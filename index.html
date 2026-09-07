@@ -424,6 +424,11 @@
             <div class="bays"></div>
           </section>
           <section class="media-unit media-deck" id="media-deck" aria-label="Cassette deck">
+            <div class="deck-bar">
+              <span class="hwlabel">cassette</span>
+              <span class="deck-bar-name" id="deck-bar-name"></span>
+              <button type="button" class="txt-btn" id="deck-toggle" aria-controls="media-deck"></button>
+            </div>
             <div class="unit-lip"></div>
             <div class="deck-head">
               <div class="deck-leds">
@@ -494,8 +499,50 @@
                 <button type="button" class="key" id="tape-eject">Eject</button>
               </div>
             </div>
-            <div class="deck-line"><span class="status" id="deck-status"></span></div>
+            <div class="deck-line">
+              <span class="status" id="deck-status"></span>
+              <span class="status fail" id="deck-fail"></span>
+              <button type="button" class="txt-btn primary" id="deck-retry" hidden>Retry</button>
+            </div>
           </section>
+        </div>
+        <div class="media-list-head">
+          <label class="media-search">
+            <span class="visually-hidden">Search discs and tapes</span>
+            <input
+              type="search"
+              id="media-search"
+              class="form-control form-control-sm"
+              placeholder="Search discs and tapes"
+              autocomplete="off"
+            />
+          </label>
+          <span class="media-count" id="media-count" role="status"></span>
+          <label class="media-autoboot" title="After a disc loads into drive 0, reset and boot it">
+            <input type="checkbox" class="autoboot" />
+            Autoboot after loading
+          </label>
+        </div>
+        <div class="media-chips" id="media-chips" role="group" aria-label="Show"></div>
+        <ul class="media-list" id="media-list" aria-label="Discs and tapes"></ul>
+        <div class="media-foot">
+          <label class="btn btn-sm btn-outline-light" title="Open a disc or tape image from this computer">
+            Open a file…
+            <input
+              type="file"
+              id="media-open"
+              hidden
+              accept=".ssd,.dsd,.adf,.adm,.adl,.hfe,.uef,.zip,application/binary"
+            />
+          </label>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-light"
+            id="media-connect-drive"
+            title="Sign in so your Google Drive images appear in the list"
+          >
+            Connect Google Drive
+          </button>
         </div>
       </div>
       <template id="drive-bay-template">
@@ -532,6 +579,8 @@
           <div class="bay-line">
             <span class="status bay-status"></span>
             <span class="status bay-kept"></span>
+            <span class="status fail bay-fail"></span>
+            <button type="button" class="txt-btn primary bay-retry" hidden>Retry</button>
             <span class="spacer"></span>
             <div class="dropdown">
               <button type="button" class="txt-btn bay-save dropdown-toggle" data-bs-toggle="dropdown">Save</button>

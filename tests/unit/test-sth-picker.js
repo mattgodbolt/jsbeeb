@@ -141,6 +141,18 @@ describe("SthPicker", () => {
     });
 
     describe("registering media sources", () => {
+        it("lists both catalogues for the media window, discs and tapes told apart", async () => {
+            const picker = make();
+            vi.spyOn(picker.discs, "catalogue").mockResolvedValue(["Acornsoft/Elite.zip"]);
+            vi.spyOn(picker.tapes, "catalogue").mockResolvedValue(["AnF/ChuckieEgg.zip"]);
+            const [source, lister] = deps.media.addLister.mock.calls[0];
+            expect(source).toBe("sth");
+            expect(await lister()).toEqual([
+                expect.objectContaining({ ref: "sth:Acornsoft/Elite.zip", kind: "disc", title: "Elite" }),
+                expect.objectContaining({ ref: "sth:AnF/ChuckieEgg.zip", kind: "tape", title: "ChuckieEgg" }),
+            ]);
+        });
+
         it("hands the loader a fetcher for each catalogue", async () => {
             const picker = make();
             const registered = Object.fromEntries(deps.media.addSource.mock.calls);

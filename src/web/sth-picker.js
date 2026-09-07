@@ -3,6 +3,7 @@ import { StairwayToHell } from "../sth.js";
 import { errorText } from "./reporting.js";
 import { clearArchiveList, filterArchiveList, showArchiveMessage } from "./archive-list.js";
 import { noteEvent } from "./analytics.js";
+import { describeSthDisc, describeSthTape } from "./media-catalogue.js";
 
 /**
  * The Stairway to Hell archive picker: one modal browsing either the disc or
@@ -48,6 +49,10 @@ export class SthPicker {
         );
         media.addSource("sth", (name) => this.discs.fetch(name));
         media.addSource("tapeSth", (name) => this.tapes.fetch(name));
+        media.addLister("sth", async () => [
+            ...(await this.discs.catalogue()).map(describeSthDisc),
+            ...(await this.tapes.catalogue()).map(describeSthTape),
+        ]);
 
         document.addEventListener("click", (e) => {
             const target = e.target.closest("a.sth");

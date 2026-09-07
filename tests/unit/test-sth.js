@@ -53,6 +53,32 @@ describe("StairwayToHell", () => {
         expect(seen).toEqual([`${ARCHIVE_BASE}/tapeimages/manifest.json`]);
     });
 
+    it("hands the catalogue back as a promise, fetching it once", async () => {
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValue(manifestResponse([{ path: "Acornsoft/Elite.zip", size: 1, mtime: null }]));
+        const sth = new StairwayToHell(
+            () => {},
+            () => {},
+            () => {},
+            false,
+        );
+        expect(await sth.catalogue()).toEqual(["Acornsoft/Elite.zip"]);
+        expect(await sth.catalogue()).toEqual(["Acornsoft/Elite.zip"]);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects the catalogue promise when the manifest cannot be fetched", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 503 });
+        const sth = new StairwayToHell(
+            () => {},
+            () => {},
+            () => {},
+            false,
+        );
+        await expect(sth.catalogue()).rejects.toThrow("503");
+    });
+
     it("invokes the error callback when the manifest fetch fails", async () => {
         vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 503 });
         vi.spyOn(console, "error").mockImplementation(() => {});

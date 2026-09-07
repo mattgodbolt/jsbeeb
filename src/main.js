@@ -249,7 +249,7 @@ new HfePicker({
     processor,
     autoboot: (image) => autoBoot.boot(image),
 });
-new GoogleDrivePicker({ media, drives, modals, processor });
+const googleDrivePicker = new GoogleDrivePicker({ media, drives, modals, processor });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -289,7 +289,17 @@ const rewindUI = new RewindUI({ processor, video, loop });
 rewindUI.updateButtonState();
 
 const discVisualiser = new DiscVisualiser({ fdc: processor.fdc });
-new MediaWindow({ media, drives, processor, model, modals, loop, visualiser: discVisualiser });
+new MediaWindow({
+    media,
+    drives,
+    processor,
+    model,
+    modals,
+    loop,
+    visualiser: discVisualiser,
+    autoboot: (image) => autoBoot.boot(image),
+    googleDrive: googleDrivePicker,
+});
 
 const layout = new Layout({
     screenCanvas,

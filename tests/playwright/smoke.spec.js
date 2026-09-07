@@ -116,6 +116,21 @@ test("the media window shows the drives, keeps the keyboard while focused, and g
     await beeb.expectScreenText(">A");
 });
 
+test("the media window's list puts a built-in disc into drive 1", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click('#leds .slot-readout[data-slot="1"]');
+    await expect(page.locator('.bay[data-drive="1"]')).toHaveClass(/target/);
+    await page.fill("#media-search", "welcome");
+    const row = page.locator("#media-list .media-row-main").first();
+    await expect(row).toHaveAttribute("title", /Load Welcome.*into drive 1/);
+    await row.click();
+    await expect(page.locator('.bay[data-drive="1"]')).toHaveAttribute("data-state", "loaded");
+    await expect(page.locator('.bay[data-drive="1"] .bay-title')).toHaveText("Welcome.ssd");
+    expect(await page.evaluate(() => window.processor.fdc.drives[1].disc?.name)).toBe("Welcome.ssd");
+    await expect(page).toHaveURL(/disc2=Welcome\.ssd/);
+});
+
 test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");

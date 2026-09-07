@@ -46,6 +46,8 @@ export class MediaResolver {
                 return this.source(sth)(image);
             case "hfe":
                 return { name: image, data: await this.source("hfe")(image), ignored: [] };
+            case "session":
+                return this.source("session")(image);
             case "b64data":
                 return { name: "disk.ssd", data: stringToUint8Array(atob(image)), ignored: [] };
             case "data":

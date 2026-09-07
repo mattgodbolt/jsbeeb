@@ -72,26 +72,31 @@ export class BbcDiscArchive {
 
     async populate() {
         this._onStart();
-        // Tracked separately from the catalogue: an archive can legitimately be
-        // empty, and an empty array would mean "fetch it again" every time.
-        if (!this._loaded) {
-            try {
-                const response = await fetch(`${this._baseUrl}manifest.json`);
-                if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
-                const data = await response.json();
-                if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
-                this._catalogue = data.files
-                    // The captured discs were published before provenance was recorded.
-                    .map((file) => ({ ...file, provenance: file.provenance ?? Provenance.Captured }))
-                    .sort(byTitle);
-                this._loaded = true;
-            } catch (error) {
-                console.error("Failed to fetch HFE archive catalogue:", error);
-                if (this._onError) this._onError();
-                return;
-            }
+        try {
+            await this.catalogue();
+        } catch (error) {
+            console.error("Failed to fetch HFE archive catalogue:", error);
+            if (this._onError) this._onError();
+            return;
         }
         if (this._onCat) this._onCat(this._catalogue);
+    }
+
+    /** @returns {Promise<object[]>} every manifest entry, sorted by title, fetched the first time it is asked for */
+    async catalogue() {
+        // Tracked separately from the catalogue: an archive can legitimately be
+        // empty, and an empty array would mean "fetch it again" every time.
+        if (this._loaded) return this._catalogue;
+        const response = await fetch(`${this._baseUrl}manifest.json`);
+        if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
+        const data = await response.json();
+        if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
+        this._catalogue = data.files
+            // The captured discs were published before provenance was recorded.
+            .map((file) => ({ ...file, provenance: file.provenance ?? Provenance.Captured }))
+            .sort(byTitle);
+        this._loaded = true;
+        return this._catalogue;
     }
 
     /**

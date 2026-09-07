@@ -52,6 +52,19 @@ describe("MediaWindow", () => {
         const media = new EventTarget();
         Object.assign(media, {
             params: {},
+            listAll: vi.fn().mockResolvedValue({ descriptors: [], failures: [] }),
+            loadDiscImage: vi.fn(),
+            loadTapeImage: vi.fn(),
+            setDiscImage: vi.fn((driveIndex, name) => {
+                media.params[driveIndex === 0 ? "disc1" : "disc2"] = name;
+                media.dispatchEvent(new CustomEvent("media-changed", { detail: {} }));
+            }),
+            setTapeImage: vi.fn((name) => (media.params.tape = name)),
+            setProcessorTape: vi.fn((tape) => {
+                tapeInterface.tape = tape;
+                media.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
+            }),
+            openFile: vi.fn(),
             ejectDisc: vi.fn((driveIndex) => drives.eject(driveIndex)),
             ejectTape: vi.fn(() => {
                 tapeInterface.tape = undefined;
@@ -61,11 +74,13 @@ describe("MediaWindow", () => {
         deps = {
             media,
             drives,
-            processor: { fdc, tapeInterface, atomppia: tapeInterface },
+            processor: { fdc, tapeInterface, atomppia: tapeInterface, reset: vi.fn() },
             model: { isAtom: false },
             modals: { show: vi.fn() },
             loop,
             visualiser: { openOn: vi.fn() },
+            autoboot: vi.fn(),
+            googleDrive: { connect: vi.fn().mockResolvedValue(true), connected: false },
         };
     });
 
@@ -92,6 +107,15 @@ describe("MediaWindow", () => {
             expect(window.isOpen).toBe(false);
             document.querySelector('#leds .slot-readout[data-slot="tape"]').click();
             expect(panel().hidden).toBe(false);
+        });
+
+        it("aims the list at the slot whose line in the LED panel was clicked", () => {
+            make();
+            document.querySelector('#leds .slot-readout[data-slot="1"]').click();
+            expect(bay(1).classList.contains("target")).toBe(true);
+            document.querySelector('#leds .slot-readout[data-slot="tape"]').click();
+            expect(document.getElementById("deck-window").classList.contains("target")).toBe(true);
+            expect(bay(1).classList.contains("target")).toBe(false);
         });
     });
 
@@ -172,10 +196,12 @@ describe("MediaWindow", () => {
             expect(deps.visualiser.openOn).toHaveBeenCalledWith(1);
         });
 
-        it("offers the disc list from the slot", () => {
+        it("aims the list at its drive when its slot is clicked", () => {
             make();
-            bay(0).querySelector(".bay-slot").click();
-            expect(deps.modals.show).toHaveBeenCalledWith("discs");
+            bay(1).querySelector(".bay-slot").click();
+            expect(bay(1).classList.contains("target")).toBe(true);
+            expect(bay(0).classList.contains("target")).toBe(false);
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
         });
 
         it("lights while the controller selects the drive, only while open", () => {
@@ -265,10 +291,180 @@ describe("MediaWindow", () => {
             expect(document.getElementById("deck-empty").hidden).toBe(false);
         });
 
-        it("offers the tape list from the window", () => {
+        it("aims the list at the deck when its window is clicked", () => {
             make();
             document.getElementById("deck-window").click();
-            expect(deps.modals.show).toHaveBeenCalledWith("tapes");
+            expect(document.getElementById("deck-window").classList.contains("target")).toBe(true);
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
+        });
+
+        it("starts folded on a BBC and unfolds when a tape goes in, or when asked, remembering that", () => {
+            make();
+            expect(panel().classList.contains("deck-collapsed")).toBe(true);
+            expect(text(document.getElementById("deck-bar-name"))).toBe("empty");
+            putTapeIn(tape());
+            expect(panel().classList.contains("deck-collapsed")).toBe(false);
+            document.getElementById("deck-toggle").click();
+            expect(panel().classList.contains("deck-collapsed")).toBe(true);
+            expect(text(document.getElementById("deck-bar-name"))).toBe("chuckie.uef");
+            expect(window.localStorage.getItem("mediaDeckShown")).toBe("0");
+        });
+
+        it("starts unfolded on an Atom, and where the user last left it", () => {
+            deps.model.isAtom = true;
+            make();
+            expect(panel().classList.contains("deck-collapsed")).toBe(false);
+            deps.model.isAtom = false;
+            window.localStorage.setItem("mediaDeckShown", "1");
+            document.body.innerHTML = "";
+            domFromIndexHtml("navbarSupportedContent", "leds", "media-panel", "drive-bay-template");
+            document.querySelector(".media-header").setPointerCapture = () => {};
+            make();
+            expect(panel().classList.contains("deck-collapsed")).toBe(false);
+        });
+    });
+
+    describe("the list", () => {
+        const elite = {
+            ref: "hfe:A.hfe",
+            kind: "disc",
+            title: "Elite",
+            publisher: "Acornsoft",
+            detail: "D1S1 · 40 · v1",
+            source: "hfe",
+            savesChanges: false,
+        };
+        const chuckie = {
+            ref: "sth:AnF/Chuckie.zip",
+            kind: "tape",
+            title: "Chuckie",
+            publisher: "AnF",
+            detail: "",
+            source: "sth",
+            savesChanges: false,
+        };
+        const saves = { ...elite, ref: "local:saves.ssd", title: "saves.ssd", source: "browser", savesChanges: true };
+        const rows = () => [...document.querySelectorAll("#media-list .media-row")];
+        const rowTitles = () => rows().map((row) => text(row.querySelector(".title")));
+        const openWith = async (descriptors, failures = []) => {
+            deps.media.listAll.mockResolvedValue({ descriptors, failures });
+            const window = make();
+            window.open();
+            await vi.waitFor(() => expect(deps.media.listAll).toHaveBeenCalled());
+            await vi.waitFor(() => expect(document.getElementById("media-count").textContent).not.toBe(""));
+            return window;
+        };
+        const search = (query) => {
+            const box = document.getElementById("media-search");
+            box.value = query;
+            box.dispatchEvent(new Event("input"));
+        };
+
+        it("lists everything every source offers once opened, with a chip per source", async () => {
+            await openWith([elite, chuckie, saves]);
+            expect(rowTitles()).toEqual(["Elite", "Chuckie", "saves.ssd"]);
+            expect(text(document.getElementById("media-count"))).toBe("3 of 3");
+            const chips = [...document.querySelectorAll("#media-chips .media-chip")].map((c) => c.textContent);
+            expect(chips).toEqual(["All", "STH archive 1", "HFE archive 1", "This browser 1", "Discs", "Tapes"]);
+            expect(text(rows()[2].querySelector(".detail"))).toContain("saves changes");
+        });
+
+        it("narrows to what is typed, to a source, and to discs or tapes", async () => {
+            await openWith([elite, chuckie, saves]);
+            search("elite");
+            expect(rowTitles()).toEqual(["Elite"]);
+            search("");
+            document.querySelector('#media-chips .media-chip[title="The Stairway To Hell mirror"]').click();
+            expect(rowTitles()).toEqual(["Chuckie"]);
+            document.querySelector("#media-chips .media-chip").click();
+            document.querySelector('#media-chips .media-chip[title="Show tapes"]').click();
+            expect(rowTitles()).toEqual(["Elite", "saves.ssd"]);
+            search("nothing here");
+            expect(rowTitles()).toEqual([]);
+            expect(text(document.querySelector("#media-list .notice"))).toBe('Nothing matches "nothing here"');
+        });
+
+        it("says which sources could not be listed", async () => {
+            await openWith([elite], ["sth: offline"]);
+            expect(text(document.querySelector("#media-list .notice"))).toBe("Could not list sth: offline");
+        });
+
+        it("loads a disc into the aimed drive from the row, and the other drive from its button", async () => {
+            const loaded = discFor("A.ssd", ssdImage());
+            deps.media.loadDiscImage.mockResolvedValue(loaded);
+            await openWith([elite]);
+            expect(rows()[0].querySelector(".media-row-main").title).toBe(
+                "Load Elite, Acornsoft, D1S1 · 40 · v1, HFE archive into drive 0",
+            );
+            rows()[0].querySelector(".media-target").click();
+            await vi.waitFor(() => expect(fdc.drives[1].disc).toBe(loaded));
+            expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:A.hfe", "auto");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "hfe:A.hfe");
+            expect(deps.processor.reset).not.toHaveBeenCalled();
+            await vi.waitFor(() => expect(text(rows()[0].querySelector(".detail"))).toContain("in drive 1"));
+            bay(1).querySelector(".bay-slot").click();
+            expect(rows()[0].querySelector(".media-keycap").textContent).toBe("1");
+            expect(rows()[0].querySelector(".media-target").textContent).toBe("0");
+        });
+
+        it("resets and boots when autoboot is ticked and the disc goes into drive 0", async () => {
+            deps.media.params.autoboot = "";
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            await openWith([elite]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+            expect(deps.processor.reset).toHaveBeenCalledWith(true);
+        });
+
+        it("shows a load in the bay while it happens, and a failure with Retry afterwards", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            let fail;
+            deps.media.loadDiscImage.mockReturnValueOnce(new Promise((_, reject) => (fail = reject)));
+            await openWith([elite]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(bay(0).dataset.state).toBe("busy"));
+            expect(text(bay(0).querySelector(".bay-status"))).toBe("loading Elite from HFE archive…");
+            fail(new Error("HTTP 404"));
+            await vi.waitFor(() => expect(bay(0).dataset.state).toBe("empty"));
+            expect(text(bay(0).querySelector(".bay-fail"))).toBe("could not load Elite: HTTP 404");
+            expect(bay(0).querySelector(".bay-retry").hidden).toBe(false);
+            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            bay(0).querySelector(".bay-retry").click();
+            await vi.waitFor(() => expect(bay(0).dataset.state).toBe("loaded"));
+            expect(bay(0).querySelector(".bay-retry").hidden).toBe(true);
+        });
+
+        it("loads a tape into the deck from its row, unfolding the deck", async () => {
+            const loadedTape = { name: "Chuckie.uef", position: 0 };
+            deps.media.loadTapeImage.mockResolvedValue(loadedTape);
+            await openWith([chuckie]);
+            expect(rows()[0].querySelector(".media-keycap").textContent).toBe("T");
+            expect(rows()[0].querySelector(".media-target")).toBeNull();
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
+            expect(deps.media.setTapeImage).toHaveBeenCalledWith("sth:AnF/Chuckie.zip");
+            expect(panel().classList.contains("deck-collapsed")).toBe(false);
+        });
+
+        it("leaves a file opened this session out of the URL", async () => {
+            deps.media.loadDiscImage.mockResolvedValue(discFor("mine.ssd", ssdImage()));
+            await openWith([{ ...elite, ref: "session:mine.ssd", title: "mine.ssd", source: "session" }]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, undefined));
+        });
+
+        it("opens a file into the aimed drive from the footer, and connects Google Drive", async () => {
+            deps.media.openFile.mockResolvedValue("Loaded mine.ssd into drive 1.");
+            await openWith([]);
+            bay(1).querySelector(".bay-slot").click();
+            const input = document.getElementById("media-open");
+            Object.defineProperty(input, "files", { value: [new File([new Uint8Array(4)], "mine.ssd")] });
+            input.dispatchEvent(new Event("change"));
+            await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1));
+            document.getElementById("media-connect-drive").click();
+            await vi.waitFor(() => expect(deps.googleDrive.connect).toHaveBeenCalled());
+            expect(deps.media.listAll.mock.calls.length).toBeGreaterThanOrEqual(3);
         });
     });
 

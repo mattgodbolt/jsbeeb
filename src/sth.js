@@ -35,16 +35,20 @@ export class StairwayToHell {
 
     async populate() {
         this._onStart();
-        if (this._catalog.length === 0) {
-            try {
-                this._catalog = await _fetchManifest(this._baseUrl + "manifest.json");
-            } catch (error) {
-                console.error("Failed to fetch catalog:", error);
-                if (this._onError) this._onError();
-                return;
-            }
+        try {
+            await this.catalogue();
+        } catch (error) {
+            console.error("Failed to fetch catalog:", error);
+            if (this._onError) this._onError();
+            return;
         }
         if (this._onCat) this._onCat(this._catalog);
+    }
+
+    /** @returns {Promise<string[]>} every path in the archive, fetched the first time it is asked for */
+    async catalogue() {
+        if (this._catalog.length === 0) this._catalog = await _fetchManifest(this._baseUrl + "manifest.json");
+        return this._catalog;
     }
 
     async fetch(file) {

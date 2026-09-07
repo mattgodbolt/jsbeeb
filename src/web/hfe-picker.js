@@ -3,6 +3,7 @@ import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenanc
 import { errorText } from "./reporting.js";
 import { clearArchiveList, showArchiveMessage } from "./archive-list.js";
 import { noteEvent } from "./analytics.js";
+import { describeHfeEntry } from "./media-catalogue.js";
 
 const HfeProvenanceLabels = {
     [Provenance.Captured]: ["Captured", "Direct from disc"],
@@ -42,6 +43,7 @@ export class HfePicker {
             },
         );
         media.addSource("hfe", (path) => this.archive.fetch(path));
+        media.addLister("hfe", async () => (await this.archive.catalogue()).map(describeHfeEntry));
 
         this.modal = new bootstrap.Modal(document.getElementById("hfe"));
         document.getElementById("hfe").addEventListener("shown.bs.modal", () => {

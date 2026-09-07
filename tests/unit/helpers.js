@@ -27,6 +27,7 @@ export function makeWebDeps() {
     return {
         media: {
             addSource: vi.fn(),
+            addLister: vi.fn(),
             setDiscImage: vi.fn(),
             setTapeImage: vi.fn(),
             loadDiscImage: vi.fn(),

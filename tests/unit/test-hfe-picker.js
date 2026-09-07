@@ -150,6 +150,16 @@ describe("HfePicker", () => {
     });
 
     describe("registering media sources", () => {
+        it("lists the archive for the media window", async () => {
+            const picker = make();
+            vi.spyOn(picker.archive, "catalogue").mockResolvedValue([entry("Games/ELITE.hfe", "Elite")]);
+            const [source, lister] = deps.media.addLister.mock.calls[0];
+            expect(source).toBe("hfe");
+            expect(await lister()).toEqual([
+                expect.objectContaining({ ref: "hfe:Games/ELITE.hfe", kind: "disc", title: "Elite", source: "hfe" }),
+            ]);
+        });
+
         it("hands the loader a fetcher for the archive", async () => {
             const picker = make();
             const registered = Object.fromEntries(deps.media.addSource.mock.calls);

@@ -249,6 +249,45 @@ describe("MediaLoader", () => {
         });
     });
 
+    describe("files opened this session", () => {
+        it("remembers a disc file, lists it, and can put it in either drive again by reference", async () => {
+            const media = make();
+            expect(await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).toBe("Loaded mine.ssd into drive 1.");
+            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
+            expect(deps.urlState.params.disc2).toBeUndefined();
+            const { descriptors } = await media.listAll();
+            expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:mine.ssd", kind: "disc" }));
+            const again = await media.loadDiscImage("session:mine.ssd");
+            expect(again.name).toBe("mine.ssd");
+            expect(again.originalImageData).toBeTruthy();
+        });
+
+        it("says when a reference names a file that was never opened", async () => {
+            await expect(make().loadDiscImage("session:ghost.ssd")).rejects.toThrow("ghost.ssd was not opened");
+        });
+
+        it("lists the built-in discs and the browser's discs alongside", async () => {
+            window.localStorage.setItem("disc_saves.ssd", "");
+            const { descriptors, failures } = await make().listAll();
+            expect(failures).toEqual([]);
+            expect(descriptors.map((d) => d.ref)).toEqual([
+                ...BuiltInImages.map((image) => image.file),
+                "local:saves.ssd",
+            ]);
+        });
+
+        it("keeps listing when one source fails, and says which", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const media = make();
+            media.addLister("sth", async () => {
+                throw new Error("offline");
+            });
+            const { descriptors, failures } = await media.listAll();
+            expect(descriptors.length).toBe(BuiltInImages.length);
+            expect(failures).toEqual(["sth: offline"]);
+        });
+    });
+
     describe("setProcessorTape", () => {
         it("hands the tape to the machine's tape interface and says the deck changed", () => {
             const tape = {};

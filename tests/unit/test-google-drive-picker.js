@@ -18,7 +18,7 @@ describe("GoogleDrivePicker", () => {
             create: vi.fn(),
         };
         deps = {
-            media: { addSource: vi.fn(), setDiscImage: vi.fn() },
+            media: { addSource: vi.fn(), addLister: vi.fn(), setDiscImage: vi.fn() },
             drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
             modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
             processor: { fdc: { drives: [{ disc: null }, {}] } },
@@ -199,6 +199,36 @@ describe("GoogleDrivePicker", () => {
             make();
             submit();
             expect(deps.modals.popupLoading).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("connecting", () => {
+        it("loads the client and signs in, saying so afterwards", async () => {
+            const picker = make();
+            expect(picker.connected).toBe(false);
+            expect(await picker.connect()).toBe(true);
+            expect(loader.initialise).toHaveBeenCalled();
+            expect(loader.authorize).toHaveBeenCalledWith(false);
+        });
+
+        it("reports a client that will not load", async () => {
+            loader.initialise.mockRejectedValue(new Error("blocked"));
+            expect(await make().connect()).toBe(false);
+            expect(toasts()).toEqual([expect.stringContaining("Google Drive is unavailable: blocked")]);
+        });
+    });
+
+    describe("listing for the media window", () => {
+        it("offers nothing until signed in, then every file on the Drive", async () => {
+            make();
+            const [source, lister] = deps.media.addLister.mock.calls[0];
+            expect(source).toBe("gdrive");
+            expect(await lister()).toEqual([]);
+            loader.authorized = true;
+            loader.listFiles.mockResolvedValue([{ id: "abc", name: "mine.ssd", capabilities: { canEdit: true } }]);
+            expect(await lister()).toEqual([
+                expect.objectContaining({ ref: "gd:abc/mine.ssd", source: "gdrive", savesChanges: true }),
+            ]);
         });
     });
 

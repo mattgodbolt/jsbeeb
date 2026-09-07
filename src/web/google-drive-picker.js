@@ -5,6 +5,7 @@ import { toast } from "./toast.js";
 import { errorText } from "./reporting.js";
 import { replaceOrAddExtension } from "../archive.js";
 import { noteEvent } from "./analytics.js";
+import { describeDriveFile } from "./media-catalogue.js";
 
 /**
  * The Google Drive picker: signing in, listing the user's discs, loading one
@@ -44,20 +45,29 @@ export class GoogleDrivePicker {
         // someone to ask for Drive.
         document.getElementById("open-drive-link").addEventListener("click", async (e) => {
             e.preventDefault();
-            try {
-                await this.googleDrive.initialise();
-            } catch (error) {
-                toast(`Google Drive is unavailable: ${errorText(error)}`, { title: "Google Drive" });
-                return;
-            }
-            const authed = await this.auth(false);
-            if (authed) {
-                this.modal.show();
-            }
+            if (await this.connect()) this.modal.show();
         });
+        media.addLister("gdrive", async () =>
+            this.googleDrive.authorized ? (await this.googleDrive.listFiles()).map(describeDriveFile) : [],
+        );
 
         this.el.addEventListener("show.bs.modal", () => this.showList());
         document.querySelector("#google-drive form").addEventListener("submit", (e) => this.create(e));
+    }
+
+    /** Loads the Google client and signs in; false when either is refused. */
+    async connect() {
+        try {
+            await this.googleDrive.initialise();
+        } catch (error) {
+            toast(`Google Drive is unavailable: ${errorText(error)}`, { title: "Google Drive" });
+            return false;
+        }
+        return this.auth(false);
+    }
+
+    get connected() {
+        return !!this.googleDrive.authorized;
     }
 
     async auth(imm) {

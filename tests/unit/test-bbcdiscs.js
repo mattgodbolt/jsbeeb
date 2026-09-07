@@ -113,6 +113,20 @@ describe("BbcDiscArchive", () => {
         expect(received[0].provenance).toBe(Provenance.Captured);
     });
 
+    it("hands the catalogue back as a promise, sorted and with provenance filled in", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(
+            manifestResponse([entry({ title: "Zebra" }), entry({ title: "Apple", provenance: undefined })]),
+        );
+        const catalogue = await archive(() => {}).catalogue();
+        expect(catalogue.map((file) => file.title)).toEqual(["Apple", "Zebra"]);
+        expect(catalogue[0].provenance).toBe(Provenance.Captured);
+    });
+
+    it("rejects the catalogue promise when the manifest is missing", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 404 });
+        await expect(archive(() => {}).catalogue()).rejects.toThrow("404");
+    });
+
     it("only fetches the manifest once across repeated opens", async () => {
         const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([entry()]));
         const subject = archive(() => {});

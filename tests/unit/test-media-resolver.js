@@ -96,6 +96,15 @@ describe("MediaResolver", () => {
         });
     });
 
+    it("hands a session: reference to the session source, whatever the kind", async () => {
+        const { resolver } = make();
+        const session = vi.fn(async (name) => ({ name, data: bytes("s"), ignored: [] }));
+        resolver.addSource("session", session);
+        expect((await resolver.resolve("disc", "session:mine.ssd")).name).toBe("mine.ssd");
+        expect((await resolver.resolve("tape", "session:mine.uef")).name).toBe("mine.uef");
+        expect(session).toHaveBeenCalledTimes(2);
+    });
+
     it("says when an archive has not been registered", async () => {
         const { resolver } = make();
         await expect(resolver.resolve("disc", "sth:ELITE.zip")).rejects.toThrow("No sth archive is available here");

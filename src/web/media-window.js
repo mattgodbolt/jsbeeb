@@ -1,6 +1,10 @@
 import { dfsCatalogue } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
 import { FloatingPanel } from "./floating-panel.js";
+import { Sources, matchesQuery } from "./media-catalogue.js";
+import { errorText, reportLoadFailure } from "./reporting.js";
+import { toast } from "./toast.js";
+import { noteEvent } from "./analytics.js";
 
 const SourceNames = {
     "": "built in",
@@ -15,12 +19,17 @@ const SourceNames = {
     file: "a file",
     data: "the URL",
     b64data: "the URL",
+    session: "a file opened this session",
 };
 
 // The counter has three digits, and a tape run end to end turns it over once.
 const CounterDivisions = 1000;
 
+// Beyond this the list is a scroll nobody reads; the search box narrows it.
+const MaxRows = 100;
+
 const DriveKeys = ["disc1", "disc2"];
+const DeckShownKey = "mediaDeckShown";
 
 /** Where a URL reference came from, in words, or null when the URL names nothing. */
 export function sourceOf(ref) {
@@ -30,21 +39,25 @@ export function sourceOf(ref) {
 
 const tracksOf = (drive) => (drive.tracksPerStep === 2 ? "40" : "80");
 const threeDigits = (count) => String(count).padStart(3, "0");
+const otherDrive = (driveIndex) => 1 - driveIndex;
 
 /**
  * The media window: two drive fronts and a cassette deck showing what the
  * machine holds, with the controls that belong on them (eject, the 40/80
- * switch, save, the disc surface, the tape transport), and the one-line
+ * switch, save, the disc surface, the tape transport); under them one
+ * searchable list of everything every source offers; and the one-line
  * readouts in the LED panel that open it.
  */
 export class MediaWindow {
-    constructor({ media, drives, processor, model, modals, loop, visualiser }) {
+    constructor({ media, drives, processor, model, modals, loop, visualiser, autoboot, googleDrive }) {
         this.media = media;
         this.drives = drives;
         this.processor = processor;
         this.model = model;
         this.modals = modals;
         this.visualiser = visualiser;
+        this.autoboot = autoboot;
+        this.googleDrive = googleDrive;
 
         this.panel = document.getElementById("media-panel");
         this.floating = new FloatingPanel({
@@ -55,23 +68,34 @@ export class MediaWindow {
         this.summary = document.getElementById("media-summary");
         this.bays = [0, 1].map((driveIndex) => this.buildBay(driveIndex));
         this.deck = this.buildDeck();
+        this.list = this.buildList();
         this.readouts = Object.fromEntries(
             [...document.querySelectorAll("#leds .slot-readout")].map((el) => [el.dataset.slot, el]),
         );
         this.counterBase = 0;
         this.lastCounter = null;
+        this.target = 0;
 
         for (const opener of document.querySelectorAll(".media-window-open"))
             opener.addEventListener("click", (e) => {
                 e.preventDefault();
                 this.open();
+                // A slot's own line in the LED panel opens the window aimed at that slot.
+                const { slot } = opener.dataset;
+                if (slot !== undefined) this.aimAt(slot === "tape" ? "tape" : Number(slot));
             });
+        this.floating.addEventListener("open", () => this.refreshList());
         drives.addEventListener("disc-changed", (e) => this.renderDrive(e.detail.driveIndex));
         drives.addEventListener("tracks-changed", (e) => this.renderDrive(e.detail.driveIndex));
-        media.addEventListener("tape-changed", () => this.renderDeck());
+        media.addEventListener("tape-changed", (e) => {
+            if (e.detail.tape) this.showDeck(true, false);
+            this.renderDeck();
+        });
         // The URL is named after the bytes arrive, so the source line catches up here.
         media.addEventListener("media-changed", () => this.renderAll());
         loop.addEventListener("tick", () => this.tick());
+        this.showDeck(model.isAtom || window.localStorage.getItem(DeckShownKey) === "1", false);
+        this.setTarget(0);
         this.renderAll();
     }
 
@@ -126,12 +150,20 @@ export class MediaWindow {
             sub: section.querySelector(".bay-sub"),
             status: section.querySelector(".bay-status"),
             kept: section.querySelector(".bay-kept"),
+            fail: section.querySelector(".bay-fail"),
+            retry: section.querySelector(".bay-retry"),
             save: section.querySelector(".bay-save"),
             surface: section.querySelector(".bay-surface"),
             radios: [...pitch.querySelectorAll("input")],
+            busy: null,
+            failed: null,
         };
-        bay.eject.addEventListener("click", () => this.media.ejectDisc(driveIndex));
-        bay.slot.addEventListener("click", () => this.modals.show("discs"));
+        bay.eject.addEventListener("click", () => {
+            bay.failed = null;
+            this.media.ejectDisc(driveIndex);
+        });
+        bay.slot.addEventListener("click", () => this.aimAt(driveIndex));
+        bay.retry.addEventListener("click", () => this.loadDisc(driveIndex, bay.failed.descriptor));
         section
             .querySelector(".bay-save-ssd")
             .addEventListener("click", () => this.drives.downloadSsdOrDsd(driveIndex));
@@ -153,13 +185,23 @@ export class MediaWindow {
             title: document.getElementById("deck-tape-title"),
             sub: document.getElementById("deck-tape-sub"),
             status: document.getElementById("deck-status"),
+            fail: document.getElementById("deck-fail"),
+            retry: document.getElementById("deck-retry"),
             rewind: document.getElementById("tape-rewind"),
             play: document.getElementById("tape-play"),
             stop: document.getElementById("tape-stop"),
             eject: document.getElementById("tape-eject"),
+            barName: document.getElementById("deck-bar-name"),
+            toggle: document.getElementById("deck-toggle"),
+            busy: null,
+            failed: null,
         };
-        deck.window.addEventListener("click", () => this.modals.show("tapes"));
-        deck.eject.addEventListener("click", () => this.media.ejectTape());
+        deck.window.addEventListener("click", () => this.aimAt("tape"));
+        deck.eject.addEventListener("click", () => {
+            deck.failed = null;
+            this.media.ejectTape();
+        });
+        deck.retry.addEventListener("click", () => this.loadTape(deck.failed.descriptor));
         deck.rewind.addEventListener("click", () => {
             this.processor.tapeInterface.rewindTape();
             this.renderDeck();
@@ -172,11 +214,277 @@ export class MediaWindow {
             this.processor.atomppia.stopTape();
             this.renderDeck();
         });
+        deck.toggle.addEventListener("click", () => this.showDeck(!this.deckShown, true));
         document.getElementById("tape-counter-reset").addEventListener("click", () => {
             this.counterBase = this.tapeCount();
             this.showCounter();
         });
         return deck;
+    }
+
+    buildList() {
+        const list = {
+            search: document.getElementById("media-search"),
+            count: document.getElementById("media-count"),
+            chips: document.getElementById("media-chips"),
+            rows: document.getElementById("media-list"),
+            open: document.getElementById("media-open"),
+            connect: document.getElementById("media-connect-drive"),
+            descriptors: [],
+            failures: [],
+            query: "",
+            source: "all",
+            kinds: { disc: true, tape: true },
+            loaded: false,
+        };
+        list.search.addEventListener("input", () => {
+            list.query = list.search.value.trim();
+            this.renderList();
+        });
+        list.open.addEventListener("change", async (evt) => {
+            const file = evt.target.files[0];
+            if (!file) return;
+            noteEvent("local", "clickWindow");
+            try {
+                toast(await this.media.openFile(file, this.target === "tape" ? 0 : this.target), { title: "Opened" });
+                this.refreshList();
+            } catch (error) {
+                reportLoadFailure(file.name, error);
+            }
+            evt.target.value = "";
+        });
+        list.connect.addEventListener("click", async () => {
+            if (await this.googleDrive.connect()) this.refreshList();
+        });
+        return list;
+    }
+
+    /** Points the list at a slot: what Enter on a row loads into. */
+    aimAt(target) {
+        this.setTarget(target);
+        this.list.search.focus();
+    }
+
+    setTarget(target) {
+        this.target = target;
+        for (const bay of this.bays) bay.section.classList.toggle("target", target === bay.driveIndex);
+        this.deck.window.classList.toggle("target", target === "tape");
+        this.renderList();
+    }
+
+    async refreshList() {
+        const { descriptors, failures } = await this.media.listAll();
+        this.list.descriptors = descriptors;
+        this.list.failures = failures;
+        this.list.loaded = true;
+        this.list.connect.hidden = this.googleDrive.connected;
+        this.renderChips();
+        this.renderList();
+    }
+
+    renderChips() {
+        const { list } = this;
+        const counts = new Map();
+        for (const d of list.descriptors) counts.set(d.source, (counts.get(d.source) ?? 0) + 1);
+        const chip = (label, title, pressed, onClick) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "media-chip";
+            button.textContent = label;
+            button.title = title;
+            button.setAttribute("aria-pressed", String(pressed));
+            button.addEventListener("click", onClick);
+            return button;
+        };
+        const gap = document.createElement("span");
+        gap.className = "gap";
+        gap.setAttribute("aria-hidden", "true");
+        list.chips.replaceChildren(
+            chip("All", "Every source", list.source === "all", () => {
+                list.source = "all";
+                this.renderChips();
+                this.renderList();
+            }),
+            ...Object.entries(Sources)
+                .filter(([source]) => counts.has(source))
+                .map(([source, { name, title }]) =>
+                    chip(`${name} ${counts.get(source)}`, title, list.source === source, () => {
+                        list.source = source;
+                        this.renderChips();
+                        this.renderList();
+                    }),
+                ),
+            gap,
+            ...["disc", "tape"].map((kind) =>
+                chip(kind === "disc" ? "Discs" : "Tapes", `Show ${kind}s`, list.kinds[kind], () => {
+                    list.kinds[kind] = !list.kinds[kind];
+                    this.renderChips();
+                    this.renderList();
+                }),
+            ),
+        );
+    }
+
+    renderList() {
+        const { list } = this;
+        const shown = list.descriptors.filter(
+            (d) =>
+                list.kinds[d.kind] &&
+                (list.source === "all" || d.source === list.source) &&
+                matchesQuery(d, list.query),
+        );
+        const rows = shown.slice(0, MaxRows).map((d) => this.buildRow(d));
+        const notices = list.failures.map((failure) => {
+            const li = document.createElement("li");
+            li.className = "notice";
+            li.textContent = `Could not list ${failure}`;
+            return li;
+        });
+        if (list.loaded && shown.length === 0) {
+            const li = document.createElement("li");
+            li.className = "notice";
+            li.textContent = list.query ? `Nothing matches "${list.query}"` : "Nothing to show";
+            notices.push(li);
+        }
+        list.rows.replaceChildren(...notices, ...rows);
+        list.count.textContent = list.loaded
+            ? shown.length > MaxRows
+                ? `showing ${MaxRows} of ${shown.length}; keep typing to narrow it`
+                : `${shown.length} of ${list.descriptors.length}`
+            : "";
+    }
+
+    buildRow(d) {
+        const li = document.createElement("li");
+        li.className = "media-row";
+        const main = document.createElement("button");
+        main.type = "button";
+        main.className = "media-row-main";
+        const target = d.kind === "tape" ? "tape" : this.target === "tape" ? 0 : this.target;
+        const targetName = target === "tape" ? "the cassette deck" : `drive ${target}`;
+        const sourceName = Sources[d.source]?.name ?? d.source;
+        const label = [d.title, d.publisher, d.detail, sourceName].filter(Boolean).join(", ");
+        main.title = `Load ${label} into ${targetName}`;
+        main.setAttribute("aria-label", main.title);
+        const cell = (className, text) => {
+            const span = document.createElement("span");
+            span.className = className;
+            span.textContent = text;
+            return span;
+        };
+        const detail = cell("detail", d.detail);
+        if (d.savesChanges) {
+            const saves = cell("saves", "saves changes");
+            saves.title = "Writes to this disc are kept";
+            detail.prepend(saves, d.detail ? " · " : "");
+        }
+        const inDrive = this.slotHolding(d.ref);
+        if (inDrive !== null) detail.append(detail.textContent ? " · " : "", cell("in-drive", `in ${inDrive}`));
+        const source = cell(`media-source src-${d.source}`, sourceName);
+        source.title = Sources[d.source]?.title ?? "";
+        const keycap = cell("media-keycap", target === "tape" ? "T" : String(target));
+        keycap.setAttribute("aria-hidden", "true");
+        main.append(
+            cell(`title${d.publisher || d.detail ? "" : " thin"}`, d.title),
+            cell("publisher", d.publisher),
+            detail,
+            source,
+            keycap,
+        );
+        main.addEventListener("click", () => this.loadInto(target, d));
+        main.addEventListener("keydown", (e) => {
+            if (d.kind === "disc" && (e.key === "0" || e.key === "1")) {
+                e.preventDefault();
+                this.loadDisc(Number(e.key), d);
+            }
+        });
+        const targets = document.createElement("span");
+        targets.className = "targets";
+        if (d.kind === "disc") {
+            const other = otherDrive(target === "tape" ? 0 : target);
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "media-target";
+            button.textContent = String(other);
+            button.title = `Load ${d.title} into drive ${other}`;
+            button.setAttribute("aria-label", button.title);
+            button.addEventListener("click", () => this.loadDisc(other, d));
+            targets.append(button);
+        }
+        li.append(main, targets);
+        return li;
+    }
+
+    /** Which slot a reference is loaded in, as text, or null. */
+    slotHolding(ref) {
+        for (const driveIndex of [0, 1])
+            if (this.media.params[DriveKeys[driveIndex]] === ref && this.processor.fdc?.drives[driveIndex].disc)
+                return `drive ${driveIndex}`;
+        if (this.media.params.tape === ref && this.processor.tapeInterface.tape) return "the deck";
+        return null;
+    }
+
+    loadInto(target, d) {
+        if (d.kind === "tape") return this.loadTape(d);
+        return this.loadDisc(target, d);
+    }
+
+    /** A reference the URL can carry, or nothing for a file opened this session. */
+    static urlRef(d) {
+        return d.source === "session" ? undefined : d.ref;
+    }
+
+    async loadDisc(driveIndex, d) {
+        noteEvent("media", "loadDisc", d.ref);
+        const bay = this.bays[driveIndex];
+        bay.busy = d;
+        bay.failed = null;
+        this.renderDrive(driveIndex);
+        const needsAutoboot = driveIndex === 0 && this.media.params.autoboot !== undefined;
+        if (needsAutoboot) this.processor.reset(true);
+        try {
+            const loaded = await this.media.loadDiscImage(d.ref, this.drives.layoutForDrive(driveIndex));
+            bay.busy = null;
+            this.drives.putDiscIn(driveIndex, loaded);
+            this.media.setDiscImage(driveIndex, MediaWindow.urlRef(d));
+            if (needsAutoboot) this.autoboot(d.title);
+        } catch (error) {
+            bay.busy = null;
+            bay.failed = { descriptor: d, error };
+            reportLoadFailure(`${d.title} from ${Sources[d.source]?.name ?? d.source}`, error);
+        }
+        this.renderDrive(driveIndex);
+        this.renderList();
+    }
+
+    async loadTape(d) {
+        noteEvent("media", "loadTape", d.ref);
+        const { deck } = this;
+        deck.busy = d;
+        deck.failed = null;
+        this.showDeck(true, false);
+        this.renderDeck();
+        try {
+            const tape = await this.media.loadTapeImage(d.ref);
+            deck.busy = null;
+            this.media.setProcessorTape(tape);
+            this.media.setTapeImage(MediaWindow.urlRef(d));
+        } catch (error) {
+            deck.busy = null;
+            deck.failed = { descriptor: d, error };
+            reportLoadFailure(`${d.title} from ${Sources[d.source]?.name ?? d.source}`, error);
+        }
+        this.renderDeck();
+        this.renderList();
+    }
+
+    /** Folds the recorder to one line, or unfolds it; a choice the user made is kept. */
+    showDeck(shown, remember) {
+        this.deckShown = shown;
+        this.panel.classList.toggle("deck-collapsed", !shown);
+        this.deck.toggle.textContent = shown ? "Hide" : "Show";
+        this.deck.toggle.setAttribute("aria-expanded", String(shown));
+        if (remember) window.localStorage.setItem(DeckShownKey, shown ? "1" : "0");
     }
 
     renderAll() {
@@ -189,15 +497,22 @@ export class MediaWindow {
         const drive = this.processor.fdc?.drives[driveIndex];
         const disc = drive?.disc;
         const readout = this.readouts[driveIndex];
-        bay.section.dataset.state = disc ? "loaded" : "empty";
+        bay.section.dataset.state = bay.busy ? "busy" : disc ? "loaded" : "empty";
         for (const radio of bay.radios) {
             radio.checked = !!drive && radio.value === tracksOf(drive);
             radio.disabled = !drive;
         }
-        for (const control of [bay.eject, bay.save, bay.surface]) control.disabled = !disc;
-        if (!disc) {
+        for (const control of [bay.eject, bay.save, bay.surface]) control.disabled = !disc || !!bay.busy;
+        bay.fail.textContent = bay.failed
+            ? `could not load ${bay.failed.descriptor.title}: ${errorText(bay.failed.error)}`
+            : "";
+        bay.retry.hidden = !bay.failed;
+        if (bay.busy) {
+            bay.status.textContent = `loading ${bay.busy.title} from ${Sources[bay.busy.source]?.name ?? bay.busy.source}…`;
+            bay.kept.textContent = "";
+        } else if (!disc) {
             bay.eject.title = `Nothing to eject from drive ${driveIndex}`;
-            bay.slot.title = `Drive ${driveIndex} is empty; click to load a disc`;
+            bay.slot.title = `Drive ${driveIndex} is empty; click to pick a disc for it from the list`;
             bay.status.textContent = drive ? `nothing loaded · reads ${tracksOf(drive)} track discs` : "no drive";
             bay.kept.textContent = "";
             readout.querySelector(".name").textContent = "empty";
@@ -220,7 +535,7 @@ export class MediaWindow {
                 ? "Writes to this disc are saved where it came from"
                 : "Writes to this disc are lost when the page reloads; use Save to keep a copy";
             bay.eject.title = `Eject ${disc.name} from drive ${driveIndex}`;
-            bay.slot.title = `${disc.name} is in drive ${driveIndex}; click to load something else`;
+            bay.slot.title = `${disc.name} is in drive ${driveIndex}; click to pick something else for it`;
             readout.querySelector(".name").textContent = disc.name;
             readout.title = `Drive ${driveIndex} holds ${disc.name}, ${tracks} track. Click to open the media window`;
         }
@@ -233,28 +548,37 @@ export class MediaWindow {
         const isAtom = this.model.isAtom;
         const motorOn = !!this.processor.tapeInterface.motorOn;
         const readout = this.readouts.tape;
+        deck.section.classList.toggle("busy", !!deck.busy);
         deck.cassette.hidden = !tape;
         deck.empty.hidden = !!tape;
         deck.rewind.disabled = !tape;
-        deck.eject.disabled = !tape;
+        deck.eject.disabled = !tape || !!deck.busy;
         deck.play.disabled = !tape || !isAtom;
         deck.stop.disabled = !tape || !isAtom;
         deck.play.setAttribute("aria-pressed", String(motorOn));
         deck.play.title = isAtom ? "Play the tape" : "Play stays down: the BBC switches the motor itself, with *MOTOR";
         deck.stop.title = isAtom ? "Stop the tape" : "The BBC switches the motor itself, with *MOTOR";
-        if (!tape) {
-            deck.window.title = "The deck is empty; click to load a tape";
+        deck.fail.textContent = deck.failed
+            ? `could not load ${deck.failed.descriptor.title}: ${errorText(deck.failed.error)}`
+            : "";
+        deck.retry.hidden = !deck.failed;
+        if (deck.busy) {
+            deck.status.textContent = `loading ${deck.busy.title} from ${Sources[deck.busy.source]?.name ?? deck.busy.source}…`;
+        } else if (!tape) {
+            deck.window.title = "The deck is empty; click to pick a tape for it from the list";
             deck.eject.title = "Nothing to eject";
             deck.status.textContent = "nothing loaded";
+            deck.barName.textContent = "empty";
             readout.querySelector(".name").textContent = "empty";
             readout.title = "The cassette deck is empty. Click to open the media window";
         } else {
             const source = sourceOf(this.media.params.tape);
             deck.title.textContent = tape.name;
             deck.sub.textContent = source ?? "";
-            deck.window.title = `${tape.name} is in the deck; click to load another tape`;
+            deck.window.title = `${tape.name} is in the deck; click to pick another tape for it`;
             deck.eject.title = `Eject ${tape.name}`;
             deck.status.textContent = [tape.name, source, motorOn ? "motor on" : "stopped"].filter(Boolean).join(" · ");
+            deck.barName.textContent = tape.name;
             readout.querySelector(".name").textContent = tape.name;
             readout.title = `The cassette deck holds ${tape.name}. Click to open the media window`;
         }

@@ -19,12 +19,12 @@ export function filterArchiveList(listId, filter) {
 }
 
 /**
- * Every archive picker offers the same autoboot choice, and it is one setting,
- * so ticking it in either has to show in both.
+ * Every archive picker and the media window offer the same autoboot choice, and
+ * it is one setting, so ticking it in any has to show in all.
  */
 export class AutobootTicks {
     constructor({ urlState }) {
-        this.checks = document.querySelectorAll(".modal .autoboot");
+        this.checks = document.querySelectorAll(".autoboot");
         for (const check of this.checks) {
             check.addEventListener("click", () => {
                 this.show(check.checked);
