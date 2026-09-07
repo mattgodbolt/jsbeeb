@@ -509,6 +509,25 @@
           </section>
         </div>
         <div class="media-list-head">
+          <div class="media-into">
+            <span id="media-into-label">Into</span>
+            <div class="btn-group btn-group-sm" role="group" aria-labelledby="media-into-label" id="media-into">
+              <button type="button" class="btn btn-outline-light" data-target="0" title="Load into drive 0">
+                Drive 0
+              </button>
+              <button type="button" class="btn btn-outline-light" data-target="1" title="Load into drive 1">
+                Drive 1
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                data-target="tape"
+                title="Load into the cassette deck"
+              >
+                Cassette
+              </button>
+            </div>
+          </div>
           <label class="media-search">
             <span class="visually-hidden">Search discs and tapes</span>
             <input
@@ -527,6 +546,7 @@
         </div>
         <div class="media-chips" id="media-chips" role="group" aria-label="Show"></div>
         <ul class="media-list" id="media-list" aria-label="Discs and tapes"></ul>
+        <div class="media-hint" id="media-hint" aria-hidden="true"></div>
         <div class="media-foot">
           <label class="btn btn-sm btn-outline-light" id="media-open-label">
             <span id="media-open-text">Open a file…</span>

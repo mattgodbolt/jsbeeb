@@ -454,6 +454,39 @@ describe("MediaWindow", () => {
             expect(rows()[0].querySelector(".media-target").textContent).toBe("0");
         });
 
+        it("is aimed from the Into control, which says where the list points", async () => {
+            await openWith([elite]);
+            const into = (target) => document.querySelector(`#media-into [data-target="${target}"]`);
+            expect(into("0").classList.contains("active")).toBe(true);
+            into("1").click();
+            expect(into("1").classList.contains("active")).toBe(true);
+            expect(into("0").classList.contains("active")).toBe(false);
+            expect(bay(1).classList.contains("target")).toBe(true);
+            expect(document.getElementById("media-search").placeholder).toBe("Search for a disc for drive 1");
+            expect(text(document.getElementById("media-hint"))).toContain("Enter loads into drive 1");
+            into("tape").click();
+            expect(document.getElementById("deck-window").classList.contains("target")).toBe(true);
+            expect(document.getElementById("media-search").placeholder).toBe("Search for a tape for the deck");
+        });
+
+        it("boots the disc on Shift+Enter or a shift-click, whatever the autoboot tick says", async () => {
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            await openWith([elite]);
+            const box = document.getElementById("media-search");
+            box.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }),
+            );
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+            expect(deps.processor.reset).toHaveBeenCalledWith(true);
+            deps.autoboot.mockClear();
+            make();
+            await openWith([elite]);
+            rows()[0]
+                .querySelector(".media-row-main")
+                .dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+        });
+
         it("resets and boots when autoboot is ticked and the disc goes into drive 0", async () => {
             deps.media.params.autoboot = "";
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));

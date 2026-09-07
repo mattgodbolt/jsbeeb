@@ -236,6 +236,8 @@ export class MediaWindow {
             open: document.getElementById("media-open"),
             openText: document.getElementById("media-open-text"),
             openLabel: document.getElementById("media-open-label"),
+            into: document.getElementById("media-into"),
+            hint: document.getElementById("media-hint"),
             connect: document.getElementById("media-connect-drive"),
             descriptors: [],
             failures: [],
@@ -253,7 +255,7 @@ export class MediaWindow {
             const first = list.rows.querySelector(".media-row-main");
             if (e.key === "Enter" && first) {
                 e.preventDefault();
-                first.click();
+                this.loadInto(this.rowTarget(first.descriptor), first.descriptor, { boot: e.shiftKey });
             } else if (e.key === "ArrowDown" && first) {
                 e.preventDefault();
                 first.focus();
@@ -285,6 +287,10 @@ export class MediaWindow {
         list.connect.addEventListener("click", async () => {
             if (await this.googleDrive.connect()) this.refreshList();
         });
+        for (const button of list.into.querySelectorAll("[data-target]"))
+            button.addEventListener("click", () =>
+                this.aimAt(button.dataset.target === "tape" ? "tape" : Number(button.dataset.target)),
+            );
         return list;
     }
 
@@ -306,6 +312,29 @@ export class MediaWindow {
         this.list.openLabel.title = forTape
             ? "Open a tape image from this computer; a disc image goes into drive 0"
             : `Open a disc image from this computer into drive ${target}; a tape image goes into the deck`;
+        this.list.search.placeholder = forTape
+            ? "Search for a tape for the deck"
+            : `Search for a disc for drive ${target}`;
+        for (const button of this.list.into.querySelectorAll("[data-target]"))
+            button.classList.toggle("active", button.dataset.target === String(target));
+        this.list.hint.replaceChildren(
+            ...[
+                ["Enter", `loads into ${into}`],
+                ...(forTape
+                    ? []
+                    : [
+                          ["Shift+Enter", "loads and boots"],
+                          [`${otherDrive(target)}`, `into drive ${otherDrive(target)}`],
+                      ]),
+                ["Esc", "closes"],
+            ].map(([key, what]) => {
+                const span = document.createElement("span");
+                const kbd = document.createElement("kbd");
+                kbd.textContent = key;
+                span.append(kbd, ` ${what}`);
+                return span;
+            }),
+        );
         this.renderChips();
         this.renderList();
     }
@@ -429,7 +458,8 @@ export class MediaWindow {
             source,
             keycap,
         );
-        main.addEventListener("click", () => this.loadInto(target, d));
+        main.descriptor = d;
+        main.addEventListener("click", (e) => this.loadInto(target, d, { boot: e.shiftKey }));
         main.addEventListener("keydown", (e) => {
             if (d.kind === "disc" && (e.key === "0" || e.key === "1")) {
                 e.preventDefault();
@@ -446,7 +476,7 @@ export class MediaWindow {
             button.textContent = String(other);
             button.title = `Load ${d.title} into drive ${other}`;
             button.setAttribute("aria-label", button.title);
-            button.addEventListener("click", () => this.loadDisc(other, d));
+            button.addEventListener("click", (e) => this.loadDisc(other, d, { boot: e.shiftKey }));
             targets.append(button);
         }
         li.append(main, targets);
@@ -462,9 +492,14 @@ export class MediaWindow {
         return null;
     }
 
-    loadInto(target, d) {
+    /** Where a row's own action sends its descriptor: the deck for a tape, the aimed drive for a disc. */
+    rowTarget(d) {
+        return d.kind === "tape" ? "tape" : this.target === "tape" ? 0 : this.target;
+    }
+
+    loadInto(target, d, options = {}) {
         if (d.kind === "tape") return this.loadTape(d);
-        return this.loadDisc(target, d);
+        return this.loadDisc(target, d, options);
     }
 
     /** A reference the URL can carry, or nothing for a file opened this session. */
@@ -472,13 +507,14 @@ export class MediaWindow {
         return d.source === "session" ? undefined : d.ref;
     }
 
-    async loadDisc(driveIndex, d) {
+    /** @param {object} [options] `boot`: reset and boot the disc afterwards, whatever the autoboot tick says */
+    async loadDisc(driveIndex, d, { boot = false } = {}) {
         noteEvent("media", "loadDisc", d.ref);
         const bay = this.bays[driveIndex];
         bay.busy = d;
         bay.failed = null;
         this.renderDrive(driveIndex);
-        const needsAutoboot = driveIndex === 0 && this.media.params.autoboot !== undefined;
+        const needsAutoboot = driveIndex === 0 && (boot || this.media.params.autoboot !== undefined);
         if (needsAutoboot) this.processor.reset(true);
         try {
             const loaded = await this.media.loadDiscImage(d.ref, this.drives.layoutForDrive(driveIndex));
