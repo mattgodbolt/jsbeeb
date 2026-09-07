@@ -137,11 +137,11 @@ export class GoogleDriveLoader {
         });
     }
 
-    async create(name, data) {
+    async create(name, data, layout) {
         console.log(`Google Drive: creating disc image: '${name}'`);
         const response = await this.saveFile(name, data);
         const meta = response.result;
-        return { fileId: meta.id, disc: this.makeDisc(data, meta) };
+        return { fileId: meta.id, disc: this.makeDisc(data, meta, layout) };
     }
 
     makeDisc(data, meta, layout) {

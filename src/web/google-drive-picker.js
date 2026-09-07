@@ -189,7 +189,7 @@ export class GoogleDrivePicker {
         }
 
         try {
-            const result = await this.googleDrive.create(name, data);
+            const result = await this.googleDrive.create(name, data, this.drives.layoutForDrive(0));
             this.media.setDisc1Image("gd:" + result.fileId + "/" + name);
             this.drives.putDiscIn(0, result.disc);
             this.modals.loadingFinished();

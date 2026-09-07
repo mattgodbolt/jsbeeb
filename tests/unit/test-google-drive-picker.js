@@ -160,9 +160,10 @@ describe("GoogleDrivePicker", () => {
             document.querySelector("#google-drive .disc-name").value = "fresh.ssd";
             submit();
             await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalled());
-            const [name, data] = loader.create.mock.calls[0];
+            const [name, data, layout] = loader.create.mock.calls[0];
             expect(name).toBe("fresh.ssd");
             expect(data.length).toBeGreaterThan(0);
+            expect(layout).toBe("auto");
             expect(deps.media.setDisc1Image).toHaveBeenCalledWith("gd:xyz/fresh.ssd");
         });
 
