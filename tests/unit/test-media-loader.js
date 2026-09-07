@@ -133,6 +133,26 @@ describe("MediaLoader", () => {
             );
             expect(names).toEqual(BuiltInImages.map((image) => image.name));
         });
+
+        it("puts the clicked image in drive 0, then names it in the URL", async () => {
+            const media = make();
+            const loaded = {};
+            vi.spyOn(media, "loadDiscImage").mockResolvedValue(loaded);
+            document.querySelector("#disc-list li:not(.template)").click();
+            await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded));
+            expect(media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.auto);
+            expect(deps.urlState.params).toEqual({ disc1: "elite.ssd" });
+            expect(deps.modals.hide).toHaveBeenCalledWith("discs");
+        });
+
+        it("leaves the URL alone when the image will not load", async () => {
+            const media = make();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            vi.spyOn(media, "loadDiscImage").mockRejectedValue(new Error("offline"));
+            document.querySelector("#disc-list li:not(.template)").click();
+            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load Elite")]));
+            expect(deps.urlState.params).toEqual({});
+        });
     });
 
     describe("the local disc input", () => {

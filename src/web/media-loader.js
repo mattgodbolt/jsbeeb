@@ -144,10 +144,10 @@ export class MediaLoader extends EventTarget {
             elem.querySelector(".description").textContent = image.desc;
             elem.addEventListener("click", async () => {
                 noteEvent("images", "click", image.file);
-                this.setDisc1Image(image.file);
                 modals.hide("discs");
                 try {
-                    drives.putDiscIn(0, await this.loadDiscImage(this.params.disc1, drives.layoutForDrive(0)));
+                    drives.putDiscIn(0, await this.loadDiscImage(image.file, drives.layoutForDrive(0)));
+                    this.setDisc1Image(image.file);
                 } catch (error) {
                     reportLoadFailure(`${image.name} (${image.file})`, error);
                 }

@@ -59,7 +59,6 @@ export class HfePicker {
     async pick(file) {
         noteEvent("hfe", "click", file.path);
         const image = "hfe:" + file.path;
-        this.media.setDisc1Image(image);
         const needsAutoboot = this.urlState.params.autoboot !== undefined;
         if (needsAutoboot) this.processor.reset(true);
 
@@ -68,6 +67,7 @@ export class HfePicker {
         try {
             const loaded = await this.media.loadDiscImage(image, this.drives.layoutForDrive(0));
             this.drives.putDiscIn(0, loaded);
+            this.media.setDisc1Image(image);
             this.modals.loadingFinished();
             if (needsAutoboot) this.autoboot(name);
         } catch (err) {

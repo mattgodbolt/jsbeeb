@@ -80,13 +80,16 @@ describe("SthPicker", () => {
     });
 
     describe("picking a disc", () => {
-        it("names it in the URL, loads it into drive 0 and closes the loading dialog", async () => {
+        it("loads it into drive 0, then names it in the URL and closes the loading dialog", async () => {
             const loaded = {};
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().pickDisc("ELITE.zip");
-            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("sth:ELITE.zip");
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("sth:ELITE.zip", "auto");
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
+            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("sth:ELITE.zip");
+            expect(deps.media.setDisc1Image.mock.invocationCallOrder[0]).toBeGreaterThan(
+                deps.drives.putDiscIn.mock.invocationCallOrder[0],
+            );
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
             expect(deps.processor.reset).not.toHaveBeenCalled();
             expect(deps.autoboot).not.toHaveBeenCalled();
@@ -105,6 +108,7 @@ describe("SthPicker", () => {
             deps.media.loadDiscImage.mockRejectedValue(new Error("404"));
             await make().pickDisc("ELITE.zip");
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                 expect.stringContaining("Unable to load ELITE.zip from the STH archive: 404"),
             );
@@ -112,14 +116,16 @@ describe("SthPicker", () => {
     });
 
     describe("picking a tape", () => {
-        it("names it in the URL and routes it to the machine", async () => {
+        it("routes it to the machine, then names it in the URL", async () => {
             const tape = {};
-            deps.media.setTapeImage.mockImplementation((name) => (deps.urlState.params.tape = name));
             deps.media.loadTapeImage.mockResolvedValue(tape);
             await make().pickTape("CHUCKIE.zip");
-            expect(deps.media.setTapeImage).toHaveBeenCalledWith("sth:CHUCKIE.zip");
             expect(deps.media.loadTapeImage).toHaveBeenCalledWith("sth:CHUCKIE.zip");
             expect(deps.media.setProcessorTape).toHaveBeenCalledWith(tape);
+            expect(deps.media.setTapeImage).toHaveBeenCalledWith("sth:CHUCKIE.zip");
+            expect(deps.media.setTapeImage.mock.invocationCallOrder[0]).toBeGreaterThan(
+                deps.media.setProcessorTape.mock.invocationCallOrder[0],
+            );
         });
 
         it("reports a failure through the loading dialog", async () => {
@@ -127,6 +133,7 @@ describe("SthPicker", () => {
             deps.media.loadTapeImage.mockRejectedValue(new Error("410"));
             await make().pickTape("CHUCKIE.zip");
             expect(deps.media.setProcessorTape).not.toHaveBeenCalled();
+            expect(deps.media.setTapeImage).not.toHaveBeenCalled();
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                 expect.stringContaining("Unable to load CHUCKIE.zip from the STH archive: 410"),
             );

@@ -136,6 +136,7 @@ describe("GoogleDrivePicker", () => {
                 expect(toasts()).toEqual([expect.stringContaining("Unable to load mine.ssd from Google Drive: boom")]),
             );
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
         });
 
         it("says when the list cannot be fetched", async () => {
