@@ -36,6 +36,7 @@ import { SpeechOutput } from "./web/speech-output.js";
 import { Printer } from "./printer.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
+import { MediaWindow } from "./web/media-window.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 import { adaptKeyCodesToBrowser, keyCodes, userKeymap } from "./keymap.js";
@@ -112,7 +113,7 @@ if (keyMappingWarnings.length) {
     });
 }
 if (driveTrackWarnings.length) {
-    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 from the Discs menu.`, {
+    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 on the drive in the media window.`, {
         title: "Disc drives",
     });
 }
@@ -287,7 +288,8 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 const rewindUI = new RewindUI({ processor, video, loop });
 rewindUI.updateButtonState();
 
-new DiscVisualiser({ fdc: processor.fdc });
+const discVisualiser = new DiscVisualiser({ fdc: processor.fdc });
+new MediaWindow({ media, drives, processor, model, modals, loop, visualiser: discVisualiser });
 
 const layout = new Layout({
     screenCanvas,

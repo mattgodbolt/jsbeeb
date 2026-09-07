@@ -5,6 +5,8 @@ import { keyCodes } from "../keymap.js";
 
 const PasteBoxId = "paste-text";
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+// Where keys are for the page, not the machine: the paste box, and the media window's controls.
+const KeyboardSinks = `#${PasteBoxId}, #media-panel`;
 
 /**
  * Builds the emulated keyboard and wires the browser's shortcuts around it,
@@ -21,7 +23,7 @@ export class KeyboardSetup {
     constructor({ actions, accessibilitySwitches, processor, dbgr, keyLayout }) {
         const keyboard = (this.keyboard = new Keyboard({
             processor,
-            inputEnabledFunction: () => document.activeElement && document.activeElement.id === PasteBoxId,
+            inputEnabledFunction: () => !!document.activeElement?.closest(KeyboardSinks),
             keyLayout,
             dbgr,
         }));

@@ -229,7 +229,7 @@ export class MediaLoader extends EventTarget {
         if (schema[0] === "!" || schema === "local") {
             return localDisc(image, layout, (error) =>
                 toast(
-                    `Browser storage would not take changes to ${image} (${errorText(error)}). Use Discs, Download to keep a copy.`,
+                    `Browser storage would not take changes to ${image} (${errorText(error)}). Use the drive's Save button to keep a copy.`,
                     { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
                 ),
             );

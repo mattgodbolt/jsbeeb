@@ -14,8 +14,8 @@ class Light {
 }
 
 /**
- * The furniture around the screen: the keyboard and drive lights, the tape
- * controls, and the pop-up window the printer prints into.
+ * The furniture around the screen: the keyboard, drive and cassette lights,
+ * and the pop-up window the printer prints into.
  */
 export class FrontPanel {
     constructor({ processor, model, printer, loop }) {
@@ -33,32 +33,6 @@ export class FrontPanel {
             }),
         );
 
-        for (const link of document.querySelectorAll("#tape-menu a")) {
-            link.addEventListener("click", (e) => {
-                const type = e.target.dataset.id;
-                if (type === undefined) return;
-
-                if (type === "rewind") {
-                    console.log("Rewinding tape to the start");
-                    processor.tapeInterface.rewindTape();
-                    this.updateTapeButton();
-                }
-            });
-        }
-
-        this.tapePlayStopBtn = document.getElementById("tape-play-stop");
-        this.tapeControlHeader = document.getElementById("tape-control-header");
-        this.tapeControlCell = document.getElementById("tape-control-cell");
-
-        this.tapePlayStopBtn.addEventListener("click", () => {
-            if (processor.atomppia.motorOn) {
-                processor.atomppia.stopTape();
-            } else {
-                processor.atomppia.playTape();
-            }
-            this.updateTapeButton();
-        });
-
         this.cassette = new Light("motorlight");
         this.caps = new Light("capslight");
         this.shift = new Light("shiftlight");
@@ -69,28 +43,11 @@ export class FrontPanel {
         this.updateLedVisibility();
     }
 
-    updateTapeButton() {
-        if (!this.model.isAtom) return;
-        const playing = this.processor.atomppia.motorOn;
-        const label = playing ? "Stop cassette" : "Play cassette";
-        this.tapePlayStopBtn.textContent = playing ? "■" : "▶";
-        this.tapePlayStopBtn.title = label;
-        this.tapePlayStopBtn.setAttribute("aria-label", label);
-        this.tapePlayStopBtn.classList.toggle("playing", playing);
-    }
-
-    showTapeControl(visible) {
-        const display = visible ? "" : "none";
-        this.tapeControlHeader.style.display = display;
-        this.tapeControlCell.style.display = display;
-    }
-
     updateLedVisibility() {
         const bbcDisplay = this.model.isAtom ? "none" : "";
         for (const el of document.querySelectorAll(".bbc-only")) {
             el.style.display = bbcDisplay;
         }
-        this.showTapeControl(this.model.isAtom);
     }
 
     syncLights() {

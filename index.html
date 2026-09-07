@@ -107,34 +107,7 @@
                   </li>
                   <hr />
                 </div>
-                <li>
-                  <a href="#download-drive" class="dropdown-item" id="download-drive-link"
-                    >Download drive 0 image as SSD/DSD</a
-                  >
-                </li>
-                <li>
-                  <a href="#download-drive-hfe" class="dropdown-item" id="download-drive-hfe-link"
-                    >Download drive 0 image as HFE</a
-                  >
-                </li>
-                <li><hr class="dropdown-divider" /></li>
-                <li class="dropdown-item-text drive-tracks" data-drive="0">
-                  <span class="drive-tracks-label">Drive 0 reads</span>
-                  <div class="btn-group btn-group-sm" role="group" aria-label="Drive 0 track pitch">
-                    <button type="button" class="btn btn-outline-light" data-tracks="40">40</button>
-                    <button type="button" class="btn btn-outline-light" data-tracks="80">80</button>
-                  </div>
-                  <span class="drive-tracks-label">track discs</span>
-                </li>
-                <li class="dropdown-item-text drive-tracks" data-drive="1">
-                  <span class="drive-tracks-label">Drive 1 reads</span>
-                  <div class="btn-group btn-group-sm" role="group" aria-label="Drive 1 track pitch">
-                    <button type="button" class="btn btn-outline-light" data-tracks="40">40</button>
-                    <button type="button" class="btn btn-outline-light" data-tracks="80">80</button>
-                  </div>
-                  <span class="drive-tracks-label">track discs</span>
-                </li>
-                <li><hr class="dropdown-divider" /></li>
+                <li><a href="#" class="dropdown-item media-window-open">Drives and cassette…</a></li>
                 <li><a href="#" id="disc-visualiser-open" class="dropdown-item">View disc surface</a></li>
               </ul>
             </li>
@@ -157,12 +130,12 @@
                     >From STH archive</a
                   >
                 </li>
-                <li><a data-id="rewind" class="dropdown-item">Rewind cassette</a></li>
                 <li>
                   <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">
                     From local file
                   </a>
                 </li>
+                <li><a href="#" class="dropdown-item media-window-open">Cassette deck…</a></li>
               </ul>
             </li>
             <li class="nav-item dropdown embed-hide">
@@ -402,51 +375,175 @@
         <div class="disc-status" id="disc-hover-what"></div>
       </div>
       <div id="leds">
-        <table>
-          <thead>
-            <tr>
-              <th>cassette<br />motor</th>
-              <th id="tape-control-header" class="initially-hidden">tape<br />control</th>
-              <th class="bbc-only">caps<br />lock</th>
-              <th class="bbc-only">shift<br />lock</th>
-              <th class="bbc-only">drive<br />0/2</th>
-              <th class="bbc-only">drive<br />1/3</th>
-              <th class="bbc-only">econet<br />tx/rx</th>
-              <th id="virtual-mhz-header">virtual<br />MHz</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div class="red led" id="motorlight"></div>
-              </td>
-              <td id="tape-control-cell" class="initially-hidden">
-                <button id="tape-play-stop" class="tape-btn" title="Play cassette" aria-label="Play cassette">
-                  &#9654;
-                </button>
-              </td>
-              <td class="bbc-only">
-                <div class="red led" id="capslight"></div>
-              </td>
-              <td class="bbc-only">
-                <div class="red led" id="shiftlight"></div>
-              </td>
-              <td class="bbc-only">
-                <div class="yellow led" id="drive0"></div>
-              </td>
-              <td class="bbc-only">
-                <div class="yellow led" id="drive1"></div>
-              </td>
-              <td class="bbc-only">
-                <div class="yellow led" id="networklight"></div>
-              </td>
-              <td>
-                <div class="virtualMHz"></div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="slot-readouts" role="group" aria-label="What is loaded">
+          <button type="button" class="slot-readout media-window-open bbc-only" data-slot="0">
+            <span class="hdr">drive<br />0/2</span>
+            <span class="line"><span class="led disc" id="drive0"></span><span class="name"></span></span>
+          </button>
+          <button type="button" class="slot-readout media-window-open bbc-only" data-slot="1">
+            <span class="hdr">drive<br />1/3</span>
+            <span class="line"><span class="led disc" id="drive1"></span><span class="name"></span></span>
+          </button>
+          <button type="button" class="slot-readout media-window-open" data-slot="tape">
+            <span class="hdr">cassette<br />motor</span>
+            <span class="line"
+              ><span class="led tape" id="motorlight"></span><span class="name"></span><span class="counter"></span
+            ></span>
+          </button>
+        </div>
+        <div class="lights">
+          <div class="cell bbc-only" title="Caps lock">
+            <span class="hdr">caps<br />lock</span>
+            <span class="led keyboard" id="capslight"></span>
+          </div>
+          <div class="cell bbc-only" title="Shift lock">
+            <span class="hdr">shift<br />lock</span>
+            <span class="led keyboard" id="shiftlight"></span>
+          </div>
+          <div class="cell bbc-only" title="Econet activity">
+            <span class="hdr">econet<br />tx/rx</span>
+            <span class="led disc" id="networklight"></span>
+          </div>
+          <div class="cell" title="Emulated processor speed">
+            <span class="hdr" id="virtual-mhz-header">virtual<br />MHz</span>
+            <span class="virtualMHz"></span>
+          </div>
+        </div>
       </div>
+      <div id="media-panel" hidden role="dialog" aria-labelledby="media-title">
+        <div class="panel-header media-header" title="Drag to move">
+          <span class="disc-title" id="media-title">Media</span>
+          <span id="media-summary"></span>
+          <button type="button" id="media-close" class="btn btn-sm btn-outline-light" title="Close (Escape)">
+            Close
+          </button>
+        </div>
+        <div class="media-rack">
+          <section class="media-unit media-case" aria-label="Disc drives">
+            <div class="unit-lip"></div>
+            <div class="bays"></div>
+          </section>
+          <section class="media-unit media-deck" id="media-deck" aria-label="Cassette deck">
+            <div class="unit-lip"></div>
+            <div class="deck-head">
+              <div class="deck-leds">
+                <i class="deck-led on" role="img" title="Power: the deck is on" aria-label="Power on"></i
+                ><span>power</span>
+                <i class="deck-led data" id="deck-data" role="img" title="Data: lights as blocks pass the head"></i
+                ><span>data</span>
+              </div>
+              <div class="counter-wrap">
+                <span>counter</span>
+                <span class="counter-row">
+                  <span class="counter" id="tape-counter" role="status" title="Tape counter">
+                    <b>0</b><b>0</b><b>0</b>
+                  </span>
+                  <button
+                    type="button"
+                    class="counter-reset"
+                    id="tape-counter-reset"
+                    title="Reset the counter to 000"
+                    aria-label="Reset tape counter"
+                  ></button>
+                </span>
+              </div>
+              <div class="deck-logo" aria-hidden="true">jsbeeb<small>data recorder</small></div>
+            </div>
+            <button type="button" class="deck-window" id="deck-window">
+              <span class="cassette" id="deck-cassette" aria-hidden="true">
+                <span class="tape-label"><b id="deck-tape-title"></b><span id="deck-tape-sub"></span></span>
+                <span class="reels">
+                  <svg class="reel" viewBox="0 0 48 48" aria-hidden="true">
+                    <circle cx="24" cy="24" r="22" fill="#3b2a1c" />
+                    <circle cx="24" cy="24" r="10" fill="#efe6cc" stroke="#8a7f66" />
+                    <g stroke="#8a7f66" stroke-width="2.4" stroke-linecap="round">
+                      <line x1="24" y1="15" x2="24" y2="19" />
+                      <line x1="24" y1="29" x2="24" y2="33" />
+                      <line x1="16.2" y1="19.5" x2="19.7" y2="21.5" />
+                      <line x1="28.3" y1="26.5" x2="31.8" y2="28.5" />
+                      <line x1="16.2" y1="28.5" x2="19.7" y2="26.5" />
+                      <line x1="28.3" y1="21.5" x2="31.8" y2="19.5" />
+                    </g>
+                    <circle cx="24" cy="24" r="3.5" fill="#1a1613" />
+                  </svg>
+                  <svg class="reel small" viewBox="0 0 48 48" aria-hidden="true">
+                    <circle cx="24" cy="24" r="14" fill="#3b2a1c" />
+                    <circle cx="24" cy="24" r="10" fill="#efe6cc" stroke="#8a7f66" />
+                    <g stroke="#8a7f66" stroke-width="2.4" stroke-linecap="round">
+                      <line x1="24" y1="15" x2="24" y2="19" />
+                      <line x1="24" y1="29" x2="24" y2="33" />
+                      <line x1="16.2" y1="19.5" x2="19.7" y2="21.5" />
+                      <line x1="28.3" y1="26.5" x2="31.8" y2="28.5" />
+                      <line x1="16.2" y1="28.5" x2="19.7" y2="26.5" />
+                      <line x1="28.3" y1="21.5" x2="31.8" y2="19.5" />
+                    </g>
+                    <circle cx="24" cy="24" r="3.5" fill="#1a1613" />
+                  </svg>
+                </span>
+              </span>
+              <span class="empty-tape" id="deck-empty"><b>no tape</b><span>click to load one</span></span>
+            </button>
+            <div>
+              <div class="key-labels" aria-hidden="true">
+                <span>rew</span><span>play</span><span>stop</span><span>eject</span>
+              </div>
+              <div class="keys" role="group" aria-label="Tape transport">
+                <button type="button" class="key" id="tape-rewind" title="Rewind to the start">Rewind</button>
+                <button type="button" class="key" id="tape-play">Play</button>
+                <button type="button" class="key" id="tape-stop">Stop</button>
+                <button type="button" class="key" id="tape-eject">Eject</button>
+              </div>
+            </div>
+            <div class="deck-line"><span class="status" id="deck-status"></span></div>
+          </section>
+        </div>
+      </div>
+      <template id="drive-bay-template">
+        <section class="bay" data-state="empty">
+          <span class="bay-led led disc" role="img"></span>
+          <span class="lever-wrap">
+            <button type="button" class="lever bay-eject"></button>
+            <span class="hwlabel" aria-hidden="true">eject</span>
+          </span>
+          <div class="mouth">
+            <button type="button" class="slot bay-slot">
+              <span class="jacket">
+                <span class="paper">
+                  <span class="title">
+                    <span class="bay-title"></span>
+                    <span class="dfs bay-dfs" title="DFS catalogue title and cycle number, read from the disc"></span>
+                  </span>
+                  <span class="sub bay-sub"></span>
+                </span>
+              </span>
+              <span class="empty-note"><b>no disc</b><span>click to load one</span></span>
+            </button>
+          </div>
+          <fieldset class="pitch">
+            <legend class="bay-pitch-legend"></legend>
+            <span class="hwlabel" aria-hidden="true">tracks</span>
+            <label><span>40</span><input type="radio" value="40" /></label>
+            <span class="track" aria-hidden="true"><span class="knob"></span></span>
+            <label><span>80</span><input type="radio" value="80" /></label>
+          </fieldset>
+          <div class="bay-badge" aria-hidden="true">
+            <span class="logo">jsbeeb</span><span class="drive-no">drive<b class="bay-number"></b></span>
+          </div>
+          <div class="bay-line">
+            <span class="status bay-status"></span>
+            <span class="status bay-kept"></span>
+            <span class="spacer"></span>
+            <div class="dropdown">
+              <button type="button" class="txt-btn bay-save dropdown-toggle" data-bs-toggle="dropdown">Save</button>
+              <ul class="dropdown-menu dropdown-menu-dark">
+                <li><button type="button" class="dropdown-item bay-save-ssd">Download as SSD/DSD</button></li>
+                <li><button type="button" class="dropdown-item bay-save-hfe">Download as HFE</button></li>
+              </ul>
+            </div>
+            <button type="button" class="txt-btn bay-surface">Surface</button>
+          </div>
+        </section>
+      </template>
       <div id="crtc_debug" class="initially-hidden">
         <div class="crtc_state">
           <h6 class="dbg">6845 state</h6>

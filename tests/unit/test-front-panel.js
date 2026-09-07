@@ -11,7 +11,7 @@ describe("FrontPanel", () => {
 
     beforeEach(() => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        domFromIndexHtml("tape-menu", "leds");
+        domFromIndexHtml("leds");
         processor = {
             sysvia: { capsLockLight: false, shiftLockLight: false },
             fdc: { motorOn: [false, false] },
@@ -59,54 +59,15 @@ describe("FrontPanel", () => {
     });
 
     describe("what each machine shows", () => {
-        it("hides the BBC lights and shows the tape control on an Atom", () => {
+        it("hides the BBC lights on an Atom", () => {
             make(true);
             expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("none");
-            expect(document.getElementById("tape-control-header").style.display).toBe("");
+            expect(document.getElementById("motorlight").closest(".slot-readout").style.display).toBe("");
         });
 
-        it("shows the BBC lights and hides the tape control on a BBC", () => {
+        it("shows the BBC lights on a BBC", () => {
             make(false);
             expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("");
-            expect(document.getElementById("tape-control-header").style.display).toBe("none");
-        });
-    });
-
-    describe("the tape controls", () => {
-        it("plays and stops the Atom's cassette, showing which is next", () => {
-            make(true);
-            const button = document.getElementById("tape-play-stop");
-            button.click();
-            expect(processor.atomppia.playTape).toHaveBeenCalled();
-            processor.atomppia.motorOn = true;
-            button.click();
-            expect(processor.atomppia.stopTape).toHaveBeenCalled();
-            expect(button.textContent).toBe("■");
-        });
-
-        it("rewinds through the right interface for the machine", () => {
-            make(false);
-            document.querySelector('#tape-menu a[data-id="rewind"]').click();
-            expect(processor.acia.rewindTape).toHaveBeenCalled();
-            expect(processor.atomppia.rewindTape).not.toHaveBeenCalled();
-        });
-
-        it("rewinds the Atom's tape and shows play as what comes next", () => {
-            make(true);
-            processor.atomppia.motorOn = true;
-            processor.atomppia.rewindTape.mockImplementation(() => (processor.atomppia.motorOn = false));
-            document.querySelector('#tape-menu a[data-id="rewind"]').click();
-            expect(processor.atomppia.rewindTape).toHaveBeenCalled();
-            expect(document.getElementById("tape-play-stop").textContent).toBe("▶");
-        });
-
-        it("ignores menu links it does not handle", () => {
-            const link = document.getElementById("tape-menu").appendChild(document.createElement("a"));
-            link.dataset.id = "archive";
-            make(false);
-            link.click();
-            expect(processor.acia.rewindTape).not.toHaveBeenCalled();
-            expect(console.log).not.toHaveBeenCalled();
         });
     });
 

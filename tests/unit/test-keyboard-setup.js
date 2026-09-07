@@ -133,6 +133,17 @@ describe("KeyboardSetup", () => {
         });
     });
 
+    describe("where keys go", () => {
+        it("reach the machine from the page at large, but not from the media window", () => {
+            domFromIndexHtml("media-panel");
+            document.dispatchEvent(keyEvent("keydown", keyCodes.A));
+            expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
+            document.getElementById("media-close").focus();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.A));
+            expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe("the keyboard's own events", () => {
         it("routes pause and resume to the loop's actions", () => {
             setup.keyboard.dispatchEvent(new CustomEvent("pause"));

@@ -103,6 +103,14 @@ describe("DiscVisualiser", () => {
             expect(panel().style.left).toBe("0px");
             expect(panel().style.top).toBe("0px");
         });
+
+        it("opens on a named drive", () => {
+            const visualiser = make();
+            visualiser.openOn(1);
+            expect(panel().hidden).toBe(false);
+            expect(status()).toBe("Drive 1: no disc");
+            expect(document.querySelector('[data-drive="1"]').classList.contains("active")).toBe(true);
+        });
     });
 
     describe("the views", () => {
