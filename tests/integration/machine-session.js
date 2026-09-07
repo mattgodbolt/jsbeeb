@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MachineSession } from "../../src/machine-session.js";
+import { BBC, keyCodes } from "../../src/keymap.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
@@ -136,6 +137,82 @@ describe("MachineSession running for cycles", () => {
         session.removeBreakpoint(id);
 
         expectCyclesNear((await session.runFor(1000)).cyclesRun, 1000);
+    });
+});
+
+describe("MachineSession keyboard", () => {
+    let session;
+    const HoldCycles = 200000; // a tenth of a second, several OS keyboard scans
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    async function pressRaw(key) {
+        session.keyDownRaw(key);
+        await session.runFor(HoldCycles);
+        session.keyUpRaw(key);
+        await session.runFor(HoldCycles);
+    }
+
+    it("types a key pressed by matrix position", async () => {
+        await pressRaw(BBC.A);
+        await pressRaw(BBC.RETURN);
+
+        expect((await session.runUntilPrompt()).screenText).toContain("A");
+    });
+
+    it("reports the keys held, however they were pressed", () => {
+        session.keyDownRaw(BBC.A);
+        session.keyDown(keyCodes.SHIFT);
+        expect(session.heldKeys()).toEqual(expect.arrayContaining([BBC.A, BBC.SHIFT]));
+
+        session.keyUpRaw(BBC.A);
+        session.keyUp(keyCodes.SHIFT);
+        expect(session.heldKeys()).toEqual([]);
+    });
+
+    it("refuses a key while typing a breakpoint interrupted still owns the keyboard", async () => {
+        const id = session.addBreakpoint("execute", 0xffee); // OSWRCH, echoing the first character
+        await session.type("X");
+        session.removeBreakpoint(id);
+
+        expect(session.typingPending).toBe(true);
+        expect(() => session.keyDown(keyCodes.SHIFT)).toThrow(/cancelTyping/);
+        expect(() => session.keyDownRaw(BBC.SHIFT)).toThrow(/cancelTyping/);
+
+        session.cancelTyping();
+        expect(session.typingPending).toBe(false);
+        session.keyDown(keyCodes.SHIFT);
+        expect(session.heldKeys()).toEqual([BBC.SHIFT]);
+        session.keyUp(keyCodes.SHIFT);
+
+        await pressRaw(BBC.RETURN);
+        await session.runUntilPrompt();
+    });
+
+    it("releases every key held", () => {
+        session.keyDownRaw(BBC.SHIFT);
+        session.keyDownRaw(BBC.A);
+
+        session.releaseAllKeys();
+
+        expect(session.heldKeys()).toEqual([]);
+    });
+
+    it("releasing every key drops pending typing too", async () => {
+        const id = session.addBreakpoint("execute", 0xffee);
+        await session.type("X");
+        session.removeBreakpoint(id);
+
+        session.releaseAllKeys();
+
+        expect(session.typingPending).toBe(false);
+        expect(session.heldKeys()).toEqual([]);
+        await pressRaw(BBC.RETURN);
+        await session.runUntilPrompt();
     });
 });
 

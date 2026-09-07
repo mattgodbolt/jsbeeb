@@ -118,19 +118,88 @@ export class MachineSession {
         return this.drainOutput();
     }
 
+    get _keyboard() {
+        return this._machine.processor.keyboardInterface;
+    }
+
+    /**
+     * The keyboard is the typist's until everything from type() has been
+     * delivered, and a key pressed meanwhile would be silently dropped.
+     */
+    _requireKeyboard() {
+        if (this.typingPending) {
+            throw new Error(
+                "Text from type() is still being typed: await type(), or if a breakpoint stopped it " +
+                    "run the machine on to finish it, or cancelTyping() first",
+            );
+        }
+    }
+
     /**
      * Press a key (by browser keyCode).
-     * Use utils.keyCodes for named keys, or ASCII charCode for letters/digits.
+     * Use keyCodes from keymap.js for named keys, or ASCII charCode for letters/digits.
      */
     keyDown(keyCode, shiftDown = false) {
-        this._machine.processor.sysvia.keyDown(keyCode, shiftDown);
+        this._requireKeyboard();
+        this._keyboard.keyDown(keyCode, shiftDown);
     }
 
     /**
      * Release a key (by browser keyCode).
      */
     keyUp(keyCode) {
-        this._machine.processor.sysvia.keyUp(keyCode);
+        this._requireKeyboard();
+        this._keyboard.keyUp(keyCode);
+    }
+
+    /**
+     * Press a key by its place in the keyboard matrix, as the model's key
+     * table (BBC or ATOM in the keymaps) gives it, with no host key map in
+     * between: a game reading the matrix sees exactly this key.
+     * @param {[number, number]} colRow
+     */
+    keyDownRaw(colRow) {
+        this._requireKeyboard();
+        this._keyboard.keyDownRaw(colRow);
+    }
+
+    /**
+     * Release a key pressed by matrix position.
+     * @param {[number, number]} colRow
+     */
+    keyUpRaw(colRow) {
+        this._requireKeyboard();
+        this._keyboard.keyUpRaw(colRow);
+    }
+
+    /**
+     * Every key currently down, as matrix positions keyDownRaw takes.
+     * @returns {Array<[number, number]>}
+     */
+    heldKeys() {
+        const held = [];
+        this._keyboard.keys.forEach((column, col) => {
+            column.forEach((down, row) => {
+                if (down) held.push([col, row]);
+            });
+        });
+        return held;
+    }
+
+    /** Whether text from type() is still to be delivered, which a breakpoint stopping the run leaves behind. */
+    get typingPending() {
+        return this._machine.typist.isTyping;
+    }
+
+    /** Drop any text from type() still to be delivered, and give the keyboard back. */
+    cancelTyping() {
+        this._machine.typist.cancel();
+    }
+
+    /** Release every key, and drop any typing still pending, so the keyboard is in a known state. */
+    releaseAllKeys() {
+        this.cancelTyping();
+        this._keyboard.clearKeys();
     }
 
     /**
