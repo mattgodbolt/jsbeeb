@@ -135,6 +135,16 @@ describe("MediaWindow", () => {
             expect(text(bay(0).querySelector(".bay-status"))).toContain("80T");
         });
 
+        it("throws the switch the other way when its track is clicked", () => {
+            make();
+            deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            bay(0).querySelector(".pitch .track").click();
+            expect(fdc.drives[0].tracksPerStep).toBe(2);
+            expect(bay(0).querySelector('input[value="40"]').checked).toBe(true);
+            bay(0).querySelector(".pitch .track").click();
+            expect(fdc.drives[0].tracksPerStep).toBe(1);
+        });
+
         it("ejects from the latch", () => {
             make();
             deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));

@@ -80,7 +80,9 @@ export class FloatingPanel extends EventTarget {
         };
         this.panel.style.left = `${this._position.left}px`;
         this.panel.style.top = `${this._position.top}px`;
-        // Dragging trades the panel's right-hand anchor for an explicit position.
+        // Dragging trades whatever anchored the panel at rest for an explicit position.
         this.panel.style.right = "auto";
+        this.panel.style.bottom = "auto";
+        this.panel.style.transform = "none";
     }
 }

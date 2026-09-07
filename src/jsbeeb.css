@@ -777,10 +777,11 @@ div.smoothie-chart-tooltip {
   --olive-lo: #4f4e2c;
   --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.09 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
   position: fixed;
-  top: 80px;
-  right: 8px;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   width: min(860px, 96vw);
-  max-height: calc(100vh - 64px);
+  max-height: calc(100vh - 88px);
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.92);
   border: 1px solid #555;
@@ -1635,7 +1636,7 @@ div.smoothie-chart-tooltip {
 
 @keyframes reel-spin {
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg);
   }
 }
 
@@ -1670,6 +1671,7 @@ div.smoothie-chart-tooltip {
 @media (max-width: 700px) {
   #media-panel {
     inset: 0;
+    transform: none;
     width: auto;
     max-height: none;
     border: 0;

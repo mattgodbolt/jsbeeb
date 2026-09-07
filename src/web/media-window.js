@@ -108,6 +108,13 @@ export class MediaWindow {
                 this.drives.setTracksPerStep(driveIndex, radio.value === "40" ? 2 : 1),
             );
         }
+        // The knob's track is a switch too: a click throws it the other way.
+        pitch.querySelector(".track").addEventListener("click", () => {
+            const other = [...pitch.querySelectorAll("input")].find((radio) => !radio.checked);
+            if (!other || other.disabled) return;
+            other.checked = true;
+            other.dispatchEvent(new Event("change"));
+        });
         const bay = {
             driveIndex,
             section,
