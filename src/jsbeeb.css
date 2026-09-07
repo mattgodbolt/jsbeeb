@@ -1964,6 +1964,15 @@ div.smoothie-chart-tooltip {
   text-overflow: ellipsis;
 }
 
+/* A row with no publisher lets its detail start where the publisher would, instead of a gap. */
+.media-row .publisher:empty {
+  display: none;
+}
+
+.media-row .publisher:empty + .detail {
+  grid-column: 2 / 4;
+}
+
 .media-row .detail .saves {
   color: #75b798;
 }
