@@ -28,6 +28,9 @@ import { setNodeBasePath } from "./loader.js";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
+// Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
+const AcconShadowBit = 4;
+
 // Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
 
@@ -392,20 +395,72 @@ export class MachineSession {
         };
     }
 
-    /** Read `length` bytes from emulator memory starting at `address` */
-    readMemory(address, length = 16) {
-        const bytes = [];
-        for (let i = 0; i < length; i++) {
-            bytes.push(this._machine.readbyte(address + i));
-        }
-        return bytes;
+    /**
+     * What the memory map has paged in: `romsel`, the sideways bank at
+     * &8000 to &BFFF, and on a Master `acccon`, whose bit 2 puts shadow
+     * RAM at &3000 to &7FFF.
+     * @returns {{romsel: number, acccon?: number}}
+     */
+    pagingState() {
+        const cpu = this._machine.processor;
+        const state = { romsel: cpu.romsel };
+        if (cpu.model.isMaster) state.acccon = cpu.acccon;
+        return state;
     }
 
-    /** Write an array of byte values into emulator memory at `address` */
-    writeMemory(address, bytes) {
-        for (let i = 0; i < bytes.length; i++) {
-            this._machine.writebyte(address + i, bytes[i]);
+    /**
+     * Runs `fn` with `bank` paged at &8000, or shadow RAM paged (or not)
+     * at &3000, putting the map back afterwards. Either left undefined
+     * leaves the map as the machine has it.
+     */
+    _withPaging({ bank, shadow }, fn) {
+        const cpu = this._machine.processor;
+        const { romsel, acccon } = cpu;
+        if (bank !== undefined) {
+            if (!Number.isInteger(bank) || bank < 0 || bank > 15) throw new Error(`Bank ${bank} is not 0 to 15`);
+            cpu.romSelect(bank);
         }
+        if (shadow !== undefined) {
+            if (!cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
+            cpu.writeAcccon(shadow ? acccon | AcconShadowBit : acccon & ~AcconShadowBit);
+        }
+        try {
+            return fn();
+        } finally {
+            if (bank !== undefined) cpu.romSelect(romsel);
+            if (shadow !== undefined) cpu.writeAcccon(acccon);
+        }
+    }
+
+    /**
+     * Read `length` bytes from emulator memory starting at `address`, from
+     * whatever is paged in unless `bank` or `shadow` says otherwise.
+     * @param {number} address
+     * @param {number} [length=16]
+     * @param {Object} [opts]
+     * @param {number} [opts.bank] sideways bank to read at &8000 to &BFFF
+     * @param {boolean} [opts.shadow] on a Master, read shadow RAM (true) or main RAM (false) at &3000 to &7FFF
+     */
+    readMemory(address, length = 16, { bank, shadow } = {}) {
+        return this._withPaging({ bank, shadow }, () => {
+            const bytes = [];
+            for (let i = 0; i < length; i++) {
+                bytes.push(this._machine.readbyte(address + i));
+            }
+            return bytes;
+        });
+    }
+
+    /**
+     * Write an array of byte values into emulator memory at `address`;
+     * `bank` and `shadow` pick where, as for readMemory.
+     */
+    writeMemory(address, bytes, { bank, shadow } = {}) {
+        this._withPaging({ bank, shadow }, () => {
+            for (let i = 0; i < bytes.length; i++) {
+                this._machine.writebyte(address + i, bytes[i]);
+            }
+        });
     }
 
     /** Read the current 6502 CPU registers */
