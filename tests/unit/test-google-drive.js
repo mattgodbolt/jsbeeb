@@ -17,11 +17,9 @@ describe("GoogleDriveLoader", () => {
             loader.parentFolderId = "folder";
             loader.gapi = {
                 client: {
-                    request: vi
-                        .fn()
-                        .mockResolvedValue({
-                            result: { id: "xyz", name: "fresh.ssd", capabilities: { canEdit: true } },
-                        }),
+                    request: vi.fn().mockResolvedValue({
+                        result: { id: "xyz", name: "fresh.ssd", capabilities: { canEdit: true } },
+                    }),
                 },
             };
             return loader;
