@@ -424,11 +424,17 @@
             <div class="bays"></div>
           </section>
           <section class="media-unit media-deck" id="media-deck" aria-label="Cassette deck">
-            <div class="deck-bar">
+            <button
+              type="button"
+              class="fold-bar deck-bar"
+              id="deck-toggle"
+              aria-controls="media-deck"
+              title="Show the cassette deck"
+            >
               <span class="hwlabel">cassette</span>
-              <span class="deck-bar-name" id="deck-bar-name"></span>
-              <button type="button" class="txt-btn" id="deck-toggle" aria-controls="media-deck"></button>
-            </div>
+              <span class="fold-bar-name" id="deck-bar-name"></span>
+              <span class="fold-bar-show">Show</span>
+            </button>
             <div class="unit-lip"></div>
             <div class="deck-head">
               <div class="deck-leds">
@@ -508,6 +514,16 @@
             </div>
           </section>
         </div>
+        <button
+          type="button"
+          class="fold-bar list-bar"
+          id="list-toggle"
+          aria-controls="media-list"
+          title="Show the list of discs and tapes"
+        >
+          <span class="fold-bar-name">Discs and tapes</span>
+          <span class="fold-bar-show">Show</span>
+        </button>
         <div class="media-list-head">
           <div class="media-into">
             <span id="media-into-label">Into</span>
@@ -547,6 +563,9 @@
         <div class="media-chips" id="media-chips" role="group" aria-label="Show"></div>
         <ul class="media-list" id="media-list" aria-label="Discs and tapes"></ul>
         <div class="media-hint" id="media-hint" aria-hidden="true"></div>
+        <div class="media-list-end">
+          <button type="button" class="txt-btn list-hide" id="list-hide" title="Fold the list away">Hide list</button>
+        </div>
         <div class="media-foot">
           <label class="btn btn-sm btn-outline-light" id="media-open-label">
             <span id="media-open-text">Open a file…</span>
@@ -569,6 +588,11 @@
       </div>
       <template id="drive-bay-template">
         <section class="bay" data-state="empty">
+          <button type="button" class="fold-bar bay-bar">
+            <span class="hwlabel bay-bar-label"></span>
+            <span class="fold-bar-name bay-bar-name"></span>
+            <span class="fold-bar-show">Show</span>
+          </button>
           <span class="bay-led led disc" role="img"></span>
           <span class="lever-wrap">
             <button type="button" class="lever bay-eject"></button>

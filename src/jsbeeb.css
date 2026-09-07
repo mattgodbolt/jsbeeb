@@ -954,10 +954,6 @@ div.smoothie-chart-tooltip {
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
 }
 
-.lever-wrap:has(.lever:disabled) .hwlabel {
-  color: #8d8370;
-}
-
 .mouth {
   grid-column: 2 / 4;
   grid-row: 2;
@@ -1795,24 +1791,39 @@ div.smoothie-chart-tooltip {
     0 1px 0 rgba(0, 0, 0, 0.35);
 }
 
-/* ----- the deck folded to one line ----- */
+/* ----- a slot or the list folded to one line, which is a button that unfolds it ----- */
 
-.deck-bar {
+.fold-bar {
   display: none;
+  width: 100%;
   align-items: center;
   gap: 8px;
   font-size: 11px;
   color: #5a5040;
   white-space: nowrap;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
 }
 
-.deck-bar-name {
+.fold-bar-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 600;
   color: var(--paper-ink);
+}
+
+.fold-bar-show {
+  font-weight: 600;
+  text-decoration: underline dotted rgba(0, 0, 0, 0.45);
+  text-underline-offset: 2px;
+}
+
+.fold-bar:hover .fold-bar-show {
+  text-decoration-style: solid;
 }
 
 #media-panel.deck-collapsed .media-rack {
@@ -1830,6 +1841,61 @@ div.smoothie-chart-tooltip {
 
 #media-panel.deck-collapsed .deck-bar {
   display: flex;
+}
+
+.bay.folded {
+  display: flex;
+  padding: 5px 10px;
+}
+
+.bay.folded > :not(.bay-bar) {
+  display: none;
+}
+
+.bay.folded .bay-bar {
+  display: flex;
+}
+
+.list-bar {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #1a1d20;
+  border: 1px solid #495057;
+  color: #9aa3ad;
+  font-size: 12.5px;
+}
+
+.list-bar .fold-bar-name {
+  color: #dee2e6;
+}
+
+#media-panel.list-collapsed .list-bar {
+  display: flex;
+}
+
+#media-panel.list-collapsed .media-list-head,
+#media-panel.list-collapsed .media-chips,
+#media-panel.list-collapsed .media-list,
+#media-panel.list-collapsed .media-hint,
+#media-panel.list-collapsed .media-list-end,
+#media-panel.list-collapsed .media-foot {
+  display: none;
+}
+
+.media-list-end {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.list-hide {
+  color: #9aa3ad;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
+.list-hide:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* ----- the list: one search, a row of chips, the rows ----- */
@@ -1903,7 +1969,7 @@ div.smoothie-chart-tooltip {
   margin: 8px 0 0;
   padding: 0;
   border-top: 1px solid #3a3f44;
-  max-height: 320px;
+  height: 320px;
   overflow-y: auto;
 }
 
@@ -2115,7 +2181,7 @@ div.smoothie-chart-tooltip {
   }
 
   .media-list {
-    max-height: none;
+    height: auto;
   }
 
   .media-row-main {

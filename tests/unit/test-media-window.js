@@ -123,7 +123,6 @@ describe("MediaWindow", () => {
         it("starts empty, with the latch open and nothing to save or eject", () => {
             make();
             expect(bay(0).dataset.state).toBe("empty");
-            expect(bay(0).querySelector(".bay-eject").disabled).toBe(true);
             expect(bay(0).querySelector(".bay-save").disabled).toBe(true);
             expect(bay(0).querySelector(".bay-surface").disabled).toBe(true);
             expect(text(bay(0).querySelector(".bay-status"))).toBe("nothing loaded · reads 80 track discs");
@@ -298,7 +297,7 @@ describe("MediaWindow", () => {
             expect(document.activeElement).toBe(document.getElementById("media-search"));
         });
 
-        it("starts folded on a BBC and unfolds when a tape goes in, or when asked, remembering that", () => {
+        it("starts folded on a BBC, unfolds when a tape goes in, and folds and unfolds on a click", () => {
             make();
             expect(panel().classList.contains("deck-collapsed")).toBe(true);
             expect(text(document.getElementById("deck-bar-name"))).toBe("empty");
@@ -307,30 +306,60 @@ describe("MediaWindow", () => {
             document.getElementById("deck-hide").click();
             expect(panel().classList.contains("deck-collapsed")).toBe(true);
             expect(text(document.getElementById("deck-bar-name"))).toBe("chuckie.uef");
-            expect(window.localStorage.getItem("mediaDeckShown")).toBe("0");
             document.getElementById("deck-toggle").click();
             expect(panel().classList.contains("deck-collapsed")).toBe(false);
-            expect(window.localStorage.getItem("mediaDeckShown")).toBe("1");
         });
 
-        it("stays folded for a tape once the user has folded it", () => {
-            window.localStorage.setItem("mediaDeckShown", "0");
-            make();
-            putTapeIn(tape());
-            expect(panel().classList.contains("deck-collapsed")).toBe(true);
-        });
-
-        it("starts unfolded on an Atom, and where the user last left it", () => {
+        it("starts unfolded on an Atom", () => {
             deps.model.isAtom = true;
             make();
             expect(panel().classList.contains("deck-collapsed")).toBe(false);
-            deps.model.isAtom = false;
-            window.localStorage.setItem("mediaDeckShown", "1");
-            document.body.innerHTML = "";
-            domFromIndexHtml("navbarSupportedContent", "leds", "media-panel", "drive-bay-template");
-            document.querySelector(".media-header").setPointerCapture = () => {};
+        });
+    });
+
+    describe("folding", () => {
+        it("keeps drive 1 folded until a disc goes in it, it is aimed at, or its bar is clicked", () => {
             make();
-            expect(panel().classList.contains("deck-collapsed")).toBe(false);
+            expect(bay(1).classList.contains("folded")).toBe(true);
+            expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("empty");
+            bay(1).querySelector(".bay-bar").click();
+            expect(bay(1).classList.contains("folded")).toBe(false);
+            const window = make();
+            document.querySelector('#media-into [data-target="1"]').click();
+            expect(bay(1).classList.contains("folded")).toBe(false);
+            window.showDrive(false);
+            deps.drives.putDiscIn(1, discFor("b.ssd", ssdImage()));
+            expect(bay(1).classList.contains("folded")).toBe(false);
+            expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("b.ssd");
+        });
+
+        it("opens with the list for an empty slot, and folded for a full one", () => {
+            deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            const window = make();
+            document.querySelector('#leds .slot-readout[data-slot="0"]').click();
+            expect(window.isOpen).toBe(true);
+            expect(panel().classList.contains("list-collapsed")).toBe(true);
+            document.getElementById("list-toggle").click();
+            expect(panel().classList.contains("list-collapsed")).toBe(false);
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
+            document.getElementById("list-hide").click();
+            expect(panel().classList.contains("list-collapsed")).toBe(true);
+            window.close();
+            document.querySelector('#leds .slot-readout[data-slot="1"]').click();
+            expect(panel().classList.contains("list-collapsed")).toBe(false);
+            expect(bay(1).classList.contains("folded")).toBe(false);
+            window.close();
+            document.querySelector("#navbarDiscs + .dropdown-menu .media-window-open").click();
+            expect(panel().classList.contains("list-collapsed")).toBe(false);
+        });
+
+        it("lets the latch of an empty drive aim the list at it", () => {
+            make();
+            expect(bay(0).querySelector(".bay-eject").disabled).toBe(false);
+            bay(0).querySelector(".bay-eject").click();
+            expect(deps.media.ejectDisc).not.toHaveBeenCalled();
+            expect(bay(0).classList.contains("target")).toBe(true);
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
         });
     });
 
