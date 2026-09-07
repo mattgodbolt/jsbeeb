@@ -165,8 +165,21 @@ export class MediaLoader extends EventTarget {
         else this.resolver.addSource(schema, fetcher);
     }
 
+    /** Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds. */
     setProcessorTape(tape) {
         this.processor.tapeInterface.setTape(tape);
+        this.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
+    }
+
+    ejectDisc(driveIndex) {
+        this.drives.eject(driveIndex);
+        if (driveIndex === 0) this.setDisc1Image(undefined);
+        else this.setDisc2Image(undefined);
+    }
+
+    ejectTape() {
+        this.setProcessorTape(undefined);
+        this.setTapeImage(undefined);
     }
 
     setDisc1Image(name) {

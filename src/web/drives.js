@@ -7,11 +7,13 @@ import { DriveTracks } from "../url-params.js";
 const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
 
 /**
- * The disc drives as the page sees them: putting a disc in, the 40/80 track
- * switches on the Discs menu, and downloading what is in drive 0.
+ * The disc drives as the page sees them: putting a disc in and taking it out,
+ * the 40/80 track switches on the Discs menu, and downloading what is in drive 0.
+ * Raises "disc-changed" with the drive index and what it now holds.
  */
-export class Drives {
+export class Drives extends EventTarget {
     constructor({ fdc, driveTracks, confirm }) {
+        super();
         this.fdc = fdc;
         this.driveTracks = driveTracks;
         this.saidWritesAreNotKept = false;
@@ -80,6 +82,13 @@ export class Drives {
         this.noteUnsavedWrites(loadedDisc);
         // A switch the user fixed does not move, so anything it does is not news.
         if (fixed === undefined && drive.tracksPerStep !== was) this.noteDriveTracks(driveIndex, loadedDisc.name);
+        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: loadedDisc } }));
+    }
+
+    eject(driveIndex) {
+        this.fdc.loadDisc(driveIndex, undefined, this.tracksPerStepForDrive(driveIndex));
+        this.showDriveTracks(driveIndex);
+        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: undefined } }));
     }
 
     noteUnsavedWrites(loadedDisc) {
