@@ -29,7 +29,7 @@ const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
 // Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
-const AcconShadowBit = 4;
+const AccconShadowBit = 4;
 
 // Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
@@ -422,7 +422,7 @@ export class MachineSession {
         }
         if (shadow !== undefined) {
             if (!cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
-            cpu.writeAcccon(shadow ? acccon | AcconShadowBit : acccon & ~AcconShadowBit);
+            cpu.writeAcccon(shadow ? acccon | AccconShadowBit : acccon & ~AccconShadowBit);
         }
         try {
             return fn();

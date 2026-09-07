@@ -166,7 +166,7 @@ describe("MachineSession paged memory", () => {
 
         expect(session.readMemory(0x8000, 3, { bank: SidewaysRamBank })).toEqual([1, 2, 3]);
         expect(session.readMemory(0x8000, 3, { bank: OtherSidewaysRamBank })).toEqual([9, 9, 9]);
-        expect(session.readMemory(0x8000, 3)).not.toEqual([1, 2, 3]);
+        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.romsel & 15 }));
         expect(session.pagingState()).toEqual(before);
     });
 
