@@ -196,8 +196,9 @@ export class MachineSession {
     }
 
     /**
-     * Run for an exact number of emulated CPU cycles, or until a breakpoint
-     * fires. `completed` is false if one did.
+     * Run for an exact number of emulated CPU cycles, or until something stops
+     * the CPU first: a breakpoint, or the paint runFrames stops at. `completed`
+     * is false if it was stopped short.
      * @returns {Promise<{cyclesRun: number, completed: boolean}>}
      */
     async runFor(cycles) {
