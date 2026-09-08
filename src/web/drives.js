@@ -11,8 +11,7 @@ export const tracksPerStepOf = (label) => (label === "40" ? 2 : 1);
 /**
  * The disc drives as the page sees them: putting a disc in and taking it out,
  * each drive's 40/80 track switch, and downloading what a drive holds.
- * Raises "disc-changed" with the drive index and what it now holds, and
- * "tracks-changed" when a switch moves.
+ * Raises "tracks-changed" when a switch moves.
  */
 export class Drives extends EventTarget {
     constructor({ fdc, driveTracks, confirm, urlState }) {
@@ -21,7 +20,6 @@ export class Drives extends EventTarget {
         this.driveTracks = driveTracks;
         this.confirm = confirm;
         this.urlState = urlState;
-        this.claims = [null, null];
         this.saidWritesAreNotKept = false;
 
         for (const driveIndex of [0, 1]) {
@@ -96,24 +94,8 @@ export class Drives extends EventTarget {
         this.dispatchEvent(new CustomEvent("tracks-changed", { detail: { driveIndex } }));
     }
 
-    /**
-     * A claim on a drive for a load in flight. Putting a disc in with an older claim does nothing,
-     * so whichever load was asked for last is the one the drive ends up with, whatever order they
-     * finish in; a put with no claim is a newer wish and takes over.
-     */
-    claim(driveIndex) {
-        return (this.claims[driveIndex] = {});
-    }
-
-    /** Whether `claim` is still the latest load asked of the drive. */
-    holds(driveIndex, claim) {
-        return this.claims[driveIndex] === claim;
-    }
-
-    /** @returns {boolean} whether the disc went in, or was overtaken by a later load */
-    putDiscIn(driveIndex, loadedDisc, claim = this.claim(driveIndex)) {
+    putDiscIn(driveIndex, loadedDisc) {
         if (!this.fdc) throw new Error("This machine has no disc drives");
-        if (!this.holds(driveIndex, claim)) return false;
         const drive = this.fdc.drives[driveIndex];
         const fixed = this.tracksPerStepForDrive(driveIndex);
         const was = drive.tracksPerStep;
@@ -121,14 +103,10 @@ export class Drives extends EventTarget {
         this.noteUnsavedWrites(loadedDisc);
         // A switch the user fixed does not move, so anything it does is not news.
         if (fixed === undefined && drive.tracksPerStep !== was) this.noteDriveTracks(driveIndex, loadedDisc.name);
-        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: loadedDisc } }));
-        return true;
     }
 
     eject(driveIndex) {
-        this.claim(driveIndex);
         this.fdc.loadDisc(driveIndex, undefined, this.tracksPerStepForDrive(driveIndex));
-        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: undefined } }));
     }
 
     noteUnsavedWrites(loadedDisc) {

@@ -82,52 +82,16 @@ describe("Drives", () => {
     });
 
     describe("what the drives hold", () => {
-        const changes = (drives) => {
-            const seen = [];
-            drives.addEventListener("disc-changed", (e) => seen.push(e.detail));
-            return seen;
-        };
-
-        it("says which drive took which disc", () => {
-            const drives = make();
-            const seen = changes(drives);
-            const disc = fakeDisc();
-            drives.putDiscIn(1, disc);
-            expect(seen).toEqual([{ driveIndex: 1, disc }]);
-        });
-
         it("refuses, in words, on a machine with no drives", () => {
             fdc = undefined;
             expect(() => make().putDiscIn(0, fakeDisc())).toThrow("no disc drives");
         });
 
-        it("takes the last disc asked for, whichever load finishes first", () => {
-            const drives = make();
-            const first = drives.claim(0);
-            const second = drives.claim(0);
-            expect(drives.putDiscIn(0, fakeDisc({ name: "second.ssd" }), second)).toBe(true);
-            expect(drives.putDiscIn(0, fakeDisc({ name: "first.ssd" }), first)).toBe(false);
-            expect(fdc.drives[0].disc.name).toBe("second.ssd");
-            expect(drives.holds(0, second)).toBe(true);
-        });
-
-        it("lets a disc put in with no claim, or an eject, overtake a load in flight", () => {
-            const drives = make();
-            const pending = drives.claim(0);
-            expect(drives.putDiscIn(0, fakeDisc({ name: "direct.ssd" }))).toBe(true);
-            expect(drives.holds(0, pending)).toBe(false);
-            const again = drives.claim(1);
-            drives.eject(1);
-            expect(drives.holds(1, again)).toBe(false);
-        });
-
-        it("ejects a disc, leaving the drive empty and saying so", () => {
+        it("ejects a disc, leaving the drive empty", () => {
             const drives = make();
             drives.putDiscIn(0, fakeDisc());
-            const seen = changes(drives);
             drives.eject(0);
             expect(fdc.drives[0].disc).toBeUndefined();
-            expect(seen).toEqual([{ driveIndex: 0, disc: undefined }]);
         });
 
         it("keeps a fixed switch where the user put it across an eject", () => {

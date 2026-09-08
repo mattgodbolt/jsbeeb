@@ -5,6 +5,7 @@ import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
 import { MediaResolver, openIfZip, splitImage } from "../media-resolver.js";
+import { MediaSlots } from "./media-slots.js";
 import { stringToUint8Array } from "../binary.js";
 import { noteEvent } from "./analytics.js";
 import { browserDiscNames, describeBrowserDisc, describeBuiltIn, describeSessionFile } from "./media-catalogue.js";
@@ -47,16 +48,15 @@ function readFileAsBinaryString(file) {
 /**
  * Getting discs and tapes into the machine: resolving any image reference the
  * URL schema can name, files from this computer, and what every source has to
- * offer. Choosing what goes in a drive funnels through drives.putDiscIn.
+ * offer. What goes in a drive or the deck funnels through its `slots`.
  */
 export class MediaLoader extends EventTarget {
     /**
      * @param {object} deps
      * @param {Function} deps.isSnapshotFile says whether a dropped file is a save state
      * @param {Function} deps.loadSnapshot restores a dropped save state
-     * @param {string} [deps.defaultBootDisc] the disc the page boots when the URL names none
      */
-    constructor({ processor, model, drives, urlState, modals, isSnapshotFile, loadSnapshot, defaultBootDisc }) {
+    constructor({ processor, model, drives, urlState, modals, isSnapshotFile, loadSnapshot }) {
         super();
         this.processor = processor;
         this.model = model;
@@ -67,8 +67,7 @@ export class MediaLoader extends EventTarget {
         this.driveSource = null;
         this.isSnapshotFile = isSnapshotFile;
         this.loadSnapshot = loadSnapshot;
-        this.tapeClaim = null;
-        this.defaultBootDisc = defaultBootDisc;
+        this.slots = new MediaSlots({ loader: this, drives, processor, urlState });
         this.listers = new Map();
         /** Files opened this session, by name: the only media the URL cannot name. */
         this.sessionFiles = new Map();
@@ -176,66 +175,8 @@ export class MediaLoader extends EventTarget {
         return `Loaded ${name} into drive ${driveIndex}.`;
     }
 
-    /** A claim on the deck for a tape load in flight, as Drives.claim is for a drive. */
-    claimTape() {
-        return (this.tapeClaim = {});
-    }
-
-    holdsTape(claim) {
-        return this.tapeClaim === claim;
-    }
-
-    /**
-     * Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds.
-     *
-     * @returns {boolean} whether the tape went in, or was overtaken by a later load
-     */
-    setProcessorTape(tape, claim = this.claimTape()) {
-        if (!this.holdsTape(claim)) return false;
-        this.processor.tapeInterface.setTape(tape);
-        this.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
-        return true;
-    }
-
-    ejectDisc(driveIndex) {
-        this.drives.eject(driveIndex);
-        this.setDiscImage(driveIndex, undefined);
-    }
-
-    ejectTape() {
-        this.setProcessorTape(undefined);
-        this.setTapeImage(undefined);
-    }
-
-    /**
-     * What the URL says a drive holds; a bare disc parameter means drive 0. The page's own boot
-     * disc is unnamed there, so drive 0 is read as holding it while it still does.
-     */
-    refInDrive(driveIndex) {
-        const { params } = this;
-        if (driveIndex !== 0) return params.disc2;
-        const named = params.disc1 ?? params.disc;
-        if (named !== undefined) return named;
-        const disc = this.processor.fdc?.drives[0]?.disc;
-        return disc?.name === this.defaultBootDisc && !disc.originalImageData ? this.defaultBootDisc : undefined;
-    }
-
-    /** Names the disc in a drive for the URL and the settings store, or unnames it. */
-    setDiscImage(driveIndex, name) {
-        // The URL has always called the drives disc1 and disc2, and a bare disc means disc1.
-        const changes = driveIndex === 0 ? { disc: undefined, disc1: name } : { disc2: name };
-        this.urlState.set(changes);
-        const detail = driveIndex === 0 ? { disc1: name } : { disc2: name };
-        this.dispatchEvent(new CustomEvent("media-changed", { detail }));
-    }
-
     setAutoboot(on) {
         this.urlState.set({ autoboot: on ? true : undefined });
-    }
-
-    setTapeImage(name) {
-        this.urlState.set({ tape: name });
-        this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
     }
 
     /** Keeps a file opened this session for the list, and says so with "files-changed". */
@@ -250,16 +191,14 @@ export class MediaLoader extends EventTarget {
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(data);
         this.rememberFile(name, data, "disc");
-        this.drives.putDiscIn(driveIndex, loadedDisc);
-        this.setDiscImage(driveIndex, undefined);
+        this.slots.put(this.slots.drive(driveIndex), loadedDisc, `session:${name}`, { inUrl: false });
     }
 
     /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
     async loadTapeFile(name, data) {
         const tape = await loadTapeFromData(name, data, this.model);
         this.rememberFile(name, data, "tape");
-        this.setProcessorTape(tape);
-        this.setTapeImage(undefined);
+        this.slots.put(this.slots.deck, tape, `session:${name}`, { inUrl: false });
     }
 
     async loadSCSIFile(file) {

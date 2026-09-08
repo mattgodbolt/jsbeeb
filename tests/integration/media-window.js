@@ -8,6 +8,7 @@ import { SnapshotUI, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { createSnapshot, snapshotToJSON } from "../../src/snapshot.js";
 import { MediaWindow } from "../../src/web/media-window.js";
 import { Drives } from "../../src/web/drives.js";
+import { describeRef } from "../../src/web/media-catalogue.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { TestMachine } from "../../src/test-machine.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "../unit/helpers.js";
@@ -113,7 +114,9 @@ describe("the media window against a real machine", () => {
     it("loads the built-in Elite into drive 0 from the list, names it in the URL and catalogues it", async () => {
         const { machine, urlState, media, window } = await setUp();
         const mediaEvents = [];
-        media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
+        media.slots.addEventListener("changed", (e) => {
+            if (!e.detail.slot.busy) mediaEvents.push(e.detail.slot.urlParams());
+        });
 
         window.open();
         const search = document.getElementById("media-search");
@@ -126,7 +129,7 @@ describe("the media window against a real machine", () => {
 
         await vi.waitFor(() => expect(machine.processor.fdc.drives[0].disc?.name).toBe("elite.ssd"));
         expect(urlState.params.disc1).toBe("elite.ssd");
-        expect(mediaEvents).toEqual([{ disc1: "elite.ssd" }]);
+        expect(mediaEvents).toEqual([{ disc: undefined, disc1: "elite.ssd" }]);
         expect(window.isOpen).toBe(false);
         expect(document.querySelector('.bay[data-drive="0"] .bay-dfs').textContent).toBe("Elite (05)");
 
@@ -185,7 +188,6 @@ describe("the media window against a real machine", () => {
             model: machine.model,
             video: { paint: vi.fn() },
             media,
-            drives,
             urlState,
             modals,
             loop: { pause: () => () => {} },
@@ -195,13 +197,9 @@ describe("the media window against a real machine", () => {
         document.querySelector("#media-list .media-row-main").click();
         await vi.waitFor(() => expect(machine.processor.fdc.drives[0].disc?.name).toBe("elite.ssd"));
         await machine.runUntilInput();
-        const snapshot = createSnapshot(
-            machine.processor,
-            machine.model,
-            snapshotMedia(machine.processor.fdc.drives, urlState.params),
-        );
+        const snapshot = createSnapshot(machine.processor, machine.model, snapshotMedia(media.slots));
 
-        media.ejectDisc(0);
+        media.slots.eject(media.slots.drive(0));
         window.open();
         await search("welcome");
         document.querySelector("#media-list .media-row-main").click();
@@ -231,8 +229,7 @@ describe("the media window against a real machine", () => {
             search: "?disc=elite.ssd&drive0Tracks=40",
             driveTracks: [DriveTracks.forty, DriveTracks.auto],
         });
-        const claim = drives.claim(0);
-        drives.putDiscIn(0, await media.loadDiscImage("elite.ssd", drives.layoutForDrive(0)), claim);
+        await media.slots.load(media.slots.drive(0), describeRef("elite.ssd", "disc"));
         window.open();
         const bay = (driveIndex) => document.querySelector(`.bay[data-drive="${driveIndex}"]`);
         expect(text(bay(0).querySelector(".bay-sub"))).toBe("40 track · 1 side · built in");
@@ -242,7 +239,7 @@ describe("the media window against a real machine", () => {
         expect(urlState.params.drive0Tracks).toBe("80");
         expect(machine.processor.fdc.drives[0].tracksPerStep).toBe(1);
 
-        media.ejectDisc(0);
+        media.slots.eject(media.slots.drive(0));
         expect(urlState.params.disc).toBeUndefined();
         expect(urlState.params.disc1).toBeUndefined();
         expect(text(bay(0).querySelector(".bay-title"))).toBe("");

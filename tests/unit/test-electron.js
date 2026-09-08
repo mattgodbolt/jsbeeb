@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initialise } from "../../src/app/electron.js";
-import { teardownDom, toasts } from "./helpers.js";
+import { teardownDom } from "./helpers.js";
 
 describe("the Electron hooks", () => {
     let api;
@@ -19,21 +19,13 @@ describe("the Electron hooks", () => {
             saveSettings: vi.fn(),
         };
         window.electronAPI = api;
+        const slots = Object.assign(new EventTarget(), {
+            drive: (index) => `drive ${index}`,
+            deck: "the deck",
+            load: vi.fn().mockResolvedValue("loaded"),
+        });
         deps = {
-            media: {
-                loadDiscImage: vi.fn(),
-                loadTapeImage: vi.fn(),
-                setProcessorTape: vi.fn(() => true),
-                claimTape: vi.fn(() => ({})),
-                setDiscImage: vi.fn(),
-                setTapeImage: vi.fn(),
-                addEventListener: vi.fn(),
-            },
-            drives: {
-                layoutForDrive: (driveIndex) => `layout${driveIndex}`,
-                putDiscIn: vi.fn(() => true),
-                claim: vi.fn(() => ({})),
-            },
+            media: { slots },
             modals: { show: vi.fn() },
             actions: { media: vi.fn() },
         };
@@ -53,17 +45,6 @@ describe("the Electron hooks", () => {
         return api.onLoadTape.mock.calls[0][0](message);
     };
 
-    it("leaves the URL alone when a later load overtook the menu's", async () => {
-        deps.drives.putDiscIn.mockReturnValue(false);
-        deps.media.setProcessorTape.mockReturnValue(false);
-        deps.media.loadDiscImage.mockResolvedValue({ name: "late.ssd" });
-        deps.media.loadTapeImage.mockResolvedValue({ name: "late.uef" });
-        await loadDisc({ drive: 0, path: "/discs/late.ssd" });
-        await loadTape({ path: "/tapes/late.uef" });
-        expect(deps.media.setDiscImage).not.toHaveBeenCalled();
-        expect(deps.media.setTapeImage).not.toHaveBeenCalled();
-    });
-
     it("shows the modal the menu named, and runs the action it sent", () => {
         initialise(deps);
         api.onShowModal.mock.calls[0][0]({ modalId: "configuration" });
@@ -78,44 +59,28 @@ describe("the Electron hooks", () => {
         expect(api.onLoadDisc).not.toHaveBeenCalled();
     });
 
-    it("puts a disc in the drive the menu named, laid out for that drive, and names it in the URL", async () => {
-        const loaded = {};
-        deps.media.loadDiscImage.mockResolvedValue(loaded);
+    it("loads the disc the menu named into its drive, known by its file name", async () => {
         await loadDisc({ drive: 1, path: "file:///discs/b.ssd" });
-        expect(deps.media.loadDiscImage).toHaveBeenCalledWith("file:///discs/b.ssd", "layout1");
-        expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, loaded, expect.anything());
-        expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "file:///discs/b.ssd");
-        expect(deps.media.setDiscImage).toHaveBeenCalledTimes(1);
+        expect(deps.media.slots.load).toHaveBeenCalledWith(
+            "drive 1",
+            expect.objectContaining({ ref: "file:///discs/b.ssd", kind: "disc", title: "b.ssd" }),
+        );
     });
 
-    it("names drive 0's disc as disc1", async () => {
-        deps.media.loadDiscImage.mockResolvedValue({});
-        await loadDisc({ drive: 0, path: "file:///discs/a.ssd" });
-        expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "file:///discs/a.ssd");
-    });
-
-    it("reports a disc that will not load and leaves the drive and the URL alone", async () => {
-        vi.spyOn(console, "error").mockImplementation(() => {});
-        deps.media.loadDiscImage.mockRejectedValue(new Error("no such file"));
-        await loadDisc({ drive: 0, path: "file:///discs/missing.ssd" });
-        expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-        expect(deps.media.setDiscImage).not.toHaveBeenCalled();
-        expect(toasts()).toEqual([expect.stringContaining("Could not load disc file:///discs/missing.ssd")]);
-    });
-
-    it("routes a tape to the machine and names it in the URL", async () => {
-        const tape = {};
-        deps.media.loadTapeImage.mockResolvedValue(tape);
+    it("loads the tape the menu named into the deck", async () => {
         await loadTape({ path: "file:///tapes/t.uef" });
-        expect(deps.media.setProcessorTape).toHaveBeenCalledWith(tape, expect.anything());
-        expect(deps.media.setTapeImage).toHaveBeenCalledWith("file:///tapes/t.uef");
+        expect(deps.media.slots.load).toHaveBeenCalledWith(
+            "the deck",
+            expect.objectContaining({ ref: "file:///tapes/t.uef", kind: "tape" }),
+        );
     });
 
-    it("reports a tape that will not load", async () => {
-        vi.spyOn(console, "error").mockImplementation(() => {});
-        deps.media.loadTapeImage.mockRejectedValue(new Error("not a UEF"));
-        await loadTape({ path: "file:///tapes/bad.uef" });
-        expect(deps.media.setProcessorTape).not.toHaveBeenCalled();
-        expect(toasts()).toEqual([expect.stringContaining("Could not load tape file:///tapes/bad.uef")]);
+    it("saves what a slot is known by as a setting once it settles", () => {
+        initialise(deps);
+        const slot = { busy: null, urlParams: () => ({ disc: undefined, disc1: "file:///discs/b.ssd" }) };
+        deps.media.slots.dispatchEvent(new CustomEvent("changed", { detail: { slot } }));
+        expect(api.saveSettings).toHaveBeenCalledWith({ disc: undefined, disc1: "file:///discs/b.ssd" });
+        deps.media.slots.dispatchEvent(new CustomEvent("changed", { detail: { slot: { ...slot, busy: {} } } }));
+        expect(api.saveSettings).toHaveBeenCalledTimes(1);
     });
 });

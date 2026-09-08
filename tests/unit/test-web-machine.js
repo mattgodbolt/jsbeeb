@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Machine, buildEmulationConfig } from "../../src/web/machine.js";
-import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const settings = (overrides = {}) => ({
     tubeCpuMultiplier: 1,
@@ -106,16 +106,14 @@ describe("Machine", () => {
     });
 
     describe("start", () => {
-        const startDeps = () => ({
-            media: {
-                loadDiscImage: vi.fn().mockResolvedValue({ name: "loaded" }),
-                loadTapeImage: vi.fn().mockResolvedValue({}),
-                setProcessorTape: vi.fn(),
-                claimTape: vi.fn(() => ({})),
-            },
-            drives: { putDiscIn: vi.fn(), claim: vi.fn(() => ({})), layoutForDrive: () => "auto" },
-            autoBoot: { insertBasic: vi.fn().mockResolvedValue() },
-        });
+        const startDeps = () => {
+            const slots = {
+                drive: (index) => `drive ${index}`,
+                deck: "the deck",
+                load: vi.fn().mockResolvedValue("loaded"),
+            };
+            return { media: { slots }, autoBoot: { insertBasic: vi.fn().mockResolvedValue() } };
+        };
 
         it("initialises the audio and the processor, then wires the RS-423 handler", async () => {
             const machine = make();
@@ -134,32 +132,31 @@ describe("Machine", () => {
             expect(deps.speechOutput.onTransmit).toHaveBeenCalledWith(65);
         });
 
-        it("loads both discs and the tape", async () => {
+        it("loads both discs and the tape into their slots, naming in the URL what the URL named", async () => {
             const machine = make();
             const started = startDeps();
-            await machine.start({ ...started, discImage: "elite.ssd", secondDiscImage: "b.ssd", tape: "t.uef" });
-            expect(started.drives.putDiscIn).toHaveBeenCalledWith(0, { name: "loaded" }, expect.anything());
-            expect(started.drives.putDiscIn).toHaveBeenCalledWith(1, { name: "loaded" }, expect.anything());
-            expect(started.media.setProcessorTape).toHaveBeenCalled();
+            await machine.start({
+                ...started,
+                discImage: "elite.ssd",
+                discImageInUrl: false,
+                secondDiscImage: "sth:B.zip",
+                tape: "t.uef",
+            });
+            const { load } = started.media.slots;
+            expect(load).toHaveBeenCalledWith(
+                "drive 0",
+                expect.objectContaining({ ref: "elite.ssd", kind: "disc", title: "elite.ssd" }),
+                { inUrl: false },
+            );
+            expect(load).toHaveBeenCalledWith("drive 1", expect.objectContaining({ ref: "sth:B.zip", source: "sth" }));
+            expect(load).toHaveBeenCalledWith("the deck", expect.objectContaining({ ref: "t.uef", kind: "tape" }));
         });
 
-        it("reports a failed image and finishes booting anyway", async () => {
-            vi.spyOn(console, "error").mockImplementation(() => {});
+        it("finishes booting whatever became of an image", async () => {
             const machine = make();
             const started = startDeps();
-            started.media.loadDiscImage.mockRejectedValue(new Error("404"));
+            started.media.slots.load.mockResolvedValue("failed");
             await expect(machine.start({ ...started, discImage: "gone.ssd", tape: "t.uef" })).resolves.toBeDefined();
-            expect(toasts()).toEqual([expect.stringContaining("Could not load disc gone.ssd: 404")]);
-            expect(started.media.setProcessorTape).toHaveBeenCalled();
-        });
-
-        it("skips a drive whose image load resolves to nothing", async () => {
-            const machine = make();
-            const started = startDeps();
-            started.media.loadDiscImage.mockResolvedValue(null);
-            await machine.start({ ...started, discImage: "gd:abc/mine.ssd" });
-            expect(started.drives.putDiscIn).not.toHaveBeenCalled();
-            expect(toasts()).toEqual([]);
         });
 
         it("only loads an MMC image on an Atom", async () => {

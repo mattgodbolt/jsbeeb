@@ -32,7 +32,7 @@ describe("MediaLoader", () => {
                 econet: {},
             },
             model: { isAtom: false },
-            drives: { layoutForDrive: () => DiscLayout.auto, putDiscIn: vi.fn() },
+            drives: { layoutForDrive: () => DiscLayout.auto, putDiscIn: vi.fn(), eject: vi.fn() },
             urlState: fakeUrlState(),
             modals: { hide: vi.fn() },
             isSnapshotFile: (name) => name.endsWith(".snp"),
@@ -113,61 +113,13 @@ describe("MediaLoader", () => {
         });
     });
 
-    describe("the URL and the media-changed events", () => {
-        const mediaEvents = [];
-        beforeEach(() => {
-            mediaEvents.length = 0;
-        });
-        const makeWatched = () => {
+    describe("autoboot in the URL", () => {
+        it("ticks and clears it", () => {
             const media = make();
-            media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
-            return media;
-        };
-
-        it("names drive 0's disc, displacing any bare disc parameter", () => {
-            deps.urlState.params.disc = "old.ssd";
-            makeWatched().setDiscImage(0, "sth:ELITE.zip");
-            expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
-            expect(deps.urlState.updateUrl).toHaveBeenCalledTimes(1);
-            expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
-        });
-
-        it("reads drive 0 as holding the page's own boot disc while it still does", () => {
-            deps.defaultBootDisc = "elite.ssd";
-            deps.processor.fdc = { drives: [{ disc: { name: "elite.ssd" } }, {}] };
-            const media = make();
-            expect(media.refInDrive(0)).toBe("elite.ssd");
-            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageData: new Uint8Array(1) };
-            expect(media.refInDrive(0)).toBeUndefined();
-            deps.processor.fdc.drives[0].disc = { name: "other.ssd" };
-            expect(media.refInDrive(0)).toBeUndefined();
-        });
-
-        it("reads a drive's disc back from the URL, whichever way it was named", () => {
-            deps.urlState.params.disc = "bare.ssd";
-            const media = makeWatched();
-            expect(media.refInDrive(0)).toBe("bare.ssd");
-            expect(media.refInDrive(1)).toBeUndefined();
-            media.setDiscImage(0, "sth:ELITE.zip");
-            media.setDiscImage(1, "b.ssd");
-            expect(media.refInDrive(0)).toBe("sth:ELITE.zip");
-            expect(media.refInDrive(1)).toBe("b.ssd");
-        });
-
-        it("ticks and clears autoboot", () => {
-            const media = makeWatched();
             media.setAutoboot(true);
             expect(deps.urlState.params).toEqual({ autoboot: true });
             media.setAutoboot(false);
             expect(deps.urlState.params).toEqual({});
-        });
-
-        it("names drive 1's disc and the tape", () => {
-            const media = makeWatched();
-            media.setDiscImage(1, "b.ssd");
-            media.setTapeImage("sth:Chuckie.zip");
-            expect(deps.urlState.params).toEqual({ disc2: "b.ssd", tape: "sth:Chuckie.zip" });
-            expect(mediaEvents).toEqual([{ disc2: "b.ssd" }, { tape: "sth:Chuckie.zip" }]);
         });
     });
 
@@ -266,10 +218,9 @@ describe("MediaLoader", () => {
         });
 
         it("keeps a file in the list after the disc made from it is ejected", async () => {
-            deps.drives.eject = vi.fn();
             const media = make();
             await media.openFile(fileFor("mine.ssd", ssdImage()));
-            media.ejectDisc(0);
+            media.slots.eject(media.slots.drive(0));
             const { descriptors } = await media.listAll();
             expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:mine.ssd" }));
         });
@@ -327,52 +278,6 @@ describe("MediaLoader", () => {
             releaseSlow();
             const { descriptors } = await listing;
             expect(descriptors.slice(-2).map((d) => d.ref)).toEqual(["slow", "quick"]);
-        });
-    });
-
-    describe("setProcessorTape", () => {
-        it("takes the last tape asked for, whichever load finishes first", () => {
-            const media = make();
-            const first = media.claimTape();
-            const second = media.claimTape();
-            expect(media.setProcessorTape({ name: "second" }, second)).toBe(true);
-            expect(media.setProcessorTape({ name: "first" }, first)).toBe(false);
-            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledTimes(1);
-            expect(media.holdsTape(second)).toBe(true);
-            media.ejectTape();
-            expect(media.holdsTape(second)).toBe(false);
-        });
-
-        it("hands the tape to the machine's tape interface and says the deck changed", () => {
-            const tape = {};
-            const media = make();
-            const seen = [];
-            media.addEventListener("tape-changed", (e) => seen.push(e.detail));
-            media.setProcessorTape(tape);
-            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(tape);
-            expect(seen).toEqual([{ tape }]);
-        });
-    });
-
-    describe("ejecting", () => {
-        it("empties a drive and takes its disc out of the URL", () => {
-            deps.drives.eject = vi.fn();
-            deps.urlState.params.disc1 = "sth:ELITE.zip";
-            deps.urlState.params.disc2 = "b.ssd";
-            const media = make();
-            media.ejectDisc(0);
-            expect(deps.drives.eject).toHaveBeenCalledWith(0);
-            expect(deps.urlState.params).toEqual({ disc2: "b.ssd" });
-            media.ejectDisc(1);
-            expect(deps.drives.eject).toHaveBeenLastCalledWith(1);
-            expect(deps.urlState.params).toEqual({});
-        });
-
-        it("empties the deck and takes the tape out of the URL", () => {
-            deps.urlState.params.tape = "sth:Chuckie.zip";
-            make().ejectTape();
-            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(undefined);
-            expect(deps.urlState.params).toEqual({});
         });
     });
 });

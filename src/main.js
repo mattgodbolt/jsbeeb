@@ -56,7 +56,6 @@ let secondDiscImage = null;
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
-const defaultBootDisc = queryDiscImage ? undefined : discImage;
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 const extraRoms = [];
@@ -226,7 +225,6 @@ const media = new MediaLoader({
     modals,
     isSnapshotFile,
     loadSnapshot: (file, buffer) => snapshots.loadStateFromFile(file, buffer),
-    defaultBootDisc,
 });
 const autoBoot = new Autoboot({
     model,
@@ -241,11 +239,9 @@ const snapshots = new SnapshotUI({
     model,
     video,
     media,
-    drives,
     urlState,
     modals,
     loop,
-    defaultBootDisc,
 });
 
 const inputs = new AnalogueInputs({
@@ -330,9 +326,9 @@ const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "
 if (parsedQuery.loadBasic) needsAutoboot = "";
 const startPromise = machine.start({
     media,
-    drives,
     autoBoot,
     discImage,
+    discImageInUrl: !!queryDiscImage,
     secondDiscImage,
     tape: parsedQuery.tape,
     mmcImage,

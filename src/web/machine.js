@@ -1,4 +1,5 @@
 import { machineSpec } from "../machine-spec.js";
+import { describeRef } from "./media-catalogue.js";
 import { Cmos, localStoragePersistence } from "../cmos.js";
 import { Econet } from "../econet.js";
 import { LoadSD } from "../mmc.js";
@@ -137,9 +138,9 @@ export class Machine {
      */
     async start({
         media,
-        drives,
         autoBoot,
         discImage,
+        discImageInUrl = true,
         secondDiscImage,
         tape,
         mmcImage,
@@ -168,26 +169,17 @@ export class Machine {
             return loading;
         }
 
-        if (discImage) {
-            const claim = drives.claim(0);
-            startImageLoad(`disc ${discImage}`, async () => {
-                const loadedDisc = await media.loadDiscImage(discImage, drives.layoutForDrive(0));
-                if (loadedDisc) drives.putDiscIn(0, loadedDisc, claim);
-            });
-        }
-
-        if (secondDiscImage) {
-            const claim = drives.claim(1);
-            startImageLoad(`disc ${secondDiscImage}`, async () => {
-                const loadedDisc = await media.loadDiscImage(secondDiscImage, drives.layoutForDrive(1));
-                if (loadedDisc) drives.putDiscIn(1, loadedDisc, claim);
-            });
-        }
-
-        if (tape) {
-            const claim = media.claimTape();
-            startImageLoad(`tape ${tape}`, async () => media.setProcessorTape(await media.loadTapeImage(tape), claim));
-        }
+        // The slots report their own failures; the page's default disc is not named in the URL.
+        const { slots } = media;
+        if (discImage)
+            startImageLoad(`disc ${discImage}`, () =>
+                slots.load(slots.drive(0), describeRef(discImage, "disc"), { inUrl: discImageInUrl }),
+            );
+        if (secondDiscImage)
+            startImageLoad(`disc ${secondDiscImage}`, () =>
+                slots.load(slots.drive(1), describeRef(secondDiscImage, "disc")),
+            );
+        if (tape) startImageLoad(`tape ${tape}`, () => slots.load(slots.deck, describeRef(tape, "tape")));
 
         if (mmcImage && this.model.isAtom) {
             startImageLoad(`MMC image ${mmcImage}`, async () => processor.atommc.SetMMCData(await LoadSD(mmcImage)));
