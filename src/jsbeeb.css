@@ -770,12 +770,17 @@ div.smoothie-chart-tooltip {
   border-bottom: 1px solid #a99e85;
 }
 
+.media-case {
+  display: flex;
+  flex-direction: column;
+}
+
 .media-case .bays {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
   justify-content: center;
-  height: calc(100% - 8px);
 }
 
 #media-panel .hwlabel {
@@ -1760,7 +1765,7 @@ div.smoothie-chart-tooltip {
 }
 
 #media-panel.deck-collapsed .media-deck {
-  display: block;
+  display: flex;
   padding: 0;
 }
 
@@ -1770,7 +1775,7 @@ div.smoothie-chart-tooltip {
 
 #media-panel.deck-collapsed .deck-bar {
   display: flex;
-  height: 100%;
+  flex: 1;
   min-height: 120px;
   writing-mode: vertical-rl;
   padding: 10px 0;
