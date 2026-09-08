@@ -51,6 +51,17 @@ describe("GoogleDriveLoader", () => {
         expect(list.mock.calls[1][0].pageToken).toBe("more");
     });
 
+    it("does not count a refused token as a connection", async () => {
+        const loader = new GoogleDriveLoader();
+        loader.tokenClient = {
+            requestAccessToken() {
+                this.callback({ error: "access_denied" });
+            },
+        };
+        await expect(loader.authorize(false)).rejects.toEqual({ error: "access_denied" });
+        expect(loader.authorized).toBe(false);
+    });
+
     it("gives up when the Google script cannot be fetched", async () => {
         const loader = new GoogleDriveLoader();
 

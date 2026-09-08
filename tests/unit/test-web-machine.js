@@ -111,8 +111,9 @@ describe("Machine", () => {
                 loadDiscImage: vi.fn().mockResolvedValue({ name: "loaded" }),
                 loadTapeImage: vi.fn().mockResolvedValue({}),
                 setProcessorTape: vi.fn(),
+                claimTape: vi.fn(() => ({})),
             },
-            drives: { putDiscIn: vi.fn(), layoutForDrive: () => "auto" },
+            drives: { putDiscIn: vi.fn(), claim: vi.fn(() => ({})), layoutForDrive: () => "auto" },
             autoBoot: { insertBasic: vi.fn().mockResolvedValue() },
         });
 
@@ -137,8 +138,8 @@ describe("Machine", () => {
             const machine = make();
             const started = startDeps();
             await machine.start({ ...started, discImage: "elite.ssd", secondDiscImage: "b.ssd", tape: "t.uef" });
-            expect(started.drives.putDiscIn).toHaveBeenCalledWith(0, { name: "loaded" });
-            expect(started.drives.putDiscIn).toHaveBeenCalledWith(1, { name: "loaded" });
+            expect(started.drives.putDiscIn).toHaveBeenCalledWith(0, { name: "loaded" }, expect.anything());
+            expect(started.drives.putDiscIn).toHaveBeenCalledWith(1, { name: "loaded" }, expect.anything());
             expect(started.media.setProcessorTape).toHaveBeenCalled();
         });
 

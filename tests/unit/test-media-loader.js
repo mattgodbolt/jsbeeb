@@ -169,11 +169,15 @@ describe("MediaLoader", () => {
             document.getElementById("paste-text").dispatchEvent(event);
         };
 
-        it("hands a save state to the snapshot loader", async () => {
-            make();
+        it("hands a save state to the snapshot loader, and says so only if it was restored", async () => {
+            deps.loadSnapshot.mockResolvedValue(true);
+            const media = make();
             drop(fileFor("state.snp", new Uint8Array([1])));
             await vi.waitFor(() => expect(deps.loadSnapshot).toHaveBeenCalled());
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Restored")]));
+            deps.loadSnapshot.mockResolvedValue(false);
+            expect(await media.openFile(fileFor("bad.snp", new Uint8Array([1])))).toBeNull();
         });
 
         it("puts a dropped disc in drive 0 and says so", async () => {
@@ -290,6 +294,18 @@ describe("MediaLoader", () => {
     });
 
     describe("setProcessorTape", () => {
+        it("takes the last tape asked for, whichever load finishes first", () => {
+            const media = make();
+            const first = media.claimTape();
+            const second = media.claimTape();
+            expect(media.setProcessorTape({ name: "second" }, second)).toBe(true);
+            expect(media.setProcessorTape({ name: "first" }, first)).toBe(false);
+            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledTimes(1);
+            expect(media.holdsTape(second)).toBe(true);
+            media.ejectTape();
+            expect(media.holdsTape(second)).toBe(false);
+        });
+
         it("hands the tape to the machine's tape interface and says the deck changed", () => {
             const tape = {};
             const media = make();

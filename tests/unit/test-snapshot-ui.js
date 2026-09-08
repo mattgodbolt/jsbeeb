@@ -97,7 +97,7 @@ describe("SnapshotUI", () => {
             processor: { fdc: { drives: [{ disc: null }, { disc: null }] }, hasTube: false, execute: vi.fn() },
             model: { name: "B-DFS1.2" },
             video: { paint: vi.fn() },
-            media: { loadDiscImage: vi.fn(), setDiscImage: vi.fn() },
+            media: Object.assign(new EventTarget(), { loadDiscImage: vi.fn(), setDiscImage: vi.fn() }),
             drives: { putDiscIn: vi.fn() },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },

@@ -66,6 +66,7 @@ export class MediaLoader extends EventTarget {
         this.driveSource = null;
         this.isSnapshotFile = isSnapshotFile;
         this.loadSnapshot = loadSnapshot;
+        this.tapeClaim = null;
         this.listers = new Map();
         /** Files opened this session, by name: the only media the URL cannot name. */
         this.sessionFiles = new Map();
@@ -103,7 +104,8 @@ export class MediaLoader extends EventTarget {
             const file = event.dataTransfer.files[0];
             if (!file) return;
             try {
-                toast(await this.openFile(file), { title: "Dropped" });
+                const outcome = await this.openFile(file);
+                if (outcome) toast(outcome, { title: "Dropped" });
             } catch (error) {
                 reportLoadFailure(file.name, error);
             }
@@ -154,13 +156,12 @@ export class MediaLoader extends EventTarget {
      * A file from this computer, into whatever it is for: a save state is
      * restored, a tape goes in the deck, anything else into the named drive.
      *
-     * @returns {Promise<string>} what happened, for a toast
+     * @returns {Promise<?string>} what happened, for a toast, or null when it was reported already
      */
     async openFile(file, driveIndex = 0) {
         const arrayBuffer = await file.arrayBuffer();
         if (this.isSnapshotFile(file.name, arrayBuffer)) {
-            await this.loadSnapshot(file, arrayBuffer);
-            return `Restored the state saved in ${file.name}.`;
+            return (await this.loadSnapshot(file, arrayBuffer)) ? `Restored the state saved in ${file.name}.` : null;
         }
         // What a zip holds decides whether it is a tape or a disc, so it is opened first.
         const { name, data, ignored } = await openIfZip(file.name, new Uint8Array(arrayBuffer));
@@ -173,10 +174,25 @@ export class MediaLoader extends EventTarget {
         return `Loaded ${name} into drive ${driveIndex}.`;
     }
 
-    /** Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds. */
-    setProcessorTape(tape) {
+    /** A claim on the deck for a tape load in flight, as Drives.claim is for a drive. */
+    claimTape() {
+        return (this.tapeClaim = {});
+    }
+
+    holdsTape(claim) {
+        return this.tapeClaim === claim;
+    }
+
+    /**
+     * Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds.
+     *
+     * @returns {boolean} whether the tape went in, or was overtaken by a later load
+     */
+    setProcessorTape(tape, claim = this.claimTape()) {
+        if (!this.holdsTape(claim)) return false;
         this.processor.tapeInterface.setTape(tape);
         this.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
+        return true;
     }
 
     ejectDisc(driveIndex) {

@@ -101,19 +101,24 @@ export class MediaWindow {
                 else this.openFor(targetFrom(slot));
             });
         this.floating.addEventListener("open", () => this.refreshList());
-        // Whatever arrives in a slot, by whichever route, settles the failure it was showing.
+        // Whatever arrives in a slot, by whichever route, is what it holds: a load of the window's
+        // own still in flight has been overtaken, and a failure it was showing is settled.
         drives.addEventListener("disc-changed", (e) => {
             const { driveIndex, disc } = e.detail;
-            this.bays[driveIndex].failed = null;
+            const bay = this.bays[driveIndex];
+            bay.busy = null;
+            bay.failed = null;
             if (disc && driveIndex === FoldableDrive) this.showDrive(true);
             this.renderDrive(driveIndex);
         });
         drives.addEventListener("tracks-changed", (e) => this.renderDrive(e.detail.driveIndex));
         media.addEventListener("tape-changed", (e) => {
+            this.deck.busy = null;
             this.deck.failed = null;
             if (e.detail.tape) this.showDeck(true);
             this.renderDeck();
         });
+        media.addEventListener("restored", () => this.renderAll());
         // The URL is named after the bytes arrive, so the source line catches up here.
         media.addEventListener("media-changed", () => this.renderAll());
         loop.addEventListener("tick", () => this.tick());
@@ -334,8 +339,11 @@ export class MediaWindow {
             if (!file) return;
             noteEvent("local", "clickWindow");
             try {
-                toast(await this.media.openFile(file, this.targetDrive), { title: "Opened" });
-                this.close();
+                const outcome = await this.media.openFile(file, this.targetDrive);
+                if (outcome) {
+                    toast(outcome, { title: "Opened" });
+                    this.close();
+                }
             } catch (error) {
                 reportLoadFailure(file.name, error);
             }
@@ -621,7 +629,7 @@ export class MediaWindow {
     async loadDriveDiscs() {
         const descriptors = await this.refreshList();
         for (const driveIndex of [0, 1]) {
-            if (this.processor.fdc?.drives[driveIndex]?.disc) continue;
+            if (this.processor.fdc?.drives[driveIndex]?.disc || this.bays[driveIndex].busy) continue;
             const named = descriptors.find((d) => d.ref === this.media.refInDrive(driveIndex));
             if (named?.source === "gdrive") await this.loadDisc(driveIndex, named, { stayOpen: true });
         }
@@ -634,8 +642,7 @@ export class MediaWindow {
     async loadDisc(driveIndex, d, { boot = false, stayOpen = false } = {}) {
         noteEvent("media", "loadDisc", d.ref);
         const bay = this.bays[driveIndex];
-        // The last load asked for is the one the bay ends up with, whichever order they finish in.
-        const request = (bay.request = {});
+        const claim = this.drives.claim(driveIndex);
         bay.busy = d;
         bay.failed = null;
         this.unfold(driveIndex);
@@ -645,11 +652,11 @@ export class MediaWindow {
         const needsAutoboot = boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
         try {
             const loaded = await this.media.loadDiscImage(d.ref, this.drives.layoutForDrive(driveIndex));
-            if (bay.request !== request) return;
+            if (!this.drives.holds(driveIndex, claim)) return;
             bay.busy = null;
             // The machine is only reset once there is a disc to boot.
             if (needsAutoboot) this.processor.reset(true);
-            this.drives.putDiscIn(driveIndex, loaded);
+            this.drives.putDiscIn(driveIndex, loaded, claim);
             this.media.setDiscImage(driveIndex, MediaWindow.urlRef(d));
             if (boot) {
                 this.media.setAutoboot(true);
@@ -658,7 +665,7 @@ export class MediaWindow {
             if (needsAutoboot) this.autoboot(d.title);
             if (!stayOpen) this.close();
         } catch (error) {
-            if (bay.request !== request) return;
+            if (!this.drives.holds(driveIndex, claim)) return;
             bay.busy = null;
             bay.failed = { descriptor: d, error };
             reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
@@ -670,20 +677,20 @@ export class MediaWindow {
     async loadTape(d) {
         noteEvent("media", "loadTape", d.ref);
         const { deck } = this;
-        const request = (deck.request = {});
+        const claim = this.media.claimTape();
         deck.busy = d;
         deck.failed = null;
         this.unfold("tape");
         this.renderDeck();
         try {
             const tape = await this.media.loadTapeImage(d.ref);
-            if (deck.request !== request) return;
+            if (!this.media.holdsTape(claim)) return;
             deck.busy = null;
-            this.media.setProcessorTape(tape);
+            this.media.setProcessorTape(tape, claim);
             this.media.setTapeImage(MediaWindow.urlRef(d));
             this.close();
         } catch (error) {
-            if (deck.request !== request) return;
+            if (!this.media.holdsTape(claim)) return;
             deck.busy = null;
             deck.failed = { descriptor: d, error };
             reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
@@ -738,6 +745,7 @@ export class MediaWindow {
         const copied = copyFrom === null ? null : await this.drives.sectorImage(copyFrom);
         if (copyFrom !== null && !copied) return;
         const bay = this.bays[driveIndex];
+        const claim = this.drives.claim(driveIndex);
         bay.busy = { title: name, source: "gdrive" };
         bay.failed = null;
         this.renderDrive(driveIndex);
@@ -747,11 +755,13 @@ export class MediaWindow {
                 copyFrom === null
                     ? await this.driveSource.createBlank(name, layout)
                     : await this.driveSource.createFrom(name, copied, layout);
+            if (!this.drives.holds(driveIndex, claim)) return;
             bay.busy = null;
-            this.drives.putDiscIn(driveIndex, disc);
+            this.drives.putDiscIn(driveIndex, disc, claim);
             this.media.setDiscImage(driveIndex, ref);
             this.close();
         } catch (error) {
+            if (!this.drives.holds(driveIndex, claim)) return;
             bay.busy = null;
             reportLoadFailure(`${name} on Google Drive`, error);
         }

@@ -23,12 +23,17 @@ describe("the Electron hooks", () => {
             media: {
                 loadDiscImage: vi.fn(),
                 loadTapeImage: vi.fn(),
-                setProcessorTape: vi.fn(),
+                setProcessorTape: vi.fn(() => true),
+                claimTape: vi.fn(() => ({})),
                 setDiscImage: vi.fn(),
                 setTapeImage: vi.fn(),
                 addEventListener: vi.fn(),
             },
-            drives: { layoutForDrive: (driveIndex) => `layout${driveIndex}`, putDiscIn: vi.fn() },
+            drives: {
+                layoutForDrive: (driveIndex) => `layout${driveIndex}`,
+                putDiscIn: vi.fn(() => true),
+                claim: vi.fn(() => ({})),
+            },
             modals: { show: vi.fn() },
             actions: { media: vi.fn() },
         };
@@ -67,7 +72,7 @@ describe("the Electron hooks", () => {
         deps.media.loadDiscImage.mockResolvedValue(loaded);
         await loadDisc({ drive: 1, path: "file:///discs/b.ssd" });
         expect(deps.media.loadDiscImage).toHaveBeenCalledWith("file:///discs/b.ssd", "layout1");
-        expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, loaded);
+        expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, loaded, expect.anything());
         expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "file:///discs/b.ssd");
         expect(deps.media.setDiscImage).toHaveBeenCalledTimes(1);
     });
@@ -91,7 +96,7 @@ describe("the Electron hooks", () => {
         const tape = {};
         deps.media.loadTapeImage.mockResolvedValue(tape);
         await loadTape({ path: "file:///tapes/t.uef" });
-        expect(deps.media.setProcessorTape).toHaveBeenCalledWith(tape);
+        expect(deps.media.setProcessorTape).toHaveBeenCalledWith(tape, expect.anything());
         expect(deps.media.setTapeImage).toHaveBeenCalledWith("file:///tapes/t.uef");
     });
 

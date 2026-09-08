@@ -96,6 +96,26 @@ describe("Drives", () => {
             expect(seen).toEqual([{ driveIndex: 1, disc }]);
         });
 
+        it("takes the last disc asked for, whichever load finishes first", () => {
+            const drives = make();
+            const first = drives.claim(0);
+            const second = drives.claim(0);
+            expect(drives.putDiscIn(0, fakeDisc({ name: "second.ssd" }), second)).toBe(true);
+            expect(drives.putDiscIn(0, fakeDisc({ name: "first.ssd" }), first)).toBe(false);
+            expect(fdc.drives[0].disc.name).toBe("second.ssd");
+            expect(drives.holds(0, second)).toBe(true);
+        });
+
+        it("lets a disc put in with no claim, or an eject, overtake a load in flight", () => {
+            const drives = make();
+            const pending = drives.claim(0);
+            expect(drives.putDiscIn(0, fakeDisc({ name: "direct.ssd" }))).toBe(true);
+            expect(drives.holds(0, pending)).toBe(false);
+            const again = drives.claim(1);
+            drives.eject(1);
+            expect(drives.holds(1, again)).toBe(false);
+        });
+
         it("ejects a disc, leaving the drive empty and saying so", () => {
             const drives = make();
             drives.putDiscIn(0, fakeDisc());

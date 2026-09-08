@@ -9,9 +9,10 @@ function init(args) {
 
     api.onLoadDisc(async (message) => {
         const { drive, path } = message;
+        const claim = drives.claim(drive);
         try {
-            drives.putDiscIn(drive, await media.loadDiscImage(path, drives.layoutForDrive(drive)));
-            media.setDiscImage(drive, path);
+            const loaded = await media.loadDiscImage(path, drives.layoutForDrive(drive));
+            if (drives.putDiscIn(drive, loaded, claim)) media.setDiscImage(drive, path);
         } catch (error) {
             reportLoadFailure(`disc ${path}`, error);
         }
@@ -19,9 +20,9 @@ function init(args) {
 
     api.onLoadTape(async (message) => {
         const { path } = message;
+        const claim = media.claimTape();
         try {
-            media.setProcessorTape(await media.loadTapeImage(path));
-            media.setTapeImage(path);
+            if (media.setProcessorTape(await media.loadTapeImage(path), claim)) media.setTapeImage(path);
         } catch (error) {
             reportLoadFailure(`tape ${path}`, error);
         }

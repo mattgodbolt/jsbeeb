@@ -169,21 +169,24 @@ export class Machine {
         }
 
         if (discImage) {
+            const claim = drives.claim(0);
             startImageLoad(`disc ${discImage}`, async () => {
                 const loadedDisc = await media.loadDiscImage(discImage, drives.layoutForDrive(0));
-                if (loadedDisc) drives.putDiscIn(0, loadedDisc);
+                if (loadedDisc) drives.putDiscIn(0, loadedDisc, claim);
             });
         }
 
         if (secondDiscImage) {
+            const claim = drives.claim(1);
             startImageLoad(`disc ${secondDiscImage}`, async () => {
                 const loadedDisc = await media.loadDiscImage(secondDiscImage, drives.layoutForDrive(1));
-                if (loadedDisc) drives.putDiscIn(1, loadedDisc);
+                if (loadedDisc) drives.putDiscIn(1, loadedDisc, claim);
             });
         }
 
         if (tape) {
-            startImageLoad(`tape ${tape}`, async () => media.setProcessorTape(await media.loadTapeImage(tape)));
+            const claim = media.claimTape();
+            startImageLoad(`tape ${tape}`, async () => media.setProcessorTape(await media.loadTapeImage(tape), claim));
         }
 
         if (mmcImage && this.model.isAtom) {

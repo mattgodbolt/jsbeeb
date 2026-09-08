@@ -6,7 +6,7 @@ import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
-import { domFromIndexHtml, fakeFdc, fakeUrlState, ssdImage, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeFdc, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 /** An SSD whose catalogue carries a title and cycle number. */
 function titledImage(title, cycle) {
@@ -57,9 +57,14 @@ describe("MediaWindow", () => {
                 media.dispatchEvent(new CustomEvent("media-changed", { detail: {} }));
             }),
             setTapeImage: vi.fn((name) => (media.params.tape = name)),
-            setProcessorTape: vi.fn((tape) => {
+            tapeClaim: null,
+            claimTape: () => (media.tapeClaim = {}),
+            holdsTape: (claim) => media.tapeClaim === claim,
+            setProcessorTape: vi.fn((tape, claim = media.claimTape()) => {
+                if (!media.holdsTape(claim)) return false;
                 tapeInterface.tape = tape;
                 media.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
+                return true;
             }),
             openFile: vi.fn(),
             setAutoboot: vi.fn((on) => {
@@ -673,6 +678,46 @@ describe("MediaWindow", () => {
             expect(bay(0).dataset.state).toBe("loaded");
         });
 
+        it("gives way to a disc that arrives by another route while it is loading", async () => {
+            let finishLoad;
+            deps.media.loadDiscImage.mockReturnValueOnce(new Promise((resolve) => (finishLoad = resolve)));
+            await openWith([elite]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(bay(0).dataset.state).toBe("busy"));
+            const dropped = discFor("dropped.ssd", ssdImage());
+            deps.drives.putDiscIn(0, dropped);
+            expect(bay(0).dataset.state).toBe("loaded");
+            finishLoad(discFor("A.ssd", ssdImage()));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(fdc.drives[0].disc === dropped).toBe(true);
+            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
+        });
+
+        it("does not fill a drive from Google Drive while a load of the user's own is in flight", async () => {
+            deps.media.params.disc1 = "gd:abc/mine.ssd";
+            const mine = { ...elite, ref: "gd:abc/mine.ssd", title: "mine.ssd", source: "gdrive" };
+            let finishLoad;
+            deps.media.loadDiscImage.mockReturnValueOnce(new Promise((resolve) => (finishLoad = resolve)));
+            await openWith([elite]);
+            rows()[0].querySelector(".media-row-main").click();
+            deps.media.listAll.mockResolvedValue({ descriptors: [elite, mine], failures: [] });
+            document.getElementById("media-connect-drive").click();
+            await vi.waitFor(() => expect(rowTitles()).toContain("mine.ssd"));
+            expect(deps.media.loadDiscImage).toHaveBeenCalledTimes(1);
+            finishLoad(discFor("A.ssd", ssdImage()));
+            await vi.waitFor(() => expect(bay(0).dataset.state).toBe("loaded"));
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "hfe:A.hfe");
+        });
+
+        it("redraws the slots when a save state has been restored", async () => {
+            const window = make();
+            deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            fdc.drives[0].tracksPerStep = 2;
+            deps.media.dispatchEvent(new Event("restored"));
+            expect(bay(0).querySelector('input[value="40"]').checked).toBe(true);
+            expect(window.isOpen).toBe(false);
+        });
+
         it("ignores a failure from a load the bay has since moved on from", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             let failFirst;
@@ -749,7 +794,9 @@ describe("MediaWindow", () => {
             const loadedTape = { name: "Chuckie.uef", position: 0 };
             deps.media.loadTapeImage.mockResolvedValue(loadedTape);
             document.getElementById("deck-retry").click();
-            await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
+            await vi.waitFor(() =>
+                expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape, expect.anything()),
+            );
             expect(document.getElementById("deck-retry").hidden).toBe(true);
         });
 
@@ -781,7 +828,9 @@ describe("MediaWindow", () => {
             document.getElementById("deck-hide").click();
             expect(panel().classList.contains("deck-collapsed")).toBe(true);
             rows()[0].querySelector(".media-row-main").click();
-            await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
+            await vi.waitFor(() =>
+                expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape, expect.anything()),
+            );
             expect(deps.media.setTapeImage).toHaveBeenCalledWith("sth:AnF/Chuckie.zip");
             expect(panel().classList.contains("deck-collapsed")).toBe(false);
             expect(panel().hidden).toBe(true);
@@ -821,6 +870,17 @@ describe("MediaWindow", () => {
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("gd:abc/mine.ssd", "auto");
             expect(panel().hidden).toBe(false);
             expect(text(rows()[1].querySelector(".detail"))).toContain("in drive 0");
+        });
+
+        it("stays open, with no toast, when a save state could not be restored", async () => {
+            deps.media.openFile.mockResolvedValue(null);
+            await openWith([]);
+            const input = document.getElementById("media-open");
+            Object.defineProperty(input, "files", { value: [new File([new Uint8Array(4)], "bad.snp")] });
+            input.dispatchEvent(new Event("change"));
+            await vi.waitFor(() => expect(input.value).toBe(""));
+            expect(panel().hidden).toBe(false);
+            expect(toasts()).toEqual([]);
         });
 
         it("leaves the window open when a file cannot be opened", async () => {

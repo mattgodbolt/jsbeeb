@@ -140,13 +140,15 @@ export class SnapshotUI {
                     model: snapshot.model,
                     coProcessor: hasCoProcessor(snapshot),
                 });
-                return;
+                return true;
             }
             await this.restore(snapshot);
             // Force a repaint so the display updates even while paused
             this.video.paint();
+            return true;
         } catch (e) {
             this.modals.showError("loading state", e);
+            return false;
         } finally {
             resume();
         }
@@ -170,6 +172,8 @@ export class SnapshotUI {
         // drive before restoreSnapshot applies dirty track overlays on top.
         await this.reloadSnapshotMedia(snapshot.media);
         restoreSnapshot(this.processor, this.model, snapshot);
+        // The drives' pitch and the recorder's latch came back with the state, after the media events.
+        this.media.dispatchEvent(new Event("restored"));
     }
 
     async reloadSnapshotMedia(savedMedia) {
