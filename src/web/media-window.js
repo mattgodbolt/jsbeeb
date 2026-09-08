@@ -419,7 +419,7 @@ export class MediaWindow {
         this.list.hint.replaceChildren(
             ...[
                 ["Enter", `loads into ${into}`],
-                ...(target === 0 ? [["Shift+Enter", "loads and boots"]] : []),
+                ...(target === 0 ? [["Shift+Enter", "loads, ticks Autoboot and boots"]] : []),
                 ["Esc", "closes"],
             ].map(([key, what]) => {
                 const span = document.createElement("span");
@@ -627,8 +627,8 @@ export class MediaWindow {
     }
 
     /**
-     * @param {object} [options] `boot`: reset and boot the disc afterwards, whatever the autoboot
-     *   tick says; `stayOpen`: the load was not what the window was opened for
+     * @param {object} [options] `boot`: tick Autoboot, so the URL says what happened, and boot the
+     *   disc; `stayOpen`: the load was not what the window was opened for
      */
     async loadDisc(driveIndex, d, { boot = false, stayOpen = false } = {}) {
         noteEvent("media", "loadDisc", d.ref);
@@ -645,6 +645,10 @@ export class MediaWindow {
             if (needsAutoboot) this.processor.reset(true);
             this.drives.putDiscIn(driveIndex, loaded);
             this.media.setDiscImage(driveIndex, MediaWindow.urlRef(d));
+            if (boot) {
+                this.media.setAutoboot(true);
+                this.showAutoboot(true);
+            }
             if (needsAutoboot) this.autoboot(d.title);
             if (!stayOpen) this.close();
         } catch (error) {

@@ -612,7 +612,7 @@ describe("MediaWindow", () => {
             expect(document.getElementById("media-search").placeholder).toBe("Search for a tape for the deck");
         });
 
-        it("boots the disc on Shift+Enter, whatever the autoboot tick says", async () => {
+        it("boots the disc on Shift+Enter, ticking Autoboot so the URL says so", async () => {
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
             const box = document.getElementById("media-search");
@@ -621,6 +621,18 @@ describe("MediaWindow", () => {
             );
             await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
+            expect(deps.media.setAutoboot).toHaveBeenCalledWith(true);
+            expect(document.querySelector("#media-panel .autoboot").checked).toBe(true);
+        });
+
+        it("leaves Autoboot alone when a Shift+Enter load fails", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            deps.media.loadDiscImage.mockRejectedValue(new Error("HTTP 404"));
+            await openWith([elite]);
+            shiftClick(rows()[0].querySelector(".media-row-main"));
+            await vi.waitFor(() => expect(bay(0).querySelector(".bay-retry").hidden).toBe(false));
+            expect(deps.media.setAutoboot).not.toHaveBeenCalled();
+            expect(deps.processor.reset).not.toHaveBeenCalled();
         });
 
         it("boots the disc on a shift-click of its row", async () => {
