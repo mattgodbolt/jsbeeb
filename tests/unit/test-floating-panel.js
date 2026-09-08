@@ -19,6 +19,7 @@ describe("FloatingPanel", () => {
         header = panel.querySelector(".header");
         closeButton = document.getElementById("close");
         header.setPointerCapture = () => {};
+        header.style.cursor = "move";
         panel.getBoundingClientRect = () => ({ left: 100, top: 50, width: 200, height: 100 });
     });
 
@@ -80,7 +81,7 @@ describe("FloatingPanel", () => {
         expect(panel.style.top).toBe(`${window.innerHeight - 100}px`);
     });
 
-    it("is not dragged while its header shows no move cursor, as in the sheet layout", () => {
+    it("is not dragged while its header does not show the move cursor", () => {
         make();
         header.style.cursor = "default";
         header.dispatchEvent(new MouseEvent("pointerdown", { button: 0, clientX: 110, clientY: 60 }));
