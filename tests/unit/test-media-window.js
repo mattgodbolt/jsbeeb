@@ -200,6 +200,16 @@ describe("MediaWindow", () => {
             expect(deps.visualiser.openOn).toHaveBeenCalledWith(1);
         });
 
+        it("nudges the search box when a slot asks for something to load", () => {
+            vi.useFakeTimers();
+            make();
+            const box = document.getElementById("media-search");
+            bay(1).querySelector(".bay-slot").click();
+            expect(box.classList.contains("attention")).toBe(true);
+            vi.advanceTimersByTime(2500);
+            expect(box.classList.contains("attention")).toBe(false);
+        });
+
         it("aims the list at its drive when its slot is clicked", () => {
             make();
             bay(1).querySelector(".bay-slot").click();
@@ -674,7 +684,7 @@ describe("MediaWindow", () => {
         it("drops the folder and extension, and cuts a long name in the middle", () => {
             expect(shortName("Superior/Exile.ssd")).toBe("Exile");
             expect(shortName("ChuckieEgg_B.uef")).toBe("ChuckieEgg_B");
-            expect(shortName("Elite-MasterAndTubeEnhanced.ssd")).toBe("Elite-Mas…nced");
+            expect(shortName("Elite-MasterAndTubeEnhanced.ssd")).toBe("Elite-M…nced");
             expect(shortName("3A1DAB83.hfe")).toBe("3A1DAB83");
         });
 

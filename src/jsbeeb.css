@@ -204,7 +204,12 @@ span.accesskey {
   font-family: var(--bs-font-monospace);
   font-size: 10px;
   white-space: nowrap;
-  width: 11em;
+  width: 9.5em;
+}
+
+/* The cassette line carries the counter as well as the name. */
+#leds .slot-readout[data-slot="tape"] .line {
+  width: 11.5em;
 }
 
 #leds .slot-readout .name {
@@ -212,7 +217,7 @@ span.accesskey {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: left;
+  text-align: center;
 }
 
 #leds .slot-readout .counter:empty {
@@ -2208,4 +2213,30 @@ div.smoothie-chart-tooltip {
 
 .media-new-disc .btn {
   margin: 0;
+}
+
+/* ----- a nudge towards the search box when a slot asks for something to load ----- */
+
+@keyframes search-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(77, 139, 224, 0);
+  }
+  30% {
+    box-shadow: 0 0 0 5px rgba(77, 139, 224, 0.75);
+  }
+  70% {
+    box-shadow: 0 0 0 2px rgba(77, 139, 224, 0.4);
+  }
+}
+
+#media-search.attention {
+  box-shadow: 0 0 0 3px rgba(77, 139, 224, 0.6);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #media-search.attention {
+    animation: search-pulse 0.9s ease-out 2;
+    box-shadow: none;
+  }
 }

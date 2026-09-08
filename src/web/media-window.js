@@ -31,6 +31,8 @@ const CounterDivisions = 1000;
 const MaxRows = 100;
 
 const DriveKeys = ["disc1", "disc2"];
+// How long the search box stays highlighted where motion is off, and a backstop where it is on.
+const NudgeMs = 2000;
 // The drive almost nobody uses, folded to one line until it holds something or is aimed at.
 const FoldableDrive = 1;
 
@@ -44,7 +46,7 @@ const tracksOf = (drive) => (drive.tracksPerStep === 2 ? "40" : "80");
 
 // What fits on a line of the LED panel: the name without its folder or extension, cut in the
 // middle when it is still too long, so both the start and the end of it survive.
-const ReadoutChars = 14;
+const ReadoutChars = 12;
 export function shortName(name) {
     const bare = name
         .split("/")
@@ -366,6 +368,18 @@ export class MediaWindow {
         this.setTarget(target);
         this.showList(true);
         this.list.search.focus();
+        this.nudgeSearch();
+    }
+
+    /** Draws the eye to the search box, which is where a slot's "load one" leads. */
+    nudgeSearch() {
+        const box = this.list.search;
+        box.classList.remove("attention");
+        void box.offsetWidth;
+        box.classList.add("attention");
+        const settle = () => box.classList.remove("attention");
+        box.addEventListener("animationend", settle, { once: true });
+        window.setTimeout(settle, NudgeMs);
     }
 
     unfold(target) {
