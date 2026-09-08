@@ -232,10 +232,8 @@ export class SnapshotUI {
             }
 
             this.drives.putDiscIn(driveIndex, loadedDisc);
-            // Only update the URL/query for URL-sourced discs. For embedded
-            // (local-file) discs, setting parsedQuery would put a bogus source
-            // in the URL and break subsequent saves/reloads.
-            if (savedMedia[discKey]) this.media.setDiscImage(driveIndex, savedMedia[discKey]);
+            // An embedded disc has no source, which takes whatever the URL named before out of it.
+            this.media.setDiscImage(driveIndex, savedMedia[discKey]);
         }
     }
 }

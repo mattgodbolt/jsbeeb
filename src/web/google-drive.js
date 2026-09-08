@@ -87,10 +87,14 @@ export class GoogleDriveLoader {
     }
 
     async listFiles() {
-        let response = await this.driveClient.files.list({ q: `mimeType = '${MIME_TYPE}' and trashed = false` });
+        const query = {
+            q: `mimeType = '${MIME_TYPE}' and trashed = false`,
+            fields: `nextPageToken, files(${FILE_FIELDS})`,
+        };
+        let response = await this.driveClient.files.list(query);
         let result = response.result.files;
         while (response.result.nextPageToken) {
-            response = await this.driveClient.files.list({ pageToken: response.result.nextPageToken });
+            response = await this.driveClient.files.list({ ...query, pageToken: response.result.nextPageToken });
             result = result.concat(response.result.files);
         }
         return result;

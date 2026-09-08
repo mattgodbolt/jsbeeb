@@ -72,12 +72,16 @@ export class Acia extends EventTarget {
             this.runTape();
             this.relayNoise.motorOn();
         } else if (!on && this.motorOn) {
-            this.toneGen.mute();
-            this.runTapeTask.cancel();
-            this.setTapeCarrier(false);
+            this.stopRunning();
             this.relayNoise.motorOff();
         }
         this.motorOn = on;
+    }
+
+    stopRunning() {
+        this.toneGen.mute();
+        this.runTapeTask.cancel();
+        this.setTapeCarrier(false);
     }
 
     read(addr) {
@@ -271,15 +275,20 @@ export class Acia extends EventTarget {
         if (state.runRs423TaskOffset !== null) this.runRs423Task.schedule(state.runRs423TaskOffset);
     }
 
+    /** A tape put in, or taken out, while the motor is on starts or stops at once. */
     setTape(tape) {
         this.tape = tape;
+        if (!this.motorOn) return;
+        if (tape) this.runTape();
+        else this.stopRunning();
     }
 
     rewindTape() {
-        if (this.tape) {
-            console.log("rewinding tape");
-            this.tape.rewind();
-        }
+        if (!this.tape) return;
+        console.log("rewinding tape");
+        this.tape.rewind();
+        // A tape that had run out stopped being polled; rewound, it has something to play again.
+        if (this.motorOn) this.runTape();
     }
 
     // Byte times are held in CPU cycles because that's what the scheduler counts.
@@ -343,8 +352,12 @@ export class Acia extends EventTarget {
         this.serialTransmitCyclesPerByte = this.secondsToCycles(this.numBitsPerByte() / rate);
     }
 
+    /** Polls the tape and books the next poll; a tape that has run out is left alone. */
     runTape() {
-        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(this));
+        if (!this.tape) return;
+        const delay = this.tape.poll(this);
+        if (delay === undefined) this.stopRunning();
+        else this.runTapeTask.reschedule(delay);
     }
 
     runRs423() {
