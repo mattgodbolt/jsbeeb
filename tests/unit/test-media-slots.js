@@ -96,6 +96,17 @@ describe("MediaSlots", () => {
             expect(slots.holding("session:mine.ssd")).toBe(slots.drive(0));
         });
 
+        it("leaves a URL alone that already names the disc, however it spells the drive", async () => {
+            urlState.params.disc = "elite.ssd";
+            vi.spyOn(urlState, "set");
+            loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
+            await slots.load(slots.drive(0), { ...elite, ref: "elite.ssd" });
+            expect(urlState.set).not.toHaveBeenCalled();
+            expect(urlState.params).toEqual({ disc: "elite.ssd" });
+            await slots.load(slots.drive(1), { ...elite, ref: "elite.ssd" }, { inUrl: false });
+            expect(urlState.set).not.toHaveBeenCalled();
+        });
+
         it("is told when the URL is not to name what it loaded", async () => {
             loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
             await slots.load(slots.drive(0), { ...elite, ref: "elite.ssd" }, { inUrl: false });
@@ -170,6 +181,8 @@ describe("MediaSlots", () => {
             loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
             expect(await none.load(none.drive(0), elite)).toBe("failed");
             expect(none.drive(0).failed.error.message).toContain("no disc drives");
+            expect(none.drive(0).ref).toBeUndefined();
+            expect(urlState.params).toEqual({});
         });
     });
 

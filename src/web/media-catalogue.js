@@ -67,7 +67,7 @@ export function describeRef(ref, kind) {
         title: image.split("/").pop(),
         publisher: "",
         detail: "",
-        source: SchemaSources[schema] ?? schema,
+        source: SchemaSources[schema] ?? OtherSchemaPhrases[schema] ?? schema,
         savesChanges: false,
     };
 }

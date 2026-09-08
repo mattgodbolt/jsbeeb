@@ -35,6 +35,12 @@ class Slot {
         // The URL has always called the drives disc1 and disc2, and a bare disc means disc1.
         return this.index === 0 ? { disc: undefined, disc1: ref } : { disc2: ref };
     }
+
+    /** What the URL names for this slot now, reading a bare disc as disc1. */
+    namedInUrl(params) {
+        if (this.isDeck) return params.tape;
+        return this.index === 0 ? (params.disc1 ?? params.disc) : params.disc2;
+    }
 }
 
 /**
@@ -135,12 +141,14 @@ export class MediaSlots extends EventTarget {
     install(slot, media, ref, inUrl) {
         slot.busy = null;
         slot.failed = null;
-        slot.ref = media ? ref : undefined;
-        slot.inUrl = inUrl;
         if (slot.isDeck) this.processor.tapeInterface.setTape(media);
         else if (media) this.drives.putDiscIn(slot.index, media);
         else this.drives.eject(slot.index);
-        this.urlState.set(slot.urlParams());
+        slot.ref = media ? ref : undefined;
+        slot.inUrl = inUrl;
+        // A URL that already says as much is left alone, so a load it asked for makes no history.
+        const named = inUrl ? slot.ref : undefined;
+        if (slot.namedInUrl(this.urlState.params) !== named) this.urlState.set(slot.urlParams());
         this.changed(slot);
     }
 

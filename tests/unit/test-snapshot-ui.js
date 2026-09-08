@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SnapshotUI, snapshotMedia } from "../../src/web/snapshot-ui.js";
+import { SnapshotUI, isSnapshotFile, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { Modals } from "../../src/web/modals.js";
 import { DiscLayout } from "../../src/disc.js";
 import { domFromIndexHtml, ssdImage, teardownDom, toasts } from "./helpers.js";
@@ -52,6 +52,19 @@ describe("snapshot media manifest", () => {
         const manifest = snapshotMedia(slotsHolding({ disc: { ...urlDisc, name: "elite.ssd" }, ref: "elite.ssd" }));
         expect(manifest.disc1).toBe("elite.ssd");
         expect(manifest.disc1Crc32).toBe(0x1234);
+    });
+});
+
+describe("isSnapshotFile", () => {
+    it("knows the state file extensions", () => {
+        expect(isSnapshotFile("state.snp")).toBe(true);
+        expect(isSnapshotFile("state.json")).toBe(true);
+        expect(isSnapshotFile("state.json.gz")).toBe(true);
+        expect(isSnapshotFile("elite.ssd")).toBe(false);
+    });
+
+    it("treats a uef that is not a BeebEm state as a tape", () => {
+        expect(isSnapshotFile("tape.uef", new Uint8Array([1, 2, 3]).buffer)).toBe(false);
     });
 });
 
