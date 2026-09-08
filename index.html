@@ -360,7 +360,7 @@
         </div>
       </div>
       <div id="media-panel" hidden role="dialog" aria-labelledby="media-title">
-        <div class="panel-header media-header" title="Drag to move">
+        <div class="media-header" title="Drag to move">
           <span class="disc-title" id="media-title">Media</span>
           <span id="media-summary"></span>
           <button type="button" id="media-close" class="btn btn-sm btn-outline-light" title="Close (Escape)">
@@ -389,13 +389,18 @@
               <div class="deck-leds">
                 <i class="deck-led on" role="img" title="Power: the deck is on" aria-label="Power on"></i
                 ><span>power</span>
-                <i class="deck-led data" id="deck-data" role="img" title="Data: lights as blocks pass the head"></i
+                <i
+                  class="deck-led data"
+                  id="deck-data"
+                  aria-hidden="true"
+                  title="Data: lights as blocks pass the head"
+                ></i
                 ><span>data</span>
               </div>
               <div class="counter-wrap">
                 <span>counter</span>
                 <span class="counter-row">
-                  <span class="counter" id="tape-counter" role="status" title="Tape counter">
+                  <span class="counter" id="tape-counter" role="img" title="Tape counter">
                     <b>0</b><b>0</b><b>0</b>
                   </span>
                   <button
@@ -448,10 +453,10 @@
                 <span>rew</span><span>play</span><span>stop</span><span>eject</span>
               </div>
               <div class="keys" role="group" aria-label="Tape transport">
-                <button type="button" class="key" id="tape-rewind" title="Rewind to the start">Rewind</button>
-                <button type="button" class="key" id="tape-play">Play</button>
-                <button type="button" class="key" id="tape-stop">Stop</button>
-                <button type="button" class="key" id="tape-eject">Eject</button>
+                <button type="button" class="deck-key" id="tape-rewind" title="Rewind to the start">Rewind</button>
+                <button type="button" class="deck-key" id="tape-play">Play</button>
+                <button type="button" class="deck-key" id="tape-stop">Stop</button>
+                <button type="button" class="deck-key" id="tape-eject">Eject</button>
               </div>
             </div>
             <div class="deck-line">
@@ -477,15 +482,28 @@
           <div class="media-into">
             <span id="media-into-label">Into</span>
             <div class="btn-group btn-group-sm" role="group" aria-labelledby="media-into-label" id="media-into">
-              <button type="button" class="btn btn-outline-light" data-target="0" title="Load into drive 0">
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                aria-pressed="false"
+                data-target="0"
+                title="Load into drive 0"
+              >
                 Drive 0
               </button>
-              <button type="button" class="btn btn-outline-light" data-target="1" title="Load into drive 1">
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                aria-pressed="false"
+                data-target="1"
+                title="Load into drive 1"
+              >
                 Drive 1
               </button>
               <button
                 type="button"
                 class="btn btn-outline-light"
+                aria-pressed="false"
                 data-target="tape"
                 title="Load into the cassette deck"
               >
@@ -500,6 +518,7 @@
               id="media-search"
               class="form-control form-control-sm"
               placeholder="Search discs and tapes"
+              aria-describedby="media-hint"
               autocomplete="off"
             />
           </label>
@@ -511,7 +530,7 @@
         </div>
         <div class="media-chips" id="media-chips" role="group" aria-label="Show"></div>
         <ul class="media-list" id="media-list" aria-label="Discs and tapes"></ul>
-        <div class="media-hint" id="media-hint" aria-hidden="true"></div>
+        <div class="media-hint" id="media-hint"></div>
         <div class="media-list-end">
           <button type="button" class="txt-btn list-hide" id="list-hide" title="Fold the list away">Hide list</button>
         </div>
@@ -572,7 +591,7 @@
             <span class="fold-bar-name bay-bar-name"></span>
             <span class="fold-bar-show">Show</span>
           </button>
-          <span class="bay-led led disc" role="img"></span>
+          <span class="bay-led led disc" role="img" aria-label="Drive idle"></span>
           <span class="lever-wrap">
             <button type="button" class="lever bay-eject"></button>
             <span class="hwlabel" aria-hidden="true">eject</span>

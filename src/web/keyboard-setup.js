@@ -54,7 +54,6 @@ export class KeyboardSetup {
         );
         keyboard.registerKeyHandler(keyCodes.PAGEDOWN, onDown("pagedown", actions.openRewind), alt);
         keyboard.registerKeyHandler(keyCodes.B, onDown(null, actions.openPrinter), ctrl);
-        // Alt+M aims the media window at drive 0, Alt+Shift+M at drive 1, Alt+C at the cassette.
         keyboard.registerKeyHandler(
             keyCodes.M,
             (down, _code, shift) => {

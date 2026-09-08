@@ -169,7 +169,7 @@ const template = [
             { type: "separator" },
             {
                 label: "Discs and Tapes...",
-                accelerator: "CmdOrCtrl+M",
+                accelerator: "CmdOrCtrl+Shift+M",
                 click: sendAction("media"),
             },
             { type: "separator" },

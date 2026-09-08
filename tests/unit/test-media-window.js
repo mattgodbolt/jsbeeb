@@ -6,7 +6,7 @@ import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
-import { domFromIndexHtml, fakeUrlState, ssdImage, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeFdc, fakeUrlState, ssdImage, teardownDom } from "./helpers.js";
 
 /** An SSD whose catalogue carries a title and cycle number. */
 function titledImage(title, cycle) {
@@ -15,21 +15,6 @@ function titledImage(title, cycle) {
     data.set(new TextEncoder().encode(title.slice(8, 12)), 0x100);
     data[0x104] = cycle;
     return data;
-}
-
-function fakeFdc() {
-    const drives = [
-        { tracksPerStep: 1, disc: undefined },
-        { tracksPerStep: 1, disc: undefined },
-    ];
-    return {
-        drives,
-        motorOn: [false, false],
-        loadDisc: (driveIndex, disc, fixed) => {
-            drives[driveIndex].disc = disc;
-            drives[driveIndex].tracksPerStep = fixed ?? (disc?.is40Track ? 2 : 1);
-        },
-    };
 }
 
 describe("MediaWindow", () => {
@@ -313,17 +298,34 @@ describe("MediaWindow", () => {
             expect(text(document.getElementById("deck-status"))).toContain("motor off");
         });
 
-        it("plays and stops the Atom's tape from the keys", () => {
+        it("works PLAY and STOP as the motor itself on an Atom, with nothing to say about a relay", () => {
             deps.model.isAtom = true;
+            tapeInterface.playPressed = false;
             make();
             putTapeIn(tape());
+            expect(text(document.getElementById("deck-status"))).toContain("stopped");
             document.getElementById("tape-play").click();
-            expect(tapeInterface.playTape).toHaveBeenCalled();
+            expect(tapeInterface.pressPlay).toHaveBeenCalled();
             tapeInterface.motorOn = true;
             tick();
             expect(document.getElementById("tape-play").disabled).toBe(true);
+            expect(text(document.getElementById("deck-status"))).toContain("playing");
             document.getElementById("tape-stop").click();
-            expect(tapeInterface.stopTape).toHaveBeenCalled();
+            expect(tapeInterface.pressStop).toHaveBeenCalled();
+            tapeInterface.motorOn = false;
+            tick();
+            expect(text(document.getElementById("deck-status"))).not.toContain("motor off");
+        });
+
+        it("blanks the readout's counter when the tape is ejected, and the deck's counter reads zero", () => {
+            make();
+            putTapeIn(tape(0.5));
+            expect(text(document.querySelector('#leds [data-slot="tape"] .counter'))).toBe("499");
+            deps.media.ejectTape();
+            expect(text(document.querySelector('#leds [data-slot="tape"] .counter'))).toBe("");
+            expect(text(document.getElementById("tape-counter"))).toBe("000");
+            putTapeIn(tape(0.5));
+            expect(text(document.querySelector('#leds [data-slot="tape"] .counter'))).toBe("499");
         });
 
         it("rewinds and ejects from the keys", () => {
@@ -372,19 +374,34 @@ describe("MediaWindow", () => {
     });
 
     describe("folding", () => {
-        it("keeps drive 1 folded until a disc goes in it, it is aimed at, or its bar is clicked", () => {
+        it("starts with drive 1 folded to a line, which unfolds it when clicked", () => {
             make();
             expect(bay(1).classList.contains("folded")).toBe(true);
             expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("empty");
             bay(1).querySelector(".bay-bar").click();
             expect(bay(1).classList.contains("folded")).toBe(false);
-            const window = make();
+        });
+
+        it("unfolds drive 1 when the list is aimed at it", () => {
+            make();
             document.querySelector('#media-into [data-target="1"]').click();
             expect(bay(1).classList.contains("folded")).toBe(false);
-            window.showDrive(false);
+        });
+
+        it("unfolds drive 1 when a disc goes into it, however it got there", () => {
+            make();
             deps.drives.putDiscIn(1, discFor("b.ssd", ssdImage()));
             expect(bay(1).classList.contains("folded")).toBe(false);
             expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("b.ssd");
+        });
+
+        it("aims at drive 0 again whenever the Media button opens it", () => {
+            make();
+            document.querySelector('#leds .slot-readout[data-slot="1"]').click();
+            expect(bay(1).classList.contains("target")).toBe(true);
+            document.getElementById("navbarMedia").click();
+            expect(bay(0).classList.contains("target")).toBe(true);
+            expect(bay(1).classList.contains("target")).toBe(false);
         });
 
         it("opens with the list whichever way it is opened, and the list folds and unfolds on request", () => {
@@ -460,10 +477,10 @@ describe("MediaWindow", () => {
             deps.media.listAll.mockResolvedValue({ descriptors, failures });
             const window = make();
             window.open();
-            await vi.waitFor(() => expect(deps.media.listAll).toHaveBeenCalled());
             await vi.waitFor(() => expect(document.getElementById("media-count").textContent).not.toBe(""));
             return window;
         };
+        const shiftClick = (el) => el.dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
         const search = (query) => {
             const box = document.getElementById("media-search");
             box.value = query;
@@ -538,10 +555,10 @@ describe("MediaWindow", () => {
             const loaded = discFor("A.ssd", ssdImage());
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await openWith([elite]);
-            expect(rows()[0].querySelector(".media-row-main").title).toBe(
-                "Load Elite, Acornsoft, D1S1 · 40 · v1, HFE archive into drive 0",
-            );
+            expect(rows()[0].querySelector(".media-row-main").title).toMatch(/^Load Elite.*into drive 0$/);
+            expect(bay(1).classList.contains("folded")).toBe(true);
             rows()[0].querySelector(".media-target").click();
+            expect(bay(1).classList.contains("folded")).toBe(false);
             await vi.waitFor(() => expect(fdc.drives[1].disc).toBe(loaded));
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:A.hfe", "auto");
             expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "hfe:A.hfe");
@@ -557,10 +574,10 @@ describe("MediaWindow", () => {
         it("is aimed from the Into control, which says where the list points", async () => {
             await openWith([elite]);
             const into = (target) => document.querySelector(`#media-into [data-target="${target}"]`);
-            expect(into("0").classList.contains("active")).toBe(true);
+            expect(into("0").getAttribute("aria-pressed")).toBe("true");
             into("1").click();
-            expect(into("1").classList.contains("active")).toBe(true);
-            expect(into("0").classList.contains("active")).toBe(false);
+            expect(into("1").getAttribute("aria-pressed")).toBe("true");
+            expect(into("0").getAttribute("aria-pressed")).toBe("false");
             expect(bay(1).classList.contains("target")).toBe(true);
             expect(document.getElementById("media-search").placeholder).toBe("Search for a disc for drive 1");
             expect(text(document.getElementById("media-hint"))).toContain("Enter loads into drive 1");
@@ -569,7 +586,7 @@ describe("MediaWindow", () => {
             expect(document.getElementById("media-search").placeholder).toBe("Search for a tape for the deck");
         });
 
-        it("boots the disc on Shift+Enter or a shift-click, whatever the autoboot tick says", async () => {
+        it("boots the disc on Shift+Enter, whatever the autoboot tick says", async () => {
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
             const box = document.getElementById("media-search");
@@ -578,13 +595,22 @@ describe("MediaWindow", () => {
             );
             await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
-            deps.autoboot.mockClear();
-            make();
+        });
+
+        it("boots the disc on a shift-click of its row", async () => {
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
-            rows()[0]
-                .querySelector(".media-row-main")
-                .dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
+            shiftClick(rows()[0].querySelector(".media-row-main"));
             await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+        });
+
+        it("only boots from drive 0: a shift-click on the other drive's button into drive 1 loads without a reset", async () => {
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            await openWith([elite]);
+            shiftClick(rows()[0].querySelector(".media-target"));
+            await vi.waitFor(() => expect(fdc.drives[1].disc).toBeTruthy());
+            expect(deps.autoboot).not.toHaveBeenCalled();
+            expect(deps.processor.reset).not.toHaveBeenCalled();
         });
 
         it("resets and boots when autoboot is ticked and the disc goes into drive 0", async () => {
@@ -594,6 +620,16 @@ describe("MediaWindow", () => {
             rows()[0].querySelector(".media-row-main").click();
             await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
+        });
+
+        it("does not reset the machine for a load that fails", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            deps.media.params.autoboot = "";
+            deps.media.loadDiscImage.mockRejectedValue(new Error("HTTP 404"));
+            await openWith([elite]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(bay(0).querySelector(".bay-retry").hidden).toBe(false));
+            expect(deps.processor.reset).not.toHaveBeenCalled();
         });
 
         it("shows a load in the bay while it happens, and a failure with Retry afterwards", async () => {
@@ -615,6 +651,32 @@ describe("MediaWindow", () => {
             expect(bay(0).querySelector(".bay-retry").hidden).toBe(true);
         });
 
+        it("clears a failure when a disc reaches the drive some other way", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            deps.media.loadDiscImage.mockRejectedValue(new Error("HTTP 404"));
+            await openWith([elite]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(bay(0).querySelector(".bay-retry").hidden).toBe(false));
+            deps.drives.putDiscIn(0, discFor("dropped.ssd", ssdImage()));
+            expect(bay(0).querySelector(".bay-retry").hidden).toBe(true);
+            expect(text(bay(0).querySelector(".bay-fail"))).toBe("");
+        });
+
+        it("shows a tape that could not be loaded on the deck, with Retry", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            deps.media.loadTapeImage.mockRejectedValueOnce(new Error("offline"));
+            await openWith([chuckie]);
+            document.getElementById("deck-window").click();
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(document.getElementById("deck-retry").hidden).toBe(false));
+            expect(text(document.getElementById("deck-fail"))).toBe("could not load Chuckie: offline");
+            const loadedTape = { name: "Chuckie.uef", position: 0 };
+            deps.media.loadTapeImage.mockResolvedValue(loadedTape);
+            document.getElementById("deck-retry").click();
+            await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
+            expect(document.getElementById("deck-retry").hidden).toBe(true);
+        });
+
         it("loads a tape into the deck from its row, unfolding the deck", async () => {
             const loadedTape = { name: "Chuckie.uef", position: 0 };
             deps.media.loadTapeImage.mockResolvedValue(loadedTape);
@@ -622,6 +684,8 @@ describe("MediaWindow", () => {
             document.getElementById("deck-window").click();
             expect(rows()[0].querySelector(".media-keycap").textContent).toBe("T");
             expect(rows()[0].querySelector(".media-target")).toBeNull();
+            document.getElementById("deck-hide").click();
+            expect(panel().classList.contains("deck-collapsed")).toBe(true);
             rows()[0].querySelector(".media-row-main").click();
             await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
             expect(deps.media.setTapeImage).toHaveBeenCalledWith("sth:AnF/Chuckie.zip");
@@ -669,6 +733,29 @@ describe("MediaWindow", () => {
             tick.checked = false;
             tick.dispatchEvent(new Event("change"));
             expect(deps.media.setAutoboot).toHaveBeenCalledWith(false);
+        });
+
+        it("shows the tick as the URL has it when opened, and as the page sets it meanwhile", async () => {
+            deps.media.params.autoboot = "";
+            const window = await openIt();
+            const tick = document.querySelector("#media-panel .autoboot");
+            await vi.waitFor(() => expect(tick.checked).toBe(true));
+            window.showAutoboot(false);
+            expect(tick.checked).toBe(false);
+        });
+
+        it("offers this browser for a new disc each time the form opens, however the last one was made", async () => {
+            deps.googleDrive.connected = true;
+            deps.googleDrive.createBlank.mockResolvedValue({ ref: "gd:x/a.ssd", disc: discFor("a.ssd", ssdImage()) });
+            await openIt();
+            const where = (value) => document.querySelector(`#media-new-disc-where input[value="${value}"]`);
+            document.getElementById("media-new-disc").click();
+            where("gdrive").checked = true;
+            document.getElementById("media-new-disc-name").value = "a.ssd";
+            document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
+            await vi.waitFor(() => expect(deps.googleDrive.createBlank).toHaveBeenCalled());
+            document.getElementById("media-new-disc").click();
+            expect(where("browser").checked).toBe(true);
         });
 
         it("makes a blank disc in this browser under the typed name, in the aimed drive", async () => {

@@ -35,6 +35,22 @@ describe("GoogleDriveLoader", () => {
         });
     });
 
+    it("lists every page of disc images, asking each time for the fields the rows read", async () => {
+        const loader = new GoogleDriveLoader();
+        const list = vi
+            .fn()
+            .mockResolvedValueOnce({ result: { files: [{ id: "1" }], nextPageToken: "more" } })
+            .mockResolvedValueOnce({ result: { files: [{ id: "2" }] } });
+        loader.driveClient = { files: { list } };
+        expect(await loader.listFiles()).toEqual([{ id: "1" }, { id: "2" }]);
+        expect(list).toHaveBeenCalledTimes(2);
+        for (const [query] of list.mock.calls) {
+            expect(query.q).toContain("trashed = false");
+            expect(query.fields).toContain("capabilities");
+        }
+        expect(list.mock.calls[1][0].pageToken).toBe("more");
+    });
+
     it("gives up when the Google script cannot be fetched", async () => {
         const loader = new GoogleDriveLoader();
 

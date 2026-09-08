@@ -154,6 +154,17 @@ describe("KeyboardSetup", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.A));
             expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
         });
+
+        it("releases a key that was held while Alt-Shift-M moved focus into the window", () => {
+            domFromIndexHtml("media-panel");
+            document.dispatchEvent(keyEvent("keydown", keyCodes.SHIFT, { shift: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
+            document.getElementById("media-search").focus();
+            document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true, shift: true }));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.SHIFT));
+            expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.M);
+            expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.SHIFT_LEFT);
+        });
     });
 
     describe("the keyboard's own events", () => {

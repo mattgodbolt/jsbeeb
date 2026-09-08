@@ -271,6 +271,7 @@ span.accesskey {
   --led-power: #e81414;
   --led-tape: #e81414;
   --led-disc: #f2c21c;
+  --led-data: #7fe37a;
 }
 
 .led {
@@ -734,7 +735,9 @@ div.smoothie-chart-tooltip {
   transform: translateX(-50%);
   width: min(860px, 96vw);
   max-height: calc(100vh - 88px);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: rgba(0, 0, 0, 0.92);
   border: 1px solid #555;
   border-radius: 4px;
@@ -805,7 +808,7 @@ div.smoothie-chart-tooltip {
   justify-content: center;
 }
 
-#media-panel .hwlabel {
+.media-unit .hwlabel {
   font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -814,7 +817,7 @@ div.smoothie-chart-tooltip {
 }
 
 #media-panel button {
-  font: inherit;
+  font-family: inherit;
   cursor: pointer;
 }
 
@@ -1205,7 +1208,8 @@ div.smoothie-chart-tooltip {
   color: #8a3f00;
 }
 
-.bay-line .spacer {
+.bay-line .spacer,
+.deck-line .spacer {
   flex: 1;
 }
 
@@ -1301,12 +1305,12 @@ div.smoothie-chart-tooltip {
 }
 
 .deck-led.data {
-  background: #1f4a1f;
+  background: color-mix(in srgb, var(--led-data) 25%, #222);
 }
 
 .deck-led.data.on {
-  background: #7fe37a;
-  box-shadow: 0 0 6px rgba(120, 255, 120, 0.7);
+  background: var(--led-data);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--led-data) 70%, transparent);
 }
 
 .counter-wrap {
@@ -1551,7 +1555,7 @@ div.smoothie-chart-tooltip {
   margin-top: -3px;
 }
 
-#media-panel .key {
+.deck-key {
   height: 34px;
   border: 0;
   border-radius: 2px 2px 3px 3px;
@@ -1570,7 +1574,7 @@ div.smoothie-chart-tooltip {
     box-shadow 0.08s;
 }
 
-#media-panel .key::after {
+.deck-key::after {
   content: "";
   position: absolute;
   left: 8px;
@@ -1581,12 +1585,12 @@ div.smoothie-chart-tooltip {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-#media-panel .key:hover:not(:disabled) {
+.deck-key:hover:not(:disabled) {
   filter: brightness(1.04);
 }
 
-#media-panel .key:active:not(:disabled),
-#media-panel .key[aria-pressed="true"] {
+.deck-key:active:not(:disabled),
+.deck-key[aria-pressed="true"] {
   transform: translateY(4px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.6),
@@ -1595,7 +1599,7 @@ div.smoothie-chart-tooltip {
     0 2px 3px rgba(0, 0, 0, 0.5);
 }
 
-#media-panel .key:disabled {
+.deck-key:disabled {
   filter: saturate(0.6) brightness(0.96);
 }
 
@@ -1715,7 +1719,7 @@ div.smoothie-chart-tooltip {
     margin-top: 14px;
   }
 
-  #media-panel .key {
+  .deck-key {
     height: 30px;
   }
 }
@@ -1900,7 +1904,7 @@ div.smoothie-chart-tooltip {
   flex-wrap: wrap;
 }
 
-#media-panel .media-chip {
+.media-chip {
   padding: 1px 10px;
   border-radius: 999px;
   border: 1px solid #495057;
@@ -1910,12 +1914,12 @@ div.smoothie-chart-tooltip {
   white-space: nowrap;
 }
 
-#media-panel .media-chip:hover {
+.media-chip:hover {
   color: #dee2e6;
   border-color: #adb5bd;
 }
 
-#media-panel .media-chip[aria-pressed="true"] {
+.media-chip[aria-pressed="true"] {
   background: #e9ecef;
   color: #212529;
   border-color: #e9ecef;
@@ -1934,7 +1938,8 @@ div.smoothie-chart-tooltip {
   margin: 8px 0 0;
   padding: 0;
   border-top: 1px solid #3a3f44;
-  height: 320px;
+  flex: 1 1 320px;
+  min-height: 120px;
   overflow-y: auto;
 }
 
@@ -2101,10 +2106,14 @@ div.smoothie-chart-tooltip {
   margin: 0;
 }
 
-.bay.target,
-.deck-window.target {
+.bay.target {
   outline: 3px solid #4d8be0;
   outline-offset: 1px;
+}
+
+/* A shadow rather than an outline, so the focus ring still reads on the aimed deck. */
+.deck-window.target {
+  box-shadow: 0 0 0 3px #4d8be0;
 }
 
 .bay.target .bay-badge .drive-no b {
@@ -2138,7 +2147,16 @@ div.smoothie-chart-tooltip {
   background: none;
 }
 
+/* The sheet: the whole window scrolls as one, so nothing inside it competes for the height. */
 @media (max-width: 700px) {
+  #media-panel {
+    overflow-y: auto;
+  }
+
+  #media-panel > * {
+    flex-shrink: 0;
+  }
+
   .media-list-head {
     flex-wrap: wrap;
     gap: 6px 12px;
@@ -2155,7 +2173,7 @@ div.smoothie-chart-tooltip {
   }
 
   .media-list {
-    height: auto;
+    flex: none;
   }
 
   .media-row-main {
@@ -2171,8 +2189,8 @@ div.smoothie-chart-tooltip {
     font-size: 11.5px;
   }
 
-  .media-row .publisher:empty {
-    display: none;
+  .media-row .publisher:empty + .detail {
+    grid-column: 1;
   }
 
   .media-row .media-source {
@@ -2184,20 +2202,6 @@ div.smoothie-chart-tooltip {
     grid-column: 3;
     grid-row: 1 / span 3;
   }
-}
-
-/* ----- the window as a column, so only the list scrolls and it fits the viewport ----- */
-
-#media-panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.media-list {
-  flex: 1 1 320px;
-  min-height: 120px;
-  height: auto;
 }
 
 /* ----- naming a new disc ----- */
@@ -2262,5 +2266,21 @@ div.smoothie-chart-tooltip {
   #media-search.attention {
     animation: search-pulse 0.9s ease-out 2;
     box-shadow: none;
+  }
+}
+
+/* Forced colours strip backgrounds, which is all a lamp or a pressed chip has to show with. */
+@media (forced-colors: active) {
+  .led,
+  .deck-led,
+  .pitch .knob,
+  .media-chip[aria-pressed="true"] {
+    forced-color-adjust: none;
+  }
+
+  .media-chip[aria-pressed="true"] {
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
   }
 }

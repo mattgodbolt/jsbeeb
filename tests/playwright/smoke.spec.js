@@ -133,6 +133,31 @@ test("the media window's list puts a built-in disc into drive 1", async ({ beeb,
     await expect(page).toHaveURL(/disc2=Welcome\.ssd/);
 });
 
+test("the media window fills a phone's screen without scrolling sideways", async ({ beeb, page }) => {
+    await page.setViewportSize({ width: 600, height: 800 });
+    await beeb.open("?disc=elite.ssd");
+    await beeb.expectDrive0("elite.ssd");
+    // The top bar is folded into its hamburger at this width; the LED panel's line still opens it.
+    await page.click('#leds .slot-readout[data-slot="0"]');
+    await expect(page.locator("#media-panel")).toBeVisible();
+    await page.click('#media-into [data-target="1"]');
+    const fit = await page.evaluate(() => {
+        const panel = document.getElementById("media-panel");
+        const box = panel.getBoundingClientRect();
+        return {
+            rightEdge: box.right,
+            width: box.width,
+            innerWidth: window.innerWidth,
+            pageScrollsSideways: document.documentElement.scrollWidth > window.innerWidth,
+            panelScrollsSideways: panel.scrollWidth > panel.clientWidth,
+        };
+    });
+    expect(fit.rightEdge).toBeLessThanOrEqual(fit.innerWidth);
+    expect(fit.width).toBe(fit.innerWidth);
+    expect(fit.pageScrollsSideways).toBe(false);
+    expect(fit.panelScrollsSideways).toBe(false);
+});
+
 test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");

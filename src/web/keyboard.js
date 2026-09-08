@@ -259,12 +259,12 @@ export class Keyboard extends EventTarget {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyUp(evt) {
-        // Early return for text input
-        if (this.inputEnabledFunction()) return;
-
-        // Always let the key ups come through to avoid sticky keys in the debugger
+        // Always let the key ups come through to avoid sticky keys: a key held while focus
+        // moved into a text field or the media window still has to be released in the machine.
         const code = this.keyCode(evt);
         this.keyInterface.keyUp(code);
+
+        if (this.inputEnabledFunction()) return;
 
         // No further special handling needed if not running
         if (!this.running) return;

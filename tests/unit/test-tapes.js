@@ -6,7 +6,6 @@ const BbcModel = findModel("B-DFS1.2");
 const AtomModel = findModel("Atom");
 
 // Build a minimal UEF file: "UEF File!\0" + version (minor, major) + chunks.
-// UefTape constructor reads the first chunk, so at least one must be present.
 function makeUef(chunks) {
     const header = [
         // "UEF File!\0"
@@ -116,11 +115,14 @@ describe("tapes", () => {
                 { id: 0x0116, data: [0x00, 0x00, 0x80, 0x3f] },
             ]);
 
+        // The first poll takes the origin chunk; the second is the gap.
         it("turns a one second gap into one second of CPU cycles", async () => {
             const bbc = await loadTapeFromData("test.uef", oneSecondGap(), BbcModel);
+            bbc.poll(mockAcia());
             expect(bbc.poll(mockAcia())).toBe(2 * 1000 * 1000);
 
             const atom = await loadTapeFromData("test.uef", oneSecondGap(), AtomModel);
+            atom.poll(mockAcia());
             expect(atom.poll(mockAcia())).toBe(1 * 1000 * 1000);
         });
 
@@ -178,6 +180,19 @@ describe("tapes", () => {
             expect(pollUntilReceived(tape)).toBe(0x41);
 
             tape.rewind();
+            expect(pollUntilReceived(tape)).toBe(0x41);
+        });
+
+        it("plays again from the start after running off the end", async () => {
+            const uef = makeUef([{ id: 0x0100, data: [0x41] }]);
+            const tape = await loadTapeFromData("test.uef", uef, BbcModel);
+            expect(pollUntilReceived(tape)).toBe(0x41);
+            const acia = { setTapeCarrier() {}, tone() {}, receive() {} };
+            for (let i = 0; i < 20 && tape.curChunk; i++) tape.poll(acia);
+            expect(tape.poll(acia)).toBeUndefined();
+
+            tape.rewind();
+            expect(tape.position).toBeLessThan(1);
             expect(pollUntilReceived(tape)).toBe(0x41);
         });
     });

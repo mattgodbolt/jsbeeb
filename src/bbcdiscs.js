@@ -13,7 +13,7 @@ export const Provenance = {
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 /**
- * Order the picker by what someone is looking for, which is the disc's name.
+ * Order the list by what someone is looking for, which is the disc's name.
  * The catalogue arrives grouped by publisher, so it has to be sorted here; the
  * remaining keys only settle ties, keeping a title's variants together and in
  * a stable order rather than the one the catalogue happens to list them in.
@@ -25,7 +25,7 @@ export const byTitle = (a, b) =>
     collator.compare(a.variant || "", b.variant || "");
 
 /**
- * How a disc reads in the picker. Several fingerprinted variants of one title
+ * How a disc reads in the list. Several fingerprinted variants of one title
  * sit next to each other, so the title alone doesn't identify a disc.
  *
  * @param {object} file manifest entry
@@ -38,25 +38,6 @@ export function describe(file) {
         publisher: file.publisher ?? "",
         detail: detail.join(" · "),
     };
-}
-
-/** The provenances a catalogue actually holds, so a source added later needs no code here. */
-export const provenancesIn = (catalogue) => [...new Set(catalogue.map((file) => file.provenance))].sort();
-
-/**
- * Whether a disc belongs in the picker as it is currently filtered.
- *
- * @param {object} file manifest entry
- * @param {string} filter lower cased text to look for
- * @param {?Set<string>} shown provenances to include, or null for all of them
- */
-export function matches(file, filter, shown) {
-    if (shown && !shown.has(file.provenance)) return false;
-    if (!filter) return true;
-    // What the row says the disc is, rather than everything the row renders:
-    // the provenance is a word the tickboxes control, not one to search for.
-    const { title, publisher, detail } = describe(file);
-    return `${title} ${publisher} ${detail}`.toLowerCase().includes(filter);
 }
 
 export class BbcDiscArchive {

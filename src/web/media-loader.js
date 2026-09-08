@@ -64,6 +64,8 @@ export class MediaLoader extends EventTarget {
         this.modals = modals;
         this.resolver = new MediaResolver();
         this.driveSource = null;
+        this.isSnapshotFile = isSnapshotFile;
+        this.loadSnapshot = loadSnapshot;
         this.listers = new Map();
         /** Files opened this session, by name: the only media the URL cannot name. */
         this.sessionFiles = new Map();
@@ -106,15 +108,13 @@ export class MediaLoader extends EventTarget {
                 reportLoadFailure(file.name, error);
             }
         });
-        this.isSnapshotFile = isSnapshotFile;
-        this.loadSnapshot = loadSnapshot;
     }
 
     get params() {
         return this.urlState.params;
     }
 
-    /** Register the fetcher behind an image schema; each picker calls this as it is constructed. */
+    /** Register the fetcher behind an image schema; each source calls this as it is constructed. */
     addSource(schema, fetcher) {
         if (schema === "drive") this.driveSource = fetcher;
         else this.resolver.addSource(schema, fetcher);
@@ -137,14 +137,16 @@ export class MediaLoader extends EventTarget {
     async listAll() {
         const descriptors = [];
         const failures = [];
-        for (const [source, lister] of this.listers) {
-            try {
-                descriptors.push(...(await lister()));
-            } catch (error) {
-                console.error(`Listing ${source} failed:`, error);
-                failures.push(`${source}: ${errorText(error)}`);
+        const sources = [...this.listers.keys()];
+        const outcomes = await Promise.allSettled(sources.map((source) => this.listers.get(source)()));
+        outcomes.forEach((outcome, i) => {
+            if (outcome.status === "fulfilled") {
+                descriptors.push(...outcome.value);
+            } else {
+                console.error(`Listing ${sources[i]} failed:`, outcome.reason);
+                failures.push(`${sources[i]}: ${errorText(outcome.reason)}`);
             }
-        }
+        });
         return { descriptors, failures };
     }
 
@@ -160,12 +162,15 @@ export class MediaLoader extends EventTarget {
             await this.loadSnapshot(file, arrayBuffer);
             return `Restored the state saved in ${file.name}.`;
         }
-        if (isTapeName(file.name)) {
-            await this.loadTapeFile(file, new Uint8Array(arrayBuffer));
-            return `Loaded ${file.name} as the tape.`;
+        // What a zip holds decides whether it is a tape or a disc, so it is opened first.
+        const { name, data, ignored } = await openIfZip(file.name, new Uint8Array(arrayBuffer));
+        reportIgnoredFiles(name, ignored);
+        if (isTapeName(name)) {
+            await this.loadTapeFile(name, data);
+            return `Loaded ${name} as the tape.`;
         }
-        await this.loadHTMLFile(file, driveIndex, new Uint8Array(arrayBuffer));
-        return `Loaded ${file.name} into drive ${driveIndex}.`;
+        this.loadHTMLFile(name, data, driveIndex);
+        return `Loaded ${name} into drive ${driveIndex}.`;
     }
 
     /** Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds. */
@@ -202,11 +207,8 @@ export class MediaLoader extends EventTarget {
         this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
     }
 
-    /** A disc image file from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
-    async loadHTMLFile(file, driveIndex = 0, imageData = null) {
-        if (!imageData) imageData = stringToUint8Array(await readFileAsBinaryString(file));
-        const { name, data, ignored } = await openIfZip(file.name, imageData);
-        reportIgnoredFiles(name, ignored);
+    /** A disc image from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
+    loadHTMLFile(name, data, driveIndex) {
         const loadedDisc = disc.discFor(name, data, undefined, this.drives.layoutForDrive(driveIndex));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(data);
@@ -215,11 +217,8 @@ export class MediaLoader extends EventTarget {
         this.setDiscImage(driveIndex, undefined);
     }
 
-    /** A tape image file from this computer, into the deck; likewise unnamed in the URL. */
-    async loadTapeFile(file, imageData = null) {
-        if (!imageData) imageData = stringToUint8Array(await readFileAsBinaryString(file));
-        const { name, data, ignored } = await openIfZip(file.name, imageData);
-        reportIgnoredFiles(name, ignored);
+    /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
+    async loadTapeFile(name, data) {
         this.sessionFiles.set(name, { data, kind: "tape" });
         this.setProcessorTape(await loadTapeFromData(name, data, this.model));
         this.setTapeImage(undefined);

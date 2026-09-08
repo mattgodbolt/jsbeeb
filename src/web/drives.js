@@ -33,6 +33,7 @@ export class Drives extends EventTarget {
         return disc ?? null;
     }
 
+    /** Downloads a drive's disc as a sector image, asking first if a flux-only track would be lost. */
     async downloadSsdOrDsd(driveIndex) {
         const disc = this.discToDownload(driveIndex);
         if (!disc) return;
@@ -46,6 +47,7 @@ export class Drives extends EventTarget {
         }
     }
 
+    /** Downloads a drive's disc as HFE, the format that keeps every flux transition. */
     downloadHfe(driveIndex) {
         const disc = this.discToDownload(driveIndex);
         if (!disc) return;

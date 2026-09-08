@@ -4,22 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Drives } from "../../src/web/drives.js";
 import { DiscLayout } from "../../src/disc.js";
 import { DriveTracks } from "../../src/url-params.js";
-import { fakeUrlState, teardownDom, toasts } from "./helpers.js";
-
-/** Enough of an FDC for the page's side of putting a disc in. */
-function fakeFdc() {
-    const drives = [
-        { tracksPerStep: 1, disc: null },
-        { tracksPerStep: 1, disc: null },
-    ];
-    return {
-        drives,
-        loadDisc: vi.fn((driveIndex, disc, fixed) => {
-            drives[driveIndex].disc = disc;
-            drives[driveIndex].tracksPerStep = fixed ?? (disc?.is40Track ? 2 : 1);
-        }),
-    };
-}
+import { fakeFdc, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 function fakeDisc({ name = "game.ssd", savesChanges = false, is40Track = false } = {}) {
     const disc = { name, savesChanges, is40Track, onFirstWrite: null };

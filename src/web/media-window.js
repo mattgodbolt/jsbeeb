@@ -1,28 +1,23 @@
 import { dfsCatalogue, toSsdOrDsd } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
 import { FloatingPanel } from "./floating-panel.js";
-import { Sources, compareForQuery, matchesQuery } from "./media-catalogue.js";
+import { Sources, compareForQuery, describeBrowserDisc, matchesQuery } from "./media-catalogue.js";
 import { errorText, reportLoadFailure } from "./reporting.js";
-import { describeBrowserDisc } from "./media-catalogue.js";
 import { guessDiscTypeFromName } from "../fdc.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
 
-const SourceNames = {
-    "": "built in",
-    sth: "STH archive",
-    "|": "STH archive",
-    hfe: "HFE archive",
-    gd: "Google Drive",
-    local: "this browser",
-    "!": "this browser",
-    http: "the web",
-    https: "the web",
-    file: "a file",
-    data: "the URL",
-    b64data: "the URL",
-    session: "a file opened this session",
+// The source behind each URL schema the list knows, and words for the schemas it does not.
+const SchemaSources = {
+    "": "builtin",
+    sth: "sth",
+    "|": "sth",
+    hfe: "hfe",
+    gd: "gdrive",
+    local: "browser",
+    "!": "browser",
 };
+const OtherSchemaPhrases = { http: "the web", https: "the web", file: "a file", data: "the URL", b64data: "the URL" };
 
 // The counter has three digits, and a tape run end to end turns it over once.
 const CounterDivisions = 1000;
@@ -39,21 +34,26 @@ const FoldableDrive = 1;
 /** Where a URL reference came from, in words, or null when the URL names nothing. */
 export function sourceOf(ref) {
     if (!ref) return null;
-    return SourceNames[splitImage(ref).schema] ?? null;
+    const { schema } = splitImage(ref);
+    return Sources[SchemaSources[schema]]?.phrase ?? OtherSchemaPhrases[schema] ?? null;
 }
+
+const sourceName = (source) => Sources[source]?.name ?? source;
+const targetFrom = (slot) => (slot === "tape" ? "tape" : Number(slot));
 
 const tracksOf = (drive) => (drive.tracksPerStep === 2 ? "40" : "80");
 
 // What fits on a line of the LED panel: the name without its folder or extension, cut in the
 // middle when it is still too long, so both the start and the end of it survive.
 const ReadoutChars = 12;
+const ReadoutTailChars = 4;
 export function shortName(name) {
     const bare = name
         .split("/")
         .pop()
         .replace(/\.[a-z0-9]+$/i, "");
     if (bare.length <= ReadoutChars) return bare;
-    return `${bare.slice(0, ReadoutChars - 5)}…${bare.slice(-4)}`;
+    return `${bare.slice(0, ReadoutChars - ReadoutTailChars - 1)}…${bare.slice(-ReadoutTailChars)}`;
 }
 const threeDigits = (count) => String(count).padStart(3, "0");
 const otherDrive = (driveIndex) => 1 - driveIndex;
@@ -97,15 +97,19 @@ export class MediaWindow {
                 e.preventDefault();
                 const { slot } = opener.dataset;
                 if (slot === undefined) this.open();
-                else this.openFor(slot === "tape" ? "tape" : Number(slot));
+                else this.openFor(targetFrom(slot));
             });
         this.floating.addEventListener("open", () => this.refreshList());
+        // Whatever arrives in a slot, by whichever route, settles the failure it was showing.
         drives.addEventListener("disc-changed", (e) => {
-            if (e.detail.disc && e.detail.driveIndex === FoldableDrive) this.showDrive(true);
-            this.renderDrive(e.detail.driveIndex);
+            const { driveIndex, disc } = e.detail;
+            this.bays[driveIndex].failed = null;
+            if (disc && driveIndex === FoldableDrive) this.showDrive(true);
+            this.renderDrive(driveIndex);
         });
         drives.addEventListener("tracks-changed", (e) => this.renderDrive(e.detail.driveIndex));
         media.addEventListener("tape-changed", (e) => {
+            this.deck.failed = null;
             if (e.detail.tape) this.showDeck(true);
             this.renderDeck();
         });
@@ -125,6 +129,7 @@ export class MediaWindow {
 
     /** Opens with the list, aimed at drive 0. */
     open() {
+        this.setTarget(0);
         this.showList(true);
         this.floating.open();
         this.list.search.select();
@@ -152,6 +157,7 @@ export class MediaWindow {
         section.querySelector(".bay-badge").title =
             `Drive ${driveIndex}; the BBC calls the other side of its disc drive ${upperSide}`;
         section.querySelector(".bay-pitch-legend").textContent = `Drive ${driveIndex} reads`;
+        section.querySelector(".bay-led").setAttribute("aria-label", `Drive ${driveIndex} idle`);
         const pitch = section.querySelector(".pitch");
         pitch.title = `The 40/80 track switch on the front of drive ${driveIndex}`;
         for (const radio of pitch.querySelectorAll("input")) {
@@ -195,7 +201,6 @@ export class MediaWindow {
         };
         // The latch ejects a disc, and on an empty drive it is where you would put one in.
         bay.eject.addEventListener("click", () => {
-            bay.failed = null;
             if (this.processor.fdc?.drives[driveIndex]?.disc) this.media.ejectDisc(driveIndex);
             else this.aimAt(driveIndex);
         });
@@ -239,33 +244,27 @@ export class MediaWindow {
             eject: document.getElementById("tape-eject"),
             barName: document.getElementById("deck-bar-name"),
             bar: document.getElementById("deck-toggle"),
-            hideButton: document.getElementById("deck-hide"),
+            hide: document.getElementById("deck-hide"),
             busy: null,
             failed: null,
         };
         deck.window.addEventListener("click", () => this.aimAt("tape"));
-        deck.eject.addEventListener("click", () => {
-            deck.failed = null;
-            this.media.ejectTape();
-        });
+        deck.eject.addEventListener("click", () => this.media.ejectTape());
         deck.retry.addEventListener("click", () => this.loadTape(deck.failed.descriptor));
         deck.rewind.addEventListener("click", () => {
             this.processor.tapeInterface.rewindTape();
             this.renderDeck();
         });
-        // The Atom's PLAY is its motor; the BBC's is a latch the machine's relay works against.
         deck.play.addEventListener("click", () => {
-            if (this.model.isAtom) this.processor.atomppia.playTape();
-            else this.processor.tapeInterface.pressPlay();
+            this.processor.tapeInterface.pressPlay();
             this.renderDeck();
         });
         deck.stop.addEventListener("click", () => {
-            if (this.model.isAtom) this.processor.atomppia.stopTape();
-            else this.processor.tapeInterface.pressStop();
+            this.processor.tapeInterface.pressStop();
             this.renderDeck();
         });
         deck.bar.addEventListener("click", () => this.showDeck(true));
-        document.getElementById("deck-hide").addEventListener("click", () => this.showDeck(false));
+        deck.hide.addEventListener("click", () => this.showDeck(false));
         document.getElementById("tape-counter-reset").addEventListener("click", () => {
             this.counterBase = this.tapeCount();
             this.showCounter();
@@ -333,7 +332,7 @@ export class MediaWindow {
             if (!file) return;
             noteEvent("local", "clickWindow");
             try {
-                toast(await this.media.openFile(file, this.target === "tape" ? 0 : this.target), { title: "Opened" });
+                toast(await this.media.openFile(file, this.targetDrive), { title: "Opened" });
                 this.close();
             } catch (error) {
                 reportLoadFailure(file.name, error);
@@ -360,9 +359,7 @@ export class MediaWindow {
         });
         list.hide.addEventListener("click", () => this.showList(false));
         for (const button of list.into.querySelectorAll("[data-target]"))
-            button.addEventListener("click", () =>
-                this.aimAt(button.dataset.target === "tape" ? "tape" : Number(button.dataset.target)),
-            );
+            button.addEventListener("click", () => this.aimAt(targetFrom(button.dataset.target)));
         return list;
     }
 
@@ -378,12 +375,19 @@ export class MediaWindow {
     /** Draws the eye to the search box, which is where a slot's "load one" leads. */
     nudgeSearch() {
         const box = this.list.search;
+        this.settleNudge?.();
         box.classList.remove("attention");
         void box.offsetWidth;
         box.classList.add("attention");
-        const settle = () => box.classList.remove("attention");
-        box.addEventListener("animationend", settle, { once: true });
-        window.setTimeout(settle, NudgeMs);
+        const settle = () => {
+            box.classList.remove("attention");
+            box.removeEventListener("animationend", settle);
+            window.clearTimeout(timer);
+            this.settleNudge = null;
+        };
+        const timer = window.setTimeout(settle, NudgeMs);
+        box.addEventListener("animationend", settle);
+        this.settleNudge = settle;
     }
 
     unfold(target) {
@@ -406,8 +410,11 @@ export class MediaWindow {
         this.list.search.placeholder = forTape
             ? "Search for a tape for the deck"
             : `Search for a disc for drive ${target}`;
-        for (const button of this.list.into.querySelectorAll("[data-target]"))
-            button.classList.toggle("active", button.dataset.target === String(target));
+        for (const button of this.list.into.querySelectorAll("[data-target]")) {
+            const aimed = button.dataset.target === String(target);
+            button.classList.toggle("active", aimed);
+            button.setAttribute("aria-pressed", String(aimed));
+        }
         this.list.hint.replaceChildren(
             ...[
                 ["Enter", `loads into ${into}`],
@@ -426,7 +433,11 @@ export class MediaWindow {
     }
 
     async refreshList() {
-        const { descriptors, failures } = await this.media.listAll();
+        const listing = this.media.listAll();
+        this.list.latest = listing;
+        const { descriptors, failures } = await listing;
+        // A newer refresh has been asked for meanwhile: its answer is the one to show.
+        if (this.list.latest !== listing) return;
         this.list.descriptors = descriptors;
         this.list.failures = failures;
         this.list.loaded = true;
@@ -518,10 +529,9 @@ export class MediaWindow {
         const main = document.createElement("button");
         main.type = "button";
         main.className = "media-row-main";
-        const target = d.kind === "tape" ? "tape" : this.target === "tape" ? 0 : this.target;
+        const target = this.rowTarget(d);
         const targetName = target === "tape" ? "the cassette deck" : `drive ${target}`;
-        const sourceName = Sources[d.source]?.name ?? d.source;
-        const label = [d.title, d.publisher, d.detail, sourceName].filter(Boolean).join(", ");
+        const label = [d.title, d.publisher, d.detail, sourceName(d.source)].filter(Boolean).join(", ");
         main.title = `Load ${label} into ${targetName}`;
         main.setAttribute("aria-label", main.title);
         const cell = (className, text) => {
@@ -538,7 +548,7 @@ export class MediaWindow {
         }
         const inDrive = this.slotHolding(d.ref);
         if (inDrive !== null) detail.append(detail.textContent ? " · " : "", cell("in-drive", `in ${inDrive}`));
-        const source = cell(`media-source src-${d.source}`, sourceName);
+        const source = cell(`media-source src-${d.source}`, sourceName(d.source));
         source.title = Sources[d.source]?.title ?? "";
         const keycap = cell("media-keycap", target === "tape" ? "T" : String(target));
         keycap.setAttribute("aria-hidden", "true");
@@ -568,18 +578,28 @@ export class MediaWindow {
         return li;
     }
 
+    /** What the URL says a drive holds; a bare disc parameter means drive 0. */
+    refInDrive(driveIndex) {
+        return this.media.params[DriveKeys[driveIndex]] ?? (driveIndex === 0 ? this.media.params.disc : undefined);
+    }
+
     /** Which slot a reference is loaded in, as text, or null. */
     slotHolding(ref) {
         for (const driveIndex of [0, 1])
-            if (this.media.params[DriveKeys[driveIndex]] === ref && this.processor.fdc?.drives[driveIndex].disc)
+            if (this.refInDrive(driveIndex) === ref && this.processor.fdc?.drives[driveIndex].disc)
                 return `drive ${driveIndex}`;
         if (this.media.params.tape === ref && this.processor.tapeInterface.tape) return "the deck";
         return null;
     }
 
+    /** The drive the list is aimed at; aiming at the deck leaves discs going to drive 0. */
+    get targetDrive() {
+        return this.target === "tape" ? 0 : this.target;
+    }
+
     /** Where a row's own action sends its descriptor: the deck for a tape, the aimed drive for a disc. */
     rowTarget(d) {
-        return d.kind === "tape" ? "tape" : this.target === "tape" ? 0 : this.target;
+        return d.kind === "tape" ? "tape" : this.targetDrive;
     }
 
     loadInto(target, d, options = {}) {
@@ -598,12 +618,14 @@ export class MediaWindow {
         const bay = this.bays[driveIndex];
         bay.busy = d;
         bay.failed = null;
+        this.unfold(driveIndex);
         this.renderDrive(driveIndex);
         const needsAutoboot = driveIndex === 0 && (boot || this.media.params.autoboot !== undefined);
-        if (needsAutoboot) this.processor.reset(true);
         try {
             const loaded = await this.media.loadDiscImage(d.ref, this.drives.layoutForDrive(driveIndex));
             bay.busy = null;
+            // The machine is only reset once there is a disc to boot.
+            if (needsAutoboot) this.processor.reset(true);
             this.drives.putDiscIn(driveIndex, loaded);
             this.media.setDiscImage(driveIndex, MediaWindow.urlRef(d));
             if (needsAutoboot) this.autoboot(d.title);
@@ -612,7 +634,7 @@ export class MediaWindow {
         } catch (error) {
             bay.busy = null;
             bay.failed = { descriptor: d, error };
-            reportLoadFailure(`${d.title} from ${Sources[d.source]?.name ?? d.source}`, error);
+            reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
         }
         this.renderDrive(driveIndex);
         this.renderList();
@@ -623,7 +645,7 @@ export class MediaWindow {
         const { deck } = this;
         deck.busy = d;
         deck.failed = null;
-        this.showDeck(true);
+        this.unfold("tape");
         this.renderDeck();
         try {
             const tape = await this.media.loadTapeImage(d.ref);
@@ -634,7 +656,7 @@ export class MediaWindow {
         } catch (error) {
             deck.busy = null;
             deck.failed = { descriptor: d, error };
-            reportLoadFailure(`${d.title} from ${Sources[d.source]?.name ?? d.source}`, error);
+            reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
         }
         this.renderDeck();
         this.renderList();
@@ -656,7 +678,7 @@ export class MediaWindow {
         const disc = copying ? this.processor.fdc?.drives[copyFrom]?.disc : null;
         list.newDiscLabel.textContent = copying ? `Copy the disc in drive ${copyFrom} to Google Drive as` : "Name";
         list.newDiscWhere.hidden = copying;
-        if (copying) list.newDiscForm.querySelector('input[value="gdrive"]').checked = true;
+        list.newDiscForm.querySelector(`input[value="${copying ? "gdrive" : "browser"}"]`).checked = true;
         list.newDiscName.value = disc ? disc.name.split("/").pop() : "";
         list.newDiscForm.hidden = false;
         list.newDiscName.focus();
@@ -680,7 +702,7 @@ export class MediaWindow {
         if (!name) return;
         if (!guessDiscTypeFromName(name).supportsCatalogue || !/\.[a-z]+$/i.test(name)) name += ".ssd";
         const copyFrom = this.list.copyFrom;
-        const driveIndex = copyFrom ?? (this.target === "tape" ? 0 : this.target);
+        const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;
         if (copyFrom === null && where === "browser") return this.loadDisc(driveIndex, describeBrowserDisc(name));
         const bay = this.bays[driveIndex];
@@ -723,7 +745,6 @@ export class MediaWindow {
 
     /** Folds the list to one line, or unfolds it. */
     showList(shown) {
-        this.list.shown = shown;
         this.panel.classList.toggle("list-collapsed", !shown);
         this.list.bar.setAttribute("aria-expanded", String(shown));
     }
@@ -769,7 +790,7 @@ export class MediaWindow {
         bay.retry.hidden = !bay.failed;
         bay.hide.hidden = driveIndex !== FoldableDrive || !!disc || !!bay.busy;
         if (bay.busy) {
-            bay.status.textContent = `loading ${bay.busy.title} from ${Sources[bay.busy.source]?.name ?? bay.busy.source}…`;
+            bay.status.textContent = `loading ${bay.busy.title} from ${sourceName(bay.busy.source)}…`;
             bay.kept.textContent = "";
         } else if (!disc) {
             bay.eject.title = `Drive ${driveIndex} is empty; click to pick a disc for it from the list`;
@@ -783,7 +804,7 @@ export class MediaWindow {
         } else {
             const tracks = tracksOf(drive);
             const sides = disc.isDoubleSided ? `2 sides (drives ${driveIndex} and ${driveIndex + 2})` : "1 side";
-            const ref = this.media.params[DriveKeys[driveIndex]] ?? (driveIndex === 0 && this.media.params.disc);
+            const ref = this.refInDrive(driveIndex);
             const source = sourceOf(ref);
             const name = this.nameFor(ref, disc.name);
             bay.title.textContent = name;
@@ -806,10 +827,8 @@ export class MediaWindow {
 
     renderDeck() {
         const { deck } = this;
-        const tape = this.processor.tapeInterface.tape;
+        const { tape, playPressed, tapeRunning } = this.processor.tapeInterface;
         const isAtom = this.model.isAtom;
-        const { motorOn } = this.processor.tapeInterface;
-        const playPressed = isAtom ? !!motorOn : this.processor.tapeInterface.playPressed;
         const readout = this.readouts.tape;
         deck.section.classList.toggle("busy", !!deck.busy);
         deck.cassette.hidden = !tape;
@@ -825,9 +844,9 @@ export class MediaWindow {
             ? `could not load ${deck.failed.descriptor.title}: ${errorText(deck.failed.error)}`
             : "";
         deck.retry.hidden = !deck.failed;
-        deck.hideButton.hidden = !!tape || !!deck.busy;
+        deck.hide.hidden = !!tape || !!deck.busy;
         if (deck.busy) {
-            deck.status.textContent = `loading ${deck.busy.title} from ${Sources[deck.busy.source]?.name ?? deck.busy.source}…`;
+            deck.status.textContent = `loading ${deck.busy.title} from ${sourceName(deck.busy.source)}…`;
         } else if (!tape) {
             deck.window.title = "The deck is empty; click to pick a tape for it from the list";
             deck.eject.title = "Nothing to eject";
@@ -842,8 +861,7 @@ export class MediaWindow {
             deck.sub.textContent = source ?? "";
             deck.window.title = `${name} is in the deck; click to pick another tape for it`;
             deck.eject.title = `Eject ${name}`;
-            const running = isAtom ? motorOn : motorOn && playPressed;
-            const state = running ? "playing" : playPressed && !isAtom ? "motor off" : "stopped";
+            const state = tapeRunning ? "playing" : playPressed && !isAtom ? "motor off" : "stopped";
             deck.status.textContent = [name, source, state].filter(Boolean).join(" · ");
             deck.barName.textContent = name;
             readout.querySelector(".name").textContent = shortName(name);
@@ -867,18 +885,19 @@ export class MediaWindow {
 
     showCounter() {
         const reading = (this.tapeCount() - this.counterBase + CounterDivisions) % CounterDivisions;
-        if (reading === this.lastCounter) return;
-        this.lastCounter = reading;
-        const digits = threeDigits(reading);
-        this.deck.counter.querySelectorAll("b").forEach((digit, i) => (digit.textContent = digits[i]));
-        this.deck.counter.setAttribute("aria-label", `Tape counter ${digits}`);
-        this.readouts.tape.querySelector(".counter").textContent = this.processor.tapeInterface.tape ? digits : "";
+        const digits = this.processor.tapeInterface.tape ? threeDigits(reading) : "";
+        if (digits === this.lastCounter) return;
+        this.lastCounter = digits;
+        const shown = digits || threeDigits(0);
+        this.deck.counter.querySelectorAll("b").forEach((digit, i) => (digit.textContent = shown[i]));
+        this.deck.counter.setAttribute("aria-label", `Tape counter ${shown}`);
+        this.readouts.tape.querySelector(".counter").textContent = digits;
     }
 
     /** Cheap enough to run every emulation tick: the lights, the reels and the counter. */
     tick() {
         const { tapeInterface, fdc } = this.processor;
-        const running = !!(tapeInterface.tape && (tapeInterface.tapeRunning ?? tapeInterface.motorOn));
+        const running = !!(tapeInterface.tape && tapeInterface.tapeRunning);
         if (running !== this.deck.section.classList.contains("motor")) {
             this.deck.section.classList.toggle("motor", running);
             this.deck.data.classList.toggle("on", running);

@@ -370,10 +370,9 @@ export class MachineSession {
 
     mediaResolver() {
         if (!this._mediaResolver) {
-            const quiet = () => {};
             this._mediaResolver = new MediaResolver();
-            this._mediaResolver.addSource("sth", (file) => new StairwayToHell(quiet, quiet, quiet).fetch(file));
-            this._mediaResolver.addSource("hfe", (path) => new BbcDiscArchive(quiet, quiet, quiet).fetch(path));
+            this._mediaResolver.addSource("sth", (file) => new StairwayToHell(false).fetch(file));
+            this._mediaResolver.addSource("hfe", (path) => new BbcDiscArchive().fetch(path));
         }
         return this._mediaResolver;
     }

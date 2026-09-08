@@ -63,18 +63,13 @@ describe("the media catalogue", () => {
                 publisher: "Acorn User",
                 detail: "D1DS · 40 · v1",
                 source: "hfe",
-                tracks: "40",
-                sides: 2,
-                provenance: Provenance.Captured,
                 savesChanges: false,
             });
         });
 
-        it("files a reconstructed disc under its own source, with pitch and sides unknown", () => {
+        it("files a reconstructed disc under its own source", () => {
             const described = describeHfeEntry({ path: "x.hfe", title: "X", provenance: Provenance.Reconstructed });
             expect(described.source).toBe("hfeRebuilt");
-            expect(described.tracks).toBeUndefined();
-            expect(described.sides).toBeUndefined();
         });
     });
 

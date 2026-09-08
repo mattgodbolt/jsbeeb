@@ -4,22 +4,36 @@ import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
  * One shape for everything the media window can list, whichever source it
  * came from:
  *
- *   { ref, kind, title, publisher, detail, source, tracks, sides, savesChanges }
+ *   { ref, kind, title, publisher, detail, source, savesChanges }
  *
  * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL.
  */
 
+// `name` heads a chip; `phrase` sits mid-sentence in a slot's status line.
 export const Sources = Object.freeze({
-    builtin: { name: "Built in", title: "The example discs that ship with jsbeeb" },
-    sth: { name: "STH archive", title: "The Stairway To Hell mirror" },
-    hfe: { name: "HFE archive", title: "Flux captures of real discs, with title, publisher, side and pitch" },
+    builtin: { name: "Built in", phrase: "built in", title: "The example discs that ship with jsbeeb" },
+    sth: { name: "STH archive", phrase: "STH archive", title: "The Stairway To Hell mirror" },
+    hfe: {
+        name: "HFE archive",
+        phrase: "HFE archive",
+        title: "Flux captures of real discs, with title, publisher, side and pitch",
+    },
     hfeRebuilt: {
         name: "HFE rebuilt",
+        phrase: "HFE archive",
         title: "Discs rebuilt from a sector dump: the data is right, the surface around it is inferred",
     },
-    gdrive: { name: "Google Drive", title: "Your Google Drive; changes are kept there" },
-    browser: { name: "This browser", title: "Discs kept in this browser's storage; changes are kept" },
-    session: { name: "This session", title: "Files opened this session; they cannot be named in the URL" },
+    gdrive: { name: "Google Drive", phrase: "Google Drive", title: "Your Google Drive; changes are kept there" },
+    browser: {
+        name: "This browser",
+        phrase: "this browser",
+        title: "Discs kept in this browser's storage; changes are kept",
+    },
+    session: {
+        name: "This session",
+        phrase: "a file opened this session",
+        title: "Files opened this session; they cannot be named in the URL",
+    },
 });
 
 const LocalDiscPrefix = "disc_";
@@ -41,8 +55,6 @@ const describeSth = (path, kind) => {
 export const describeSthDisc = (path) => describeSth(path, "disc");
 export const describeSthTape = (path) => describeSth(path, "tape");
 
-const sidesOf = (file) => (file.disc?.includes("DS") ? 2 : 1);
-
 export function describeHfeEntry(file) {
     const { title, publisher, detail } = describeHfe(file);
     return {
@@ -52,9 +64,6 @@ export function describeHfeEntry(file) {
         publisher,
         detail,
         source: file.provenance === Provenance.Reconstructed ? "hfeRebuilt" : "hfe",
-        tracks: file.tracks?.[0],
-        sides: file.disc ? sidesOf(file) : undefined,
-        provenance: file.provenance,
         savesChanges: false,
     };
 }

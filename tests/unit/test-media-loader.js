@@ -5,6 +5,7 @@ import { BuiltInImages, MediaLoader } from "../../src/web/media-loader.js";
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
+import { createZipBlob } from "../../src/archive.js";
 import { domFromIndexHtml, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 const fileFor = (name, bytes) => new File([bytes], name);
@@ -184,6 +185,28 @@ describe("MediaLoader", () => {
             expect(again.originalImageData).toBeTruthy();
         });
 
+        it("opens a zipped tape as a tape, whatever the zip is called", async () => {
+            const uef = new Uint8Array([...new TextEncoder().encode("UEF File!\0"), 6, 0, 0, 1, 1, 0, 0, 0, 1]);
+            const zipped = new Uint8Array(await createZipBlob([{ name: "Chuckie.uef", data: uef }]).arrayBuffer());
+            const media = make();
+            expect(await media.openFile(fileFor("chuckie_egg.zip", zipped))).toBe("Loaded Chuckie.uef as the tape.");
+            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(
+                expect.objectContaining({ name: "Chuckie.uef" }),
+            );
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            const { descriptors } = await media.listAll();
+            expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:Chuckie.uef", kind: "tape" }));
+        });
+
+        it("keeps a file in the list after the disc made from it is ejected", async () => {
+            deps.drives.eject = vi.fn();
+            const media = make();
+            await media.openFile(fileFor("mine.ssd", ssdImage()));
+            media.ejectDisc(0);
+            const { descriptors } = await media.listAll();
+            expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:mine.ssd" }));
+        });
+
         it("says when a reference names a file that was never opened", async () => {
             await expect(make().loadDiscImage("session:ghost.ssd")).rejects.toThrow("ghost.ssd was not opened");
         });
@@ -207,6 +230,23 @@ describe("MediaLoader", () => {
             const { descriptors, failures } = await media.listAll();
             expect(descriptors.length).toBe(BuiltInImages.length);
             expect(failures).toEqual(["sth: offline"]);
+        });
+
+        it("asks every source at once, and keeps them in the order they were added", async () => {
+            const media = make();
+            let releaseSlow;
+            const slowAsked = new Promise((resolve) => {
+                media.addLister("slow", () => {
+                    resolve();
+                    return new Promise((done) => (releaseSlow = () => done([{ ref: "slow" }])));
+                });
+            });
+            media.addLister("quick", async () => [{ ref: "quick" }]);
+            const listing = media.listAll();
+            await slowAsked;
+            releaseSlow();
+            const { descriptors } = await listing;
+            expect(descriptors.slice(-2).map((d) => d.ref)).toEqual(["slow", "quick"]);
         });
     });
 
