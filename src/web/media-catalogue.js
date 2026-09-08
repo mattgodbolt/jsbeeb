@@ -1,4 +1,4 @@
-import { describe as describeHfe } from "../bbcdiscs.js";
+import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
@@ -12,7 +12,11 @@ import { describe as describeHfe } from "../bbcdiscs.js";
 export const Sources = Object.freeze({
     builtin: { name: "Built in", title: "The example discs that ship with jsbeeb" },
     sth: { name: "STH archive", title: "The Stairway To Hell mirror" },
-    hfe: { name: "HFE archive", title: "Flux-level disc images, with title, publisher and side" },
+    hfe: { name: "HFE archive", title: "Flux captures of real discs, with title, publisher, side and pitch" },
+    hfeRebuilt: {
+        name: "HFE rebuilt",
+        title: "Discs rebuilt from a sector dump: the data is right, the surface around it is inferred",
+    },
     gdrive: { name: "Google Drive", title: "Your Google Drive; changes are kept there" },
     browser: { name: "This browser", title: "Discs kept in this browser's storage; changes are kept" },
     session: { name: "This session", title: "Files opened this session; they cannot be named in the URL" },
@@ -47,7 +51,7 @@ export function describeHfeEntry(file) {
         title,
         publisher,
         detail,
-        source: "hfe",
+        source: file.provenance === Provenance.Reconstructed ? "hfeRebuilt" : "hfe",
         tracks: file.tracks?.[0],
         sides: file.disc ? sidesOf(file) : undefined,
         provenance: file.provenance,
@@ -151,7 +155,7 @@ export const matchesQuery = (descriptor, query) => scoreQuery(descriptor, query)
 
 // Among equal matches: the examples that ship with jsbeeb, then the user's own discs, then the
 // archive with metadata before the one without.
-const SourceRank = { builtin: 0, browser: 1, gdrive: 1, session: 1, hfe: 2, sth: 3 };
+const SourceRank = { builtin: 0, browser: 1, gdrive: 1, session: 1, hfe: 2, hfeRebuilt: 3, sth: 4 };
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 

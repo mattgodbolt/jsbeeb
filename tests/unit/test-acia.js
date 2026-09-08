@@ -68,6 +68,49 @@ describe("Acia", () => {
         });
     });
 
+    describe("the recorder's PLAY latch", () => {
+        const withTape = () => {
+            const relayNoise = { motorOn: vi.fn(), motorOff: vi.fn() };
+            const acia = createMockAcia(relayNoise);
+            const tape = { poll: vi.fn(() => 100), rewind: vi.fn() };
+            acia.setTape(tape);
+            vi.spyOn(acia.runTapeTask, "reschedule");
+            vi.spyOn(acia.runTapeTask, "cancel");
+            return { acia, tape };
+        };
+
+        it("runs the tape from the relay alone, PLAY being down to begin with", () => {
+            const { acia } = withTape();
+            expect(acia.playPressed).toBe(true);
+            acia.setMotor(true);
+            expect(acia.tapeRunning).toBe(true);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
+        });
+
+        it("holds the tape still while STOP is down, whatever the relay does", () => {
+            const { acia } = withTape();
+            acia.setMotor(true);
+            acia.pressStop();
+            expect(acia.tapeRunning).toBe(false);
+            expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+            acia.runTapeTask.reschedule.mockClear();
+            acia.setMotor(false);
+            acia.setMotor(true);
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
+            acia.pressPlay();
+            expect(acia.tapeRunning).toBe(true);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
+        });
+
+        it("does nothing when PLAY is pressed with the relay off", () => {
+            const { acia } = withTape();
+            acia.pressStop();
+            acia.pressPlay();
+            expect(acia.tapeRunning).toBe(false);
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
+        });
+    });
+
     describe("receive overrun", () => {
         it("should raise one notice for a burst of overruns", () => {
             const acia = createMockAcia();

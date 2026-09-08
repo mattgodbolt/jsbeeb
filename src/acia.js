@@ -17,6 +17,7 @@ export class Acia extends EventTarget {
 
         this.rs423Selected = false;
         this.motorOn = false;
+        this.playPressed = true;
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;
         this.hadDcdHigh = false;
@@ -72,12 +73,35 @@ export class Acia extends EventTarget {
             this.runTape();
             this.relayNoise.motorOn();
         } else if (!on && this.motorOn) {
-            this.toneGen.mute();
-            this.runTapeTask.cancel();
-            this.setTapeCarrier(false);
+            this.stopRunning();
             this.relayNoise.motorOff();
         }
         this.motorOn = on;
+    }
+
+    /** Whether the tape is moving: the machine's motor relay is on and the recorder's PLAY is down. */
+    get tapeRunning() {
+        return this.motorOn && this.playPressed;
+    }
+
+    /** PLAY on the recorder: down by default, so the relay alone runs the tape as it always has. */
+    pressPlay() {
+        if (this.playPressed) return;
+        this.playPressed = true;
+        if (this.motorOn) this.runTape();
+    }
+
+    /** STOP on the recorder: the tape stays put however the relay is set, until PLAY is pressed again. */
+    pressStop() {
+        if (!this.playPressed) return;
+        this.playPressed = false;
+        if (this.motorOn) this.stopRunning();
+    }
+
+    stopRunning() {
+        this.toneGen.mute();
+        this.runTapeTask.cancel();
+        this.setTapeCarrier(false);
     }
 
     read(addr) {
@@ -344,7 +368,7 @@ export class Acia extends EventTarget {
     }
 
     runTape() {
-        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(this));
+        if (this.tape && this.playPressed) this.runTapeTask.reschedule(this.tape.poll(this));
     }
 
     runRs423() {

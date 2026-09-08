@@ -21,7 +21,7 @@ describe("the media catalogue", () => {
     afterEach(() => window.localStorage.clear());
 
     it("names every source the descriptors can come from", () => {
-        expect(Object.keys(Sources)).toEqual(["builtin", "sth", "hfe", "gdrive", "browser", "session"]);
+        expect(Object.keys(Sources)).toEqual(["builtin", "sth", "hfe", "hfeRebuilt", "gdrive", "browser", "session"]);
     });
 
     describe("STH", () => {
@@ -70,8 +70,9 @@ describe("the media catalogue", () => {
             });
         });
 
-        it("leaves the pitch and sides unknown for a reconstructed disc", () => {
+        it("files a reconstructed disc under its own source, with pitch and sides unknown", () => {
             const described = describeHfeEntry({ path: "x.hfe", title: "X", provenance: Provenance.Reconstructed });
+            expect(described.source).toBe("hfeRebuilt");
             expect(described.tracks).toBeUndefined();
             expect(described.sides).toBeUndefined();
         });

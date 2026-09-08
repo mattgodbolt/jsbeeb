@@ -2022,6 +2022,12 @@ div.smoothie-chart-tooltip {
   border-color: #2f6b63;
 }
 
+.media-source.src-hfeRebuilt {
+  color: #8fb8b0;
+  border-color: #2f6b63;
+  border-style: dashed;
+}
+
 .media-source.src-builtin {
   color: #9ec5fe;
   border-color: #2f5a8f;

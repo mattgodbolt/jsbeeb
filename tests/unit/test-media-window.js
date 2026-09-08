@@ -42,7 +42,19 @@ describe("MediaWindow", () => {
         domFromIndexHtml("navbarSupportedContent", "leds", "media-panel", "drive-bay-template");
         document.querySelector(".media-header").setPointerCapture = () => {};
         fdc = fakeFdc();
-        tapeInterface = { tape: undefined, motorOn: false, rewindTape: vi.fn(), playTape: vi.fn(), stopTape: vi.fn() };
+        tapeInterface = {
+            tape: undefined,
+            motorOn: false,
+            playPressed: true,
+            get tapeRunning() {
+                return this.motorOn && this.playPressed;
+            },
+            rewindTape: vi.fn(),
+            playTape: vi.fn(),
+            stopTape: vi.fn(),
+            pressPlay: vi.fn(() => (tapeInterface.playPressed = true)),
+            pressStop: vi.fn(() => (tapeInterface.playPressed = false)),
+        };
         loop = new EventTarget();
         const drives = new Drives({
             fdc,
@@ -247,7 +259,7 @@ describe("MediaWindow", () => {
             putTapeIn(tape(0.5));
             expect(document.getElementById("deck-cassette").hidden).toBe(false);
             expect(text(document.getElementById("deck-tape-title"))).toBe("chuckie.uef");
-            expect(text(document.getElementById("deck-status"))).toBe("chuckie.uef · STH archive · stopped");
+            expect(text(document.getElementById("deck-status"))).toBe("chuckie.uef · STH archive · motor off");
             expect(text(document.getElementById("tape-counter"))).toBe("499");
             expect(readout("tape")).toBe("chuckie499");
             expect(text(document.querySelector('#leds [data-slot="tape"] .counter'))).toBe("499");
@@ -276,13 +288,29 @@ describe("MediaWindow", () => {
             expect(document.getElementById("media-deck").classList.contains("motor")).toBe(false);
         });
 
-        it("keeps play latched on a BBC, which switches the motor itself", () => {
+        it("works PLAY and STOP as a latch on a BBC, which the motor relay runs against", () => {
             make();
             putTapeIn(tape());
             expect(document.getElementById("tape-play").disabled).toBe(true);
-            expect(document.getElementById("tape-play").title).toContain("*MOTOR");
+            expect(document.getElementById("tape-play").getAttribute("aria-pressed")).toBe("true");
+            expect(document.getElementById("tape-stop").disabled).toBe(false);
+            tapeInterface.motorOn = true;
+            tick();
+            expect(document.getElementById("media-deck").classList.contains("motor")).toBe(true);
+            expect(text(document.getElementById("deck-status"))).toContain("playing");
+            document.getElementById("tape-stop").click();
+            expect(tapeInterface.pressStop).toHaveBeenCalled();
+            expect(document.getElementById("tape-play").disabled).toBe(false);
             expect(document.getElementById("tape-stop").disabled).toBe(true);
-            expect(document.getElementById("tape-rewind").disabled).toBe(false);
+            tick();
+            expect(document.getElementById("media-deck").classList.contains("motor")).toBe(false);
+            expect(text(document.getElementById("deck-status"))).toContain("stopped");
+            document.getElementById("tape-play").click();
+            expect(tapeInterface.pressPlay).toHaveBeenCalled();
+            tick();
+            tapeInterface.motorOn = false;
+            tick();
+            expect(text(document.getElementById("deck-status"))).toContain("motor off");
         });
 
         it("plays and stops the Atom's tape from the keys", () => {
@@ -291,6 +319,9 @@ describe("MediaWindow", () => {
             putTapeIn(tape());
             document.getElementById("tape-play").click();
             expect(tapeInterface.playTape).toHaveBeenCalled();
+            tapeInterface.motorOn = true;
+            tick();
+            expect(document.getElementById("tape-play").disabled).toBe(true);
             document.getElementById("tape-stop").click();
             expect(tapeInterface.stopTape).toHaveBeenCalled();
         });
@@ -669,6 +700,37 @@ describe("MediaWindow", () => {
             expect(deps.googleDrive.createBlank).toHaveBeenCalledWith("fresh.ssd", "auto");
             expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "gd:xyz/fresh.ssd");
             expect(panel().hidden).toBe(true);
+        });
+
+        it("copies the disc in a drive to Google Drive from its Save menu", async () => {
+            deps.googleDrive.connected = true;
+            deps.googleDrive.createFrom = vi.fn();
+            const copy = discFor("mine.ssd", ssdImage());
+            deps.googleDrive.createFrom.mockResolvedValue({ ref: "gd:xyz/mine.ssd", disc: copy });
+            deps.drives.putDiscIn(1, discFor("Superior/Exile.ssd", ssdImage()));
+            await openIt();
+            bay(1).querySelector(".bay-save-drive").click();
+            expect(document.getElementById("media-new-disc-form").hidden).toBe(false);
+            expect(document.getElementById("media-new-disc-where").hidden).toBe(true);
+            expect(document.getElementById("media-new-disc-name").value).toBe("Exile.ssd");
+            expect(text(document.getElementById("media-new-disc-label"))).toContain("drive 1");
+            document.getElementById("media-new-disc-name").value = "mine.ssd";
+            document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
+            await vi.waitFor(() => expect(fdc.drives[1].disc).toBe(copy));
+            const [name, data, layout] = deps.googleDrive.createFrom.mock.calls[0];
+            expect(name).toBe("mine.ssd");
+            expect(data.length).toBeGreaterThan(0);
+            expect(layout).toBe("auto");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "gd:xyz/mine.ssd");
+        });
+
+        it("connects Google Drive first when the Save menu asks for a copy there", async () => {
+            deps.googleDrive.connect.mockResolvedValue(false);
+            deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            await openIt();
+            bay(0).querySelector(".bay-save-drive").click();
+            await vi.waitFor(() => expect(deps.googleDrive.connect).toHaveBeenCalled());
+            expect(document.getElementById("media-new-disc-form").hidden).toBe(true);
         });
 
         it("cancels the new disc form back to the search box", async () => {

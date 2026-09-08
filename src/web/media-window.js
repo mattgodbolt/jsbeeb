@@ -1,4 +1,4 @@
-import { dfsCatalogue } from "../disc.js";
+import { dfsCatalogue, toSsdOrDsd } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
 import { FloatingPanel } from "./floating-panel.js";
 import { Sources, compareForQuery, matchesQuery } from "./media-catalogue.js";
@@ -213,6 +213,7 @@ export class MediaWindow {
             .querySelector(".bay-save-ssd")
             .addEventListener("click", () => this.drives.downloadSsdOrDsd(driveIndex));
         section.querySelector(".bay-save-hfe").addEventListener("click", () => this.drives.downloadHfe(driveIndex));
+        section.querySelector(".bay-save-drive").addEventListener("click", () => this.offerCopyToDrive(driveIndex));
         bay.save.title = `Download drive ${driveIndex}'s disc as an image`;
         bay.surface.title = `Open the disc surface window on drive ${driveIndex}`;
         bay.surface.addEventListener("click", () => this.visualiser.openOn(driveIndex));
@@ -252,12 +253,15 @@ export class MediaWindow {
             this.processor.tapeInterface.rewindTape();
             this.renderDeck();
         });
+        // The Atom's PLAY is its motor; the BBC's is a latch the machine's relay works against.
         deck.play.addEventListener("click", () => {
-            this.processor.atomppia.playTape();
+            if (this.model.isAtom) this.processor.atomppia.playTape();
+            else this.processor.tapeInterface.pressPlay();
             this.renderDeck();
         });
         deck.stop.addEventListener("click", () => {
-            this.processor.atomppia.stopTape();
+            if (this.model.isAtom) this.processor.atomppia.stopTape();
+            else this.processor.tapeInterface.pressStop();
             this.renderDeck();
         });
         deck.bar.addEventListener("click", () => this.showDeck(true));
@@ -282,6 +286,9 @@ export class MediaWindow {
             hint: document.getElementById("media-hint"),
             bar: document.getElementById("list-toggle"),
             hide: document.getElementById("list-hide"),
+            newDiscLabel: document.getElementById("media-new-disc-label"),
+            newDiscWhere: document.getElementById("media-new-disc-where"),
+            copyFrom: null,
             autoboot: this.panel.querySelector(".autoboot"),
             newDisc: document.getElementById("media-new-disc"),
             newDiscForm: document.getElementById("media-new-disc-form"),
@@ -337,10 +344,7 @@ export class MediaWindow {
             if (await this.googleDrive.connect()) this.refreshList();
         });
         list.autoboot.addEventListener("change", () => this.media.setAutoboot(list.autoboot.checked));
-        list.newDisc.addEventListener("click", () => {
-            list.newDiscForm.hidden = false;
-            list.newDiscName.focus();
-        });
+        list.newDisc.addEventListener("click", () => this.showDiscForm({ copyFrom: null }));
         document.getElementById("media-new-disc-cancel").addEventListener("click", () => {
             list.newDiscForm.hidden = true;
             list.search.focus();
@@ -348,7 +352,7 @@ export class MediaWindow {
         list.newDiscForm.addEventListener("submit", (e) => {
             e.preventDefault();
             const where = list.newDiscForm.querySelector('input[name="media-new-disc-where"]:checked').value;
-            this.createBlankDisc(list.newDiscName.value.trim(), where);
+            this.createDisc(list.newDiscName.value.trim(), where);
         });
         list.bar.addEventListener("click", () => {
             this.showList(true);
@@ -642,21 +646,57 @@ export class MediaWindow {
     }
 
     /**
-     * A blank, formatted disc, kept in this browser or on Google Drive, put in
-     * the aimed drive. A name with no extension is an SSD.
+     * The name form, for a blank disc or for a copy of what a drive holds; the
+     * copy can only go to Google Drive, since a browser-local disc saves in place.
      */
-    async createBlankDisc(name, where) {
+    showDiscForm({ copyFrom }) {
+        const { list } = this;
+        list.copyFrom = copyFrom;
+        const copying = copyFrom !== null;
+        const disc = copying ? this.processor.fdc?.drives[copyFrom]?.disc : null;
+        list.newDiscLabel.textContent = copying ? `Copy the disc in drive ${copyFrom} to Google Drive as` : "Name";
+        list.newDiscWhere.hidden = copying;
+        if (copying) list.newDiscForm.querySelector('input[value="gdrive"]').checked = true;
+        list.newDiscName.value = disc ? disc.name.split("/").pop() : "";
+        list.newDiscForm.hidden = false;
+        list.newDiscName.focus();
+        list.newDiscName.select();
+    }
+
+    /** Save to Google Drive on a bay: connect if need be, then ask for the copy's name. */
+    async offerCopyToDrive(driveIndex) {
+        if (!this.googleDrive.connected && !(await this.googleDrive.connect())) return;
+        this.refreshList();
+        this.showList(true);
+        this.showDiscForm({ copyFrom: driveIndex });
+    }
+
+    /**
+     * A disc kept in this browser or on Google Drive, put in the aimed drive:
+     * blank and formatted, or a copy of what a drive holds. A name with no
+     * extension is an SSD.
+     */
+    async createDisc(name, where) {
         if (!name) return;
         if (!guessDiscTypeFromName(name).supportsCatalogue || !/\.[a-z]+$/i.test(name)) name += ".ssd";
-        const driveIndex = this.target === "tape" ? 0 : this.target;
+        const copyFrom = this.list.copyFrom;
+        const driveIndex = copyFrom ?? (this.target === "tape" ? 0 : this.target);
         this.list.newDiscForm.hidden = true;
-        if (where === "browser") return this.loadDisc(driveIndex, describeBrowserDisc(name));
+        if (copyFrom === null && where === "browser") return this.loadDisc(driveIndex, describeBrowserDisc(name));
         const bay = this.bays[driveIndex];
         bay.busy = { title: name, source: "gdrive" };
         bay.failed = null;
         this.renderDrive(driveIndex);
         try {
-            const { ref, disc } = await this.googleDrive.createBlank(name, this.drives.layoutForDrive(driveIndex));
+            const layout = this.drives.layoutForDrive(driveIndex);
+            const { ref, disc } =
+                copyFrom === null
+                    ? await this.googleDrive.createBlank(name, layout)
+                    : await this.googleDrive.createFrom(
+                          name,
+                          toSsdOrDsd(this.processor.fdc.drives[copyFrom].disc),
+                          layout,
+                      );
             bay.busy = null;
             this.drives.putDiscIn(driveIndex, disc);
             this.media.setDiscImage(driveIndex, ref);
@@ -768,18 +808,19 @@ export class MediaWindow {
         const { deck } = this;
         const tape = this.processor.tapeInterface.tape;
         const isAtom = this.model.isAtom;
-        const motorOn = !!this.processor.tapeInterface.motorOn;
+        const { motorOn } = this.processor.tapeInterface;
+        const playPressed = isAtom ? !!motorOn : this.processor.tapeInterface.playPressed;
         const readout = this.readouts.tape;
         deck.section.classList.toggle("busy", !!deck.busy);
         deck.cassette.hidden = !tape;
         deck.empty.hidden = !!tape;
         deck.rewind.disabled = !tape;
         deck.eject.disabled = !tape || !!deck.busy;
-        deck.play.disabled = !tape || !isAtom;
-        deck.stop.disabled = !tape || !isAtom;
-        deck.play.setAttribute("aria-pressed", String(motorOn));
-        deck.play.title = isAtom ? "Play the tape" : "Play stays down: the BBC switches the motor itself, with *MOTOR";
-        deck.stop.title = isAtom ? "Stop the tape" : "The BBC switches the motor itself, with *MOTOR";
+        deck.play.disabled = !tape || playPressed;
+        deck.stop.disabled = !tape || !playPressed;
+        deck.play.setAttribute("aria-pressed", String(playPressed));
+        deck.play.title = isAtom ? "Play the tape" : "Play: the tape runs whenever the BBC switches its motor on";
+        deck.stop.title = isAtom ? "Stop the tape" : "Stop: the tape stays put however the BBC sets its motor";
         deck.fail.textContent = deck.failed
             ? `could not load ${deck.failed.descriptor.title}: ${errorText(deck.failed.error)}`
             : "";
@@ -801,7 +842,9 @@ export class MediaWindow {
             deck.sub.textContent = source ?? "";
             deck.window.title = `${name} is in the deck; click to pick another tape for it`;
             deck.eject.title = `Eject ${name}`;
-            deck.status.textContent = [name, source, motorOn ? "motor on" : "stopped"].filter(Boolean).join(" · ");
+            const running = isAtom ? motorOn : motorOn && playPressed;
+            const state = running ? "playing" : playPressed && !isAtom ? "motor off" : "stopped";
+            deck.status.textContent = [name, source, state].filter(Boolean).join(" · ");
             deck.barName.textContent = name;
             readout.querySelector(".name").textContent = shortName(name);
             readout.title = `The cassette deck holds ${name}. Click to open the media window`;
@@ -835,11 +878,11 @@ export class MediaWindow {
     /** Cheap enough to run every emulation tick: the lights, the reels and the counter. */
     tick() {
         const { tapeInterface, fdc } = this.processor;
-        const motorOn = !!(tapeInterface.tape && tapeInterface.motorOn);
-        if (motorOn !== this.deck.section.classList.contains("motor")) {
-            this.deck.section.classList.toggle("motor", motorOn);
-            this.deck.data.classList.toggle("on", motorOn);
-            this.readouts.tape.classList.toggle("motor", motorOn);
+        const running = !!(tapeInterface.tape && (tapeInterface.tapeRunning ?? tapeInterface.motorOn));
+        if (running !== this.deck.section.classList.contains("motor")) {
+            this.deck.section.classList.toggle("motor", running);
+            this.deck.data.classList.toggle("on", running);
+            this.readouts.tape.classList.toggle("motor", running);
             this.renderDeck();
         }
         this.showCounter();
