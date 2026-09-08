@@ -213,10 +213,13 @@ describe("MediaWindow", () => {
         it("ejects from the latch", () => {
             make();
             deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            expect(text(bay(0).querySelector(".bay-title"))).toBe("a.ssd");
             bay(0).querySelector(".bay-eject").click();
             expect(deps.media.ejectDisc).toHaveBeenCalledWith(0);
             expect(bay(0).dataset.state).toBe("empty");
             expect(readout("0")).toBe("empty");
+            expect(text(bay(0).querySelector(".bay-title"))).toBe("");
+            expect(text(bay(0).querySelector(".bay-sub"))).toBe("");
         });
 
         it("saves through the drives and opens the surface on its own drive", () => {

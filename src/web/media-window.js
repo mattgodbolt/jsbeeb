@@ -816,6 +816,8 @@ export class MediaWindow {
             bay.status.textContent = drive
                 ? `nothing loaded · reads ${tracksLabel(drive.tracksPerStep)} track discs`
                 : "no drive";
+            bay.title.textContent = "";
+            bay.sub.textContent = "";
             bay.kept.textContent = "";
             this.showSticker(bay);
             bay.barName.textContent = "empty";
