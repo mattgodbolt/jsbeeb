@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaLoader } from "../../src/web/media-loader.js";
+import { MediaWindow } from "../../src/web/media-window.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { TestMachine } from "../../src/test-machine.js";
@@ -32,9 +33,10 @@ class FileBackedXhr {
     }
 }
 
-describe("the built-in disc list", () => {
+describe("the media window against a real machine", () => {
     beforeEach(() => {
-        domFromIndexHtml("header-bar", "discs", "econetfs", "tapes", "paste-text");
+        domFromIndexHtml("header-bar", "econetfs", "paste-text", "leds", "media-panel", "drive-bay-template");
+        document.querySelector(".media-header").setPointerCapture = () => {};
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
     });
 
@@ -47,39 +49,53 @@ describe("the built-in disc list", () => {
         const machine = new TestMachine();
         await machine.initialise();
         const urlState = fakeUrlState();
-        const modals = { hide: vi.fn() };
         const drives = new Drives({
             fdc: machine.processor.fdc,
             driveTracks: [DriveTracks.auto, DriveTracks.auto],
             confirm: async () => false,
+            urlState,
         });
         const media = new MediaLoader({
             processor: machine.processor,
             model: machine.model,
             drives,
             urlState,
-            modals,
+            modals: { hide: vi.fn() },
             isSnapshotFile: () => false,
             loadSnapshot: () => {},
         });
-        return { machine, urlState, modals, drives, media };
+        const window = new MediaWindow({
+            media,
+            drives,
+            processor: machine.processor,
+            model: machine.model,
+            loop: new EventTarget(),
+            visualiser: { openOn: vi.fn() },
+            autoboot: vi.fn(),
+            googleDrive: { connect: vi.fn(), connected: false, createBlank: vi.fn() },
+        });
+        return { machine, urlState, drives, media, window };
     };
 
-    it("clicks Elite into drive 0, names it in the URL and catalogues it", async () => {
-        const { machine, urlState, modals, media } = await setUp();
+    it("loads the built-in Elite into drive 0 from the list, names it in the URL and catalogues it", async () => {
+        const { machine, urlState, media, window } = await setUp();
         const mediaEvents = [];
         media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
 
-        const elite = [...document.querySelectorAll("#disc-list li:not(.template)")].find(
-            (li) => li.querySelector(".name")?.textContent === "Elite",
+        window.open();
+        const search = document.getElementById("media-search");
+        search.value = "elite";
+        search.dispatchEvent(new Event("input"));
+        await vi.waitFor(() =>
+            expect(document.querySelector("#media-list .media-row-main .title")?.textContent).toBe("Elite"),
         );
-        expect(elite).toBeDefined();
-        elite.click();
+        document.querySelector("#media-list .media-row-main").click();
 
         await vi.waitFor(() => expect(machine.processor.fdc.drives[0].disc?.name).toBe("elite.ssd"));
         expect(urlState.params.disc1).toBe("elite.ssd");
         expect(mediaEvents).toEqual([{ disc1: "elite.ssd" }]);
-        expect(modals.hide).toHaveBeenCalledWith("discs");
+        expect(window.isOpen).toBe(false);
+        expect(document.querySelector('.bay[data-drive="0"] .bay-dfs').textContent).toBe("Elite (05)");
 
         await machine.runUntilInput();
         const seen = [];

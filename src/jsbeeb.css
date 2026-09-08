@@ -743,10 +743,9 @@ div.smoothie-chart-tooltip {
 }
 
 .media-rack {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 292px;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-items: stretch;
 }
 
 .media-unit {
@@ -1218,17 +1217,24 @@ div.smoothie-chart-tooltip {
 
 .media-deck {
   display: grid;
-  grid-template-rows: auto auto auto auto;
-  gap: 6px;
+  grid-template-columns: 150px minmax(0, 1fr) 232px;
+  grid-template-rows: auto 96px auto;
+  gap: 6px 10px;
+  align-items: stretch;
+}
+
+.media-deck > .unit-lip,
+.media-deck > .deck-line {
+  grid-column: 1 / -1;
 }
 
 .deck-head {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 10px;
-  height: 50px;
-  padding: 0 8px;
+  gap: 6px 10px;
+  padding: 6px 8px;
   border-radius: 3px;
   background-color: var(--olive);
   background-image:
@@ -1328,9 +1334,10 @@ div.smoothie-chart-tooltip {
 }
 
 .deck-logo {
+  grid-column: 1 / -1;
   justify-self: end;
   text-align: right;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: #f7f2e2;
@@ -1352,7 +1359,7 @@ div.smoothie-chart-tooltip {
   position: relative;
   display: block;
   width: 100%;
-  height: 112px;
+  height: 100%;
   border: 0;
   border-radius: 4px;
   padding: 0;
@@ -1378,14 +1385,15 @@ div.smoothie-chart-tooltip {
 
 .deck-window .cassette {
   position: absolute;
-  inset: 10px 12px;
+  inset: 8px 12px;
   background: linear-gradient(#2a2724, #16130f);
   border-radius: 3px;
   border: 1px solid #4a423a;
   display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 3px;
-  padding: 4px 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 10px;
+  padding: 4px 8px;
 }
 
 .deck-window .tape-label {
@@ -1419,26 +1427,27 @@ div.smoothie-chart-tooltip {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 24px;
   align-items: center;
   justify-items: center;
-  padding: 0 10px;
+  padding: 0 6px;
 }
 
 .deck-window .reels::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 12px;
+  right: 12px;
   top: 50%;
   height: 3px;
-  margin-top: 20px;
+  margin-top: 18px;
   background: #4b3524;
   border-radius: 2px;
 }
 
 .deck-window .reel {
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
 }
 
 .deck-window .empty-tape {
@@ -1464,6 +1473,12 @@ div.smoothie-chart-tooltip {
 .deck-window:hover .empty-tape,
 .deck-window:focus-visible .empty-tape {
   border-color: rgba(255, 220, 220, 0.7);
+}
+
+.deck-keys {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .key-labels {
@@ -1609,8 +1624,9 @@ div.smoothie-chart-tooltip {
     cursor: default;
   }
 
-  .media-rack {
+  .media-deck {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 96px auto auto;
   }
 
   .bay {
@@ -1667,17 +1683,13 @@ div.smoothie-chart-tooltip {
     display: none;
   }
 
-  .deck-window {
-    height: 96px;
-  }
-
   .deck-window .reel {
     width: 36px;
     height: 36px;
   }
 
   .deck-window .reels::before {
-    margin-top: 13px;
+    margin-top: 14px;
   }
 
   #media-panel .key {
@@ -1760,13 +1772,9 @@ div.smoothie-chart-tooltip {
   text-decoration-style: solid;
 }
 
-#media-panel.deck-collapsed .media-rack {
-  grid-template-columns: minmax(0, 1fr) 30px;
-}
-
 #media-panel.deck-collapsed .media-deck {
-  display: flex;
-  padding: 0;
+  display: block;
+  padding: 5px 10px;
 }
 
 #media-panel.deck-collapsed .media-deck > :not(.deck-bar) {
@@ -1775,15 +1783,6 @@ div.smoothie-chart-tooltip {
 
 #media-panel.deck-collapsed .deck-bar {
   display: flex;
-  flex: 1;
-  min-height: 120px;
-  writing-mode: vertical-rl;
-  padding: 10px 0;
-  justify-content: flex-start;
-}
-
-#media-panel.deck-collapsed .deck-bar .fold-bar-name {
-  flex: 0 1 auto;
 }
 
 .bay.folded {
