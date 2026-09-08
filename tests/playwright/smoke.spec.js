@@ -108,12 +108,11 @@ test("the media window shows the drives, keeps the keyboard while focused, and g
     await expect(page.locator('.bay[data-drive="0"] .bay-dfs')).toHaveText("Elite (05)");
     await page.focus("#media-close");
     await beeb.pressKey("a");
-    await page.waitForTimeout(300);
-    expect(await beeb.screenText()).not.toContain(">A");
     await page.keyboard.press("Escape");
     await expect(page.locator("#media-panel")).toBeHidden();
-    await beeb.pressKey("a");
-    await beeb.expectScreenText(">A");
+    await beeb.pressKey("b");
+    await beeb.expectScreenText(">B");
+    expect(await beeb.screenText()).not.toContain(">AB");
 });
 
 test("the media window's list puts a built-in disc into drive 1", async ({ beeb, page }) => {

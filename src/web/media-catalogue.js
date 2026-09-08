@@ -173,8 +173,14 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
  * that the same title from two archives sits together, the richer source first.
  */
 export function compareForQuery(query) {
+    // A sort asks for each score many times over; the query is fixed, so each is worked out once.
+    const scores = new Map();
+    const scoreOf = (d) => {
+        if (!scores.has(d)) scores.set(d, scoreQuery(d, query));
+        return scores.get(d);
+    };
     return (a, b) =>
-        scoreQuery(b, query) - scoreQuery(a, query) ||
+        scoreOf(b) - scoreOf(a) ||
         (b.source === "builtin") - (a.source === "builtin") ||
         collator.compare(a.title, b.title) ||
         (SourceRank[a.source] ?? 9) - (SourceRank[b.source] ?? 9) ||

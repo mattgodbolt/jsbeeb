@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Drives } from "../../src/web/drives.js";
 import { DiscLayout } from "../../src/disc.js";
 import { DriveTracks } from "../../src/url-params.js";
-import { fakeFdc, fakeUrlState, teardownDom, toasts } from "./helpers.js";
+import { discFor } from "../../src/fdc.js";
+import { fakeFdc, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 function fakeDisc({ name = "game.ssd", savesChanges = false, is40Track = false } = {}) {
     const disc = { name, savesChanges, is40Track, onFirstWrite: null };
@@ -157,6 +158,15 @@ describe("Drives", () => {
                 expect.stringContaining("no disc in drive 0"),
                 expect.stringContaining("no disc in drive 1"),
             ]);
+            expect(confirm).not.toHaveBeenCalled();
+        });
+
+        it("give a drive's disc as a sector image, and nothing for an empty drive", async () => {
+            const drives = make();
+            expect(await drives.sectorImage(1)).toBeNull();
+            drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            const image = await drives.sectorImage(0);
+            expect(image.length).toBe(ssdImage().length);
             expect(confirm).not.toHaveBeenCalled();
         });
 

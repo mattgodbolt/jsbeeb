@@ -72,7 +72,7 @@ describe("the media window against a real machine", () => {
             loop: new EventTarget(),
             visualiser: { openOn: vi.fn() },
             autoboot: vi.fn(),
-            googleDrive: { connect: vi.fn(), connected: false, createBlank: vi.fn() },
+            driveSource: { connect: vi.fn(), connected: false, createBlank: vi.fn() },
         });
         return { machine, urlState, drives, media, window };
     };

@@ -280,7 +280,7 @@ describe("SnapshotUI", () => {
             expect(driveIndex).toBe(0);
             expect(loadedDisc.name).toBe("mine.ssd");
             expect(loadedDisc.originalImageData).toBeTruthy();
-            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, undefined);
         });
 
         it("rebuilds image data that was serialised as a plain object", async () => {

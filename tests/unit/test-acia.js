@@ -102,6 +102,18 @@ describe("Acia", () => {
             expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
         });
 
+        it("starts a tape put in while the relay is on, and stops when it is taken out", () => {
+            const { acia } = withTape();
+            acia.setMotor(true);
+            acia.runTapeTask.reschedule.mockClear();
+            const another = { poll: vi.fn(() => 100), rewind: vi.fn() };
+            acia.setTape(another);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
+            expect(another.poll).toHaveBeenCalled();
+            acia.setTape(undefined);
+            expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+        });
+
         it("does nothing when PLAY is pressed with the relay off", () => {
             const { acia } = withTape();
             acia.pressStop();

@@ -410,7 +410,9 @@ export class AtomPPIA extends PPIA {
     // nothing on ATOM
     receive(/*_byte*/) {}
 
+    /** A tape put in starts stopped, whatever the last one was doing. */
     setTape(tape) {
+        this.stopTape();
         this.tape = tape;
     }
 

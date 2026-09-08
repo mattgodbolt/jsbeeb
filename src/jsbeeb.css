@@ -211,9 +211,6 @@ span.accesskey {
 
 #leds .slot-readout .line {
   display: contents;
-  font-family: var(--bs-font-monospace);
-  font-size: 10px;
-  white-space: nowrap;
 }
 
 #leds .slot-readout .led {
@@ -309,10 +306,6 @@ span.accesskey {
 
 .led.tape {
   --led: var(--led-tape);
-}
-
-.led.power {
-  --led: var(--led-power);
 }
 
 #pages {
@@ -719,6 +712,9 @@ div.smoothie-chart-tooltip {
 /* ------------------------------------------------------------------ */
 
 #media-panel {
+  --aim: #4d8be0;
+  --muted: #9aa3ad;
+  --rule: #3a3f44;
   --beige: #d9d0ba;
   --beige-hi: #ece5d2;
   --beige-lo: #b9ae95;
@@ -801,11 +797,9 @@ div.smoothie-chart-tooltip {
 }
 
 .media-case .bays {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  justify-content: center;
 }
 
 .media-unit .hwlabel {
@@ -988,6 +982,10 @@ div.smoothie-chart-tooltip {
   font-weight: 800;
   font-size: 14px;
   text-transform: uppercase;
+}
+
+.paper .bay-title {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1094,14 +1092,6 @@ div.smoothie-chart-tooltip {
   padding: 0 2px;
   border: 0;
   min-width: 0;
-}
-
-.pitch legend {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
 }
 
 .pitch input {
@@ -1386,7 +1376,6 @@ div.smoothie-chart-tooltip {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
   border: 0;
   border-radius: 4px;
   padding: 0;
@@ -1764,6 +1753,10 @@ div.smoothie-chart-tooltip {
     0 1px 0 rgba(0, 0, 0, 0.35);
 }
 
+.txt-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(#fff, #e6dfcb);
+}
+
 /* ----- a slot or the list folded to one line, which is a button that unfolds it ----- */
 
 .fold-bar {
@@ -1799,16 +1792,16 @@ div.smoothie-chart-tooltip {
   text-decoration-style: solid;
 }
 
-#media-panel.deck-collapsed .media-deck {
+.deck-collapsed .media-deck {
   display: block;
   padding: 5px 10px;
 }
 
-#media-panel.deck-collapsed .media-deck > :not(.deck-bar) {
+.deck-collapsed .media-deck > :not(.deck-bar) {
   display: none;
 }
 
-#media-panel.deck-collapsed .deck-bar {
+.deck-collapsed .deck-bar {
   display: flex;
 }
 
@@ -1831,7 +1824,7 @@ div.smoothie-chart-tooltip {
   border-radius: 4px;
   background: #1a1d20;
   border: 1px solid #495057;
-  color: #9aa3ad;
+  color: var(--muted);
   font-size: 12.5px;
 }
 
@@ -1839,16 +1832,16 @@ div.smoothie-chart-tooltip {
   color: #dee2e6;
 }
 
-#media-panel.list-collapsed .list-bar {
+.list-collapsed .list-bar {
   display: flex;
 }
 
-#media-panel.list-collapsed .media-list-head,
-#media-panel.list-collapsed .media-chips,
-#media-panel.list-collapsed .media-list,
-#media-panel.list-collapsed .media-hint,
-#media-panel.list-collapsed .media-list-end,
-#media-panel.list-collapsed .media-foot {
+.list-collapsed .media-list-head,
+.list-collapsed .media-chips,
+.list-collapsed .media-list,
+.list-collapsed .media-hint,
+.list-collapsed .media-list-end,
+.list-collapsed .media-foot {
   display: none;
 }
 
@@ -1859,7 +1852,7 @@ div.smoothie-chart-tooltip {
 }
 
 .list-hide {
-  color: #9aa3ad;
+  color: var(--muted);
   text-decoration-color: rgba(255, 255, 255, 0.35);
 }
 
@@ -1884,7 +1877,7 @@ div.smoothie-chart-tooltip {
 
 .media-count {
   font-size: 11px;
-  color: #9aa3ad;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -1909,7 +1902,7 @@ div.smoothie-chart-tooltip {
   border-radius: 999px;
   border: 1px solid #495057;
   background: none;
-  color: #9aa3ad;
+  color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -1929,7 +1922,7 @@ div.smoothie-chart-tooltip {
 .media-chips .gap {
   width: 1px;
   height: 16px;
-  background: #3a3f44;
+  background: var(--rule);
   margin: 0 3px;
 }
 
@@ -1937,7 +1930,7 @@ div.smoothie-chart-tooltip {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
-  border-top: 1px solid #3a3f44;
+  border-top: 1px solid var(--rule);
   flex: 1 1 320px;
   min-height: 120px;
   overflow-y: auto;
@@ -1985,7 +1978,7 @@ div.smoothie-chart-tooltip {
 
 .media-row .publisher,
 .media-row .detail {
-  color: #9aa3ad;
+  color: var(--muted);
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
@@ -2088,7 +2081,7 @@ div.smoothie-chart-tooltip {
 
 .media-list .notice {
   padding: 8px;
-  color: #9aa3ad;
+  color: var(--muted);
   font-size: 12.5px;
 }
 
@@ -2097,9 +2090,15 @@ div.smoothie-chart-tooltip {
   align-items: center;
   gap: 8px;
   padding: 8px 0 0;
-  border-top: 1px solid #3a3f44;
+  border-top: 1px solid var(--rule);
   margin-top: 6px;
   flex-wrap: wrap;
+}
+
+/* The file input is visually hidden, so its label shows the focus instead. */
+#media-open-label:focus-within {
+  outline: 2px solid var(--aim);
+  outline-offset: 2px;
 }
 
 .media-foot .btn {
@@ -2107,13 +2106,13 @@ div.smoothie-chart-tooltip {
 }
 
 .bay.target {
-  outline: 3px solid #4d8be0;
+  outline: 3px solid var(--aim);
   outline-offset: 1px;
 }
 
 /* A shadow rather than an outline, so the focus ring still reads on the aimed deck. */
 .deck-window.target {
-  box-shadow: 0 0 0 3px #4d8be0;
+  box-shadow: 0 0 0 3px var(--aim);
 }
 
 .bay.target .bay-badge .drive-no b {
@@ -2130,7 +2129,7 @@ div.smoothie-chart-tooltip {
 
 .media-hint {
   font-size: 11px;
-  color: #6c757d;
+  color: var(--muted);
   margin-top: 6px;
   display: flex;
   gap: 12px;
@@ -2140,10 +2139,10 @@ div.smoothie-chart-tooltip {
 .media-hint kbd {
   font-family: var(--bs-font-monospace);
   font-size: 10px;
-  border: 1px solid #3a3f44;
+  border: 1px solid var(--rule);
   border-radius: 3px;
   padding: 0 4px;
-  color: #9aa3ad;
+  color: var(--muted);
   background: none;
 }
 
@@ -2212,7 +2211,7 @@ div.smoothie-chart-tooltip {
   gap: 10px;
   flex-wrap: wrap;
   padding: 8px 0 0;
-  border-top: 1px solid #3a3f44;
+  border-top: 1px solid var(--rule);
   margin-top: 8px;
   font-size: 12.5px;
 }
@@ -2248,18 +2247,18 @@ div.smoothie-chart-tooltip {
 @keyframes search-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(77, 139, 224, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--aim) 0%, transparent);
   }
   30% {
-    box-shadow: 0 0 0 5px rgba(77, 139, 224, 0.75);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--aim) 75%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 2px rgba(77, 139, 224, 0.4);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--aim) 40%, transparent);
   }
 }
 
 #media-search.attention {
-  box-shadow: 0 0 0 3px rgba(77, 139, 224, 0.6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--aim) 60%, transparent);
 }
 
 @media (prefers-reduced-motion: no-preference) {

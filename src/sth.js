@@ -25,8 +25,9 @@ function encodePath(path) {
 }
 
 export class StairwayToHell {
-    constructor(tape) {
-        this._baseUrl = `${mirrorBase}/${tape ? "tape" : "disk"}images/`;
+    /** @param {{tapes?: boolean}} [what] the tape images rather than the disc images */
+    constructor({ tapes = false } = {}) {
+        this._baseUrl = `${mirrorBase}/${tapes ? "tape" : "disk"}images/`;
         this._catalog = [];
     }
 

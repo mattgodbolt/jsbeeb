@@ -117,6 +117,17 @@ describe("MediaLoader", () => {
             expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
         });
 
+        it("reads a drive's disc back from the URL, whichever way it was named", () => {
+            deps.urlState.params.disc = "bare.ssd";
+            const media = makeWatched();
+            expect(media.refInDrive(0)).toBe("bare.ssd");
+            expect(media.refInDrive(1)).toBeUndefined();
+            media.setDiscImage(0, "sth:ELITE.zip");
+            media.setDiscImage(1, "b.ssd");
+            expect(media.refInDrive(0)).toBe("sth:ELITE.zip");
+            expect(media.refInDrive(1)).toBe("b.ssd");
+        });
+
         it("names drive 1's disc and the tape", () => {
             const media = makeWatched();
             media.setDiscImage(1, "b.ssd");
@@ -230,6 +241,17 @@ describe("MediaLoader", () => {
             const { descriptors, failures } = await media.listAll();
             expect(descriptors.length).toBe(BuiltInImages.length);
             expect(failures).toEqual(["sth: offline"]);
+        });
+
+        it("treats a source that throws before it can answer like one that fails", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const media = make();
+            media.addLister("browser-broken", () => {
+                throw new Error("storage denied");
+            });
+            const { descriptors, failures } = await media.listAll();
+            expect(descriptors.length).toBe(BuiltInImages.length);
+            expect(failures).toEqual(["browser-broken: storage denied"]);
         });
 
         it("asks every source at once, and keeps them in the order they were added", async () => {

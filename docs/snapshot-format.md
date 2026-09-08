@@ -253,7 +253,7 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `runTapeTaskOffset`    | number\|null | Tape poll task offset   |
 | `runRs423TaskOffset`   | number\|null | RS-423 poll task offset |
 
-The recorder's PLAY latch (`playPressed`) is not saved; a restored machine has PLAY pressed, as a fresh one does.
+The recorder's PLAY latch (`playPressed`) is not saved; a restore leaves it as it was.
 
 ### ADC (`state.adc`)
 

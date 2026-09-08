@@ -1,6 +1,7 @@
-import { dfsCatalogue, toSsdOrDsd } from "../disc.js";
+import { dfsCatalogue } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
 import { FloatingPanel } from "./floating-panel.js";
+import { tracksLabel, tracksPerStepOf } from "./drives.js";
 import { Sources, compareForQuery, describeBrowserDisc, matchesQuery } from "./media-catalogue.js";
 import { errorText, reportLoadFailure } from "./reporting.js";
 import { guessDiscTypeFromName } from "../fdc.js";
@@ -19,13 +20,12 @@ const SchemaSources = {
 };
 const OtherSchemaPhrases = { http: "the web", https: "the web", file: "a file", data: "the URL", b64data: "the URL" };
 
-// The counter has three digits, and a tape run end to end turns it over once.
-const CounterDivisions = 1000;
+const CounterDigits = 3;
+const CounterDivisions = 10 ** CounterDigits;
 
 // Beyond this the list is a scroll nobody reads; the search box narrows it.
 const MaxRows = 100;
 
-const DriveKeys = ["disc1", "disc2"];
 // How long the search box stays highlighted where motion is off, and a backstop where it is on.
 const NudgeMs = 2000;
 // The drive almost nobody uses, folded to one line until it holds something or is aimed at.
@@ -41,8 +41,6 @@ export function sourceOf(ref) {
 const sourceName = (source) => Sources[source]?.name ?? source;
 const targetFrom = (slot) => (slot === "tape" ? "tape" : Number(slot));
 
-const tracksOf = (drive) => (drive.tracksPerStep === 2 ? "40" : "80");
-
 // What fits on a line of the LED panel: the name without its folder or extension, cut in the
 // middle when it is still too long, so both the start and the end of it survive.
 const ReadoutChars = 12;
@@ -55,8 +53,10 @@ export function shortName(name) {
     if (bare.length <= ReadoutChars) return bare;
     return `${bare.slice(0, ReadoutChars - ReadoutTailChars - 1)}…${bare.slice(-ReadoutTailChars)}`;
 }
-const threeDigits = (count) => String(count).padStart(3, "0");
+const counterDigits = (count) => String(count).padStart(CounterDigits, "0");
 const otherDrive = (driveIndex) => 1 - driveIndex;
+// The BBC addresses the other side of a drive's disc as drive N+2.
+const upperSideOf = (driveIndex) => driveIndex + 2;
 
 /**
  * The media window: two drive fronts and a cassette deck showing what the
@@ -66,14 +66,14 @@ const otherDrive = (driveIndex) => 1 - driveIndex;
  * readouts in the LED panel that open it.
  */
 export class MediaWindow {
-    constructor({ media, drives, processor, model, loop, visualiser, autoboot, googleDrive }) {
+    constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource }) {
         this.media = media;
         this.drives = drives;
         this.processor = processor;
         this.model = model;
         this.visualiser = visualiser;
         this.autoboot = autoboot;
-        this.googleDrive = googleDrive;
+        this.driveSource = driveSource;
 
         this.panel = document.getElementById("media-panel");
         this.floating = new FloatingPanel({
@@ -150,7 +150,7 @@ export class MediaWindow {
         const template = document.getElementById("drive-bay-template");
         const section = template.content.firstElementChild.cloneNode(true);
         this.panel.querySelector(".bays").appendChild(section);
-        const upperSide = driveIndex + 2;
+        const upperSide = upperSideOf(driveIndex);
         section.dataset.drive = driveIndex;
         section.setAttribute("aria-label", `Drive ${driveIndex}`);
         section.querySelector(".bay-number").textContent = `${driveIndex}/${upperSide}`;
@@ -159,13 +159,13 @@ export class MediaWindow {
         section.querySelector(".bay-pitch-legend").textContent = `Drive ${driveIndex} reads`;
         section.querySelector(".bay-led").setAttribute("aria-label", `Drive ${driveIndex} idle`);
         const pitch = section.querySelector(".pitch");
-        pitch.title = `The 40/80 track switch on the front of drive ${driveIndex}`;
+        pitch.title = `Drive ${driveIndex}'s 40/80 track switch`;
         for (const radio of pitch.querySelectorAll("input")) {
             radio.name = `pitch-${driveIndex}`;
             radio.setAttribute("aria-label", `${radio.value} track`);
             radio.closest("label").title = `Drive ${driveIndex} reads ${radio.value} track discs`;
             radio.addEventListener("change", () =>
-                this.drives.setTracksPerStep(driveIndex, radio.value === "40" ? 2 : 1),
+                this.drives.setTracksPerStep(driveIndex, tracksPerStepOf(radio.value)),
             );
         }
         // The knob's track is a switch too: a click throws it the other way.
@@ -296,6 +296,7 @@ export class MediaWindow {
             connect: document.getElementById("media-connect-drive"),
             descriptors: [],
             failures: [],
+            latest: null,
             query: "",
             source: "all",
             kinds: { disc: true, tape: true },
@@ -340,7 +341,7 @@ export class MediaWindow {
             evt.target.value = "";
         });
         list.connect.addEventListener("click", async () => {
-            if (await this.googleDrive.connect()) this.refreshList();
+            if (await this.driveSource.connect()) this.refreshList();
         });
         list.autoboot.addEventListener("change", () => this.media.setAutoboot(list.autoboot.checked));
         list.newDisc.addEventListener("click", () => this.showDiscForm({ copyFrom: null }));
@@ -418,7 +419,7 @@ export class MediaWindow {
         this.list.hint.replaceChildren(
             ...[
                 ["Enter", `loads into ${into}`],
-                ...(forTape ? [] : [["Shift+Enter", "loads and boots"]]),
+                ...(target === 0 ? [["Shift+Enter", "loads and boots"]] : []),
                 ["Esc", "closes"],
             ].map(([key, what]) => {
                 const span = document.createElement("span");
@@ -441,8 +442,11 @@ export class MediaWindow {
         this.list.descriptors = descriptors;
         this.list.failures = failures;
         this.list.loaded = true;
-        this.list.connect.hidden = this.googleDrive.connected;
-        this.list.newDiscDriveOption.hidden = !this.googleDrive.connected;
+        // A source that has dropped out of the listing cannot stay the one chosen.
+        if (this.list.source !== "all" && !descriptors.some((d) => d.source === this.list.source))
+            this.list.source = "all";
+        this.list.connect.hidden = this.driveSource.connected;
+        this.list.newDiscDriveOption.hidden = !this.driveSource.connected;
         this.list.autoboot.checked = this.media.params.autoboot !== undefined;
         this.renderChips();
         this.renderList();
@@ -578,15 +582,10 @@ export class MediaWindow {
         return li;
     }
 
-    /** What the URL says a drive holds; a bare disc parameter means drive 0. */
-    refInDrive(driveIndex) {
-        return this.media.params[DriveKeys[driveIndex]] ?? (driveIndex === 0 ? this.media.params.disc : undefined);
-    }
-
     /** Which slot a reference is loaded in, as text, or null. */
     slotHolding(ref) {
         for (const driveIndex of [0, 1])
-            if (this.refInDrive(driveIndex) === ref && this.processor.fdc?.drives[driveIndex].disc)
+            if (this.media.refInDrive(driveIndex) === ref && this.processor.fdc?.drives[driveIndex].disc)
                 return `drive ${driveIndex}`;
         if (this.media.params.tape === ref && this.processor.tapeInterface.tape) return "the deck";
         return null;
@@ -687,7 +686,7 @@ export class MediaWindow {
 
     /** Save to Google Drive on a bay: connect if need be, then ask for the copy's name. */
     async offerCopyToDrive(driveIndex) {
-        if (!this.googleDrive.connected && !(await this.googleDrive.connect())) return;
+        if (!this.driveSource.connected && !(await this.driveSource.connect())) return;
         this.refreshList();
         this.showList(true);
         this.showDiscForm({ copyFrom: driveIndex });
@@ -705,6 +704,8 @@ export class MediaWindow {
         const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;
         if (copyFrom === null && where === "browser") return this.loadDisc(driveIndex, describeBrowserDisc(name));
+        const copied = copyFrom === null ? null : await this.drives.sectorImage(copyFrom);
+        if (copyFrom !== null && !copied) return;
         const bay = this.bays[driveIndex];
         bay.busy = { title: name, source: "gdrive" };
         bay.failed = null;
@@ -713,12 +714,8 @@ export class MediaWindow {
             const layout = this.drives.layoutForDrive(driveIndex);
             const { ref, disc } =
                 copyFrom === null
-                    ? await this.googleDrive.createBlank(name, layout)
-                    : await this.googleDrive.createFrom(
-                          name,
-                          toSsdOrDsd(this.processor.fdc.drives[copyFrom].disc),
-                          layout,
-                      );
+                    ? await this.driveSource.createBlank(name, layout)
+                    : await this.driveSource.createFrom(name, copied, layout);
             bay.busy = null;
             this.drives.putDiscIn(driveIndex, disc);
             this.media.setDiscImage(driveIndex, ref);
@@ -779,7 +776,7 @@ export class MediaWindow {
         const readout = this.readouts[driveIndex];
         bay.section.dataset.state = bay.busy ? "busy" : disc ? "loaded" : "empty";
         for (const radio of bay.radios) {
-            radio.checked = !!drive && radio.value === tracksOf(drive);
+            radio.checked = !!drive && radio.value === tracksLabel(drive.tracksPerStep);
             radio.disabled = !drive;
         }
         for (const control of [bay.save, bay.surface]) control.disabled = !disc || !!bay.busy;
@@ -795,16 +792,20 @@ export class MediaWindow {
         } else if (!disc) {
             bay.eject.title = `Drive ${driveIndex} is empty; click to pick a disc for it from the list`;
             bay.slot.title = `Drive ${driveIndex} is empty; click to pick a disc for it from the list`;
-            bay.status.textContent = drive ? `nothing loaded · reads ${tracksOf(drive)} track discs` : "no drive";
+            bay.status.textContent = drive
+                ? `nothing loaded · reads ${tracksLabel(drive.tracksPerStep)} track discs`
+                : "no drive";
             bay.kept.textContent = "";
             this.showSticker(bay);
             bay.barName.textContent = "empty";
             readout.querySelector(".name").textContent = "empty";
             readout.title = `Drive ${driveIndex} is empty. Click to open the media window`;
         } else {
-            const tracks = tracksOf(drive);
-            const sides = disc.isDoubleSided ? `2 sides (drives ${driveIndex} and ${driveIndex + 2})` : "1 side";
-            const ref = this.refInDrive(driveIndex);
+            const tracks = tracksLabel(drive.tracksPerStep);
+            const sides = disc.isDoubleSided
+                ? `2 sides (drives ${driveIndex} and ${upperSideOf(driveIndex)})`
+                : "1 side";
+            const ref = this.media.refInDrive(driveIndex);
             const source = sourceOf(ref);
             const name = this.nameFor(ref, disc.name);
             bay.title.textContent = name;
@@ -885,10 +886,10 @@ export class MediaWindow {
 
     showCounter() {
         const reading = (this.tapeCount() - this.counterBase + CounterDivisions) % CounterDivisions;
-        const digits = this.processor.tapeInterface.tape ? threeDigits(reading) : "";
+        const digits = this.processor.tapeInterface.tape ? counterDigits(reading) : "";
         if (digits === this.lastCounter) return;
         this.lastCounter = digits;
-        const shown = digits || threeDigits(0);
+        const shown = digits || counterDigits(0);
         this.deck.counter.querySelectorAll("b").forEach((digit, i) => (digit.textContent = shown[i]));
         this.deck.counter.setAttribute("aria-label", `Tape counter ${shown}`);
         this.readouts.tape.querySelector(".counter").textContent = digits;

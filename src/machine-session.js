@@ -371,7 +371,7 @@ export class MachineSession {
     mediaResolver() {
         if (!this._mediaResolver) {
             this._mediaResolver = new MediaResolver();
-            this._mediaResolver.addSource("sth", (file) => new StairwayToHell(false).fetch(file));
+            this._mediaResolver.addSource("sth", (file) => new StairwayToHell().fetch(file));
             this._mediaResolver.addSource("hfe", (path) => new BbcDiscArchive().fetch(path));
         }
         return this._mediaResolver;

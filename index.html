@@ -373,13 +373,7 @@
             <div class="bays"></div>
           </section>
           <section class="media-unit media-deck" id="media-deck" aria-label="Cassette deck">
-            <button
-              type="button"
-              class="fold-bar deck-bar"
-              id="deck-toggle"
-              aria-controls="media-deck"
-              title="Show the cassette deck"
-            >
+            <button type="button" class="fold-bar deck-bar" id="deck-toggle" title="Show the cassette deck">
               <span class="hwlabel">cassette</span>
               <span class="fold-bar-name" id="deck-bar-name"></span>
               <span class="fold-bar-show">Show</span>
@@ -529,7 +523,7 @@
           </label>
         </div>
         <div class="media-chips" id="media-chips" role="group" aria-label="Show"></div>
-        <ul class="media-list" id="media-list" aria-label="Discs and tapes"></ul>
+        <ul class="media-list" id="media-list" role="list" aria-label="Discs and tapes"></ul>
         <div class="media-hint" id="media-hint"></div>
         <div class="media-list-end">
           <button type="button" class="txt-btn list-hide" id="list-hide" title="Fold the list away">Hide list</button>
@@ -540,7 +534,7 @@
             <input
               type="file"
               id="media-open"
-              hidden
+              class="visually-hidden"
               accept=".ssd,.dsd,.adf,.adm,.adl,.hfe,.uef,.zip,application/binary"
             />
           </label>
@@ -611,7 +605,7 @@
             </button>
           </div>
           <fieldset class="pitch">
-            <legend class="bay-pitch-legend"></legend>
+            <legend class="bay-pitch-legend visually-hidden"></legend>
             <span class="hwlabel" aria-hidden="true">tracks</span>
             <label><span>40</span><input type="radio" value="40" /></label>
             <span class="track" aria-hidden="true"><span class="knob"></span></span>
@@ -907,6 +901,21 @@
                   <td>Rewind</td>
                   <td><span class="key">Alt-PageDown</span></td>
                   <td><span class="key">Alt-PageDown</span></td>
+                </tr>
+                <tr>
+                  <td>Discs and tapes, for drive 0</td>
+                  <td><span class="key">Alt-M</span></td>
+                  <td><span class="key">Alt-M</span></td>
+                </tr>
+                <tr>
+                  <td>Discs and tapes, for drive 1</td>
+                  <td><span class="key">Alt-Shift-M</span></td>
+                  <td><span class="key">Alt-Shift-M</span></td>
+                </tr>
+                <tr>
+                  <td>Discs and tapes, for the cassette</td>
+                  <td><span class="key">Alt-C</span></td>
+                  <td><span class="key">Alt-C</span></td>
                 </tr>
               </table>
               <div>

@@ -138,7 +138,7 @@ export class MediaLoader extends EventTarget {
         const descriptors = [];
         const failures = [];
         const sources = [...this.listers.keys()];
-        const outcomes = await Promise.allSettled(sources.map((source) => this.listers.get(source)()));
+        const outcomes = await Promise.allSettled(sources.map(async (source) => this.listers.get(source)()));
         outcomes.forEach((outcome, i) => {
             if (outcome.status === "fulfilled") {
                 descriptors.push(...outcome.value);
@@ -169,7 +169,7 @@ export class MediaLoader extends EventTarget {
             await this.loadTapeFile(name, data);
             return `Loaded ${name} as the tape.`;
         }
-        this.loadHTMLFile(name, data, driveIndex);
+        this.loadDiscFile(name, data, driveIndex);
         return `Loaded ${name} into drive ${driveIndex}.`;
     }
 
@@ -187,6 +187,12 @@ export class MediaLoader extends EventTarget {
     ejectTape() {
         this.setProcessorTape(undefined);
         this.setTapeImage(undefined);
+    }
+
+    /** What the URL says a drive holds; a bare disc parameter means drive 0. */
+    refInDrive(driveIndex) {
+        const { params } = this;
+        return driveIndex === 0 ? (params.disc1 ?? params.disc) : params.disc2;
     }
 
     /** Names the disc in a drive for the URL and the settings store, or unnames it. */
@@ -208,7 +214,7 @@ export class MediaLoader extends EventTarget {
     }
 
     /** A disc image from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
-    loadHTMLFile(name, data, driveIndex) {
+    loadDiscFile(name, data, driveIndex) {
         const loadedDisc = disc.discFor(name, data, undefined, this.drives.layoutForDrive(driveIndex));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(data);

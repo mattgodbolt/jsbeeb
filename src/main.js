@@ -282,7 +282,7 @@ const mediaWindow = new MediaWindow({
     loop,
     visualiser: discVisualiser,
     autoboot: (image) => autoBoot.boot(image),
-    googleDrive: googleDriveSource,
+    driveSource: googleDriveSource,
 });
 
 const layout = new Layout({

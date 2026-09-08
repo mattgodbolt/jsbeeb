@@ -22,7 +22,7 @@ describe("StairwayToHell", () => {
                 { path: "Acornsoft/Elite.zip", size: 12345, mtime: null },
             ]);
         });
-        expect(await new StairwayToHell(false).catalogue()).toEqual([
+        expect(await new StairwayToHell().catalogue()).toEqual([
             "Acornsoft/Elite.zip",
             "Cheats/CHT_ChuckieEgg-ExtraColours.zip",
         ]);
@@ -34,7 +34,7 @@ describe("StairwayToHell", () => {
             seen.push(url);
             return manifestResponse([{ path: "AnF/ChuckieEgg.zip", size: 1, mtime: null }]);
         });
-        expect(await new StairwayToHell(true).catalogue()).toEqual(["AnF/ChuckieEgg.zip"]);
+        expect(await new StairwayToHell({ tapes: true }).catalogue()).toEqual(["AnF/ChuckieEgg.zip"]);
         expect(seen).toEqual([`${ARCHIVE_BASE}/tapeimages/manifest.json`]);
     });
 
@@ -42,7 +42,7 @@ describe("StairwayToHell", () => {
         const fetchSpy = vi
             .spyOn(globalThis, "fetch")
             .mockResolvedValue(manifestResponse([{ path: "Acornsoft/Elite.zip", size: 1, mtime: null }]));
-        const sth = new StairwayToHell(false);
+        const sth = new StairwayToHell();
         await sth.catalogue();
         await sth.catalogue();
         expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -50,7 +50,7 @@ describe("StairwayToHell", () => {
 
     it("rejects when the manifest cannot be fetched", async () => {
         vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 503 });
-        await expect(new StairwayToHell(false).catalogue()).rejects.toThrow("503");
+        await expect(new StairwayToHell().catalogue()).rejects.toThrow("503");
     });
 
     it("rejects a manifest that has no files array", async () => {
@@ -59,7 +59,7 @@ describe("StairwayToHell", () => {
             status: 200,
             json: async () => ({ schemaVersion: 1 }),
         });
-        await expect(new StairwayToHell(false).catalogue()).rejects.toThrow("files array");
+        await expect(new StairwayToHell().catalogue()).rejects.toThrow("files array");
     });
 
     it("URL-encodes path components when fetching a file", async () => {
@@ -71,7 +71,7 @@ describe("StairwayToHell", () => {
         });
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "error").mockImplementation(() => {});
-        await expect(new StairwayToHell(false).fetch("Daxis/Daxis[droids]-demo.zip")).rejects.toThrow();
+        await expect(new StairwayToHell().fetch("Daxis/Daxis[droids]-demo.zip")).rejects.toThrow();
         expect(seen).toEqual([`${ARCHIVE_BASE}/diskimages/Daxis/Daxis%5Bdroids%5D-demo.zip`]);
     });
 
@@ -79,7 +79,7 @@ describe("StairwayToHell", () => {
         const zip = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
         vi.spyOn(globalThis, "fetch").mockResolvedValue(bytesResponse(zip));
         vi.spyOn(console, "log").mockImplementation(() => {});
-        const { name, data } = await new StairwayToHell(false).fetch("Mandarin/Lancelot.zip");
+        const { name, data } = await new StairwayToHell().fetch("Mandarin/Lancelot.zip");
         expect(name).toBe("test.ssd");
         expect(data instanceof Uint8Array).toBe(true);
         expect(String.fromCharCode(...data)).toBe("This is a test SSD file\n");

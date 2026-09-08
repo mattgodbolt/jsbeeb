@@ -295,8 +295,12 @@ export class Acia extends EventTarget {
         if (state.runRs423TaskOffset !== null) this.runRs423Task.schedule(state.runRs423TaskOffset);
     }
 
+    /** A tape put in, or taken out, while the tape is meant to be running starts or stops at once. */
     setTape(tape) {
         this.tape = tape;
+        if (!this.tapeRunning) return;
+        if (tape) this.runTape();
+        else this.stopRunning();
     }
 
     rewindTape() {

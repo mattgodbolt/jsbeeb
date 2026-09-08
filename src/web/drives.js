@@ -4,6 +4,10 @@ import { toHfe } from "../disc-hfe.js";
 import { downloadDriveData } from "./dom-utils.js";
 import { DriveTracks } from "../url-params.js";
 
+/** The 40/80 switch's label for a drive stepping `tracksPerStep` physical tracks per logical one. */
+export const tracksLabel = (tracksPerStep) => (tracksPerStep === 2 ? "40" : "80");
+export const tracksPerStepOf = (label) => (label === "40" ? 2 : 1);
+
 /**
  * The disc drives as the page sees them: putting a disc in and taking it out,
  * each drive's 40/80 track switch, and downloading what a drive holds.
@@ -33,18 +37,29 @@ export class Drives extends EventTarget {
         return disc ?? null;
     }
 
-    /** Downloads a drive's disc as a sector image, asking first if a flux-only track would be lost. */
-    async downloadSsdOrDsd(driveIndex) {
+    /**
+     * A drive's disc as a sector image, asking first when a track would not fit one.
+     *
+     * @returns {Promise<Uint8Array|null>} the image, or null when there is none to give
+     */
+    async sectorImage(driveIndex) {
         const disc = this.discToDownload(driveIndex);
-        if (!disc) return;
-        const save = (options) =>
-            downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
+        if (!disc) return null;
         try {
-            save();
+            return toSsdOrDsd(disc);
         } catch (e) {
             if (await this.confirm(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel"))
-                save({ force: true });
+                return toSsdOrDsd(disc, { force: true });
+            return null;
         }
+    }
+
+    /** Downloads a drive's disc as a sector image, asking first if a flux-only track would be lost. */
+    async downloadSsdOrDsd(driveIndex) {
+        const image = await this.sectorImage(driveIndex);
+        if (!image) return;
+        const disc = this.fdc.drives[driveIndex].disc;
+        downloadDriveData(image, disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
     }
 
     /** Downloads a drive's disc as HFE, the format that keeps every flux transition. */
@@ -62,17 +77,17 @@ export class Drives extends EventTarget {
     /** @returns {Number|undefined} the tracksPerStep the user fixed this drive at, if they fixed one */
     tracksPerStepForDrive(driveIndex) {
         if (this.driveTracks[driveIndex] === DriveTracks.auto) return undefined;
-        return this.driveTracks[driveIndex] === DriveTracks.forty ? 2 : 1;
+        return tracksPerStepOf(this.driveTracks[driveIndex] === DriveTracks.forty ? "40" : "80");
     }
 
     /**
-     * Throws a drive's 40/80 switch, as a switch on a real drive's front: the disc in it now is
-     * read at that pitch, and so is whatever is put in next, until the switch is thrown again.
+     * Throws a drive's 40/80 switch: the disc in it now is read at that pitch, and so is
+     * whatever is put in next, until the switch is thrown again.
      */
     setTracksPerStep(driveIndex, tracksPerStep) {
         const drive = this.fdc?.drives[driveIndex];
         if (!drive) return;
-        const setting = tracksPerStep === 2 ? DriveTracks.forty : DriveTracks.eighty;
+        const setting = tracksLabel(tracksPerStep) === "40" ? DriveTracks.forty : DriveTracks.eighty;
         if (drive.tracksPerStep === tracksPerStep && this.driveTracks[driveIndex] === setting) return;
         drive.tracksPerStep = tracksPerStep;
         this.driveTracks[driveIndex] = setting;
@@ -109,7 +124,7 @@ export class Drives extends EventTarget {
     }
 
     noteDriveTracks(driveIndex, discName) {
-        const tracks = this.fdc.drives[driveIndex].tracksPerStep === 2 ? "40" : "80";
+        const tracks = tracksLabel(this.fdc.drives[driveIndex].tracksPerStep);
         toast(`Drive ${driveIndex} switched to ${tracks} track for ${discName}.`, {
             title: "Disc drive",
             quietKey: "quietDriveTracks",

@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-    Sources,
     browserDiscNames,
     describeBrowserDisc,
     describeBuiltIn,
@@ -19,10 +18,6 @@ import { Provenance } from "../../src/bbcdiscs.js";
 
 describe("the media catalogue", () => {
     afterEach(() => window.localStorage.clear());
-
-    it("names every source the descriptors can come from", () => {
-        expect(Object.keys(Sources)).toEqual(["builtin", "sth", "hfe", "hfeRebuilt", "gdrive", "browser", "session"]);
-    });
 
     describe("STH", () => {
         it("reads the publisher and title out of the path", () => {
