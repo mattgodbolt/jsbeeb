@@ -34,7 +34,9 @@ describe("DiscVisualiser", () => {
         });
         overlay.getContext = overlayContext;
         overlay.getBoundingClientRect = () => ({ left: 0, top: 0, width: CanvasSize, height: CanvasSize });
-        document.querySelector(".disc-header").setPointerCapture = () => {};
+        const header = document.querySelector(".disc-header");
+        header.setPointerCapture = () => {};
+        header.style.cursor = "move";
 
         rafCallbacks = new Map();
         let nextHandle = 1;

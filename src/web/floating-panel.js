@@ -53,8 +53,8 @@ export class FloatingPanel extends EventTarget {
     _bindDrag(header) {
         header.addEventListener("pointerdown", (e) => {
             if (e.button !== 0 || e.target.closest("button")) return;
-            // The sheet layout takes the move cursor off the header, and the drag with it.
-            if (getComputedStyle(header).cursor === "default") return;
+            // The header is a drag handle only while it is styled as one, with the move cursor.
+            if (getComputedStyle(header).cursor !== "move") return;
             const { left, top } = this.panel.getBoundingClientRect();
             this._drag = { pointerId: e.pointerId, grabX: e.clientX - left, grabY: e.clientY - top };
             header.setPointerCapture(e.pointerId);
