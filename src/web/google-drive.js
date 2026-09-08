@@ -73,7 +73,7 @@ export class GoogleDriveLoader {
         return new Promise((resolve, reject) => {
             console.log("Authorizing...");
             this.tokenClient.callback = (resp) => {
-                if (resp.error !== undefined) reject(resp);
+                if (resp.error !== undefined) return reject(new Error(resp.error_description ?? resp.error));
                 console.log("Authorized OK");
                 this.authorized = true;
                 resolve(true);

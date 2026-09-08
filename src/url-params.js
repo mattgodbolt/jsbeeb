@@ -298,13 +298,14 @@ export function guessModelFromHostname(hostname) {
  * Parse disc images from the query parameters
  * @param {Object} parsedQuery - The query parameters
  * @returns {Object} Object containing disc information
- *   - discImage: disc image URL (?disc= or ?disc1=)
+ *   - discImage: disc image URL (?disc1= or, failing that, ?disc=)
  *   - secondDiscImage: second disc URL (?disc2=)
  *   - mmcImage: MMC/SD card image URL (?mmc=, Atom only)
  */
 export function parseMediaParams(parsedQuery) {
     const { disc, disc1, disc2, mmc } = parsedQuery;
-    const discImage = disc || disc1;
+    // disc1 is the name the drives use; a bare disc is the older spelling, and gives way to it.
+    const discImage = disc1 || disc;
 
     return { discImage, secondDiscImage: disc2, mmcImage: mmc };
 }

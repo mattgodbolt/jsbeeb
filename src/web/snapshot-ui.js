@@ -221,7 +221,10 @@ export class SnapshotUI {
                 continue;
             }
 
+            // A disc that keeps its changes at its source has moved on by design; the state's own
+            // dirty tracks go back over it.
             if (
+                !loadedDisc.savesChanges &&
                 savedMedia[crcKey] != null &&
                 loadedDisc.originalImageCrc32 != null &&
                 loadedDisc.originalImageCrc32 !== savedMedia[crcKey]

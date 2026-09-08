@@ -51,6 +51,17 @@ describe("GoogleDriveLoader", () => {
         expect(list.mock.calls[1][0].pageToken).toBe("more");
     });
 
+    it("does not count a refused token as a connection, and says why in words", async () => {
+        const loader = new GoogleDriveLoader();
+        loader.tokenClient = {
+            requestAccessToken() {
+                this.callback({ error: "access_denied", error_description: "The user did not consent" });
+            },
+        };
+        await expect(loader.authorize(false)).rejects.toThrow("The user did not consent");
+        expect(loader.authorized).toBe(false);
+    });
+
     it("gives up when the Google script cannot be fetched", async () => {
         const loader = new GoogleDriveLoader();
 
