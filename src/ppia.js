@@ -410,7 +410,9 @@ export class AtomPPIA extends PPIA {
     // nothing on ATOM
     receive(/*_byte*/) {}
 
+    /** A tape put in starts stopped, whatever the last one was doing. */
     setTape(tape) {
+        this.stopTape();
         this.tape = tape;
     }
 
@@ -436,8 +438,12 @@ export class AtomPPIA extends PPIA {
         }
     }
 
+    /** Polls the tape and books the next poll; the Atom's PLAY is its motor, so a tape that runs out stops. */
     runTape() {
-        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(this));
+        if (!this.tape) return;
+        const delay = this.tape.poll(this);
+        if (delay === undefined) this.stopTape();
+        else this.runTapeTask.reschedule(delay);
     }
 
     updateIrq() {}

@@ -29,8 +29,6 @@ class UefTape {
         this.isAtom = model.isAtom;
         this.cpuSpeed = model.cyclesPerSecond;
         this.rewind();
-
-        this.curChunk = this.readChunk();
     }
 
     rewind() {
@@ -54,6 +52,8 @@ class UefTape {
         const minor = this.stream.readByte();
         const major = this.stream.readByte();
         if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
+        // No chunk yet: the first poll reads one. null, later, means the tape has run off the end.
+        this.curChunk = undefined;
     }
 
     readChunk() {
@@ -68,7 +68,7 @@ class UefTape {
     // On BBC, acia is the ACIA (6850); on Atom, it's the PPIA (8255).
     // Both provide setTapeCarrier(), tone(), and receive/receiveBit().
     poll(acia) {
-        if (!this.curChunk) return;
+        if (this.curChunk === null) return;
 
         // Atom: deliver one wavebit per poll.
         if (this.isAtom && this.atomWavebitsLeft > 0) {
@@ -242,7 +242,6 @@ class UefTape {
                 return secsToClocks(gap, this.cpuSpeed);
             default:
                 console.log("Skipping unknown chunk " + hexword(this.curChunk.id));
-                this.curChunk = this.readChunk();
                 break;
         }
         return this.cycles(1);

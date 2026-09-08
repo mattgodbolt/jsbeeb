@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AtomPPIA } from "../../src/ppia.js";
 import { Scheduler } from "../../src/scheduler.js";
 
@@ -190,6 +190,28 @@ describe("AtomPPIA", () => {
             };
             ppia.setTape(fakeTape);
             expect(ppia.tape).toBe(fakeTape);
+        });
+
+        it("starts a new tape stopped, whatever the last one was doing", () => {
+            const { ppia } = makePPIA();
+            ppia.setTape({ rewind() {}, poll: () => 100 });
+            ppia.playTape();
+            ppia.setTape({ rewind() {}, poll: () => 100 });
+            expect(ppia.motorOn).toBe(false);
+            ppia.setTape(undefined);
+            expect(ppia.motorOn).toBe(false);
+        });
+
+        it("stops, motor and all, when the tape runs out", () => {
+            const { ppia } = makePPIA();
+            let polls = 0;
+            ppia.setTape({ rewind() {}, poll: () => (++polls > 1 ? undefined : 100) });
+            vi.spyOn(ppia.runTapeTask, "reschedule");
+            ppia.playTape();
+            expect(ppia.motorOn).toBe(true);
+            ppia.runTape();
+            expect(ppia.runTapeTask.reschedule).toHaveBeenCalledTimes(1);
+            expect(ppia.motorOn).toBe(false);
         });
 
         it("stops the motor when rewinding", () => {

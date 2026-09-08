@@ -214,7 +214,7 @@ describe("Keyboard", () => {
         expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    test("keyUp should not proceed when input is enabled", () => {
+    test("keyUp still releases the key when input is enabled, but leaves the event to the page", () => {
         const event = {
             which: keyCodes.A,
             location: 0,
@@ -222,14 +222,12 @@ describe("Keyboard", () => {
             altKey: false,
         };
 
-        // Set input enabled to true
         mockInputEnabledFunction.mockReturnValueOnce(true);
 
         keyboard.setRunning(true);
         keyboard.keyUp(event);
 
-        expect(mockInputEnabledFunction).toHaveBeenCalled();
-        expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+        expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
         expect(event.preventDefault).not.toHaveBeenCalled();
     });
 

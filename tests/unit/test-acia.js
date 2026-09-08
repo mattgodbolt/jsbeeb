@@ -68,6 +68,48 @@ describe("Acia", () => {
         });
     });
 
+    describe("the tape and the relay", () => {
+        const withTape = () => {
+            const relayNoise = { motorOn: vi.fn(), motorOff: vi.fn() };
+            const acia = createMockAcia(relayNoise);
+            const tape = { poll: vi.fn(() => 100), rewind: vi.fn() };
+            acia.setTape(tape);
+            vi.spyOn(acia.runTapeTask, "reschedule");
+            vi.spyOn(acia.runTapeTask, "cancel");
+            return { acia, tape };
+        };
+
+        it("starts a tape put in while the relay is on, and stops when it is taken out", () => {
+            const { acia } = withTape();
+            acia.setMotor(true);
+            acia.runTapeTask.reschedule.mockClear();
+            const another = { poll: vi.fn(() => 100), rewind: vi.fn() };
+            acia.setTape(another);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
+            expect(another.poll).toHaveBeenCalled();
+            acia.setTape(undefined);
+            expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+        });
+
+        it("leaves a tape put in with the relay off until the relay comes on", () => {
+            const { acia } = withTape();
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
+            acia.setMotor(true);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalledWith(100);
+        });
+
+        it("stops polling a tape that has run out, and picks it up again once rewound", () => {
+            const { acia, tape } = withTape();
+            tape.poll.mockReturnValueOnce(undefined);
+            acia.setMotor(true);
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
+            expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+            acia.rewindTape();
+            expect(tape.rewind).toHaveBeenCalled();
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalledWith(100);
+        });
+    });
+
     describe("receive overrun", () => {
         it("should raise one notice for a burst of overruns", () => {
             const acia = createMockAcia();
