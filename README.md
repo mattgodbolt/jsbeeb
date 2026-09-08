@@ -13,6 +13,7 @@ different peripherals.
 
 - [Keyboard Mappings](#keyboard-mappings)
 - [Remapping Keys](#remapping-keys)
+- [Discs and Tapes](#discs-and-tapes)
 - [Emulator Shortcuts](#emulator-shortcuts)
 - [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)

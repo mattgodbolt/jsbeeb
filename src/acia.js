@@ -304,10 +304,11 @@ export class Acia extends EventTarget {
     }
 
     rewindTape() {
-        if (this.tape) {
-            console.log("rewinding tape");
-            this.tape.rewind();
-        }
+        if (!this.tape) return;
+        console.log("rewinding tape");
+        this.tape.rewind();
+        // A tape that had run out stopped being polled; rewound, it has something to play again.
+        if (this.tapeRunning) this.runTape();
     }
 
     // Byte times are held in CPU cycles because that's what the scheduler counts.
@@ -372,7 +373,10 @@ export class Acia extends EventTarget {
     }
 
     runTape() {
-        if (this.tape && this.playPressed) this.runTapeTask.reschedule(this.tape.poll(this));
+        if (!this.tape || !this.playPressed) return;
+        const delay = this.tape.poll(this);
+        if (delay === undefined) this.stopRunning();
+        else this.runTapeTask.reschedule(delay);
     }
 
     runRs423() {

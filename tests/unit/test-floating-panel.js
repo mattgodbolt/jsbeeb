@@ -80,6 +80,14 @@ describe("FloatingPanel", () => {
         expect(panel.style.top).toBe(`${window.innerHeight - 100}px`);
     });
 
+    it("is not dragged while its header shows no move cursor, as in the sheet layout", () => {
+        make();
+        header.style.cursor = "default";
+        header.dispatchEvent(new MouseEvent("pointerdown", { button: 0, clientX: 110, clientY: 60 }));
+        header.dispatchEvent(new MouseEvent("pointermove", { clientX: 130, clientY: 75 }));
+        expect(panel.style.left).toBe("");
+    });
+
     it("ignores a drag that starts on a button in the header, or with another mouse button", () => {
         make();
         closeButton.dispatchEvent(

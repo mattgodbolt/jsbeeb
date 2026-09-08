@@ -341,7 +341,7 @@ export class MediaWindow {
             evt.target.value = "";
         });
         list.connect.addEventListener("click", async () => {
-            if (await this.driveSource.connect()) this.refreshList();
+            if (await this.driveSource.connect()) this.loadDriveDiscs();
         });
         list.autoboot.addEventListener("change", () => this.media.setAutoboot(list.autoboot.checked));
         list.newDisc.addEventListener("click", () => this.showDiscForm({ copyFrom: null }));
@@ -611,8 +611,24 @@ export class MediaWindow {
         return d.source === "session" ? undefined : d.ref;
     }
 
-    /** @param {object} [options] `boot`: reset and boot the disc afterwards, whatever the autoboot tick says */
-    async loadDisc(driveIndex, d, { boot = false } = {}) {
+    /**
+     * Google Drive has just been connected: the list can show it, and a drive the URL says
+     * holds one of its discs, which could not be loaded before, can be filled.
+     */
+    async loadDriveDiscs() {
+        await this.refreshList();
+        for (const driveIndex of [0, 1]) {
+            if (this.processor.fdc?.drives[driveIndex]?.disc) continue;
+            const named = this.list.descriptors.find((d) => d.ref === this.media.refInDrive(driveIndex));
+            if (named?.source === "gdrive") await this.loadDisc(driveIndex, named, { stayOpen: true });
+        }
+    }
+
+    /**
+     * @param {object} [options] `boot`: reset and boot the disc afterwards, whatever the autoboot
+     *   tick says; `stayOpen`: the load was not what the window was opened for
+     */
+    async loadDisc(driveIndex, d, { boot = false, stayOpen = false } = {}) {
         noteEvent("media", "loadDisc", d.ref);
         const bay = this.bays[driveIndex];
         bay.busy = d;
@@ -628,8 +644,7 @@ export class MediaWindow {
             this.drives.putDiscIn(driveIndex, loaded);
             this.media.setDiscImage(driveIndex, MediaWindow.urlRef(d));
             if (needsAutoboot) this.autoboot(d.title);
-            // Loaded is what the window was open for.
-            this.close();
+            if (!stayOpen) this.close();
         } catch (error) {
             bay.busy = null;
             bay.failed = { descriptor: d, error };
@@ -687,7 +702,7 @@ export class MediaWindow {
     /** Save to Google Drive on a bay: connect if need be, then ask for the copy's name. */
     async offerCopyToDrive(driveIndex) {
         if (!this.driveSource.connected && !(await this.driveSource.connect())) return;
-        this.refreshList();
+        this.loadDriveDiscs();
         this.showList(true);
         this.showDiscForm({ copyFrom: driveIndex });
     }

@@ -128,6 +128,14 @@ describe("MediaLoader", () => {
             expect(media.refInDrive(1)).toBe("b.ssd");
         });
 
+        it("ticks and clears autoboot", () => {
+            const media = makeWatched();
+            media.setAutoboot(true);
+            expect(deps.urlState.params).toEqual({ autoboot: true });
+            media.setAutoboot(false);
+            expect(deps.urlState.params).toEqual({});
+        });
+
         it("names drive 1's disc and the tape", () => {
             const media = makeWatched();
             media.setDiscImage(1, "b.ssd");
@@ -263,9 +271,11 @@ describe("MediaLoader", () => {
                     return new Promise((done) => (releaseSlow = () => done([{ ref: "slow" }])));
                 });
             });
-            media.addLister("quick", async () => [{ ref: "quick" }]);
+            const quick = vi.fn(async () => [{ ref: "quick" }]);
+            media.addLister("quick", quick);
             const listing = media.listAll();
             await slowAsked;
+            expect(quick).toHaveBeenCalled();
             releaseSlow();
             const { descriptors } = await listing;
             expect(descriptors.slice(-2).map((d) => d.ref)).toEqual(["slow", "quick"]);

@@ -456,7 +456,9 @@ export class AtomPPIA extends PPIA {
     }
 
     runTape() {
-        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(this));
+        if (!this.tape) return;
+        const delay = this.tape.poll(this);
+        if (delay !== undefined) this.runTapeTask.reschedule(delay);
     }
 
     updateIrq() {}

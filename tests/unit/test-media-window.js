@@ -80,7 +80,12 @@ describe("MediaWindow", () => {
             loop,
             visualiser: { openOn: vi.fn() },
             autoboot: vi.fn(),
-            driveSource: { connect: vi.fn().mockResolvedValue(true), connected: false, createBlank: vi.fn() },
+            driveSource: {
+                connect: vi.fn().mockResolvedValue(true),
+                connected: false,
+                createBlank: vi.fn(),
+                createFrom: vi.fn(),
+            },
         };
     });
 
@@ -125,6 +130,15 @@ describe("MediaWindow", () => {
             expect(bay(1).classList.contains("folded")).toBe(false);
             document.querySelector('#leds .slot-readout[data-slot="tape"]').click();
             expect(document.getElementById("deck-window").classList.contains("target")).toBe(true);
+            expect(bay(1).classList.contains("target")).toBe(false);
+        });
+
+        it("aims at drive 0 again whenever the Media button opens it", () => {
+            make();
+            document.querySelector('#leds .slot-readout[data-slot="1"]').click();
+            expect(bay(1).classList.contains("target")).toBe(true);
+            document.getElementById("navbarMedia").click();
+            expect(bay(0).classList.contains("target")).toBe(true);
             expect(bay(1).classList.contains("target")).toBe(false);
         });
     });
@@ -224,7 +238,7 @@ describe("MediaWindow", () => {
             const box = document.getElementById("media-search");
             bay(1).querySelector(".bay-slot").click();
             expect(box.classList.contains("attention")).toBe(true);
-            vi.advanceTimersByTime(2500);
+            vi.runAllTimers();
             expect(box.classList.contains("attention")).toBe(false);
         });
 
@@ -416,15 +430,6 @@ describe("MediaWindow", () => {
             expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("b.ssd");
         });
 
-        it("aims at drive 0 again whenever the Media button opens it", () => {
-            make();
-            document.querySelector('#leds .slot-readout[data-slot="1"]').click();
-            expect(bay(1).classList.contains("target")).toBe(true);
-            document.getElementById("navbarMedia").click();
-            expect(bay(0).classList.contains("target")).toBe(true);
-            expect(bay(1).classList.contains("target")).toBe(false);
-        });
-
         it("opens with the list whichever way it is opened, and the list folds and unfolds on request", () => {
             deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
             const window = make();
@@ -579,7 +584,7 @@ describe("MediaWindow", () => {
             expect(bay(1).classList.contains("folded")).toBe(true);
             rows()[0].querySelector(".media-target").click();
             expect(bay(1).classList.contains("folded")).toBe(false);
-            await vi.waitFor(() => expect(fdc.drives[1].disc).toBe(loaded));
+            await vi.waitFor(() => expect(fdc.drives[1].disc === loaded).toBe(true));
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:A.hfe", "auto");
             expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "hfe:A.hfe");
             expect(deps.processor.reset).not.toHaveBeenCalled();
@@ -736,6 +741,20 @@ describe("MediaWindow", () => {
             expect(deps.media.listAll).toHaveBeenCalledTimes(2);
         });
 
+        it("fills a drive the URL names on Google Drive once Drive is connected, and stays open", async () => {
+            const mine = { ...elite, ref: "gd:abc/mine.ssd", title: "mine.ssd", source: "gdrive" };
+            const loaded = discFor("mine.ssd", ssdImage());
+            deps.media.params.disc1 = "gd:abc/mine.ssd";
+            deps.media.loadDiscImage.mockResolvedValue(loaded);
+            await openWith([elite]);
+            deps.media.listAll.mockResolvedValue({ descriptors: [elite, mine], failures: [] });
+            document.getElementById("media-connect-drive").click();
+            await vi.waitFor(() => expect(fdc.drives[0].disc === loaded).toBe(true));
+            expect(deps.media.loadDiscImage).toHaveBeenCalledWith("gd:abc/mine.ssd", "auto");
+            expect(panel().hidden).toBe(false);
+            expect(text(rows()[1].querySelector(".detail"))).toContain("in drive 0");
+        });
+
         it("leaves the window open when a file cannot be opened", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             deps.media.openFile.mockRejectedValue(new Error("not a disc"));
@@ -776,7 +795,7 @@ describe("MediaWindow", () => {
     });
 
     describe("the footer", () => {
-        it("ticks and clears autoboot in the URL, and shows what was set elsewhere", async () => {
+        it("ticks and clears autoboot in the URL", async () => {
             await openWith();
             const tick = document.querySelector("#media-panel .autoboot");
             expect(tick.checked).toBe(false);
@@ -836,7 +855,7 @@ describe("MediaWindow", () => {
             document.getElementById("media-new-disc-name").value = "fresh.ssd";
             document.querySelector('#media-new-disc-where input[value="gdrive"]').checked = true;
             document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
-            await vi.waitFor(() => expect(fdc.drives[0].disc).toBe(created));
+            await vi.waitFor(() => expect(fdc.drives[0].disc === created).toBe(true));
             expect(deps.driveSource.createBlank).toHaveBeenCalledWith("fresh.ssd", "auto");
             expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "gd:xyz/fresh.ssd");
             expect(panel().hidden).toBe(true);
@@ -860,7 +879,6 @@ describe("MediaWindow", () => {
 
         it("copies the disc in a drive to Google Drive from its Save menu", async () => {
             deps.driveSource.connected = true;
-            deps.driveSource.createFrom = vi.fn();
             const copy = discFor("mine.ssd", ssdImage());
             deps.driveSource.createFrom.mockResolvedValue({ ref: "gd:xyz/mine.ssd", disc: copy });
             deps.drives.putDiscIn(1, discFor("Superior/Exile.ssd", ssdImage()));
@@ -872,7 +890,7 @@ describe("MediaWindow", () => {
             expect(text(document.getElementById("media-new-disc-label"))).toContain("drive 1");
             document.getElementById("media-new-disc-name").value = "mine.ssd";
             document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
-            await vi.waitFor(() => expect(fdc.drives[1].disc).toBe(copy));
+            await vi.waitFor(() => expect(fdc.drives[1].disc === copy).toBe(true));
             const [name, data, layout] = deps.driveSource.createFrom.mock.calls[0];
             expect(name).toBe("mine.ssd");
             expect(data.length).toBeGreaterThan(0);
@@ -898,7 +916,7 @@ describe("MediaWindow", () => {
         });
     });
 
-    describe("what fits on a line of the LED panel", () => {
+    describe("what a slot is called", () => {
         it("drops the folder and extension, and cuts a long name in the middle", () => {
             expect(shortName("Superior/Exile.ssd")).toBe("Exile");
             expect(shortName("ChuckieEgg_B.uef")).toBe("ChuckieEgg_B");

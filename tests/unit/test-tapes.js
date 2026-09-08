@@ -154,6 +154,17 @@ describe("tapes", () => {
             expect(pollUntilReceived(tape)).toBe(0x41);
         });
 
+        it("skips a chunk it does not know without losing the one after it", async () => {
+            const uef = makeUef([
+                { id: 0x0100, data: [0x41] },
+                { id: 0x0120, data: [0x01, 0x00] },
+                { id: 0x0100, data: [0x42] },
+            ]);
+            const tape = await loadTapeFromData("test.uef", uef, BbcModel);
+            expect(pollUntilReceived(tape)).toBe(0x41);
+            expect(pollUntilReceived(tape)).toBe(0x42);
+        });
+
         it("knows its name and how far in the head is", async () => {
             const uef = makeUef([
                 { id: 0x0110, data: [0x01, 0x00] },
@@ -188,8 +199,8 @@ describe("tapes", () => {
             const tape = await loadTapeFromData("test.uef", uef, BbcModel);
             expect(pollUntilReceived(tape)).toBe(0x41);
             const acia = { setTapeCarrier() {}, tone() {}, receive() {} };
-            for (let i = 0; i < 20 && tape.curChunk; i++) tape.poll(acia);
-            expect(tape.poll(acia)).toBeUndefined();
+            let polls = 0;
+            while (tape.poll(acia) !== undefined) expect(++polls).toBeLessThan(20);
 
             tape.rewind();
             expect(tape.position).toBeLessThan(1);

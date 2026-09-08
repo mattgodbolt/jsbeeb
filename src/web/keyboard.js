@@ -107,7 +107,7 @@ export class Keyboard extends EventTarget {
     /**
      * Registers a handler for a specific key with optional modifiers
      * @param {number} keyCode - The key code to handle
-     * @param {Function} handler - The handler function
+     * @param {Function} handler - Called as (down, code, shiftKey) on the way down and up
      * @param {Object} [options] - Options for this handler
      * @param {boolean} [options.alt=true] - Whether this handler requires the Alt key
      * @param {boolean} [options.ctrl=false] - Whether this handler requires the Ctrl key

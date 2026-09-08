@@ -77,7 +77,7 @@ export class Drives extends EventTarget {
     /** @returns {Number|undefined} the tracksPerStep the user fixed this drive at, if they fixed one */
     tracksPerStepForDrive(driveIndex) {
         if (this.driveTracks[driveIndex] === DriveTracks.auto) return undefined;
-        return tracksPerStepOf(this.driveTracks[driveIndex] === DriveTracks.forty ? "40" : "80");
+        return tracksPerStepOf(this.driveTracks[driveIndex]);
     }
 
     /**
@@ -87,7 +87,7 @@ export class Drives extends EventTarget {
     setTracksPerStep(driveIndex, tracksPerStep) {
         const drive = this.fdc?.drives[driveIndex];
         if (!drive) return;
-        const setting = tracksLabel(tracksPerStep) === "40" ? DriveTracks.forty : DriveTracks.eighty;
+        const setting = tracksLabel(tracksPerStep);
         if (drive.tracksPerStep === tracksPerStep && this.driveTracks[driveIndex] === setting) return;
         drive.tracksPerStep = tracksPerStep;
         this.driveTracks[driveIndex] = setting;

@@ -162,9 +162,9 @@ export function scoreQuery(descriptor, query) {
 /** Whether a descriptor is what the typed query is looking for. */
 export const matchesQuery = (descriptor, query) => scoreQuery(descriptor, query) > 0;
 
-// Among equal matches: the examples that ship with jsbeeb, then the user's own discs, then the
-// archive with metadata before the one without.
-const SourceRank = { builtin: 0, browser: 1, gdrive: 1, session: 1, hfe: 2, hfeRebuilt: 3, sth: 4 };
+// Among equal matches with one title: the user's own discs, then the archive with metadata
+// before the one without.
+const SourceRank = { browser: 1, gdrive: 1, session: 1, hfe: 2, hfeRebuilt: 3, sth: 4 };
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 

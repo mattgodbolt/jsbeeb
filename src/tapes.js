@@ -253,7 +253,6 @@ class UefTape {
                 return secsToClocks(gap, this.cpuSpeed);
             default:
                 console.log("Skipping unknown chunk " + hexword(this.curChunk.id));
-                this.curChunk = this.readChunk();
                 break;
         }
         return this.cycles(1);
