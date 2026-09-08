@@ -372,6 +372,7 @@ export class Acia extends EventTarget {
         this.serialTransmitCyclesPerByte = this.secondsToCycles(this.numBitsPerByte() / rate);
     }
 
+    /** Polls the tape and books the next poll; a tape that has run out is left alone. */
     runTape() {
         if (!this.tape || !this.playPressed) return;
         const delay = this.tape.poll(this);

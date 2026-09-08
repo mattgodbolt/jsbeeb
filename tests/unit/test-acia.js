@@ -114,6 +114,13 @@ describe("Acia", () => {
             expect(acia.runTapeTask.cancel).toHaveBeenCalled();
         });
 
+        it("leaves a tape put in with the relay off until the relay comes on", () => {
+            const { acia } = withTape();
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
+            acia.setMotor(true);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalledWith(100);
+        });
+
         it("stops polling a tape that has run out, and picks it up again once rewound", () => {
             const { acia, tape } = withTape();
             tape.poll.mockReturnValueOnce(undefined);

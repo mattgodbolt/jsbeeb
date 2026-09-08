@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MachineSession } from "../../src/machine-session.js";
+import { BBC, keyCodes } from "../../src/keymap.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
@@ -91,6 +92,192 @@ describe("MachineSession frame stepping", () => {
         expect(result.completed).toBe(false);
         expect(result.framesRun).toBeLessThan(5);
         expect(hit).toMatchObject({ id, type: "execute" });
+    });
+});
+
+describe("MachineSession running for cycles", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    function breakOnNextInterrupt() {
+        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
+        return session.addBreakpoint("execute", lo | (hi << 8));
+    }
+
+    it("reports the cycles it ran", async () => {
+        const before = session.elapsedCycles;
+
+        const result = await session.runFor(1000);
+
+        expect(result.completed).toBe(true);
+        expect(result.cyclesRun).toBe(session.elapsedCycles - before);
+        expectCyclesNear(result.cyclesRun, 1000);
+    });
+
+    it("stops short when a breakpoint fires and reports only the cycles run", async () => {
+        const id = breakOnNextInterrupt();
+        const before = session.elapsedCycles;
+
+        const result = await session.runFor(600000);
+        session.removeBreakpoint(id);
+
+        expect(result.completed).toBe(false);
+        expect(result.cyclesRun).toBe(session.elapsedCycles - before);
+        expect(result.cyclesRun).toBeLessThan(CyclesPerInterlacedFrame);
+    });
+
+    it("leaves no unspent cycles behind after a breakpoint stop", async () => {
+        const id = breakOnNextInterrupt();
+        await session.runFor(600000);
+        session.removeBreakpoint(id);
+
+        expectCyclesNear((await session.runFor(1000)).cyclesRun, 1000);
+    });
+});
+
+describe("MachineSession keyboard", () => {
+    let session;
+    const HoldCycles = 200000; // a tenth of a second, several OS keyboard scans
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    async function pressRaw(key) {
+        session.keyDownRaw(key);
+        await session.runFor(HoldCycles);
+        session.keyUpRaw(key);
+        await session.runFor(HoldCycles);
+    }
+
+    it("types a key pressed by matrix position", async () => {
+        await pressRaw(BBC.A);
+        await pressRaw(BBC.RETURN);
+
+        expect((await session.runUntilPrompt()).screenText).toContain("A");
+    });
+
+    it("reports the keys held, however they were pressed", () => {
+        session.keyDownRaw(BBC.A);
+        session.keyDown(keyCodes.SHIFT);
+        expect(session.heldKeys()).toEqual(expect.arrayContaining([BBC.A, BBC.SHIFT]));
+
+        session.keyUpRaw(BBC.A);
+        session.keyUp(keyCodes.SHIFT);
+        expect(session.heldKeys()).toEqual([]);
+    });
+
+    it("refuses a key while typing a breakpoint interrupted still owns the keyboard", async () => {
+        const id = session.addBreakpoint("execute", 0xffee); // OSWRCH, echoing the first character
+        await session.type("X");
+        session.removeBreakpoint(id);
+
+        expect(session.typingPending).toBe(true);
+        expect(() => session.keyDown(keyCodes.SHIFT)).toThrow(/cancelTyping/);
+        expect(() => session.keyDownRaw(BBC.SHIFT)).toThrow(/cancelTyping/);
+
+        session.cancelTyping();
+        expect(session.typingPending).toBe(false);
+        session.keyDown(keyCodes.SHIFT);
+        expect(session.heldKeys()).toEqual([BBC.SHIFT]);
+        session.keyUp(keyCodes.SHIFT);
+
+        await pressRaw(BBC.RETURN);
+        await session.runUntilPrompt();
+    });
+
+    it("releases every key held", () => {
+        session.keyDownRaw(BBC.SHIFT);
+        session.keyDownRaw(BBC.A);
+
+        session.releaseAllKeys();
+
+        expect(session.heldKeys()).toEqual([]);
+    });
+
+    it("releasing every key drops pending typing too", async () => {
+        const id = session.addBreakpoint("execute", 0xffee);
+        await session.type("X");
+        session.removeBreakpoint(id);
+
+        session.releaseAllKeys();
+
+        expect(session.typingPending).toBe(false);
+        expect(session.heldKeys()).toEqual([]);
+        await pressRaw(BBC.RETURN);
+        await session.runUntilPrompt();
+    });
+});
+
+describe("MachineSession paged memory", () => {
+    let session;
+    const SidewaysRamBank = 4; // one of the Master's four
+    const OtherSidewaysRamBank = 5;
+
+    beforeAll(async () => {
+        session = new MachineSession("Master");
+        await session.initialise();
+        await session.boot(30);
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("reports what is paged in, agreeing with the OS's copy of ROMSEL", () => {
+        const [romselCopy] = session.readMemory(0xf4, 1);
+
+        expect(session.pagingState()).toEqual({ romsel: romselCopy, acccon: expect.any(Number) });
+    });
+
+    it("reads and writes a sideways bank other than the one paged in", () => {
+        const before = session.pagingState();
+
+        session.writeMemory(0x8000, [1, 2, 3], { bank: SidewaysRamBank });
+        session.writeMemory(0x8000, [9, 9, 9], { bank: OtherSidewaysRamBank });
+
+        expect(session.readMemory(0x8000, 3, { bank: SidewaysRamBank })).toEqual([1, 2, 3]);
+        expect(session.readMemory(0x8000, 3, { bank: OtherSidewaysRamBank })).toEqual([9, 9, 9]);
+        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.romsel & 15 }));
+        expect(session.pagingState()).toEqual(before);
+    });
+
+    it("reads and writes shadow RAM apart from main RAM", () => {
+        const before = session.pagingState();
+
+        session.writeMemory(0x3000, [10, 20], { shadow: true });
+        session.writeMemory(0x3000, [30, 40], { shadow: false });
+
+        expect(session.readMemory(0x3000, 2, { shadow: true })).toEqual([10, 20]);
+        expect(session.readMemory(0x3000, 2, { shadow: false })).toEqual([30, 40]);
+        expect(session.pagingState()).toEqual(before);
+    });
+
+    it("refuses a bank that does not exist", () => {
+        expect(() => session.readMemory(0x8000, 1, { bank: 16 })).toThrow(/0 to 15/);
+    });
+});
+
+describe("MachineSession paged memory on a machine without shadow RAM", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("reports ROMSEL alone", () => {
+        expect(session.pagingState()).toEqual({ romsel: expect.any(Number) });
+    });
+
+    it("refuses to page shadow RAM", () => {
+        expect(() => session.readMemory(0x3000, 1, { shadow: true })).toThrow(/Master/);
     });
 });
 

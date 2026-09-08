@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.25.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.24.1...v1.25.0) (2026-09-07)
+
+
+### Features
+
+* MachineSession presses keys by matrix position, reports what is held, and refuses to drop a key while interrupted typing owns the keyboard ([#1093](https://github.com/mattgodbolt/jsbeeb/issues/1093)) ([4ffd7fc](https://github.com/mattgodbolt/jsbeeb/commit/4ffd7fc56673fe8c655d0c2bec2ac252435891d3))
+* MachineSession reads and writes a chosen sideways bank or shadow RAM, and reports what is paged in ([#1094](https://github.com/mattgodbolt/jsbeeb/issues/1094)) ([94700ac](https://github.com/mattgodbolt/jsbeeb/commit/94700aca6492ff25b32127bc2a0b285a29fc41d4))
+
+
+### Bug Fixes
+
+* a run stopped short by a breakpoint no longer lengthens the next one ([#1092](https://github.com/mattgodbolt/jsbeeb/issues/1092)) ([bd49db0](https://github.com/mattgodbolt/jsbeeb/commit/bd49db072c24cd7b21b9f073fcb935fa06b0d2a2))
+* media loads go through the drive funnels, and the URL names only what is in the drive ([#1089](https://github.com/mattgodbolt/jsbeeb/issues/1089)) ([dfcd314](https://github.com/mattgodbolt/jsbeeb/commit/dfcd314eb529fee5ada39da2bc90376253343bbd))
+
 ## [1.24.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.24.0...v1.24.1) (2026-09-06)
 
 

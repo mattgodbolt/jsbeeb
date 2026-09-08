@@ -455,10 +455,12 @@ export class AtomPPIA extends PPIA {
         }
     }
 
+    /** Polls the tape and books the next poll; the Atom's PLAY is its motor, so a tape that runs out stops. */
     runTape() {
         if (!this.tape) return;
         const delay = this.tape.poll(this);
-        if (delay !== undefined) this.runTapeTask.reschedule(delay);
+        if (delay === undefined) this.stopTape();
+        else this.runTapeTask.reschedule(delay);
     }
 
     updateIrq() {}

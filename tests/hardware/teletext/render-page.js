@@ -27,7 +27,9 @@ async function runToField(session, field) {
 
 // Where T8's boxes sit follows from where in the frame its raster loop caught vsync, which
 // follows from when the program started. Only the widths are the measurement, but the
-// reference pins a position, so start the page from where the reference started it.
+// reference pins a position, so start the page from where the reference started it:
+// three frames and 12000 cycles after the prompt.
+const T8StartFramesAfterPrompt = 3;
 const T8StartCyclesIntoFrame = 12000;
 
 /** Renders one page of the test disc under jsbeeb and returns a PNG of the active display. */
@@ -38,7 +40,7 @@ export async function renderPage(page) {
         await session.boot();
         session.loadDisc(Disc);
         if (page === "T8") {
-            await session.runFrames(1);
+            await session.runFrames(T8StartFramesAfterPrompt);
             await session.runFor(T8StartCyclesIntoFrame);
         }
         await session.type(`CHAIN "${page}"`);

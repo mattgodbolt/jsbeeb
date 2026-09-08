@@ -28,6 +28,9 @@ import { setNodeBasePath } from "./loader.js";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
+// Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
+const AccconShadowBit = 4;
+
 // Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
 
@@ -115,19 +118,88 @@ export class MachineSession {
         return this.drainOutput();
     }
 
+    get _keyboard() {
+        return this._machine.processor.keyboardInterface;
+    }
+
+    /**
+     * The keyboard is the typist's until everything from type() has been
+     * delivered, and a key pressed meanwhile would be silently dropped.
+     */
+    _requireKeyboard() {
+        if (this.typingPending) {
+            throw new Error(
+                "Text from type() is still being typed: await type(), or if a breakpoint stopped it " +
+                    "run the machine on to finish it, or cancelTyping() first",
+            );
+        }
+    }
+
     /**
      * Press a key (by browser keyCode).
-     * Use utils.keyCodes for named keys, or ASCII charCode for letters/digits.
+     * Use keyCodes from keymap.js for named keys, or ASCII charCode for letters/digits.
      */
     keyDown(keyCode, shiftDown = false) {
-        this._machine.processor.sysvia.keyDown(keyCode, shiftDown);
+        this._requireKeyboard();
+        this._keyboard.keyDown(keyCode, shiftDown);
     }
 
     /**
      * Release a key (by browser keyCode).
      */
     keyUp(keyCode) {
-        this._machine.processor.sysvia.keyUp(keyCode);
+        this._requireKeyboard();
+        this._keyboard.keyUp(keyCode);
+    }
+
+    /**
+     * Press a key by its place in the keyboard matrix, as the model's key
+     * table (BBC or ATOM in the keymaps) gives it, with no host key map in
+     * between: a game reading the matrix sees exactly this key.
+     * @param {[number, number]} colRow
+     */
+    keyDownRaw(colRow) {
+        this._requireKeyboard();
+        this._keyboard.keyDownRaw(colRow);
+    }
+
+    /**
+     * Release a key pressed by matrix position.
+     * @param {[number, number]} colRow
+     */
+    keyUpRaw(colRow) {
+        this._requireKeyboard();
+        this._keyboard.keyUpRaw(colRow);
+    }
+
+    /**
+     * Every key currently down, as matrix positions keyDownRaw takes.
+     * @returns {Array<[number, number]>}
+     */
+    heldKeys() {
+        const held = [];
+        this._keyboard.keys.forEach((column, col) => {
+            column.forEach((down, row) => {
+                if (down) held.push([col, row]);
+            });
+        });
+        return held;
+    }
+
+    /** Whether text from type() is still to be delivered, which a breakpoint stopping the run leaves behind. */
+    get typingPending() {
+        return this._machine.typist.isTyping;
+    }
+
+    /** Drop any text from type() still to be delivered, and give the keyboard back. */
+    cancelTyping() {
+        this._machine.typist.cancel();
+    }
+
+    /** Release every key, and drop any typing still pending, so the keyboard is in a known state. */
+    releaseAllKeys() {
+        this.cancelTyping();
+        this._keyboard.clearKeys();
     }
 
     /**
@@ -196,11 +268,15 @@ export class MachineSession {
     }
 
     /**
-     * Run for an exact number of emulated CPU cycles.
-     * Useful for timing-sensitive code.
+     * Run for an exact number of emulated CPU cycles, or until something stops
+     * the CPU first: a breakpoint, or the paint runFrames stops at. `completed`
+     * is false if it was stopped short.
+     * @returns {Promise<{cyclesRun: number, completed: boolean}>}
      */
     async runFor(cycles) {
-        await this._machine.runFor(cycles);
+        const startCycles = this.elapsedCycles;
+        const stopped = await this._machine.runFor(cycles);
+        return { cyclesRun: this.elapsedCycles - startCycles, completed: !stopped };
     }
 
     /** Emulated cycles since power-on */
@@ -226,25 +302,15 @@ export class MachineSession {
         const cpu = this._machine.processor;
         const backstop = maxCycles ?? count * BackstopSecondsPerFrame * cpu.model.cyclesPerSecond;
         const startFrame = this._frameCount;
-        const startCycles = this.elapsedCycles;
-        // execute() adds each request to a running targetCycles, so budget left
-        // unspent by an early stop would silently lengthen the caller's next run.
-        const unspentBefore = cpu.targetCycles - cpu.currentCycles;
 
         this._stopAtFrame = startFrame + count;
         try {
-            await this._machine.runFor(backstop);
+            const { cyclesRun } = await this.runFor(backstop);
+            const framesRun = this._frameCount - startFrame;
+            return { framesRun, cyclesRun, completed: framesRun >= count };
         } finally {
             this._stopAtFrame = Infinity;
-            cpu.targetCycles = cpu.currentCycles + unspentBefore;
         }
-
-        const framesRun = this._frameCount - startFrame;
-        return {
-            framesRun,
-            cyclesRun: this.elapsedCycles - startCycles,
-            completed: framesRun >= count,
-        };
     }
 
     /** Frames painted since the session was created; a hard reset does not zero it */
@@ -397,20 +463,72 @@ export class MachineSession {
         };
     }
 
-    /** Read `length` bytes from emulator memory starting at `address` */
-    readMemory(address, length = 16) {
-        const bytes = [];
-        for (let i = 0; i < length; i++) {
-            bytes.push(this._machine.readbyte(address + i));
-        }
-        return bytes;
+    /**
+     * What the memory map has paged in: `romsel`, the sideways bank at
+     * &8000 to &BFFF, and on a Master `acccon`, whose bit 2 puts shadow
+     * RAM at &3000 to &7FFF.
+     * @returns {{romsel: number, acccon?: number}}
+     */
+    pagingState() {
+        const cpu = this._machine.processor;
+        const state = { romsel: cpu.romsel };
+        if (cpu.model.isMaster) state.acccon = cpu.acccon;
+        return state;
     }
 
-    /** Write an array of byte values into emulator memory at `address` */
-    writeMemory(address, bytes) {
-        for (let i = 0; i < bytes.length; i++) {
-            this._machine.writebyte(address + i, bytes[i]);
+    /**
+     * Runs `fn` with `bank` paged at &8000, or shadow RAM paged (or not)
+     * at &3000, putting the map back afterwards. Either left undefined
+     * leaves the map as the machine has it.
+     */
+    _withPaging({ bank, shadow }, fn) {
+        const cpu = this._machine.processor;
+        const { romsel, acccon } = cpu;
+        if (bank !== undefined) {
+            if (!Number.isInteger(bank) || bank < 0 || bank > 15) throw new Error(`Bank ${bank} is not 0 to 15`);
+            cpu.romSelect(bank);
         }
+        if (shadow !== undefined) {
+            if (!cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
+            cpu.writeAcccon(shadow ? acccon | AccconShadowBit : acccon & ~AccconShadowBit);
+        }
+        try {
+            return fn();
+        } finally {
+            if (bank !== undefined) cpu.romSelect(romsel);
+            if (shadow !== undefined) cpu.writeAcccon(acccon);
+        }
+    }
+
+    /**
+     * Read `length` bytes from emulator memory starting at `address`, from
+     * whatever is paged in unless `bank` or `shadow` says otherwise.
+     * @param {number} address
+     * @param {number} [length=16]
+     * @param {Object} [opts]
+     * @param {number} [opts.bank] sideways bank to read at &8000 to &BFFF
+     * @param {boolean} [opts.shadow] on a Master, read shadow RAM (true) or main RAM (false) at &3000 to &7FFF
+     */
+    readMemory(address, length = 16, { bank, shadow } = {}) {
+        return this._withPaging({ bank, shadow }, () => {
+            const bytes = [];
+            for (let i = 0; i < length; i++) {
+                bytes.push(this._machine.readbyte(address + i));
+            }
+            return bytes;
+        });
+    }
+
+    /**
+     * Write an array of byte values into emulator memory at `address`;
+     * `bank` and `shadow` pick where, as for readMemory.
+     */
+    writeMemory(address, bytes, { bank, shadow } = {}) {
+        this._withPaging({ bank, shadow }, () => {
+            for (let i = 0; i < bytes.length; i++) {
+                this._machine.writebyte(address + i, bytes[i]);
+            }
+        });
     }
 
     /** Read the current 6502 CPU registers */
