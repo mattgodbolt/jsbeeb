@@ -433,12 +433,13 @@ export class MediaWindow {
         this.renderList();
     }
 
+    /** @returns {Promise<object[]>} the descriptors this refresh fetched, shown unless a newer one overtook it */
     async refreshList() {
         const listing = this.media.listAll();
         this.list.latest = listing;
         const { descriptors, failures } = await listing;
         // A newer refresh has been asked for meanwhile: its answer is the one to show.
-        if (this.list.latest !== listing) return;
+        if (this.list.latest !== listing) return descriptors;
         this.list.descriptors = descriptors;
         this.list.failures = failures;
         this.list.loaded = true;
@@ -451,6 +452,7 @@ export class MediaWindow {
         this.renderChips();
         this.renderList();
         this.renderAll();
+        return descriptors;
     }
 
     renderChips() {
@@ -616,10 +618,10 @@ export class MediaWindow {
      * holds one of its discs, which could not be loaded before, can be filled.
      */
     async loadDriveDiscs() {
-        await this.refreshList();
+        const descriptors = await this.refreshList();
         for (const driveIndex of [0, 1]) {
             if (this.processor.fdc?.drives[driveIndex]?.disc) continue;
-            const named = this.list.descriptors.find((d) => d.ref === this.media.refInDrive(driveIndex));
+            const named = descriptors.find((d) => d.ref === this.media.refInDrive(driveIndex));
             if (named?.source === "gdrive") await this.loadDisc(driveIndex, named, { stayOpen: true });
         }
     }
