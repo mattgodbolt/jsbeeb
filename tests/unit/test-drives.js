@@ -191,6 +191,16 @@ describe("Drives", () => {
             expect(toasts()).toEqual([]);
         });
 
+        it("follows a restored state's pitch when pinned, and leaves an auto drive be", () => {
+            const drives = make([DriveTracks.forty, DriveTracks.auto]);
+            fdc.drives[0].tracksPerStep = 1;
+            fdc.drives[1].tracksPerStep = 2;
+            drives.followRestoredPitch(0);
+            drives.followRestoredPitch(1);
+            expect(urlState.params).toEqual({ drive0Tracks: "80" });
+            expect(drives.tracksPerStepForDrive(1)).toBeUndefined();
+        });
+
         it("pins a drive that was on auto even when the switch does not move", () => {
             const drives = make();
             const seen = vi.fn();

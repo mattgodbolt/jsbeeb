@@ -94,6 +94,16 @@ export class Drives extends EventTarget {
         this.dispatchEvent(new CustomEvent("tracks-changed", { detail: { driveIndex } }));
     }
 
+    /**
+     * A restored state has set the drive's pitch behind the switch's back. A switch the user
+     * pinned follows it, so the URL and the drive agree; one on auto has nothing to say.
+     */
+    followRestoredPitch(driveIndex) {
+        const drive = this.fdc?.drives[driveIndex];
+        if (drive && this.tracksPerStepForDrive(driveIndex) !== undefined)
+            this.setTracksPerStep(driveIndex, drive.tracksPerStep);
+    }
+
     putDiscIn(driveIndex, loadedDisc) {
         if (!this.fdc) throw new Error("This machine has no disc drives");
         const drive = this.fdc.drives[driveIndex];

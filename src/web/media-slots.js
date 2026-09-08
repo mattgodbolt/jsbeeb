@@ -154,6 +154,7 @@ export class MediaSlots extends EventTarget {
 
     /** A restored state has put the machine's side of every slot back, behind the slots' backs. */
     restored() {
+        for (const slot of this.driveSlots) this.drives.followRestoredPitch(slot.index);
         for (const slot of this.all) this.changed(slot);
     }
 

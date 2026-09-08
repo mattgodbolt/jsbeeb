@@ -48,6 +48,7 @@ const SchemaSources = {
     gd: "gdrive",
     local: "browser",
     "!": "browser",
+    session: "session",
 };
 const OtherSchemaPhrases = { http: "the web", https: "the web", file: "a file", data: "the URL", b64data: "the URL" };
 

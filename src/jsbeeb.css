@@ -936,7 +936,8 @@ div.smoothie-chart-tooltip {
 }
 
 .bay[data-state="empty"] .jacket,
-.bay[data-state="loaded"] .empty-note {
+.bay[data-state="loaded"] .empty-note,
+.bay[data-state="busy"] .empty-note {
   display: none;
 }
 

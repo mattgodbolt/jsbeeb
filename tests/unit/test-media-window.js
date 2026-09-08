@@ -1190,6 +1190,7 @@ describe("MediaWindow", () => {
             expect(sourceOf("!mine")).toBe("this browser");
             expect(sourceOf("https://example.com/a.ssd")).toBe("the web");
             expect(sourceOf("elite.ssd")).toBe("built in");
+            expect(sourceOf("session:mine.ssd")).toBe("a file opened this session");
             expect(sourceOf(undefined)).toBeNull();
         });
     });

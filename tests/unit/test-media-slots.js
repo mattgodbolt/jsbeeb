@@ -217,8 +217,10 @@ describe("MediaSlots", () => {
             expect(urlState.params).toEqual({});
         });
 
-        it("says every slot changed once a state has been restored", () => {
+        it("says every slot changed once a state has been restored, the switches first", () => {
+            const followed = vi.spyOn(slots.drives, "followRestoredPitch");
             slots.restored();
+            expect(followed.mock.calls).toEqual([[0], [1]]);
             expect(changes).toEqual(["drive 0", "drive 1", "the deck"]);
         });
 
