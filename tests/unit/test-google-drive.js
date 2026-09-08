@@ -58,7 +58,7 @@ describe("GoogleDriveLoader", () => {
                 this.callback({ error: "access_denied" });
             },
         };
-        await expect(loader.authorize(false)).rejects.toEqual({ error: "access_denied" });
+        await expect(loader.authorize(false)).rejects.toThrow("access_denied");
         expect(loader.authorized).toBe(false);
     });
 

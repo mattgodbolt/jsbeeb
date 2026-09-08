@@ -1,6 +1,7 @@
 import { localDisc } from "../../src/web/local-disc.js";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { DiscLayout } from "../../src/disc.js";
+import { uint8ArrayToString } from "../../src/binary.js";
 
 describe("a disc held in browser local storage", () => {
     const stubStorage = (localStorage) => vi.stubGlobal("window", { localStorage });
@@ -25,6 +26,16 @@ describe("a disc held in browser local storage", () => {
 
         expect(created.savesChanges).toBe(true);
         expect(stored["disc_kept.ssd"]).toBeTypeOf("string");
+    });
+
+    it("opens a disc the browser already holds, without writing it back", () => {
+        const image = new Uint8Array(80 * 10 * 256);
+        image[0] = 0x41;
+        const setItem = vi.fn();
+        stubStorage({ "disc_kept.ssd": uint8ArrayToString(image), setItem });
+        const opened = localDisc("kept.ssd", DiscLayout.contiguous);
+        expect(opened.name).toBe("kept.ssd");
+        expect(setItem).not.toHaveBeenCalled();
     });
 
     it("is kept from the moment it is made, written to or not", () => {

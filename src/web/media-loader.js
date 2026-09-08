@@ -54,8 +54,9 @@ export class MediaLoader extends EventTarget {
      * @param {object} deps
      * @param {Function} deps.isSnapshotFile says whether a dropped file is a save state
      * @param {Function} deps.loadSnapshot restores a dropped save state
+     * @param {string} [deps.defaultBootDisc] the disc the page boots when the URL names none
      */
-    constructor({ processor, model, drives, urlState, modals, isSnapshotFile, loadSnapshot }) {
+    constructor({ processor, model, drives, urlState, modals, isSnapshotFile, loadSnapshot, defaultBootDisc }) {
         super();
         this.processor = processor;
         this.model = model;
@@ -67,6 +68,7 @@ export class MediaLoader extends EventTarget {
         this.isSnapshotFile = isSnapshotFile;
         this.loadSnapshot = loadSnapshot;
         this.tapeClaim = null;
+        this.defaultBootDisc = defaultBootDisc;
         this.listers = new Map();
         /** Files opened this session, by name: the only media the URL cannot name. */
         this.sessionFiles = new Map();
@@ -205,10 +207,17 @@ export class MediaLoader extends EventTarget {
         this.setTapeImage(undefined);
     }
 
-    /** What the URL says a drive holds; a bare disc parameter means drive 0. */
+    /**
+     * What the URL says a drive holds; a bare disc parameter means drive 0. The page's own boot
+     * disc is unnamed there, so drive 0 is read as holding it while it still does.
+     */
     refInDrive(driveIndex) {
         const { params } = this;
-        return driveIndex === 0 ? (params.disc1 ?? params.disc) : params.disc2;
+        if (driveIndex !== 0) return params.disc2;
+        const named = params.disc1 ?? params.disc;
+        if (named !== undefined) return named;
+        const disc = this.processor.fdc?.drives[0]?.disc;
+        return disc?.name === this.defaultBootDisc && !disc.originalImageData ? this.defaultBootDisc : undefined;
     }
 
     /** Names the disc in a drive for the URL and the settings store, or unnames it. */
@@ -229,12 +238,18 @@ export class MediaLoader extends EventTarget {
         this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
     }
 
+    /** Keeps a file opened this session for the list, and says so with "files-changed". */
+    rememberFile(name, data, kind) {
+        this.sessionFiles.set(name, { data, kind });
+        this.dispatchEvent(new Event("files-changed"));
+    }
+
     /** A disc image from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
     loadDiscFile(name, data, driveIndex) {
         const loadedDisc = disc.discFor(name, data, undefined, this.drives.layoutForDrive(driveIndex));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(data);
-        this.sessionFiles.set(name, { data, kind: "disc" });
+        this.rememberFile(name, data, "disc");
         this.drives.putDiscIn(driveIndex, loadedDisc);
         this.setDiscImage(driveIndex, undefined);
     }
@@ -242,7 +257,7 @@ export class MediaLoader extends EventTarget {
     /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
     async loadTapeFile(name, data) {
         const tape = await loadTapeFromData(name, data, this.model);
-        this.sessionFiles.set(name, { data, kind: "tape" });
+        this.rememberFile(name, data, "tape");
         this.setProcessorTape(tape);
         this.setTapeImage(undefined);
     }

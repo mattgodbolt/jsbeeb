@@ -22,11 +22,15 @@ function createScheduledAcia(scheduler, cr, transmitRate, model = BbcModel) {
 
 function createMockAcia(relayNoise) {
     const scheduler = {
-        newTask: vi.fn(() => ({
-            cancel: vi.fn(),
-            ensureScheduled: vi.fn(),
-            reschedule: vi.fn(),
-        })),
+        newTask: vi.fn(() => {
+            const task = {
+                scheduled: () => task.isScheduled,
+                cancel: vi.fn(() => (task.isScheduled = false)),
+                ensureScheduled: vi.fn(),
+                reschedule: vi.fn(() => (task.isScheduled = true)),
+            };
+            return task;
+        }),
     };
     const acia = new Acia({ interrupt: 0, model: BbcModel }, { mute: vi.fn(), tone: vi.fn() }, scheduler, relayNoise);
     acia.setRs423Handler({});
@@ -127,9 +131,11 @@ describe("Acia", () => {
             acia.setMotor(true);
             expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
             expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+            expect(acia.tapeRunning).toBe(false);
             acia.rewindTape();
             expect(tape.rewind).toHaveBeenCalled();
             expect(acia.runTapeTask.reschedule).toHaveBeenCalledWith(100);
+            expect(acia.tapeRunning).toBe(true);
         });
 
         it("does nothing when PLAY is pressed with the relay off", () => {

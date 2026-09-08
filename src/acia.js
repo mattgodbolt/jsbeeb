@@ -79,9 +79,14 @@ export class Acia extends EventTarget {
         this.motorOn = on;
     }
 
-    /** Whether the tape is moving: the machine's motor relay is on and the recorder's PLAY is down. */
-    get tapeRunning() {
+    /** Whether the machine and the recorder between them ask for the tape to move. */
+    get shouldRun() {
         return this.motorOn && this.playPressed;
+    }
+
+    /** Whether the tape is moving: asked to, and not run out. */
+    get tapeRunning() {
+        return this.shouldRun && this.runTapeTask.scheduled();
     }
 
     /** PLAY on the recorder: down by default, so the relay alone runs the tape as it always has. */
@@ -301,7 +306,7 @@ export class Acia extends EventTarget {
     /** A tape put in, or taken out, while the tape is meant to be running starts or stops at once. */
     setTape(tape) {
         this.tape = tape;
-        if (!this.tapeRunning) return;
+        if (!this.shouldRun) return;
         if (tape) this.runTape();
         else this.stopRunning();
     }
@@ -311,7 +316,7 @@ export class Acia extends EventTarget {
         console.log("rewinding tape");
         this.tape.rewind();
         // A tape that had run out stopped being polled; rewound, it has something to play again.
-        if (this.tapeRunning) this.runTape();
+        if (this.shouldRun) this.runTape();
     }
 
     // Byte times are held in CPU cycles because that's what the scheduler counts.

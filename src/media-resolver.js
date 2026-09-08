@@ -56,7 +56,7 @@ export class MediaResolver {
             case "https":
             case "file":
                 // The URL may end in query parameters, which would upset the extension check.
-                return openIfZip(new URL(ref).pathname, await this.load(ref));
+                return openIfZip(new URL(ref).pathname.split("/").pop(), await this.load(ref));
             default:
                 return openIfZip(image, await this.load(`${folder}/${image}`));
         }

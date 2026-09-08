@@ -96,6 +96,11 @@ describe("Drives", () => {
             expect(seen).toEqual([{ driveIndex: 1, disc }]);
         });
 
+        it("refuses, in words, on a machine with no drives", () => {
+            fdc = undefined;
+            expect(() => make().putDiscIn(0, fakeDisc())).toThrow("no disc drives");
+        });
+
         it("takes the last disc asked for, whichever load finishes first", () => {
             const drives = make();
             const first = drives.claim(0);

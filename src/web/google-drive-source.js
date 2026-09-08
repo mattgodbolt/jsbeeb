@@ -5,6 +5,8 @@ import { errorText } from "./reporting.js";
 import { replaceOrAddExtension } from "../archive.js";
 import { describeDriveFile } from "./media-catalogue.js";
 
+const isUnauthorised = (error) => error?.status === 401 || error?.result?.error?.code === 401;
+
 /**
  * Google Drive as a media source: signing in, listing the user's discs,
  * loading one, and creating a new one there.
@@ -14,8 +16,18 @@ export class GoogleDriveSource {
         this.googleDrive = loader;
         media.addSource("drive", (cat, layout) => this.load(cat, layout));
         media.addLister("gdrive", async () =>
-            this.connected ? (await this.googleDrive.listFiles()).map(describeDriveFile) : [],
+            this.connected ? (await this.withToken(() => this.googleDrive.listFiles())).map(describeDriveFile) : [],
         );
+    }
+
+    /** Runs a Drive call; a 401 means the token has lapsed, so the account is connected no longer. */
+    async withToken(call) {
+        try {
+            return await call();
+        } catch (error) {
+            if (isUnauthorised(error)) this.googleDrive.authorized = false;
+            throw error;
+        }
     }
 
     get connected() {
@@ -48,7 +60,7 @@ export class GoogleDriveSource {
         if (!(await this.googleDrive.initialise())) throw new Error("Google Drive is not available");
         if (!(await this.googleDrive.authorize(true)))
             throw new Error("Google Drive is not connected; use Connect Google Drive in the media window first");
-        const loaded = await this.googleDrive.load(cat.id, layout);
+        const loaded = await this.withToken(() => this.googleDrive.load(cat.id, layout));
         if (!loaded.savesChanges) {
             toast(`${cat.name} is read only on Google Drive, so changes to it are not written back.`, {
                 title: "Google Drive",
@@ -75,7 +87,7 @@ export class GoogleDriveSource {
     /** Puts an image on the Drive under `name`, as a disc that saves its changes there. */
     async createFrom(name, data, layout) {
         const fullName = replaceOrAddExtension(name, disc.guessDiscTypeFromName(name).extension);
-        const result = await this.googleDrive.create(fullName, data, layout);
+        const result = await this.withToken(() => this.googleDrive.create(fullName, data, layout));
         return { ref: `gd:${result.fileId}/${fullName}`, disc: result.disc };
     }
 }

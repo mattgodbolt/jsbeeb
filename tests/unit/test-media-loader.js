@@ -92,6 +92,21 @@ describe("MediaLoader", () => {
         });
     });
 
+    describe("a disc kept in this browser", () => {
+        it("says once, naming Save, when the browser will not store a write", async () => {
+            vi.spyOn(console, "log").mockImplementation(() => {});
+            vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+                throw new Error("QuotaExceededError");
+            });
+            const disc = await make().loadDiscImage("local:full.ssd", DiscLayout.contiguous);
+            disc.writePulses(false, 0, 0, 0);
+            disc.flushWrites();
+            disc.writePulses(false, 1, 0, 0);
+            disc.flushWrites();
+            expect(toasts()).toEqual([expect.stringContaining("Save button")]);
+        });
+    });
+
     describe("loadTapeImage", () => {
         it("returns nothing for no reference", async () => {
             expect(await make().loadTapeImage(undefined)).toBeNull();
@@ -115,6 +130,17 @@ describe("MediaLoader", () => {
             expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
             expect(deps.urlState.updateUrl).toHaveBeenCalledTimes(1);
             expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
+        });
+
+        it("reads drive 0 as holding the page's own boot disc while it still does", () => {
+            deps.defaultBootDisc = "elite.ssd";
+            deps.processor.fdc = { drives: [{ disc: { name: "elite.ssd" } }, {}] };
+            const media = make();
+            expect(media.refInDrive(0)).toBe("elite.ssd");
+            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageData: new Uint8Array(1) };
+            expect(media.refInDrive(0)).toBeUndefined();
+            deps.processor.fdc.drives[0].disc = { name: "other.ssd" };
+            expect(media.refInDrive(0)).toBeUndefined();
         });
 
         it("reads a drive's disc back from the URL, whichever way it was named", () => {
@@ -197,6 +223,7 @@ describe("MediaLoader", () => {
 
     describe("files opened this session", () => {
         it("remembers a disc file, lists it, and can put it in either drive again by reference", async () => {
+            deps.urlState.params.disc2 = "old.ssd";
             const media = make();
             expect(await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).toBe("Loaded mine.ssd into drive 1.");
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
@@ -206,6 +233,14 @@ describe("MediaLoader", () => {
             const again = await media.loadDiscImage("session:mine.ssd");
             expect(again.name).toBe("mine.ssd");
             expect(again.originalImageData).toBeTruthy();
+        });
+
+        it("says when a file joins the session, so an open list can show it", async () => {
+            const media = make();
+            const seen = vi.fn();
+            media.addEventListener("files-changed", seen);
+            await media.openFile(fileFor("mine.ssd", ssdImage()));
+            expect(seen).toHaveBeenCalledTimes(1);
         });
 
         it("does not list a tape file that turned out not to be one", async () => {
@@ -218,8 +253,10 @@ describe("MediaLoader", () => {
         it("opens a zipped tape as a tape, whatever the zip is called", async () => {
             const uef = new Uint8Array([...new TextEncoder().encode("UEF File!\0"), 6, 0, 0, 1, 1, 0, 0, 0, 1]);
             const zipped = new Uint8Array(await createZipBlob([{ name: "Chuckie.uef", data: uef }]).arrayBuffer());
+            deps.urlState.params.tape = "sth:old.zip";
             const media = make();
             expect(await media.openFile(fileFor("chuckie_egg.zip", zipped))).toBe("Loaded Chuckie.uef as the tape.");
+            expect(deps.urlState.params.tape).toBeUndefined();
             expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(
                 expect.objectContaining({ name: "Chuckie.uef" }),
             );

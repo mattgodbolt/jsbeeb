@@ -226,6 +226,7 @@ const media = new MediaLoader({
     modals,
     isSnapshotFile,
     loadSnapshot: (file, buffer) => snapshots.loadStateFromFile(file, buffer),
+    defaultBootDisc,
 });
 const autoBoot = new Autoboot({
     model,
@@ -346,7 +347,6 @@ const startPromise = machine.start({
 
         switch (needsAutoboot) {
             case "boot":
-                mediaWindow.showAutoboot(true);
                 autoBoot.boot(discImage);
                 break;
             case "type":
@@ -359,7 +359,6 @@ const startPromise = machine.start({
                 autoBoot.runTape();
                 break;
             default:
-                mediaWindow.showAutoboot(false);
                 break;
         }
 

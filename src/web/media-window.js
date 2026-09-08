@@ -101,6 +101,7 @@ export class MediaWindow {
                 else this.openFor(targetFrom(slot));
             });
         this.floating.addEventListener("open", () => this.refreshList());
+        this.floating.addEventListener("close", () => (this.list.newDiscForm.hidden = true));
         // Whatever arrives in a slot, by whichever route, is what it holds: a load of the window's
         // own still in flight has been overtaken, and a failure it was showing is settled.
         drives.addEventListener("disc-changed", (e) => {
@@ -110,32 +111,50 @@ export class MediaWindow {
             bay.failed = null;
             if (disc && driveIndex === FoldableDrive) this.showDrive(true);
             this.renderDrive(driveIndex);
+            // The rows say which slot holds them.
+            this.renderList();
         });
         drives.addEventListener("tracks-changed", (e) => this.renderDrive(e.detail.driveIndex));
         media.addEventListener("tape-changed", (e) => {
             this.deck.busy = null;
             this.deck.failed = null;
+            this.counterBase = 0;
             if (e.detail.tape) this.showDeck(true);
             this.renderDeck();
+            this.renderList();
         });
         media.addEventListener("restored", () => this.renderAll());
+        // A file opened while the window is up joins the list; closed, the next open lists it anyway.
+        media.addEventListener("files-changed", () => {
+            if (this.isOpen) this.refreshList();
+        });
         // The URL is named after the bytes arrive, so the source line catches up here.
         media.addEventListener("media-changed", () => this.renderAll());
         loop.addEventListener("tick", () => this.tick());
+        // The Atom has no disc drives: only the deck, and only the deck to aim at.
+        if (model.isAtom) {
+            this.panel.querySelector(".media-case").hidden = true;
+            for (const button of this.list.into.querySelectorAll('[data-target]:not([data-target="tape"])'))
+                button.hidden = true;
+        }
         this.showDeck(model.isAtom);
         this.showDrive(false);
         this.showList(true);
-        this.setTarget(0);
+        this.setTarget(this.defaultTarget);
         this.renderAll();
+    }
+
+    get defaultTarget() {
+        return this.model.isAtom ? "tape" : 0;
     }
 
     get isOpen() {
         return this.floating.isOpen;
     }
 
-    /** Opens with the list, aimed at drive 0. */
+    /** Opens with the list, aimed at drive 0 (the deck, on the Atom). */
     open() {
-        this.setTarget(0);
+        this.setTarget(this.defaultTarget);
         this.showList(true);
         this.floating.open();
         this.list.search.select();
@@ -145,7 +164,7 @@ export class MediaWindow {
     /** Opens from a slot's own line, aimed at that slot. */
     openFor(target) {
         this.floating.open();
-        this.aimAt(target);
+        this.aimAt(this.model.isAtom ? "tape" : target);
     }
 
     close() {
@@ -378,6 +397,7 @@ export class MediaWindow {
         this.unfold(target);
         this.setTarget(target);
         this.showList(true);
+        this.list.search.select();
         this.list.search.focus();
         this.nudgeSearch();
     }
@@ -561,7 +581,7 @@ export class MediaWindow {
             saves.title = "Writes to this disc are kept";
             detail.prepend(saves, d.detail ? " · " : "");
         }
-        const inDrive = this.slotHolding(d.ref);
+        const inDrive = this.slotHolding(d);
         if (inDrive !== null) detail.append(detail.textContent ? " · " : "", cell("in-drive", `in ${inDrive}`));
         const source = cell(`media-source src-${d.source}`, sourceName(d.source));
         source.title = Sources[d.source]?.title ?? "";
@@ -593,12 +613,16 @@ export class MediaWindow {
         return li;
     }
 
-    /** Which slot a reference is loaded in, as text, or null. */
-    slotHolding(ref) {
-        for (const driveIndex of [0, 1])
-            if (this.media.refInDrive(driveIndex) === ref && this.processor.fdc?.drives[driveIndex].disc)
-                return `drive ${driveIndex}`;
-        if (this.media.params.tape === ref && this.processor.tapeInterface.tape) return "the deck";
+    /** Which slot a descriptor's media is loaded in, as text, or null. */
+    slotHolding(d) {
+        // A file opened this session is unnamed in the URL; the slot knows it by its name.
+        const isIn = (ref, name) => (d.source === "session" ? name === d.title : ref === d.ref);
+        for (const driveIndex of [0, 1]) {
+            const disc = this.processor.fdc?.drives[driveIndex].disc;
+            if (disc && isIn(this.media.refInDrive(driveIndex), disc.name)) return `drive ${driveIndex}`;
+        }
+        const { tape } = this.processor.tapeInterface;
+        if (tape && isIn(this.media.params.tape, tape.name)) return "the deck";
         return null;
     }
 
@@ -649,11 +673,12 @@ export class MediaWindow {
         this.renderDrive(driveIndex);
         // Only drive 0 boots, so only a boot into drive 0 means anything for the URL.
         boot = boot && driveIndex === 0;
-        const needsAutoboot = boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
         try {
             const loaded = await this.media.loadDiscImage(d.ref, this.drives.layoutForDrive(driveIndex));
-            if (!this.drives.holds(driveIndex, claim)) return;
+            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, d);
             bay.busy = null;
+            // The tick is read now, not before the wait, in case it was changed meanwhile.
+            const needsAutoboot = boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
             // The machine is only reset once there is a disc to boot.
             if (needsAutoboot) this.processor.reset(true);
             this.drives.putDiscIn(driveIndex, loaded, claim);
@@ -665,7 +690,7 @@ export class MediaWindow {
             if (needsAutoboot) this.autoboot(d.title);
             if (!stayOpen) this.close();
         } catch (error) {
-            if (!this.drives.holds(driveIndex, claim)) return;
+            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, d);
             bay.busy = null;
             bay.failed = { descriptor: d, error };
             reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
@@ -684,19 +709,29 @@ export class MediaWindow {
         this.renderDeck();
         try {
             const tape = await this.media.loadTapeImage(d.ref);
-            if (!this.media.holdsTape(claim)) return;
+            if (!this.media.holdsTape(claim)) return this.overtaken(deck, d);
             deck.busy = null;
             this.media.setProcessorTape(tape, claim);
             this.media.setTapeImage(MediaWindow.urlRef(d));
             this.close();
         } catch (error) {
-            if (!this.media.holdsTape(claim)) return;
+            if (!this.media.holdsTape(claim)) return this.overtaken(deck, d);
             deck.busy = null;
             deck.failed = { descriptor: d, error };
             reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
         }
         this.renderDeck();
         this.renderList();
+    }
+
+    /**
+     * A load of the window's own finished after something else claimed its slot. If that something
+     * put media in, the slot has already redrawn; if it failed, the slot would otherwise stay "loading".
+     */
+    overtaken(slot, descriptor) {
+        if (slot.busy !== descriptor) return;
+        slot.busy = null;
+        this.renderAll();
     }
 
     /** Ticks or clears the autoboot box, for whoever changed the setting elsewhere. */
@@ -755,15 +790,16 @@ export class MediaWindow {
                 copyFrom === null
                     ? await this.driveSource.createBlank(name, layout)
                     : await this.driveSource.createFrom(name, copied, layout);
-            if (!this.drives.holds(driveIndex, claim)) return;
+            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, bay.busy);
             bay.busy = null;
             this.drives.putDiscIn(driveIndex, disc, claim);
             this.media.setDiscImage(driveIndex, ref);
             this.close();
         } catch (error) {
-            if (!this.drives.holds(driveIndex, claim)) return;
+            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, bay.busy);
             bay.busy = null;
-            reportLoadFailure(`${name} on Google Drive`, error);
+            console.error(`Could not save ${name} to Google Drive:`, error);
+            toast(`Could not save ${name} to Google Drive: ${errorText(error)}`, { title: "Google Drive" });
         }
         this.renderDrive(driveIndex);
     }
@@ -905,7 +941,14 @@ export class MediaWindow {
             deck.sub.textContent = source ?? "";
             deck.window.title = `${name} is in the deck; click to pick another tape for it`;
             deck.eject.title = `Eject ${name}`;
-            const state = tapeRunning ? "playing" : playPressed && !isAtom ? "motor off" : "stopped";
+            const { motorOn } = this.processor.tapeInterface;
+            const state = tapeRunning
+                ? "playing"
+                : !playPressed || isAtom
+                  ? "stopped"
+                  : motorOn
+                    ? "at the end"
+                    : "motor off";
             deck.status.textContent = [name, source, state].filter(Boolean).join(" · ");
             deck.barName.textContent = name;
             readout.querySelector(".name").textContent = shortName(name);

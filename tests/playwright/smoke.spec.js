@@ -115,6 +115,26 @@ test("the media window shows the drives, keeps the keyboard while focused, and g
     expect(await beeb.screenText()).not.toContain(">AB");
 });
 
+test("Alt+M opens the window aimed at drive 0 with the search box focused, and typing there stays on the page", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+M");
+    await expect(page.locator("#media-panel")).toBeVisible();
+    await expect(page.locator('.bay[data-drive="0"]')).toHaveClass(/target/);
+    await expect(page.locator("#media-search")).toBeFocused();
+    await page.keyboard.type("welcome");
+    await expect(page.locator("#media-search")).toHaveValue("welcome");
+    await expect(page.locator("#media-list .media-row-main").first()).toHaveAttribute("title", /Load Welcome/);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#media-panel")).toBeHidden();
+    await beeb.pressKey("b");
+    await beeb.expectScreenText(">B");
+    expect(await beeb.screenText()).not.toContain("WELCOME");
+});
+
 test("the media window's list puts a built-in disc into drive 1", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");

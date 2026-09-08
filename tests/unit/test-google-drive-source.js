@@ -25,6 +25,18 @@ describe("GoogleDriveSource", () => {
 
     const make = () => new GoogleDriveSource({ media, loader });
 
+    it("forgets the connection when Google says the token has lapsed", async () => {
+        let lister;
+        const lapsed = { authorized: true, listFiles: vi.fn().mockRejectedValue({ status: 401 }) };
+        const source = new GoogleDriveSource({
+            media: { addSource: vi.fn(), addLister: vi.fn((name, fn) => (lister = fn)) },
+            loader: lapsed,
+        });
+        expect(source.connected).toBe(true);
+        await expect(lister()).rejects.toEqual({ status: 401 });
+        expect(source.connected).toBe(false);
+    });
+
     describe("connecting", () => {
         it("loads the client and signs in, saying so afterwards", async () => {
             const source = make();

@@ -112,6 +112,7 @@ export class Drives extends EventTarget {
 
     /** @returns {boolean} whether the disc went in, or was overtaken by a later load */
     putDiscIn(driveIndex, loadedDisc, claim = this.claim(driveIndex)) {
+        if (!this.fdc) throw new Error("This machine has no disc drives");
         if (!this.holds(driveIndex, claim)) return false;
         const drive = this.fdc.drives[driveIndex];
         const fixed = this.tracksPerStepForDrive(driveIndex);

@@ -53,6 +53,17 @@ describe("the Electron hooks", () => {
         return api.onLoadTape.mock.calls[0][0](message);
     };
 
+    it("leaves the URL alone when a later load overtook the menu's", async () => {
+        deps.drives.putDiscIn.mockReturnValue(false);
+        deps.media.setProcessorTape.mockReturnValue(false);
+        deps.media.loadDiscImage.mockResolvedValue({ name: "late.ssd" });
+        deps.media.loadTapeImage.mockResolvedValue({ name: "late.uef" });
+        await loadDisc({ drive: 0, path: "/discs/late.ssd" });
+        await loadTape({ path: "/tapes/late.uef" });
+        expect(deps.media.setDiscImage).not.toHaveBeenCalled();
+        expect(deps.media.setTapeImage).not.toHaveBeenCalled();
+    });
+
     it("shows the modal the menu named, and runs the action it sent", () => {
         initialise(deps);
         api.onShowModal.mock.calls[0][0]({ modalId: "configuration" });

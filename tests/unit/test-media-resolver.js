@@ -45,14 +45,14 @@ describe("MediaResolver", () => {
         expect(load.mock.calls.map(([url]) => url)).toEqual(["discs/elite.ssd", "tapes/game.uef"]);
     });
 
-    it("fetches a URL as given, keeping only its path as the name", async () => {
+    it("fetches a URL as given, keeping only its file name as the name", async () => {
         const { resolver, load } = make({
             "https://example.com/dir/a.ssd?v=2": bytes("x"),
             "file:///tmp/b.ssd": bytes("y"),
         });
         const { name } = await resolver.resolve("disc", "https://example.com/dir/a.ssd?v=2");
-        expect(name).toBe("/dir/a.ssd");
-        expect((await resolver.resolve("disc", "file:///tmp/b.ssd")).name).toBe("/tmp/b.ssd");
+        expect(name).toBe("a.ssd");
+        expect((await resolver.resolve("disc", "file:///tmp/b.ssd")).name).toBe("b.ssd");
         expect(load).toHaveBeenLastCalledWith("file:///tmp/b.ssd");
     });
 
