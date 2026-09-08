@@ -226,7 +226,7 @@ export class Keyboard extends EventTarget {
         // underlying key leaking through to the emulated machine.
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
-            handler.handler(true, code);
+            handler.handler(true, code, evt.shiftKey);
             return;
         }
 

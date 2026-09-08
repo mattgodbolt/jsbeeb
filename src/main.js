@@ -185,6 +185,7 @@ const { keyboard } = new KeyboardSetup({
         toggleFast: () => loop.toggleFastAsPossible(),
         openRewind: () => rewindUI.open(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
+        openMedia: (target) => mediaWindow.openFor(target),
         pause: () => loop.stop(false),
         resume: () => loop.go(),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),

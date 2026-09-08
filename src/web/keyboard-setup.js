@@ -16,7 +16,7 @@ export class KeyboardSetup {
     /**
      * @param {object} opts
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
-     *   enterDebugger, reload, toggleFast, openRewind, openPrinter,
+     *   enterDebugger, reload, toggleFast, openRewind, openPrinter, openMedia,
      *   pause, resume, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
      */
@@ -54,6 +54,19 @@ export class KeyboardSetup {
         );
         keyboard.registerKeyHandler(keyCodes.PAGEDOWN, onDown("pagedown", actions.openRewind), alt);
         keyboard.registerKeyHandler(keyCodes.B, onDown(null, actions.openPrinter), ctrl);
+        // Alt+M aims the media window at drive 0, Alt+Shift+M at drive 1, Alt+C at the cassette.
+        keyboard.registerKeyHandler(
+            keyCodes.M,
+            (down, _code, shift) => {
+                if (down) actions.openMedia(shift ? 1 : 0);
+            },
+            alt,
+        );
+        keyboard.registerKeyHandler(
+            keyCodes.C,
+            onDown(null, () => actions.openMedia("tape")),
+            alt,
+        );
 
         // Alt+1-8 and Alt+F1-F8 trigger the accessibility switches. Using Alt means
         // the underlying key is never forwarded to the BBC Micro (keyboard.js bails

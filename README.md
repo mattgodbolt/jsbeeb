@@ -112,6 +112,9 @@ The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/keymap
 | `Ctrl+End`     | Pause emulation                 |
 | `Ctrl+B`       | Open printer output window      |
 | `Alt+PageDown` | Open rewind scrubber            |
+| `Alt+M`        | Media window, aimed at drive 0  |
+| `Alt+Shift+M`  | Media window, aimed at drive 1  |
+| `Alt+C`        | Media window, aimed at the deck |
 
 ### Printer Output
 
