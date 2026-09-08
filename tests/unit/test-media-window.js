@@ -1171,6 +1171,22 @@ describe("MediaWindow", () => {
             expect(document.getElementById("deck-window").classList.contains("target")).toBe(true);
             expect(document.getElementById("media-search").placeholder).toBe("Search for a tape for the deck");
         });
+
+        it("offers no discs, whatever the sources list", async () => {
+            const row = (kind, title) => ({
+                ref: `sth:${title}.zip`,
+                kind,
+                title,
+                publisher: "",
+                detail: "",
+                source: "sth",
+            });
+            await openWith([row("disc", "Elite"), row("tape", "Chuckie")]);
+            const titles = [...document.querySelectorAll("#media-list .media-row .title")].map((t) => t.textContent);
+            expect(titles).toEqual(["Chuckie"]);
+            const chips = [...document.querySelectorAll("#media-chips .media-chip")].map((c) => c.textContent);
+            expect(chips).not.toContain("Discs");
+        });
     });
 
     describe("what a slot is called", () => {

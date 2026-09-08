@@ -26,7 +26,8 @@ export class GoogleDriveSource {
             return await call();
         } catch (error) {
             if (isUnauthorised(error)) this.googleDrive.authorized = false;
-            throw error;
+            // gapi rejects with a response object; its message is a level down.
+            throw error instanceof Error ? error : new Error(error?.result?.error?.message ?? errorText(error));
         }
     }
 

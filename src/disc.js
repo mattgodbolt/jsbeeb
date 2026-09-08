@@ -1222,6 +1222,8 @@ export class Disc {
                 trackObj.pulses2Us.set(trackData.pulses2Us);
                 trackObj.length = trackData.length;
                 this._everDirtyTracks.add(trackNum | (isSideUpper ? 0x100 : 0));
+                // A disc that keeps its changes at its source takes the overlay there too.
+                for (const listener of this._trackWriteListeners) listener(isSideUpper, trackNum, trackObj);
             }
         }
     }

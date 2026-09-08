@@ -27,13 +27,18 @@ describe("GoogleDriveSource", () => {
 
     it("forgets the connection when Google says the token has lapsed", async () => {
         let lister;
-        const lapsed = { authorized: true, listFiles: vi.fn().mockRejectedValue({ status: 401 }) };
+        const lapsed = {
+            authorized: true,
+            listFiles: vi
+                .fn()
+                .mockRejectedValue({ status: 401, result: { error: { message: "Invalid Credentials" } } }),
+        };
         const source = new GoogleDriveSource({
             media: { addSource: vi.fn(), addLister: vi.fn((name, fn) => (lister = fn)) },
             loader: lapsed,
         });
         expect(source.connected).toBe(true);
-        await expect(lister()).rejects.toEqual({ status: 401 });
+        await expect(lister()).rejects.toThrow("Invalid Credentials");
         expect(source.connected).toBe(false);
     });
 

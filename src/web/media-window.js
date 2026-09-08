@@ -148,6 +148,11 @@ export class MediaWindow {
         return this.model.isAtom ? "tape" : 0;
     }
 
+    /** What the machine can take: a machine without drives is offered no discs. */
+    get kindsOffered() {
+        return this.processor.fdc ? ["disc", "tape"] : ["tape"];
+    }
+
     get isOpen() {
         return this.floating.isOpen;
     }
@@ -517,7 +522,7 @@ export class MediaWindow {
                     }),
                 ),
             gap,
-            ...["disc", "tape"].map((kind) =>
+            ...this.kindsOffered.map((kind) =>
                 chip(kind === "disc" ? "Discs" : "Tapes", `Show ${kind}s`, list.kinds[kind], () => {
                     list.kinds[kind] = !list.kinds[kind];
                     this.renderChips();
@@ -530,6 +535,7 @@ export class MediaWindow {
     renderList() {
         const { list } = this;
         const shown = list.descriptors
+            .filter((d) => this.kindsOffered.includes(d.kind))
             .filter((d) => list.kinds[d.kind] && (list.source === "all" || d.source === list.source))
             .filter((d) => matchesQuery(d, list.query))
             .sort(compareForQuery(list.query));
@@ -781,7 +787,7 @@ export class MediaWindow {
         if (copyFrom !== null && !copied) return;
         const bay = this.bays[driveIndex];
         const claim = this.drives.claim(driveIndex);
-        bay.busy = { title: name, source: "gdrive" };
+        const making = (bay.busy = { title: name, source: "gdrive" });
         bay.failed = null;
         this.renderDrive(driveIndex);
         try {
@@ -790,13 +796,13 @@ export class MediaWindow {
                 copyFrom === null
                     ? await this.driveSource.createBlank(name, layout)
                     : await this.driveSource.createFrom(name, copied, layout);
-            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, bay.busy);
+            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, making);
             bay.busy = null;
             this.drives.putDiscIn(driveIndex, disc, claim);
             this.media.setDiscImage(driveIndex, ref);
             this.close();
         } catch (error) {
-            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, bay.busy);
+            if (!this.drives.holds(driveIndex, claim)) return this.overtaken(bay, making);
             bay.busy = null;
             console.error(`Could not save ${name} to Google Drive:`, error);
             toast(`Could not save ${name} to Google Drive: ${errorText(error)}`, { title: "Google Drive" });
