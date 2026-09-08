@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MediaWindow, sourceOf } from "../../src/web/media-window.js";
+import { MediaWindow, shortName, sourceOf } from "../../src/web/media-window.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
+import { toHfe } from "../../src/disc-hfe.js";
 import { domFromIndexHtml, fakeUrlState, ssdImage, teardownDom } from "./helpers.js";
 
 /** An SSD whose catalogue carries a title and cycle number. */
@@ -65,6 +66,10 @@ describe("MediaWindow", () => {
                 media.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
             }),
             openFile: vi.fn(),
+            setAutoboot: vi.fn((on) => {
+                if (on) media.params.autoboot = "";
+                else delete media.params.autoboot;
+            }),
             ejectDisc: vi.fn((driveIndex) => drives.eject(driveIndex)),
             ejectTape: vi.fn(() => {
                 tapeInterface.tape = undefined;
@@ -76,11 +81,10 @@ describe("MediaWindow", () => {
             drives,
             processor: { fdc, tapeInterface, atomppia: tapeInterface, reset: vi.fn() },
             model: { isAtom: false },
-            modals: { show: vi.fn() },
             loop,
             visualiser: { openOn: vi.fn() },
             autoboot: vi.fn(),
-            googleDrive: { connect: vi.fn().mockResolvedValue(true), connected: false },
+            googleDrive: { connect: vi.fn().mockResolvedValue(true), connected: false, createBlank: vi.fn() },
         };
     });
 
@@ -101,8 +105,9 @@ describe("MediaWindow", () => {
         it("opens from the menu items and the LED panel readouts, and closes from its button", () => {
             const window = make();
             expect(panel().hidden).toBe(true);
-            document.querySelector("#navbarDiscs + .dropdown-menu .media-window-open").click();
+            document.getElementById("navbarMedia").click();
             expect(window.isOpen).toBe(true);
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
             document.getElementById("media-close").click();
             expect(window.isOpen).toBe(false);
             document.querySelector('#leds .slot-readout[data-slot="tape"]').click();
@@ -142,7 +147,7 @@ describe("MediaWindow", () => {
             expect(bay(1).querySelector(".bay-kept").classList.contains("warn")).toBe(true);
             expect(bay(1).querySelector(".bay-eject").disabled).toBe(false);
             expect(bay(1).querySelector('input[value="80"]').checked).toBe(true);
-            expect(readout("1")).toBe("ELITE.ssd");
+            expect(readout("1")).toBe("ELITE");
             expect(text(document.getElementById("media-summary"))).toBe("0: empty · 1: ELITE.ssd · tape: empty");
         });
 
@@ -234,7 +239,7 @@ describe("MediaWindow", () => {
             expect(text(document.getElementById("deck-tape-title"))).toBe("chuckie.uef");
             expect(text(document.getElementById("deck-status"))).toBe("chuckie.uef · STH archive · stopped");
             expect(text(document.getElementById("tape-counter"))).toBe("499");
-            expect(readout("tape")).toBe("chuckie.uef499");
+            expect(readout("tape")).toBe("chuckie499");
             expect(text(document.querySelector('#leds [data-slot="tape"] .counter'))).toBe("499");
         });
 
@@ -310,6 +315,14 @@ describe("MediaWindow", () => {
             expect(panel().classList.contains("deck-collapsed")).toBe(false);
         });
 
+        it("cannot be folded while a tape is in it", () => {
+            make();
+            putTapeIn(tape());
+            expect(document.getElementById("deck-hide").hidden).toBe(true);
+            deps.media.ejectTape();
+            expect(document.getElementById("deck-hide").hidden).toBe(false);
+        });
+
         it("starts unfolded on an Atom", () => {
             deps.model.isAtom = true;
             make();
@@ -333,30 +346,40 @@ describe("MediaWindow", () => {
             expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("b.ssd");
         });
 
-        it("opens with the list for an empty slot, and folded for a full one", () => {
+        it("opens with the list whichever way it is opened, and the list folds and unfolds on request", () => {
             deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
             const window = make();
             document.querySelector('#leds .slot-readout[data-slot="0"]').click();
             expect(window.isOpen).toBe(true);
-            expect(panel().classList.contains("list-collapsed")).toBe(true);
-            document.getElementById("list-toggle").click();
             expect(panel().classList.contains("list-collapsed")).toBe(false);
             expect(document.activeElement).toBe(document.getElementById("media-search"));
             document.getElementById("list-hide").click();
             expect(panel().classList.contains("list-collapsed")).toBe(true);
+            document.getElementById("list-toggle").click();
+            expect(panel().classList.contains("list-collapsed")).toBe(false);
             window.close();
             document.querySelector('#leds .slot-readout[data-slot="1"]').click();
-            expect(panel().classList.contains("list-collapsed")).toBe(false);
+            expect(bay(1).classList.contains("target")).toBe(true);
             expect(bay(1).classList.contains("folded")).toBe(false);
-            window.close();
-            document.querySelector("#navbarDiscs + .dropdown-menu .media-window-open").click();
-            expect(panel().classList.contains("list-collapsed")).toBe(false);
+        });
+
+        it("lets drive 1 fold away again once it is empty, but not while it holds a disc", () => {
+            make();
+            bay(1).querySelector(".bay-bar").click();
+            expect(bay(1).querySelector(".bay-hide").hidden).toBe(false);
+            bay(1).querySelector(".bay-hide").click();
+            expect(bay(1).classList.contains("folded")).toBe(true);
+            deps.drives.putDiscIn(1, discFor("b.ssd", ssdImage()));
+            expect(bay(1).classList.contains("folded")).toBe(false);
+            expect(bay(1).querySelector(".bay-hide").hidden).toBe(true);
+            expect(bay(0).querySelector(".bay-hide").hidden).toBe(true);
         });
 
         it("lets the latch of an empty drive aim the list at it, unfolding the list", () => {
             deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
             make();
             document.querySelector('#leds .slot-readout[data-slot="0"]').click();
+            document.getElementById("list-hide").click();
             expect(panel().classList.contains("list-collapsed")).toBe(true);
             bay(0).querySelector(".bay-eject").click();
             expect(deps.media.ejectDisc).toHaveBeenCalledWith(0);
@@ -584,6 +607,98 @@ describe("MediaWindow", () => {
             document.getElementById("media-connect-drive").click();
             await vi.waitFor(() => expect(deps.googleDrive.connect).toHaveBeenCalled());
             expect(deps.media.listAll.mock.calls.length).toBeGreaterThanOrEqual(2);
+        });
+    });
+
+    describe("the footer", () => {
+        const openIt = async () => {
+            const window = make();
+            window.open();
+            await vi.waitFor(() => expect(deps.media.listAll).toHaveBeenCalled());
+            return window;
+        };
+
+        it("ticks and clears autoboot in the URL, and shows what was set elsewhere", async () => {
+            await openIt();
+            const tick = document.querySelector("#media-panel .autoboot");
+            expect(tick.checked).toBe(false);
+            tick.checked = true;
+            tick.dispatchEvent(new Event("change"));
+            expect(deps.media.setAutoboot).toHaveBeenCalledWith(true);
+            tick.checked = false;
+            tick.dispatchEvent(new Event("change"));
+            expect(deps.media.setAutoboot).toHaveBeenCalledWith(false);
+        });
+
+        it("makes a blank disc in this browser under the typed name, in the aimed drive", async () => {
+            deps.media.loadDiscImage.mockResolvedValue(discFor("mine.ssd", ssdImage()));
+            await openIt();
+            document.querySelector('#media-into [data-target="1"]').click();
+            document.getElementById("media-new-disc").click();
+            expect(document.getElementById("media-new-disc-form").hidden).toBe(false);
+            expect(document.getElementById("media-new-disc-drive-option").hidden).toBe(true);
+            document.getElementById("media-new-disc-name").value = "mine";
+            document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
+            await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith("local:mine.ssd", "auto"));
+            await vi.waitFor(() => expect(fdc.drives[1].disc).toBeTruthy());
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "local:mine.ssd");
+            expect(document.getElementById("media-new-disc-form").hidden).toBe(true);
+        });
+
+        it("makes a blank disc on Google Drive once connected", async () => {
+            deps.googleDrive.connected = true;
+            const created = discFor("fresh.ssd", ssdImage());
+            deps.googleDrive.createBlank.mockResolvedValue({ ref: "gd:xyz/fresh.ssd", disc: created });
+            await openIt();
+            expect(document.getElementById("media-connect-drive").hidden).toBe(true);
+            document.getElementById("media-new-disc").click();
+            document.getElementById("media-new-disc-name").value = "fresh.ssd";
+            document.querySelector('#media-new-disc-where input[value="gdrive"]').checked = true;
+            document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
+            await vi.waitFor(() => expect(fdc.drives[0].disc).toBe(created));
+            expect(deps.googleDrive.createBlank).toHaveBeenCalledWith("fresh.ssd", "auto");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "gd:xyz/fresh.ssd");
+            expect(panel().hidden).toBe(true);
+        });
+
+        it("cancels the new disc form back to the search box", async () => {
+            await openIt();
+            document.getElementById("media-new-disc").click();
+            document.getElementById("media-new-disc-cancel").click();
+            expect(document.getElementById("media-new-disc-form").hidden).toBe(true);
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
+        });
+    });
+
+    describe("what fits on a line of the LED panel", () => {
+        it("drops the folder and extension, and cuts a long name in the middle", () => {
+            expect(shortName("Superior/Exile.ssd")).toBe("Exile");
+            expect(shortName("ChuckieEgg_B.uef")).toBe("ChuckieEgg_B");
+            expect(shortName("Elite-MasterAndTubeEnhanced.ssd")).toBe("Elite-Mas…nced");
+            expect(shortName("3A1DAB83.hfe")).toBe("3A1DAB83");
+        });
+
+        it("shows the list's title for a disc the machine knows only by its file name", async () => {
+            deps.media.listAll.mockResolvedValue({
+                descriptors: [
+                    {
+                        ref: "hfe:3A1DAB83.hfe",
+                        kind: "disc",
+                        title: "Calligraphy",
+                        publisher: "",
+                        detail: "",
+                        source: "hfe",
+                    },
+                ],
+                failures: [],
+            });
+            const window = make();
+            deps.media.params.disc1 = "hfe:3A1DAB83.hfe";
+            deps.drives.putDiscIn(0, discFor("3A1DAB83.hfe", toHfe(discFor("x.ssd", ssdImage()))));
+            expect(text(bay(0).querySelector(".bay-title"))).toBe("3A1DAB83.hfe");
+            window.open();
+            await vi.waitFor(() => expect(text(bay(0).querySelector(".bay-title"))).toBe("Calligraphy"));
+            expect(readout("0")).toBe("Calligraphy");
         });
     });
 

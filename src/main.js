@@ -11,10 +11,9 @@ import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
-import { AutobootTicks } from "./web/archive-list.js";
-import { SthPicker } from "./web/sth-picker.js";
-import { HfePicker } from "./web/hfe-picker.js";
-import { GoogleDrivePicker } from "./web/google-drive-picker.js";
+import { SthSource } from "./web/sth-source.js";
+import { HfeSource } from "./web/hfe-source.js";
+import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
@@ -232,24 +231,9 @@ const autoBoot = new Autoboot({
     processor,
     sendKeys: (keysToSend, check) => keyboard.sendRawKeyboard(keysToSend, check),
 });
-const autobootTicks = new AutobootTicks({ urlState });
-const sthPicker = new SthPicker({
-    media,
-    drives,
-    modals,
-    urlState,
-    processor,
-    autoboot: (image) => autoBoot.boot(image),
-});
-new HfePicker({
-    media,
-    drives,
-    modals,
-    urlState,
-    processor,
-    autoboot: (image) => autoBoot.boot(image),
-});
-const googleDrivePicker = new GoogleDrivePicker({ media, drives, modals, processor });
+new SthSource({ media });
+new HfeSource({ media });
+const googleDriveSource = new GoogleDriveSource({ media });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -289,16 +273,15 @@ const rewindUI = new RewindUI({ processor, video, loop });
 rewindUI.updateButtonState();
 
 const discVisualiser = new DiscVisualiser({ fdc: processor.fdc });
-new MediaWindow({
+const mediaWindow = new MediaWindow({
     media,
     drives,
     processor,
     model,
-    modals,
     loop,
     visualiser: discVisualiser,
     autoboot: (image) => autoBoot.boot(image),
-    googleDrive: googleDrivePicker,
+    googleDrive: googleDriveSource,
 });
 
 const layout = new Layout({
@@ -362,7 +345,7 @@ const startPromise = machine.start({
 
         switch (needsAutoboot) {
             case "boot":
-                autobootTicks.show(true);
+                mediaWindow.showAutoboot(true);
                 autoBoot.boot(discImage);
                 break;
             case "type":
@@ -375,7 +358,7 @@ const startPromise = machine.start({
                 autoBoot.runTape();
                 break;
             default:
-                autobootTicks.show(false);
+                mediaWindow.showAutoboot(false);
                 break;
         }
 
@@ -404,20 +387,13 @@ electron({
     settings,
     media,
     drives,
-    modals: {
-        show: (modalId, sthType) => {
-            if (modalId === "sth" && sthType) {
-                if (sthType === "discs") sthPicker.discs.populate();
-                else if (sthType === "tapes") sthPicker.tapes.populate();
-            }
-            modals.show(modalId);
-        },
-    },
+    modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     actions: {
         "soft-reset": () => page.softReset(),
         "hard-reset": () => page.hardReset(),
         "save-state": () => snapshots.saveState(),
+        media: () => mediaWindow.open(),
         rewind: () => rewindUI.open(),
         pause: () => runControls.pause(),
         resume: () => runControls.resume(),

@@ -29,6 +29,8 @@ describe("the Electron hooks", () => {
                 addEventListener: vi.fn(),
             },
             drives: { layoutForDrive: (driveIndex) => `layout${driveIndex}`, putDiscIn: vi.fn() },
+            modals: { show: vi.fn() },
+            actions: { media: vi.fn() },
         };
     });
 
@@ -45,6 +47,14 @@ describe("the Electron hooks", () => {
         initialise(deps);
         return api.onLoadTape.mock.calls[0][0](message);
     };
+
+    it("shows the modal the menu named, and runs the action it sent", () => {
+        initialise(deps);
+        api.onShowModal.mock.calls[0][0]({ modalId: "configuration" });
+        expect(deps.modals.show).toHaveBeenCalledWith("configuration");
+        api.onAction.mock.calls[0][0]({ actionId: "media" });
+        expect(deps.actions.media).toHaveBeenCalled();
+    });
 
     it("does nothing outside Electron", () => {
         delete window.electronAPI;

@@ -61,25 +61,10 @@ export function matches(file, filter, shown) {
 
 export class BbcDiscArchive {
     /** @param {string} [baseUrl] where the mirror lives, to point at a test prefix */
-    constructor(onStart, onCat, onError, baseUrl = mirrorBase) {
+    constructor(baseUrl = mirrorBase) {
         this._baseUrl = `${baseUrl}/hfe/`;
         this._catalogue = [];
         this._loaded = false;
-        this._onStart = onStart;
-        this._onCat = onCat;
-        this._onError = onError;
-    }
-
-    async populate() {
-        this._onStart();
-        try {
-            await this.catalogue();
-        } catch (error) {
-            console.error("Failed to fetch HFE archive catalogue:", error);
-            if (this._onError) this._onError();
-            return;
-        }
-        if (this._onCat) this._onCat(this._catalogue);
     }
 
     /** @returns {Promise<object[]>} every manifest entry, sorted by title, fetched the first time it is asked for */

@@ -22,7 +22,7 @@ describe("MediaLoader", () => {
     let sources;
 
     beforeEach(() => {
-        domFromIndexHtml("discs", "econetfs", "tapes", "paste-text");
+        domFromIndexHtml("econetfs", "paste-text");
         deps = {
             processor: {
                 fdc: null,
@@ -125,58 +125,6 @@ describe("MediaLoader", () => {
         });
     });
 
-    describe("the built-in list", () => {
-        it("offers every built-in image by name", () => {
-            make();
-            const names = [...document.querySelectorAll("#disc-list li:not(.template) .name")].map(
-                (el) => el.textContent,
-            );
-            expect(names).toEqual(BuiltInImages.map((image) => image.name));
-        });
-
-        it("puts the clicked image in drive 0, then names it in the URL", async () => {
-            const media = make();
-            const loaded = {};
-            vi.spyOn(media, "loadDiscImage").mockResolvedValue(loaded);
-            document.querySelector("#disc-list li:not(.template)").click();
-            await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded));
-            expect(media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.auto);
-            expect(deps.urlState.params).toEqual({ disc1: "elite.ssd" });
-            expect(deps.modals.hide).toHaveBeenCalledWith("discs");
-        });
-
-        it("leaves the URL alone when the image will not load", async () => {
-            const media = make();
-            vi.spyOn(console, "error").mockImplementation(() => {});
-            vi.spyOn(media, "loadDiscImage").mockRejectedValue(new Error("offline"));
-            document.querySelector("#disc-list li:not(.template)").click();
-            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load Elite")]));
-            expect(deps.urlState.params).toEqual({});
-        });
-    });
-
-    describe("the local disc input", () => {
-        it("puts the file in drive 0 and takes the disc out of the URL", async () => {
-            deps.urlState.params.disc1 = "elite.ssd";
-            make();
-            await pickFile("disc_load", fileFor("mine.ssd", ssdImage()));
-            await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalled());
-            const [driveIndex, loaded] = deps.drives.putDiscIn.mock.calls[0];
-            expect(driveIndex).toBe(0);
-            expect(loaded.name).toBe("mine.ssd");
-            expect(loaded.originalImageData).toBeTruthy();
-            expect(deps.urlState.params.disc1).toBeUndefined();
-            expect(deps.modals.hide).toHaveBeenCalledWith("discs");
-        });
-
-        it("reports a file the disc code cannot take", async () => {
-            make();
-            await pickFile("disc_load", fileFor("broken.hfe", new Uint8Array(3)));
-            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load broken.hfe")]));
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-        });
-    });
-
     describe("the filestore input", () => {
         it("loads the SCSI image and restarts the filestore", async () => {
             make();
@@ -191,32 +139,6 @@ describe("MediaLoader", () => {
             deps.processor.filestore = undefined;
             await make().loadSCSIFile(fileFor("scsi.dat", new Uint8Array([1, 2, 3])));
             expect(deps.modals.hide).not.toHaveBeenCalled();
-        });
-    });
-
-    describe("the local tape input", () => {
-        // "UEF File!" header, then one data chunk, the least loadTapeFromData accepts.
-        const uefImage = () =>
-            new Uint8Array([
-                0x55, 0x45, 0x46, 0x20, 0x46, 0x69, 0x6c, 0x65, 0x21, 0x00, 0x06, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
-                0x00, 0x41,
-            ]);
-
-        it("routes the file to the cassette interface and takes the tape out of the URL", async () => {
-            deps.urlState.params.tape = "old.uef";
-            make();
-            await pickFile("tape_load", fileFor("mine.uef", uefImage()));
-            await vi.waitFor(() => expect(deps.processor.tapeInterface.setTape).toHaveBeenCalled());
-            expect(deps.processor.tapeInterface.setTape.mock.calls[0][0]).toBeTruthy();
-            expect(deps.urlState.params.tape).toBeUndefined();
-            expect(deps.modals.hide).toHaveBeenCalledWith("tapes");
-        });
-
-        it("reports a file the tape code cannot take", async () => {
-            make();
-            await pickFile("tape_load", fileFor("noise.uef", new Uint8Array(12)));
-            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load noise.uef")]));
-            expect(deps.processor.tapeInterface.setTape).not.toHaveBeenCalled();
         });
     });
 

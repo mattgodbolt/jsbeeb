@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Modals } from "../../src/web/modals.js";
-import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("Modals", () => {
     let loop;
@@ -10,7 +10,7 @@ describe("Modals", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure", "info", "discs");
+        domFromIndexHtml("error-dialog", "are-you-sure", "info", "help");
         loop = { pause: vi.fn(() => vi.fn()) };
         modals = new Modals({ loop });
     });
@@ -45,12 +45,12 @@ describe("Modals", () => {
 
         it("takes one hold per modal and lets each go with its own", () => {
             raise("info");
-            raise("discs");
+            raise("help");
             expect(loop.pause).toHaveBeenCalledTimes(2);
             lower("info");
             expect(resumes()[0]).toHaveBeenCalledTimes(1);
             expect(resumes()[1]).not.toHaveBeenCalled();
-            lower("discs");
+            lower("help");
             expect(resumes()[1]).toHaveBeenCalledTimes(1);
         });
 
@@ -62,9 +62,9 @@ describe("Modals", () => {
 
         it("reports whether any modal is up", () => {
             expect(modals.anyVisible()).toBe(false);
-            raise("discs");
+            raise("help");
             expect(modals.anyVisible()).toBe(true);
-            lower("discs");
+            lower("help");
             expect(modals.anyVisible()).toBe(false);
         });
     });
@@ -75,25 +75,6 @@ describe("Modals", () => {
             const dialog = document.getElementById("error-dialog");
             expect(dialog.querySelector(".context").textContent).toBe("saving state");
             expect(dialog.querySelector(".error").textContent).toBe("disc full");
-        });
-    });
-
-    describe("loading dialog", () => {
-        it("shows the message", () => {
-            modals.popupLoading("Loading Elite");
-            expect(document.querySelector("#loading-dialog .loading").textContent).toBe("Loading Elite");
-        });
-
-        it("toasts a message on finishing when given one", () => {
-            modals.popupLoading("Loading Elite");
-            modals.loadingFinished("Unable to load Elite");
-            expect(toasts()).toEqual([expect.stringContaining("Unable to load Elite")]);
-        });
-
-        it("says nothing on finishing quietly", () => {
-            modals.popupLoading("Loading Elite");
-            modals.loadingFinished();
-            expect(toasts()).toEqual([]);
         });
     });
 

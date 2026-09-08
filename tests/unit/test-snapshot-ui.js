@@ -156,7 +156,7 @@ describe("SnapshotUI", () => {
         let modals;
 
         const makeWithModals = () => {
-            domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure");
+            domFromIndexHtml("error-dialog", "are-you-sure");
             vi.useFakeTimers();
             loop = {
                 holds: 0,

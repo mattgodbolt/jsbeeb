@@ -11,7 +11,7 @@ import { browserDiscNames, describeBrowserDisc, describeBuiltIn, describeSession
 
 const isTapeName = (name) => /\.uef$/i.test(name);
 
-/** The images offered on the Discs dialog's built-in list. */
+/** The example discs that ship with jsbeeb. */
 export const BuiltInImages = [
     {
         name: "Elite",
@@ -46,8 +46,8 @@ function readFileAsBinaryString(file) {
 
 /**
  * Getting discs and tapes into the machine: resolving any image reference the
- * URL schema can name, the local file inputs, the drop zone and the built-in
- * list. Choosing what goes in a drive funnels through drives.putDiscIn.
+ * URL schema can name, files from this computer, and what every source has to
+ * offer. Choosing what goes in a drive funnels through drives.putDiscIn.
  */
 export class MediaLoader extends EventTarget {
     /**
@@ -78,18 +78,6 @@ export class MediaLoader extends EventTarget {
             [...this.sessionFiles].map(([name, file]) => describeSessionFile(name, file.kind)),
         );
 
-        document.getElementById("disc_load").addEventListener("change", async (evt) => {
-            if (evt.target.files.length === 0) return;
-            noteEvent("local", "click"); // NB no filename here
-            const file = evt.target.files[0];
-            try {
-                await this.loadHTMLFile(file);
-            } catch (error) {
-                reportLoadFailure(file.name, error);
-            }
-            evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
-        });
-
         document.getElementById("fs_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
             noteEvent("local", "click"); // NB no filename here
@@ -99,21 +87,6 @@ export class MediaLoader extends EventTarget {
             } catch (error) {
                 reportLoadFailure(file.name, error);
             }
-            evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
-        });
-
-        document.getElementById("tape_load").addEventListener("change", async (evt) => {
-            if (evt.target.files.length === 0) return;
-            const file = evt.target.files[0];
-            noteEvent("local", "clickTape"); // NB no filename here
-
-            try {
-                await this.loadTapeFile(file);
-                modals.hide("tapes");
-            } catch (error) {
-                reportLoadFailure(file.name, error);
-            }
-
             evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
         });
 
@@ -135,26 +108,6 @@ export class MediaLoader extends EventTarget {
         });
         this.isSnapshotFile = isSnapshotFile;
         this.loadSnapshot = loadSnapshot;
-
-        const discList = document.getElementById("disc-list");
-        const discTemplate = discList.querySelector(".template");
-        for (const image of BuiltInImages) {
-            const elem = discTemplate.cloneNode(true);
-            elem.classList.remove("template");
-            discList.appendChild(elem);
-            elem.querySelector(".name").textContent = image.name;
-            elem.querySelector(".description").textContent = image.desc;
-            elem.addEventListener("click", async () => {
-                noteEvent("images", "click", image.file);
-                modals.hide("discs");
-                try {
-                    drives.putDiscIn(0, await this.loadDiscImage(image.file, drives.layoutForDrive(0)));
-                    this.setDiscImage(0, image.file);
-                } catch (error) {
-                    reportLoadFailure(`${image.name} (${image.file})`, error);
-                }
-            });
-        }
     }
 
     get params() {
@@ -240,6 +193,10 @@ export class MediaLoader extends EventTarget {
         this.dispatchEvent(new CustomEvent("media-changed", { detail }));
     }
 
+    setAutoboot(on) {
+        this.urlState.set({ autoboot: on ? true : undefined });
+    }
+
     setTapeImage(name) {
         this.urlState.set({ tape: name });
         this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
@@ -256,7 +213,6 @@ export class MediaLoader extends EventTarget {
         this.sessionFiles.set(name, { data, kind: "disc" });
         this.drives.putDiscIn(driveIndex, loadedDisc);
         this.setDiscImage(driveIndex, undefined);
-        this.modals.hide("discs");
     }
 
     /** A tape image file from this computer, into the deck; likewise unnamed in the URL. */

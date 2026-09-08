@@ -1,5 +1,4 @@
 import * as bootstrap from "bootstrap";
-import { toast } from "./toast.js";
 
 /**
  * The dialogs the page raises itself, and the rule that a dialog pauses the
@@ -10,8 +9,6 @@ export class Modals {
     constructor({ loop }) {
         this.errorDialog = document.getElementById("error-dialog");
         this.errorModal = new bootstrap.Modal(this.errorDialog);
-        this.loadingDialog = document.getElementById("loading-dialog");
-        this.loadingModal = new bootstrap.Modal(this.loadingDialog);
         this.aysEl = document.getElementById("are-you-sure");
         this.aysModal = new bootstrap.Modal(this.aysEl);
 
@@ -43,16 +40,6 @@ export class Modals {
         this.errorDialog.querySelector(".context").textContent = context;
         this.errorDialog.querySelector(".error").textContent = error;
         this.errorModal.show();
-    }
-
-    popupLoading(msg) {
-        this.loadingDialog.querySelector(".loading").textContent = msg;
-        this.loadingModal.show();
-    }
-
-    loadingFinished(message) {
-        this.loadingModal.hide();
-        if (message) toast(message);
     }
 
     /** @returns {Promise<boolean>} true for the yes button; false for any other way out of the dialog */

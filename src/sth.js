@@ -25,24 +25,9 @@ function encodePath(path) {
 }
 
 export class StairwayToHell {
-    constructor(onStart, onCat, onError, tape) {
+    constructor(tape) {
         this._baseUrl = `${mirrorBase}/${tape ? "tape" : "disk"}images/`;
         this._catalog = [];
-        this._onStart = onStart;
-        this._onCat = onCat;
-        this._onError = onError;
-    }
-
-    async populate() {
-        this._onStart();
-        try {
-            await this.catalogue();
-        } catch (error) {
-            console.error("Failed to fetch catalog:", error);
-            if (this._onError) this._onError();
-            return;
-        }
-        if (this._onCat) this._onCat(this._catalog);
     }
 
     /** @returns {Promise<string[]>} every path in the archive, fetched the first time it is asked for */

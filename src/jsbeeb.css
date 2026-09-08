@@ -204,12 +204,19 @@ span.accesskey {
   font-family: var(--bs-font-monospace);
   font-size: 10px;
   white-space: nowrap;
-  max-width: 12em;
+  width: 11em;
 }
 
 #leds .slot-readout .name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
+}
+
+#leds .slot-readout .counter:empty {
+  display: none;
 }
 
 #leds .slot-readout .counter:not(:empty)::before {
@@ -233,84 +240,6 @@ span.accesskey {
   #leds .hdr {
     display: none;
   }
-}
-
-#sth-list {
-  height: 300px;
-  overflow: auto;
-}
-
-#hfe-list {
-  height: 380px;
-  overflow: auto;
-  list-style: none;
-  padding-left: 0;
-}
-
-#hfe-list li a {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) 7em;
-  gap: 0 1rem;
-  align-items: baseline;
-  padding: 3px 6px;
-  border-radius: 3px;
-  text-decoration: none;
-}
-
-#hfe-list li a:hover,
-#hfe-list li a:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-#hfe-list .name {
-  font-weight: 600;
-}
-
-#hfe-list .publisher,
-#hfe-list .detail {
-  opacity: 0.65;
-  font-size: 0.9em;
-}
-
-#hfe-list .detail {
-  font-family: monospace;
-}
-
-#hfe-list .provenance {
-  font-size: 0.8em;
-  opacity: 0.6;
-  font-style: italic;
-  text-align: right;
-}
-
-.hfe-provenance label {
-  margin-left: 1.5rem;
-  opacity: 0.8;
-}
-
-.hfe-provenance input {
-  margin-right: 0.3em;
-}
-
-.hfe-credit {
-  font-size: 0.9em;
-  opacity: 0.75;
-}
-
-@media (max-width: 40rem) {
-  #hfe-list li a {
-    grid-template-columns: minmax(0, 1fr);
-    padding-bottom: 6px;
-  }
-
-  /* Stacked into one column, so there is no column end to sit against. */
-  #hfe-list .provenance {
-    text-align: left;
-  }
-}
-
-div.filter {
-  margin-top: 8px;
 }
 
 /* One LED, coloured by what it reports; change a kind's colour here. */
@@ -1827,12 +1756,12 @@ div.smoothie-chart-tooltip {
 }
 
 #media-panel.deck-collapsed .media-rack {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 30px;
 }
 
 #media-panel.deck-collapsed .media-deck {
   display: block;
-  padding: 5px 10px;
+  padding: 0;
 }
 
 #media-panel.deck-collapsed .media-deck > :not(.deck-bar) {
@@ -1841,6 +1770,15 @@ div.smoothie-chart-tooltip {
 
 #media-panel.deck-collapsed .deck-bar {
   display: flex;
+  height: 100%;
+  min-height: 120px;
+  writing-mode: vertical-rl;
+  padding: 10px 0;
+  justify-content: flex-start;
+}
+
+#media-panel.deck-collapsed .deck-bar .fold-bar-name {
+  flex: 0 1 auto;
 }
 
 .bay.folded {
@@ -2213,4 +2151,57 @@ div.smoothie-chart-tooltip {
     grid-column: 3;
     grid-row: 1 / span 3;
   }
+}
+
+/* ----- the window as a column, so only the list scrolls and it fits the viewport ----- */
+
+#media-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.media-list {
+  flex: 1 1 320px;
+  min-height: 120px;
+  height: auto;
+}
+
+/* ----- naming a new disc ----- */
+
+.media-new-disc {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 0 0;
+  border-top: 1px solid #3a3f44;
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+
+.media-new-disc > label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  flex: 1 1 180px;
+}
+
+.media-new-disc-where {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 0 0 6px;
+  border: 0;
+  min-width: 0;
+}
+
+.media-new-disc-where label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.media-new-disc .btn {
+  margin: 0;
 }

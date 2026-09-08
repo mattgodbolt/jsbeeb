@@ -68,75 +68,17 @@
                 ><span class="nav-word bbc-model-short">BBC B</span></a
               >
             </li>
-            <li class="nav-item dropdown embed-hide">
+            <li class="nav-item embed-hide">
               <a
                 href="#"
-                class="nav-link dropdown-toggle"
-                id="navbarDiscs"
+                class="nav-link media-window-open"
+                id="navbarMedia"
                 role="button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-                aria-label="Discs"
-                title="Discs"
-                ><span class="nav-icon d-xl-none me-1" data-icon="floppy" aria-hidden="true"></span
-                ><span class="nav-word">Discs</span></a
+                aria-label="Media"
+                title="Discs and tapes: what is loaded, and everything you can load"
+                ><span class="nav-icon me-1" data-icon="floppy" aria-hidden="true"></span
+                ><span class="nav-word">Media</span></a
               >
-              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
-                <li>
-                  <a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal" data-bs-target="#sth"
-                    >From STH archive</a
-                  >
-                </li>
-                <li>
-                  <a href="#hfe" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#hfe">From HFE archive</a>
-                </li>
-                <li>
-                  <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
-                    From examples or local</a
-                  >
-                </li>
-                <li>
-                  <a href="#google-drive" class="dropdown-item" id="open-drive-link">From Google Drive</a>
-                </li>
-                <hr />
-                <div id="fsmenuitem">
-                  <li>
-                    <a href="#econetfs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#econetfs">
-                      Econet File Server</a
-                    >
-                  </li>
-                  <hr />
-                </div>
-                <li><a href="#" class="dropdown-item media-window-open">Drives and cassette…</a></li>
-                <li><a href="#" id="disc-visualiser-open" class="dropdown-item">View disc surface</a></li>
-              </ul>
-            </li>
-            <li class="nav-item dropdown embed-hide">
-              <a
-                href="#"
-                class="nav-link dropdown-toggle"
-                id="navbarCassettes"
-                role="button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-                aria-label="Cassettes"
-                title="Cassettes"
-                ><span class="nav-icon d-xl-none me-1" data-icon="cassette" aria-hidden="true"></span
-                ><span class="nav-word d-none d-xl-inline">Cassettes</span></a
-              >
-              <ul class="dropdown-menu dropdown-menu-dark" id="tape-menu" aria-labelledby="navbarCassettes">
-                <li>
-                  <a href="#sth" class="dropdown-item sth" data-bs-toggle="modal" data-id="tapes" data-bs-target="#sth"
-                    >From STH archive</a
-                  >
-                </li>
-                <li>
-                  <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">
-                    From local file
-                  </a>
-                </li>
-                <li><a href="#" class="dropdown-item media-window-open">Cassette deck…</a></li>
-              </ul>
             </li>
             <li class="nav-item dropdown embed-hide">
               <a
@@ -219,6 +161,13 @@
                 <li>
                   <a href="#about" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#info" id="about">
                     About jsbeeb</a
+                  >
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a href="#" id="disc-visualiser-open" class="dropdown-item">View disc surface</a></li>
+                <li id="fsmenuitem">
+                  <a href="#econetfs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#econetfs">
+                    Econet File Server</a
                   >
                 </li>
               </ul>
@@ -579,12 +528,42 @@
           <button
             type="button"
             class="btn btn-sm btn-outline-light"
+            id="media-new-disc"
+            title="Make an empty, formatted disc that keeps its changes"
+          >
+            New blank disc…
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-light"
             id="media-connect-drive"
             title="Sign in so your Google Drive images appear in the list"
           >
             Connect Google Drive
           </button>
         </div>
+        <form class="media-new-disc" id="media-new-disc-form" hidden>
+          <label>
+            <span id="media-new-disc-label">Name</span>
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              id="media-new-disc-name"
+              placeholder="mydisc.ssd"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <fieldset class="media-new-disc-where" id="media-new-disc-where">
+            <legend class="visually-hidden">Where</legend>
+            <label><input type="radio" name="media-new-disc-where" value="browser" checked /> in this browser</label>
+            <label id="media-new-disc-drive-option"
+              ><input type="radio" name="media-new-disc-where" value="gdrive" /> on Google Drive</label
+            >
+          </fieldset>
+          <button type="submit" class="btn btn-sm btn-primary" id="media-new-disc-create">Create</button>
+          <button type="button" class="btn btn-sm btn-outline-light" id="media-new-disc-cancel">Cancel</button>
+        </form>
       </div>
       <template id="drive-bay-template">
         <section class="bay" data-state="empty">
@@ -628,6 +607,7 @@
             <span class="status fail bay-fail"></span>
             <button type="button" class="txt-btn primary bay-retry" hidden>Retry</button>
             <span class="spacer"></span>
+            <button type="button" class="txt-btn bay-hide" hidden>Hide</button>
             <div class="dropdown">
               <button type="button" class="txt-btn bay-save dropdown-toggle" data-bs-toggle="dropdown">Save</button>
               <ul class="dropdown-menu dropdown-menu-dark">
@@ -927,37 +907,6 @@
       </div>
     </div>
 
-    <div class="modal fade" id="discs" tabindex="-1" aria-labelledby="discModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="discModalLabel">Load disc image</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <ul id="disc-list">
-              <li class="template">
-                <a href="#"><span class="name"></span></a> - <span class="description"></span>
-              </li>
-            </ul>
-            To load a custom disc image, get an SSD, DSD, HFE, ADF, ADM or ADL file and load it below. Search the web,
-            or check somewhere like
-            <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the images are
-            usually stored in a ZIP file, and you'll need to unzip first.
-            <div class="disc">
-              <label
-                >Load local SSD, DSD, HFE, ADF, ADM or ADL file:
-                <input type="file" id="disc_load" accept=".ssd,.dsd,.adf,.adm,.adl,.hfe,application/binary" />
-              </label>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="modal fade" id="econetfs" tabindex="-1" aria-labelledby="econetModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
@@ -982,171 +931,6 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="tapes" tabindex="-1" aria-labelledby="tapeModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="tapeModalLabel">Load cassette image</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            To load a custom cassette image, get a UEF file and load it below.
-            <div class="tape">
-              <label
-                >Load local UEF file:
-                <input type="file" id="tape_load" accept=".uef,.zip,application/binary" />
-              </label>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="google-drive" tabindex="-1" aria-labelledby="google-driveModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="google-driveModalLabel">
-              Load or create disc from your
-              <a href="https://drive.google.com/">Google Drive</a>
-              account
-            </h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="loading">Loading...</div>
-            <div>
-              <ul class="list">
-                <li class="template">
-                  <a href="#"><span class="name"></span></a>
-                </li>
-              </ul>
-              <div>
-                <form class="well" role="form" action="#">
-                  <input type="text" placeholder="Create disc..." autofocus class="disc-name" />
-                  <label class="checkbox-inline">
-                    <input type="checkbox" class="create-from-existing" value="" />
-                    Use current disc image
-                  </label>
-                  <button type="submit" class="btn btn-secondary create-button">Create</button>
-                </form>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- cannot make this one fade in else our attempts to close the modal while it's still opening fail -->
-    <div class="modal" id="loading-dialog" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-body">
-            <div class="modal-header">
-              <h5 class="modal-title loading" id="loadingModalLabel"></h5>
-              <button
-                type="button"
-                class="btn-close btn-close-white"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              ></button>
-            </div>
-          </div>
-          <div class="modal-body">
-            <div style="display: none" id="google-drive-auth">
-              Google Drive requires you to authorize jsbeeb to access your files by logging in.<br />
-              Please click Authorize to open a Google Drive pop-up to authenticate and give permission to jsbeeb.
-              <form class="well" role="form" action="#">
-                <button type="submit" class="btn btn-secondary">Authorize</button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="sth" tabindex="-1" aria-labelledby="sthModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="sthModalLabel">
-              Load from
-              <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
-              archive
-            </h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div style="margin-bottom: 1rem">
-              <div class="loading">Loading catalog from STH archive...</div>
-              <div class="filter">
-                <label>Filter <input type="text" autofocus id="sth-filter" /></label>
-              </div>
-            </div>
-            <ul id="sth-list">
-              <li class="template">
-                <a href="#"><span class="name"></span></a>
-              </li>
-            </ul>
-          </div>
-          <div class="modal-footer">
-            <label class="float-xs-left checkbox-inline">
-              <input type="checkbox" class="autoboot" value="" />Autoboot</label
-            >
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="hfe" tabindex="-1" aria-labelledby="hfeModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="hfeModalLabel">Load from HFE disc archive</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p class="hfe-credit">
-              Disc images preserved by <a href="https://github.com/scarybeasts/beebjit">scarybeasts</a> and
-              contributors. Several fingerprinted variants of a title may be listed; they differ in protection, track
-              layout or release. A disc may also appear more than once because two sources hold it: captured direct from
-              the disc, or rebuilt from a sector dump.
-            </p>
-            <div style="margin-bottom: 1rem">
-              <div class="loading">Loading catalogue from HFE archive...</div>
-              <div class="filter">
-                <label>Filter <input type="text" autofocus id="hfe-filter" /></label>
-                <span id="hfe-provenance" class="hfe-provenance"></span>
-              </div>
-            </div>
-            <ul id="hfe-list">
-              <li class="template">
-                <a href="#">
-                  <span class="name"></span>
-                  <span class="publisher"></span>
-                  <span class="detail"></span>
-                  <span class="provenance"></span>
-                </a>
-              </li>
-            </ul>
-          </div>
-          <div class="modal-footer">
-            <label class="float-xs-left checkbox-inline">
-              <input type="checkbox" class="autoboot" value="" />Autoboot</label
-            >
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>

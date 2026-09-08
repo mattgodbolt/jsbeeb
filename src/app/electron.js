@@ -28,10 +28,7 @@ function init(args) {
     });
 
     api.onShowModal((message) => {
-        const { modalId, sthType } = message;
-        if (modals && modals.show) {
-            modals.show(modalId, sthType);
-        }
+        if (modals && modals.show) modals.show(message.modalId);
     });
 
     api.onAction((message) => {

@@ -101,7 +101,7 @@ test("the media window shows the drives, keeps the keyboard while focused, and g
     await beeb.open("?disc=elite.ssd");
     await beeb.expectDrive0("elite.ssd");
     await beeb.expectScreenText(">");
-    await expect(page.locator('#leds .slot-readout[data-slot="0"] .name')).toHaveText("elite.ssd");
+    await expect(page.locator('#leds .slot-readout[data-slot="0"] .name')).toHaveText("elite");
     await page.click('#leds .slot-readout[data-slot="0"]');
     await expect(page.locator("#media-panel")).toBeVisible();
     await expect(page.locator("#media-summary")).toHaveText("0: elite.ssd · 1: empty · tape: empty");
@@ -119,14 +119,16 @@ test("the media window shows the drives, keeps the keyboard while focused, and g
 test("the media window's list puts a built-in disc into drive 1", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click('#leds .slot-readout[data-slot="1"]');
+    await page.click("#navbarMedia");
+    await expect(page.locator("#media-panel")).toBeVisible();
+    await page.click('#media-into [data-target="1"]');
     await expect(page.locator('.bay[data-drive="1"]')).toHaveClass(/target/);
     await page.fill("#media-search", "welcome");
     const row = page.locator("#media-list .media-row-main").first();
     await expect(row).toHaveAttribute("title", /Load Welcome.*into drive 1/);
     await row.click();
     await expect(page.locator('.bay[data-drive="1"]')).toHaveAttribute("data-state", "loaded");
-    await expect(page.locator('.bay[data-drive="1"] .bay-title')).toHaveText("Welcome.ssd");
+    await expect(page.locator('.bay[data-drive="1"] .bay-title')).toHaveText("Welcome");
     expect(await page.evaluate(() => window.processor.fdc.drives[1].disc?.name)).toBe("Welcome.ssd");
     await expect(page).toHaveURL(/disc2=Welcome\.ssd/);
 });
