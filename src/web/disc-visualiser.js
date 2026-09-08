@@ -1,4 +1,5 @@
 import { IbmDiscFormat } from "../disc.js";
+import { FloatingPanel } from "./floating-panel.js";
 import {
     DensityPalette,
     DensityRampHex,
@@ -93,7 +94,6 @@ export class DiscVisualiser {
         this.sideControls = document.getElementById("disc-side-controls");
         this.openBtn = document.getElementById("disc-visualiser-open");
 
-        this.isOpen = false;
         this._view = "density";
         this._driveIndex = 0;
         this._isSideUpper = false;
@@ -110,9 +110,7 @@ export class DiscVisualiser {
         this._scanCursor = 0;
         this._scanHandle = null;
         this._hover = null;
-        this._position = null;
         this._pan = null;
-        this._drag = null;
         this._surfaceStale = false;
         this._frameHandle = null;
 
@@ -124,14 +122,19 @@ export class DiscVisualiser {
             e.preventDefault();
             this.toggle();
         });
-        document.getElementById("disc-close").addEventListener("click", () => this.close());
+        this.floating = new FloatingPanel({
+            panel: this.panel,
+            header: this.panel.querySelector(".disc-header"),
+            closeButton: document.getElementById("disc-close"),
+        });
+        this.floating.addEventListener("open", () => this._start());
+        this.floating.addEventListener("close", () => this._stop());
         this._bindChoice("[data-drive]", (button) => this._select(Number(button.dataset.drive), this._isSideUpper));
         this._bindChoice("[data-side]", (button) => this._select(this._driveIndex, button.dataset.side === "1"));
         this._bindChoice("[data-view]", (button) => this._setView(button.dataset.view));
         this.overlayCanvas.addEventListener("mousemove", (e) => (this._hover = this._canvasPoint(e)));
         this.overlayCanvas.addEventListener("mouseleave", () => (this._hover = null));
         this._bindZoomAndPan();
-        this._bindDrag(this.panel.querySelector(".disc-header"));
         this._buildLegend();
     }
 
@@ -191,36 +194,6 @@ export class DiscVisualiser {
             this._surfaceStale = true;
     }
 
-    _bindDrag(header) {
-        header.addEventListener("pointerdown", (e) => {
-            if (e.button !== 0 || e.target.closest("button")) return;
-            const { left, top } = this.panel.getBoundingClientRect();
-            this._drag = { pointerId: e.pointerId, grabX: e.clientX - left, grabY: e.clientY - top };
-            header.setPointerCapture(e.pointerId);
-            e.preventDefault();
-        });
-        header.addEventListener("pointermove", (e) => {
-            if (this._drag?.pointerId !== e.pointerId) return;
-            this._moveTo(e.clientX - this._drag.grabX, e.clientY - this._drag.grabY);
-        });
-        for (const ending of ["pointerup", "pointercancel"])
-            header.addEventListener(ending, (e) => {
-                if (this._drag?.pointerId === e.pointerId) this._drag = null;
-            });
-    }
-
-    _moveTo(left, top) {
-        const { width, height } = this.panel.getBoundingClientRect();
-        this._position = {
-            left: Math.min(Math.max(left, 0), Math.max(0, window.innerWidth - width)),
-            top: Math.min(Math.max(top, 0), Math.max(0, window.innerHeight - height)),
-        };
-        this.panel.style.left = `${this._position.left}px`;
-        this.panel.style.top = `${this._position.top}px`;
-        // Dragging trades the panel's right-hand anchor for an explicit position.
-        this.panel.style.right = "auto";
-    }
-
     _bindChoice(selector, onClick) {
         for (const button of this.panel.querySelectorAll(selector))
             button.addEventListener("click", () => {
@@ -229,24 +202,29 @@ export class DiscVisualiser {
             });
     }
 
+    get isOpen() {
+        return this.floating.isOpen;
+    }
+
     toggle() {
-        if (this.isOpen) this.close();
-        else this.open();
+        this.floating.toggle();
     }
 
     open() {
-        if (this.isOpen) return;
-        this.isOpen = true;
-        this.panel.hidden = false;
+        this.floating.open();
+    }
+
+    close() {
+        this.floating.close();
+    }
+
+    _start() {
         window.addEventListener("resize", this._onResize);
         this._resize();
         this._tick();
     }
 
-    close() {
-        if (!this.isOpen) return;
-        this.isOpen = false;
-        this.panel.hidden = true;
+    _stop() {
         if (this._frameHandle !== null) cancelAnimationFrame(this._frameHandle);
         this._frameHandle = null;
         this._cancelScan();
@@ -316,7 +294,6 @@ export class DiscVisualiser {
     }
 
     _resize() {
-        if (this._position) this._moveTo(this._position.left, this._position.top);
         const size = Math.round(this.surfaceCanvas.clientWidth * (window.devicePixelRatio || 1));
         if (size <= 0 || size === this._geometry?.size) return;
         for (const canvas of [this.surfaceCanvas, this.overlayCanvas]) {
