@@ -221,6 +221,13 @@ describe("SnapshotUI", () => {
             expect(toasts()).toEqual([]);
         });
 
+        it("restores over a disc that keeps its changes at its source, however its bytes have moved on", async () => {
+            const loaded = { name: "mine.ssd", originalImageCrc32: 0x9999, savesChanges: true };
+            deps.media.loadDiscImage.mockResolvedValue(loaded);
+            await make().reloadSnapshotMedia({ disc1: "local:mine.ssd", disc1Crc32: 0x1234 });
+            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
+        });
+
         it("refuses to restore when the source has changed under the state", async () => {
             deps.media.loadDiscImage.mockResolvedValue({ name: "ELITE.ssd", originalImageCrc32: 0x9999 });
             await expect(make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 })).rejects.toThrow(

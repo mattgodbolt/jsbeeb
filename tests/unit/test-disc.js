@@ -13,6 +13,7 @@ import {
 } from "../../src/disc.js";
 import * as fs from "node:fs";
 import { ssdImage } from "./helpers.js";
+import { discFor } from "../../src/fdc.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -676,5 +677,23 @@ describe("sector decoding warnings", () => {
         track.findSectors();
 
         expect(console).toHaveBeenCalled();
+    });
+});
+
+describe("restoring a state's written tracks", () => {
+    it("tells the disc's write listeners, so a disc kept at its source takes them there", () => {
+        const disc = discFor("kept.ssd", ssdImage());
+        const written = [];
+        disc.addTrackWriteListener((isSideUpper, trackNum) => written.push([isSideUpper, trackNum]), true);
+        const track = disc.getTrack(false, 3);
+        disc.restoreState({
+            tracksUsed: disc.tracksUsed,
+            isDoubleSided: false,
+            isWriteable: true,
+            name: "kept.ssd",
+            tracks: {},
+            dirtyTracks: { "false:3": { pulses2Us: track.pulses2Us.slice(), length: track.length } },
+        });
+        expect(written).toEqual([[false, 3]]);
     });
 });

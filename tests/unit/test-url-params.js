@@ -344,6 +344,8 @@ describe("URL Parameters", () => {
                 secondDiscImage: undefined,
                 mmcImage: undefined,
             });
+            // disc1 is what the drives are named by; a bare disc gives way to it, as it does everywhere else.
+            expect(parseMediaParams({ disc: "old.ssd", disc1: "disc1.ssd" }).discImage).toBe("disc1.ssd");
         });
 
         it("should extract mmc image for Atom", () => {
