@@ -652,6 +652,41 @@ describe("MediaWindow", () => {
             await vi.waitFor(() => expect(fdc.drives[1].disc).toBeTruthy());
             expect(deps.autoboot).not.toHaveBeenCalled();
             expect(deps.processor.reset).not.toHaveBeenCalled();
+            expect(deps.media.setAutoboot).not.toHaveBeenCalled();
+        });
+
+        it("ends up with the last disc asked for, whichever load finishes first", async () => {
+            const first = discFor("A.ssd", ssdImage());
+            const second = discFor("B.ssd", ssdImage());
+            let finishFirst;
+            deps.media.loadDiscImage
+                .mockReturnValueOnce(new Promise((resolve) => (finishFirst = () => resolve(first))))
+                .mockResolvedValueOnce(second);
+            await openWith([elite, saves]);
+            rows()[0].querySelector(".media-row-main").click();
+            rows()[1].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(fdc.drives[0].disc === second).toBe(true));
+            finishFirst();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(fdc.drives[0].disc === second).toBe(true);
+            expect(deps.media.setDiscImage).toHaveBeenLastCalledWith(0, "local:saves.ssd");
+            expect(bay(0).dataset.state).toBe("loaded");
+        });
+
+        it("ignores a failure from a load the bay has since moved on from", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            let failFirst;
+            deps.media.loadDiscImage
+                .mockReturnValueOnce(new Promise((_, reject) => (failFirst = () => reject(new Error("HTTP 404")))))
+                .mockResolvedValueOnce(discFor("B.ssd", ssdImage()));
+            await openWith([elite, saves]);
+            rows()[0].querySelector(".media-row-main").click();
+            rows()[1].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(bay(0).dataset.state).toBe("loaded"));
+            failFirst();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(bay(0).dataset.state).toBe("loaded");
+            expect(bay(0).querySelector(".bay-retry").hidden).toBe(true);
         });
 
         it("resets and boots when autoboot is ticked and the disc goes into drive 0", async () => {
@@ -716,6 +751,24 @@ describe("MediaWindow", () => {
             document.getElementById("deck-retry").click();
             await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
             expect(document.getElementById("deck-retry").hidden).toBe(true);
+        });
+
+        it("ends up with the last tape asked for, whichever load finishes first", async () => {
+            const first = { name: "first.uef", position: 0 };
+            const second = { name: "second.uef", position: 0 };
+            let finishFirst;
+            deps.media.loadTapeImage
+                .mockReturnValueOnce(new Promise((resolve) => (finishFirst = () => resolve(first))))
+                .mockResolvedValueOnce(second);
+            await openWith([chuckie, { ...chuckie, ref: "sth:AnF/Other.zip", title: "Other" }]);
+            document.getElementById("deck-window").click();
+            rows()[0].querySelector(".media-row-main").click();
+            rows()[1].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(tapeInterface.tape).toBe(second));
+            finishFirst();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(tapeInterface.tape).toBe(second);
+            expect(deps.media.setTapeImage).toHaveBeenLastCalledWith("sth:AnF/Other.zip");
         });
 
         it("loads a tape into the deck from its row, unfolding the deck", async () => {
@@ -852,7 +905,7 @@ describe("MediaWindow", () => {
             document.getElementById("media-new-disc").click();
             expect(document.getElementById("media-new-disc-form").hidden).toBe(false);
             expect(document.getElementById("media-new-disc-drive-option").hidden).toBe(true);
-            document.getElementById("media-new-disc-name").value = "mine";
+            document.getElementById("media-new-disc-name").value = "mine.hfe";
             document.getElementById("media-new-disc-form").dispatchEvent(new Event("submit", { cancelable: true }));
             await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith("local:mine.ssd", "auto"));
             await vi.waitFor(() => expect(fdc.drives[1].disc).toBeTruthy());

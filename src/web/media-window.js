@@ -1,5 +1,6 @@
 import { dfsCatalogue } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
+import { replaceOrAddExtension } from "../archive.js";
 import { FloatingPanel } from "./floating-panel.js";
 import { tracksLabel, tracksPerStepOf } from "./drives.js";
 import { Sources, compareForQuery, describeBrowserDisc, matchesQuery } from "./media-catalogue.js";
@@ -633,13 +634,18 @@ export class MediaWindow {
     async loadDisc(driveIndex, d, { boot = false, stayOpen = false } = {}) {
         noteEvent("media", "loadDisc", d.ref);
         const bay = this.bays[driveIndex];
+        // The last load asked for is the one the bay ends up with, whichever order they finish in.
+        const request = (bay.request = {});
         bay.busy = d;
         bay.failed = null;
         this.unfold(driveIndex);
         this.renderDrive(driveIndex);
-        const needsAutoboot = driveIndex === 0 && (boot || this.media.params.autoboot !== undefined);
+        // Only drive 0 boots, so only a boot into drive 0 means anything for the URL.
+        boot = boot && driveIndex === 0;
+        const needsAutoboot = boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
         try {
             const loaded = await this.media.loadDiscImage(d.ref, this.drives.layoutForDrive(driveIndex));
+            if (bay.request !== request) return;
             bay.busy = null;
             // The machine is only reset once there is a disc to boot.
             if (needsAutoboot) this.processor.reset(true);
@@ -652,6 +658,7 @@ export class MediaWindow {
             if (needsAutoboot) this.autoboot(d.title);
             if (!stayOpen) this.close();
         } catch (error) {
+            if (bay.request !== request) return;
             bay.busy = null;
             bay.failed = { descriptor: d, error };
             reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
@@ -663,17 +670,20 @@ export class MediaWindow {
     async loadTape(d) {
         noteEvent("media", "loadTape", d.ref);
         const { deck } = this;
+        const request = (deck.request = {});
         deck.busy = d;
         deck.failed = null;
         this.unfold("tape");
         this.renderDeck();
         try {
             const tape = await this.media.loadTapeImage(d.ref);
+            if (deck.request !== request) return;
             deck.busy = null;
             this.media.setProcessorTape(tape);
             this.media.setTapeImage(MediaWindow.urlRef(d));
             this.close();
         } catch (error) {
+            if (deck.request !== request) return;
             deck.busy = null;
             deck.failed = { descriptor: d, error };
             reportLoadFailure(`${d.title} from ${sourceName(d.source)}`, error);
@@ -720,7 +730,7 @@ export class MediaWindow {
      */
     async createDisc(name, where) {
         if (!name) return;
-        if (!guessDiscTypeFromName(name).supportsCatalogue || !/\.[a-z]+$/i.test(name)) name += ".ssd";
+        if (!guessDiscTypeFromName(name).supportsCatalogue) name = replaceOrAddExtension(name, ".ssd");
         const copyFrom = this.list.copyFrom;
         const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;

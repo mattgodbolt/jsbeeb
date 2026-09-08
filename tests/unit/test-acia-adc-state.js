@@ -39,6 +39,19 @@ describe("Acia snapshotState / restoreState", () => {
         expect(acia2.hadDcdHigh).toBe(true);
     });
 
+    it("keeps the recorder's PLAY latch, and restores an older snapshot with PLAY down", () => {
+        acia.pressStop();
+        const snapshot = acia.snapshotState();
+        expect(snapshot.playPressed).toBe(false);
+
+        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
+        acia2.restoreState(snapshot);
+        expect(acia2.playPressed).toBe(false);
+
+        acia2.restoreState({ ...snapshot, playPressed: undefined });
+        expect(acia2.playPressed).toBe(true);
+    });
+
     it("should snapshot and restore serial rate", () => {
         acia.setSerialReceive(9600);
         acia.setSerialTransmit(1200);

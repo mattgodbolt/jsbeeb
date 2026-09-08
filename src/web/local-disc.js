@@ -40,5 +40,7 @@ export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}
             onSaveError(e);
         }
     };
+    // A fresh disc is kept at once, so it is still there to list if nothing is ever written to it.
+    if (!dataString) onChange(data);
     return discFor(name, data, onChange, layout);
 }

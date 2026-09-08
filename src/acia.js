@@ -259,6 +259,7 @@ export class Acia extends EventTarget {
             dr: this.dr,
             rs423Selected: this.rs423Selected,
             motorOn: this.motorOn,
+            playPressed: this.playPressed,
             tapeCarrierCount: this.tapeCarrierCount,
             tapeDcdLineLevel: this.tapeDcdLineLevel,
             hadDcdHigh: this.hadDcdHigh,
@@ -278,6 +279,8 @@ export class Acia extends EventTarget {
         this.dr = state.dr;
         this.rs423Selected = state.rs423Selected;
         this.motorOn = state.motorOn;
+        // Snapshots predating the recorder's PLAY latch were taken with it down.
+        this.playPressed = state.playPressed ?? true;
         this.tapeCarrierCount = state.tapeCarrierCount;
         this.tapeDcdLineLevel = state.tapeDcdLineLevel;
         this.hadDcdHigh = state.hadDcdHigh;

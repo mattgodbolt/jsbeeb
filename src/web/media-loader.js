@@ -225,8 +225,9 @@ export class MediaLoader extends EventTarget {
 
     /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
     async loadTapeFile(name, data) {
+        const tape = await loadTapeFromData(name, data, this.model);
         this.sessionFiles.set(name, { data, kind: "tape" });
-        this.setProcessorTape(await loadTapeFromData(name, data, this.model));
+        this.setProcessorTape(tape);
         this.setTapeImage(undefined);
     }
 

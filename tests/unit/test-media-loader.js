@@ -204,6 +204,13 @@ describe("MediaLoader", () => {
             expect(again.originalImageData).toBeTruthy();
         });
 
+        it("does not list a tape file that turned out not to be one", async () => {
+            const media = make();
+            await expect(media.openFile(fileFor("junk.uef", new Uint8Array(16)))).rejects.toThrow("not a UEF");
+            const { descriptors } = await media.listAll();
+            expect(descriptors.map((d) => d.ref)).not.toContain("session:junk.uef");
+        });
+
         it("opens a zipped tape as a tape, whatever the zip is called", async () => {
             const uef = new Uint8Array([...new TextEncoder().encode("UEF File!\0"), 6, 0, 0, 1, 1, 0, 0, 0, 1]);
             const zipped = new Uint8Array(await createZipBlob([{ name: "Chuckie.uef", data: uef }]).arrayBuffer());

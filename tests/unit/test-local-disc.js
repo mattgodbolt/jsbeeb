@@ -27,6 +27,13 @@ describe("a disc held in browser local storage", () => {
         expect(stored["disc_kept.ssd"]).toBeTypeOf("string");
     });
 
+    it("is kept from the moment it is made, written to or not", () => {
+        const stored = {};
+        stubStorage({ setItem: (key, value) => (stored[key] = value) });
+        localDisc("fresh.ssd", DiscLayout.contiguous);
+        expect(stored["disc_fresh.ssd"]).toBeTypeOf("string");
+    });
+
     it("reports a refused write once however many tracks are written", () => {
         const refusal = new Error("QuotaExceededError");
         stubStorage({
@@ -39,6 +46,7 @@ describe("a disc held in browser local storage", () => {
         const created = localDisc("full.ssd", DiscLayout.contiguous, (error) => refused.push(error));
         for (const trackNum of [0, 1, 2]) writeTrack(created, trackNum);
 
+        // The refusal of the fresh disc itself counts as the one report.
         expect(refused).toEqual([refusal]);
     });
 
