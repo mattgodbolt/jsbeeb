@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.26.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.25.0...v1.26.0) (2026-09-09)
+
+
+### Features
+
+* the media window ([#1091](https://github.com/mattgodbolt/jsbeeb/issues/1091)) ([3b0824b](https://github.com/mattgodbolt/jsbeeb/commit/3b0824bec6d8069fa81ea1c0aa554f5bd2b6920f))
+* the whole page takes a dropped disc, tape or save state ([#1106](https://github.com/mattgodbolt/jsbeeb/issues/1106)) ([4e7397c](https://github.com/mattgodbolt/jsbeeb/commit/4e7397c06badfef49d60fd14b18afeb1d4753028))
+
+
+### Bug Fixes
+
+* a save state restores over a disc kept in the browser or on Drive, and other restore and Drive fixes ([#1099](https://github.com/mattgodbolt/jsbeeb/issues/1099)) ([b04fb46](https://github.com/mattgodbolt/jsbeeb/commit/b04fb4672b61bf4e4b75ab544ea470c6d6336f83))
+* a tape at its end no longer freezes the machine, and other tape, key and Drive fixes ([#1095](https://github.com/mattgodbolt/jsbeeb/issues/1095)) ([a21b1ac](https://github.com/mattgodbolt/jsbeeb/commit/a21b1acc6b8badf109b8efab48ddf4b452ad22a7))
+* the media window's phone layout applies, the LED panel fits a phone, and an open menu does not shrink the screen ([#1104](https://github.com/mattgodbolt/jsbeeb/issues/1104)) ([19ad103](https://github.com/mattgodbolt/jsbeeb/commit/19ad1038969f67718968071faef66a78e60351ea))
+
 ## [1.25.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.24.1...v1.25.0) (2026-09-07)
 
 
