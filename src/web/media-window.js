@@ -109,6 +109,8 @@ export class MediaWindow {
             if (this.isOpen) this.refreshList();
         });
         loop.addEventListener("tick", () => this.tick());
+        this.pageListeners = new AbortController();
+        this.bindDropZone();
         // The Atom has no disc drives: only the deck, and only the deck to aim at.
         if (model.isAtom) {
             this.panel.querySelector(".media-case").hidden = true;
@@ -133,6 +135,93 @@ export class MediaWindow {
 
     get isOpen() {
         return this.floating.isOpen;
+    }
+
+    /**
+     * The whole page takes a dropped file: a disc goes into the aimed drive, a tape into the
+     * deck, a save state is restored. An overlay says so while a file is over the page.
+     */
+    bindDropZone() {
+        const zone = document.getElementById("drop-zone");
+        const words = zone.querySelector(".drop-zone-into");
+        // dragenter and dragleave fire for every element crossed, so the depth says when the page is left.
+        let depth = 0;
+        const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+        const { signal } = this.pageListeners;
+        document.addEventListener(
+            "dragenter",
+            (e) => {
+                if (!hasFiles(e)) return;
+                e.preventDefault();
+                if (depth++ === 0) {
+                    words.textContent = this.model.isAtom
+                        ? "a tape goes in the deck"
+                        : `a disc goes into ${this.targetName}`;
+                    zone.hidden = false;
+                }
+            },
+            { signal },
+        );
+        document.addEventListener(
+            "dragover",
+            (e) => {
+                if (!hasFiles(e)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+            },
+            { signal },
+        );
+        document.addEventListener(
+            "dragleave",
+            (e) => {
+                if (!hasFiles(e)) return;
+                if (--depth === 0) zone.hidden = true;
+            },
+            { signal },
+        );
+        document.addEventListener(
+            "drop",
+            async (e) => {
+                if (!hasFiles(e)) return;
+                e.preventDefault();
+                depth = 0;
+                zone.hidden = true;
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                noteEvent("local", "drop");
+                await this.openFile(file, "Dropped");
+            },
+            { signal },
+        );
+    }
+
+    /** Takes the window's drop-zone listeners off the page, for a page that builds another window. */
+    dispose() {
+        this.pageListeners.abort();
+    }
+
+    /** Where a disc from this computer goes, in words. */
+    get targetName() {
+        return `drive ${this.targetDrive}`;
+    }
+
+    /**
+     * Opens a file from this computer into the aimed drive, the deck or the machine's state, says
+     * so, boots a disc that went into drive 0 if Autoboot is ticked, and gets out of the way.
+     */
+    async openFile(file, title) {
+        try {
+            const opened = await this.media.openFile(file, this.targetDrive);
+            if (!opened) return;
+            toast(opened.words, { title });
+            if (opened.kind === "disc" && opened.driveIndex === 0 && this.media.params.autoboot !== undefined) {
+                this.processor.reset(true);
+                this.autoboot(opened.name);
+            }
+            this.close();
+        } catch (error) {
+            reportLoadFailure(file.name, error);
+        }
     }
 
     /** Opens with the list, aimed at drive 0 (the deck, on the Atom). */
@@ -340,15 +429,7 @@ export class MediaWindow {
             const file = evt.target.files[0];
             if (!file) return;
             noteEvent("local", "clickWindow");
-            try {
-                const outcome = await this.media.openFile(file, this.targetDrive);
-                if (outcome) {
-                    toast(outcome, { title: "Opened" });
-                    this.close();
-                }
-            } catch (error) {
-                reportLoadFailure(file.name, error);
-            }
+            await this.openFile(file, "Opened");
             evt.target.value = "";
         });
         list.connect.addEventListener("click", async () => {

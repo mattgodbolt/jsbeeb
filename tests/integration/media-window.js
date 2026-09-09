@@ -43,6 +43,7 @@ describe("the media window against a real machine", () => {
             "econetfs",
             "paste-text",
             "leds",
+            "drop-zone",
             "media-panel",
             "drive-bay-template",
             "save-state",
@@ -105,10 +106,10 @@ describe("the media window against a real machine", () => {
     const expectRowDetail = (title, matcher) =>
         vi.waitFor(() => expect(text(rowDetail(title) ?? { textContent: "(no row)" })).toMatch(matcher));
     const publicFile = (relative) => readFileSync(path.join(RepoRoot, "public", relative));
-    const dropOnPasteBox = (name, bytes) => {
+    const dropOnPage = (name, bytes) => {
         const event = new Event("drop", { bubbles: true, cancelable: true });
-        Object.defineProperty(event, "dataTransfer", { value: { files: [new File([bytes], name)] } });
-        document.getElementById("paste-text").dispatchEvent(event);
+        Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [new File([bytes], name)] } });
+        document.body.dispatchEvent(event);
     };
 
     it("loads the built-in Elite into drive 0 from the list, names it in the URL and catalogues it", async () => {
@@ -166,7 +167,7 @@ describe("the media window against a real machine", () => {
         document.querySelector("#media-list .media-row-main").click();
         await vi.waitFor(() => expect(document.querySelector('.bay[data-drive="0"]').dataset.state).toBe("busy"));
 
-        dropOnPasteBox("Welcome.ssd", publicFile("discs/Welcome.ssd"));
+        dropOnPage("Welcome.ssd", publicFile("discs/Welcome.ssd"));
         await vi.waitFor(() => expect(machine.processor.fdc.drives[0].disc?.name).toBe("Welcome.ssd"));
         finishSlow({ name: "Slow.ssd", data: publicFile("discs/elite.ssd"), ignored: [] });
         await new Promise((resolve) => setTimeout(resolve, 20));

@@ -64,6 +64,7 @@ describe("AnalogueInputs", () => {
 
         it("refuses a channel that does not exist, says so, and clears the setting", () => {
             deps.settings.microphoneChannel = 5;
+            deps.settings.urlState.params.microphoneChannel = 5;
             const inputs = make();
             inputs.updateAdcSources(false, 5);
             for (let ch = 0; ch < 4; ch++) expect(channels[ch]).toBe(inputs.gamepadSource);
@@ -114,6 +115,7 @@ describe("AnalogueInputs", () => {
     describe("a microphone that cannot start", () => {
         it("reports, clears the setting and takes it out of the URL", async () => {
             deps.settings.microphoneChannel = 2;
+            deps.settings.urlState.params.microphoneChannel = 2;
             const inputs = make();
             vi.spyOn(inputs.microphoneInput, "initialise").mockResolvedValue(false);
             vi.spyOn(inputs.microphoneInput, "getErrorMessage").mockReturnValue("denied");

@@ -4,7 +4,7 @@ import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
-import { MediaResolver, openIfZip, splitImage } from "../media-resolver.js";
+import { MediaResolver, openIfZip, routeOf, splitImage } from "../media-resolver.js";
 import { MediaSlots } from "./media-slots.js";
 import { stringToUint8Array } from "../binary.js";
 import { noteEvent } from "./analytics.js";
@@ -93,24 +93,6 @@ export class MediaLoader extends EventTarget {
             }
             evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
         });
-
-        const pastetext = document.getElementById("paste-text");
-        pastetext.addEventListener("dragover", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.dataTransfer.dropEffect = "copy";
-        });
-        pastetext.addEventListener("drop", async (event) => {
-            noteEvent("local", "drop");
-            const file = event.dataTransfer.files[0];
-            if (!file) return;
-            try {
-                const outcome = await this.openFile(file);
-                if (outcome) toast(outcome, { title: "Dropped" });
-            } catch (error) {
-                reportLoadFailure(file.name, error);
-            }
-        });
     }
 
     get params() {
@@ -157,22 +139,24 @@ export class MediaLoader extends EventTarget {
      * A file from this computer, into whatever it is for: a save state is
      * restored, a tape goes in the deck, anything else into the named drive.
      *
-     * @returns {Promise<?string>} what happened, for a toast, or null when it was reported already
+     * @returns {Promise<?{kind: string, name: string, driveIndex?: number, words: string}>} what
+     *   happened, with words for a toast; null when a restore failed and has been reported already
      */
     async openFile(file, driveIndex = 0) {
         const arrayBuffer = await file.arrayBuffer();
         if (this.isSnapshotFile(file.name, arrayBuffer)) {
-            return (await this.loadSnapshot(file, arrayBuffer)) ? `Restored the state saved in ${file.name}.` : null;
+            if (!(await this.loadSnapshot(file, arrayBuffer))) return null;
+            return { kind: "snapshot", name: file.name, words: `Restored the state saved in ${file.name}.` };
         }
         // What a zip holds decides whether it is a tape or a disc, so it is opened first.
         const { name, data, ignored } = await openIfZip(file.name, new Uint8Array(arrayBuffer));
         reportIgnoredFiles(name, ignored);
         if (isTapeName(name)) {
             await this.loadTapeFile(name, data);
-            return `Loaded ${name} as the tape.`;
+            return { kind: "tape", name, words: `Loaded ${name} as the tape.` };
         }
         this.loadDiscFile(name, data, driveIndex);
-        return `Loaded ${name} into drive ${driveIndex}.`;
+        return { kind: "disc", name, driveIndex, words: `Loaded ${name} into drive ${driveIndex}.` };
     }
 
     setAutoboot(on) {
@@ -221,8 +205,9 @@ export class MediaLoader extends EventTarget {
 
     async loadDiscImage(discImage, layout = DiscLayout.auto) {
         if (!discImage) return null;
-        const { schema, image } = splitImage(discImage);
-        if (schema[0] === "!" || schema === "local") {
+        const { image } = splitImage(discImage);
+        const route = routeOf(discImage);
+        if (route === "browser") {
             return localDisc(image, layout, (error) =>
                 toast(
                     `Browser storage would not take changes to ${image} (${errorText(error)}). Use the drive's Save button to keep a copy.`,
@@ -230,7 +215,7 @@ export class MediaLoader extends EventTarget {
                 ),
             );
         }
-        if (schema === "gd") {
+        if (route === "drive") {
             const [, id, name = "(unknown)"] = image.match(/([^/]+)\/?(.*)/) ?? [null, image];
             return this.driveSource({ name, id }, layout);
         }
@@ -243,7 +228,7 @@ export class MediaLoader extends EventTarget {
         const { name, data, ignored } = await this.resolver.resolve("disc", discImage);
         reportIgnoredFiles(name, ignored);
         const loaded = disc.discFor(name, data, undefined, layout);
-        if (schema === "session") loaded.setOriginalImage(data);
+        if (route === "session") loaded.setOriginalImage(data);
         return loaded;
     }
 

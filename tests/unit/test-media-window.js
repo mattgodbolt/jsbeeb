@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaWindow, shortName } from "../../src/web/media-window.js";
 import { describeRef, sourceOf } from "../../src/web/media-catalogue.js";
+import { Schemas } from "../../src/media-resolver.js";
 import { MediaSlots } from "../../src/web/media-slots.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
@@ -27,7 +28,7 @@ describe("MediaWindow", () => {
     let urlState;
 
     beforeEach(() => {
-        domFromIndexHtml("navbarSupportedContent", "leds", "media-panel", "drive-bay-template");
+        domFromIndexHtml("navbarSupportedContent", "leds", "drop-zone", "media-panel", "drive-bay-template");
         document.querySelector(".media-header").setPointerCapture = () => {};
         fdc = fakeFdc();
         tapeInterface = {
@@ -78,9 +79,14 @@ describe("MediaWindow", () => {
         };
     });
 
-    afterEach(teardownDom);
+    let made;
+    afterEach(() => {
+        made?.dispose();
+        made = null;
+        return teardownDom();
+    });
 
-    const make = () => new MediaWindow(deps);
+    const make = () => (made = new MediaWindow(deps));
     const panel = () => document.getElementById("media-panel");
     const bay = (driveIndex) => document.querySelector(`.bay[data-drive="${driveIndex}"]`);
     const text = (el) => el.textContent.replace(/\s+/g, " ").trim();
@@ -905,7 +911,12 @@ describe("MediaWindow", () => {
         });
 
         it("opens a file into the aimed drive from the footer, and connects Google Drive", async () => {
-            deps.media.openFile.mockResolvedValue("Loaded mine.ssd into drive 1.");
+            deps.media.openFile.mockResolvedValue({
+                kind: "disc",
+                name: "mine.ssd",
+                driveIndex: 1,
+                words: "Loaded mine.ssd into drive 1.",
+            });
             await openWith([]);
             bay(1).querySelector(".bay-slot").click();
             const input = document.getElementById("media-open");
@@ -981,6 +992,94 @@ describe("MediaWindow", () => {
             expect(text(document.getElementById("media-count"))).toBe("showing 100 of 120; keep typing to narrow it");
             search("Disc 11");
             expect(text(document.getElementById("media-count"))).toBe("11 of 120");
+        });
+    });
+
+    describe("the page as a drop zone", () => {
+        const dragEvent = (type, target = document.body) => {
+            const event = new Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [], dropEffect: "" } });
+            target.dispatchEvent(event);
+            return event;
+        };
+        const dropFile = (file) => {
+            const event = new Event("drop", { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [file] } });
+            document.body.dispatchEvent(event);
+        };
+        const zone = () => document.getElementById("drop-zone");
+
+        it("shows where a file will go while one is over the page, and hides when it leaves", () => {
+            make();
+            expect(zone().hidden).toBe(true);
+            dragEvent("dragenter");
+            expect(zone().hidden).toBe(false);
+            expect(text(zone())).toContain("a disc goes into drive 0");
+            dragEvent("dragenter", document.getElementById("leds"));
+            dragEvent("dragleave", document.getElementById("leds"));
+            expect(zone().hidden).toBe(false);
+            dragEvent("dragleave");
+            expect(zone().hidden).toBe(true);
+        });
+
+        it("ignores a drag that carries no files", () => {
+            make();
+            const event = new Event("dragenter", { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { types: ["text/plain"], files: [] } });
+            document.body.dispatchEvent(event);
+            expect(zone().hidden).toBe(true);
+            expect(event.defaultPrevented).toBe(false);
+        });
+
+        it("opens a dropped file into the aimed drive and says so", async () => {
+            deps.media.openFile.mockResolvedValue({
+                kind: "disc",
+                name: "mine.ssd",
+                driveIndex: 1,
+                words: "Loaded mine.ssd into drive 1.",
+            });
+            const window = await openWith([]);
+            document.querySelector('#media-into [data-target="1"]').click();
+            dragEvent("dragenter");
+            dropFile(new File([new Uint8Array(4)], "mine.ssd"));
+            await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1));
+            await vi.waitFor(() =>
+                expect(toasts()).toEqual([expect.stringContaining("Loaded mine.ssd into drive 1.")]),
+            );
+            expect(zone().hidden).toBe(true);
+            expect(window.isOpen).toBe(false);
+            expect(deps.processor.reset).not.toHaveBeenCalled();
+        });
+
+        it("boots a disc dropped into drive 0 when Autoboot is ticked", async () => {
+            deps.media.params.autoboot = "";
+            deps.media.openFile.mockResolvedValue({
+                kind: "disc",
+                name: "game.ssd",
+                driveIndex: 0,
+                words: "Loaded game.ssd into drive 0.",
+            });
+            make();
+            dropFile(new File([new Uint8Array(4)], "game.ssd"));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("game.ssd"));
+            expect(deps.processor.reset).toHaveBeenCalledWith(true);
+        });
+
+        it("does not boot a tape or a restored state, whatever the tick says", async () => {
+            deps.media.params.autoboot = "";
+            deps.media.openFile.mockResolvedValue({ kind: "tape", name: "t.uef", words: "Loaded t.uef as the tape." });
+            make();
+            dropFile(new File([new Uint8Array(4)], "t.uef"));
+            await vi.waitFor(() => expect(toasts()).toHaveLength(1));
+            expect(deps.processor.reset).not.toHaveBeenCalled();
+        });
+
+        it("reports a file that could not be opened", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            deps.media.openFile.mockRejectedValue(new Error("not a disc"));
+            make();
+            dropFile(new File([new Uint8Array(4)], "junk.bin"));
+            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("not a disc")]));
         });
     });
 
@@ -1192,6 +1291,13 @@ describe("MediaWindow", () => {
             expect(sourceOf("elite.ssd")).toBe("built in");
             expect(sourceOf("session:mine.ssd")).toBe("a file opened this session");
             expect(sourceOf(undefined)).toBeNull();
+        });
+
+        it("has words for every schema a reference can take", () => {
+            for (const schema of Object.keys(Schemas)) {
+                const ref = schema === "" ? "x.ssd" : schema.length === 1 ? `${schema}x.ssd` : `${schema}:x.ssd`;
+                expect(sourceOf(ref), schema).toBeTruthy();
+            }
         });
     });
 });

@@ -94,10 +94,17 @@ export class UrlState {
      * history entry for the lot.
      */
     set(changes, { settle = false } = {}) {
+        let changed = false;
         for (const [key, value] of Object.entries(changes)) {
-            if (value === undefined) delete this.params[key];
-            else this.params[key] = value;
+            if (value === undefined) {
+                if (key in this.params) changed = true;
+                delete this.params[key];
+            } else {
+                if (this.params[key] !== value) changed = true;
+                this.params[key] = value;
+            }
         }
+        if (!changed) return;
         if (settle) this.updateUrlOnceSettled();
         else this.updateUrl();
     }

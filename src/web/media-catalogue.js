@@ -1,5 +1,5 @@
 import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
-import { splitImage } from "../media-resolver.js";
+import { Schemas, splitImage } from "../media-resolver.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
@@ -39,24 +39,11 @@ export const Sources = Object.freeze({
 
 export const sourceName = (source) => Sources[source]?.name ?? source;
 
-// The source behind each URL schema the list knows, and words for the schemas it does not.
-const SchemaSources = {
-    "": "builtin",
-    sth: "sth",
-    "|": "sth",
-    hfe: "hfe",
-    gd: "gdrive",
-    local: "browser",
-    "!": "browser",
-    session: "session",
-};
-const OtherSchemaPhrases = { http: "the web", https: "the web", file: "a file", data: "the URL", b64data: "the URL" };
-
 /** Where a URL reference came from, in words, or null when the URL names nothing. */
 export function sourceOf(ref) {
     if (!ref) return null;
-    const { schema } = splitImage(ref);
-    return Sources[SchemaSources[schema]]?.phrase ?? OtherSchemaPhrases[schema] ?? null;
+    const schema = Schemas[splitImage(ref).schema];
+    return Sources[schema?.source]?.phrase ?? schema?.phrase ?? null;
 }
 
 /** A descriptor for a bare reference, as the URL or the desktop menu gives one: known by its file name. */
@@ -68,7 +55,7 @@ export function describeRef(ref, kind) {
         title: image.split("/").pop(),
         publisher: "",
         detail: "",
-        source: SchemaSources[schema] ?? OtherSchemaPhrases[schema] ?? schema,
+        source: Schemas[schema]?.source ?? Schemas[schema]?.phrase ?? schema,
         savesChanges: false,
     };
 }

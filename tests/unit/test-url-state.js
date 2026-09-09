@@ -62,6 +62,14 @@ describe("UrlState", () => {
         }
     });
 
+    it("makes no history for a change that changes nothing", () => {
+        const state = new UrlState(location("?disc1=a.ssd"), history);
+        state.set({ disc1: "a.ssd", tape: undefined });
+        expect(history.pushState).not.toHaveBeenCalled();
+        state.set({ disc1: "b.ssd" });
+        expect(history.pushState).toHaveBeenCalledTimes(1);
+    });
+
     it("deletes a parameter set to undefined", () => {
         const state = new UrlState(location("?model=B&disc=elite.ssd"), history);
         state.set({ disc: undefined });
