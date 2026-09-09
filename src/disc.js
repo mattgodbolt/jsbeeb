@@ -1348,6 +1348,7 @@ export class IbmDiscFormat {
             clocks = (clocks << 1) & 0xff;
             data = (data << 1) & 0xff;
         }
+        // Bit 7's clock lands in bit 31, so back to unsigned.
         return ret >>> 0;
     }
 
