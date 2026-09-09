@@ -2,8 +2,8 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
     test: {
-        // Vitest's module runner reaches imported bindings through getters, which costs this
-        // benchmark a fifth of its speed.
+        // Native imports: under the module runner this benchmark reads a fifth low, and four
+        // fifths of that is Vitest's export-getter counter, which runs only while benchmarking.
         experimental: { viteModuleRunner: false },
     },
 });
