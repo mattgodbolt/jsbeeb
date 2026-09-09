@@ -1625,150 +1625,6 @@ div.smoothie-chart-tooltip {
   }
 }
 
-/* ----- narrow: a full-screen sheet, the drives above the deck, the list under them ----- */
-
-@media (max-width: 700px) {
-  #media-panel {
-    inset: 0;
-    transform: none;
-    width: auto;
-    max-height: none;
-    border: 0;
-    border-radius: 0;
-  }
-
-  .media-header {
-    cursor: default;
-  }
-
-  .media-deck {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto 96px auto auto;
-  }
-
-  .bay {
-    grid-template-columns: 16px 44px minmax(0, 1fr) 62px;
-    grid-template-rows: 22px 42px auto;
-    column-gap: 6px;
-    padding: 5px 6px 5px 5px;
-  }
-
-  .lever-wrap {
-    width: 50px;
-  }
-
-  .lever {
-    width: 40px;
-    height: 15px;
-    transform-origin: 9px 7px;
-  }
-
-  .mouth {
-    padding-left: 56px;
-    height: 42px;
-  }
-
-  .bay-badge {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    height: 34px;
-    padding: 0 4px;
-  }
-
-  .bay-badge .logo,
-  .paper .dfs,
-  .pitch .hwlabel {
-    display: none;
-  }
-
-  .bay-badge .drive-no {
-    text-align: center;
-  }
-
-  .paper .title {
-    font-size: 12px;
-  }
-
-  .bay-line {
-    white-space: normal;
-    flex-wrap: wrap;
-    gap: 2px 6px;
-    padding-top: 3px;
-  }
-
-  .bay-line .spacer {
-    display: none;
-  }
-
-  .deck-window .reel {
-    width: 36px;
-    height: 36px;
-  }
-
-  .deck-window .reels::before {
-    margin-top: 14px;
-  }
-
-  .deck-key {
-    height: 30px;
-  }
-
-  /* The whole sheet scrolls as one, so nothing inside it competes for the height. */
-  #media-panel {
-    overflow-y: auto;
-  }
-
-  #media-panel > * {
-    flex-shrink: 0;
-  }
-
-  .media-list-head {
-    flex-wrap: wrap;
-    gap: 6px 12px;
-  }
-
-  .media-search {
-    flex-basis: 100%;
-  }
-
-  .media-chips {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-
-  .media-list {
-    flex: none;
-  }
-
-  .media-row-main {
-    grid-template-columns: minmax(0, 1fr) auto 26px;
-    grid-template-rows: auto auto;
-    gap: 1px 10px;
-    padding: 7px 8px;
-  }
-
-  .media-row .publisher,
-  .media-row .detail {
-    grid-column: 1;
-    font-size: 11.5px;
-  }
-
-  .media-row .publisher:empty + .detail {
-    grid-column: 1;
-  }
-
-  .media-row .media-source {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-  }
-
-  .media-row .media-keycap {
-    grid-column: 3;
-    grid-row: 1 / span 3;
-  }
-}
-
 /* ----- a slot busy fetching, or left holding a failure ----- */
 
 .bay[data-state="busy"] .mouth {
@@ -2280,5 +2136,185 @@ div.smoothie-chart-tooltip {
     background: Highlight;
     color: HighlightText;
     border-color: Highlight;
+  }
+}
+
+/* ----- narrow: a full-screen sheet, the drives above the deck, the list under them.
+   Last in the file, so it wins over every rule it narrows. ----- */
+
+@media (max-width: 700px) {
+  #media-panel {
+    inset: 0;
+    transform: none;
+    width: auto;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .media-header {
+    cursor: default;
+  }
+
+  .media-deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 96px auto auto;
+  }
+
+  .bay {
+    grid-template-columns: 16px 44px minmax(0, 1fr) 62px;
+    grid-template-rows: 22px 42px auto;
+    column-gap: 6px;
+    padding: 5px 6px 5px 5px;
+  }
+
+  .lever-wrap {
+    width: 50px;
+  }
+
+  .lever {
+    width: 40px;
+    height: 15px;
+    transform-origin: 9px 7px;
+  }
+
+  .mouth {
+    padding-left: 56px;
+    height: 42px;
+  }
+
+  .bay-badge {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    height: 34px;
+    padding: 0 4px;
+  }
+
+  .bay-badge .logo,
+  .paper .dfs,
+  .pitch .hwlabel {
+    display: none;
+  }
+
+  .bay-badge .drive-no {
+    text-align: center;
+  }
+
+  .paper .title {
+    font-size: 12px;
+  }
+
+  .bay-line {
+    white-space: normal;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    padding-top: 3px;
+  }
+
+  .bay-line .spacer {
+    display: none;
+  }
+
+  .deck-window .reel {
+    width: 36px;
+    height: 36px;
+  }
+
+  .deck-window .reels::before {
+    margin-top: 14px;
+  }
+
+  .deck-key {
+    height: 30px;
+  }
+
+  /* The whole sheet scrolls as one, so nothing inside it competes for the height. */
+  #media-panel {
+    overflow-y: auto;
+  }
+
+  #media-panel > * {
+    flex-shrink: 0;
+  }
+
+  .media-list-head {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+
+  .media-search {
+    flex-basis: 100%;
+  }
+
+  .media-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .media-list {
+    flex: none;
+  }
+
+  .media-row-main {
+    grid-template-columns: minmax(0, 1fr) auto 26px;
+    grid-template-rows: auto auto;
+    gap: 1px 10px;
+    padding: 7px 8px;
+  }
+
+  .media-row .publisher,
+  .media-row .detail {
+    grid-column: 1;
+    font-size: 11.5px;
+  }
+
+  .media-row .publisher:empty + .detail {
+    grid-column: 1;
+  }
+
+  .media-row .media-source {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  .media-row .media-keycap {
+    grid-column: 3;
+    grid-row: 1 / span 3;
+  }
+}
+
+/* ----- a phone's LED panel: the slots share the width instead of overflowing it ----- */
+
+@media (max-width: 560px) {
+  #leds {
+    right: 0;
+    margin: 2px;
+    padding: 3px 4px;
+    gap: 4px;
+  }
+
+  #leds .slot-readouts {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  #leds .slot-readout,
+  #leds .slot-readout[data-slot="tape"] {
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 1px 3px;
+    column-gap: 4px;
+  }
+
+  #leds .lights {
+    gap: 3px;
+    padding-left: 4px;
+  }
+
+  #leds .cell[title="Econet activity"] {
+    display: none;
   }
 }

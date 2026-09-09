@@ -69,6 +69,16 @@ export function fitMonitor(displayConfig, viewport, canvasNative) {
     };
 }
 
+/**
+ * The height the bar takes from the screen: on a narrow window its menu drops open over the
+ * screen rather than above it, so an open menu does not count.
+ */
+export function navbarHeightOf(header) {
+    if (!header) return 0;
+    const openMenu = header.querySelector(".navbar-collapse.show");
+    return header.offsetHeight - (openMenu?.offsetHeight ?? 0);
+}
+
 /** Keeps the monitor and canvas fitted to the window, and wires the page furniture around them. */
 export class Layout {
     constructor({ screenCanvas, display, embed, sidebars = {} }) {
@@ -120,7 +130,7 @@ export class Layout {
             {
                 innerWidth: window.innerWidth,
                 innerHeight: window.innerHeight,
-                navbarHeight: document.getElementById("header-bar")?.offsetHeight || 0,
+                navbarHeight: navbarHeightOf(document.getElementById("header-bar")),
                 borderReservedSize: this.borderReservedSize,
                 bottomReservedSize: this.bottomReservedSize,
                 devicePixelRatio: window.devicePixelRatio || 1,
