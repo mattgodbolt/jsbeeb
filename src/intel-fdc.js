@@ -2,6 +2,7 @@
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502 } from "./6502.js";
+import { NmiSource } from "./nmi-source.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
 
@@ -343,8 +344,7 @@ export class IntelFdc {
         // aka. late DMA, which will abort the command while NMI is asserted. We
         // therefore need to de-assert NMI so that the NMI for command completion
         // isn't lost.
-        // TODO(#1058) we don't model NMIs properly here, each device should have its own nmi line
-        this._cpu.NMI(false);
+        this._cpu.setNmi(NmiSource.fdc, false);
     }
 
     powerOnReset() {
@@ -1025,12 +1025,11 @@ export class IntelFdc {
     }
 
     _updateNmi() {
-        const status = this.internalStatus;
-        const level = !!(status & StatusFlag.nmi);
-        if (this._cpu.nmi && level) {
+        const level = !!(this.internalStatus & StatusFlag.nmi);
+        if (level && this._cpu.nmiAsserted(NmiSource.fdc)) {
             this._log("edge triggered NMI already high");
         }
-        this._cpu.NMI(level);
+        this._cpu.setNmi(NmiSource.fdc, level);
     }
 
     _updateExternalStatus() {
@@ -1729,8 +1728,7 @@ export class IntelFdc {
         this._timerTask.cancel();
         if (state.timerTaskOffset !== null) this._timerTask.schedule(state.timerTaskOffset);
 
-        // NMI level is saved/restored by the CPU snapshot directly,
-        // so we don't reassert it here.
+        this._updateNmi();
     }
 
     /// jsbeeb compatibility stuff

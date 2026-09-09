@@ -2,6 +2,7 @@
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502 } from "./6502.js";
+import { NmiSource } from "./nmi-source.js";
 // eslint-disable-next-line no-unused-vars
 import { BaseDiscDrive, DiscDrive } from "./disc-drive.js";
 import { IbmDiscFormat } from "./disc.js";
@@ -218,11 +219,7 @@ export class WdFdc {
     }
 
     _updateNmi() {
-        const newLevel = this._isDrq | (this._isOpus ? false : this._isIntRq);
-        // TODO(#1058) the cpu handling of NMIs is bad here. Should update to handle multiple
-        // NMI/interrupt sources. And when we do go back and implement the checks in the beebjit
-        // source here too.
-        this._cpu.NMI(newLevel);
+        this._cpu.setNmi(NmiSource.fdc, this._isDrq || (!this._isOpus && this._isIntRq));
     }
 
     /**
@@ -1405,8 +1402,7 @@ export class WdFdc {
         this._timerTask.cancel();
         if (state.timerTaskOffset !== null) this._timerTask.schedule(state.timerTaskOffset);
 
-        // NMI level is saved/restored by the CPU snapshot directly,
-        // so we don't reassert it here.
+        this._updateNmi();
     }
 
     /// jsbeeb compatibility stuff

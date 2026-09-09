@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
+import { NmiSource } from "../../src/nmi-source.js";
+import { Econet } from "../../src/econet.js";
 import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
@@ -10,6 +12,46 @@ function makeCpu() {
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
     return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec() });
+}
+
+// The 8271 seek command, selecting drive 1. The drive is empty, so it never reports ready and the
+// command completes at once with an error, raising its completion NMI.
+const SeekDrive1 = 0x69;
+const FdcResetRegister = 2;
+
+function sendSeekToMissingDrive(fdc) {
+    fdc.write(0, SeekDrive1);
+    fdc.write(1, 0);
+}
+
+/** Whether the CPU takes an NMI before its next instruction, consuming the edge if so. */
+function takesNmi(cpu) {
+    cpu.p.i = true;
+    cpu.checkInt();
+    if (!cpu.takeInt) return false;
+    cpu.brk(true);
+    return true;
+}
+
+const AdlcControl1 = 0xfea0;
+const AdlcControl2 = 0xfea1;
+const AdlcTxFifo = 0xfea2;
+const RxTxInterruptsEnabled = 0x06;
+const RxTxReset = 0xc0;
+const PrioritisedStatus = 0x01;
+const AdlcIrqFlag = 0x80;
+
+// Releasing the resets with interrupts enabled reports two causes at once: TDRA, and via S2RQ
+// the idle line.
+function raiseAdlcIrq(cpu) {
+    cpu.writeDevice(AdlcControl1, RxTxInterruptsEnabled);
+    cpu.writeDevice(AdlcControl2, PrioritisedStatus);
+    cpu.polltime(1);
+}
+
+function clearAdlcIrq(cpu) {
+    cpu.writeDevice(AdlcControl1, RxTxReset);
+    cpu.polltime(1);
 }
 
 describe("Cpu6502 snapshotState / restoreState", () => {
@@ -41,19 +83,42 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         expect(cpu2.p.asByte()).toBe(0xe5 | 0x30); // bits 4,5 always set
     });
 
-    it("should snapshot and restore interrupt state", () => {
-        cpu._nmiLevel = true;
-        cpu._nmiEdge = true;
+    it("should restore a pending NMI edge, but not a level no device on the restored machine holds", async () => {
+        cpu.setNmi(NmiSource.econet, true);
         cpu.halted = true;
+
+        const snapshot = cpu.snapshotState();
+        const cpu2 = makeCpu();
+        await cpu2.initialise();
+        cpu2.restoreState(snapshot);
+
+        expect(snapshot.nmiLevel).toBe(true);
+        expect(cpu2.nmi).toBe(false);
+        expect(takesNmi(cpu2)).toBe(true);
+        expect(cpu2.halted).toBe(true);
+    });
+
+    it("should reconstruct the NMI level from FDC state", () => {
+        sendSeekToMissingDrive(cpu.fdc);
+        expect(cpu.nmi).toBe(true);
 
         const snapshot = cpu.snapshotState();
         const cpu2 = makeCpu();
         cpu2.restoreState(snapshot);
 
-        // interrupt is rebuilt by sub-component restores (VIA/ACIA), not saved directly
-        expect(cpu2._nmiLevel).toBe(true);
-        expect(cpu2._nmiEdge).toBe(true);
-        expect(cpu2.halted).toBe(true);
+        expect(cpu2.nmi).toBe(true);
+    });
+
+    it("should not raise an NMI edge for a level the FDC restores", () => {
+        sendSeekToMissingDrive(cpu.fdc);
+        takesNmi(cpu);
+
+        const snapshot = cpu.snapshotState();
+        const cpu2 = makeCpu();
+        cpu2.restoreState(snapshot);
+
+        expect(cpu2.nmi).toBe(true);
+        expect(takesNmi(cpu2)).toBe(false);
     });
 
     it("should reconstruct interrupt flags from VIA state", () => {
@@ -178,6 +243,172 @@ describe("Cpu6502 snapshotState / restoreState", () => {
 
         // The scheduler should have tasks registered (VIA timers at minimum)
         expect(cpu2.scheduler.headroom()).toBeLessThan(0xffffffff);
+    });
+});
+
+describe("Cpu6502 NMI lines", () => {
+    let cpu;
+
+    beforeEach(() => {
+        cpu = fake6502();
+    });
+
+    it("takes an NMI when the first source rises", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+
+        expect(cpu.nmi).toBe(true);
+        expect(takesNmi(cpu)).toBe(true);
+    });
+
+    it("does not take a second NMI for a source rising while another is held", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+        takesNmi(cpu);
+
+        cpu.setNmi(NmiSource.econet, true);
+
+        expect(takesNmi(cpu)).toBe(false);
+    });
+
+    it("holds the line until every source has dropped", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+        cpu.setNmi(NmiSource.econet, true);
+
+        cpu.setNmi(NmiSource.fdc, false);
+        expect(cpu.nmi).toBe(true);
+
+        cpu.setNmi(NmiSource.econet, false);
+        expect(cpu.nmi).toBe(false);
+    });
+
+    it("does not take an NMI for a source pulsing while another is held", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+        cpu.setNmi(NmiSource.econet, true);
+        takesNmi(cpu);
+
+        cpu.setNmi(NmiSource.fdc, false);
+        cpu.setNmi(NmiSource.fdc, true);
+
+        expect(takesNmi(cpu)).toBe(false);
+    });
+
+    it("takes another NMI once every source has dropped and one rises again", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+        cpu.setNmi(NmiSource.econet, true);
+        takesNmi(cpu);
+        cpu.setNmi(NmiSource.fdc, false);
+        cpu.setNmi(NmiSource.econet, false);
+
+        cpu.setNmi(NmiSource.econet, true);
+
+        expect(takesNmi(cpu)).toBe(true);
+    });
+
+    it("tells each source whether its own line is up", () => {
+        cpu.setNmi(NmiSource.econet, true);
+
+        expect(cpu.nmiAsserted(NmiSource.econet)).toBe(true);
+        expect(cpu.nmiAsserted(NmiSource.fdc)).toBe(false);
+    });
+
+    it("drops every source on reset", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+        cpu.setNmi(NmiSource.econet, true);
+
+        cpu.reset(true);
+
+        expect(cpu.nmi).toBe(false);
+        expect(takesNmi(cpu)).toBe(false);
+    });
+
+    it("leaves another device's line up when the 8271 aborts a command", () => {
+        cpu.setNmi(NmiSource.econet, true);
+        sendSeekToMissingDrive(cpu.fdc);
+
+        cpu.fdc.write(FdcResetRegister, 1);
+
+        expect(cpu.nmiAsserted(NmiSource.fdc)).toBe(false);
+        expect(cpu.nmi).toBe(true);
+    });
+});
+
+describe("Cpu6502 econet NMI line", () => {
+    const StationIdRegister = 0xfe18;
+    const NmiEnableRegister = 0xfe20;
+    let cpu;
+    let econet;
+
+    beforeEach(async () => {
+        econet = new Econet(1, TEST_6502.cyclesPerSecond);
+        cpu = new TEST_6502.Cpu(TEST_6502, { ...nullIo(), econet, config: machineSpec() });
+        await cpu.initialise();
+    });
+
+    it("follows the ADLC's IRQ flag", () => {
+        raiseAdlcIrq(cpu);
+        expect(econet.ADLC.status1 & AdlcIrqFlag).toBe(AdlcIrqFlag);
+        expect(cpu.nmi).toBe(true);
+        expect(takesNmi(cpu)).toBe(true);
+
+        clearAdlcIrq(cpu);
+        expect(econet.ADLC.status1 & AdlcIrqFlag).toBe(0);
+        expect(cpu.nmi).toBe(false);
+    });
+
+    it("takes an NMI for each of two requests in turn", () => {
+        raiseAdlcIrq(cpu);
+        takesNmi(cpu);
+        clearAdlcIrq(cpu);
+
+        raiseAdlcIrq(cpu);
+
+        expect(takesNmi(cpu)).toBe(true);
+    });
+
+    it("takes a second NMI when one prioritised cause clears while another stays", () => {
+        raiseAdlcIrq(cpu);
+        expect(takesNmi(cpu)).toBe(true);
+
+        // Filling the transmit FIFO withdraws TDRA, leaving the S2RQ cause.
+        for (let i = 0; i < 3; i++) cpu.writeDevice(AdlcTxFifo, 0x55);
+        cpu.polltime(1);
+
+        expect(econet.ADLC.status1 & AdlcIrqFlag).toBe(AdlcIrqFlag);
+        expect(takesNmi(cpu)).toBe(true);
+    });
+
+    it("does not take a new NMI for a request restored with it", () => {
+        raiseAdlcIrq(cpu);
+        takesNmi(cpu);
+        const snapshot = cpu.snapshotState();
+
+        cpu.restoreState(snapshot);
+        cpu.polltime(1);
+
+        expect(cpu.nmi).toBe(true);
+        expect(takesNmi(cpu)).toBe(false);
+    });
+
+    it("drops the line while reading the station id disables it, and raises it again on enable", () => {
+        raiseAdlcIrq(cpu);
+        takesNmi(cpu);
+
+        cpu.readDevice(StationIdRegister);
+        expect(cpu.nmi).toBe(false);
+
+        cpu.readDevice(NmiEnableRegister);
+        expect(cpu.nmi).toBe(true);
+        expect(takesNmi(cpu)).toBe(true);
+    });
+
+    it("does not touch the disc controller's line", () => {
+        cpu.setNmi(NmiSource.fdc, true);
+        takesNmi(cpu);
+
+        raiseAdlcIrq(cpu);
+        expect(takesNmi(cpu)).toBe(false);
+
+        cpu.readDevice(StationIdRegister);
+        expect(cpu.nmi).toBe(true);
     });
 });
 
