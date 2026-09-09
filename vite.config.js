@@ -38,7 +38,20 @@ export default defineConfig({
                 },
             },
             { extends: true, test: { name: "shader", include: ["tests/shader/test-*.js"] } },
+            {
+                extends: true,
+                test: {
+                    name: "bench",
+                    include: [],
+                    benchmark: { include: ["tests/bench/*.bench.js"] },
+                    // Native imports, not Vite's: its module runner reaches every import
+                    // through a getter, which costs more here than the emulation measured.
+                    experimental: { viteModuleRunner: false, nodeLoader: false },
+                },
+            },
         ],
+        // Projects inherit this, so without it every suite would run the benchmarks too.
+        benchmark: { include: [] },
         slowTestThreshold: 1000,
         coverage: {
             provider: "v8",

@@ -104,7 +104,7 @@
     "coverage:unit": "vitest run tests/unit --coverage",
     "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rl domFromIndexHtml tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
-    "benchmark": "node src/app-bench.js",
+    "benchmark": "vitest bench --silent=true --reporter=verbose",
     "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
     "mirror-sth:check": "node tools/mirror-sth.js --index-only",
     "mirror-sth:upload": "npm-run-all mirror-sth:upload:*",
