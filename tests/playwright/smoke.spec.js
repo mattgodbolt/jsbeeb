@@ -265,3 +265,23 @@ test("every display mode and sound output on the bar can be picked", async ({ be
     }
     await beeb.expectScreenText(">");
 });
+
+test("a drive bay shows one thing at a time: the note when empty, the jacket when loaded, neither twice while busy", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMedia");
+    await expect(page.locator("#media-panel")).toBeVisible();
+    const visible = (selector) => page.locator(`.bay[data-drive="0"] ${selector}`).isVisible();
+    const shown = async () => ({ note: await visible(".empty-note"), jacket: await visible(".jacket") });
+    // The page boots with a disc in drive 0; ejecting it is the empty state.
+    await page.click('.bay[data-drive="0"] .bay-eject');
+    await expect(page.locator('.bay[data-drive="0"]')).toHaveAttribute("data-state", "empty");
+    expect(await shown()).toEqual({ note: true, jacket: false });
+    await page.evaluate(() => (document.querySelector('.bay[data-drive="0"]').dataset.state = "busy"));
+    expect(await shown()).toEqual({ note: false, jacket: true });
+    await page.evaluate(() => (document.querySelector('.bay[data-drive="0"]').dataset.state = "loaded"));
+    expect(await shown()).toEqual({ note: false, jacket: true });
+});

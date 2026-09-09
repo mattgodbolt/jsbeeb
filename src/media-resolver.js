@@ -8,6 +8,30 @@ export function splitImage(image) {
     return { schema: match[2] || match[1] || "", image: match[3] };
 }
 
+/**
+ * Every schema a reference can start with: how it is served (`route`) and where the page says it
+ * came from, as a media-catalogue source key (`source`) or as words (`phrase`). A reference
+ * with no schema is a bare name from the built-in folder.
+ */
+export const Schemas = Object.freeze({
+    "": { route: "folder", source: "builtin" },
+    sth: { route: "sth", source: "sth" },
+    "|": { route: "sth", source: "sth" },
+    hfe: { route: "hfe", source: "hfe" },
+    gd: { route: "drive", source: "gdrive" },
+    local: { route: "browser", source: "browser" },
+    "!": { route: "browser", source: "browser" },
+    session: { route: "session", source: "session" },
+    data: { route: "zipped-inline", phrase: "the URL" },
+    b64data: { route: "inline", phrase: "the URL" },
+    http: { route: "url", phrase: "the web" },
+    https: { route: "url", phrase: "the web" },
+    file: { route: "url", phrase: "a file" },
+});
+
+/** How a reference is served; a schema this page does not know is read as a folder name. */
+export const routeOf = (ref) => (Schemas[splitImage(ref).schema] ?? Schemas[""]).route;
+
 // Where a bare name is looked for, and which registered source serves the archive.
 const Kinds = {
     disc: { folder: "discs", sth: "sth" },
@@ -38,23 +62,20 @@ export class MediaResolver {
     }
 
     async resolve(kind, ref) {
-        const { schema, image } = splitImage(ref);
+        const { image } = splitImage(ref);
         const { folder, sth } = Kinds[kind];
-        switch (schema) {
-            case "|":
+        switch (routeOf(ref)) {
             case "sth":
                 return this.source(sth)(image);
             case "hfe":
                 return { name: image, data: await this.source("hfe")(image), ignored: [] };
             case "session":
                 return this.source("session")(image);
-            case "b64data":
+            case "inline":
                 return { name: "disk.ssd", data: stringToUint8Array(atob(image)), ignored: [] };
-            case "data":
+            case "zipped-inline":
                 return unzipDiscImage(stringToUint8Array(atob(image)));
-            case "http":
-            case "https":
-            case "file":
+            case "url":
                 // The URL may end in query parameters, which would upset the extension check.
                 return openIfZip(new URL(ref).pathname.split("/").pop(), await this.load(ref));
             default:

@@ -140,36 +140,29 @@ describe("MediaLoader", () => {
         });
     });
 
-    describe("the drop zone", () => {
-        const drop = (file) => {
-            const event = new Event("drop", { bubbles: true, cancelable: true });
-            Object.defineProperty(event, "dataTransfer", { value: { files: file ? [file] : [] } });
-            document.getElementById("paste-text").dispatchEvent(event);
-        };
-
+    describe("opening a file", () => {
         it("hands a save state to the snapshot loader, and says so only if it was restored", async () => {
             deps.loadSnapshot.mockResolvedValue(true);
             const media = make();
-            drop(fileFor("state.snp", new Uint8Array([1])));
-            await vi.waitFor(() => expect(deps.loadSnapshot).toHaveBeenCalled());
+            expect(await media.openFile(fileFor("state.snp", new Uint8Array([1])))).toEqual({
+                kind: "snapshot",
+                name: "state.snp",
+                words: "Restored the state saved in state.snp.",
+            });
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Restored")]));
             deps.loadSnapshot.mockResolvedValue(false);
             expect(await media.openFile(fileFor("bad.snp", new Uint8Array([1])))).toBeNull();
         });
 
-        it("puts a dropped disc in drive 0 and says so", async () => {
-            make();
-            drop(fileFor("dropped.ssd", ssdImage()));
-            await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalled());
-            expect(toasts()).toEqual([expect.stringContaining("Loaded dropped.ssd into drive 0.")]);
-        });
-
-        it("does nothing when nothing was dropped", async () => {
-            make();
-            drop(null);
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-            expect(deps.loadSnapshot).not.toHaveBeenCalled();
+        it("puts a disc in the drive it was given and says so", async () => {
+            const media = make();
+            expect(await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).toEqual({
+                kind: "disc",
+                name: "mine.ssd",
+                driveIndex: 1,
+                words: "Loaded mine.ssd into drive 1.",
+            });
+            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
         });
     });
 
@@ -177,7 +170,9 @@ describe("MediaLoader", () => {
         it("remembers a disc file, lists it, and can put it in either drive again by reference", async () => {
             deps.urlState.params.disc2 = "old.ssd";
             const media = make();
-            expect(await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).toBe("Loaded mine.ssd into drive 1.");
+            expect((await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).words).toBe(
+                "Loaded mine.ssd into drive 1.",
+            );
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
             expect(deps.urlState.params.disc2).toBeUndefined();
             const { descriptors } = await media.listAll();
@@ -207,7 +202,11 @@ describe("MediaLoader", () => {
             const zipped = new Uint8Array(await createZipBlob([{ name: "Chuckie.uef", data: uef }]).arrayBuffer());
             deps.urlState.params.tape = "sth:old.zip";
             const media = make();
-            expect(await media.openFile(fileFor("chuckie_egg.zip", zipped))).toBe("Loaded Chuckie.uef as the tape.");
+            expect(await media.openFile(fileFor("chuckie_egg.zip", zipped))).toEqual({
+                kind: "tape",
+                name: "Chuckie.uef",
+                words: "Loaded Chuckie.uef as the tape.",
+            });
             expect(deps.urlState.params.tape).toBeUndefined();
             expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(
                 expect.objectContaining({ name: "Chuckie.uef" }),
