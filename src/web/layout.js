@@ -3,6 +3,10 @@ import { errorText } from "./reporting.js";
 
 /** Steps the drawing buffer grows in, as a multiple of the base canvas size. */
 const CanvasScaleStep = 0.25;
+/** Below this width the side pictures are not worth a border; the monitor takes the whole width. */
+const NarrowWindow = 700;
+/** Clearance between the monitor and the LED panel below it. */
+const LedPanelGap = 10;
 
 /**
  * Where everything goes for a given window: the monitor picture, the canvas
@@ -122,6 +126,12 @@ export class Layout {
         }
     }
 
+    /** What the LED panel needs below the monitor: its own height, which its layout decides. */
+    ledPanelRoom() {
+        const panel = document.getElementById("leds");
+        return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
+    }
+
     resize() {
         // The display config can change when the display mode switches.
         const displayConfig = this.display.filterClass.getDisplayConfig();
@@ -131,8 +141,8 @@ export class Layout {
                 innerWidth: window.innerWidth,
                 innerHeight: window.innerHeight,
                 navbarHeight: navbarHeightOf(document.getElementById("header-bar")),
-                borderReservedSize: this.borderReservedSize,
-                bottomReservedSize: this.bottomReservedSize,
+                borderReservedSize: window.innerWidth <= NarrowWindow ? 0 : this.borderReservedSize,
+                bottomReservedSize: this.bottomReservedSize && this.ledPanelRoom(),
                 devicePixelRatio: window.devicePixelRatio || 1,
             },
             { width: this.screenCanvas.getAttribute("width"), height: this.screenCanvas.getAttribute("height") },
