@@ -304,7 +304,6 @@ export class IntelFdc {
 
         this._regs = new Uint8Array(IntelFdc.NumRegisters);
         this._isResultReady = false;
-        // Derived from one of the regs plus _isResultReady.
         this._status = 0;
         this._mmioData = 0;
         this._mmioClocks = 0;
@@ -1046,27 +1045,16 @@ export class IntelFdc {
         // READ DRIVE STATUS:                        188us
         // write $35 to parameter register:           31us
         // write 3rd SPECIFY parameter:               27us
-        let status = this.internalStatus;
-        // The internal status register appears to be shared with some mode bits that
-        // must be masked out.
-        status &= ~0x03;
-        // Current best thinking is that the internal register uses bit value 0x10 for
-        // something different, and that "result ready" is maintained by the external
-        // register logic.
-        status &= ~StatusFlag.resultReady;
-        if (this._isResultReady) {
-            status |= StatusFlag.resultReady;
-        }
-
-        // TODO(#1060) "command register full", bit value 0x40, isn't understood. In
-        // particular, the mode register (shared with the status register we
-        // believe) is set to 0xC1 in typical operation. This would seem to raise
-        // 0x40 after it has been lowered at command register acceptance. However,
-        // the bit is not returned.
-        // Don't return it, ever, for now.
-        // Also avoid "parameter register full".
-        status &= ~0x60;
-
+        // EMU NOTE: command register full and parameter register full are set by the host's write
+        // and cleared when the 8271's microcontroller accepts the byte; see Chris Evans's ROM
+        // reverse engineering, https://scarybeastsecurity.blogspot.com/2020/11/reverse-engineering-forgotten-1970s.html
+        // On the real chip acceptance takes the tens of microseconds listed above; here it happens
+        // in the same write, so neither bit is ever reported. Software only polls for them to
+        // clear, so nothing waits on them being set, and the latency is left unmodelled rather
+        // than guessed from two measurements. The mode register shares this byte; result ready
+        // is kept by the external register logic.
+        let status = this.internalStatus & (StatusFlag.busy | StatusFlag.nmi | StatusFlag.needData);
+        if (this._isResultReady) status |= StatusFlag.resultReady;
         this._status = status;
     }
 
