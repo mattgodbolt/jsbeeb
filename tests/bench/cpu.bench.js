@@ -8,11 +8,12 @@ import { findModel } from "../../src/models.js";
 // An iteration executes a million cycles, so the reported hz reads as virtual MHz.
 const CyclesPerIteration = 1000 * 1000;
 const CyclesToBoot = 10 * 1000 * 1000;
+const EliteImage = "elite.ssd";
 
 async function eliteUnderway() {
     const cpu = fake6502(findModel("B"));
     await cpu.initialise();
-    cpu.fdc.loadDisc(0, discFor("elite", await load("discs/elite.ssd")));
+    cpu.fdc.loadDisc(0, discFor(EliteImage, await load(`discs/${EliteImage}`)));
     cpu.sysvia.keyDown(keyCodes.SHIFT);
     cpu.execute(CyclesToBoot);
     cpu.sysvia.keyUp(keyCodes.SHIFT);
