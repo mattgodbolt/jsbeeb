@@ -45,13 +45,13 @@ describe("Intel 8271 tests", function () {
     const paramFull = 0x20;
     const resultReady = 0x10;
     const loadHead = 0x08;
-    const select1 = 0x40;
+    const driveSelect1 = 0x40;
     const writeRegCmd = 0x3a;
     const readDriveStatusCmd = 0x2c;
     const mmioWrite = 0x23;
-    const seekCmd = (0x0a << 2) | select1 | 1;
+    const seekCmd = (0x0a << 2) | driveSelect1 | 1;
 
-    it("should contruct and start out idle", () => {
+    it("should construct and start out idle", () => {
         const fakeCpu = fake6502();
         const scheduler = new Scheduler();
         const fdc = new IntelFdc(fakeCpu, scheduler);
@@ -74,7 +74,7 @@ describe("Intel 8271 tests", function () {
         const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive]);
         expect(fdc._driveOut & loadHead).toBe(0);
         expect(fakeDrive.spinning).toBe(false);
-        sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
+        sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
         expect(fdc._driveOut & loadHead).toBe(loadHead);
         expect(fakeDrive.spinning).toBe(true);
     });
@@ -83,7 +83,7 @@ describe("Intel 8271 tests", function () {
         const scheduler = new Scheduler();
         const fakeDrive = new FakeDrive();
         const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive]);
-        sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
+        sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
         // nb will seek two more due to bad track nonsense
         sendCommand(fdc, seekCmd, 2);
         expect(fakeDrive.track).toBe(1);
