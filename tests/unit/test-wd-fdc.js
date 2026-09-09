@@ -46,6 +46,8 @@ const ShortWaitTicks = 1000;
 const MfmByteTicks = 64;
 // Well inside the 32us an MFM byte takes, so no byte is lost between polls.
 const PollTicks = 16;
+// A type II command gives up after five revolutions, so a command still busy after ten has hung.
+const MaxCommandTicks = 10 * DiscDrive.TicksPerRevolution;
 
 const IdMark = IbmDiscFormat.idMarkDataPattern;
 const DataMark = IbmDiscFormat.dataMarkDataPattern;
@@ -99,6 +101,7 @@ function runCommand(fdc, scheduler, command, { commandRegister = CommandRegister
     do {
         takeByte();
         scheduler.polltime(PollTicks);
+        if (scheduler.epoch - start > MaxCommandTicks) throw new Error(`Command ${command} never finished`);
     } while (fdc.read(commandRegister) & StatusBusy);
     takeByte();
     return { bytes, status: fdc.read(commandRegister), ticks: scheduler.epoch - start };
