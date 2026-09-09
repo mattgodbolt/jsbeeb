@@ -57,6 +57,13 @@ const ForceInterruptBits = Object.freeze({
     immediate: 0x08,
 });
 
+// The datasheet names one byte for each address mark; the WD1772 accepts the whole range
+// (Jean Louis-Guerin's WD1772 specification, "Type II commands").
+const isIdMark = (data) => data >= 0xfc && data <= 0xff;
+const isDataMark = (data) => data === 0xfa || data === 0xfb;
+const isDeletedDataMark = (data) => data === 0xf8 || data === 0xf9;
+const FmIndexMark = 0xfc;
+
 /**
  * The drive control register is documented here:
  * https://www.cloud9.co.uk/james/BBCMicro/Documentation/wd1770.html
@@ -134,21 +141,35 @@ const TimerState = Object.freeze({
     done: 4,
 });
 
+/**
+ * Which controller, and how it is wired. The Master Compact's WD1772 steps faster than the WD1770; the
+ * Opus Challenger's WD1770 sits at the other half of the page and keeps INTRQ off the NMI line.
+ *
+ * @readonly
+ * @enum {string}
+ */
+export const WdFdcVariant = Object.freeze({
+    wd1770: "wd1770",
+    wd1772: "wd1772",
+    opusChallenger: "opusChallenger",
+});
+
 export class WdFdc {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
      * @param {BaseDiscDrive[] | undefined} drives
      * @param {*} debugFlags
+     * @param {WdFdcVariant} [variant]
      */
-    constructor(cpu, scheduler, drives, debugFlags) {
+    constructor(cpu, scheduler, drives, debugFlags, variant = WdFdcVariant.wd1770) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
 
         this._isMaster = cpu.model.isMaster;
-        this._is1772 = false; // TODO(#1059) if we ever support Master Compact
-        this._isOpus = false; // TODO(#1059) if we ever support Opus
+        this._is1772 = variant === WdFdcVariant.wd1772;
+        this._isOpus = variant === WdFdcVariant.opusChallenger;
 
         this._controlRegister = 0;
         /** @type {Status|Number} */
@@ -265,10 +286,9 @@ export class WdFdc {
         // Only remap control register values.
         if (addr >= 4) return val;
         let remapped = Control.reset;
-        if (val & 0x01) remapped |= Control.drive0;
-        else remapped |= Control.drive1;
+        remapped |= val & 0x01 ? Control.drive1 : Control.drive0;
         if (val & 0x02) remapped |= Control.side;
-        if (val & 0x40) remapped |= Control.density;
+        if (!(val & 0x40)) remapped |= Control.density;
         return remapped;
     }
 
@@ -959,39 +979,36 @@ export class WdFdc {
 
     _markDetectorTriggered() {
         if (this._isDoubleDensity(this._controlRegister)) {
-            // EMU NOTE: unsure as to exactly when MFM sync bytes are spotted. Here we look for MFM 0x00 then MFM 0xa1 (sync).
-            // The documented sequence is 12 0x00, 3x 0xa1 (sync).
-            if ((this._markDetector & 0xffffffffn) === 0xaaaa4489n) {
+            // EMU NOTE: unsure as to exactly when MFM sync bytes are spotted. Here we look for MFM 0x00 then an MFM
+            // sync, 0xa1 or 0xc2. The documented sequences are 12 0x00, 3x 0xa1 (sync) and 12 0x00, 3x 0xc2 (index).
+            const lastWord = this._markDetector & 0xffffffffn;
+            if (lastWord === 0xaaaa4489n) {
                 this._deliverData = 0xa1;
                 return true;
             }
-            // TODO(#1059) sync to c2 (5224).
-            // Note that an early, naive attempt had it triggered in the middle of the sector data,
-            // so we'll need to study how it actually works in detail.
-            // Tag the byte after 3 sync bytes as a marker.
+            // Ordinary data can encode this pattern too (01 fe 29 is one such run), so it only resyncs
+            // where the spec says it may, in read track.
+            if (lastWord === 0xaaaa5224n && this._state === State.inReadTrack) {
+                this._deliverData = 0xc2;
+                return true;
+            }
+            // Tag the byte after 3 sync bytes as a marker. The byte after 3 index syncs is the index mark, which
+            // opens no field, so it stays untagged.
             if ((this._markDetector & 0xffffffffffff0000n) === 0x4489448944890000n) {
                 this._deliverIsMarker = true;
             }
-        } else {
-            // The FM mark detector appears to need 4 data bits' worth of zeros, with clock bits set to 1, to be able to trigger.
-            // Tried on @scarybeasts's real 1772-based machine.
-            if ((this._markDetector & 0x0000ffff00000000n) === 0x0000888800000000n) {
-                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(
-                    Number(this._markDetector & 0xffffffffn),
-                );
-                if (!iffyPulses && clocks === 0xc7) {
-                    // TODO(#1059) see http://info-coach.fr/atari/documents/_mydoc/WD1772-JLG.pdf
-                    // This suggests that a wider range of byte values will function as markers. It may also differ FM vs. MFM.
-                    if (data === 0xf8 || data === 0xfb || data === 0xfe) {
-                        // Resync to marker.
-                        this._deliverData = data;
-                        this._deliverIsMarker = true;
-                        return true;
-                    }
-                }
-            }
+            return false;
         }
-        return false;
+        // The FM mark detector appears to need 4 data bits' worth of zeros, with clock bits set to 1, to be able to trigger.
+        // Tried on @scarybeasts's real 1772-based machine.
+        if ((this._markDetector & 0x0000ffff00000000n) !== 0x0000888800000000n) return false;
+        const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(Number(this._markDetector & 0xffffffffn));
+        // A mark reads back with the clock that write track gives it.
+        const markClocks = this._fmMarkerClocksFor(data);
+        if (iffyPulses || markClocks === undefined || clocks !== markClocks) return false;
+        this._deliverData = data;
+        this._deliverIsMarker = data !== FmIndexMark;
+        return true;
     }
 
     /**
@@ -1066,7 +1083,7 @@ export class WdFdc {
 
     _fmMarkerClocksFor(byte) {
         switch (byte) {
-            case 0xfc:
+            case FmIndexMark:
                 return 0xd7;
             case 0xf8:
             case 0xf9:
@@ -1161,9 +1178,9 @@ export class WdFdc {
 
         switch (this._state) {
             case State.searchId:
-                if (!isMarker || data !== IbmDiscFormat.idMarkDataPattern) break;
+                if (!isMarker || !isIdMark(data)) break;
                 this._setState(State.inId);
-                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(isMfm), IbmDiscFormat.idMarkDataPattern);
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(isMfm), data);
                 break;
             case State.inId:
                 this._byteReceivedInId(data);
@@ -1221,9 +1238,8 @@ export class WdFdc {
             if (isCrcError) this._statusRegister |= Status.crcError;
             // Unlike the 8271, read address returns just a single record. It is also not synchronized
             // to the index pulse.
-            // EMU TODO(#1059) it's likely that timing is generally off for most states,
-            // i.e. the 1770 takes various numbers of internal clock cycles before it
-            // delivers the CRC error, before it goes not busy, etc.
+            // EMU NOTE: the internal clock cycles the 1770 spends between delivering the last
+            // header byte, reporting the CRC error and dropping busy are not modelled.
             // EMU NOTE: must not clear busy flag right away. The 1770 delivers the
             // last header byte DRQ separately from lowering the busy flag.
             this._setState(State.done);
@@ -1261,10 +1277,8 @@ export class WdFdc {
             this._setState(State.searchId);
             return;
         }
-        if (!isMarker) return;
-        if (data === IbmDiscFormat.dataMarkDataPattern) {
-            // Nothing...
-        } else if (data === IbmDiscFormat.deletedDataMarkDataPattern) {
+        if (!isMarker || !(isDataMark(data) || isDeletedDataMark(data))) return;
+        if (isDeletedDataMark(data)) {
             // EMU NOTE: the datasheet is ambiguous on whether the deleted mark is
             // visible in the status register immediately, or at the end of a read.
             // The state machine diagram says "DAM in time" -> "Set Record Type in
@@ -1278,7 +1292,7 @@ export class WdFdc {
             // the bit, but testing on @scarybeasts's 1772, the bit is set and left set even if
             // a non-deleted sector is encountered subsequently.
             this._statusRegister |= Status.typeIIorIIIDeletedMark;
-        } else return;
+        }
         this._setState(State.inData);
         // CRC error is reset here. It's possible to hit a CRC error in a sector header and then find
         // an OK matching sector header.
