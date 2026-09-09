@@ -27,13 +27,8 @@ jobs:
         run: npm ci
       - name: checks
         run: npm run ci-checks
-      # Vitest 4's job summary has a fixed "Vitest Test Report" heading, so each
-      # run gets a heading of its own first to tell the three apart. Vitest 5
-      # names them itself; the echoes go when we move to it (#947).
       - name: Unit tests
-        run: |
-          echo "# Unit tests" >> "$GITHUB_STEP_SUMMARY"
-          npm run test:unit -- --coverage
+        run: npm run test:unit -- --coverage
       - name: Coverage report
         # The PR comment needs a write token, which fork pull_request events do not get.
         if: always() && github.event_name != 'pull_request' && hashFiles('coverage/coverage-summary.json') != ''
@@ -59,13 +54,9 @@ jobs:
             --exclude "coverage-final.json" --exclude "lcov.info" --exclude "lcov-report/*" --exclude ".tmp/*" \
             --cache-control max-age=30 --metadata-directive REPLACE
       - name: Integration tests
-        run: |
-          echo "# Integration tests" >> "$GITHUB_STEP_SUMMARY"
-          npm run test:integration
+        run: npm run test:integration
       - name: Shader tests
-        run: |
-          echo "# Shader tests" >> "$GITHUB_STEP_SUMMARY"
-          npm run test:shader
+        run: npm run test:shader
       - name: End-to-end tests
         run: |
           echo "# End-to-end tests" >> "$GITHUB_STEP_SUMMARY"
