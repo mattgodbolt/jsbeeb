@@ -19,6 +19,13 @@ function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
 
+/** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
+export const NmiSource = Object.freeze({
+    fdc: 0x01,
+    econet: 0x02,
+    tube: 0x04,
+});
+
 class Flags {
     constructor() {
         this._byte = 0x30;
@@ -114,7 +121,7 @@ class Base6502 {
         this.forceTracing = false;
         this.runner = this.opcodes.runInstruction;
         this.interrupt = 0;
-        this._nmiLevel = false;
+        this._nmiSources = 0;
         this._nmiEdge = false;
 
         if (model.nmos) {
@@ -204,13 +211,18 @@ class Base6502 {
     }
 
     get nmi() {
-        return this._nmiLevel;
+        return this._nmiSources !== 0;
     }
 
-    NMI(nmi) {
-        const prevLevel = this._nmiLevel;
-        this._nmiLevel = !!nmi;
-        if (this._nmiLevel && !prevLevel) this._nmiEdge = true;
+    nmiAsserted(source) {
+        return (this._nmiSources & source) !== 0;
+    }
+
+    setNmi(source, level) {
+        const wasAsserted = this._nmiSources !== 0;
+        if (level) this._nmiSources |= source;
+        else this._nmiSources &= ~source;
+        if (!wasAsserted && this._nmiSources) this._nmiEdge = true;
     }
 
     /** Called as the NMI vector is taken, for devices that withdraw their request at that point. */
@@ -433,7 +445,8 @@ class Tube6502 extends Base6502 {
         this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
         // A latched NMI would otherwise survive the reset and be taken on the first instruction
         // after it, defeating the empty R3 FIFO the ULA seeds for exactly that reason.
-        this._nmiLevel = this._nmiEdge = false;
+        this._nmiSources = 0;
+        this._nmiEdge = false;
         this.takeInt = false;
         this.tube.reset(hard);
     }
@@ -505,7 +518,7 @@ class Tube6502 extends Base6502 {
             s: this.s,
             pc: this.pc,
             p: this.p.asByte(),
-            nmiLevel: this._nmiLevel,
+            nmiLevel: this.nmi,
             nmiEdge: this._nmiEdge,
             takeInt: this.takeInt,
             // The parasite has no scheduler of its own, so this is not relative to any epoch.
@@ -524,7 +537,7 @@ class Tube6502 extends Base6502 {
         this.s = state.s;
         this.pc = state.pc;
         this.p.setFromByte(state.p);
-        this._nmiLevel = state.nmiLevel;
+        this._nmiSources = state.nmiLevel ? NmiSource.tube : 0;
         this._nmiEdge = state.nmiEdge;
         this.takeInt = state.takeInt;
         this.cycles = state.cycles;
@@ -817,20 +830,22 @@ export class Cpu6502 extends Base6502 {
 
     handleEconetStationId() {
         if (!this.econet) return 0xff;
-        this.econet.econetNMIEnabled = false;
+        this.setEconetNmiEnabled(false);
         return this.econet.stationId;
     }
 
-    handleEconetNMIEnable() {
-        if (this.econet && !this.econet.econetNMIEnabled) {
-            // was off
-            this.econet.econetNMIEnabled = true;
-            if (this.econet.ADLC.status1 & 128) {
-                // irq pending
-                this.NMI(true); // delayed NMI asserted
-            }
-        }
+    handleEconetNmiEnable() {
+        if (this.econet) this.setEconetNmiEnabled(true);
         return 0xff;
+    }
+
+    setEconetNmiEnabled(enabled) {
+        this.econet.econetNMIEnabled = enabled;
+        this.updateEconetNmi();
+    }
+
+    updateEconetNmi() {
+        this.setNmi(NmiSource.econet, this.econet.nmi);
     }
 
     readDevice(addr) {
@@ -879,7 +894,7 @@ export class Cpu6502 extends Base6502 {
             case 0xfe18:
                 return this.model.isMaster ? this.adconverter.read(addr) : this.handleEconetStationId();
             case 0xfe20:
-                if (!this.model.isMaster) return this.handleEconetNMIEnable();
+                if (!this.model.isMaster) return this.handleEconetNmiEnable();
                 break;
             case 0xfe24:
             case 0xfe28:
@@ -895,7 +910,7 @@ export class Cpu6502 extends Base6502 {
                 if (this.model.isMaster) return this.handleEconetStationId();
                 break;
             case 0xfe3c:
-                if (this.model.isMaster) return this.handleEconetNMIEnable();
+                if (this.model.isMaster) return this.handleEconetNmiEnable();
                 break;
             case 0xfe40:
             case 0xfe44:
@@ -1054,7 +1069,7 @@ export class Cpu6502 extends Base6502 {
                 return this.serial.write(addr, b);
             case 0xfe18:
                 if (this.model.isMaster) return this.adconverter.write(addr, b);
-                if (!this.model.isMaster && this.econet) this.econet.econetNMIEnabled = false;
+                if (!this.model.isMaster && this.econet) this.setEconetNmiEnabled(false);
                 break;
             case 0xfe20:
                 return this.ula.write(addr, b);
@@ -1077,7 +1092,7 @@ export class Cpu6502 extends Base6502 {
                 }
                 return this.romSelect(b);
             case 0xfe38:
-                if (this.model.isMaster && this.econet) this.econet.econetNMIEnabled = false;
+                if (this.model.isMaster && this.econet) this.setEconetNmiEnabled(false);
                 break;
             case 0xfe3c:
                 if (!this.model.isMaster) {
@@ -1199,7 +1214,7 @@ export class Cpu6502 extends Base6502 {
             s: this.s,
             pc: this.pc,
             p: this.p.asByte(),
-            nmiLevel: this._nmiLevel,
+            nmiLevel: this.nmi,
             nmiEdge: this._nmiEdge,
             halted: this.halted,
             takeInt: this.takeInt,
@@ -1246,8 +1261,7 @@ export class Cpu6502 extends Base6502 {
         this.p.setFromByte(state.p);
         // interrupt is rebuilt by sub-component restores (VIA updateIFR, ACIA updateIrq)
         this.interrupt = 0;
-        this._nmiLevel = state.nmiLevel;
-        this._nmiEdge = state.nmiEdge;
+        this._nmiSources = 0;
         this.halted = state.halted;
         this.takeInt = state.takeInt;
 
@@ -1291,10 +1305,16 @@ export class Cpu6502 extends Base6502 {
         // touchscreen keeps its current state, unpolled.
         if (state.touchScreen) this.touchScreen.restoreState(state.touchScreen);
 
-        // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
+        // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state, and the saved
+        // level is the only record of its line.
         if (state.fdc) {
             this.fdc.restoreState(state.fdc);
+        } else {
+            this.setNmi(NmiSource.fdc, state.nmiLevel);
         }
+        if (this.econet) this.updateEconetNmi();
+        // After the devices have re-driven their lines, so a line coming back up is not an edge.
+        this._nmiEdge = state.nmiEdge;
 
         // Tube state (v3+). Rather than leave the parasite running on state the host knows
         // nothing about, reset it; restoreSnapshot() rejects such a pairing before reaching here.
@@ -1379,7 +1399,7 @@ export class Cpu6502 extends Base6502 {
         this.p.i = true;
         this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
         this._nmiEdge = false;
-        this._nmiLevel = false;
+        this._nmiSources = 0;
         this.halted = false;
         this.breakpointResume = false;
         this.music5000PageSel = 0;
@@ -1428,10 +1448,9 @@ export class Cpu6502 extends Base6502 {
         const musicStuff = this.music5000 ? (cycles) => this.music5000.polltime(cycles) : nop;
         const econetStuff = this.econet
             ? (cycles) => {
-                  const donmi = this.econet.polltime(cycles);
-                  if (donmi && this.econet.econetNMIEnabled) {
-                      this.NMI(true);
-                  }
+                  const retrigger = this.econet.polltime(cycles);
+                  if (retrigger) this.setNmi(NmiSource.econet, false);
+                  this.updateEconetNmi();
                   this.filestore.polltime(cycles);
               }
             : nop;

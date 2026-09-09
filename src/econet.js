@@ -650,9 +650,14 @@ export class Econet {
         }
     }
 
+    /** The ADLC's IRQ output as the NMI line sees it, gated by the station-id/NMI-enable latch. */
+    get nmi() {
+        return this.econetNMIEnabled && !!(this.ADLC.status1 & 128);
+    }
+
+    /** Whether the ADLC wants a fresh NMI edge while its IRQ flag stays set. */
     checkForNMI() {
-        // Do we need to flag an interrupt?
-        let raiseNMI = false;
+        let retriggerNMI = false;
         if (this.ADLC.status1 !== this.ADLCprev.status1 || this.ADLC.status2 !== this.ADLCprev.status2) {
             // something changed
             let tempcause, temp2;
@@ -689,7 +694,6 @@ export class Econet {
 
             if (tempcause) {
                 //something got set
-                raiseNMI = true;
                 this.irqcause = this.irqcause | tempcause; // remember which bit went high to flag irq
                 // SR1b7 IRQ flag
                 this.ADLC.status1 |= 128;
@@ -707,12 +711,12 @@ export class Econet {
                 } else {
                     // interrupt again because still have flags set
                     if (this.ADLC.control2 & 1) {
-                        raiseNMI = true;
+                        retriggerNMI = true;
                     }
                 }
             }
         }
 
-        return raiseNMI;
+        return retriggerNMI;
     }
 }

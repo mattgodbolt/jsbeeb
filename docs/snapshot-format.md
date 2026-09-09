@@ -104,7 +104,7 @@ The `type` field is the constructor name: `Uint8Array`, `Uint16Array`, `Uint32Ar
 | `s`                | number     | Stack pointer (0-255)                                                                             |
 | `pc`               | number     | Program counter (0-65535)                                                                         |
 | `p`                | number     | Processor flags byte (bits 4-5 always set)                                                        |
-| `nmiLevel`         | boolean    | NMI line level                                                                                    |
+| `nmiLevel`         | boolean    | NMI line level, the OR of every device's line (see below)                                         |
 | `nmiEdge`          | boolean    | NMI edge detected (pending)                                                                       |
 | `halted`           | boolean    | CPU halted state                                                                                  |
 | `takeInt`          | boolean    | Interrupt pending                                                                                 |
@@ -121,6 +121,8 @@ The `type` field is the constructor name: `Uint8Array`, `Uint16Array`, `Uint32Ar
 | `roms`             | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em. |
 
 **Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
+
+The NMI level is rebuilt the same way: the CPU clears every device's line and each device re-drives its own, the FDC from its restored registers and econet from its live state (econet state itself is not saved). `nmiLevel` is read back only when the snapshot carries no FDC state (v1 and imported snapshots), where it stands in for the disc controller's line. `nmiEdge` is applied after the devices have re-driven their lines, so a line coming back up on restore is not mistaken for a fresh edge.
 
 ### Scheduler (`state.scheduler`)
 
@@ -445,7 +447,7 @@ Present only when a co-processor was fitted.
 
 The IRQ and reset lines are not saved: they follow from the status registers and FIFO counts above, in the same way the host's `interrupt` follows from the VIA and ACIA state.
 
-The parasite's NMI does not. The ULA latches its request rather than presenting the register 3 condition as a level, so once the parasite takes an NMI the request is retired while the condition that raised it may still hold. `parasiteNmi` is therefore real state and cannot be recomputed. Snapshots written before it existed fall back to the register 3 condition on restore, which is what the emulator used to derive the line from. `nmiLevel` and `nmiEdge` on the parasite itself are saved for the same reason: an edge already taken leaves no trace in the ULA.
+The parasite's NMI does not. The ULA latches its request rather than presenting the register 3 condition as a level, so once the parasite takes an NMI the request is retired while the condition that raised it may still hold. `parasiteNmi` is therefore real state and cannot be recomputed. Snapshots written before it existed fall back to the register 3 condition on restore, which is what the emulator used to derive the line from. `nmiLevel` and `nmiEdge` on the parasite itself are saved for the same reason: an edge already taken leaves no trace in the ULA. The ULA is the parasite's only NMI source, so unlike the host's `nmiLevel` the parasite's is restored as saved, before the ULA re-drives the line.
 
 ## Known limitations (v3)
 

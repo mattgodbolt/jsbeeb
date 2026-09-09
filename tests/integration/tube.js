@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
+import { NmiSource } from "../../src/6502.js";
 
 // The ULA's M flag, which lets pending R3 data raise the parasite's NMI.
 const TubeStatusEnableParasiteNmiFromR3 = 0x08;
@@ -73,7 +74,7 @@ describe("Tube co-processor", () => {
 
         cpu.restoreState(state);
 
-        expect(cpu.tube._nmiLevel).toBe(true);
+        expect(cpu.tube.nmi).toBe(true);
         expect(cpu.tube._nmiEdge).toBe(true);
     });
 
@@ -92,14 +93,14 @@ describe("Tube co-processor", () => {
         cpu.restoreState(state);
 
         expect(cpu.tube.tube.parasiteNmi).toBe(true);
-        expect(cpu.tube._nmiLevel).toBe(true);
+        expect(cpu.tube.nmi).toBe(true);
     });
 
     it("does not take a latched NMI across a parasite reset", async () => {
         const machine = new TestMachine("Master", { tube: true });
         await machine.initialise();
         const parasite = machine.processor.tube;
-        parasite.NMI(true);
+        parasite.setNmi(NmiSource.tube, true);
         expect(parasite._nmiEdge).toBe(true);
 
         parasite.reset(true);

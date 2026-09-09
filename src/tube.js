@@ -1,3 +1,4 @@
+import { NmiSource } from "./6502.js";
 import { hexbyte, hexword } from "./hex.js";
 
 //  this one should be declared more globally
@@ -139,7 +140,7 @@ export class Tube {
         //  each host access to register 3 that gives the parasite something to do raises a request, and
         //  only the parasite can retire one, by servicing the transfer or by taking the NMI. Recomputing
         //  the condition here instead would lose every request raised while an earlier one still stood.
-        this.parasiteCpu.NMI(this.parasiteNmi && this.parasiteNmiEnabled());
+        this.parasiteCpu.setNmi(NmiSource.tube, this.parasiteNmi && this.parasiteNmiEnabled());
         //  parasite CPU RESET held low - not implemented in the CPU - the CPU should be frozen until this signal is released
         this.parasiteCpu.resetHeldLow = this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_PARASITE_RESET_ACTIVE_LOW;
     }

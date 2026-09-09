@@ -18,7 +18,7 @@ function fakeCpu() {
         resetHeldLow: false,
         nmiLevel: false,
         nmiEdges: 0,
-        NMI(nmi) {
+        setNmi(source, nmi) {
             if (nmi && !this.nmiLevel) this.nmiEdges++;
             this.nmiLevel = !!nmi;
         },
