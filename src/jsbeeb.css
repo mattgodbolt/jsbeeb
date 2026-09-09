@@ -147,6 +147,7 @@ span.accesskey {
   left: 0;
   position: fixed;
   display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 8px;
   color: #ddd;
@@ -2322,40 +2323,5 @@ div.smoothie-chart-tooltip {
   .media-row .media-keycap {
     grid-column: 3;
     grid-row: 1 / span 3;
-  }
-}
-
-/* ----- a phone's LED panel: the slots share the width instead of overflowing it ----- */
-
-@media (max-width: 560px) {
-  #leds {
-    right: 0;
-    margin: 2px;
-    padding: 3px 4px;
-    gap: 4px;
-  }
-
-  #leds .slot-readouts {
-    flex: 1 1 0;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  #leds .slot-readout,
-  #leds .slot-readout[data-slot="tape"] {
-    width: auto;
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 1px 3px;
-    column-gap: 4px;
-  }
-
-  #leds .lights {
-    gap: 3px;
-    padding-left: 4px;
-  }
-
-  #leds .cell.econet {
-    display: none;
   }
 }
