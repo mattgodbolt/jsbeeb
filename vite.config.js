@@ -38,18 +38,6 @@ export default defineConfig({
                 },
             },
             { extends: true, test: { name: "shader", include: ["tests/shader/test-*.js"] } },
-            {
-                extends: true,
-                test: {
-                    name: "bench",
-                    include: [],
-                    // The file is not named *.bench.js, so no other project discovers it.
-                    benchmark: { include: ["tests/bench/*-bench.js"] },
-                    // Vite's module runner reaches an imported binding through a getter, and
-                    // the emulator crosses modules once an instruction: a fifth of the speed.
-                    experimental: { viteModuleRunner: false },
-                },
-            },
         ],
         slowTestThreshold: 1000,
         coverage: {
