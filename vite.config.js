@@ -18,8 +18,6 @@ export default defineConfig({
     },
     test: {
         testTimeout: 15000,
-        // Transformed modules persist in node_modules/.vitest-cache, so each run reuses the last
-        // one's work rather than transforming the graph again. Reinstalling deps clears it.
         fsModuleCache: true,
         ...(JobSummaryTitle
             ? { reporters: ["default", ["github-actions", { jobSummary: { title: JobSummaryTitle } }]] }
