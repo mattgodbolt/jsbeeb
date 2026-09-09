@@ -168,7 +168,7 @@ describe("IBM disc format tests", function () {
 describe("Disc builder tests", () => {
     const someData = new Uint8Array(256);
     someData.fill(0x33);
-    it("should write a simple FM track without blowing up", () => {
+    it("builds an FM track whose CRCs check", () => {
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
         const builder = disc.buildTrack(false, 0);
         builder
@@ -180,17 +180,22 @@ describe("Disc builder tests", () => {
             .appendFmByte(0)
             .appendFmByte(0) // sector
             .appendFmByte(1)
-            .appendCrc(false)
+            .appendCrc()
             .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
             .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
             .resetCrc()
             .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
             .appendFmChunk(someData)
-            .appendCrc(false)
+            .appendCrc()
             .fillFmByte(0xff);
+
+        const sectors = disc.getTrack(false, 0).findSectors();
+        expect(sectors).toHaveLength(1);
+        expect(sectors[0].hasHeaderCrcError).toBe(false);
+        expect(sectors[0].hasDataCrcError).toBe(false);
     });
 
-    it("should write a simple MFM track without blowing up", () => {
+    it("builds an MFM track whose CRCs check", () => {
         const disc = new Disc(true, new DiscConfig());
         const builder = disc.buildTrack(false, 0);
         builder
@@ -203,16 +208,21 @@ describe("Disc builder tests", () => {
             .appendMfmByte(0)
             .appendMfmByte(0) // sector
             .appendMfmByte(1)
-            .appendCrc(true)
+            .appendCrc()
             .appendRepeatMfmByte(0x4e, 22)
             .appendRepeatMfmByte(0x00, 12)
             .resetCrc()
             .appendMfm3xA1Sync()
             .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
             .appendMfmChunk(someData)
-            .appendCrc(true)
+            .appendCrc()
             .appendRepeatMfmByte(0x4e, 24)
             .fillMfmByte(0x4e);
+
+        const sectors = disc.getTrack(false, 0).findSectors();
+        expect(sectors).toHaveLength(1);
+        expect(sectors[0].hasHeaderCrcError).toBe(false);
+        expect(sectors[0].hasDataCrcError).toBe(false);
     });
 
     it("should note how much disc is being used", () => {

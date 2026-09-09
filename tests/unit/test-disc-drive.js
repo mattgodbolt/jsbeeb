@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
 import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
-import { DiscDrive } from "../../src/disc-drive.js";
+import { attachDriveNoise, DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 
 const SectorsPerTrack = 10;
@@ -210,5 +210,69 @@ describe("40 track discs", () => {
 
         // Ten of the tracks the controller counts in, which is twenty of the surface's.
         expect(steps).toEqual([20]);
+    });
+});
+
+describe("drive noise", () => {
+    afterEach(() => vi.useRealTimers());
+
+    function noisyDrives(seekSeconds = 0) {
+        const calls = [];
+        const ddNoise = {
+            spinUp: () => calls.push("spinUp"),
+            spinDown: () => calls.push("spinDown"),
+            seek: (amount) => {
+                calls.push(`seek ${amount}`);
+                return seekSeconds;
+            },
+        };
+        const scheduler = new Scheduler();
+        const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
+        attachDriveNoise(drives, ddNoise);
+        return { drives, calls };
+    }
+
+    it("spins up with the first drive to start, stays up over a handover, and spins down with the last to stop", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives();
+
+        drives[0].startSpinning();
+        vi.runAllTimers();
+        expect(calls).toEqual(["spinUp"]);
+
+        drives[0].stopSpinning();
+        drives[1].startSpinning();
+        vi.runAllTimers();
+        expect(calls).not.toContain("spinDown");
+
+        drives[1].stopSpinning();
+        vi.runAllTimers();
+        expect(calls.at(-1)).toBe("spinDown");
+        expect(calls.filter((call) => call === "spinDown")).toHaveLength(1);
+    });
+
+    it("seeks by the tracks the head crosses", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives(0.5);
+
+        drives[0].notifySeekAmount(5);
+        vi.advanceTimersByTime(600);
+        drives[1].notifySeekAmount(-3);
+
+        expect(calls).toEqual(["seek 5", "seek -3"]);
+    });
+
+    it("lets one seek noise finish before starting another", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives(0.5);
+
+        drives[0].notifySeekAmount(1);
+        vi.advanceTimersByTime(400);
+        drives[0].notifySeekAmount(1);
+        expect(calls).toEqual(["seek 1"]);
+
+        vi.advanceTimersByTime(200);
+        drives[0].notifySeekAmount(1);
+        expect(calls).toEqual(["seek 1", "seek 1"]);
     });
 });

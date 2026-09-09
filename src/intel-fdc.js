@@ -6,7 +6,7 @@ import { Cpu6502 } from "./6502.js";
 import { Disc, IbmDiscFormat } from "./disc.js";
 
 // eslint-disable-next-line no-unused-vars
-import { BaseDiscDrive, DiscDrive } from "./disc-drive.js";
+import { attachDriveNoise, BaseDiscDrive, DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import { hexbyte, hexword } from "./hex.js";
@@ -1750,26 +1750,6 @@ export class IntelFdc {
 export class NoiseAwareIntelFdc extends IntelFdc {
     constructor(cpu, ddNoise, scheduler, debugFlags) {
         super(cpu, scheduler, undefined, debugFlags);
-        let nextSeekTime = 0;
-        let numSpinning = 0;
-        // Update the spin status shortly after the drive state changes to debounce it slightly.
-        const updateSpinStatus = () => {
-            if (numSpinning) ddNoise.spinUp();
-            else ddNoise.spinDown();
-        };
-        for (const drive of this.drives) {
-            drive.addEventListener("startSpinning", () => {
-                numSpinning++;
-                setTimeout(updateSpinStatus, 2);
-            });
-            drive.addEventListener("stopSpinning", () => {
-                --numSpinning;
-                setTimeout(updateSpinStatus, 2);
-            });
-            drive.addEventListener("step", (evt) => {
-                const now = Date.now();
-                if (now > nextSeekTime) nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
-            });
-        }
+        attachDriveNoise(this.drives, ddNoise);
     }
 }

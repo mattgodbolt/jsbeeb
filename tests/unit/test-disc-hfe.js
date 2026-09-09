@@ -254,13 +254,13 @@ describe("HFE export tests", function () {
             .appendFmByte(0)
             .appendFmByte(0) // sector
             .appendFmByte(1)
-            .appendCrc(false)
+            .appendCrc()
             .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
             .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
             .resetCrc()
             .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
             .appendFmChunk(sectorData)
-            .appendCrc(false)
+            .appendCrc()
             .fillFmByte(0xff);
 
         const hfeData = toHfe(disc);
@@ -360,14 +360,14 @@ describe("HFE export tests", function () {
             .appendMfmByte(0)
             .appendMfmByte(0) // sector
             .appendMfmByte(1)
-            .appendCrc(true)
+            .appendCrc()
             .appendRepeatMfmByte(0x4e, 22)
             .appendRepeatMfmByte(0x00, 12)
             .resetCrc()
             .appendMfm3xA1Sync()
             .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
             .appendMfmChunk(sectorData)
-            .appendCrc(true)
+            .appendCrc()
             .appendRepeatMfmByte(0x4e, 24)
             .fillMfmByte(0x4e);
 
