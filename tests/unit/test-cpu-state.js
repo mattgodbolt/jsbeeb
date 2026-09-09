@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
-import { NmiSource } from "../../src/nmi-source.js";
+import { NmiSource } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";

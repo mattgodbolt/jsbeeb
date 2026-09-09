@@ -14,11 +14,17 @@ import { unzipRomImage } from "./archive.js";
 import { signExtend } from "./binary.js";
 import { hexbyte, hexword } from "./hex.js";
 import { loadData } from "./loader.js";
-import { NmiSource } from "./nmi-source.js";
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
+
+/** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
+export const NmiSource = Object.freeze({
+    fdc: 0x01,
+    econet: 0x02,
+    tube: 0x04,
+});
 
 class Flags {
     constructor() {

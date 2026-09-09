@@ -1,8 +1,7 @@
 // Translated from beebjit by Chris Evans.
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
-import { Cpu6502 } from "./6502.js";
-import { NmiSource } from "./nmi-source.js";
+import { Cpu6502, NmiSource } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
 

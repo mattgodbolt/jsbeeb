@@ -1,4 +1,4 @@
-import { NmiSource } from "./nmi-source.js";
+import { NmiSource } from "./6502.js";
 import { hexbyte, hexword } from "./hex.js";
 
 //  this one should be declared more globally
