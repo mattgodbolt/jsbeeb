@@ -5,7 +5,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
-// An iteration executes a million cycles, so the reported hz reads as virtual MHz.
+// An iteration runs a million cycles, so the hz column Vitest prints reads as virtual MHz.
 const CyclesPerIteration = 1000 * 1000;
 const CyclesToBoot = 10 * 1000 * 1000;
 const EliteImage = "elite.ssd";
