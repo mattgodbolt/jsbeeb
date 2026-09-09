@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Layout, fitMonitor } from "../../src/web/layout.js";
+import { Layout, fitMonitor, navbarHeightOf } from "../../src/web/layout.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const Config = {
@@ -26,6 +26,23 @@ const viewport = (innerWidth, innerHeight, extra = {}) => ({
 });
 
 const native = { width: 800, height: 600 };
+
+describe("navbarHeightOf", () => {
+    const header = (height, openMenuHeight) => ({
+        offsetHeight: height,
+        querySelector: (selector) =>
+            selector === ".navbar-collapse.show" && openMenuHeight !== undefined
+                ? { offsetHeight: openMenuHeight }
+                : null,
+    });
+
+    it("is the bar's height, less a menu dropped open over the screen, and never less than nothing", () => {
+        expect(navbarHeightOf(header(72))).toBe(72);
+        expect(navbarHeightOf(header(380, 308))).toBe(72);
+        expect(navbarHeightOf(header(72, 308))).toBe(0);
+        expect(navbarHeightOf(null)).toBe(0);
+    });
+});
 
 describe("fitMonitor", () => {
     it("fills the width of a tall window, keeping the picture's aspect", () => {
