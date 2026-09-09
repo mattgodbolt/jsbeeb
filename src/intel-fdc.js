@@ -1045,9 +1045,14 @@ export class IntelFdc {
         // READ DRIVE STATUS:                        188us
         // write $35 to parameter register:           31us
         // write 3rd SPECIFY parameter:               27us
-        // Command register full and parameter register full are set by the host's write and cleared
-        // when the 8271's microcontroller accepts the byte, which here is the same instant. The mode
-        // register shares this byte; result ready is kept by the external register logic.
+        // EMU NOTE: command register full and parameter register full are set by the host's write
+        // and cleared when the 8271's microcontroller accepts the byte; see Chris Evans's ROM
+        // reverse engineering, https://scarybeastsecurity.blogspot.com/2020/11/reverse-engineering-forgotten-1970s.html
+        // On the real chip acceptance takes the tens of microseconds listed above; here it happens
+        // in the same write, so neither bit is ever reported. Software only polls for them to
+        // clear, so nothing waits on them being set, and the latency is left unmodelled rather
+        // than guessed from two measurements. The mode register shares this byte; result ready
+        // is kept by the external register logic.
         let status = this.internalStatus & (StatusFlag.busy | StatusFlag.nmi | StatusFlag.needData);
         if (this._isResultReady) status |= StatusFlag.resultReady;
         this._status = status;
