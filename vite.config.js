@@ -43,15 +43,14 @@ export default defineConfig({
                 test: {
                     name: "bench",
                     include: [],
-                    benchmark: { include: ["tests/bench/*.bench.js"] },
-                    // Native imports, not Vite's: its module runner reaches every import
-                    // through a getter, which costs more here than the emulation measured.
-                    experimental: { viteModuleRunner: false, nodeLoader: false },
+                    // The file is not named *.bench.js, so no other project discovers it.
+                    benchmark: { include: ["tests/bench/*-bench.js"] },
+                    // Vite's module runner reaches an imported binding through a getter, and
+                    // the emulator crosses modules once an instruction: a fifth of the speed.
+                    experimental: { viteModuleRunner: false },
                 },
             },
         ],
-        // Projects inherit this, so without it every suite would run the benchmarks too.
-        benchmark: { include: [] },
         slowTestThreshold: 1000,
         coverage: {
             provider: "v8",
