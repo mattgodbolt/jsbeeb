@@ -11,6 +11,7 @@
 ### Bug Fixes
 
 * a phone lays the page out at its own width, the monitor takes all of it, and the LED bar reads down ([#1109](https://github.com/mattgodbolt/jsbeeb/issues/1109)) ([4718c99](https://github.com/mattgodbolt/jsbeeb/commit/4718c99a123e21d30b2680200eb15851e6072fe2))
+* each device drives its own NMI line and the CPU takes the OR of them ([#1119](https://github.com/mattgodbolt/jsbeeb/issues/1119)) ([05f0444](https://github.com/mattgodbolt/jsbeeb/commit/05f0444686ebf3de4503b3355b14109f80acc2c6))
 * each LED slot's header is one line, and the bar is the same on a phone as on a desktop ([#1111](https://github.com/mattgodbolt/jsbeeb/issues/1111)) ([f4648fb](https://github.com/mattgodbolt/jsbeeb/commit/f4648fb7a03d0b57844c8c80e77b31da9f437042))
 * FM pulses are written in the phase the decoder samples, so fuzzy bits read as fuzzy ([#1115](https://github.com/mattgodbolt/jsbeeb/issues/1115)) ([23d3224](https://github.com/mattgodbolt/jsbeeb/commit/23d3224c633c7a3388685123ee34567db17e7195))
 * read track on the 1770 streams the track instead of failing as a sector read ([#1114](https://github.com/mattgodbolt/jsbeeb/issues/1114)) ([9743a1a](https://github.com/mattgodbolt/jsbeeb/commit/9743a1a5d8bfa1a48255ffa6679ca56e5dfa8ffb))
