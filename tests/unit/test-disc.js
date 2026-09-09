@@ -82,33 +82,45 @@ describe("IBM disc format tests", function () {
         expect(crc).toBe(0x9d39);
     });
     it("converts to FM pulses", () => {
-        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0x00)).toBe(0x44444444);
-        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0xff)).toBe(0x55555555);
-        expect(IbmDiscFormat.fmTo2usPulses(0xc7, 0xfe)).toBe(0x55111554);
+        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0x00)).toBe(0x88888888);
+        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0xff)).toBe(0xaaaaaaaa);
+        expect(IbmDiscFormat.fmTo2usPulses(0xc7, 0xfe)).toBe(0xaa222aa8);
     });
     it("converts from FM pulses", () => {
-        // TODO(#1061) either fix these or understand why beebjit doesn't use same bit posn for bits.
-        const deliberateFudge = 1;
-        expect(IbmDiscFormat._2usPulsesToFm(0x44444444 << deliberateFudge)).toEqual({
+        expect(IbmDiscFormat._2usPulsesToFm(0x88888888)).toEqual({
             clocks: 0xff,
             data: 0x00,
             iffyPulses: false,
         });
-        expect(IbmDiscFormat._2usPulsesToFm(0x55555555 << deliberateFudge)).toEqual({
+        expect(IbmDiscFormat._2usPulsesToFm(0xaaaaaaaa)).toEqual({
             clocks: 0xff,
             data: 0xff,
             iffyPulses: false,
         });
-        expect(IbmDiscFormat._2usPulsesToFm(0x55111554 << deliberateFudge)).toEqual({
+        expect(IbmDiscFormat._2usPulsesToFm(0xaa222aa8)).toEqual({
             clocks: 0xc7,
             data: 0xfe,
             iffyPulses: false,
         });
-        expect(IbmDiscFormat._2usPulsesToFm((0x55111554 << deliberateFudge) | 0x05)).toEqual({
+        expect(IbmDiscFormat._2usPulsesToFm(0xaa222aa8 | 0x05)).toEqual({
             clocks: 0xc7,
             data: 0xfe,
             iffyPulses: true,
         });
+    });
+    it("reads back what it wrote in FM", () => {
+        for (const [clocks, data] of [
+            [0xff, 0x00],
+            [0xff, 0xff],
+            [IbmDiscFormat.markClockPattern, IbmDiscFormat.idMarkDataPattern],
+            [0x00, 0x00],
+        ]) {
+            expect(IbmDiscFormat._2usPulsesToFm(IbmDiscFormat.fmTo2usPulses(clocks, data))).toEqual({
+                clocks,
+                data,
+                iffyPulses: false,
+            });
+        }
     });
     it("converts to MFM pulses", () => {
         expect(IbmDiscFormat.mfmTo2usPulses(false, 0x00)).toEqual({ lastBit: false, pulses: 0xaaaa });

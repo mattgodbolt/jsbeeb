@@ -1343,12 +1343,12 @@ export class IbmDiscFormat {
         let ret = 0;
         for (let i = 0; i < 8; ++i) {
             ret <<= 4;
-            if (clocks & 0x80) ret |= 0x04;
-            if (data & 0x80) ret |= 0x01;
+            if (clocks & 0x80) ret |= 0x08;
+            if (data & 0x80) ret |= 0x02;
             clocks = (clocks << 1) & 0xff;
             data = (data << 1) & 0xff;
         }
-        return ret;
+        return ret >>> 0;
     }
 
     static _2usPulsesToFm(pulses) {
