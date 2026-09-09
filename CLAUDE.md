@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   Chrome uses the machine's GPU when it has one and the software renderer otherwise, which is what CI runs;
   `E2E_GL=software` or `E2E_GL=hardware` forces one
 - `npm run ci-checks` - Run ESLint, Prettier and the check that every `test:*` script has a CI workflow step
-- `vitest run tests/unit/test-gzip.js` - Run a single test file
+- `vitest run tests/unit/test-archive.js` - Run a single test file
 
 ### Code Coverage
 
