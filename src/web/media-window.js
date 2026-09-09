@@ -195,7 +195,7 @@ export class MediaWindow {
         );
     }
 
-    /** Takes the window's listeners off the page, for a page that builds another. */
+    /** Takes the window's drop-zone listeners off the page, for a page that builds another window. */
     dispose() {
         this.pageListeners.abort();
     }

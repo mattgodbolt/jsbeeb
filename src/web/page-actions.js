@@ -29,10 +29,12 @@ export class PageActions {
         );
         window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)), { signal });
 
-        // To lower the chance of data loss, only the drop zone in the menu bar accepts drops.
+        // Files are the media window's to take; anything else dropped on the page would replace it.
+        const carriesFiles = (event) => [...(event.dataTransfer?.types ?? [])].includes("Files");
         document.addEventListener(
             "dragover",
             (event) => {
+                if (carriesFiles(event)) return;
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "none";
             },
