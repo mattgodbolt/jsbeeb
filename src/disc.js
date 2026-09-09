@@ -3,6 +3,9 @@
 
 import { crc32 } from "./archive.js";
 import { hexbyte } from "./hex.js";
+
+export const PulsesPerWord = 32;
+
 class TrackBuilder {
     /**
      * @param {Track} track
@@ -13,6 +16,7 @@ class TrackBuilder {
         this._index = 0;
         this._pulsesIndex = 0;
         this._lastMfmBit = 0;
+        this._isMfm = false;
         this._crc = 0;
     }
 
@@ -36,6 +40,7 @@ class TrackBuilder {
         if (this._index >= this._track.pulses2Us.length)
             throw new Error(`Track buffer overflow in ${this._track.description}`);
         this._track.pulses2Us[this._index++] = IbmDiscFormat.fmTo2usPulses(clocks, data);
+        this._isMfm = false;
         this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
         return this;
     }
@@ -69,12 +74,10 @@ class TrackBuilder {
         return this;
     }
 
-    appendCrc(isMfm) {
-        // TODO(#1061) consider remembering isMfm if nothing else needs to know;
-        // could then break this into MFM and FM builder
+    appendCrc() {
         const firstByte = (this._crc >>> 8) & 0xff;
         const secondByte = this._crc & 0xff;
-        if (isMfm) {
+        if (this._isMfm) {
             this.appendMfmByte(firstByte);
             this.appendMfmByte(secondByte);
         } else {
@@ -92,6 +95,7 @@ class TrackBuilder {
         this._pulsesIndex = (this._pulsesIndex + 16) & 31;
         this._track.pulses2Us[this._index] = (existingPulses & mask) | (pulses << this._pulsesIndex);
         if (this._pulsesIndex === 0) this._index++;
+        this._isMfm = true;
         return this;
     }
 
@@ -135,6 +139,7 @@ class TrackBuilder {
      * @param {boolean} isMfm whether this is an MFM track
      */
     buildFromPulses(pulseDeltas, isMfm) {
+        this._isMfm = isMfm;
         let hasWarned = false;
         for (const pulse of pulseDeltas) {
             if (!IbmDiscFormat.checkPulse(pulse, isMfm)) {
@@ -203,6 +208,10 @@ class MfmReader {
         this._rawReader = rawReader;
     }
 
+    static get pulsesPerByte() {
+        return 16;
+    }
+
     read(numBytes) {
         const data = new Uint8Array(numBytes);
         let pulses = 0;
@@ -214,7 +223,7 @@ class MfmReader {
             }
             data[offset] = IbmDiscFormat._2usPulsesToMfm(pulses >>> 16);
         }
-        return { data, clocks: null, iffyPulses: false };
+        return { data, iffyPulses: false };
     }
 
     get initialCrc() {
@@ -234,18 +243,20 @@ class FmReader {
         this._rawReader = rawReader;
     }
 
+    static get pulsesPerByte() {
+        return 32;
+    }
+
     read(numBytes) {
         const data = new Uint8Array(numBytes);
-        const clocks = new Uint8Array(numBytes);
         let iffyPulses = false;
         for (let offset = 0; offset < numBytes; ++offset) {
             const pulses = this._rawReader.readPulses();
-            const { data: dataByte, clock: clockByte, iffyPulses: iffy } = IbmDiscFormat._2usPulsesToFm(pulses);
+            const { data: dataByte, iffyPulses: iffy } = IbmDiscFormat._2usPulsesToFm(pulses);
             data[offset] = dataByte;
-            clocks[offset] = clockByte;
             iffyPulses |= iffy;
         }
-        return { data, clocks, iffyPulses };
+        return { data, iffyPulses };
     }
 
     get initialCrc() {
@@ -263,6 +274,7 @@ class Sector {
     constructor(track, isMfm, idPosBitOffset, warn = console.log) {
         this.track = track;
         this.isMfm = isMfm;
+        this._readerType = isMfm ? MfmReader : FmReader;
         this._warn = warn;
         this.idPosBitOffset = idPosBitOffset;
         this.dataPosBitOffset = null;
@@ -285,8 +297,11 @@ class Sector {
     }
 
     _readerAt(bitOffset) {
-        const rawReader = new RawDiscReader(this.track, bitOffset);
-        return this.isMfm ? new MfmReader(rawReader) : new FmReader(rawReader);
+        return new this._readerType(new RawDiscReader(this.track, bitOffset));
+    }
+
+    get pulsesPerByte() {
+        return this._readerType.pulsesPerByte;
     }
 
     get trackNumber() {
@@ -305,18 +320,20 @@ class Sector {
      * @param {Sector|undefined} nextSector
      */
     read(nextSector) {
-        const pulsesPerByte = this.isMfm ? 16 : 32; // TODO(#1061) put in reader
         if (this.dataPosBitOffset === null) {
             this._warn(`Sector header without data ${this.description}`);
             return;
         }
 
+        const { pulsesPerByte } = this;
         const dataMarker = this.isDeleted
             ? IbmDiscFormat.deletedDataMarkDataPattern
             : IbmDiscFormat.dataMarkDataPattern;
         const sectorStartByte = (this.dataPosBitOffset / pulsesPerByte) | 0;
         const sectorEndByte =
-            (nextSector ? nextSector.idPosBitOffset / pulsesPerByte : (this.track.length * 32) / pulsesPerByte) | 0;
+            (nextSector
+                ? nextSector.idPosBitOffset / pulsesPerByte
+                : (this.track.length * PulsesPerWord) / pulsesPerByte) | 0;
         // Account for CRC and sync bytes.
         let sectorSize = Sector.toSectorSize(sectorEndByte - sectorStartByte - 5);
 
@@ -537,15 +554,9 @@ export const DiscLayout = Object.freeze({
 
 export class DiscConfig {
     constructor() {
-        // TODO(#1061) is this even useful?
-        this.logProtection = false;
-        this.logIffyPulses = false;
         this.expandTo80 = false;
-        this.isQuantizeFm = false;
         this.isSkipOddTracks = false;
         this.isSkipUpperSide = false;
-        this.rev = 0;
-        this.revSpec = "";
     }
 }
 
@@ -712,7 +723,7 @@ export function loadSsd(disc, data, isDsd, onChange) {
                     .appendFmByte(0)
                     .appendFmByte(sector)
                     .appendFmByte(1)
-                    .appendCrc(false);
+                    .appendCrc();
 
                 // Sync pattern between sector header and sector data, aka GAP 2.
                 trackBuilder
@@ -727,7 +738,7 @@ export function loadSsd(disc, data, isDsd, onChange) {
                     .resetCrc()
                     .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
                     .appendFmChunk(sectorData)
-                    .appendCrc(false);
+                    .appendCrc();
 
                 if (sector !== SsdFormat.sectorsPerTrack - 1) {
                     // Sync pattern between sectors, aka GAP 3.
@@ -808,7 +819,7 @@ export function loadAdf(disc, data, isDsd) {
                     .appendMfmByte(0)
                     .appendMfmByte(sector)
                     .appendMfmByte(1)
-                    .appendCrc(true);
+                    .appendCrc();
 
                 // Sync pattern between sector header and sector data, aka GAP 2.
                 trackBuilder.appendRepeatMfmByte(0x4e, 22).appendRepeatMfmByte(0x00, 12);
@@ -822,7 +833,7 @@ export function loadAdf(disc, data, isDsd) {
                     .appendMfm3xA1Sync()
                     .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
                     .appendMfmChunk(sectorData)
-                    .appendCrc(true);
+                    .appendCrc();
 
                 // Sync pattern between sectors, aka GAP 3.
                 trackBuilder.appendRepeatMfmByte(0x4e, 24);
@@ -1087,8 +1098,6 @@ export class Disc {
         this._snapshotDirtyTracks.add(dirtyKey);
         this._everDirtyTracks.add(dirtyKey);
         trackObj.pulses2Us[position] = pulses;
-        // TODO(#1061) a debug log flag for this
-        // console.log(`wrote to ${track}:${position * 32}`);
     }
 
     /** @returns {?{isSideUpper: boolean, trackNum: Number}} the track written, if there was one */
@@ -1250,7 +1259,6 @@ export class Disc {
                             console.log(`Non-standard FM sector count ${track.description} count ${sectors.length}`);
                         }
                     }
-                    /// MG stuff
                     for (const sector of sectors) {
                         if (sector.hasHeaderCrcError) console.log(`${sector.description} has bad header crc`);
                         if (sector.trackNumber !== trackNum) console.log(`${sector.description} has bad track id`);
@@ -1260,7 +1268,6 @@ export class Disc {
                     console.log(`"Unformatted track ${track.description}"`);
                 }
             }
-            // TODO(#1061) add fingerprinting, catalog etc
         }
     }
 }

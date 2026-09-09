@@ -6,6 +6,36 @@ import { Scheduler } from "./scheduler.js";
 import { Disc } from "./disc.js";
 import { IbmDiscFormat } from "./disc.js";
 
+const SpinDebounceMs = 2;
+
+/**
+ * Plays the spin and seek noises for a set of drives.
+ * @param {BaseDiscDrive[]} drives
+ * @param {import("./ddnoise.js").DdNoise|import("./ddnoise.js").FakeDdNoise} ddNoise
+ */
+export function attachDriveNoise(drives, ddNoise) {
+    let nextSeekTime = 0;
+    let numSpinning = 0;
+    const updateSpinStatus = () => {
+        if (numSpinning) ddNoise.spinUp();
+        else ddNoise.spinDown();
+    };
+    for (const drive of drives) {
+        drive.addEventListener("startSpinning", () => {
+            numSpinning++;
+            setTimeout(updateSpinStatus, SpinDebounceMs);
+        });
+        drive.addEventListener("stopSpinning", () => {
+            numSpinning--;
+            setTimeout(updateSpinStatus, SpinDebounceMs);
+        });
+        drive.addEventListener("step", (evt) => {
+            const now = Date.now();
+            if (now > nextSeekTime) nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
+        });
+    }
+}
+
 class StepEvent extends Event {
     constructor(stepAmount) {
         super("step");

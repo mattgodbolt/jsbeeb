@@ -1,9 +1,8 @@
 // Pure geometry and colour mapping, free of the DOM; disc-visualiser.js owns the canvases.
 
-import { IbmDiscFormat } from "./disc.js";
+import { IbmDiscFormat, PulsesPerWord } from "./disc.js";
 
 /** One FM byte, or two MFM bytes; 2us a slot. */
-export const PulsesPerWord = 32;
 
 /**
  * Both FM and MFM put between eight and sixteen flux transitions in a formatted word, so the ramp
@@ -118,7 +117,7 @@ export function trackRegions(track, warn) {
     };
 
     for (const sector of track.findSectors(warn)) {
-        const pulsesPerByte = sector.isMfm ? PulsesPerWord / 2 : PulsesPerWord;
+        const { pulsesPerByte } = sector;
         const noteError = (kind, startBit, endBit) =>
             errors.push({
                 firstWord: Math.floor(startBit / PulsesPerWord) % track.length,
