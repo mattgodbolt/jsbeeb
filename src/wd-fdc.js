@@ -108,17 +108,17 @@ const State = Object.freeze({
     inId: 6,
     searchData: 7,
     inData: 8,
-    inReadTrack: 8,
-    writeSectorDelay: 9,
-    writeSectorLeadInFm: 10,
-    writeSectorLeadInMfm: 11,
-    writeSectorMarkerFm: 12,
-    writeSectorMarkerMfm: 13,
-    writeSectorBody: 14,
-    writeTrackSetup: 15,
-    inWriteTrack: 16,
-    checkMulti: 17,
-    done: 18,
+    inReadTrack: 9,
+    writeSectorDelay: 10,
+    writeSectorLeadInFm: 11,
+    writeSectorLeadInMfm: 12,
+    writeSectorMarkerFm: 13,
+    writeSectorMarkerMfm: 14,
+    writeSectorBody: 15,
+    writeTrackSetup: 16,
+    inWriteTrack: 17,
+    checkMulti: 18,
+    done: 19,
 });
 
 /**
@@ -739,7 +739,7 @@ export class WdFdc {
             case State.inId:
             case State.searchData:
             case State.inData:
-            case State.readTrack:
+            case State.inReadTrack:
                 this._bitstreamReceived(pulses, count, isIndexPulsePositiveEdge);
                 if (this._indexPulseCount >= 6) {
                     this._statusRegister |= Status.recordNotFound;
