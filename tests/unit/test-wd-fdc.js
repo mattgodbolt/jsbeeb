@@ -284,6 +284,15 @@ describe("WD1770 FDC tests", () => {
             },
         );
 
+        it("streams a whole FM revolution, gaps and marks included, without a CRC check", () => {
+            const { scheduler, fdc } = makeFdc({ disc: fmDiscWithSector({}), control: ControlRunningDrive0Fm });
+            const { bytes, status } = runCommand(fdc, scheduler, ReadTrackCommand);
+            expect(status & StatusCrcError).toBe(0);
+            expect(bytes.length).toBeGreaterThan(IbmDiscFormat.bytesPerTrack * 0.9);
+            expect(hex(bytes)).toContain("fe00000001");
+            expect(hex(bytes)).toContain("fb000102030405");
+        });
+
         it("keeps read track byte-aligned across an MFM index mark", () => {
             const disc = blankDisc();
             const builder = appendMfmIndexMark(disc.buildTrack(false, 0));
