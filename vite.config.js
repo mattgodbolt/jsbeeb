@@ -18,6 +18,7 @@ export default defineConfig({
     },
     test: {
         testTimeout: 15000,
+        fsModuleCache: true,
         ...(JobSummaryTitle
             ? { reporters: ["default", ["github-actions", { jobSummary: { title: JobSummaryTitle } }]] }
             : {}),
