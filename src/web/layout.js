@@ -76,7 +76,7 @@ export function fitMonitor(displayConfig, viewport, canvasNative) {
 export function navbarHeightOf(header) {
     if (!header) return 0;
     const openMenu = header.querySelector(".navbar-collapse.show");
-    return header.offsetHeight - (openMenu?.offsetHeight ?? 0);
+    return Math.max(0, header.offsetHeight - (openMenu?.offsetHeight ?? 0));
 }
 
 /** Keeps the monitor and canvas fitted to the window, and wires the page furniture around them. */

@@ -2314,7 +2314,7 @@ div.smoothie-chart-tooltip {
     padding-left: 4px;
   }
 
-  #leds .cell[title="Econet activity"] {
+  #leds .cell.econet {
     display: none;
   }
 }

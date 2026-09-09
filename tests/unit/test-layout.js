@@ -30,12 +30,16 @@ const native = { width: 800, height: 600 };
 describe("navbarHeightOf", () => {
     const header = (height, openMenuHeight) => ({
         offsetHeight: height,
-        querySelector: () => (openMenuHeight === undefined ? null : { offsetHeight: openMenuHeight }),
+        querySelector: (selector) =>
+            selector === ".navbar-collapse.show" && openMenuHeight !== undefined
+                ? { offsetHeight: openMenuHeight }
+                : null,
     });
 
-    it("is the bar's height, less a menu dropped open over the screen", () => {
+    it("is the bar's height, less a menu dropped open over the screen, and never less than nothing", () => {
         expect(navbarHeightOf(header(72))).toBe(72);
         expect(navbarHeightOf(header(380, 308))).toBe(72);
+        expect(navbarHeightOf(header(72, 308))).toBe(0);
         expect(navbarHeightOf(null)).toBe(0);
     });
 });
