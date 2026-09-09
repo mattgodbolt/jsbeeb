@@ -28,6 +28,8 @@ jobs:
       - name: checks
         run: npm run ci-checks
       - name: Unit tests
+        env:
+          VITEST_JOB_SUMMARY_TITLE: Unit tests
         run: npm run test:unit -- --coverage
       - name: Coverage report
         # The PR comment needs a write token, which fork pull_request events do not get.
@@ -54,8 +56,12 @@ jobs:
             --exclude "coverage-final.json" --exclude "lcov.info" --exclude "lcov-report/*" --exclude ".tmp/*" \
             --cache-control max-age=30 --metadata-directive REPLACE
       - name: Integration tests
+        env:
+          VITEST_JOB_SUMMARY_TITLE: Integration tests
         run: npm run test:integration
       - name: Shader tests
+        env:
+          VITEST_JOB_SUMMARY_TITLE: Shader tests
         run: npm run test:shader
       - name: End-to-end tests
         run: |

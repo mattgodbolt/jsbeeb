@@ -2,31 +2,10 @@ import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 import { workersFor } from "./tools/test-workers.js";
 
-const ProjectFlag = "--project";
-const SuiteTitles = { unit: "Unit tests", integration: "Integration tests", shader: "Shader tests" };
-const InGithubActions = process.env.GITHUB_ACTIONS === "true";
-
-function projectsAsked() {
-    const args = process.argv;
-    return args.flatMap((arg, i) => {
-        if (arg === ProjectFlag) return args[i + 1] ? [args[i + 1]] : [];
-        if (arg.startsWith(`${ProjectFlag}=`)) return [arg.slice(ProjectFlag.length + 1)];
-        return [];
-    });
-}
-
-/**
- * Heading for the GitHub Actions job summary. Every run in a job appends to the same summary
- * page, so the three suites need headings of their own; the reporter's title is a root option
- * and cannot live on the projects, so it comes from the project the command line asked for.
- * Undefined leaves Vitest's own default.
- */
-function jobSummaryTitle() {
-    const titles = projectsAsked()
-        .map((name) => SuiteTitles[name])
-        .filter(Boolean);
-    return titles.length === 1 ? titles[0] : undefined;
-}
+// Every run in a GitHub Actions job appends to one summary page, so the suites need headings of
+// their own. The title is a root option rather than a per-project one, so the workflow names each
+// run as it starts it.
+const JobSummaryTitle = process.env.VITEST_JOB_SUMMARY_TITLE;
 
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
@@ -39,9 +18,8 @@ export default defineConfig({
     },
     test: {
         testTimeout: 15000,
-        // Named only under Actions, so that everywhere else Vitest picks its own reporters.
-        ...(InGithubActions
-            ? { reporters: ["default", ["github-actions", { jobSummary: { title: jobSummaryTitle() } }]] }
+        ...(JobSummaryTitle
+            ? { reporters: ["default", ["github-actions", { jobSummary: { title: JobSummaryTitle } }]] }
             : {}),
         // Every worker runs CPU-bound JavaScript (an emulated machine, or jsdom),
         // so a hyperthread sibling would only share its core: one worker per two
