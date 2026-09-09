@@ -168,6 +168,15 @@ describe("Layout", () => {
             expect(monitor.style.height).toBe("618px");
         });
 
+        it("gives the monitor a narrow window's whole width, with no border for side pictures", () => {
+            vi.spyOn(window, "innerWidth", "get").mockReturnValue(412);
+            vi.spyOn(window, "innerHeight", "get").mockReturnValue(780);
+            make({ embed: false });
+            resize();
+            expect(document.getElementById("cub-monitor").style.width).toBe("412px");
+            vi.restoreAllMocks();
+        });
+
         it("takes two more looks shortly after load, when the page has settled", () => {
             make();
             expect(display.filterClass.getDisplayConfig).not.toHaveBeenCalled();
