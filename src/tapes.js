@@ -31,6 +31,17 @@ class UefTape {
         this.rewind();
     }
 
+    get name() {
+        return this.stream.name;
+    }
+
+    /** @returns {Number} how far through the image the head is, 0 to 1 */
+    get position() {
+        const chunk = this.curChunk?.stream;
+        const chunkLeft = chunk ? chunk.end - chunk.pos : 0;
+        return (this.stream.pos - chunkLeft) / this.stream.end;
+    }
+
     rewind() {
         this.dummyData = [false, false, true, false, true, false, true, false, true, true];
         this.state = -1;
@@ -278,6 +289,15 @@ class TapefileTape {
         // for cassette mode.
         const cpp = this.cpuSpeed / (19200 / divider);
         return Math.floor(bitsPerByte * cpp);
+    }
+
+    get name() {
+        return this.stream.name;
+    }
+
+    /** @returns {Number} how far through the image the head is, 0 to 1 */
+    get position() {
+        return this.stream.pos / this.stream.end;
     }
 
     rewind() {

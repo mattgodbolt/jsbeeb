@@ -195,11 +195,25 @@ describe("AtomPPIA", () => {
         it("starts a new tape stopped, whatever the last one was doing", () => {
             const { ppia } = makePPIA();
             ppia.setTape({ rewind() {}, poll: () => 100 });
-            ppia.playTape();
+            ppia.pressPlay();
             ppia.setTape({ rewind() {}, poll: () => 100 });
             expect(ppia.motorOn).toBe(false);
             ppia.setTape(undefined);
             expect(ppia.motorOn).toBe(false);
+        });
+
+        it("offers PLAY and STOP as the motor itself, the way the ACIA's latch reads", () => {
+            const { ppia } = makePPIA();
+            ppia.setTape({ rewind() {}, poll: () => 100 });
+            expect(ppia.playPressed).toBe(false);
+            expect(ppia.tapeRunning).toBe(false);
+            ppia.pressPlay();
+            expect(ppia.motorOn).toBe(true);
+            expect(ppia.playPressed).toBe(true);
+            expect(ppia.tapeRunning).toBe(true);
+            ppia.pressStop();
+            expect(ppia.motorOn).toBe(false);
+            expect(ppia.tapeRunning).toBe(false);
         });
 
         it("stops, motor and all, when the tape runs out", () => {

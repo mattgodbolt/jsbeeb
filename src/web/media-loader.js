@@ -5,10 +5,14 @@ import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
 import { MediaResolver, openIfZip, splitImage } from "../media-resolver.js";
+import { MediaSlots } from "./media-slots.js";
 import { stringToUint8Array } from "../binary.js";
 import { noteEvent } from "./analytics.js";
+import { browserDiscNames, describeBrowserDisc, describeBuiltIn, describeSessionFile } from "./media-catalogue.js";
 
-/** The images offered on the Discs dialog's built-in list. */
+const isTapeName = (name) => /\.uef$/i.test(name);
+
+/** The example discs that ship with jsbeeb. */
 export const BuiltInImages = [
     {
         name: "Elite",
@@ -43,8 +47,8 @@ function readFileAsBinaryString(file) {
 
 /**
  * Getting discs and tapes into the machine: resolving any image reference the
- * URL schema can name, the local file inputs, the drop zone and the built-in
- * list. Choosing what goes in a drive funnels through drives.putDiscIn.
+ * URL schema can name, files from this computer, and what every source has to
+ * offer. What goes in a drive or the deck funnels through its `slots`.
  */
 export class MediaLoader extends EventTarget {
     /**
@@ -61,18 +65,22 @@ export class MediaLoader extends EventTarget {
         this.modals = modals;
         this.resolver = new MediaResolver();
         this.driveSource = null;
-
-        document.getElementById("disc_load").addEventListener("change", async (evt) => {
-            if (evt.target.files.length === 0) return;
-            noteEvent("local", "click"); // NB no filename here
-            const file = evt.target.files[0];
-            try {
-                await this.loadHTMLFile(file);
-            } catch (error) {
-                reportLoadFailure(file.name, error);
-            }
-            evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
+        this.isSnapshotFile = isSnapshotFile;
+        this.loadSnapshot = loadSnapshot;
+        this.slots = new MediaSlots({ loader: this, drives, processor, urlState });
+        this.listers = new Map();
+        /** Files opened this session, by name: the only media the URL cannot name. */
+        this.sessionFiles = new Map();
+        this.resolver.addSource("session", (name) => {
+            const file = this.sessionFiles.get(name);
+            if (!file) throw new Error(`${name} was not opened this session`);
+            return { name, data: file.data, ignored: [] };
         });
+        this.addLister("builtin", () => BuiltInImages.map(describeBuiltIn));
+        this.addLister("browser", () => browserDiscNames().map(describeBrowserDisc));
+        this.addLister("session", () =>
+            [...this.sessionFiles].map(([name, file]) => describeSessionFile(name, file.kind)),
+        );
 
         document.getElementById("fs_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
@@ -83,27 +91,6 @@ export class MediaLoader extends EventTarget {
             } catch (error) {
                 reportLoadFailure(file.name, error);
             }
-            evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
-        });
-
-        document.getElementById("tape_load").addEventListener("change", async (evt) => {
-            if (evt.target.files.length === 0) return;
-            const file = evt.target.files[0];
-            noteEvent("local", "clickTape"); // NB no filename here
-
-            try {
-                const { name, data, ignored } = await openIfZip(
-                    file.name,
-                    stringToUint8Array(await readFileAsBinaryString(file)),
-                );
-                reportIgnoredFiles(name, ignored);
-                this.setProcessorTape(await loadTapeFromData(name, data, model));
-                urlState.set({ tape: undefined });
-                modals.hide("tapes");
-            } catch (error) {
-                reportLoadFailure(file.name, error);
-            }
-
             evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
         });
 
@@ -118,91 +105,100 @@ export class MediaLoader extends EventTarget {
             const file = event.dataTransfer.files[0];
             if (!file) return;
             try {
-                const arrayBuffer = await file.arrayBuffer();
-                if (isSnapshotFile(file.name, arrayBuffer)) {
-                    await loadSnapshot(file, arrayBuffer);
-                } else if (file.name.toLowerCase().endsWith(".uef")) {
-                    // Regular UEF tape image (not a BeebEm save state)
-                    this.setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
-                    toast(`Loaded ${file.name} as the tape.`, { title: "Dropped" });
-                } else {
-                    await this.loadHTMLFile(file);
-                    toast(`Loaded ${file.name} into drive 0.`, { title: "Dropped" });
-                }
+                const outcome = await this.openFile(file);
+                if (outcome) toast(outcome, { title: "Dropped" });
             } catch (error) {
                 reportLoadFailure(file.name, error);
             }
         });
-
-        const discList = document.getElementById("disc-list");
-        const discTemplate = discList.querySelector(".template");
-        for (const image of BuiltInImages) {
-            const elem = discTemplate.cloneNode(true);
-            elem.classList.remove("template");
-            discList.appendChild(elem);
-            elem.querySelector(".name").textContent = image.name;
-            elem.querySelector(".description").textContent = image.desc;
-            elem.addEventListener("click", async () => {
-                noteEvent("images", "click", image.file);
-                modals.hide("discs");
-                try {
-                    drives.putDiscIn(0, await this.loadDiscImage(image.file, drives.layoutForDrive(0)));
-                    this.setDiscImage(0, image.file);
-                } catch (error) {
-                    reportLoadFailure(`${image.name} (${image.file})`, error);
-                }
-            });
-        }
     }
 
     get params() {
         return this.urlState.params;
     }
 
-    /** Register the fetcher behind an image schema; each picker calls this as it is constructed. */
+    /** Register the fetcher behind an image schema; each source calls this as it is constructed. */
     addSource(schema, fetcher) {
         if (schema === "drive") this.driveSource = fetcher;
         else this.resolver.addSource(schema, fetcher);
     }
 
-    /** Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds. */
-    setProcessorTape(tape) {
-        this.processor.tapeInterface.setTape(tape);
-        this.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
+    /**
+     * Register what a source has to offer the media window: a function returning
+     * descriptors (see media-catalogue.js), fetched when the window asks.
+     */
+    addLister(source, lister) {
+        this.listers.set(source, lister);
     }
 
-    ejectDisc(driveIndex) {
-        this.drives.eject(driveIndex);
-        this.setDiscImage(driveIndex, undefined);
+    /**
+     * Everything every source offers, merged. A source that fails is reported
+     * and left out rather than taking the rest of the list with it.
+     *
+     * @returns {Promise<{descriptors: object[], failures: string[]}>}
+     */
+    async listAll() {
+        const descriptors = [];
+        const failures = [];
+        const sources = [...this.listers.keys()];
+        const outcomes = await Promise.allSettled(sources.map(async (source) => this.listers.get(source)()));
+        outcomes.forEach((outcome, i) => {
+            if (outcome.status === "fulfilled") {
+                descriptors.push(...outcome.value);
+            } else {
+                console.error(`Listing ${sources[i]} failed:`, outcome.reason);
+                failures.push(`${sources[i]}: ${errorText(outcome.reason)}`);
+            }
+        });
+        return { descriptors, failures };
     }
 
-    ejectTape() {
-        this.setProcessorTape(undefined);
-        this.setTapeImage(undefined);
+    /**
+     * A file from this computer, into whatever it is for: a save state is
+     * restored, a tape goes in the deck, anything else into the named drive.
+     *
+     * @returns {Promise<?string>} what happened, for a toast, or null when it was reported already
+     */
+    async openFile(file, driveIndex = 0) {
+        const arrayBuffer = await file.arrayBuffer();
+        if (this.isSnapshotFile(file.name, arrayBuffer)) {
+            return (await this.loadSnapshot(file, arrayBuffer)) ? `Restored the state saved in ${file.name}.` : null;
+        }
+        // What a zip holds decides whether it is a tape or a disc, so it is opened first.
+        const { name, data, ignored } = await openIfZip(file.name, new Uint8Array(arrayBuffer));
+        reportIgnoredFiles(name, ignored);
+        if (isTapeName(name)) {
+            await this.loadTapeFile(name, data);
+            return `Loaded ${name} as the tape.`;
+        }
+        this.loadDiscFile(name, data, driveIndex);
+        return `Loaded ${name} into drive ${driveIndex}.`;
     }
 
-    /** Names the disc in a drive for the URL and the settings store, or unnames it. */
-    setDiscImage(driveIndex, name) {
-        // The URL has always called the drives disc1 and disc2, and a bare disc means disc1.
-        const changes = driveIndex === 0 ? { disc: undefined, disc1: name } : { disc2: name };
-        this.urlState.set(changes);
-        const detail = driveIndex === 0 ? { disc1: name } : { disc2: name };
-        this.dispatchEvent(new CustomEvent("media-changed", { detail }));
+    setAutoboot(on) {
+        this.urlState.set({ autoboot: on ? true : undefined });
     }
 
-    setTapeImage(name) {
-        this.urlState.set({ tape: name });
-        this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
+    /** Keeps a file opened this session for the list, and says so with "files-changed". */
+    rememberFile(name, data, kind) {
+        this.sessionFiles.set(name, { data, kind });
+        this.dispatchEvent(new Event("files-changed"));
     }
 
-    async loadHTMLFile(file) {
-        const imageData = stringToUint8Array(await readFileAsBinaryString(file));
-        const loadedDisc = disc.discFor(file.name, imageData, undefined, this.drives.layoutForDrive(0));
+    /** A disc image from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
+    loadDiscFile(name, data, driveIndex) {
+        const loadedDisc = disc.discFor(name, data, undefined, this.drives.layoutForDrive(driveIndex));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
-        loadedDisc.setOriginalImage(imageData);
-        this.drives.putDiscIn(0, loadedDisc);
-        this.urlState.set({ disc: undefined, disc1: undefined });
-        this.modals.hide("discs");
+        loadedDisc.setOriginalImage(data);
+        this.rememberFile(name, data, "disc");
+        this.slots.put(this.slots.drive(driveIndex), loadedDisc, `session:${name}`, { inUrl: false });
+    }
+
+    /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
+    async loadTapeFile(name, data) {
+        const tape = await loadTapeFromData(name, data, this.model);
+        this.rememberFile(name, data, "tape");
+        this.slots.put(this.slots.deck, tape, `session:${name}`, { inUrl: false });
     }
 
     async loadSCSIFile(file) {
@@ -229,7 +225,7 @@ export class MediaLoader extends EventTarget {
         if (schema[0] === "!" || schema === "local") {
             return localDisc(image, layout, (error) =>
                 toast(
-                    `Browser storage would not take changes to ${image} (${errorText(error)}). Use Discs, Download to keep a copy.`,
+                    `Browser storage would not take changes to ${image} (${errorText(error)}). Use the drive's Save button to keep a copy.`,
                     { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
                 ),
             );
@@ -246,7 +242,9 @@ export class MediaLoader extends EventTarget {
         // * Dialog box (ugh) saying "is this ok?"
         const { name, data, ignored } = await this.resolver.resolve("disc", discImage);
         reportIgnoredFiles(name, ignored);
-        return disc.discFor(name, data, undefined, layout);
+        const loaded = disc.discFor(name, data, undefined, layout);
+        if (schema === "session") loaded.setOriginalImage(data);
+        return loaded;
     }
 
     async loadTapeImage(tapeImage) {

@@ -25,26 +25,16 @@ function encodePath(path) {
 }
 
 export class StairwayToHell {
-    constructor(onStart, onCat, onError, tape) {
-        this._baseUrl = `${mirrorBase}/${tape ? "tape" : "disk"}images/`;
+    /** @param {{tapes?: boolean}} [what] the tape images rather than the disc images */
+    constructor({ tapes = false } = {}) {
+        this._baseUrl = `${mirrorBase}/${tapes ? "tape" : "disk"}images/`;
         this._catalog = [];
-        this._onStart = onStart;
-        this._onCat = onCat;
-        this._onError = onError;
     }
 
-    async populate() {
-        this._onStart();
-        if (this._catalog.length === 0) {
-            try {
-                this._catalog = await _fetchManifest(this._baseUrl + "manifest.json");
-            } catch (error) {
-                console.error("Failed to fetch catalog:", error);
-                if (this._onError) this._onError();
-                return;
-            }
-        }
-        if (this._onCat) this._onCat(this._catalog);
+    /** @returns {Promise<string[]>} every path in the archive, fetched the first time it is asked for */
+    async catalogue() {
+        if (this._catalog.length === 0) this._catalog = await _fetchManifest(this._baseUrl + "manifest.json");
+        return this._catalog;
     }
 
     async fetch(file) {

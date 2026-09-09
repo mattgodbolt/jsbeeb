@@ -421,6 +421,23 @@ export class AtomPPIA extends PPIA {
         if (this.tape) this.tape.rewind();
     }
 
+    /** On the Atom the recorder's PLAY is the motor: there is no relay for it to work against. */
+    get playPressed() {
+        return this.motorOn;
+    }
+
+    get tapeRunning() {
+        return this.motorOn;
+    }
+
+    pressPlay() {
+        this.playTape();
+    }
+
+    pressStop() {
+        this.stopTape();
+    }
+
     playTape() {
         if (this.tape) {
             this.motorOn = true;

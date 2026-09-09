@@ -17,6 +17,7 @@ export class Acia extends EventTarget {
 
         this.rs423Selected = false;
         this.motorOn = false;
+        this.playPressed = true;
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;
         this.hadDcdHigh = false;
@@ -76,6 +77,30 @@ export class Acia extends EventTarget {
             this.relayNoise.motorOff();
         }
         this.motorOn = on;
+    }
+
+    /** Whether the machine and the recorder between them ask for the tape to move. */
+    get shouldRun() {
+        return this.motorOn && this.playPressed;
+    }
+
+    /** Whether the tape is moving: asked to, and not run out. */
+    get tapeRunning() {
+        return this.shouldRun && this.runTapeTask.scheduled();
+    }
+
+    /** PLAY on the recorder: down by default, so the relay alone runs the tape as it always has. */
+    pressPlay() {
+        if (this.playPressed) return;
+        this.playPressed = true;
+        if (this.motorOn) this.runTape();
+    }
+
+    /** STOP on the recorder: the tape stays put however the relay is set, until PLAY is pressed again. */
+    pressStop() {
+        if (!this.playPressed) return;
+        this.playPressed = false;
+        if (this.motorOn) this.stopRunning();
     }
 
     stopRunning() {
@@ -239,6 +264,7 @@ export class Acia extends EventTarget {
             dr: this.dr,
             rs423Selected: this.rs423Selected,
             motorOn: this.motorOn,
+            playPressed: this.playPressed,
             tapeCarrierCount: this.tapeCarrierCount,
             tapeDcdLineLevel: this.tapeDcdLineLevel,
             hadDcdHigh: this.hadDcdHigh,
@@ -258,6 +284,8 @@ export class Acia extends EventTarget {
         this.dr = state.dr;
         this.rs423Selected = state.rs423Selected;
         this.motorOn = state.motorOn;
+        // Snapshots predating the recorder's PLAY latch were taken with it down.
+        this.playPressed = state.playPressed ?? true;
         this.tapeCarrierCount = state.tapeCarrierCount;
         this.tapeDcdLineLevel = state.tapeDcdLineLevel;
         this.hadDcdHigh = state.hadDcdHigh;
@@ -275,10 +303,10 @@ export class Acia extends EventTarget {
         if (state.runRs423TaskOffset !== null) this.runRs423Task.schedule(state.runRs423TaskOffset);
     }
 
-    /** A tape put in, or taken out, while the motor is on starts or stops at once. */
+    /** A tape put in, or taken out, while the tape is meant to be running starts or stops at once. */
     setTape(tape) {
         this.tape = tape;
-        if (!this.motorOn) return;
+        if (!this.shouldRun) return;
         if (tape) this.runTape();
         else this.stopRunning();
     }
@@ -288,7 +316,7 @@ export class Acia extends EventTarget {
         console.log("rewinding tape");
         this.tape.rewind();
         // A tape that had run out stopped being polled; rewound, it has something to play again.
-        if (this.motorOn) this.runTape();
+        if (this.shouldRun) this.runTape();
     }
 
     // Byte times are held in CPU cycles because that's what the scheduler counts.
@@ -354,7 +382,7 @@ export class Acia extends EventTarget {
 
     /** Polls the tape and books the next poll; a tape that has run out is left alone. */
     runTape() {
-        if (!this.tape) return;
+        if (!this.tape || !this.playPressed) return;
         const delay = this.tape.poll(this);
         if (delay === undefined) this.stopRunning();
         else this.runTapeTask.reschedule(delay);

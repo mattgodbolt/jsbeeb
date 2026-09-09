@@ -4,55 +4,29 @@ import { toHfe } from "../disc-hfe.js";
 import { downloadDriveData } from "./dom-utils.js";
 import { DriveTracks } from "../url-params.js";
 
-const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
+/** The 40/80 switch's label for a drive stepping `tracksPerStep` physical tracks per logical one. */
+export const tracksLabel = (tracksPerStep) => (tracksPerStep === 2 ? "40" : "80");
+export const tracksPerStepOf = (label) => (label === "40" ? 2 : 1);
 
 /**
  * The disc drives as the page sees them: putting a disc in and taking it out,
- * the 40/80 track switches on the Discs menu, and downloading what is in drive 0.
- * Raises "disc-changed" with the drive index and what it now holds.
+ * each drive's 40/80 track switch, and downloading what a drive holds.
+ * Raises "tracks-changed" when a switch moves.
  */
 export class Drives extends EventTarget {
-    constructor({ fdc, driveTracks, confirm }) {
+    constructor({ fdc, driveTracks, confirm, urlState }) {
         super();
         this.fdc = fdc;
         this.driveTracks = driveTracks;
+        this.confirm = confirm;
+        this.urlState = urlState;
         this.saidWritesAreNotKept = false;
 
-        for (const item of document.querySelectorAll(".drive-tracks")) {
-            const driveIndex = Number(item.dataset.drive);
+        for (const driveIndex of [0, 1]) {
             const drive = fdc?.drives[driveIndex];
             const fixed = drive ? this.tracksPerStepForDrive(driveIndex) : undefined;
             if (fixed !== undefined) drive.tracksPerStep = fixed;
-            for (const button of this.driveTracksButtons(driveIndex)) {
-                button.disabled = !drive;
-                button.addEventListener("click", (event) => {
-                    // Setting a switch is not picking from a menu, so leave the menu where it is.
-                    event.stopPropagation();
-                    drive.tracksPerStep = tracksPerStepFor(button.dataset.tracks);
-                    this.showDriveTracks(driveIndex);
-                });
-            }
-            if (drive) this.showDriveTracks(driveIndex);
         }
-
-        document.getElementById("download-drive-link").addEventListener("click", async () => {
-            const disc = this.discToDownload(0);
-            if (!disc) return;
-            const save = (options) =>
-                downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
-            try {
-                save();
-            } catch (e) {
-                if (await confirm(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel"))
-                    save({ force: true });
-            }
-        });
-
-        document.getElementById("download-drive-hfe-link").addEventListener("click", () => {
-            const disc = this.discToDownload(0);
-            if (!disc) return;
-            downloadDriveData(toHfe(disc), disc.name, ".hfe");
-        });
     }
 
     /** @returns {import("../disc.js").Disc|null} the disc in the drive, saying so when there is nothing to download */
@@ -60,6 +34,38 @@ export class Drives extends EventTarget {
         const disc = this.fdc?.drives[driveIndex].disc;
         if (!disc) toast(`There is no disc in drive ${driveIndex} to download.`, { title: "Disc" });
         return disc ?? null;
+    }
+
+    /**
+     * A drive's disc as a sector image, asking first when a track would not fit one.
+     *
+     * @returns {Promise<Uint8Array|null>} the image, or null when there is none to give
+     */
+    async sectorImage(driveIndex) {
+        const disc = this.discToDownload(driveIndex);
+        if (!disc) return null;
+        try {
+            return toSsdOrDsd(disc);
+        } catch (e) {
+            if (await this.confirm(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel"))
+                return toSsdOrDsd(disc, { force: true });
+            return null;
+        }
+    }
+
+    /** Downloads a drive's disc as a sector image, asking first if a flux-only track would be lost. */
+    async downloadSsdOrDsd(driveIndex) {
+        const image = await this.sectorImage(driveIndex);
+        if (!image) return;
+        const disc = this.fdc.drives[driveIndex].disc;
+        downloadDriveData(image, disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
+    }
+
+    /** Downloads a drive's disc as HFE, the format that keeps every flux transition. */
+    downloadHfe(driveIndex) {
+        const disc = this.discToDownload(driveIndex);
+        if (!disc) return;
+        downloadDriveData(toHfe(disc), disc.name, ".hfe");
     }
 
     /** @returns {string} the DiscLayout to load an image for this drive with */
@@ -70,25 +76,47 @@ export class Drives extends EventTarget {
     /** @returns {Number|undefined} the tracksPerStep the user fixed this drive at, if they fixed one */
     tracksPerStepForDrive(driveIndex) {
         if (this.driveTracks[driveIndex] === DriveTracks.auto) return undefined;
-        return this.driveTracks[driveIndex] === DriveTracks.forty ? 2 : 1;
+        return tracksPerStepOf(this.driveTracks[driveIndex]);
+    }
+
+    /**
+     * Throws a drive's 40/80 switch: the disc in it now is read at that pitch, and so is
+     * whatever is put in next, until the switch is thrown again.
+     */
+    setTracksPerStep(driveIndex, tracksPerStep) {
+        const drive = this.fdc?.drives[driveIndex];
+        if (!drive) return;
+        const setting = tracksLabel(tracksPerStep);
+        if (drive.tracksPerStep === tracksPerStep && this.driveTracks[driveIndex] === setting) return;
+        drive.tracksPerStep = tracksPerStep;
+        this.driveTracks[driveIndex] = setting;
+        this.urlState.set({ [`drive${driveIndex}Tracks`]: setting });
+        this.dispatchEvent(new CustomEvent("tracks-changed", { detail: { driveIndex } }));
+    }
+
+    /**
+     * A restored state has set the drive's pitch behind the switch's back. A switch the user
+     * pinned follows it, so the URL and the drive agree; one on auto has nothing to say.
+     */
+    followRestoredPitch(driveIndex) {
+        const drive = this.fdc?.drives[driveIndex];
+        if (drive && this.tracksPerStepForDrive(driveIndex) !== undefined)
+            this.setTracksPerStep(driveIndex, drive.tracksPerStep);
     }
 
     putDiscIn(driveIndex, loadedDisc) {
+        if (!this.fdc) throw new Error("This machine has no disc drives");
         const drive = this.fdc.drives[driveIndex];
         const fixed = this.tracksPerStepForDrive(driveIndex);
         const was = drive.tracksPerStep;
         this.fdc.loadDisc(driveIndex, loadedDisc, fixed);
-        this.showDriveTracks(driveIndex);
         this.noteUnsavedWrites(loadedDisc);
         // A switch the user fixed does not move, so anything it does is not news.
         if (fixed === undefined && drive.tracksPerStep !== was) this.noteDriveTracks(driveIndex, loadedDisc.name);
-        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: loadedDisc } }));
     }
 
     eject(driveIndex) {
         this.fdc.loadDisc(driveIndex, undefined, this.tracksPerStepForDrive(driveIndex));
-        this.showDriveTracks(driveIndex);
-        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: undefined } }));
     }
 
     noteUnsavedWrites(loadedDisc) {
@@ -96,26 +124,15 @@ export class Drives extends EventTarget {
         loadedDisc.notifyOnFirstTrackWrite(() => {
             if (this.saidWritesAreNotKept) return;
             this.saidWritesAreNotKept = true;
-            toast(`Changes to ${loadedDisc.name} are not saved. Use Discs, Download to keep a copy.`, {
+            toast(`Changes to ${loadedDisc.name} are not saved. Use the drive's Save button to keep a copy.`, {
                 title: "Disc",
                 quietKey: "quietDiscNotSaved",
             });
         });
     }
 
-    showDriveTracks(driveIndex) {
-        const drive = this.fdc?.drives[driveIndex];
-        if (!drive) return;
-        for (const button of this.driveTracksButtons(driveIndex))
-            button.classList.toggle("active", tracksPerStepFor(button.dataset.tracks) === drive.tracksPerStep);
-    }
-
-    driveTracksButtons(driveIndex) {
-        return document.querySelectorAll(`.drive-tracks[data-drive="${driveIndex}"] [data-tracks]`);
-    }
-
     noteDriveTracks(driveIndex, discName) {
-        const tracks = this.fdc.drives[driveIndex].tracksPerStep === 2 ? "40" : "80";
+        const tracks = tracksLabel(this.fdc.drives[driveIndex].tracksPerStep);
         toast(`Drive ${driveIndex} switched to ${tracks} track for ${discName}.`, {
             title: "Disc drive",
             quietKey: "quietDriveTracks",

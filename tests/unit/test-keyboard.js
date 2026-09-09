@@ -335,7 +335,7 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.Q);
+        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.Q, false);
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
@@ -354,7 +354,7 @@ describe("Keyboard", () => {
             shiftKey: false,
         });
 
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.K1);
+        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.K1, false);
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
@@ -388,7 +388,7 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.E);
+        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.E, false);
     });
 
     test("sendRawKeyboard should disable keyboard and schedule paste task", () => {

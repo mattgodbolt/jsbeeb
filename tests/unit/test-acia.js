@@ -22,11 +22,15 @@ function createScheduledAcia(scheduler, cr, transmitRate, model = BbcModel) {
 
 function createMockAcia(relayNoise) {
     const scheduler = {
-        newTask: vi.fn(() => ({
-            cancel: vi.fn(),
-            ensureScheduled: vi.fn(),
-            reschedule: vi.fn(),
-        })),
+        newTask: vi.fn(() => {
+            const task = {
+                scheduled: () => task.isScheduled,
+                cancel: vi.fn(() => (task.isScheduled = false)),
+                ensureScheduled: vi.fn(),
+                reschedule: vi.fn(() => (task.isScheduled = true)),
+            };
+            return task;
+        }),
     };
     const acia = new Acia({ interrupt: 0, model: BbcModel }, { mute: vi.fn(), tone: vi.fn() }, scheduler, relayNoise);
     acia.setRs423Handler({});
@@ -68,7 +72,7 @@ describe("Acia", () => {
         });
     });
 
-    describe("the tape and the relay", () => {
+    describe("the recorder's PLAY latch", () => {
         const withTape = () => {
             const relayNoise = { motorOn: vi.fn(), motorOff: vi.fn() };
             const acia = createMockAcia(relayNoise);
@@ -78,6 +82,29 @@ describe("Acia", () => {
             vi.spyOn(acia.runTapeTask, "cancel");
             return { acia, tape };
         };
+
+        it("runs the tape from the relay alone, PLAY being down to begin with", () => {
+            const { acia } = withTape();
+            expect(acia.playPressed).toBe(true);
+            acia.setMotor(true);
+            expect(acia.tapeRunning).toBe(true);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
+        });
+
+        it("holds the tape still while STOP is down, whatever the relay does", () => {
+            const { acia } = withTape();
+            acia.setMotor(true);
+            acia.pressStop();
+            expect(acia.tapeRunning).toBe(false);
+            expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+            acia.runTapeTask.reschedule.mockClear();
+            acia.setMotor(false);
+            acia.setMotor(true);
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
+            acia.pressPlay();
+            expect(acia.tapeRunning).toBe(true);
+            expect(acia.runTapeTask.reschedule).toHaveBeenCalled();
+        });
 
         it("starts a tape put in while the relay is on, and stops when it is taken out", () => {
             const { acia } = withTape();
@@ -104,9 +131,19 @@ describe("Acia", () => {
             acia.setMotor(true);
             expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
             expect(acia.runTapeTask.cancel).toHaveBeenCalled();
+            expect(acia.tapeRunning).toBe(false);
             acia.rewindTape();
             expect(tape.rewind).toHaveBeenCalled();
             expect(acia.runTapeTask.reschedule).toHaveBeenCalledWith(100);
+            expect(acia.tapeRunning).toBe(true);
+        });
+
+        it("does nothing when PLAY is pressed with the relay off", () => {
+            const { acia } = withTape();
+            acia.pressStop();
+            acia.pressPlay();
+            expect(acia.tapeRunning).toBe(false);
+            expect(acia.runTapeTask.reschedule).not.toHaveBeenCalled();
         });
     });
 

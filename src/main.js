@@ -11,10 +11,9 @@ import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
-import { AutobootTicks } from "./web/archive-list.js";
-import { SthPicker } from "./web/sth-picker.js";
-import { HfePicker } from "./web/hfe-picker.js";
-import { GoogleDrivePicker } from "./web/google-drive-picker.js";
+import { SthSource } from "./web/sth-source.js";
+import { HfeSource } from "./web/hfe-source.js";
+import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
@@ -36,6 +35,7 @@ import { SpeechOutput } from "./web/speech-output.js";
 import { Printer } from "./printer.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
+import { MediaWindow } from "./web/media-window.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 import { adaptKeyCodesToBrowser, keyCodes, userKeymap } from "./keymap.js";
@@ -56,7 +56,6 @@ let secondDiscImage = null;
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
-const defaultBootDisc = queryDiscImage ? undefined : discImage;
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 const extraRoms = [];
@@ -112,7 +111,7 @@ if (keyMappingWarnings.length) {
     });
 }
 if (driveTrackWarnings.length) {
-    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 from the Discs menu.`, {
+    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 on the drive in the media window.`, {
         title: "Disc drives",
     });
 }
@@ -185,6 +184,7 @@ const { keyboard } = new KeyboardSetup({
         toggleFast: () => loop.toggleFastAsPossible(),
         openRewind: () => rewindUI.open(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
+        openMedia: (target) => mediaWindow.openFor(target),
         pause: () => loop.stop(false),
         resume: () => loop.go(),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
@@ -216,7 +216,7 @@ const runControls = new RunControls({ loop, dbgr, keyboard });
 
 const modals = new Modals({ loop });
 
-const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals) });
+const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals), urlState });
 const media = new MediaLoader({
     processor,
     model,
@@ -231,34 +231,17 @@ const autoBoot = new Autoboot({
     processor,
     sendKeys: (keysToSend, check) => keyboard.sendRawKeyboard(keysToSend, check),
 });
-const autobootTicks = new AutobootTicks({ urlState });
-const sthPicker = new SthPicker({
-    media,
-    drives,
-    modals,
-    urlState,
-    processor,
-    autoboot: (image) => autoBoot.boot(image),
-});
-new HfePicker({
-    media,
-    drives,
-    modals,
-    urlState,
-    processor,
-    autoboot: (image) => autoBoot.boot(image),
-});
-new GoogleDrivePicker({ media, drives, modals, processor });
+new SthSource({ media });
+new HfeSource({ media });
+const googleDriveSource = new GoogleDriveSource({ media });
 const snapshots = new SnapshotUI({
     processor,
     model,
     video,
     media,
-    drives,
     urlState,
     modals,
     loop,
-    defaultBootDisc,
 });
 
 const inputs = new AnalogueInputs({
@@ -287,7 +270,17 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 const rewindUI = new RewindUI({ processor, video, loop });
 rewindUI.updateButtonState();
 
-new DiscVisualiser({ fdc: processor.fdc });
+const discVisualiser = new DiscVisualiser({ fdc: processor.fdc });
+const mediaWindow = new MediaWindow({
+    media,
+    drives,
+    processor,
+    model,
+    loop,
+    visualiser: discVisualiser,
+    autoboot: (image) => autoBoot.boot(image),
+    driveSource: googleDriveSource,
+});
 
 const layout = new Layout({
     screenCanvas,
@@ -333,9 +326,9 @@ const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "
 if (parsedQuery.loadBasic) needsAutoboot = "";
 const startPromise = machine.start({
     media,
-    drives,
     autoBoot,
     discImage,
+    discImageInUrl: !!queryDiscImage,
     secondDiscImage,
     tape: parsedQuery.tape,
     mmcImage,
@@ -350,7 +343,6 @@ const startPromise = machine.start({
 
         switch (needsAutoboot) {
             case "boot":
-                autobootTicks.show(true);
                 autoBoot.boot(discImage);
                 break;
             case "type":
@@ -363,7 +355,6 @@ const startPromise = machine.start({
                 autoBoot.runTape();
                 break;
             default:
-                autobootTicks.show(false);
                 break;
         }
 
@@ -392,20 +383,13 @@ electron({
     settings,
     media,
     drives,
-    modals: {
-        show: (modalId, sthType) => {
-            if (modalId === "sth" && sthType) {
-                if (sthType === "discs") sthPicker.discs.populate();
-                else if (sthType === "tapes") sthPicker.tapes.populate();
-            }
-            modals.show(modalId);
-        },
-    },
+    modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     actions: {
         "soft-reset": () => page.softReset(),
         "hard-reset": () => page.hardReset(),
         "save-state": () => snapshots.saveState(),
+        media: () => mediaWindow.open(),
         rewind: () => rewindUI.open(),
         pause: () => runControls.pause(),
         resume: () => runControls.resume(),

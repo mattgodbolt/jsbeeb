@@ -168,25 +168,13 @@ const template = [
             },
             { type: "separator" },
             {
-                label: "Browse STH Disc Archive...",
-                click: showModal("sth", { sthType: "discs" }),
-            },
-            {
-                label: "Browse HFE Disc Archive...",
-                click: showModal("hfe"),
-            },
-            {
-                label: "Browse Example Discs...",
-                click: showModal("discs"),
+                label: "Discs and Tapes...",
+                click: sendAction("media"),
             },
             { type: "separator" },
             {
                 label: "Load Tape from File...",
                 click: makeTapeLoader(),
-            },
-            {
-                label: "Browse STH Tape Archive...",
-                click: showModal("sth", { sthType: "tapes" }),
             },
             { type: "separator" },
             isMac ? { role: "close" } : { role: "quit" },

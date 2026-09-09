@@ -13,6 +13,7 @@ different peripherals.
 
 - [Keyboard Mappings](#keyboard-mappings)
 - [Remapping Keys](#remapping-keys)
+- [Discs and Tapes](#discs-and-tapes)
 - [Emulator Shortcuts](#emulator-shortcuts)
 - [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)
@@ -99,6 +100,10 @@ Some things to know:
 The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/keymap.js`](src/keymap.js), and `ATOM` in
 [`src/keymap-atom.js`](src/keymap-atom.js).
 
+### Discs and Tapes
+
+**Media** on the top bar opens the media window: two disc drives and a cassette deck showing what is loaded, and one searchable list of everything you can load: the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, your Google Drive once connected, discs kept in this browser, and files opened this session. Type to search, `Enter` loads the best match into the aimed drive, `Shift+Enter` loads it, ticks **Autoboot** and boots it, and the arrows walk the rows. Aim at a drive or the deck with the **Into** control, by clicking a slot, or from its line in the LED panel under the screen. Each drive front has its eject latch, its 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser. The footer opens a file from this computer, makes a blank disc in this browser or on Google Drive, and connects Google Drive.
+
 ### Emulator Shortcuts
 
 | Shortcut       | Action                          |
@@ -108,6 +113,9 @@ The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/keymap
 | `Ctrl+End`     | Pause emulation                 |
 | `Ctrl+B`       | Open printer output window      |
 | `Alt+PageDown` | Open rewind scrubber            |
+| `Alt+M`        | Media window, aimed at drive 0  |
+| `Alt+Shift+M`  | Media window, aimed at drive 1  |
+| `Alt+C`        | Media window, aimed at the deck |
 
 ### Printer Output
 

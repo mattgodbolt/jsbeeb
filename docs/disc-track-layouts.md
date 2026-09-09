@@ -99,7 +99,7 @@ survive all of that, which is the main reason it asks narrow questions.
 
 ## The switch
 
-`drive0Tracks` and `drive1Tracks` fix a drive's switch from the URL, and the Discs menu shows and
-sets it. A drive left alone follows whatever disc is loaded into it, which no real drive does: it is
+`drive0Tracks` and `drive1Tracks` fix a drive's switch from the URL, and the drive front in the
+media window shows and sets it. A drive left alone follows whatever disc is loaded into it, which no real drive does: it is
 jsbeeb doing the user a favour, and `fdc.loadDisc` is where the favour is done. `80` turns the whole
 business off for that drive, loading every image the way jsbeeb did before it could tell them apart.

@@ -57,22 +57,16 @@ async function readSnapshot(arrayBuffer) {
  * where they have one, the image bytes where they do not, and CRCs for
  * saying when a source has changed underneath a state.
  */
-export function snapshotMedia(fdcDrives, params, defaultBootDisc) {
+export function snapshotMedia(slots) {
     const manifest = {};
-    const drive0Disc = fdcDrives[0].disc;
-    if (params.disc1 || params.disc) manifest.disc1 = params.disc1 || params.disc;
-    // A default boot loads the built-in disc without naming it in the URL; record it by
-    // name so the state can reload it, but only while that disc is still in the drive.
-    else if (defaultBootDisc && drive0Disc && drive0Disc.name === defaultBootDisc && !drive0Disc.originalImageData)
-        manifest.disc1 = defaultBootDisc;
-    if (params.disc2) manifest.disc2 = params.disc2;
-
-    // For each drive with a disc loaded, include CRC32 for verification
-    // and embed original image data if no URL source exists (local file).
-    for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
-        const driveDisc = fdcDrives[driveIndex].disc;
-        if (!driveDisc || driveDisc.originalImageCrc32 == null) continue;
-        const discKey = driveIndex === 0 ? "disc1" : "disc2";
+    for (const slot of slots.driveSlots) {
+        const driveDisc = slot.media;
+        if (!driveDisc) continue;
+        const discKey = slot.index === 0 ? "disc1" : "disc2";
+        // A disc with its bytes to hand is embedded below; anything else is known by its reference,
+        // which the page's own boot disc has even though the URL does not name it.
+        if (!driveDisc.originalImageData && slot.ref) manifest[discKey] = slot.ref;
+        if (driveDisc.originalImageCrc32 == null) continue;
         const crcKey = discKey + "Crc32";
         manifest[crcKey] = driveDisc.originalImageCrc32;
         // The snapshot's dirty tracks are indexed by physical track, so restoring has to lay
@@ -88,16 +82,15 @@ export function snapshotMedia(fdcDrives, params, defaultBootDisc) {
 
 /** Saving and restoring states: the menu item, the file input and the reload across a model change. */
 export class SnapshotUI {
-    constructor({ processor, model, video, media, drives, urlState, modals, loop, defaultBootDisc }) {
+    constructor({ processor, model, video, media, urlState, modals, loop }) {
         this.processor = processor;
         this.model = model;
         this.video = video;
         this.media = media;
-        this.drives = drives;
+        this.slots = media.slots;
         this.urlState = urlState;
         this.modals = modals;
         this.loop = loop;
-        this.defaultBootDisc = defaultBootDisc;
 
         document.getElementById("save-state").addEventListener("click", async (event) => {
             event.preventDefault();
@@ -115,7 +108,7 @@ export class SnapshotUI {
     async saveState() {
         const resume = this.loop.pause("saving state");
         try {
-            const manifest = snapshotMedia(this.processor.fdc.drives, this.urlState.params, this.defaultBootDisc);
+            const manifest = snapshotMedia(this.slots);
             const snapshot = createSnapshot(this.processor, this.model, manifest);
             const json = snapshotToJSON(snapshot);
             const blob = await compressBlob(new Blob([json]));
@@ -140,13 +133,15 @@ export class SnapshotUI {
                     model: snapshot.model,
                     coProcessor: hasCoProcessor(snapshot),
                 });
-                return;
+                return true;
             }
             await this.restore(snapshot);
             // Force a repaint so the display updates even while paused
             this.video.paint();
+            return true;
         } catch (e) {
             this.modals.showError("loading state", e);
+            return false;
         } finally {
             resume();
         }
@@ -170,6 +165,8 @@ export class SnapshotUI {
         // drive before restoreSnapshot applies dirty track overlays on top.
         await this.reloadSnapshotMedia(snapshot.media);
         restoreSnapshot(this.processor, this.model, snapshot);
+        // The drives' pitch and the recorder's latch came back with the state, behind the slots' backs.
+        this.slots.restored();
     }
 
     async reloadSnapshotMedia(savedMedia) {
@@ -234,9 +231,8 @@ export class SnapshotUI {
                 );
             }
 
-            this.drives.putDiscIn(driveIndex, loadedDisc);
-            // An embedded disc has no source, which takes whatever the URL named before out of it.
-            this.media.setDiscImage(driveIndex, savedMedia[discKey]);
+            // An embedded disc has no reference, which takes whatever the URL named before out of it.
+            this.slots.put(this.slots.drive(driveIndex), loadedDisc, savedMedia[discKey]);
         }
     }
 }

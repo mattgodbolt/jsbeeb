@@ -1,37 +1,18 @@
 // Electron integration for jsbeeb desktop application.
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
-import { reportLoadFailure } from "../web/reporting.js";
+import { describeRef } from "../web/media-catalogue.js";
 
 function init(args) {
-    const { loadStateFile, modals, actions, settings, media, drives } = args;
+    const { loadStateFile, modals, actions, settings, media } = args;
     const api = window.electronAPI;
+    const { slots } = media;
 
-    api.onLoadDisc(async (message) => {
-        const { drive, path } = message;
-        try {
-            drives.putDiscIn(drive, await media.loadDiscImage(path, drives.layoutForDrive(drive)));
-            media.setDiscImage(drive, path);
-        } catch (error) {
-            reportLoadFailure(`disc ${path}`, error);
-        }
-    });
-
-    api.onLoadTape(async (message) => {
-        const { path } = message;
-        try {
-            media.setProcessorTape(await media.loadTapeImage(path));
-            media.setTapeImage(path);
-        } catch (error) {
-            reportLoadFailure(`tape ${path}`, error);
-        }
-    });
+    api.onLoadDisc(({ drive, path }) => slots.load(slots.drive(drive), describeRef(path, "disc")));
+    api.onLoadTape(({ path }) => slots.load(slots.deck, describeRef(path, "tape")));
 
     api.onShowModal((message) => {
-        const { modalId, sthType } = message;
-        if (modals && modals.show) {
-            modals.show(modalId, sthType);
-        }
+        if (modals && modals.show) modals.show(message.modalId);
     });
 
     api.onAction((message) => {
@@ -68,8 +49,8 @@ function init(args) {
         });
     }
     if (media) {
-        media.addEventListener("media-changed", (e) => {
-            api.saveSettings(e.detail);
+        slots.addEventListener("changed", (e) => {
+            if (!e.detail.slot.busy) api.saveSettings(e.detail.slot.urlParams());
         });
     }
 }

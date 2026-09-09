@@ -4,22 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Drives } from "../../src/web/drives.js";
 import { DiscLayout } from "../../src/disc.js";
 import { DriveTracks } from "../../src/url-params.js";
-import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
-
-/** Enough of an FDC for the page's side of putting a disc in. */
-function fakeFdc() {
-    const drives = [
-        { tracksPerStep: 1, disc: null },
-        { tracksPerStep: 1, disc: null },
-    ];
-    return {
-        drives,
-        loadDisc: vi.fn((driveIndex, disc, fixed) => {
-            drives[driveIndex].disc = disc;
-            drives[driveIndex].tracksPerStep = fixed ?? (disc?.is40Track ? 2 : 1);
-        }),
-    };
-}
+import { discFor } from "../../src/fdc.js";
+import { fakeFdc, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 function fakeDisc({ name = "game.ssd", savesChanges = false, is40Track = false } = {}) {
     const disc = { name, savesChanges, is40Track, onFirstWrite: null };
@@ -30,21 +16,19 @@ function fakeDisc({ name = "game.ssd", savesChanges = false, is40Track = false }
 describe("Drives", () => {
     let fdc;
     let confirm;
+    let urlState;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        domFromIndexHtml("navbarSupportedContent");
         fdc = fakeFdc();
         confirm = vi.fn().mockResolvedValue(false);
+        urlState = fakeUrlState();
     });
 
     afterEach(teardownDom);
 
-    const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) => new Drives({ fdc, driveTracks, confirm });
-    const activeTracks = (driveIndex) =>
-        [...document.querySelectorAll(`.drive-tracks[data-drive="${driveIndex}"] .active`)].map(
-            (b) => b.dataset.tracks,
-        );
+    const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) =>
+        new Drives({ fdc, driveTracks, confirm, urlState });
 
     describe("what the URL fixed each drive at", () => {
         it("loads an image contiguously for a drive fixed at 80 tracks, and lets the others be detected", () => {
@@ -65,8 +49,11 @@ describe("Drives", () => {
             make([DriveTracks.forty, DriveTracks.auto]);
             expect(fdc.drives[0].tracksPerStep).toBe(2);
             expect(fdc.drives[1].tracksPerStep).toBe(1);
-            expect(activeTracks(0)).toEqual(["40"]);
-            expect(activeTracks(1)).toEqual(["80"]);
+        });
+
+        it("copes with a machine that has no drives", () => {
+            fdc = undefined;
+            expect(() => make([DriveTracks.forty, DriveTracks.auto])).not.toThrow();
         });
     });
 
@@ -80,7 +67,6 @@ describe("Drives", () => {
 
         it("says when an unfixed drive switched itself for the disc", () => {
             make().putDiscIn(1, fakeDisc({ name: "forty.ssd", is40Track: true }));
-            expect(activeTracks(1)).toEqual(["40"]);
             expect(toasts()).toEqual([expect.stringContaining("Drive 1 switched to 40 track for forty.ssd")]);
         });
 
@@ -96,27 +82,16 @@ describe("Drives", () => {
     });
 
     describe("what the drives hold", () => {
-        const changes = (drives) => {
-            const seen = [];
-            drives.addEventListener("disc-changed", (e) => seen.push(e.detail));
-            return seen;
-        };
-
-        it("says which drive took which disc", () => {
-            const drives = make();
-            const seen = changes(drives);
-            const disc = fakeDisc();
-            drives.putDiscIn(1, disc);
-            expect(seen).toEqual([{ driveIndex: 1, disc }]);
+        it("refuses, in words, on a machine with no drives", () => {
+            fdc = undefined;
+            expect(() => make().putDiscIn(0, fakeDisc())).toThrow("no disc drives");
         });
 
-        it("ejects a disc, leaving the drive empty and saying so", () => {
+        it("ejects a disc, leaving the drive empty", () => {
             const drives = make();
             drives.putDiscIn(0, fakeDisc());
-            const seen = changes(drives);
             drives.eject(0);
             expect(fdc.drives[0].disc).toBeUndefined();
-            expect(seen).toEqual([{ driveIndex: 0, disc: undefined }]);
         });
 
         it("keeps a fixed switch where the user put it across an eject", () => {
@@ -124,7 +99,6 @@ describe("Drives", () => {
             drives.putDiscIn(0, fakeDisc({ is40Track: false }));
             drives.eject(0);
             expect(fdc.loadDisc).toHaveBeenLastCalledWith(0, undefined, 2);
-            expect(activeTracks(0)).toEqual(["40"]);
         });
 
         it("lets an unfixed switch rest at 80 track once the drive is empty", () => {
@@ -132,7 +106,6 @@ describe("Drives", () => {
             drives.putDiscIn(1, fakeDisc({ is40Track: true }));
             drives.eject(1);
             expect(fdc.drives[1].tracksPerStep).toBe(1);
-            expect(activeTracks(1)).toEqual(["80"]);
         });
     });
 
@@ -165,65 +138,84 @@ describe("Drives", () => {
         });
     });
 
-    describe("the drive 0 downloads", () => {
-        const download = (id) => document.getElementById(id).click();
-
-        it("find the disc in whichever drive is asked for", () => {
+    describe("downloads", () => {
+        it("say so instead of saving when the drive is empty", async () => {
             const drives = make();
-            const disc = fakeDisc();
-            drives.putDiscIn(1, disc);
-            expect(drives.discToDownload(1)).toBe(disc);
-            expect(drives.discToDownload(0)).toBeNull();
-            expect(toasts()).toEqual([expect.stringContaining("no disc in drive 0")]);
-        });
-
-        it("say so instead of saving when drive 0 is empty", () => {
-            make();
-            download("download-drive-link");
-            download("download-drive-hfe-link");
+            await drives.downloadSsdOrDsd(0);
+            drives.downloadHfe(1);
             expect(toasts()).toEqual([
                 expect.stringContaining("no disc in drive 0"),
-                expect.stringContaining("no disc in drive 0"),
+                expect.stringContaining("no disc in drive 1"),
             ]);
             expect(confirm).not.toHaveBeenCalled();
         });
 
-        it("say so instead of throwing on a machine with no drives", () => {
+        it("give a drive's disc as a sector image, and nothing for an empty drive", async () => {
+            const drives = make();
+            expect(await drives.sectorImage(1)).toBeNull();
+            drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
+            const image = await drives.sectorImage(0);
+            expect(image.length).toBe(ssdImage().length);
+            expect(confirm).not.toHaveBeenCalled();
+        });
+
+        it("say so instead of throwing on a machine with no drives", async () => {
             fdc = undefined;
-            make();
-            expect(() => download("download-drive-link")).not.toThrow();
-            expect(() => download("download-drive-hfe-link")).not.toThrow();
-            expect(toasts()).toEqual([
-                expect.stringContaining("no disc in drive 0"),
-                expect.stringContaining("no disc in drive 0"),
-            ]);
+            const drives = make();
+            await expect(drives.downloadSsdOrDsd(0)).resolves.toBeUndefined();
+            expect(() => drives.downloadHfe(0)).not.toThrow();
+            expect(toasts()).toHaveLength(2);
         });
     });
 
-    describe("the switches on the menu", () => {
-        it("set the drive and show what was picked", () => {
-            make();
-            document.querySelector('.drive-tracks[data-drive="1"] [data-tracks="40"]').click();
-            expect(fdc.drives[1].tracksPerStep).toBe(2);
-            expect(activeTracks(1)).toEqual(["40"]);
-            document.querySelector('.drive-tracks[data-drive="1"] [data-tracks="80"]').click();
-            expect(fdc.drives[1].tracksPerStep).toBe(1);
-            expect(activeTracks(1)).toEqual(["80"]);
-        });
-
-        it("keep the menu open when clicked", () => {
-            make();
-            const seenByMenu = vi.fn();
-            document.querySelector(".drive-tracks").parentElement.addEventListener("click", seenByMenu);
-            document.querySelector('[data-tracks="40"]').click();
-            expect(seenByMenu).not.toHaveBeenCalled();
-        });
-
-        it("are disabled on a machine with no drives", () => {
-            fdc = undefined;
+    describe("the 40/80 switch", () => {
+        it("moves the drive's switch, pins the drive there in the URL, and says so", () => {
             const drives = make();
-            for (const button of document.querySelectorAll("[data-tracks]")) expect(button.disabled).toBe(true);
-            expect(() => drives.showDriveTracks(0)).not.toThrow();
+            const seen = [];
+            drives.addEventListener("tracks-changed", (e) => seen.push(e.detail));
+            drives.setTracksPerStep(1, 2);
+            expect(fdc.drives[1].tracksPerStep).toBe(2);
+            expect(urlState.params).toEqual({ drive1Tracks: "40" });
+            expect(drives.tracksPerStepForDrive(1)).toBe(2);
+            drives.setTracksPerStep(1, 1);
+            expect(fdc.drives[1].tracksPerStep).toBe(1);
+            expect(urlState.params).toEqual({ drive1Tracks: "80" });
+            expect(seen).toEqual([{ driveIndex: 1 }, { driveIndex: 1 }]);
+        });
+
+        it("reads the next disc at the pitch the switch was thrown to", () => {
+            const drives = make();
+            drives.setTracksPerStep(0, 2);
+            drives.putDiscIn(0, fakeDisc({ is40Track: false }));
+            expect(fdc.loadDisc).toHaveBeenLastCalledWith(0, expect.anything(), 2);
+            expect(toasts()).toEqual([]);
+        });
+
+        it("follows a restored state's pitch when pinned, and leaves an auto drive be", () => {
+            const drives = make([DriveTracks.forty, DriveTracks.auto]);
+            fdc.drives[0].tracksPerStep = 1;
+            fdc.drives[1].tracksPerStep = 2;
+            drives.followRestoredPitch(0);
+            drives.followRestoredPitch(1);
+            expect(urlState.params).toEqual({ drive0Tracks: "80" });
+            expect(drives.tracksPerStepForDrive(1)).toBeUndefined();
+        });
+
+        it("pins a drive that was on auto even when the switch does not move", () => {
+            const drives = make();
+            const seen = vi.fn();
+            drives.addEventListener("tracks-changed", seen);
+            drives.setTracksPerStep(0, 1);
+            expect(urlState.params).toEqual({ drive0Tracks: "80" });
+            expect(seen).toHaveBeenCalledTimes(1);
+            drives.setTracksPerStep(0, 1);
+            expect(seen).toHaveBeenCalledTimes(1);
+        });
+
+        it("does nothing on a machine with no drives", () => {
+            fdc = undefined;
+            expect(() => make().setTracksPerStep(0, 2)).not.toThrow();
+            expect(urlState.params).toEqual({});
         });
     });
 });

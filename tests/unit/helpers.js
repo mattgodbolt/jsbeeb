@@ -22,22 +22,19 @@ export function domFromIndexHtml(...ids) {
     }
 }
 
-/** The dependency bag the archive pickers take, every callback a mock. */
-export function makeWebDeps() {
+/** Enough of an FDC for the page's side of putting a disc in and taking it out. */
+export function fakeFdc() {
+    const drives = [
+        { tracksPerStep: 1, disc: undefined },
+        { tracksPerStep: 1, disc: undefined },
+    ];
     return {
-        media: {
-            addSource: vi.fn(),
-            setDiscImage: vi.fn(),
-            setTapeImage: vi.fn(),
-            loadDiscImage: vi.fn(),
-            loadTapeImage: vi.fn(),
-            setProcessorTape: vi.fn(),
-        },
-        drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
-        modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
-        urlState: { params: {}, updateUrl: vi.fn() },
-        processor: { reset: vi.fn() },
-        autoboot: vi.fn(),
+        drives,
+        motorOn: [false, false],
+        loadDisc: vi.fn((driveIndex, disc, fixed) => {
+            drives[driveIndex].disc = disc;
+            drives[driveIndex].tracksPerStep = fixed ?? (disc?.is40Track ? 2 : 1);
+        }),
     };
 }
 

@@ -7,8 +7,8 @@ import { domFromIndexHtml, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
-const keyEvent = (type, which, { alt = false, ctrl = false } = {}) => {
-    const event = new KeyboardEvent(type, { altKey: alt, ctrlKey: ctrl, cancelable: true });
+const keyEvent = (type, which, { alt = false, ctrl = false, shift = false } = {}) => {
+    const event = new KeyboardEvent(type, { altKey: alt, ctrlKey: ctrl, shiftKey: shift, cancelable: true });
     Object.defineProperty(event, "which", { value: which });
     return event;
 };
@@ -33,6 +33,7 @@ describe("KeyboardSetup", () => {
             toggleFast: vi.fn(),
             openRewind: vi.fn(),
             openPrinter: vi.fn(),
+            openMedia: vi.fn(),
             pause: vi.fn(),
             resume: vi.fn(),
             paste: vi.fn(),
@@ -93,6 +94,17 @@ describe("KeyboardSetup", () => {
             expect(actions[action]).toHaveBeenCalledTimes(1);
         });
 
+        it("aims the media window from Alt-M, Alt-Shift-M and Alt-C", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true }));
+            expect(actions.openMedia).toHaveBeenLastCalledWith(0);
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
+            expect(actions.openMedia).toHaveBeenLastCalledWith(1);
+            document.dispatchEvent(keyEvent("keydown", keyCodes.C, { alt: true }));
+            expect(actions.openMedia).toHaveBeenLastCalledWith("tape");
+            expect(actions.openMedia).toHaveBeenCalledTimes(3);
+            expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+        });
+
         it("does nothing without the modifier", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.S));
             expect(actions.enterDebugger).not.toHaveBeenCalled();
@@ -130,6 +142,28 @@ describe("KeyboardSetup", () => {
             field.focus();
             field.dispatchEvent(pasteEvent("not for the Beeb"));
             expect(actions.paste).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("where keys go", () => {
+        it("reach the machine from the page at large, but not from the media window", () => {
+            domFromIndexHtml("media-panel");
+            document.dispatchEvent(keyEvent("keydown", keyCodes.A));
+            expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
+            document.getElementById("media-close").focus();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.A));
+            expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
+        });
+
+        it("releases a key that was held while Alt-Shift-M moved focus into the window", () => {
+            domFromIndexHtml("media-panel");
+            document.dispatchEvent(keyEvent("keydown", keyCodes.SHIFT, { shift: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
+            document.getElementById("media-search").focus();
+            document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true, shift: true }));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.SHIFT));
+            expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.M);
+            expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.SHIFT_LEFT);
         });
     });
 

@@ -13,7 +13,7 @@ export const Provenance = {
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 /**
- * Order the picker by what someone is looking for, which is the disc's name.
+ * Order the list by what someone is looking for, which is the disc's name.
  * The catalogue arrives grouped by publisher, so it has to be sorted here; the
  * remaining keys only settle ties, keeping a title's variants together and in
  * a stable order rather than the one the catalogue happens to list them in.
@@ -25,7 +25,7 @@ export const byTitle = (a, b) =>
     collator.compare(a.variant || "", b.variant || "");
 
 /**
- * How a disc reads in the picker. Several fingerprinted variants of one title
+ * How a disc reads in the list. Several fingerprinted variants of one title
  * sit next to each other, so the title alone doesn't identify a disc.
  *
  * @param {object} file manifest entry
@@ -40,58 +40,29 @@ export function describe(file) {
     };
 }
 
-/** The provenances a catalogue actually holds, so a source added later needs no code here. */
-export const provenancesIn = (catalogue) => [...new Set(catalogue.map((file) => file.provenance))].sort();
-
-/**
- * Whether a disc belongs in the picker as it is currently filtered.
- *
- * @param {object} file manifest entry
- * @param {string} filter lower cased text to look for
- * @param {?Set<string>} shown provenances to include, or null for all of them
- */
-export function matches(file, filter, shown) {
-    if (shown && !shown.has(file.provenance)) return false;
-    if (!filter) return true;
-    // What the row says the disc is, rather than everything the row renders:
-    // the provenance is a word the tickboxes control, not one to search for.
-    const { title, publisher, detail } = describe(file);
-    return `${title} ${publisher} ${detail}`.toLowerCase().includes(filter);
-}
-
 export class BbcDiscArchive {
     /** @param {string} [baseUrl] where the mirror lives, to point at a test prefix */
-    constructor(onStart, onCat, onError, baseUrl = mirrorBase) {
+    constructor(baseUrl = mirrorBase) {
         this._baseUrl = `${baseUrl}/hfe/`;
         this._catalogue = [];
         this._loaded = false;
-        this._onStart = onStart;
-        this._onCat = onCat;
-        this._onError = onError;
     }
 
-    async populate() {
-        this._onStart();
+    /** @returns {Promise<object[]>} every manifest entry, sorted by title, fetched the first time it is asked for */
+    async catalogue() {
         // Tracked separately from the catalogue: an archive can legitimately be
         // empty, and an empty array would mean "fetch it again" every time.
-        if (!this._loaded) {
-            try {
-                const response = await fetch(`${this._baseUrl}manifest.json`);
-                if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
-                const data = await response.json();
-                if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
-                this._catalogue = data.files
-                    // The captured discs were published before provenance was recorded.
-                    .map((file) => ({ ...file, provenance: file.provenance ?? Provenance.Captured }))
-                    .sort(byTitle);
-                this._loaded = true;
-            } catch (error) {
-                console.error("Failed to fetch HFE archive catalogue:", error);
-                if (this._onError) this._onError();
-                return;
-            }
-        }
-        if (this._onCat) this._onCat(this._catalogue);
+        if (this._loaded) return this._catalogue;
+        const response = await fetch(`${this._baseUrl}manifest.json`);
+        if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
+        const data = await response.json();
+        if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
+        this._catalogue = data.files
+            // The captured discs were published before provenance was recorded.
+            .map((file) => ({ ...file, provenance: file.provenance ?? Provenance.Captured }))
+            .sort(byTitle);
+        this._loaded = true;
+        return this._catalogue;
     }
 
     /**

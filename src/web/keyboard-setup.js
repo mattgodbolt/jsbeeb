@@ -5,6 +5,8 @@ import { keyCodes } from "../keymap.js";
 
 const PasteBoxId = "paste-text";
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+// Where keys are for the page, not the machine: the paste box, and the media window's controls.
+const KeyboardSinks = `#${PasteBoxId}, #media-panel`;
 
 /**
  * Builds the emulated keyboard and wires the browser's shortcuts around it,
@@ -14,14 +16,14 @@ export class KeyboardSetup {
     /**
      * @param {object} opts
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
-     *   enterDebugger, reload, toggleFast, openRewind, openPrinter,
+     *   enterDebugger, reload, toggleFast, openRewind, openPrinter, openMedia,
      *   pause, resume, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
      */
     constructor({ actions, accessibilitySwitches, processor, dbgr, keyLayout }) {
         const keyboard = (this.keyboard = new Keyboard({
             processor,
-            inputEnabledFunction: () => document.activeElement && document.activeElement.id === PasteBoxId,
+            inputEnabledFunction: () => !!document.activeElement?.closest(KeyboardSinks),
             keyLayout,
             dbgr,
         }));
@@ -52,6 +54,18 @@ export class KeyboardSetup {
         );
         keyboard.registerKeyHandler(keyCodes.PAGEDOWN, onDown("pagedown", actions.openRewind), alt);
         keyboard.registerKeyHandler(keyCodes.B, onDown(null, actions.openPrinter), ctrl);
+        keyboard.registerKeyHandler(
+            keyCodes.M,
+            (down, _code, shift) => {
+                if (down) actions.openMedia(shift ? 1 : 0);
+            },
+            alt,
+        );
+        keyboard.registerKeyHandler(
+            keyCodes.C,
+            onDown(null, () => actions.openMedia("tape")),
+            alt,
+        );
 
         // Alt+1-8 and Alt+F1-F8 trigger the accessibility switches. Using Alt means
         // the underlying key is never forwarded to the BBC Micro (keyboard.js bails

@@ -45,14 +45,14 @@ describe("MediaResolver", () => {
         expect(load.mock.calls.map(([url]) => url)).toEqual(["discs/elite.ssd", "tapes/game.uef"]);
     });
 
-    it("fetches a URL as given, keeping only its path as the name", async () => {
+    it("fetches a URL as given, keeping only its file name as the name", async () => {
         const { resolver, load } = make({
             "https://example.com/dir/a.ssd?v=2": bytes("x"),
             "file:///tmp/b.ssd": bytes("y"),
         });
         const { name } = await resolver.resolve("disc", "https://example.com/dir/a.ssd?v=2");
-        expect(name).toBe("/dir/a.ssd");
-        expect((await resolver.resolve("disc", "file:///tmp/b.ssd")).name).toBe("/tmp/b.ssd");
+        expect(name).toBe("a.ssd");
+        expect((await resolver.resolve("disc", "file:///tmp/b.ssd")).name).toBe("b.ssd");
         expect(load).toHaveBeenLastCalledWith("file:///tmp/b.ssd");
     });
 
@@ -94,6 +94,15 @@ describe("MediaResolver", () => {
             data: bytes("h"),
             ignored: [],
         });
+    });
+
+    it("hands a session: reference to the session source, whatever the kind", async () => {
+        const { resolver } = make();
+        const session = vi.fn(async (name) => ({ name, data: bytes("s"), ignored: [] }));
+        resolver.addSource("session", session);
+        expect((await resolver.resolve("disc", "session:mine.ssd")).name).toBe("mine.ssd");
+        expect((await resolver.resolve("tape", "session:mine.uef")).name).toBe("mine.uef");
+        expect(session).toHaveBeenCalledTimes(2);
     });
 
     it("says when an archive has not been registered", async () => {

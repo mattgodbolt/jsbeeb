@@ -218,6 +218,13 @@ export class DiscVisualiser {
         this.floating.close();
     }
 
+    /** Opens the panel showing the given drive's lower side. */
+    openOn(driveIndex) {
+        this._select(driveIndex, false);
+        this.open();
+        this.update();
+    }
+
     _start() {
         window.addEventListener("resize", this._onResize);
         this._resize();

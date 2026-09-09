@@ -165,6 +165,23 @@ describe("tapes", () => {
             expect(pollUntilReceived(tape)).toBe(0x42);
         });
 
+        it("knows its name and how far in the head is", async () => {
+            const uef = makeUef([
+                { id: 0x0110, data: [0x01, 0x00] },
+                { id: 0x0100, data: [0x41, 0x42, 0x43, 0x44] },
+            ]);
+            const tape = await loadTapeFromData("game.uef", uef, BbcModel);
+            expect(tape.name).toBe("game.uef");
+            const atStart = tape.position;
+            expect(atStart).toBeGreaterThanOrEqual(0);
+            expect(atStart).toBeLessThan(1);
+            pollUntilReceived(tape);
+            expect(tape.position).toBeGreaterThan(atStart);
+            expect(tape.position).toBeLessThanOrEqual(1);
+            tape.rewind();
+            expect(tape.position).toBeLessThanOrEqual(atStart);
+        });
+
         it("should support rewind and replay", async () => {
             const uef = makeUef([
                 { id: 0x0110, data: [0x01, 0x00] },
@@ -186,6 +203,7 @@ describe("tapes", () => {
             while (tape.poll(acia) !== undefined) expect(++polls).toBeLessThan(20);
 
             tape.rewind();
+            expect(tape.position).toBeLessThan(1);
             expect(pollUntilReceived(tape)).toBe(0x41);
         });
     });

@@ -107,7 +107,7 @@ export class Keyboard extends EventTarget {
     /**
      * Registers a handler for a specific key with optional modifiers
      * @param {number} keyCode - The key code to handle
-     * @param {Function} handler - The handler function
+     * @param {Function} handler - Called as (down, code, shiftKey) on the way down and up
      * @param {Object} [options] - Options for this handler
      * @param {boolean} [options.alt=true] - Whether this handler requires the Alt key
      * @param {boolean} [options.ctrl=false] - Whether this handler requires the Ctrl key
@@ -226,7 +226,7 @@ export class Keyboard extends EventTarget {
         // underlying key leaking through to the emulated machine.
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
-            handler.handler(true, code);
+            handler.handler(true, code, evt.shiftKey);
             return;
         }
 
@@ -260,7 +260,7 @@ export class Keyboard extends EventTarget {
      */
     keyUp(evt) {
         // Always let the key ups come through to avoid sticky keys: a key held while focus
-        // moved into a text field still has to be released in the machine.
+        // moved into a text field or the media window still has to be released in the machine.
         const code = this.keyCode(evt);
         this.keyInterface.keyUp(code);
 

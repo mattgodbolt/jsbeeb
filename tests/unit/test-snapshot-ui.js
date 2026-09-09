@@ -14,13 +14,19 @@ describe("snapshot media manifest", () => {
         originalImageData: new Uint8Array([1, 2]),
         name: "mine.ssd",
     };
-
-    it("is nothing when no drive holds anything worth recording", () => {
-        expect(snapshotMedia([{ disc: null }, { disc: null }], {})).toBeUndefined();
+    const slotsHolding = (drive0, drive1) => ({
+        driveSlots: [
+            { index: 0, media: drive0?.disc ?? null, ref: drive0?.ref },
+            { index: 1, media: drive1?.disc ?? null, ref: drive1?.ref },
+        ],
     });
 
-    it("names a URL-sourced disc and carries its CRC and layout", () => {
-        const manifest = snapshotMedia([{ disc: urlDisc }, { disc: null }], { disc1: "sth:ELITE.zip" });
+    it("is nothing when no drive holds anything worth recording", () => {
+        expect(snapshotMedia(slotsHolding())).toBeUndefined();
+    });
+
+    it("names a disc by its reference and carries its CRC and layout", () => {
+        const manifest = snapshotMedia(slotsHolding({ disc: urlDisc, ref: "sth:ELITE.zip" }));
         expect(manifest).toEqual({
             disc1: "sth:ELITE.zip",
             disc1Crc32: 0x1234,
@@ -28,13 +34,8 @@ describe("snapshot media manifest", () => {
         });
     });
 
-    it("takes the bare disc parameter when disc1 is not set", () => {
-        const manifest = snapshotMedia([{ disc: null }, { disc: null }], { disc: "elite.ssd" });
-        expect(manifest.disc1).toBe("elite.ssd");
-    });
-
-    it("embeds the bytes of a local disc, with its name and 40 track layout", () => {
-        const manifest = snapshotMedia([{ disc: localDisc }, { disc: null }], {});
+    it("embeds the bytes of a local disc, with its name and 40 track layout, whatever it is called", () => {
+        const manifest = snapshotMedia(slotsHolding({ disc: localDisc, ref: "session:mine.ssd" }));
         expect(manifest.disc1).toBeUndefined();
         expect(manifest.disc1ImageData).toBe(localDisc.originalImageData);
         expect(manifest.disc1Name).toBe("mine.ssd");
@@ -42,34 +43,15 @@ describe("snapshot media manifest", () => {
     });
 
     it("records drive 1 under its own keys", () => {
-        const manifest = snapshotMedia([{ disc: null }, { disc: urlDisc }], { disc2: "b.ssd" });
+        const manifest = snapshotMedia(slotsHolding(null, { disc: urlDisc, ref: "b.ssd" }));
         expect(manifest.disc2).toBe("b.ssd");
         expect(manifest.disc2Crc32).toBe(0x1234);
     });
 
-    const defaultBootDisc = { ...urlDisc, name: "elite.ssd" };
-
-    it("names the default built-in disc when the URL names none", () => {
-        const manifest = snapshotMedia([{ disc: defaultBootDisc }, { disc: null }], {}, "elite.ssd");
+    it("names the page's own boot disc, which the URL does not, by the reference its slot knows", () => {
+        const manifest = snapshotMedia(slotsHolding({ disc: { ...urlDisc, name: "elite.ssd" }, ref: "elite.ssd" }));
         expect(manifest.disc1).toBe("elite.ssd");
         expect(manifest.disc1Crc32).toBe(0x1234);
-    });
-
-    it("prefers the URL's disc over the default boot disc", () => {
-        const manifest = snapshotMedia([{ disc: urlDisc }, { disc: null }], { disc1: "sth:OTHER.zip" }, "elite.ssd");
-        expect(manifest.disc1).toBe("sth:OTHER.zip");
-    });
-
-    it("embeds a local disc rather than naming the default it replaced", () => {
-        const manifest = snapshotMedia([{ disc: localDisc }, { disc: null }], {}, "elite.ssd");
-        expect(manifest.disc1).toBeUndefined();
-        expect(manifest.disc1ImageData).toBe(localDisc.originalImageData);
-    });
-
-    it("does not name the default when the drive holds something else", () => {
-        const swappedIn = { ...urlDisc, name: "other.ssd" };
-        const manifest = snapshotMedia([{ disc: swappedIn }, { disc: null }], {}, "elite.ssd");
-        expect(manifest.disc1).toBeUndefined();
     });
 });
 
@@ -97,8 +79,10 @@ describe("SnapshotUI", () => {
             processor: { fdc: { drives: [{ disc: null }, { disc: null }] }, hasTube: false, execute: vi.fn() },
             model: { name: "B-DFS1.2" },
             video: { paint: vi.fn() },
-            media: { loadDiscImage: vi.fn(), setDiscImage: vi.fn() },
-            drives: { putDiscIn: vi.fn() },
+            media: {
+                loadDiscImage: vi.fn(),
+                slots: { drive: (index) => `drive ${index}`, put: vi.fn(), restored: vi.fn() },
+            },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
             loop: { pause: vi.fn(() => resume) },
@@ -156,7 +140,7 @@ describe("SnapshotUI", () => {
         let modals;
 
         const makeWithModals = () => {
-            domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure");
+            domFromIndexHtml("error-dialog", "are-you-sure");
             vi.useFakeTimers();
             loop = {
                 holds: 0,
@@ -208,7 +192,7 @@ describe("SnapshotUI", () => {
     describe("reloading a snapshot's media", () => {
         it("does nothing for a snapshot with none", async () => {
             await make().reloadSnapshotMedia(undefined);
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.slots.put).not.toHaveBeenCalled();
         });
 
         it("reloads a URL-sourced disc from its source and names it in the URL", async () => {
@@ -216,8 +200,7 @@ describe("SnapshotUI", () => {
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 });
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("sth:ELITE.zip", DiscLayout.contiguous);
-            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
-            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "sth:ELITE.zip");
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "sth:ELITE.zip");
             expect(toasts()).toEqual([]);
         });
 
@@ -225,7 +208,7 @@ describe("SnapshotUI", () => {
             const loaded = { name: "mine.ssd", originalImageCrc32: 0x9999, savesChanges: true };
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc1: "local:mine.ssd", disc1Crc32: 0x1234 });
-            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "local:mine.ssd");
         });
 
         it("refuses to restore when the source has changed under the state", async () => {
@@ -233,14 +216,14 @@ describe("SnapshotUI", () => {
             await expect(make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 })).rejects.toThrow(
                 "ELITE.ssd has changed since this state was saved",
             );
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.slots.put).not.toHaveBeenCalled();
         });
 
         it("refuses to restore over an empty drive when the state has a CRC but no source", async () => {
             await expect(make().reloadSnapshotMedia({ disc1Crc32: 0x1234 })).rejects.toThrow(
                 "does not record where the disc in drive 0 came from",
             );
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.slots.put).not.toHaveBeenCalled();
         });
 
         it("refuses to restore over a different disc when the state has a CRC but no source", async () => {
@@ -248,13 +231,13 @@ describe("SnapshotUI", () => {
             await expect(make().reloadSnapshotMedia({ disc1Crc32: 0x1234 })).rejects.toThrow(
                 "does not hold a matching disc",
             );
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.slots.put).not.toHaveBeenCalled();
         });
 
         it("accepts a sourceless state when the drive already holds the matching disc", async () => {
             deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageCrc32: 0x1234 };
             await make().reloadSnapshotMedia({ disc1Crc32: 0x1234 });
-            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.slots.put).not.toHaveBeenCalled();
         });
 
         it("rejects a sourceless state when the matching disc is laid out differently", async () => {
@@ -266,14 +249,12 @@ describe("SnapshotUI", () => {
 
         it("round-trips the media of a default-boot session", async () => {
             const bootDisc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: false };
-            deps.processor.fdc.drives[0].disc = bootDisc;
-            deps.defaultBootDisc = "elite.ssd";
             const ui = make();
-            const manifest = snapshotMedia(deps.processor.fdc.drives, deps.urlState.params, deps.defaultBootDisc);
+            const manifest = snapshotMedia({ driveSlots: [{ index: 0, media: bootDisc, ref: "elite.ssd" }] });
             deps.media.loadDiscImage.mockResolvedValue(bootDisc);
             await ui.reloadSnapshotMedia(manifest);
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.contiguous);
-            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, bootDisc);
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", bootDisc, "elite.ssd");
         });
 
         it("rebuilds an embedded local disc and keeps it out of the URL", async () => {
@@ -283,11 +264,11 @@ describe("SnapshotUI", () => {
                 disc1Name: "mine.ssd",
                 disc1Layout: DiscLayout.contiguous,
             });
-            const [driveIndex, loadedDisc] = deps.drives.putDiscIn.mock.calls[0];
-            expect(driveIndex).toBe(0);
+            const [slot, loadedDisc, ref] = deps.media.slots.put.mock.calls[0];
+            expect(slot).toBe("drive 0");
             expect(loadedDisc.name).toBe("mine.ssd");
             expect(loadedDisc.originalImageData).toBeTruthy();
-            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, undefined);
+            expect(ref).toBeUndefined();
         });
 
         it("rebuilds image data that was serialised as a plain object", async () => {
@@ -296,15 +277,14 @@ describe("SnapshotUI", () => {
                 disc1ImageData: Object.fromEntries(imageData.entries()),
                 disc1Name: "mine.ssd",
             });
-            expect(deps.drives.putDiscIn).toHaveBeenCalled();
+            expect(deps.media.slots.put).toHaveBeenCalled();
         });
 
         it("restores drive 1 alongside drive 0", async () => {
             const loaded = { name: "B.ssd" };
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc2: "b.ssd" });
-            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, loaded);
-            expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "b.ssd");
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 1", loaded, "b.ssd");
         });
     });
 
