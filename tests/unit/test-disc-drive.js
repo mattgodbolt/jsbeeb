@@ -72,6 +72,18 @@ describe("Disc drive tests", function () {
         scheduler.polltime(1000000);
         expect(called).toBe(true);
     });
+    it("makes quasi random pulses the FM decoder reads as clean data that changes over time", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler);
+        const first = IbmDiscFormat._2usPulsesToFm(drive.getQuasiRandomPulses());
+        expect(first).toMatchObject({ clocks: 0xff, iffyPulses: false });
+        const seen = new Set();
+        for (let i = 0; i < 8; ++i) {
+            scheduler.polltime(1000);
+            seen.add(IbmDiscFormat._2usPulsesToFm(drive.getQuasiRandomPulses()).data);
+        }
+        expect(seen.size).toBeGreaterThan(1);
+    });
     it("asserts index all the time with no disc", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
