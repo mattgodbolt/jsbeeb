@@ -141,23 +141,35 @@ const TimerState = Object.freeze({
     done: 4,
 });
 
+/**
+ * Which controller, and how it is wired. The Master Compact's WD1772 steps faster than the WD1770; the
+ * Opus Challenger's WD1770 sits at the other half of the page and keeps INTRQ off the NMI line.
+ *
+ * @readonly
+ * @enum {string}
+ */
+export const WdFdcVariant = Object.freeze({
+    wd1770: "wd1770",
+    wd1772: "wd1772",
+    opusChallenger: "opusChallenger",
+});
+
 export class WdFdc {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
      * @param {BaseDiscDrive[] | undefined} drives
      * @param {*} debugFlags
-     * @param {{is1772?: boolean, isOpus?: boolean}} [variant] a WD1772 rather than a WD1770, as in the Master
-     *   Compact, and the Opus Challenger's wiring, which swaps the register halves and keeps INTRQ off the NMI line
+     * @param {WdFdcVariant} [variant]
      */
-    constructor(cpu, scheduler, drives, debugFlags, { is1772 = false, isOpus = false } = {}) {
+    constructor(cpu, scheduler, drives, debugFlags, variant = WdFdcVariant.wd1770) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
 
         this._isMaster = cpu.model.isMaster;
-        this._is1772 = is1772;
-        this._isOpus = isOpus;
+        this._is1772 = variant === WdFdcVariant.wd1772;
+        this._isOpus = variant === WdFdcVariant.opusChallenger;
 
         this._controlRegister = 0;
         /** @type {Status|Number} */

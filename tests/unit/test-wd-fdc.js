@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
-import { WdFdc } from "../../src/wd-fdc.js";
+import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig, IbmDiscFormat } from "../../src/disc.js";
 import { fake6502 } from "../../src/fake6502.js";
@@ -66,7 +66,7 @@ function blankDisc() {
  * A drive with no disc holds its index line permanently asserted, so the controller sees exactly
  * one index pulse edge: the first callback after the motor starts.
  *
- * @param {{disc?: Disc|null, control?: Number, controlRegister?: Number, variant?: {is1772?: boolean, isOpus?: boolean}}} [options]
+ * @param {{disc?: Disc|null, control?: Number, controlRegister?: Number, variant?: WdFdcVariant}} [options]
  *   the disc in drive 0 if any, the first control register write and where it goes, and the
  *   controller variant
  */
@@ -74,7 +74,7 @@ function makeFdc({
     disc = null,
     control = ControlRunningDrive0,
     controlRegister = ControlRegister,
-    variant = {},
+    variant = WdFdcVariant.wd1770,
 } = {}) {
     const cpu = fake6502();
     const scheduler = new Scheduler();
@@ -344,15 +344,15 @@ describe("WD1770 FDC tests", () => {
     describe("variants", () => {
         describe("step rate", () => {
             it.each([
-                [{}, 0, 6],
-                [{}, 1, 12],
-                [{}, 2, 20],
-                [{}, 3, 30],
-                [{ is1772: true }, 0, 6],
-                [{ is1772: true }, 1, 12],
-                [{ is1772: true }, 2, 2],
-                [{ is1772: true }, 3, 3],
-            ])("with %o steps one track at rate %i in %i ms", (variant, rate, ms) => {
+                [WdFdcVariant.wd1770, 0, 6],
+                [WdFdcVariant.wd1770, 1, 12],
+                [WdFdcVariant.wd1770, 2, 20],
+                [WdFdcVariant.wd1770, 3, 30],
+                [WdFdcVariant.wd1772, 0, 6],
+                [WdFdcVariant.wd1772, 1, 12],
+                [WdFdcVariant.wd1772, 2, 2],
+                [WdFdcVariant.wd1772, 3, 3],
+            ])("a %s steps one track at rate %i in %i ms", (variant, rate, ms) => {
                 const { scheduler, fdc } = makeFdc({ disc: blankDisc(), variant });
                 fdc.write(TrackRegister, 0);
                 fdc.write(DataRegister, 1);
@@ -390,12 +390,15 @@ describe("WD1770 FDC tests", () => {
                 return runCommand(fdc, scheduler, command).ticks;
             }
 
-            it.each([[{}], [{ is1772: true }]])("with %o the e flag delays a type III command by 15 ms", (variant) => {
-                const command = ReadAddressCommand & ~SpinUpWaitFlag;
-                const delay = readAddressTicks(variant, command | SettleFlag) - readAddressTicks(variant, command);
-                expect(delay).toBeGreaterThan(15 * TicksPerMs - IdTicks);
-                expect(delay).toBeLessThan(15 * TicksPerMs + IdTicks);
-            });
+            it.each([[WdFdcVariant.wd1770], [WdFdcVariant.wd1772]])(
+                "on a %s the e flag delays a type III command by 15 ms",
+                (variant) => {
+                    const command = ReadAddressCommand & ~SpinUpWaitFlag;
+                    const delay = readAddressTicks(variant, command | SettleFlag) - readAddressTicks(variant, command);
+                    expect(delay).toBeGreaterThan(15 * TicksPerMs - IdTicks);
+                    expect(delay).toBeLessThan(15 * TicksPerMs + IdTicks);
+                },
+            );
         });
 
         describe("Opus Challenger", () => {
@@ -410,7 +413,12 @@ describe("WD1770 FDC tests", () => {
             const OpusDrive1 = 0x01;
 
             function makeOpus(control, disc = null) {
-                return makeFdc({ disc, control, controlRegister: OpusControlRegister, variant: { isOpus: true } });
+                return makeFdc({
+                    disc,
+                    control,
+                    controlRegister: OpusControlRegister,
+                    variant: WdFdcVariant.opusChallenger,
+                });
             }
 
             it("keeps INTRQ off the NMI line", () => {
