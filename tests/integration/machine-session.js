@@ -279,6 +279,14 @@ describe("MachineSession paged memory on a machine without shadow RAM", () => {
     it("refuses to page shadow RAM", () => {
         expect(() => session.readMemory(0x3000, 1, { shadow: true })).toThrow(/Master/);
     });
+
+    it("leaves the map alone when it refuses a bank and shadow together", () => {
+        const before = session.pagingState();
+
+        expect(() => session.readMemory(0x8000, 1, { bank: 5, shadow: true })).toThrow(/Master/);
+
+        expect(session.pagingState()).toEqual(before);
+    });
 });
 
 describe("MachineSession frame stepping across a hard reset", () => {
