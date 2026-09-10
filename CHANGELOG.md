@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.27.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.27.0...v1.27.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* restore paging when a session read validates a bank and shadow together ([#1127](https://github.com/mattgodbolt/jsbeeb/issues/1127)) ([ff59a2e](https://github.com/mattgodbolt/jsbeeb/commit/ff59a2ef973cb02e4bd601c7bac234729fc5abd0)), closes [#1105](https://github.com/mattgodbolt/jsbeeb/issues/1105)
+
 ## [1.27.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.26.0...v1.27.0) (2026-09-09)
 
 
