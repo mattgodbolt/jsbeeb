@@ -484,15 +484,12 @@ export class MachineSession {
     _withPaging({ bank, shadow }, fn) {
         const cpu = this._machine.processor;
         const { romsel, acccon } = cpu;
-        if (bank !== undefined) {
-            if (!Number.isInteger(bank) || bank < 0 || bank > 15) throw new Error(`Bank ${bank} is not 0 to 15`);
-            cpu.romSelect(bank);
-        }
-        if (shadow !== undefined) {
-            if (!cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
-            cpu.writeAcccon(shadow ? acccon | AccconShadowBit : acccon & ~AccconShadowBit);
-        }
+        if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
+            throw new Error(`Bank ${bank} is not 0 to 15`);
+        if (shadow !== undefined && !cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
         try {
+            if (bank !== undefined) cpu.romSelect(bank);
+            if (shadow !== undefined) cpu.writeAcccon(shadow ? acccon | AccconShadowBit : acccon & ~AccconShadowBit);
             return fn();
         } finally {
             if (bank !== undefined) cpu.romSelect(romsel);
