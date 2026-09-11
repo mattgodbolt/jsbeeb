@@ -307,7 +307,6 @@ export function getKeyMapAtom(keyLayout) {
     map(keyCodes.F10, ATOM.REPT);
 
     map(keyCodes.F1, ATOM.LOCK); // which is better for ATOM.LOCK - use all of them?
-    map(keyCodes.WINDOWS, ATOM.LOCK);
     map(keyCodes.ALT_LEFT, ATOM.LOCK);
 
     if (keyLayout === "natural") {
@@ -357,6 +356,7 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.EQUALS, ATOM.SEMICOLON_PLUS); // OK for <Shift> at least
 
         map(keyCodes.END, ATOM.COPY);
+        map(keyCodes.HOME, ATOM.LOCK);
         map(keyCodes.F11, ATOM.COPY);
 
         map(keyCodes.CTRL_LEFT, ATOM.CTRL);

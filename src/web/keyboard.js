@@ -147,11 +147,20 @@ export class Keyboard extends EventTarget {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyDown(evt) {
-        // Early returns for common scenarios
         if (this.inputEnabledFunction()) return;
-        if (!this.running) return;
 
         const code = this.keyCode(evt);
+
+        // Shortcuts answer whether or not the machine is running, so the one that stopped it
+        // can start it again.
+        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        if (handler) {
+            evt.preventDefault();
+            handler.handler(true, code, evt.shiftKey);
+            return;
+        }
+
+        if (!this.running) return;
         evt.preventDefault();
 
         if (this.isPasting && code === keyCodes.ESCAPE) {
@@ -160,19 +169,8 @@ export class Keyboard extends EventTarget {
         }
 
         // Special handling cases that we always want to keep within keyboard.js
-        const isSpecialHandled = this._handleSpecialKeys(code);
-        if (isSpecialHandled) return;
+        if (this._handleSpecialKeys(code)) return;
 
-        // Check for registered handlers first; if one fires, don't pass to the emulator.
-        // This lets Alt+key and Ctrl+key handlers cleanly own their keys without the
-        // underlying key leaking through to the emulated machine.
-        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
-        if (handler) {
-            handler.handler(true, code, evt.shiftKey);
-            return;
-        }
-
-        // No handler claimed the key; pass it to the emulated machine.
         this.keyInterface.keyDown(code, evt.shiftKey);
     }
 
@@ -208,6 +206,15 @@ export class Keyboard extends EventTarget {
 
         if (this.inputEnabledFunction()) return;
 
+        // A switch held while the machine stopped still has to be released, so the handlers
+        // run whether or not it is running, as they do on the way down.
+        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        if (handler) {
+            evt.preventDefault();
+            handler.handler(false, code);
+            return;
+        }
+
         // No further special handling needed if not running
         if (!this.running) return;
 
@@ -217,17 +224,9 @@ export class Keyboard extends EventTarget {
         if (code === keyCodes.F12 || code === keyCodes.BREAK) {
             this.dispatchEvent(new CustomEvent("break", { detail: false }));
             this.processor.setReset(false);
-            return;
         } else if (isMac && code === keyCodes.CAPSLOCK) {
             // Special CapsLock handling for Mac
             this.handleMacCapsLock();
-            return;
-        }
-
-        // Check for registered handlers
-        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
-        if (handler) {
-            handler.handler(false, code);
         }
     }
 
