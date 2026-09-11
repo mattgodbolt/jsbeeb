@@ -166,11 +166,11 @@ describe("MachineSession keyboard", () => {
 
     it("reports the keys held, however they were pressed", () => {
         session.keyDownRaw(BBC.A);
-        session.keyDown(keyCodes.SHIFT);
+        session.keyDown(keyCodes.SHIFT_LEFT);
         expect(session.heldKeys()).toEqual(expect.arrayContaining([BBC.A, BBC.SHIFT]));
 
         session.keyUpRaw(BBC.A);
-        session.keyUp(keyCodes.SHIFT);
+        session.keyUp(keyCodes.SHIFT_LEFT);
         expect(session.heldKeys()).toEqual([]);
     });
 
@@ -180,14 +180,14 @@ describe("MachineSession keyboard", () => {
         session.removeBreakpoint(id);
 
         expect(session.typingPending).toBe(true);
-        expect(() => session.keyDown(keyCodes.SHIFT)).toThrow(/cancelTyping/);
+        expect(() => session.keyDown(keyCodes.SHIFT_LEFT)).toThrow(/cancelTyping/);
         expect(() => session.keyDownRaw(BBC.SHIFT)).toThrow(/cancelTyping/);
 
         session.cancelTyping();
         expect(session.typingPending).toBe(false);
-        session.keyDown(keyCodes.SHIFT);
+        session.keyDown(keyCodes.SHIFT_LEFT);
         expect(session.heldKeys()).toEqual([BBC.SHIFT]);
-        session.keyUp(keyCodes.SHIFT);
+        session.keyUp(keyCodes.SHIFT_LEFT);
 
         await pressRaw(BBC.RETURN);
         await session.runUntilPrompt();

@@ -4,6 +4,17 @@ import { noteEvent } from "./analytics.js";
 import { keyCodes } from "../keymap.js";
 
 const PasteBoxId = "paste-text";
+/** The eight accessibility switches, each reachable from a number key and a function key. */
+const SwitchKeys = [
+    ["K1", "F1"],
+    ["K2", "F2"],
+    ["K3", "F3"],
+    ["K4", "F4"],
+    ["K5", "F5"],
+    ["K6", "F6"],
+    ["K7", "F7"],
+    ["K8", "F8"],
+];
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 // Where keys are for the page, not the machine: the paste box, and the media window's controls.
 const KeyboardSinks = `#${PasteBoxId}, #media-panel`;
@@ -72,10 +83,9 @@ export class KeyboardSetup {
         // out early when a handler fires), so typing numbers or using function keys
         // works normally.
         const handleSwitch = (index) => (down) => accessibilitySwitches.setSwitch(index, down);
-        for (let i = 0; i < 8; i++) {
-            keyboard.registerKeyHandler(keyCodes.K1 + i, handleSwitch(i), alt);
-            keyboard.registerKeyHandler(keyCodes.F1 + i, handleSwitch(i), alt);
-        }
+        SwitchKeys.forEach((names, index) => {
+            for (const name of names) keyboard.registerKeyHandler(keyCodes[name], handleSwitch(index), alt);
+        });
 
         document.addEventListener("keydown", (evt) => {
             actions.onAnyKeyDown();

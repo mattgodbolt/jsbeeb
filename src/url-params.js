@@ -182,12 +182,12 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
  * Process keyboard and gamepad mapping parameters from query string
  * @param {Object} parsedQuery - The parsed query parameters
  * @param {Object} machineKeys - Emulated machine's key constants (`BBC`, or `ATOM` for the Atom)
- * @param {Object} keyCodes - Key code constants
+ * @param {(name: string) => string[]} hostKeyCodes - jsbeeb's host key name to `KeyboardEvent.code` names
  * @param {Array} userKeymap - Array to store user key mappings
  * @param {Object} gamepad - Gamepad object for handling mapping
  * @returns {string[]} descriptions of any mappings that were skipped, for showing to the user
  */
-export function processInputParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad) {
+export function processInputParams(parsedQuery, machineKeys, hostKeyCodes, userKeymap, gamepad) {
     const warnings = [];
 
     Object.entries(parsedQuery).forEach(([key, val]) => {
@@ -201,7 +201,7 @@ export function processInputParams(parsedQuery, machineKeys, keyCodes, userKeyma
 
             if (!machineKeys[machineKey]) {
                 warnings.push(`${key}=${val}: "${machineKey}" is not a key on the emulated machine.`);
-            } else if (!keyCodes[nativeKey]) {
+            } else if (hostKeyCodes(nativeKey).length === 0) {
                 warnings.push(`${key}=${val}: "${nativeKey}" is not a key on your keyboard.`);
             } else {
                 console.log("mapping " + nativeKey + " to " + machineKey);

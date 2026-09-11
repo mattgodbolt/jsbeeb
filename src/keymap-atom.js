@@ -1,4 +1,4 @@
-import { detectKeyboardLayout, keyCodes, userKeymap } from "./keymap.js";
+import { detectKeyboardLayout, hostKeyCodes, keyCodes, userKeymap } from "./keymap.js";
 
 // ATOM
 
@@ -241,11 +241,8 @@ export function getKeyMapAtom(keyLayout) {
 
     // shiftDown undefined -> map both
     function map(s, colRow, shiftDown) {
-        if ((!s && s !== 0) || !colRow) {
+        if (!s || !colRow) {
             console.log("error binding key", s, colRow);
-        }
-        if (typeof s === "string") {
-            s = s.charCodeAt(0);
         }
 
         if (shiftDown === undefined) {
@@ -344,8 +341,6 @@ export function getKeyMapAtom(keyLayout) {
 
         // 3rd row
 
-        map(keyCodes.HASH, ATOM.BACKSLASH); // Atom has no # key; map to nearest
-
         map(keyCodes.MINUS, ATOM.MINUS_EQUALS);
 
         // 2nd row
@@ -364,14 +359,14 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.END, ATOM.COPY);
         map(keyCodes.F11, ATOM.COPY);
 
-        map(keyCodes.CTRL, ATOM.CTRL);
         map(keyCodes.CTRL_LEFT, ATOM.CTRL);
         map(keyCodes.CTRL_RIGHT, ATOM.CTRL);
-        map(keyCodes.SHIFT, ATOM.SHIFT);
         map(keyCodes.SHIFT_LEFT, ATOM.SHIFT);
         map(keyCodes.SHIFT_RIGHT, ATOM.SHIFT);
 
+        // The Atom has no `#` key, so both of the host's backslash keys go to the nearest.
         map(keyCodes.BACKSLASH, ATOM.BACKSLASH);
+        map(keyCodes.INTL_BACKSLASH, ATOM.BACKSLASH);
     } else if (keyLayout === "gaming") {
         // gaming keyboard
 
@@ -409,20 +404,17 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.CAPSLOCK, ATOM.CTRL);
         map(keyCodes.SEMICOLON, ATOM.SEMICOLON_PLUS);
         map(keyCodes.APOSTROPHE, ATOM.COLON_STAR);
-        // UK keyboard (key missing on US)
-        map(keyCodes.HASH, ATOM.RIGHT_SQUARE_BRACKET);
+        // UK prints `#~` on this key, a US board `\|`.
+        map(keyCodes.BACKSLASH, isUKlayout ? ATOM.RIGHT_SQUARE_BRACKET : ATOM.BACKSLASH);
 
-        // UK has extra key \| for SHIFT
+        // Only a 102-key board has a key here, so only there can the left shift be spared.
         map(keyCodes.SHIFT_LEFT, isUKlayout ? ATOM.LOCK : ATOM.SHIFT);
-        // UK: key is between SHIFT and Z
-        // US: key is above ENTER
-        map(keyCodes.BACKSLASH, isUKlayout ? ATOM.SHIFT : ATOM.BACKSLASH);
+        map(keyCodes.INTL_BACKSLASH, ATOM.SHIFT);
 
         // 5th row
 
         // Atom uses CTRL as shift, so map PC Ctrl to Atom's LOCK key
         map(keyCodes.CTRL_LEFT, ATOM.LOCK);
-        map(keyCodes.SHIFT, ATOM.CTRL);
 
         // ATOM.DELETE is covered by the common mapping above
         map(keyCodes.CTRL_RIGHT, ATOM.COPY);
@@ -451,9 +443,7 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.LEFT_SQUARE_BRACKET, ATOM.AT); // maps to @
         map(keyCodes.RIGHT_SQUARE_BRACKET, ATOM.BACKSLASH); // maps to \
 
-        map(keyCodes.SHIFT, ATOM.CTRL);
         map(keyCodes.SHIFT_LEFT, ATOM.CTRL); // using CAPSLOCK for CTRL doesn't work on MAC
-        map(keyCodes.CTRL, ATOM.SHIFT);
         map(keyCodes.CTRL_LEFT, ATOM.SHIFT);
 
         map(keyCodes.CTRL_RIGHT, ATOM.SHIFT);
@@ -462,14 +452,15 @@ export function getKeyMapAtom(keyLayout) {
         // A-L normal
         map(keyCodes.SEMICOLON, ATOM.SEMICOLON_PLUS); // ; / +
         map(keyCodes.APOSTROPHE, ATOM.LEFT_SQUARE_BRACKET);
-        map(keyCodes.BACKSLASH, ATOM.RIGHT_SQUARE_BRACKET); // HASH is \| key on Mac
+        map(keyCodes.BACKSLASH, ATOM.RIGHT_SQUARE_BRACKET);
+        map(keyCodes.INTL_BACKSLASH, ATOM.RIGHT_SQUARE_BRACKET);
 
         // Z - M normal
     }
 
     // `KEY.` URL parameters, applied last so they win. See the equivalent in `getKeyMap`.
     for (const mapping of userKeymap) {
-        remap(keyCodes[mapping.native], ATOM[mapping.key]);
+        for (const code of hostKeyCodes(mapping.native)) remap(code, ATOM[mapping.key]);
     }
 
     return keys2;

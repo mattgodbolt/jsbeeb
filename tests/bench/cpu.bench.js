@@ -14,9 +14,9 @@ async function eliteUnderway() {
     const cpu = fake6502(findModel("B"));
     await cpu.initialise();
     cpu.fdc.loadDisc(0, discFor(EliteImage, await load(`discs/${EliteImage}`)));
-    cpu.sysvia.keyDown(keyCodes.SHIFT);
+    cpu.sysvia.keyDown(keyCodes.SHIFT_LEFT);
     cpu.execute(CyclesToBoot);
-    cpu.sysvia.keyUp(keyCodes.SHIFT);
+    cpu.sysvia.keyUp(keyCodes.SHIFT_LEFT);
     return cpu;
 }
 
