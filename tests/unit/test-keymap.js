@@ -49,6 +49,10 @@ describe("What a character costs on a BBC keyboard", function () {
         expect(bbcKeyForCharacter("a")).toEqual({ key: BBC.A, shift: false, upperCase: false });
     });
 
+    it("puts the pound sign on shift and the underscore key, where the BBC draws it", function () {
+        expect(bbcKeyForCharacter("\u00a3")).toEqual({ key: BBC.UNDERSCORE_POUND, shift: true, upperCase: true });
+    });
+
     it("has nothing for a character the BBC cannot print", function () {
         expect(bbcKeyForCharacter("`")).toBeNull();
         expect(bbcKeyForCharacter("\u00e9")).toBeNull();

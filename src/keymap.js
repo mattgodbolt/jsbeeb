@@ -153,6 +153,8 @@ const ShiftedCharacters = {
     "<": BBC.COMMA,
     ">": BBC.PERIOD,
     "?": BBC.SLASH,
+    // Character 96, where ASCII has a backtick: the MOS font at &C000 draws a pound sign.
+    "\u00a3": BBC.UNDERSCORE_POUND,
 };
 
 /** Characters the BBC prints without shift. */
