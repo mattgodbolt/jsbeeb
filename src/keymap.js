@@ -110,133 +110,87 @@ export const BBC = {
     NUMPADENTER: [12, 3],
 };
 
+/**
+ * What a character costs on a BBC keyboard: which key, and whether shift is held while it is
+ * pressed. `!` is shift and `1`; `^` is its own unshifted key. Lower case is the same key as
+ * upper with the caps lock the other way, which `upperCase` says.
+ *
+ * The one table for this; the natural keyboard layout and pasting both read it.
+ *
+ * @param {string} char one character
+ * @returns {{key: [number, number], shift: boolean, upperCase: boolean}|null} null if the BBC has no such character
+ */
+export function bbcKeyForCharacter(char) {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) return { key: BBC[char], shift: false, upperCase: true };
+    if (code >= 97 && code <= 122) return { key: BBC[String.fromCharCode(code - 32)], shift: false, upperCase: false };
+    if (code >= 48 && code <= 57) return { key: BBC["K" + char], shift: false, upperCase: true };
+    const shifted = ShiftedCharacters[char];
+    if (shifted) return { key: shifted, shift: true, upperCase: true };
+    const unshifted = UnshiftedCharacters[char];
+    if (unshifted) return { key: unshifted, shift: false, upperCase: true };
+    return null;
+}
+
+/** Characters the BBC prints with shift held. `!` to `)` are shift and the digit above them. */
+const ShiftedCharacters = {
+    "!": BBC.K1,
+    '"': BBC.K2,
+    "#": BBC.K3,
+    $: BBC.K4,
+    "%": BBC.K5,
+    "&": BBC.K6,
+    "'": BBC.K7,
+    "(": BBC.K8,
+    ")": BBC.K9,
+    "=": BBC.MINUS,
+    "~": BBC.HAT_TILDE,
+    "|": BBC.PIPE_BACKSLASH,
+    "{": BBC.LEFT_SQUARE_BRACKET,
+    "+": BBC.SEMICOLON_PLUS,
+    "*": BBC.COLON_STAR,
+    "}": BBC.RIGHT_SQUARE_BRACKET,
+    "<": BBC.COMMA,
+    ">": BBC.PERIOD,
+    "?": BBC.SLASH,
+};
+
+/** Characters the BBC prints without shift. */
+const UnshiftedCharacters = {
+    "\n": BBC.RETURN,
+    "\t": BBC.TAB,
+    " ": BBC.SPACE,
+    "-": BBC.MINUS,
+    "^": BBC.HAT_TILDE,
+    "\\": BBC.PIPE_BACKSLASH,
+    "@": BBC.AT,
+    "[": BBC.LEFT_SQUARE_BRACKET,
+    _: BBC.UNDERSCORE_POUND,
+    ";": BBC.SEMICOLON_PLUS,
+    ":": BBC.COLON_STAR,
+    "]": BBC.RIGHT_SQUARE_BRACKET,
+    ",": BBC.COMMA,
+    ".": BBC.PERIOD,
+    "/": BBC.SLASH,
+};
+
 export function stringToBBCKeys(str) {
     const array = [];
     let shiftState = false;
     let capsLockState = true;
-    for (let i = 0; i < str.length; ++i) {
-        const c = str.charCodeAt(i);
-        let charStr = str.charAt(i);
-        let bbcKey = null;
-        let needsShift = false;
-        let needsCapsLock = true;
-        if (c >= 65 && c <= 90) {
-            // A-Z
-            bbcKey = BBC[charStr];
-        } else if (c >= 97 && c <= 122) {
-            // a-z
-            charStr = String.fromCharCode(c - 32);
-            bbcKey = BBC[charStr];
-            needsCapsLock = false;
-        } else if (c >= 48 && c <= 57) {
-            // 0-9
-            bbcKey = BBC["K" + charStr];
-        } else if (c >= 33 && c <= 41) {
-            // ! to )
-            charStr = String.fromCharCode(c + 16);
-            bbcKey = BBC["K" + charStr];
-            needsShift = true;
-        } else {
-            switch (charStr) {
-                case "\n":
-                    bbcKey = BBC.RETURN;
-                    break;
-                case "\t":
-                    bbcKey = BBC.TAB;
-                    break;
-                case " ":
-                    bbcKey = BBC.SPACE;
-                    break;
-                case "-":
-                    bbcKey = BBC.MINUS;
-                    break;
-                case "=":
-                    bbcKey = BBC.MINUS;
-                    needsShift = true;
-                    break;
-                case "^":
-                    bbcKey = BBC.HAT_TILDE;
-                    break;
-                case "~":
-                    bbcKey = BBC.HAT_TILDE;
-                    needsShift = true;
-                    break;
-                case "\\":
-                    bbcKey = BBC.PIPE_BACKSLASH;
-                    break;
-                case "|":
-                    bbcKey = BBC.PIPE_BACKSLASH;
-                    needsShift = true;
-                    break;
-                case "@":
-                    bbcKey = BBC.AT;
-                    break;
-                case "[":
-                    bbcKey = BBC.LEFT_SQUARE_BRACKET;
-                    break;
-                case "{":
-                    bbcKey = BBC.LEFT_SQUARE_BRACKET;
-                    needsShift = true;
-                    break;
-                case "_":
-                    bbcKey = BBC.UNDERSCORE_POUND;
-                    break;
-                case ";":
-                    bbcKey = BBC.SEMICOLON_PLUS;
-                    break;
-                case "+":
-                    bbcKey = BBC.SEMICOLON_PLUS;
-                    needsShift = true;
-                    break;
-                case ":":
-                    bbcKey = BBC.COLON_STAR;
-                    break;
-                case "*":
-                    bbcKey = BBC.COLON_STAR;
-                    needsShift = true;
-                    break;
-                case "]":
-                    bbcKey = BBC.RIGHT_SQUARE_BRACKET;
-                    break;
-                case "}":
-                    bbcKey = BBC.RIGHT_SQUARE_BRACKET;
-                    needsShift = true;
-                    break;
-                case ",":
-                    bbcKey = BBC.COMMA;
-                    break;
-                case "<":
-                    bbcKey = BBC.COMMA;
-                    needsShift = true;
-                    break;
-                case ".":
-                    bbcKey = BBC.PERIOD;
-                    break;
-                case ">":
-                    bbcKey = BBC.PERIOD;
-                    needsShift = true;
-                    break;
-                case "/":
-                    bbcKey = BBC.SLASH;
-                    break;
-                case "?":
-                    bbcKey = BBC.SLASH;
-                    needsShift = true;
-                    break;
-            }
-        }
+    for (const char of str) {
+        const needs = bbcKeyForCharacter(char);
+        if (!needs) continue;
 
-        if (!bbcKey) continue;
-
-        if ((needsShift && !shiftState) || (!needsShift && shiftState)) {
+        if (needs.shift !== shiftState) {
             array.push(BBC.SHIFT);
-            shiftState = !shiftState;
+            shiftState = needs.shift;
         }
-        if ((needsCapsLock && !capsLockState) || (!needsCapsLock && capsLockState)) {
+        if (needs.upperCase !== capsLockState) {
             array.push(BBC.CAPSLOCK);
-            capsLockState = !capsLockState;
+            capsLockState = needs.upperCase;
         }
-        array.push(bbcKey);
+        array.push(needs.key);
     }
 
     if (shiftState) array.push(BBC.SHIFT);

@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ATOM, getKeyMapAtom } from "../../src/keymap-atom.js";
-import { BBC, getKeyMap, hostKeyCodes, keyCodes, stringToBBCKeys, userKeymap } from "../../src/keymap.js";
+import {
+    BBC,
+    bbcKeyForCharacter,
+    getKeyMap,
+    hostKeyCodes,
+    keyCodes,
+    stringToBBCKeys,
+    userKeymap,
+} from "../../src/keymap.js";
 import { processInputParams } from "../../src/url-params.js";
 
 describe("Keyboard mapping", function () {
@@ -20,6 +28,30 @@ describe("Keyboard mapping", function () {
         expect(stringToBBCKeys("Q").length).toBe(1);
         expect(stringToBBCKeys("a").length).toBe(3); // With CAPSLOCK toggles
         expect(stringToBBCKeys("!").length).toBe(3); // With SHIFT
+    });
+});
+
+describe("What a character costs on a BBC keyboard", function () {
+    it("puts the shifted characters on their unshifted key", function () {
+        expect(bbcKeyForCharacter("!")).toEqual({ key: BBC.K1, shift: true, upperCase: true });
+        expect(bbcKeyForCharacter("*")).toEqual({ key: BBC.COLON_STAR, shift: true, upperCase: true });
+        expect(bbcKeyForCharacter("?")).toEqual({ key: BBC.SLASH, shift: true, upperCase: true });
+    });
+
+    it("knows the characters the BBC prints without shift, where a PC needs it", function () {
+        expect(bbcKeyForCharacter("@")).toEqual({ key: BBC.AT, shift: false, upperCase: true });
+        expect(bbcKeyForCharacter("^")).toEqual({ key: BBC.HAT_TILDE, shift: false, upperCase: true });
+        expect(bbcKeyForCharacter(":")).toEqual({ key: BBC.COLON_STAR, shift: false, upperCase: true });
+    });
+
+    it("asks for the caps lock the other way round for lower case", function () {
+        expect(bbcKeyForCharacter("A")).toEqual({ key: BBC.A, shift: false, upperCase: true });
+        expect(bbcKeyForCharacter("a")).toEqual({ key: BBC.A, shift: false, upperCase: false });
+    });
+
+    it("has nothing for a character the BBC cannot print", function () {
+        expect(bbcKeyForCharacter("`")).toBeNull();
+        expect(bbcKeyForCharacter("\u00e9")).toBeNull();
     });
 });
 
