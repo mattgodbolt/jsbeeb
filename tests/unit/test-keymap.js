@@ -68,6 +68,18 @@ describe("User key mapping from KEY. URL parameters", function () {
         expect(getKeyMap("physical")[false][keyCodes.BACKSLASH]).toEqual(BBC.COPY);
     });
 
+    it("still knows CLEAR, which an Apple keyboard prints where a PC says num lock", function () {
+        applyParams({ "KEY.CLEAR": "COPY" }, BBC);
+
+        expect(getKeyMap("physical")[false][keyCodes.NUMLOCK]).toEqual(BBC.COPY);
+    });
+
+    it("binds a host key no layout uses by default", function () {
+        applyParams({ "KEY.WINDOWS_RIGHT": "SHIFTLOCK" }, BBC);
+
+        expect(getKeyMap("physical")[false][keyCodes.WINDOWS_RIGHT]).toEqual(BBC.SHIFTLOCK);
+    });
+
     it("ignores unknown host and machine key names", function () {
         // RETURN is the BBC's name for the key the host calls ENTER: not a host key name.
         const warnings = applyParams({ "KEY.RETURN": "COPY", "KEY.ENTER": "NOTAKEY" }, BBC);

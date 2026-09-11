@@ -368,14 +368,16 @@ export const keyCodes = {
 };
 
 /**
- * Host key names that stand for more than one `keyCodes` entry, for `KEY.` parameters.
- * HASH is here because the UK `#~` key and the US `\|` key are one physical key, `Backslash`.
+ * Other names a `KEY.` parameter may use for a host key: one that covers both sides of a pair,
+ * or a second name for a key that is printed differently on different keyboards.
  */
 export const keyCodeAliases = {
     SHIFT: [keyCodes.SHIFT_LEFT, keyCodes.SHIFT_RIGHT],
     CTRL: [keyCodes.CTRL_LEFT, keyCodes.CTRL_RIGHT],
     ALT: [keyCodes.ALT_LEFT, keyCodes.ALT_RIGHT],
     HASH: [keyCodes.BACKSLASH],
+    /* an Apple keyboard prints "clear" on the key a PC calls num lock */
+    CLEAR: [keyCodes.NUMLOCK],
 };
 
 /**

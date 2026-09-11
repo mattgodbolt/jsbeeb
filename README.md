@@ -72,7 +72,8 @@ names are what you'd expect, but note:
 - `K0` to `K9` for the number keys, `NUMPAD0` to `NUMPAD9` for the keypad
 - `SHIFT_LEFT` / `SHIFT_RIGHT`, `CTRL_LEFT` / `CTRL_RIGHT`, `ALT_LEFT` / `ALT_RIGHT` to distinguish the two of each.
   Plain `SHIFT`, `CTRL` and `ALT` map both sides at once
-- `WINDOWS` and `WINDOWS_RIGHT` for the Windows or Command keys
+- `WINDOWS` and `WINDOWS_RIGHT` for the Windows or Command keys, and `CLEAR` for the key an Apple
+  keyboard prints that on
 - `BACK_QUOTE`, `APOSTROPHE`, `SEMICOLON`, `MINUS`, `EQUALS`, `BACKSLASH`, `LEFT_SQUARE_BRACKET`,
   `RIGHT_SQUARE_BRACKET` for punctuation
 - `BACKSLASH` is the key left of `Enter` on a UK keyboard (printed `#~`) and the one above it on a US keyboard
@@ -97,6 +98,8 @@ Some things to know:
 
 - Names are case-insensitive, and a remapped key ignores the `SHIFT` state, so `KEY.ENTER=COPY` presses `COPY` whether
   or not shift is held.
+- Any host key can be named here, including ones no layout uses by default, such as `PRINTSCREEN`, `SCROLL_LOCK` and
+  `WINDOWS_RIGHT`. Naming one is the only way to make it press anything.
 - Remapping replaces what that host key normally does; in the Space Invaders example above, `Enter` no longer presses
   `RETURN`.
 - The remapping is applied on top of whichever keyboard layout is selected, and survives changing layout or model.
