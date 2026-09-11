@@ -426,48 +426,44 @@ describe("SysVia natural keyboard shift override", () => {
         return via.keys[bbcKey[0]][bbcKey[1]] === 1;
     }
 
-    it("should produce ^ (HAT_TILDE without shift) when shift+6 is pressed", () => {
-        // Simulate: user presses SHIFT, then 6
+    it("holds no BBC shift for a `^`, which the BBC prints unshifted", () => {
         via.keyDown(keyCodes.SHIFT_LEFT, false);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
 
-        via.keyDown(keyCodes.K6, true);
-        // HAT_TILDE should be pressed
+        via.keyDown("^", true);
         expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(true);
-        // BBC SHIFT should be suppressed (override active)
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
     });
 
-    it("should restore BBC SHIFT when the override key is released", () => {
+    it("gives the shift key back when the character is released", () => {
         via.keyDown(keyCodes.SHIFT_LEFT, false);
-        via.keyDown(keyCodes.K6, true);
+        via.keyDown("^", true);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
 
-        // Release 6, keep shift held
-        via.keyUp(keyCodes.K6);
+        via.keyUp("^");
         expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(false);
-        // BBC SHIFT should be restored since physical shift is still held
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
     });
 
-    it("should handle shift released before the override key", () => {
+    it("keeps the shift suppressed when shift is let go first", () => {
         via.keyDown(keyCodes.SHIFT_LEFT, false);
-        via.keyDown(keyCodes.K6, true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+        via.keyDown("^", true);
 
-        // Release shift while 6 is still held
         via.keyUp(keyCodes.SHIFT_LEFT);
-        // Override is still active, so SHIFT stays suppressed
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
 
-        // Release 6
-        via.keyUp(keyCodes.K6);
-        // No override, no physical shift → SHIFT should be off
+        via.keyUp("^");
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
     });
 
-    it("should produce 6 without shift override when 6 is pressed unshifted", () => {
-        via.keyDown(keyCodes.K6, false);
+    it('holds BBC shift for a `"`, which the BBC prints shifted', () => {
+        via.keyDown('"', false);
+        expect(bbcKeyPressed(BBC.K2)).toBe(true);
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
+    });
+
+    it("asks for no shift either way for a plain digit", () => {
+        via.keyDown("6", false);
         expect(bbcKeyPressed(BBC.K6)).toBe(true);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
     });

@@ -69,6 +69,63 @@ describe("Keyboard", () => {
         expect(keyboard).toBeDefined();
     });
 
+    describe("in the natural layout", () => {
+        const evt = (code, key, extra = {}) => ({
+            code,
+            key,
+            preventDefault: vi.fn(),
+            ctrlKey: false,
+            altKey: false,
+            shiftKey: false,
+            ...extra,
+        });
+
+        beforeEach(() => {
+            keyboard.setKeyLayout("natural");
+            keyboard.setRunning(true);
+            mockSysvia.keyDown.mockClear();
+            mockSysvia.keyUp.mockClear();
+        });
+
+        test("sends the character the host produced, not the key's position", () => {
+            // A Dvorak keyboard types a hyphen where a QWERTY one has the apostrophe.
+            keyboard.keyDown(evt("Quote", "-"));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith("-", false);
+        });
+
+        test("releases what the press sent, even once the character has changed", () => {
+            keyboard.keyDown(evt("Digit2", '"', { shiftKey: true }));
+            // Shift let go first, so the release reports the unshifted character.
+            keyboard.keyUp(evt("Digit2", "2"));
+
+            expect(mockSysvia.keyUp).toHaveBeenCalledWith('"');
+        });
+
+        test("still names keys that print nothing by where they are", () => {
+            keyboard.keyDown(evt("ArrowLeft", "ArrowLeft"));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith("ArrowLeft", false);
+        });
+
+        test("leaves jsbeeb's own shortcuts on the physical key", () => {
+            const handler = vi.fn();
+            keyboard.registerKeyHandler(keyCodes.S, handler, { alt: true, ctrl: false });
+
+            keyboard.keyDown(evt("KeyS", "s", { altKey: true }));
+
+            expect(handler).toHaveBeenCalledWith(true, "KeyS", false);
+            expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+        });
+
+        test("lets go of everything held when the layout changes under it", () => {
+            keyboard.keyDown(evt("KeyA", "a"));
+            keyboard.setKeyLayout("physical");
+
+            expect(mockSysvia.clearKeys).toHaveBeenCalled();
+        });
+    });
+
     test("keyCode is the physical position the event came from", () => {
         expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
         expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);

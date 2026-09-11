@@ -120,6 +120,15 @@ export const BBC = {
  * @param {string} char one character
  * @returns {{key: [number, number], shift: boolean, upperCase: boolean}|null} null if the BBC has no such character
  */
+const IsLetter = /^[A-Za-z]$/;
+
+/** Every character a keyboard might produce that the BBC can print, for building the natural layout. */
+const PrintableCharacters = (() => {
+    const chars = ["\u00a3"];
+    for (let code = 32; code < 127; ++code) chars.push(String.fromCharCode(code));
+    return chars;
+})();
+
 export function bbcKeyForCharacter(char) {
     const code = char.charCodeAt(0);
     if (code >= 65 && code <= 90) return { key: BBC[char], shift: false, upperCase: true };
@@ -471,69 +480,27 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.DOWN, BBC.DOWN);
 
     if (keyLayout === "natural") {
-        // "natural" keyboard
+        // Keyed by the character the host keyboard produces, not by where a key sits, so the
+        // host's own layout never has to be guessed: press whatever gives a `@` and the BBC
+        // gets a `@`. The BBC holds shift for a different set of characters than a PC does,
+        // so every non-letter says which shift state it needs. Letters take their case from
+        // the shift key as usual.
+        for (const char of PrintableCharacters) {
+            const needs = bbcKeyForCharacter(char);
+            if (!needs) continue;
+            map(char, IsLetter.test(char) ? needs.key : withShiftOverride(needs.key, needs.shift));
+        }
 
+        // Keys that print nothing are still known by where they are.
         map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
-
-        // US Keyboard: has Tilde on <Shift>BACK_QUOTE
-        map(keyCodes.BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE);
-        map(keyCodes.APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true);
-        map(keyCodes.K2, isUKlayout ? BBC.K2 : BBC.AT, true);
-
-        // 1st row
-        map(keyCodes.K3, BBC.UNDERSCORE_POUND, true);
-        map(keyCodes.K7, BBC.K6, true);
-        map(keyCodes.K8, BBC.COLON_STAR, true);
-        map(keyCodes.K9, BBC.K8, true);
-        map(keyCodes.K0, BBC.K9, true);
-
-        map(keyCodes.K2, BBC.K2, false);
-        map(keyCodes.K3, BBC.K3, false);
-        map(keyCodes.K7, BBC.K7, false);
-        map(keyCodes.K8, BBC.K8, false);
-        map(keyCodes.K9, BBC.K9, false);
-        map(keyCodes.K0, BBC.K0, false);
-
-        map(keyCodes.K1, BBC.K1);
-        map(keyCodes.K4, BBC.K4);
-        map(keyCodes.K5, BBC.K5);
-        map(keyCodes.K6, BBC.K6, false);
-        map(keyCodes.K6, withShiftOverride(BBC.HAT_TILDE, false), true);
-
-        map(keyCodes.MINUS, BBC.MINUS);
-
-        // 2nd row
-        map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET);
-
-        map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET);
-
-        // 3rd row
-
-        map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
-
-        map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
-
-        // UK prints `#~` on this key, which is the BBC's `^~` pair; a US board prints `\|`.
-        map(keyCodes.BACKSLASH, isUKlayout ? BBC.HAT_TILDE : BBC.PIPE_BACKSLASH);
-        map(keyCodes.INTL_BACKSLASH, BBC.PIPE_BACKSLASH);
-
-        map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
-
         map(keyCodes.END, BBC.COPY);
-
         map(keyCodes.HOME, BBC.SHIFTLOCK);
-
         map(keyCodes.F11, BBC.COPY);
-
         map(keyCodes.ESCAPE, BBC.ESCAPE);
-
         map(keyCodes.CTRL_LEFT, BBC.CTRL);
         map(keyCodes.CTRL_RIGHT, BBC.CTRL);
-
         map(keyCodes.CAPSLOCK, BBC.CAPSLOCK);
-
         map(keyCodes.DELETE, BBC.DELETE);
-
         map(keyCodes.BACKSPACE, BBC.DELETE);
     } else if (keyLayout === "gaming") {
         // gaming keyboard
