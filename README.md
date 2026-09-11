@@ -64,13 +64,20 @@ And Superior's Hunchback steers with `CAPS LOCK` and `CTRL`, which the arrow key
 
 [`https://bbc.xania.org/?disc1=sth:Superior/Hunchback-Superior.zip&autoboot&KEY.LEFT=CAPSLOCK&KEY.RIGHT=CTRL`](https://bbc.xania.org/?disc1=sth:Superior/Hunchback-Superior.zip&autoboot&KEY.LEFT=CAPSLOCK&KEY.RIGHT=CTRL)
 
-The **host key** names are jsbeeb's names for the keys on your own keyboard. Most are what you'd expect, but note:
+The **host key** names are jsbeeb's names for the keys on your own keyboard. A host key is identified by where it
+sits, not by what it types, so these work the same on a Dvorak, AZERTY or Hungarian layout as on a QWERTY one. Most
+names are what you'd expect, but note:
 
 - `ENTER` (the BBC's `RETURN` key is called `ENTER` on the host side)
 - `K0` to `K9` for the number keys, `NUMPAD0` to `NUMPAD9` for the keypad
-- `SHIFT_LEFT` / `SHIFT_RIGHT`, `CTRL_LEFT` / `CTRL_RIGHT`, `ALT_LEFT` / `ALT_RIGHT` to distinguish the two of each
-- `BACK_QUOTE`, `APOSTROPHE`, `SEMICOLON`, `MINUS`, `EQUALS`, `HASH`, `BACKSLASH`, `LEFT_SQUARE_BRACKET`,
+- `SHIFT_LEFT` / `SHIFT_RIGHT`, `CTRL_LEFT` / `CTRL_RIGHT`, `ALT_LEFT` / `ALT_RIGHT` to distinguish the two of each.
+  Plain `SHIFT`, `CTRL` and `ALT` map both sides at once
+- `WINDOWS` and `WINDOWS_RIGHT` for the Windows or Command keys
+- `BACK_QUOTE`, `APOSTROPHE`, `SEMICOLON`, `MINUS`, `EQUALS`, `BACKSLASH`, `LEFT_SQUARE_BRACKET`,
   `RIGHT_SQUARE_BRACKET` for punctuation
+- `BACKSLASH` is the key left of `Enter` on a UK keyboard (printed `#~`) and the one above it on a US keyboard
+  (printed `\|`); they are the same physical key. `HASH` is accepted as another name for it. `INTL_BACKSLASH` is the
+  extra key between the left shift and the `Z` that only a 102-key keyboard has
 
 The **BBC key** names are:
 
@@ -97,7 +104,8 @@ Some things to know:
   was at fault.
 - On the Atom, use the Atom's own key names (`LOCK`, `UP_DOWN`, `LEFT_RIGHT` and so on) rather than the BBC's.
 
-The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/keymap.js`](src/keymap.js), and `ATOM` in
+The definitive lists are `keyCodes` with `keyCodeAliases` (host) and `BBC` (BBC micro) in
+[`src/keymap.js`](src/keymap.js), and `ATOM` in
 [`src/keymap-atom.js`](src/keymap-atom.js).
 
 ### Discs and Tapes

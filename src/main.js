@@ -38,10 +38,9 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
-import { adaptKeyCodesToBrowser, keyCodes, userKeymap } from "./keymap.js";
+import { hostKeyCodes, userKeymap } from "./keymap.js";
 
 installIcons();
-adaptKeyCodesToBrowser();
 
 // ------------------------------------------------------------------------
 // What the URL asked for.
@@ -104,7 +103,7 @@ speak(settings.speechOutput);
 settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
-const keyMappingWarnings = processInputParams(parsedQuery, model.keys, keyCodes, userKeymap, gamepad);
+const keyMappingWarnings = processInputParams(parsedQuery, model.keys, hostKeyCodes, userKeymap, gamepad);
 if (keyMappingWarnings.length) {
     toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
         title: "Mappings in the URL",

@@ -1,11 +1,5 @@
 import { runningInNode } from "./loader.js";
 
-export function isFirefox() {
-    // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-    // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-    return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
-}
-
 export const userKeymap = [];
 
 export const BBC = {
@@ -251,131 +245,148 @@ export function stringToBBCKeys(str) {
 }
 
 /**
- * Useful references:
- * http://www.cambiaresearch.com/articles/15/javascript-char-codes-key-codes
- * https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
+ * Host keys by physical position, as `KeyboardEvent.code` names them:
+ * https://www.w3.org/TR/uievents-code/
+ *
+ * The names on the left are jsbeeb's own, and the `KEY.` URL parameters use them.
  */
 export const keyCodes = {
-    UNDEFINED: 0,
-    SEMICOLON: 186,
-    HASH: 222,
-    APOSTROPHE: 192,
-    MUTE: 173,
-    MINUS: 189,
-    EQUALS: 187,
-    BACK_QUOTE: 223,
-    BACKSPACE: 8,
-    TAB: 9,
-    CLEAR: 12,
-    ENTER: 13,
-    SHIFT: 16,
-    CTRL: 17,
-    ALT: 18,
-    BREAK: 19,
-    CAPSLOCK: 20,
-    ESCAPE: 27,
-    SPACE: 32,
-    PAGEUP: 33,
-    PAGEDOWN: 34,
-    END: 35,
-    HOME: 36,
-    LEFT: 37,
-    UP: 38,
-    RIGHT: 39,
-    DOWN: 40,
-    PRINTSCREEN: 44,
-    INSERT: 45,
-    DELETE: 46,
-    K0: 48,
-    K1: 49,
-    K2: 50,
-    K3: 51,
-    K4: 52,
-    K5: 53,
-    K6: 54,
-    K7: 55,
-    K8: 56,
-    K9: 57,
-    A: 65,
-    B: 66,
-    C: 67,
-    D: 68,
-    E: 69,
-    F: 70,
-    G: 71,
-    H: 72,
-    I: 73,
-    J: 74,
-    K: 75,
-    L: 76,
-    M: 77,
-    N: 78,
-    O: 79,
-    P: 80,
-    Q: 81,
-    R: 82,
-    S: 83,
-    T: 84,
-    U: 85,
-    V: 86,
-    W: 87,
-    X: 88,
-    Y: 89,
-    Z: 90,
-    /* also META on Mac */
-    WINDOWS: 91,
-    MENU: 93,
-    NUMPAD0: 96,
-    NUMPAD1: 97,
-    NUMPAD2: 98,
-    NUMPAD3: 99,
-    NUMPAD4: 100,
-    NUMPAD5: 101,
-    NUMPAD6: 102,
-    NUMPAD7: 103,
-    NUMPAD8: 104,
-    NUMPAD9: 105,
-    NUMPADASTERISK: 106,
-    NUMPADPLUS: 107,
-    /* on numeric keypad in eg Germany*/
-    NUMPAD_DECIMAL_COMMA: 108,
-    NUMPADMINUS: 109,
-    /* on numeric keypad */
-    NUMPAD_DECIMAL_POINT: 110,
-    NUMPADSLASH: 111,
-    F1: 112,
-    F2: 113,
-    F3: 114,
-    F4: 115,
-    F5: 116,
-    F6: 117,
-    F7: 118,
-    F8: 119,
-    F9: 120,
-    F10: 121,
-    F11: 122,
-    F12: 123,
-    NUMLOCK: 144,
-    SCROLL_LOCK: 145,
-    VOLUMEUP: 174,
-    VOLUMEDOWN: 175,
-    FASTFORWARD: 176,
-    FASTREWIND: 177,
-    PLAYPAUSE: 179,
-    COMMA: 188,
-    PERIOD: 190,
-    SLASH: 191,
-    LEFT_SQUARE_BRACKET: 219,
-    BACKSLASH: 220,
-    RIGHT_SQUARE_BRACKET: 221,
-    NUMPADENTER: 255, // hack, jsbeeb only
-    SHIFT_LEFT: 256, // hack, jsbeeb only
-    SHIFT_RIGHT: 257, // hack, jsbeeb only
-    ALT_LEFT: 258, // hack, jsbeeb only
-    ALT_RIGHT: 259, // hack, jsbeeb only
-    CTRL_LEFT: 260, // hack, jsbeeb only
-    CTRL_RIGHT: 261, // hack, jsbeeb only
+    SEMICOLON: "Semicolon",
+    APOSTROPHE: "Quote",
+    MUTE: "AudioVolumeMute",
+    MINUS: "Minus",
+    EQUALS: "Equal",
+    BACK_QUOTE: "Backquote",
+    BACKSPACE: "Backspace",
+    TAB: "Tab",
+    ENTER: "Enter",
+    BREAK: "Pause",
+    CAPSLOCK: "CapsLock",
+    ESCAPE: "Escape",
+    SPACE: "Space",
+    PAGEUP: "PageUp",
+    PAGEDOWN: "PageDown",
+    END: "End",
+    HOME: "Home",
+    LEFT: "ArrowLeft",
+    UP: "ArrowUp",
+    RIGHT: "ArrowRight",
+    DOWN: "ArrowDown",
+    PRINTSCREEN: "PrintScreen",
+    INSERT: "Insert",
+    DELETE: "Delete",
+    K0: "Digit0",
+    K1: "Digit1",
+    K2: "Digit2",
+    K3: "Digit3",
+    K4: "Digit4",
+    K5: "Digit5",
+    K6: "Digit6",
+    K7: "Digit7",
+    K8: "Digit8",
+    K9: "Digit9",
+    A: "KeyA",
+    B: "KeyB",
+    C: "KeyC",
+    D: "KeyD",
+    E: "KeyE",
+    F: "KeyF",
+    G: "KeyG",
+    H: "KeyH",
+    I: "KeyI",
+    J: "KeyJ",
+    K: "KeyK",
+    L: "KeyL",
+    M: "KeyM",
+    N: "KeyN",
+    O: "KeyO",
+    P: "KeyP",
+    Q: "KeyQ",
+    R: "KeyR",
+    S: "KeyS",
+    T: "KeyT",
+    U: "KeyU",
+    V: "KeyV",
+    W: "KeyW",
+    X: "KeyX",
+    Y: "KeyY",
+    Z: "KeyZ",
+    /* also COMMAND on Mac */
+    WINDOWS: "MetaLeft",
+    WINDOWS_RIGHT: "MetaRight",
+    MENU: "ContextMenu",
+    NUMPAD0: "Numpad0",
+    NUMPAD1: "Numpad1",
+    NUMPAD2: "Numpad2",
+    NUMPAD3: "Numpad3",
+    NUMPAD4: "Numpad4",
+    NUMPAD5: "Numpad5",
+    NUMPAD6: "Numpad6",
+    NUMPAD7: "Numpad7",
+    NUMPAD8: "Numpad8",
+    NUMPAD9: "Numpad9",
+    NUMPADASTERISK: "NumpadMultiply",
+    NUMPADPLUS: "NumpadAdd",
+    NUMPAD_DECIMAL_COMMA: "NumpadComma",
+    NUMPADMINUS: "NumpadSubtract",
+    NUMPAD_DECIMAL_POINT: "NumpadDecimal",
+    NUMPADSLASH: "NumpadDivide",
+    NUMPADENTER: "NumpadEnter",
+    F1: "F1",
+    F2: "F2",
+    F3: "F3",
+    F4: "F4",
+    F5: "F5",
+    F6: "F6",
+    F7: "F7",
+    F8: "F8",
+    F9: "F9",
+    F10: "F10",
+    F11: "F11",
+    F12: "F12",
+    NUMLOCK: "NumLock",
+    SCROLL_LOCK: "ScrollLock",
+    VOLUMEUP: "AudioVolumeUp",
+    VOLUMEDOWN: "AudioVolumeDown",
+    FASTFORWARD: "MediaTrackNext",
+    FASTREWIND: "MediaTrackPrevious",
+    PLAYPAUSE: "MediaPlayPause",
+    COMMA: "Comma",
+    PERIOD: "Period",
+    SLASH: "Slash",
+    LEFT_SQUARE_BRACKET: "BracketLeft",
+    RIGHT_SQUARE_BRACKET: "BracketRight",
+    BACKSLASH: "Backslash",
+    /* only on a 102-key board, between the left shift and the Z */
+    INTL_BACKSLASH: "IntlBackslash",
+    SHIFT_LEFT: "ShiftLeft",
+    SHIFT_RIGHT: "ShiftRight",
+    ALT_LEFT: "AltLeft",
+    ALT_RIGHT: "AltRight",
+    CTRL_LEFT: "ControlLeft",
+    CTRL_RIGHT: "ControlRight",
 };
+
+/**
+ * Host key names that stand for more than one `keyCodes` entry, for `KEY.` parameters.
+ * HASH is here because the UK `#~` key and the US `\|` key are one physical key, `Backslash`.
+ */
+export const keyCodeAliases = {
+    SHIFT: [keyCodes.SHIFT_LEFT, keyCodes.SHIFT_RIGHT],
+    CTRL: [keyCodes.CTRL_LEFT, keyCodes.CTRL_RIGHT],
+    ALT: [keyCodes.ALT_LEFT, keyCodes.ALT_RIGHT],
+    HASH: [keyCodes.BACKSLASH],
+};
+
+/**
+ * The host keys a jsbeeb key name stands for, or an empty array if it names none.
+ * @param {string} name a `keyCodes` name, or an alias covering more than one
+ * @returns {string[]} `KeyboardEvent.code` names
+ */
+export function hostKeyCodes(name) {
+    if (keyCodes[name]) return [keyCodes[name]];
+    return keyCodeAliases[name] ?? [];
+}
 
 export function detectKeyboardLayout() {
     if (runningInNode) {
@@ -389,45 +400,6 @@ export function detectKeyboardLayout() {
         if (navigator.language.toLowerCase() === "en-us") return "US";
     }
     return "UK"; // Default guess of UK
-}
-
-/**
- * Adjusts keyCodes for the browser this runs in. The table starts as Chrome on a
- * UK keyboard, which is also what node sees, so only the differences are applied.
- */
-export function adaptKeyCodesToBrowser() {
-    const isUKlayout = detectKeyboardLayout() === "UK";
-    if (isFirefox()) {
-        keyCodes.SEMICOLON = 59;
-        // #~ key (not on US keyboard)
-        keyCodes.HASH = 163;
-        keyCodes.APOSTROPHE = 222;
-        keyCodes.BACK_QUOTE = 192;
-        // Firefox doesn't return a keycode for this
-        keyCodes.MUTE = -1;
-        keyCodes.MINUS = 173;
-        keyCodes.EQUALS = 61;
-    } else {
-        // Chrome
-        // TODO(#1065) check other browsers
-        // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-        keyCodes.SEMICOLON = 186;
-        // #~ key (not on US keyboard)
-        keyCodes.HASH = isUKlayout ? 222 : 223;
-        keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
-        keyCodes.MUTE = 173;
-        keyCodes.MINUS = 189;
-        keyCodes.EQUALS = 187;
-        keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
-    }
-
-    // Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
-    // Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
-    if (!runningInNode && navigator.userAgent.indexOf("Mac") !== -1) {
-        keyCodes.BACK_QUOTE = 192;
-        keyCodes.APOSTROPHE = 222;
-        keyCodes.HASH = 223;
-    }
 }
 
 export function getKeyMap(keyLayout) {
@@ -469,11 +441,8 @@ export function getKeyMap(keyLayout) {
 
     // shiftDown undefined -> map both
     function map(s, colRow, shiftDown) {
-        if ((!s && s !== 0) || !colRow) {
+        if (!s || !colRow) {
             console.log("error binding key", s, colRow);
-        }
-        if (typeof s === "string") {
-            s = s.charCodeAt(0);
         }
 
         if (shiftDown === undefined) {
@@ -534,7 +503,6 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.TAB, BBC.TAB);
     map(keyCodes.ENTER, BBC.RETURN);
 
-    map(keyCodes.SHIFT, BBC.SHIFT);
     // see later map(keyCodes.SHIFT_LEFT, BBC.SHIFT_LEFT);
     map(keyCodes.SHIFT_RIGHT, BBC.SHIFT);
 
@@ -587,7 +555,9 @@ export function getKeyMap(keyLayout) {
 
         map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
 
-        map(keyCodes.HASH, BBC.HAT_TILDE); // OK for <Shift> at least
+        // UK prints `#~` on this key, which is the BBC's `^~` pair; a US board prints `\|`.
+        map(keyCodes.BACKSLASH, isUKlayout ? BBC.HAT_TILDE : BBC.PIPE_BACKSLASH);
+        map(keyCodes.INTL_BACKSLASH, BBC.PIPE_BACKSLASH);
 
         map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
 
@@ -599,7 +569,6 @@ export function getKeyMap(keyLayout) {
 
         map(keyCodes.ESCAPE, BBC.ESCAPE);
 
-        map(keyCodes.CTRL, BBC.CTRL);
         map(keyCodes.CTRL_LEFT, BBC.CTRL);
         map(keyCodes.CTRL_RIGHT, BBC.CTRL);
 
@@ -608,8 +577,6 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.DELETE, BBC.DELETE);
 
         map(keyCodes.BACKSPACE, BBC.DELETE);
-
-        map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
     } else if (keyLayout === "gaming") {
         // gaming keyboard
 
@@ -647,14 +614,12 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.CAPSLOCK, BBC.CTRL);
         map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
         map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
-        // UK keyboard (key missing on US)
-        map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+        // UK prints `#~` on this key, a US board `\|`.
+        map(keyCodes.BACKSLASH, isUKlayout ? BBC.RIGHT_SQUARE_BRACKET : BBC.UNDERSCORE_POUND);
 
-        // UK has extra key \| for SHIFT
+        // Only a 102-key board has a key here, so only there can the left shift be spared.
         map(keyCodes.SHIFT_LEFT, isUKlayout ? BBC.SHIFTLOCK : BBC.SHIFT);
-        // UK: key is between SHIFT and Z
-        // US: key is above ENTER
-        map(keyCodes.BACKSLASH, isUKlayout ? BBC.SHIFT : BBC.UNDERSCORE_POUND);
+        map(keyCodes.INTL_BACKSLASH, BBC.SHIFT);
 
         // 5th row
 
@@ -697,9 +662,7 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.BACKSPACE, BBC.DELETE); // delete
         map(keyCodes.END, BBC.COPY); // copy key is end
         map(keyCodes.F11, BBC.COPY); // copy key is end for Apple
-        map(keyCodes.SHIFT, BBC.SHIFT); // shift
         map(keyCodes.ESCAPE, BBC.ESCAPE); // escape
-        map(keyCodes.CTRL, BBC.CTRL);
         map(keyCodes.CTRL_LEFT, BBC.CTRL);
         map(keyCodes.CTRL_RIGHT, BBC.CTRL);
         map(keyCodes.CAPSLOCK, BBC.CAPSLOCK); // caps (on Rich's/Mike's computer)
@@ -708,12 +671,12 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.RIGHT, BBC.RIGHT); // arrow right
         map(keyCodes.DOWN, BBC.DOWN); // arrow down
         map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
-        map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
 
         // None of this last group in great locations.
         // But better to have them mapped at least somewhere.
         map(keyCodes.BACK_QUOTE, BBC.AT);
         map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
+        map(keyCodes.INTL_BACKSLASH, BBC.PIPE_BACKSLASH);
         map(keyCodes.PAGEUP, BBC.UNDERSCORE_POUND);
     }
 
@@ -728,7 +691,6 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.NUMPAD7, BBC.NUMPAD7);
     map(keyCodes.NUMPAD8, BBC.NUMPAD8);
     map(keyCodes.NUMPAD9, BBC.NUMPAD9);
-    // small hack in main.js/keyCode() to make this work
     map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
 
     // "natural" mapping
@@ -738,7 +700,6 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.NUMPADASTERISK, BBC.NUMPADASTERISK);
     //map(???, BBC.NUMPADCOMMA);
     //map(???, BBC.NUMPADHASH);
-    // no keycode for NUMPADENTER, small hack in main.js/keyCode()
     map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
 
     // TODO(#748) "game" mapping
@@ -748,7 +709,7 @@ export function getKeyMap(keyLayout) {
     // `KEY.` URL parameters, applied last so they win. Not consumed: this map is rebuilt on
     // layout and model changes, and the user's mapping has to survive that.
     for (const mapping of userKeymap) {
-        remap(keyCodes[mapping.native], BBC[mapping.key]);
+        for (const code of hostKeyCodes(mapping.native)) remap(code, BBC[mapping.key]);
     }
 
     return keys2;

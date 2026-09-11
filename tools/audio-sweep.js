@@ -608,6 +608,7 @@ async function runReference(outFile, { model = "Master", rate = "48000", output 
     const { TestMachine } = await import("../src/test-machine.js");
     const { SoundChip } = await import("../src/soundchip.js");
     const { PolyphaseResampler } = await import("../src/resampler.js");
+    const { keyCodes } = await import("../src/keymap.js");
     const { ResamplerCutoffOfOutputRate, ResamplerTaps, isAudioOutput, outputStages } =
         await import("../src/audio-output.js");
     if (!isAudioOutput(output)) throw new Error(`Unknown output "${output}"`);
@@ -649,11 +650,10 @@ async function runReference(outFile, { model = "Master", rate = "48000", output 
     await machine.initialise();
     machine.loadDiscData(disc);
     const cyclesPerSecond = machine.model.cyclesPerSecond;
-    const ShiftKey = 16;
-    machine.processor.sysvia.keyDown(ShiftKey);
+    machine.processor.sysvia.keyDown(keyCodes.SHIFT_LEFT);
     machine.reset(true);
     await machine.runFor(2 * cyclesPerSecond);
-    machine.processor.sysvia.keyUp(ShiftKey);
+    machine.processor.sysvia.keyUp(keyCodes.SHIFT_LEFT);
     const runSeconds = schedule.totalCs / 100 + StartDelayCs / 100 + 4;
     for (let s = 0; s < runSeconds; ++s) {
         await machine.runFor(cyclesPerSecond);

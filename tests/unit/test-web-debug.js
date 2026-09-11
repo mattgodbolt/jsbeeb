@@ -31,7 +31,7 @@ describe("Debugger", () => {
     const disRows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
     const currentRow = () => document.querySelector("#disassembly .highlight");
     const memHighlight = () => document.querySelector("#memory .highlight");
-    const keyPress = (char) => dbgr.keyPress(char.charCodeAt(0));
+    const keyPress = (char) => dbgr.keyPress(char);
 
     describe("the panels", () => {
         it("start hidden and show when the debugger is entered", () => {

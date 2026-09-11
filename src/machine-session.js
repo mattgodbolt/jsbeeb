@@ -136,20 +136,19 @@ export class MachineSession {
     }
 
     /**
-     * Press a key (by browser keyCode).
-     * Use keyCodes from keymap.js for named keys, or ASCII charCode for letters/digits.
+     * Press a host key by its physical position, as `KeyboardEvent.code` names it:
+     * "KeyA", "Digit1", "ShiftLeft", "NumpadEnter". The `keyCodes` table in keymap.js
+     * gives jsbeeb's own name for each.
      */
-    keyDown(keyCode, shiftDown = false) {
+    keyDown(code, shiftDown = false) {
         this._requireKeyboard();
-        this._keyboard.keyDown(keyCode, shiftDown);
+        this._keyboard.keyDown(code, shiftDown);
     }
 
-    /**
-     * Release a key (by browser keyCode).
-     */
-    keyUp(keyCode) {
+    /** Release a host key, by the same `KeyboardEvent.code` name. */
+    keyUp(code) {
         this._requireKeyboard();
-        this._keyboard.keyUp(keyCode);
+        this._keyboard.keyUp(code);
     }
 
     /**

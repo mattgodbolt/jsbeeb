@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ATOM, getKeyMapAtom } from "../../src/keymap-atom.js";
-import { BBC, getKeyMap, keyCodes, stringToBBCKeys, userKeymap } from "../../src/keymap.js";
+import { BBC, getKeyMap, hostKeyCodes, keyCodes, stringToBBCKeys, userKeymap } from "../../src/keymap.js";
 import { processInputParams } from "../../src/url-params.js";
 
 describe("Keyboard mapping", function () {
@@ -29,7 +29,7 @@ describe("User key mapping from KEY. URL parameters", function () {
     });
 
     const applyParams = (params, machineKeys) =>
-        processInputParams(params, machineKeys, keyCodes, userKeymap, { remap: () => null });
+        processInputParams(params, machineKeys, hostKeyCodes, userKeymap, { remap: () => null });
 
     it("overrides the default binding for the host key", function () {
         expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.RETURN);
@@ -52,6 +52,20 @@ describe("User key mapping from KEY. URL parameters", function () {
         applyParams({ "KEY.ENTER": "LOCK" }, ATOM);
 
         expect(getKeyMapAtom("physical")[false][keyCodes.ENTER]).toEqual(ATOM.LOCK);
+    });
+
+    it("maps both sides at once for a host key name that names a pair", function () {
+        applyParams({ "KEY.SHIFT": "COPY" }, BBC);
+
+        const keyMap = getKeyMap("physical");
+        expect(keyMap[false][keyCodes.SHIFT_LEFT]).toEqual(BBC.COPY);
+        expect(keyMap[false][keyCodes.SHIFT_RIGHT]).toEqual(BBC.COPY);
+    });
+
+    it("still knows HASH as a name for the key a US keyboard prints as backslash", function () {
+        applyParams({ "KEY.HASH": "COPY" }, BBC);
+
+        expect(getKeyMap("physical")[false][keyCodes.BACKSLASH]).toEqual(BBC.COPY);
     });
 
     it("ignores unknown host and machine key names", function () {

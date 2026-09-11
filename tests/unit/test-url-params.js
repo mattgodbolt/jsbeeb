@@ -226,7 +226,7 @@ describe("URL Parameters", () => {
     describe("processInputParams", () => {
         it("should process keyboard mappings", () => {
             const machineKeys = { CTRL: "CTRL", SHIFT: "SHIFT" };
-            const keyCodes = { A: 65, B: 66 };
+            const hostKeyCodes = (name) => (["A", "B"].includes(name) ? ["Key" + name] : []);
             const userKeymap = [];
             const gamepad = { remap: vi.fn() };
 
@@ -238,7 +238,7 @@ describe("URL Parameters", () => {
                 other: "value",
             };
 
-            const warnings = processInputParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad);
+            const warnings = processInputParams(parsedQuery, machineKeys, hostKeyCodes, userKeymap, gamepad);
 
             expect(userKeymap).toEqual([
                 { native: "A", key: "CTRL" },
@@ -253,14 +253,14 @@ describe("URL Parameters", () => {
 
         it("should report mappings it can't apply", () => {
             const machineKeys = { CTRL: "CTRL" };
-            const keyCodes = { A: 65 };
+            const hostKeyCodes = (name) => (name === "A" ? ["KeyA"] : []);
             const userKeymap = [];
             const gamepad = { remap: vi.fn().mockReturnValue('unknown gamepad control "WIBBLE".') };
 
             const warnings = processInputParams(
                 { "KEY.A": "NOTAKEY", "KEY.NOTAKEY": "CTRL", "GP.WIBBLE": "CTRL" },
                 machineKeys,
-                keyCodes,
+                hostKeyCodes,
                 userKeymap,
                 gamepad,
             );
