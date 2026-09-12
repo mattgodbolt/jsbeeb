@@ -13,6 +13,7 @@ different peripherals.
 
 - [Keyboard Mappings](#keyboard-mappings)
 - [Remapping Keys](#remapping-keys)
+- [Keyboard Layouts](#keyboard-layouts)
 - [Discs and Tapes](#discs-and-tapes)
 - [Emulator Shortcuts](#emulator-shortcuts)
 - [Printer Output](#printer-output)
@@ -110,6 +111,37 @@ Some things to know:
 The definitive lists are `keyCodes` with `keyCodeAliases` (host) and `BBC` (BBC micro) in
 [`src/keymap.js`](src/keymap.js), and `ATOM` in
 [`src/keymap-atom.js`](src/keymap-atom.js).
+
+### Keyboard Layouts
+
+A BBC keyboard is not a PC keyboard, so **Keyboard** on the top bar offers three ways to bridge the
+two. The choice is remembered, and `?keyLayout=physical`, `?keyLayout=natural` or `?keyLayout=gaming`
+sets it from a link.
+
+**Physical** is the default, and the one to use for games. Each key presses the BBC key in the same
+place on the keyboard, so `Z` is `Z` and the key to the right of the `L` is the BBC's `:` and `*`,
+whatever your keyboard is printed with. A Dvorak or Hungarian keyboard works the same as a UK one,
+because only position matters.
+
+**Natural** is for typing. Each key presses whatever the BBC needs to print the character your
+keyboard produces, so a `@` gives a `@` and a `*` gives a `*`, again whatever your layout. The BBC
+holds shift for a different set of characters than a PC does, which this deals with: `^` is
+unshifted on a BBC and `"` is shifted, and you do not have to know that.
+
+Two keys are exceptions, because characters alone cannot settle them. The BBC has no backtick and
+most keyboards cannot type a `£` at all, so the key that would print a backtick gives a `£`
+instead. And the Master's numeric keypad is a separate set of keys from the digits above the
+letters, which the characters cannot tell apart, so the keypad goes by position.
+
+**Gaming** moves the BBC keys that a PC keyboard handles badly. Its main job is the BBC's `CAPS LOCK`
+and `CTRL`, which sit side by side and which many games use for left and right: Zalaga and Hunchback
+both do. On a PC those two are a row apart and diagonal, so this layout puts them on the left `Ctrl`
+and left `Alt` instead, which are side by side under one hand. The cost is that jsbeeb's own `Alt`
+shortcuts win over those keys, so while this layout is chosen you cannot hold the BBC's `CTRL` and
+press a letter or digit that jsbeeb has claimed.
+
+Whichever you choose, a `KEY.` parameter overrides individual keys on top of it, and survives
+changing layout.
 
 ### Discs and Tapes
 

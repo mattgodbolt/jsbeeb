@@ -1,4 +1,4 @@
-import { keyCodes } from "../keymap.js";
+import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
@@ -38,15 +38,35 @@ export class Keyboard extends EventTarget {
         this.stepEmuWhenPaused = false;
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
+        /** What each held physical key pressed, so releasing it releases the same thing. */
+        this.heldKeys = new Map();
     }
 
     /**
-     * The host key a keyboard event came from, by physical position.
+     * The host key a keyboard event came from, by physical position. jsbeeb's own shortcuts
+     * and special keys are always by position, whatever layout the machine is using.
      * @param {KeyboardEvent} evt - The keyboard event
      * @returns {string} - A `KeyboardEvent.code` name
      */
     keyCode(evt) {
         return evt.code;
+    }
+
+    /**
+     * How the emulated machine's key map names the key this event came from. The natural
+     * layout is keyed by the character the host produced, so that what you type comes out
+     * right whatever layout the host keyboard is in; every other layout is by position.
+     * @param {KeyboardEvent} evt - The keyboard event
+     * @returns {string}
+     */
+    _machineKey(evt) {
+        if (this.keyLayout !== "natural") return evt.code;
+        // A `KEY.` parameter names a key by where it is, so it outranks what the key prints.
+        if (isUserRemapped(evt.code)) return evt.code;
+        // The Master's keypad is a separate set of keys from the digits above the letters, and
+        // the characters cannot tell them apart.
+        if (evt.code?.startsWith("Numpad")) return evt.code;
+        return evt.key?.length === 1 ? evt.key : evt.code;
     }
 
     /**
@@ -73,6 +93,8 @@ export class Keyboard extends EventTarget {
      * @param {string} layout - The keyboard layout to use
      */
     setKeyLayout(layout) {
+        // Anything still held was named by the old layout, so release it before the names change.
+        this.clearKeys();
         this.keyLayout = layout;
         this.processor.setKeyLayout(layout);
     }
@@ -172,7 +194,12 @@ export class Keyboard extends EventTarget {
         // Special handling cases that we always want to keep within keyboard.js
         if (this._handleSpecialKeys(code)) return;
 
-        this.keyInterface.keyDown(code, evt.shiftKey);
+        // In the natural layout the character can change between press and release, as it does
+        // when shift is let go first, so what went down is remembered against the physical key.
+        // Auto-repeat reports the new character too, so a repeat sticks with what it started as.
+        const machineKey = (evt.repeat && this.heldKeys.get(code)) || this._machineKey(evt);
+        this.heldKeys.set(code, machineKey);
+        this.keyInterface.keyDown(machineKey, evt.shiftKey);
     }
 
     /**
@@ -203,7 +230,8 @@ export class Keyboard extends EventTarget {
         // Always let the key ups come through to avoid sticky keys: a key held while focus
         // moved into a text field or the media window still has to be released in the machine.
         const code = this.keyCode(evt);
-        this.keyInterface.keyUp(code);
+        this.keyInterface.keyUp(this.heldKeys.get(code) ?? this._machineKey(evt));
+        this.heldKeys.delete(code);
 
         if (this.inputEnabledFunction()) return;
 
@@ -276,6 +304,7 @@ export class Keyboard extends EventTarget {
      * Clears all pressed keys
      */
     clearKeys() {
+        this.heldKeys.clear();
         this.keyInterface.clearKeys();
     }
 
