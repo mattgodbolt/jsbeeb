@@ -238,8 +238,8 @@ const template = [
             },
             { type: "separator" },
             {
+                // No accelerator: Alt-S reaches the page, where it toggles rather than only stopping.
                 label: "Pause and Show Debugger",
-                accelerator: "CmdOrCtrl+Home",
                 click: sendAction("pause"),
             },
             {

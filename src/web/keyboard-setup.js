@@ -2,19 +2,12 @@ import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
 import { noteEvent } from "./analytics.js";
 import { keyCodes } from "../keymap.js";
+import { Shortcuts } from "./shortcuts.js";
 
 const PasteBoxId = "paste-text";
-/** The eight accessibility switches, each reachable from a number key and a function key. */
-const SwitchKeys = [
-    ["K1", "F1"],
-    ["K2", "F2"],
-    ["K3", "F3"],
-    ["K4", "F4"],
-    ["K5", "F5"],
-    ["K6", "F6"],
-    ["K7", "F7"],
-    ["K8", "F8"],
-];
+/** The eight accessibility switches, on the number keys. */
+const SwitchKeys = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"];
+
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 // Where keys are for the page, not the machine: the paste box, and the media window's controls.
 const KeyboardSinks = `#${PasteBoxId}, #media-panel`;
@@ -27,7 +20,7 @@ export class KeyboardSetup {
     /**
      * @param {object} opts
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
-     *   enterDebugger, reload, toggleFast, openRewind, openPrinter, openMedia,
+     *   toggleDebugger, toggleFast, openRewind, openPrinter, openMedia,
      *   pause, resume, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
      */
@@ -53,39 +46,38 @@ export class KeyboardSetup {
             }
         };
         const alt = { alt: true, ctrl: false };
-        const ctrl = { alt: false, ctrl: true };
-        keyboard.registerKeyHandler(keyCodes.S, onDown("S", actions.enterDebugger), alt);
-        keyboard.registerKeyHandler(keyCodes.R, onDown(null, actions.reload), alt);
-        keyboard.registerKeyHandler(keyCodes.HOME, onDown("home", actions.enterDebugger), ctrl);
-        keyboard.registerKeyHandler(keyCodes.INSERT, onDown("insert", actions.toggleFast), ctrl);
-        keyboard.registerKeyHandler(
-            keyCodes.END,
-            onDown("end", () => keyboard.pauseEmulation()),
-            ctrl,
-        );
-        keyboard.registerKeyHandler(keyCodes.PAGEDOWN, onDown("pagedown", actions.openRewind), alt);
-        keyboard.registerKeyHandler(keyCodes.B, onDown(null, actions.openPrinter), ctrl);
-        keyboard.registerKeyHandler(
-            keyCodes.M,
-            (down, _code, shift) => {
-                if (down) actions.openMedia(shift ? 1 : 0);
-            },
-            alt,
-        );
-        keyboard.registerKeyHandler(
-            keyCodes.C,
-            onDown(null, () => actions.openMedia("tape")),
-            alt,
-        );
+        const runners = {
+            toggleDebugger: () => actions.toggleDebugger(),
+            togglePause: () => (keyboard.pauseEmu ? keyboard.resumeEmulation() : keyboard.pauseEmulation()),
+            toggleFast: () => actions.toggleFast(),
+            openPrinter: () => actions.openPrinter(),
+            openRewind: () => actions.openRewind(),
+            openMediaTape: () => actions.openMedia("tape"),
+        };
+        for (const shortcut of Shortcuts) {
+            if (!shortcut.key) continue;
+            if (shortcut.run === "openMediaDrive") {
+                // The only shortcut whose shift state changes what it does, rather than which key it is.
+                keyboard.registerKeyHandler(
+                    keyCodes[shortcut.key],
+                    (down, _code, shift) => {
+                        if (down) actions.openMedia(shift ? 1 : 0);
+                    },
+                    alt,
+                );
+                continue;
+            }
+            keyboard.registerKeyHandler(
+                keyCodes[shortcut.key],
+                onDown(shortcut.note ?? null, runners[shortcut.run]),
+                alt,
+            );
+        }
 
-        // Alt+1-8 and Alt+F1-F8 trigger the accessibility switches. Using Alt means
-        // the underlying key is never forwarded to the BBC Micro (keyboard.js bails
-        // out early when a handler fires), so typing numbers or using function keys
-        // works normally.
+        // Alt means the underlying key is never forwarded to the BBC Micro (keyboard.js bails
+        // out early when a handler fires), so typing numbers works normally.
         const handleSwitch = (index) => (down) => accessibilitySwitches.setSwitch(index, down);
-        SwitchKeys.forEach((names, index) => {
-            for (const name of names) keyboard.registerKeyHandler(keyCodes[name], handleSwitch(index), alt);
-        });
+        SwitchKeys.forEach((name, index) => keyboard.registerKeyHandler(keyCodes[name], handleSwitch(index), alt));
 
         document.addEventListener("keydown", (evt) => {
             actions.onAnyKeyDown();

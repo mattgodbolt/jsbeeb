@@ -7,8 +7,8 @@ import { domFromIndexHtml, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
-const keyEvent = (type, code, { alt = false, ctrl = false, shift = false } = {}) =>
-    new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, cancelable: true });
+const keyEvent = (type, code, { alt = false, ctrl = false, shift = false, repeat = false } = {}) =>
+    new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, repeat, cancelable: true });
 
 const pasteEvent = (text) => {
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -25,8 +25,7 @@ describe("KeyboardSetup", () => {
     beforeEach(() => {
         document.body.innerHTML = "";
         actions = {
-            enterDebugger: vi.fn(),
-            reload: vi.fn(),
+            toggleDebugger: vi.fn(),
             toggleFast: vi.fn(),
             openRewind: vi.fn(),
             openPrinter: vi.fn(),
@@ -65,25 +64,28 @@ describe("KeyboardSetup", () => {
     afterEach(teardownDom);
 
     describe("the accessibility switches", () => {
-        it("clears a bit while its switch is held, keys and function keys alike", () => {
+        it("clears a bit while its switch is held", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
             document.dispatchEvent(keyEvent("keyup", keyCodes.K1, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0xff);
 
-            document.dispatchEvent(keyEvent("keydown", keyCodes.F8, { alt: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K8, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0x7f);
+        });
+
+        it("leaves the function keys to the machine, so Alt-F4 is not a switch", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.F4, { alt: true }));
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
         });
     });
 
     describe("the shortcuts", () => {
         it.each([
-            ["Alt-S", keyCodes.S, { alt: true }, "enterDebugger"],
-            ["Ctrl-Home", keyCodes.HOME, { ctrl: true }, "enterDebugger"],
-            ["Alt-R", keyCodes.R, { alt: true }, "reload"],
-            ["Ctrl-Insert", keyCodes.INSERT, { ctrl: true }, "toggleFast"],
-            ["Alt-PageDown", keyCodes.PAGEDOWN, { alt: true }, "openRewind"],
-            ["Ctrl-B", keyCodes.B, { ctrl: true }, "openPrinter"],
+            ["Alt-S", keyCodes.S, { alt: true }, "toggleDebugger"],
+            ["Alt-T", keyCodes.T, { alt: true }, "toggleFast"],
+            ["Alt-W", keyCodes.W, { alt: true }, "openRewind"],
+            ["Alt-B", keyCodes.B, { alt: true }, "openPrinter"],
         ])("%s fires %s on the way down only", (name, which, modifiers, action) => {
             document.dispatchEvent(keyEvent("keydown", which, modifiers));
             expect(actions[action]).toHaveBeenCalledTimes(1);
@@ -102,9 +104,17 @@ describe("KeyboardSetup", () => {
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
         });
 
+        it("fires once however long the key is held", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+
+            expect(actions.toggleDebugger).toHaveBeenCalledTimes(1);
+        });
+
         it("does nothing without the modifier", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.S));
-            expect(actions.enterDebugger).not.toHaveBeenCalled();
+            expect(actions.toggleDebugger).not.toHaveBeenCalled();
             expect(processor.sysvia.keyDown).toHaveBeenCalled();
         });
 

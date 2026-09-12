@@ -178,8 +178,11 @@ const processor = machine.processor;
 
 const { keyboard } = new KeyboardSetup({
     actions: {
-        enterDebugger: () => loop.stop(true),
-        reload: () => window.location.reload(),
+        toggleDebugger: () => {
+            if (!dbgr.enabled()) return loop.stop(true);
+            dbgr.hide();
+            loop.go();
+        },
         toggleFast: () => loop.toggleFastAsPossible(),
         openRewind: () => rewindUI.open(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
