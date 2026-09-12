@@ -1,4 +1,4 @@
-import { keyCodes } from "../keymap.js";
+import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
@@ -60,8 +60,10 @@ export class Keyboard extends EventTarget {
      * @returns {string}
      */
     _machineKey(evt) {
-        if (this.keyLayout === "natural" && evt.key?.length === 1) return evt.key;
-        return evt.code;
+        if (this.keyLayout !== "natural") return evt.code;
+        // A `KEY.` parameter names a key by where it is, so it outranks what the key prints.
+        if (isUserRemapped(evt.code)) return evt.code;
+        return evt.key?.length === 1 ? evt.key : evt.code;
     }
 
     /**
@@ -190,7 +192,8 @@ export class Keyboard extends EventTarget {
 
         // In the natural layout the character can change between press and release, as it does
         // when shift is let go first, so what went down is remembered against the physical key.
-        const machineKey = this._machineKey(evt);
+        // Auto-repeat reports the new character too, so a repeat sticks with what it started as.
+        const machineKey = (evt.repeat && this.heldKeys.get(code)) || this._machineKey(evt);
         this.heldKeys.set(code, machineKey);
         this.keyInterface.keyDown(machineKey, evt.shiftKey);
     }

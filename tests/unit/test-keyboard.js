@@ -2,7 +2,7 @@ import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
-import { BBC, keyCodes } from "../../src/keymap.js";
+import { BBC, keyCodes, userKeymap } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
 describe("Keyboard", () => {
@@ -116,6 +116,28 @@ describe("Keyboard", () => {
 
             expect(handler).toHaveBeenCalledWith(true, "KeyS", false);
             expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+        });
+
+        test("keeps the character it started with while a key auto-repeats", () => {
+            keyboard.keyDown(evt("Digit6", "^", { shiftKey: true }));
+            // Shift let go while the key stays down: the repeats report the plain character.
+            keyboard.keyDown(evt("Digit6", "6", { repeat: true }));
+            keyboard.keyUp(evt("Digit6", "6"));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
+            expect(mockSysvia.keyDown).toHaveBeenLastCalledWith("^", false);
+            expect(mockSysvia.keyUp).toHaveBeenCalledWith("^");
+        });
+
+        test("gives a KEY. parameter its key by position, over the character", () => {
+            userKeymap.push({ native: "K1", key: "COPY" });
+            try {
+                keyboard.keyDown(evt("Digit1", "1"));
+
+                expect(mockSysvia.keyDown).toHaveBeenCalledWith("Digit1", false);
+            } finally {
+                userKeymap.length = 0;
+            }
         });
 
         test("lets go of everything held when the layout changes under it", () => {

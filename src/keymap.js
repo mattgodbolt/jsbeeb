@@ -369,6 +369,15 @@ export function detectKeyboardLayout() {
     return "UK"; // Default guess of UK
 }
 
+/**
+ * Whether a `KEY.` parameter has claimed this host key. Those name a key by where it is, so they
+ * win over the character it prints in the layout that goes by character.
+ * @param {string} code a `KeyboardEvent.code` name
+ */
+export function isUserRemapped(code) {
+    return userKeymap.some((mapping) => hostKeyCodes(mapping.native).includes(code));
+}
+
 export function getKeyMap(keyLayout) {
     const isUKlayout = detectKeyboardLayout() === "UK";
     const keys2 = [];
