@@ -48,7 +48,8 @@ export class KeyboardSetup {
         const alt = { alt: true, ctrl: false };
         const runners = {
             toggleDebugger: () => actions.toggleDebugger(),
-            togglePause: () => (keyboard.pauseEmu ? keyboard.resumeEmulation() : keyboard.pauseEmulation()),
+            // `running` is pushed in from the loop, so it stays true whatever stopped the machine.
+            togglePause: () => (keyboard.running ? keyboard.pauseEmulation() : keyboard.resumeEmulation()),
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
             openRewind: () => actions.openRewind(),

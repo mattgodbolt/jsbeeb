@@ -128,11 +128,17 @@ keyboard produces, so a `@` gives a `@` and a `*` gives a `*`, again whatever yo
 holds shift for a different set of characters than a PC does, which this deals with: `^` is
 unshifted on a BBC and `"` is shifted, and you do not have to know that.
 
+Two keys are exceptions, because characters alone cannot settle them. The BBC has no backtick and
+most keyboards cannot type a `£` at all, so the key that would print a backtick gives a `£`
+instead. And the Master's numeric keypad is a separate set of keys from the digits above the
+letters, which the characters cannot tell apart, so the keypad goes by position.
+
 **Gaming** moves the BBC keys that a PC keyboard handles badly. Its main job is the BBC's `CAPS LOCK`
 and `CTRL`, which sit side by side and which many games use for left and right: Zalaga and Hunchback
 both do. On a PC those two are a row apart and diagonal, so this layout puts them on the left `Ctrl`
-and left `Alt` instead, which are side by side under one hand. The cost is that `Alt` and a number,
-which is an accessibility switch, does nothing while this layout is chosen.
+and left `Alt` instead, which are side by side under one hand. The cost is that jsbeeb's own `Alt`
+shortcuts win over those keys, so while this layout is chosen you cannot hold the BBC's `CTRL` and
+press a letter or digit that jsbeeb has claimed.
 
 Whichever you choose, a `KEY.` parameter overrides individual keys on top of it, and survives
 changing layout.

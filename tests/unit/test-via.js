@@ -462,6 +462,24 @@ describe("SysVia natural keyboard shift override", () => {
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
     });
 
+    it("leaves shift alone for the space bar, which prints the same either way", () => {
+        via.keyDown(" ", true);
+        via.keyDown(keyCodes.SHIFT_LEFT, true);
+
+        expect(bbcKeyPressed(BBC.SPACE)).toBe(true);
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
+    });
+
+    it("leaves shift alone when the host is already holding what the BBC wants", () => {
+        // A `"` is shifted on both, so nothing needs correcting and nothing else should suffer.
+        via.keyDown(keyCodes.SHIFT_LEFT, true);
+        via.keyDown('"', true);
+        via.keyDown("A", true);
+
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
+        expect(bbcKeyPressed(BBC.A)).toBe(true);
+    });
+
     it("asks for no shift either way for a plain digit", () => {
         via.keyDown("6", false);
         expect(bbcKeyPressed(BBC.K6)).toBe(true);

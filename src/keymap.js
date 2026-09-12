@@ -122,6 +122,9 @@ export const BBC = {
  */
 const IsLetter = /^[A-Za-z]$/;
 
+/** BBC keys that print the same thing either way, so holding one must not disturb shift. */
+const ShiftMakesNoDifference = new Set([BBC.SPACE]);
+
 /** Every character a keyboard might produce that the BBC can print, for building the natural layout. */
 const PrintableCharacters = (() => {
     const chars = ["\u00a3"];
@@ -492,13 +495,24 @@ export function getKeyMap(keyLayout) {
         // Keyed by the character the host keyboard produces, not by where a key sits, so the
         // host's own layout never has to be guessed: press whatever gives a `@` and the BBC
         // gets a `@`. The BBC holds shift for a different set of characters than a PC does,
-        // so every non-letter says which shift state it needs. Letters take their case from
-        // the shift key as usual.
-        for (const char of PrintableCharacters) {
+        // so a key says which shift state it needs when that differs from the one being held.
+        const mapCharacter = (hostKey, char) => {
             const needs = bbcKeyForCharacter(char);
-            if (!needs) continue;
-            map(char, IsLetter.test(char) ? needs.key : withShiftOverride(needs.key, needs.shift));
-        }
+            if (!needs) return;
+            for (const shiftDown of [false, true]) {
+                // Overriding when the two already agree would take shift away from everything
+                // else held at the same time, and letters want the shift key as it is anyway.
+                const disagrees =
+                    needs.shift !== shiftDown && !IsLetter.test(char) && !ShiftMakesNoDifference.has(needs.key);
+                map(hostKey, disagrees ? withShiftOverride(needs.key, needs.shift) : needs.key, shiftDown);
+            }
+        };
+
+        for (const char of PrintableCharacters) mapCharacter(char, char);
+
+        // The BBC has no backtick, and a US or Dvorak keyboard cannot type a pound sign at all,
+        // so the key that would print one gives the pound sign instead.
+        mapCharacter(keyCodes.BACK_QUOTE, "\u00a3");
 
         // Keys that print nothing are still known by where they are.
         map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
