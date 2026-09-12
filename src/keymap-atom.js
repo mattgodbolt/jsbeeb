@@ -425,6 +425,7 @@ export function getKeyMapAtom(keyLayout) {
         // UP/DOWN/LEFT/RIGHT are using arrow keys
         // REPT is using RIGHT_SHIFT
         // note: LOCK is on LEFT_ALT
+        map(keyCodes.HOME, ATOM.LOCK);
         map(keyCodes.K1, ATOM.K1);
         map(keyCodes.K2, ATOM.K2);
         map(keyCodes.K3, ATOM.K3);

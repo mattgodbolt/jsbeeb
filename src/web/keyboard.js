@@ -156,7 +156,8 @@ export class Keyboard extends EventTarget {
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
             evt.preventDefault();
-            handler.handler(true, code, evt.shiftKey);
+            // Auto-repeat would toggle a shortcut over and over while the key is simply held.
+            if (!evt.repeat) handler.handler(true, code, evt.shiftKey);
             return;
         }
 

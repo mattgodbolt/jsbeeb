@@ -7,8 +7,8 @@ import { domFromIndexHtml, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
-const keyEvent = (type, code, { alt = false, ctrl = false, shift = false } = {}) =>
-    new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, cancelable: true });
+const keyEvent = (type, code, { alt = false, ctrl = false, shift = false, repeat = false } = {}) =>
+    new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, repeat, cancelable: true });
 
 const pasteEvent = (text) => {
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -102,6 +102,14 @@ describe("KeyboardSetup", () => {
             expect(actions.openMedia).toHaveBeenLastCalledWith("tape");
             expect(actions.openMedia).toHaveBeenCalledTimes(3);
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+        });
+
+        it("fires once however long the key is held", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+
+            expect(actions.toggleDebugger).toHaveBeenCalledTimes(1);
         });
 
         it("does nothing without the modifier", () => {
