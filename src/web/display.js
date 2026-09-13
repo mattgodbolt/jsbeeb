@@ -32,7 +32,7 @@ export class Display {
         this.paintMsThisTick = 0;
         this.presentMsMax = 0;
         this.presentScheduled = false;
-        this.pendingPresent = false;
+        this.presented = true;
 
         this.filterClass = canvasLib.getFilterForMode(mode);
         // Each mode says how many pixels it wants to draw into. Set this before
@@ -42,8 +42,10 @@ export class Display {
         this.reportAnyFallback(this.filterClass);
         this.filterClass = this.canvas.filterClass;
 
-        // The emulator paints into its own framebuffer; flyback copies the
-        // finished frame into the canvas and an animation frame presents it.
+        // The emulator paints into its own framebuffer and flyback copies the
+        // finished frame into the canvas. The loop presents it on its vsync tick;
+        // the animation frame asked for here covers paints while the loop is
+        // stopped.
         this.videoFb32 = new Uint32Array(this.canvas.fb32.length);
         this.pendingFrame = {
             minx: 0,
@@ -100,18 +102,20 @@ export class Display {
             lineBaseOdd: video.lineBaseOdd,
         });
         this.paintMsThisTick += performance.now() - start;
-        this.pendingPresent = true;
+        this.presented = false;
         if (!this.presentScheduled) {
             this.presentScheduled = true;
-            window.requestAnimationFrame(() => this.present());
+            window.requestAnimationFrame(() => {
+                this.presentScheduled = false;
+                this.present();
+            });
         }
     }
 
     /** Draws the frame painted since the last present, if there is one; the loop calls this on every vsync. */
     present() {
-        this.presentScheduled = false;
-        if (!this.pendingPresent) return;
-        this.pendingPresent = false;
+        if (this.presented) return;
+        this.presented = true;
         const start = performance.now();
         const { minx, miny, maxx, maxy } = this.pendingFrame;
         this.canvas.paint(minx, miny, maxx, maxy, this.pendingFrame);

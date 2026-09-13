@@ -110,10 +110,21 @@ describe("EmulationLoop", () => {
             started();
             vi.advanceTimersByTime(10);
             const vsyncTime = performance.now() + 5;
+            vi.advanceTimersByTime(7);
             vsync(vsyncTime);
             expect(cyclesExecuted().at(-1)).toBe((5 * ClocksPerSecond) / 1000);
             expect(deps.display.present).toHaveBeenCalledWith(vsyncTime);
             expect(vsyncCallbacks).toHaveLength(1);
+        });
+
+        it("times the run from when the callback ran, not from the vsync", () => {
+            const loop = started();
+            const update = vi.spyOn(loop.virtualSpeedUpdater, "update");
+            vi.advanceTimersByTime(10);
+            const vsyncTime = performance.now() + 5;
+            vi.advanceTimersByTime(7);
+            vsync(vsyncTime);
+            expect(update).toHaveBeenLastCalledWith((5 * ClocksPerSecond) / 1000, 0, false);
         });
 
         it("presents but emulates nothing for a vsync a timer tick has already passed", () => {
