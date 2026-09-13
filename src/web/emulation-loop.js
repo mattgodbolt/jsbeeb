@@ -1,7 +1,8 @@
 import { noteEvent } from "./analytics.js";
 
-// The timer, not the vsync tick, is what keeps the sound chip fed: a display
-// presentation stall withholds animation frames (issue #885).
+// The machine runs in short slices of real time on a timer, whatever the
+// display is doing (issue #885). Audio gains most from the fine grain: its
+// queue need only cover a slice.
 const TickMs = 10;
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
