@@ -90,6 +90,29 @@ describe("Display", () => {
         expect(fakeCanvas.paint.mock.calls.map((call) => call[1])).toEqual([20, 30]);
     });
 
+    it("skips a waiting frame older than a frame period when a newer one waits", () => {
+        const display = make();
+        const now = vi.spyOn(performance, "now");
+        now.mockReturnValue(1000);
+        display.onPaint(paintedFrom(), 0, 10, FbWidth, 15);
+        now.mockReturnValue(1005);
+        display.onPaint(paintedFrom(), 0, 20, FbWidth, 25);
+        now.mockReturnValue(1030);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.map((call) => call[1])).toEqual([20]);
+        expect(rafCallbacks).toHaveLength(0);
+    });
+
+    it("shows a lone old frame rather than nothing", () => {
+        const display = make();
+        const now = vi.spyOn(performance, "now");
+        now.mockReturnValue(1000);
+        display.onPaint(paintedFrom(), 0, 10, FbWidth, 15);
+        now.mockReturnValue(2000);
+        presentAll();
+        expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
+    });
+
     it("reuses frame buffers rather than allocating one per paint", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);

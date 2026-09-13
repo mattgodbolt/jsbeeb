@@ -13,6 +13,11 @@ const SpeedyFrameSkip = 9;
 // two, a frame behind where a newest-wins presenter would be.
 const MaxQueuedFrames = 2;
 
+// One frame period. A waiting frame older than this is skipped when a newer
+// one waits behind it, so a display slower than the machine, a stall or a hold
+// never ends in stale frames shown one per refresh.
+const StaleFrameMs = 20;
+
 /**
  * The picture: the canvas and its filter, the video chip that paints into a
  * framebuffer of our own, and the animation frame that presents it. A stalled
@@ -99,6 +104,7 @@ export class Display {
             maxy,
             lineBaseEven: video.lineBaseEven,
             lineBaseOdd: video.lineBaseOdd,
+            paintedAt: start,
         });
         this.frameQueue.push(frame);
         if (this.frameQueue.length > MaxQueuedFrames) this.freeFrames.push(this.frameQueue.shift());
@@ -111,9 +117,11 @@ export class Display {
 
     present() {
         this.presentScheduled = false;
+        const start = performance.now();
+        while (this.frameQueue.length > 1 && start - this.frameQueue[0].paintedAt > StaleFrameMs)
+            this.freeFrames.push(this.frameQueue.shift());
         const frame = this.frameQueue.shift();
         if (!frame) return;
-        const start = performance.now();
         const { minx, miny, maxx, maxy } = frame;
         this.canvas.fb32.set(frame.fb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
         this.canvas.paint(minx, miny, maxx, maxy, frame);
