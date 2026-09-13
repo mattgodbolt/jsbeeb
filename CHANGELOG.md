@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.0...v2.0.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* book each emulation tick from the previous due time rather than from now ([#1136](https://github.com/mattgodbolt/jsbeeb/issues/1136)) ([1476715](https://github.com/mattgodbolt/jsbeeb/commit/1476715fc7a7fe2172aafbc5bb7f717d8cd13e5e))
+* run the machine up to each vsync and present in the same callback ([#1137](https://github.com/mattgodbolt/jsbeeb/issues/1137)) ([d74d904](https://github.com/mattgodbolt/jsbeeb/commit/d74d9043e83b981a4a3fe1d621f309e8bf083a9c))
+
 ## [2.0.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.27.1...v2.0.0) (2026-09-13)
 
 
