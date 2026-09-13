@@ -8,11 +8,14 @@ const ClocksPerSecond = 2000000;
 
 describe("EmulationLoop", () => {
     let deps;
+    let vsyncCallbacks;
 
     beforeEach(() => {
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
         // Move off zero: the loop uses last === 0 to mean "first tick".
         vi.advanceTimersByTime(1000);
+        vsyncCallbacks = [];
+        vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => vsyncCallbacks.push(callback));
         domFromIndexHtml("leds");
         deps = {
             processor: {
@@ -29,6 +32,7 @@ describe("EmulationLoop", () => {
                 setSpeedy: vi.fn(),
                 takePaintMs: vi.fn(() => 0),
                 takePresentMs: vi.fn(() => 0),
+                present: vi.fn(),
                 frameSkip: 0,
             },
             audioHandler: {
@@ -97,6 +101,57 @@ describe("EmulationLoop", () => {
         vi.spyOn(performance, "now").mockReturnValue(afterTheStall);
         loop.tick();
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 10);
+    });
+
+    const vsync = (time) => vsyncCallbacks.pop()(time);
+
+    describe("on a vsync", () => {
+        it("runs the machine up to the vsync and presents in the same callback", () => {
+            started();
+            vi.advanceTimersByTime(10);
+            const vsyncTime = performance.now() + 5;
+            vi.advanceTimersByTime(7);
+            vsync(vsyncTime);
+            expect(cyclesExecuted().at(-1)).toBe((5 * ClocksPerSecond) / 1000);
+            expect(deps.display.present).toHaveBeenCalledWith(vsyncTime);
+            expect(vsyncCallbacks).toHaveLength(1);
+        });
+
+        it("times the run from when the callback ran, not from the vsync", () => {
+            const loop = started();
+            const update = vi.spyOn(loop.virtualSpeedUpdater, "update");
+            vi.advanceTimersByTime(10);
+            const vsyncTime = performance.now() + 5;
+            vi.advanceTimersByTime(7);
+            vsync(vsyncTime);
+            expect(update).toHaveBeenLastCalledWith((5 * ClocksPerSecond) / 1000, 0, false);
+        });
+
+        it("presents but emulates nothing for a vsync a timer tick has already passed", () => {
+            started();
+            vi.advanceTimersByTime(10);
+            const executed = cyclesExecuted().length;
+            vsync(performance.now() - 5);
+            expect(cyclesExecuted().length).toBe(executed);
+            expect(deps.display.present).toHaveBeenCalledTimes(1);
+        });
+
+        it("emulates nothing while going as fast as possible", () => {
+            const loop = started();
+            loop.toggleFastAsPossible();
+            vi.advanceTimersByTime(10);
+            const executed = cyclesExecuted().length;
+            vsync(performance.now() + 5);
+            expect(cyclesExecuted().length).toBe(executed);
+        });
+
+        it("lets go of the vsyncs once stopped", () => {
+            const loop = started();
+            loop.stop(false);
+            vsync(performance.now() + 5);
+            expect(deps.display.present).not.toHaveBeenCalled();
+            expect(vsyncCallbacks).toHaveLength(0);
+        });
     });
 
     it("books each tick from the previous one's due time, so a late tick shortens the next wait", () => {

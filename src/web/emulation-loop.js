@@ -1,7 +1,8 @@
 import { noteEvent } from "./analytics.js";
 
-// A timer, not requestAnimationFrame: a display presentation stall withholds
-// animation frames, and with them the sound chip's samples (issue #885).
+// The machine runs in short slices of real time on a timer, whatever the
+// display is doing (issue #885). Audio gains most from the fine grain: its
+// queue need only cover a slice.
 const TickMs = 10;
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
@@ -51,12 +52,12 @@ class VirtualSpeedUpdater {
  * Runs the machine in real time: the tick that turns wall-clock time into
  * cycles, starting and stopping, the audio lead, fast-forward and the speed
  * readout. Owns `running`, and dispatches a "running" event whenever it
- * changes hands, "tick" on every tick while running (the first only takes the
- * time), and "rewind-capture" every RewindCaptureInterval frames for whoever
- * keeps the rewind history. Anything that needs the machine held still while
- * it works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a
- * `pause()`; the loop runs again once every hold has let go, provided the user
- * still wants it running.
+ * changes hands, "tick" on every timer tick and on every vsync that runs the
+ * machine (the first tick only takes the time), and "rewind-capture" every
+ * RewindCaptureInterval frames for whoever keeps the rewind history. Anything
+ * that needs the machine held still while it works (a dialog, a snapshot, the
+ * rewind panel, a hidden tab) takes a `pause()`; the loop runs again once every
+ * hold has let go, provided the user still wants it running.
  */
 export class EmulationLoop extends EventTarget {
     constructor({
@@ -86,10 +87,11 @@ export class EmulationLoop extends EventTarget {
 
         this.running = false;
         this.fastAsPossible = false;
-        this.last = 0;
+        this.emulatedTo = 0;
         this.lastEnd = 0;
         this.nextTickDue = 0;
         this.tickToken = null;
+        this.vsyncToken = null;
         this.emulationLeadMs = 0;
         this.rewindCycleCounter = 0;
         this.wanted = false;
@@ -154,6 +156,7 @@ export class EmulationLoop extends EventTarget {
     run() {
         this.nextTickDue = 0;
         this.scheduleTick(0);
+        this.scheduleVsyncTick();
     }
 
     toggleFastAsPossible() {
@@ -171,38 +174,59 @@ export class EmulationLoop extends EventTarget {
         else window.setTimeout(fire, delayMs);
     }
 
-    // Each tick is booked from the previous one's due time rather than from now,
-    // so the period averages TickMs however late the ticks run and their phase
-    // against the emulated frame stays put. A tick a whole period late (a stall,
-    // a hold, a hidden tab) starts a fresh schedule instead of a burst of
-    // immediate ticks.
+    // Booked from the previous due time, not from now, so the period averages
+    // TickMs and a flyback lands at the same point of a tick every frame. A tick
+    // a whole period late starts afresh rather than a burst of catch-up ticks.
     nextTickDelay(now) {
         if (now - this.nextTickDue > TickMs) this.nextTickDue = now;
         this.nextTickDue += TickMs;
         return this.nextTickDue - now;
     }
 
+    scheduleVsyncTick() {
+        const token = (this.vsyncToken = {});
+        window.requestAnimationFrame((vsyncTime) => {
+            if (this.vsyncToken !== token || !this.running) return;
+            this.scheduleVsyncTick();
+            this.vsyncTick(vsyncTime);
+        });
+    }
+
+    // Emulates up to the vsync and presents at once, so a flyback is shown at the
+    // first vsync after it; two share a refresh only if a timer tick reached the
+    // next flyback before this callback ran.
+    vsyncTick(vsyncTime) {
+        // While speedy the timer ticks run flat out.
+        if (this.emulatedTo !== 0 && !this.isSpeedy() && vsyncTime > this.emulatedTo) this.advance(vsyncTime, false);
+        this.display.present(vsyncTime);
+    }
+
+    isSpeedy() {
+        return this.fastAsPossible || (this.fastTape && this.processor.tapeInterface.motorOn);
+    }
+
     tick() {
         if (!this.running) {
-            this.last = 0;
+            this.emulatedTo = 0;
             return;
         }
         const now = performance.now();
-
-        const { processor, display, audioHandler } = this;
-        const motorOn = processor.tapeInterface.motorOn;
-        const speedy = this.fastAsPossible || (this.fastTape && motorOn);
-
-        display.setSpeedy(speedy);
-
+        const speedy = this.isSpeedy();
+        this.display.setSpeedy(speedy);
         this.scheduleTick(speedy ? 0 : this.nextTickDelay(now));
+        this.advance(now, speedy);
+    }
 
+    advance(now, speedy) {
+        // now can be a vsync timestamp, before this ran; the timings use start.
+        const start = performance.now();
+        const { processor, display, audioHandler } = this;
         this.gamepad.update(processor.sysvia);
         this.dispatchEvent(new Event("tick"));
-        if (this.last !== 0) {
+        if (this.emulatedTo !== 0) {
             let cycles;
             if (!speedy) {
-                const sinceLast = Math.max(0, now - this.last);
+                const sinceLast = Math.max(0, now - this.emulatedTo);
                 cycles = (sinceLast * this.clocksPerSecond) / 1000;
                 cycles = Math.min(cycles, this.maxCyclesPerTick);
             } else {
@@ -215,7 +239,7 @@ export class EmulationLoop extends EventTarget {
                 }
                 audioHandler.flushChipEvents();
                 const end = performance.now();
-                this.virtualSpeedUpdater.update(cycles, end - now, speedy);
+                this.virtualSpeedUpdater.update(cycles, end - start, speedy);
                 const paintMs = display.takePaintMs();
                 let snapshotMs = 0;
                 this.rewindCycleCounter += cycles;
@@ -226,10 +250,10 @@ export class EmulationLoop extends EventTarget {
                 }
                 if (this.audioStatsNode)
                     this.logAudioDebugTick(
-                        now,
+                        start,
                         cycles,
-                        speedy ? 0 : now - this.lastEnd,
-                        end - now,
+                        speedy ? 0 : start - this.lastEnd,
+                        end - start,
                         paintMs,
                         snapshotMs,
                     );
@@ -243,13 +267,13 @@ export class EmulationLoop extends EventTarget {
                 this.stop(false);
             }
         }
-        this.last = Math.max(this.last, now);
+        this.emulatedTo = Math.max(this.emulatedTo, now);
         this.lastEnd = performance.now();
     }
 
     // A change of audio buffer depth is taken by the picture, not the sound:
-    // gaining lead emulates ahead at once; losing it moves `last` forward so the
-    // ticks emulate nothing until the queue has drained by that much.
+    // gaining lead emulates ahead at once; losing it moves `emulatedTo` forward
+    // so the ticks emulate nothing until the queue has drained by that much.
     setEmulationLead(leadMs) {
         if (!this.running) return;
         const aheadMs = leadMs - this.emulationLeadMs;
@@ -258,7 +282,7 @@ export class EmulationLoop extends EventTarget {
             if (!this.processor.execute((aheadMs * this.clocksPerSecond) / 1000)) this.stop(true);
             this.audioHandler.flushChipEvents();
         } else {
-            this.last -= aheadMs;
+            this.emulatedTo -= aheadMs;
         }
     }
 
