@@ -239,7 +239,7 @@ export class TestMachine {
 
     /**
      * Press a key on the keyboard.
-     * @param {number} code - key code (BBC keyCode or Atom raw key)
+     * @param {string} code - the host key by physical position, as `keyCodes` in keymap.js names it
      */
     keyDown(code) {
         this._keyInterface.keyDown(code);
@@ -247,7 +247,7 @@ export class TestMachine {
 
     /**
      * Release a key on the keyboard.
-     * @param {number} code - key code
+     * @param {string} code - the host key by physical position
      */
     keyUp(code) {
         this._keyInterface.keyUp(code);

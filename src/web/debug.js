@@ -478,7 +478,7 @@ export class Debugger {
         if (document.activeElement && document.activeElement !== document.body) {
             return false;
         }
-        switch (String.fromCharCode(key)) {
+        switch (key) {
             case "b":
                 if (this.disassStack.length) this.updateDisassembly(this.disassStack.pop());
                 break;

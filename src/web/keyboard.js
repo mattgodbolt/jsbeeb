@@ -38,75 +38,20 @@ export class Keyboard extends EventTarget {
         this.stepEmuWhenPaused = false;
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
-
-        // Modifier key states
-        this.lastShiftLocation = 1;
-        this.lastCtrlLocation = 1;
-        this.lastAltLocation = 1;
     }
 
     /**
-     * Translates a keyboard event to a BBC key code
+     * The host key a keyboard event came from, by physical position.
      * @param {KeyboardEvent} evt - The keyboard event
-     * @returns {number} - The BBC key code
+     * @returns {string} - A `KeyboardEvent.code` name
      */
     keyCode(evt) {
-        const ret = evt.which || evt.charCode || evt.keyCode;
-
-        switch (evt.location) {
-            default:
-                // keyUp events seem to pass location = 0 (Chrome)
-                switch (ret) {
-                    case keyCodes.SHIFT:
-                        return this.lastShiftLocation === 1 ? keyCodes.SHIFT_LEFT : keyCodes.SHIFT_RIGHT;
-                    case keyCodes.ALT:
-                        return this.lastAltLocation === 1 ? keyCodes.ALT_LEFT : keyCodes.ALT_RIGHT;
-                    case keyCodes.CTRL:
-                        return this.lastCtrlLocation === 1 ? keyCodes.CTRL_LEFT : keyCodes.CTRL_RIGHT;
-                }
-                break;
-            case 1:
-                switch (ret) {
-                    case keyCodes.SHIFT:
-                        this.lastShiftLocation = 1;
-                        return keyCodes.SHIFT_LEFT;
-                    case keyCodes.ALT:
-                        this.lastAltLocation = 1;
-                        return keyCodes.ALT_LEFT;
-                    case keyCodes.CTRL:
-                        this.lastCtrlLocation = 1;
-                        return keyCodes.CTRL_LEFT;
-                }
-                break;
-            case 2:
-                switch (ret) {
-                    case keyCodes.SHIFT:
-                        this.lastShiftLocation = 2;
-                        return keyCodes.SHIFT_RIGHT;
-                    case keyCodes.ALT:
-                        this.lastAltLocation = 2;
-                        return keyCodes.ALT_RIGHT;
-                    case keyCodes.CTRL:
-                        this.lastCtrlLocation = 2;
-                        return keyCodes.CTRL_RIGHT;
-                }
-                break;
-            case 3: // numpad
-                switch (ret) {
-                    case keyCodes.ENTER:
-                        return keyCodes.NUMPADENTER;
-                    case keyCodes.DELETE:
-                        return keyCodes.NUMPAD_DECIMAL_POINT;
-                }
-                break;
-        }
-
-        return ret;
+        return evt.code;
     }
 
     /**
      * Registers a handler for a specific key with optional modifiers
-     * @param {number} keyCode - The key code to handle
+     * @param {string} keyCode - The host key, by physical position
      * @param {Function} handler - Called as (down, code, shiftKey) on the way down and up
      * @param {Object} [options] - Options for this handler
      * @param {boolean} [options.alt=true] - Whether this handler requires the Alt key
@@ -142,7 +87,7 @@ export class Keyboard extends EventTarget {
 
     /**
      * Find a matching key handler for the given key event
-     * @param {number} keyCode - The key code
+     * @param {string} keyCode - The host key, by physical position
      * @param {boolean} altKey - Whether Alt is pressed
      * @param {boolean} ctrlKey - Whether Ctrl is pressed
      * @returns {Object|null} The handler object or null if none found
@@ -163,19 +108,16 @@ export class Keyboard extends EventTarget {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyPress(evt) {
-        // Common key constants
-        const LOWERCASE_G = 103;
-        const LOWERCASE_N = 110;
-
         // Early returns for common scenarios
         // Check if input is enabled. If inputEnabledFunction returns true, keyboard events should not be processed.
         if (this.inputEnabledFunction()) return;
         if (this.running || (!this.dbgr.enabled() && !this.pauseEmu)) return;
 
-        const code = this.keyCode(evt);
+        // The debugger's keys are the characters they print, not positions.
+        const key = evt.key;
 
         // Handle debugger 'g' key press
-        if (this.dbgr.enabled() && code === LOWERCASE_G) {
+        if (this.dbgr.enabled() && key === "g") {
             this.dbgr.hide();
             this.dispatchEvent(new Event("resume"));
             return;
@@ -183,10 +125,10 @@ export class Keyboard extends EventTarget {
 
         // Handle pause/step control keys
         if (this.pauseEmu) {
-            if (code === LOWERCASE_G) {
+            if (key === "g") {
                 this.resumeEmulation();
                 return;
-            } else if (code === LOWERCASE_N) {
+            } else if (key === "n") {
                 this.requestStep();
                 this.dispatchEvent(new Event("resume"));
                 return;
@@ -195,7 +137,7 @@ export class Keyboard extends EventTarget {
 
         // Pass any other keys to the debugger if it's enabled
         if (this.dbgr.enabled()) {
-            const handled = this.dbgr.keyPress(this.keyCode(evt));
+            const handled = this.dbgr.keyPress(key);
             if (handled) evt.preventDefault();
         }
     }
@@ -236,7 +178,7 @@ export class Keyboard extends EventTarget {
 
     /**
      * Handle special keys that must remain in keyboard.js
-     * @param {number} code - The key code
+     * @param {string} code - The host key, by physical position
      * @returns {boolean} True if the key was handled specially
      * @private
      */

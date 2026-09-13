@@ -1,4 +1,9 @@
-import { BBC, isFirefox } from "../keymap.js";
+import { BBC } from "../keymap.js";
+
+function isFirefox() {
+    // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
+    return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
+}
 
 export class GamePad {
     constructor() {

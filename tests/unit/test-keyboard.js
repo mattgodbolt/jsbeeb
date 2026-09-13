@@ -69,66 +69,17 @@ describe("Keyboard", () => {
         expect(keyboard).toBeDefined();
     });
 
-    test("keyCode should handle location properly", () => {
-        // Test SHIFT key
-        const shiftEvent = { which: keyCodes.SHIFT, location: 1 };
-        expect(keyboard.keyCode(shiftEvent)).toBe(keyCodes.SHIFT_LEFT);
-
-        const shiftEvent2 = { which: keyCodes.SHIFT, location: 2 };
-        expect(keyboard.keyCode(shiftEvent2)).toBe(keyCodes.SHIFT_RIGHT);
-
-        // Test CTRL key
-        const ctrlEvent = { which: keyCodes.CTRL, location: 1 };
-        expect(keyboard.keyCode(ctrlEvent)).toBe(keyCodes.CTRL_LEFT);
-
-        const ctrlEvent2 = { which: keyCodes.CTRL, location: 2 };
-        expect(keyboard.keyCode(ctrlEvent2)).toBe(keyCodes.CTRL_RIGHT);
-
-        // Test ALT key
-        const altEvent = { which: keyCodes.ALT, location: 1 };
-        expect(keyboard.keyCode(altEvent)).toBe(keyCodes.ALT_LEFT);
-
-        const altEvent2 = { which: keyCodes.ALT, location: 2 };
-        expect(keyboard.keyCode(altEvent2)).toBe(keyCodes.ALT_RIGHT);
-
-        // Test numpad
-        const enterEvent = { which: keyCodes.ENTER, location: 3 };
-        expect(keyboard.keyCode(enterEvent)).toBe(keyCodes.NUMPADENTER);
-
-        const deleteEvent = { which: keyCodes.DELETE, location: 3 };
-        expect(keyboard.keyCode(deleteEvent)).toBe(keyCodes.NUMPAD_DECIMAL_POINT);
-
-        // Test normal key
-        const normalEvent = { which: keyCodes.A, location: 0 };
-        expect(keyboard.keyCode(normalEvent)).toBe(keyCodes.A);
-    });
-
-    test("keyCode should remember last modifier key locations", () => {
-        // First, set modifier locations to known values
-        keyboard.keyCode({ which: keyCodes.SHIFT, location: 1 });
-        keyboard.keyCode({ which: keyCodes.CTRL, location: 1 });
-        keyboard.keyCode({ which: keyCodes.ALT, location: 1 });
-
-        // When location = 0 (like in keyUp events), should return based on last location
-        expect(keyboard.keyCode({ which: keyCodes.SHIFT, location: 0 })).toBe(keyCodes.SHIFT_LEFT);
-        expect(keyboard.keyCode({ which: keyCodes.CTRL, location: 0 })).toBe(keyCodes.CTRL_LEFT);
-        expect(keyboard.keyCode({ which: keyCodes.ALT, location: 0 })).toBe(keyCodes.ALT_LEFT);
-
-        // Change the locations to right side
-        keyboard.keyCode({ which: keyCodes.SHIFT, location: 2 });
-        keyboard.keyCode({ which: keyCodes.CTRL, location: 2 });
-        keyboard.keyCode({ which: keyCodes.ALT, location: 2 });
-
-        // Should now use the updated locations
-        expect(keyboard.keyCode({ which: keyCodes.SHIFT, location: 0 })).toBe(keyCodes.SHIFT_RIGHT);
-        expect(keyboard.keyCode({ which: keyCodes.CTRL, location: 0 })).toBe(keyCodes.CTRL_RIGHT);
-        expect(keyboard.keyCode({ which: keyCodes.ALT, location: 0 })).toBe(keyCodes.ALT_RIGHT);
+    test("keyCode is the physical position the event came from", () => {
+        expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
+        expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);
+        expect(keyboard.keyCode({ code: "NumpadEnter" })).toBe(keyCodes.NUMPADENTER);
+        expect(keyboard.keyCode({ code: "NumpadDecimal" })).toBe(keyCodes.NUMPAD_DECIMAL_POINT);
+        expect(keyboard.keyCode({ code: "KeyA" })).toBe(keyCodes.A);
     });
 
     test("keyDown should handle normal key press", () => {
         const event = {
-            which: keyCodes.A,
-            location: 0,
+            code: keyCodes.A,
             preventDefault: vi.fn(),
             ctrlKey: false,
             altKey: false,
@@ -144,8 +95,7 @@ describe("Keyboard", () => {
 
     test("keyDown should not handle keys when not running", () => {
         const event = {
-            which: keyCodes.A,
-            location: 0,
+            code: keyCodes.A,
             preventDefault: vi.fn(),
             ctrlKey: false,
             altKey: false,
@@ -160,8 +110,7 @@ describe("Keyboard", () => {
 
     test("keyDown should not handle keys when input is enabled", () => {
         const event = {
-            which: keyCodes.A,
-            location: 0,
+            code: keyCodes.A,
             preventDefault: vi.fn(),
             ctrlKey: false,
             altKey: false,
@@ -180,8 +129,7 @@ describe("Keyboard", () => {
 
     test("keyDown should handle F12/BREAK and emit break event", async () => {
         const event = {
-            which: keyCodes.F12,
-            location: 0,
+            code: keyCodes.F12,
             preventDefault: vi.fn(),
             ctrlKey: false,
             altKey: false,
@@ -201,8 +149,7 @@ describe("Keyboard", () => {
 
     test("keyUp should call sysvia.keyUp", () => {
         const event = {
-            which: keyCodes.A,
-            location: 0,
+            code: keyCodes.A,
             preventDefault: vi.fn(),
             altKey: false,
         };
@@ -216,8 +163,7 @@ describe("Keyboard", () => {
 
     test("keyUp still releases the key when input is enabled, but leaves the event to the page", () => {
         const event = {
-            which: keyCodes.A,
-            location: 0,
+            code: keyCodes.A,
             preventDefault: vi.fn(),
             altKey: false,
         };
@@ -233,8 +179,7 @@ describe("Keyboard", () => {
 
     test("keyUp should handle F12/BREAK and emit break event", async () => {
         const event = {
-            which: keyCodes.F12,
-            location: 0,
+            code: keyCodes.F12,
             preventDefault: vi.fn(),
             altKey: false,
         };
@@ -262,8 +207,7 @@ describe("Keyboard", () => {
 
     test("keyPress should not proceed when input is enabled", () => {
         const event = {
-            which: 103, // lowercase g key
-            location: 0,
+            key: "g",
             preventDefault: vi.fn(),
         };
 
@@ -283,8 +227,7 @@ describe("Keyboard", () => {
 
     test("keyPress should emit resume event when lowercase g pressed in pause mode", async () => {
         const event = {
-            which: 103, // lowercase g key
-            location: 0,
+            key: "g",
             preventDefault: vi.fn(),
         };
 
@@ -299,8 +242,7 @@ describe("Keyboard", () => {
 
     test("keyPress should handle debugger g key and emit resume event", async () => {
         const event = {
-            which: 103, // lowercase g key
-            location: 0,
+            key: "g",
             preventDefault: vi.fn(),
         };
 
@@ -324,8 +266,7 @@ describe("Keyboard", () => {
         keyboard.registerKeyHandler(keyCodes.Q, mockHandler, { alt: true, ctrl: false });
 
         const event = {
-            which: keyCodes.Q,
-            location: 0,
+            code: keyCodes.Q,
             preventDefault: vi.fn(),
             ctrlKey: false,
             altKey: true,
@@ -346,8 +287,7 @@ describe("Keyboard", () => {
 
         keyboard.setRunning(true);
         keyboard.keyDown({
-            which: keyCodes.K1,
-            location: 0,
+            code: keyCodes.K1,
             preventDefault: vi.fn(),
             altKey: true,
             ctrlKey: false,
@@ -361,8 +301,7 @@ describe("Keyboard", () => {
     test("unhandled keys still reach sysvia.keyDown", () => {
         keyboard.setRunning(true);
         keyboard.keyDown({
-            which: keyCodes.A,
-            location: 0,
+            code: keyCodes.A,
             preventDefault: vi.fn(),
             altKey: false,
             ctrlKey: false,
@@ -377,8 +316,7 @@ describe("Keyboard", () => {
         keyboard.registerKeyHandler(keyCodes.E, mockHandler, { alt: false, ctrl: true });
 
         const event = {
-            which: keyCodes.E,
-            location: 0,
+            code: keyCodes.E,
             preventDefault: vi.fn(),
             ctrlKey: true,
             altKey: false,
@@ -413,8 +351,7 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
 
         const escEvent = {
-            which: keyCodes.ESCAPE,
-            location: 0,
+            code: keyCodes.ESCAPE,
             preventDefault: vi.fn(),
             altKey: false,
             ctrlKey: false,
@@ -524,16 +461,16 @@ describe("Keyboard Atom adapter", () => {
     });
 
     test("keyDown should route to PPIA, not SysVia", () => {
-        const evt = { which: 65, location: 0, shiftKey: false, altKey: false, ctrlKey: false, preventDefault: vi.fn() };
+        const evt = { code: "KeyA", shiftKey: false, altKey: false, ctrlKey: false, preventDefault: vi.fn() };
         keyboard.keyDown(evt);
-        expect(mockAtomPPIA.keyDown).toHaveBeenCalledWith(65, false);
+        expect(mockAtomPPIA.keyDown).toHaveBeenCalledWith("KeyA", false);
         expect(mockProcessor.sysvia.keyDown).not.toHaveBeenCalled();
     });
 
     test("keyUp should route to PPIA", () => {
-        const evt = { which: 65, location: 0, altKey: false, ctrlKey: false, preventDefault: vi.fn() };
+        const evt = { code: "KeyA", altKey: false, ctrlKey: false, preventDefault: vi.fn() };
         keyboard.keyUp(evt);
-        expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith(65);
+        expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith("KeyA");
     });
 
     test("setKeyLayout hands the layout to the processor", () => {

@@ -7,11 +7,8 @@ import { domFromIndexHtml, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
-const keyEvent = (type, which, { alt = false, ctrl = false, shift = false } = {}) => {
-    const event = new KeyboardEvent(type, { altKey: alt, ctrlKey: ctrl, shiftKey: shift, cancelable: true });
-    Object.defineProperty(event, "which", { value: which });
-    return event;
-};
+const keyEvent = (type, code, { alt = false, ctrl = false, shift = false } = {}) =>
+    new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, cancelable: true });
 
 const pasteEvent = (text) => {
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -157,11 +154,11 @@ describe("KeyboardSetup", () => {
 
         it("releases a key that was held while Alt-Shift-M moved focus into the window", () => {
             domFromIndexHtml("media-panel");
-            document.dispatchEvent(keyEvent("keydown", keyCodes.SHIFT, { shift: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.SHIFT_LEFT, { shift: true }));
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
             document.getElementById("media-search").focus();
             document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true, shift: true }));
-            document.dispatchEvent(keyEvent("keyup", keyCodes.SHIFT));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.SHIFT_LEFT));
             expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.M);
             expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.SHIFT_LEFT);
         });
