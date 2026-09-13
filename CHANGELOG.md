@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.27.1...v2.0.0) (2026-09-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* `MachineSession.keyDown` and `keyUp` take a `KeyboardEvent.code` name such as "ShiftLeft" rather than a numeric key code. Anything driving jsbeeb headlessly by key code, jsbeeb-mcp included, needs its key table changed to match.
+
+### Features
+
+* identify host keys by physical position, not by key code ([#1129](https://github.com/mattgodbolt/jsbeeb/issues/1129)) ([0bc934d](https://github.com/mattgodbolt/jsbeeb/commit/0bc934d2abb79f8c4842fad8d858c4b1f8ddf64e))
+* key the natural layout by what you type, not by where the key is ([#1132](https://github.com/mattgodbolt/jsbeeb/issues/1132)) ([bd4e8fb](https://github.com/mattgodbolt/jsbeeb/commit/bd4e8fb7e08839f673ac4bf5471ec8363694ee53))
+* put every jsbeeb shortcut on Alt, and give shift lock a home ([#1130](https://github.com/mattgodbolt/jsbeeb/issues/1130)) ([a887390](https://github.com/mattgodbolt/jsbeeb/commit/a88739046276f8b3b7767cdf2de97681cd049879))
+
 ## [1.27.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.27.0...v1.27.1) (2026-09-10)
 
 
