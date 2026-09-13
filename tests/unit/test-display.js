@@ -32,7 +32,7 @@ describe("Display", () => {
         });
         // The video chip paints once as it is built; the tests care about what
         // happens after that.
-        rafCallbacks.splice(0);
+        for (const callback of rafCallbacks.splice(0)) callback();
         display.presentScheduled = false;
         display.frames = 0;
         fakeCanvas?.paint.mockClear();
@@ -62,18 +62,41 @@ describe("Display", () => {
         expect(document.getElementById("cub-monitor-pic").src).toContain(config.image);
     });
 
-    it("coalesces paints into one present per animation frame", () => {
+    it("presents two paints that arrive before an animation frame one frame each, oldest first", () => {
         const display = make();
         display.videoFb32.fill(7);
         display.onPaint(paintedFrom(), 0, 10, FbWidth, 20);
+        display.videoFb32.fill(9);
         display.onPaint(paintedFrom(), 0, 30, FbWidth, 40);
         expect(fakeCanvas.paint).not.toHaveBeenCalled();
         expect(rafCallbacks).toHaveLength(1);
         presentAll();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
-        // The last frame's bounds win, and the pixels were copied over.
-        expect(fakeCanvas.paint).toHaveBeenCalledWith(0, 30, FbWidth, 40, display.pendingFrame);
-        expect(fakeCanvas.fb32[30 * FbWidth]).toBe(7);
+        expect(fakeCanvas.paint.mock.calls[0].slice(0, 4)).toEqual([0, 10, FbWidth, 20]);
+        expect(fakeCanvas.fb32[10 * FbWidth]).toBe(7);
+        expect(rafCallbacks).toHaveLength(1);
+        presentAll();
+        expect(fakeCanvas.paint).toHaveBeenCalledTimes(2);
+        expect(fakeCanvas.paint.mock.calls[1].slice(0, 4)).toEqual([0, 30, FbWidth, 40]);
+        expect(fakeCanvas.fb32[30 * FbWidth]).toBe(9);
+        expect(rafCallbacks).toHaveLength(0);
+    });
+
+    it("drops the oldest waiting frame when the display falls behind", () => {
+        const display = make();
+        for (const miny of [10, 20, 30]) display.onPaint(paintedFrom(), 0, miny, FbWidth, miny + 5);
+        presentAll();
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.map((call) => call[1])).toEqual([20, 30]);
+    });
+
+    it("reuses frame buffers rather than allocating one per paint", () => {
+        const display = make();
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        presentAll();
+        const [recycled] = display.freeFrames;
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        expect(display.frameQueue[0].fb32 === recycled.fb32).toBe(true);
     });
 
     it("schedules another present once the first has run", () => {
@@ -122,9 +145,11 @@ describe("Display", () => {
         const display = make();
         const from = { lineGrid: new Uint8Array([1, 2, 3]), lineBaseEven: 5, lineBaseOdd: 6 };
         display.onPaint(from, 0, 0, FbWidth, 8);
-        expect(display.pendingFrame.lineBaseEven).toBe(5);
-        expect(display.pendingFrame.lineBaseOdd).toBe(6);
-        expect([...display.pendingFrame.lineGrid]).toEqual([1, 2, 3]);
+        presentAll();
+        const [, , , , frame] = fakeCanvas.paint.mock.calls[0];
+        expect(frame.lineBaseEven).toBe(5);
+        expect(frame.lineBaseOdd).toBe(6);
+        expect([...frame.lineGrid]).toEqual([1, 2, 3]);
     });
 
     it("hands over the timing counters and starts them afresh", () => {

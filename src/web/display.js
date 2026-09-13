@@ -7,6 +7,12 @@ import { toast } from "./toast.js";
 // interlaced modes (MODE 7) alternate fields across the frames that do paint.
 const SpeedyFrameSkip = 9;
 
+// Completed frames wait for an animation frame each, so two flybacks that land
+// between vsyncs both reach the screen. Two suffices while the display is faster
+// than the machine; a slower one keeps the queue full and shows the older of the
+// two, a frame behind where a newest-wins presenter would be.
+const MaxQueuedFrames = 2;
+
 /**
  * The picture: the canvas and its filter, the video chip that paints into a
  * framebuffer of our own, and the animation frame that presents it. A stalled
@@ -42,17 +48,10 @@ export class Display {
         this.filterClass = this.canvas.filterClass;
 
         // The emulator paints into its own framebuffer; flyback copies the
-        // finished frame into the canvas and an animation frame presents it.
+        // finished frame into the queue and an animation frame presents it.
         this.videoFb32 = new Uint32Array(this.canvas.fb32.length);
-        this.pendingFrame = {
-            minx: 0,
-            miny: 0,
-            maxx: 0,
-            maxy: 0,
-            lineBaseEven: 0,
-            lineBaseOdd: 0,
-            lineGrid: new Uint8Array(0),
-        };
+        this.frameQueue = [];
+        this.freeFrames = [];
 
         const display = this;
         this.video = fakeVideo
@@ -86,11 +85,14 @@ export class Display {
             this.frames = 0;
         }
         const start = performance.now();
-        this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
-        if (this.pendingFrame.lineGrid.length !== video.lineGrid.length)
-            this.pendingFrame.lineGrid = new Uint8Array(video.lineGrid.length);
-        this.pendingFrame.lineGrid.set(video.lineGrid);
-        Object.assign(this.pendingFrame, {
+        const frame = this.freeFrames.pop() ?? {
+            fb32: new Uint32Array(this.videoFb32.length),
+            lineGrid: new Uint8Array(0),
+        };
+        frame.fb32.set(this.videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
+        if (frame.lineGrid.length !== video.lineGrid.length) frame.lineGrid = new Uint8Array(video.lineGrid.length);
+        frame.lineGrid.set(video.lineGrid);
+        Object.assign(frame, {
             minx,
             miny,
             maxx,
@@ -98,6 +100,8 @@ export class Display {
             lineBaseEven: video.lineBaseEven,
             lineBaseOdd: video.lineBaseOdd,
         });
+        this.frameQueue.push(frame);
+        if (this.frameQueue.length > MaxQueuedFrames) this.freeFrames.push(this.frameQueue.shift());
         this.paintMsThisTick += performance.now() - start;
         if (!this.presentScheduled) {
             this.presentScheduled = true;
@@ -107,10 +111,18 @@ export class Display {
 
     present() {
         this.presentScheduled = false;
+        const frame = this.frameQueue.shift();
+        if (!frame) return;
         const start = performance.now();
-        const { minx, miny, maxx, maxy } = this.pendingFrame;
-        this.canvas.paint(minx, miny, maxx, maxy, this.pendingFrame);
+        const { minx, miny, maxx, maxy } = frame;
+        this.canvas.fb32.set(frame.fb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
+        this.canvas.paint(minx, miny, maxx, maxy, frame);
+        this.freeFrames.push(frame);
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
+        if (this.frameQueue.length) {
+            this.presentScheduled = true;
+            window.requestAnimationFrame(() => this.present());
+        }
     }
 
     /** The mode is changed from a modal, which stops the emulator, so this repaints itself. */
