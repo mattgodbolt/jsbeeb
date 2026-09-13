@@ -32,6 +32,7 @@ export class Display {
         this.paintMsThisTick = 0;
         this.presentMsMax = 0;
         this.presentScheduled = false;
+        this.pendingPresent = false;
 
         this.filterClass = canvasLib.getFilterForMode(mode);
         // Each mode says how many pixels it wants to draw into. Set this before
@@ -99,14 +100,18 @@ export class Display {
             lineBaseOdd: video.lineBaseOdd,
         });
         this.paintMsThisTick += performance.now() - start;
+        this.pendingPresent = true;
         if (!this.presentScheduled) {
             this.presentScheduled = true;
             window.requestAnimationFrame(() => this.present());
         }
     }
 
+    /** Draws the frame painted since the last present, if there is one; the loop calls this on every vsync. */
     present() {
         this.presentScheduled = false;
+        if (!this.pendingPresent) return;
+        this.pendingPresent = false;
         const start = performance.now();
         const { minx, miny, maxx, maxy } = this.pendingFrame;
         this.canvas.paint(minx, miny, maxx, maxy, this.pendingFrame);

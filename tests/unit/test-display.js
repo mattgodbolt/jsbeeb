@@ -32,7 +32,7 @@ describe("Display", () => {
         });
         // The video chip paints once as it is built; the tests care about what
         // happens after that.
-        rafCallbacks.splice(0);
+        for (const callback of rafCallbacks.splice(0)) callback();
         display.presentScheduled = false;
         display.frames = 0;
         fakeCanvas?.paint.mockClear();
@@ -74,6 +74,16 @@ describe("Display", () => {
         // The last frame's bounds win, and the pixels were copied over.
         expect(fakeCanvas.paint).toHaveBeenCalledWith(0, 30, FbWidth, 40, display.pendingFrame);
         expect(fakeCanvas.fb32[30 * FbWidth]).toBe(7);
+    });
+
+    it("draws only when a frame has been painted since the last present", () => {
+        const display = make();
+        display.present();
+        expect(fakeCanvas.paint).not.toHaveBeenCalled();
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        display.present();
+        display.present();
+        expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
     });
 
     it("schedules another present once the first has run", () => {

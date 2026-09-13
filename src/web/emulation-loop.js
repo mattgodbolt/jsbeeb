@@ -90,6 +90,7 @@ export class EmulationLoop extends EventTarget {
         this.lastEnd = 0;
         this.nextTickDue = 0;
         this.tickToken = null;
+        this.vsyncToken = null;
         this.emulationLeadMs = 0;
         this.rewindCycleCounter = 0;
         this.wanted = false;
@@ -154,6 +155,7 @@ export class EmulationLoop extends EventTarget {
     run() {
         this.nextTickDue = 0;
         this.scheduleTick(0);
+        this.scheduleVsyncTick();
     }
 
     toggleFastAsPossible() {
@@ -182,21 +184,43 @@ export class EmulationLoop extends EventTarget {
         return this.nextTickDue - now;
     }
 
+    // The timer tick keeps the sound chip fed whatever the display does. The
+    // vsync tick runs the machine up to the vsync itself and presents in the same
+    // callback, so a flyback due before a vsync is shown at that vsync, one due
+    // after it cannot be produced until the next, and two flybacks never share a
+    // refresh while the callbacks come on time.
+    scheduleVsyncTick() {
+        const token = (this.vsyncToken = {});
+        window.requestAnimationFrame((vsyncTime) => {
+            if (this.vsyncToken !== token || !this.running) return;
+            this.scheduleVsyncTick();
+            this.vsyncTick(vsyncTime);
+        });
+    }
+
+    vsyncTick(vsyncTime) {
+        if (this.last !== 0 && !this.isSpeedy() && vsyncTime > this.last) this.advance(vsyncTime, false);
+        this.display.present();
+    }
+
+    isSpeedy() {
+        return this.fastAsPossible || (this.fastTape && this.processor.tapeInterface.motorOn);
+    }
+
     tick() {
         if (!this.running) {
             this.last = 0;
             return;
         }
         const now = performance.now();
-
-        const { processor, display, audioHandler } = this;
-        const motorOn = processor.tapeInterface.motorOn;
-        const speedy = this.fastAsPossible || (this.fastTape && motorOn);
-
-        display.setSpeedy(speedy);
-
+        const speedy = this.isSpeedy();
+        this.display.setSpeedy(speedy);
         this.scheduleTick(speedy ? 0 : this.nextTickDelay(now));
+        this.advance(now, speedy);
+    }
 
+    advance(now, speedy) {
+        const { processor, display, audioHandler } = this;
         this.gamepad.update(processor.sysvia);
         this.dispatchEvent(new Event("tick"));
         if (this.last !== 0) {
