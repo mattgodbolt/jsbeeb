@@ -88,6 +88,7 @@ export class EmulationLoop extends EventTarget {
         this.fastAsPossible = false;
         this.last = 0;
         this.lastEnd = 0;
+        this.nextTickDue = 0;
         this.tickToken = null;
         this.emulationLeadMs = 0;
         this.rewindCycleCounter = 0;
@@ -151,6 +152,7 @@ export class EmulationLoop extends EventTarget {
     }
 
     run() {
+        this.nextTickDue = 0;
         this.scheduleTick(0);
     }
 
@@ -169,6 +171,17 @@ export class EmulationLoop extends EventTarget {
         else window.setTimeout(fire, delayMs);
     }
 
+    // Each tick is booked from the previous one's due time rather than from now,
+    // so the period averages TickMs however late the ticks run and their phase
+    // against the emulated frame stays put. A tick a whole period late (a stall,
+    // a hold, a hidden tab) starts a fresh schedule instead of a burst of
+    // immediate ticks.
+    nextTickDelay(now) {
+        if (now - this.nextTickDue > TickMs) this.nextTickDue = now;
+        this.nextTickDue += TickMs;
+        return this.nextTickDue - now;
+    }
+
     tick() {
         if (!this.running) {
             this.last = 0;
@@ -182,7 +195,7 @@ export class EmulationLoop extends EventTarget {
 
         display.setSpeedy(speedy);
 
-        this.scheduleTick(speedy ? 0 : TickMs);
+        this.scheduleTick(speedy ? 0 : this.nextTickDelay(now));
 
         this.gamepad.update(processor.sysvia);
         this.dispatchEvent(new Event("tick"));

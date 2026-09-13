@@ -99,6 +99,24 @@ describe("EmulationLoop", () => {
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 10);
     });
 
+    it("books each tick from the previous one's due time, so a late tick shortens the next wait", () => {
+        const loop = started();
+        const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+        vi.advanceTimersByTime(10);
+        expect(setTimeoutSpy.mock.calls.at(-1)[1]).toBe(10);
+        vi.spyOn(performance, "now").mockReturnValue(performance.now() + 14);
+        loop.tick();
+        expect(setTimeoutSpy.mock.calls.at(-1)[1]).toBe(6);
+    });
+
+    it("starts a fresh schedule after a tick a whole period late", () => {
+        const loop = started();
+        const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+        vi.spyOn(performance, "now").mockReturnValue(performance.now() + 500);
+        loop.tick();
+        expect(setTimeoutSpy.mock.calls.at(-1)[1]).toBe(10);
+    });
+
     it("runs a fiftieth of a second per tick when going as fast as possible", () => {
         const loop = started();
         loop.toggleFastAsPossible();
