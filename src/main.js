@@ -188,7 +188,11 @@ const { keyboard } = new KeyboardSetup({
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
         pause: () => loop.stop(false),
-        resume: () => loop.go(),
+        resume: () => {
+            // However the machine was stopped, coming back leaves no debugger behind it.
+            dbgr.hide();
+            loop.go();
+        },
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
         onAnyKeyDown: () => {
             audioHandler.tryResume();

@@ -110,133 +110,101 @@ export const BBC = {
     NUMPADENTER: [12, 3],
 };
 
+/**
+ * What a character costs on a BBC keyboard: which key, and whether shift is held while it is
+ * pressed. `!` is shift and `1`; `^` is its own unshifted key. Lower case is the same key as
+ * upper with the caps lock the other way, which `upperCase` says.
+ *
+ * The one table for this; the natural keyboard layout and pasting both read it.
+ *
+ * @param {string} char one character
+ * @returns {{key: [number, number], shift: boolean, upperCase: boolean}|null} null if the BBC has no such character
+ */
+const IsLetter = /^[A-Za-z]$/;
+
+/** BBC keys that print the same thing either way, so holding one must not disturb shift. */
+const ShiftMakesNoDifference = new Set([BBC.SPACE]);
+
+/** Every character a keyboard might produce that the BBC can print, for building the natural layout. */
+const PrintableCharacters = (() => {
+    const chars = ["\u00a3"];
+    for (let code = 32; code < 127; ++code) chars.push(String.fromCharCode(code));
+    return chars;
+})();
+
+export function bbcKeyForCharacter(char) {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) return { key: BBC[char], shift: false, upperCase: true };
+    if (code >= 97 && code <= 122) return { key: BBC[String.fromCharCode(code - 32)], shift: false, upperCase: false };
+    if (code >= 48 && code <= 57) return { key: BBC["K" + char], shift: false, upperCase: true };
+    const shifted = ShiftedCharacters[char];
+    if (shifted) return { key: shifted, shift: true, upperCase: true };
+    const unshifted = UnshiftedCharacters[char];
+    if (unshifted) return { key: unshifted, shift: false, upperCase: true };
+    return null;
+}
+
+/** Characters the BBC prints with shift held. `!` to `)` are shift and the digit above them. */
+const ShiftedCharacters = {
+    "!": BBC.K1,
+    '"': BBC.K2,
+    "#": BBC.K3,
+    $: BBC.K4,
+    "%": BBC.K5,
+    "&": BBC.K6,
+    "'": BBC.K7,
+    "(": BBC.K8,
+    ")": BBC.K9,
+    "=": BBC.MINUS,
+    "~": BBC.HAT_TILDE,
+    "|": BBC.PIPE_BACKSLASH,
+    "{": BBC.LEFT_SQUARE_BRACKET,
+    "+": BBC.SEMICOLON_PLUS,
+    "*": BBC.COLON_STAR,
+    "}": BBC.RIGHT_SQUARE_BRACKET,
+    "<": BBC.COMMA,
+    ">": BBC.PERIOD,
+    "?": BBC.SLASH,
+    // Character 96, where ASCII has a backtick: the MOS font at &C000 draws a pound sign.
+    "\u00a3": BBC.UNDERSCORE_POUND,
+};
+
+/** Characters the BBC prints without shift. */
+const UnshiftedCharacters = {
+    "\n": BBC.RETURN,
+    "\t": BBC.TAB,
+    " ": BBC.SPACE,
+    "-": BBC.MINUS,
+    "^": BBC.HAT_TILDE,
+    "\\": BBC.PIPE_BACKSLASH,
+    "@": BBC.AT,
+    "[": BBC.LEFT_SQUARE_BRACKET,
+    _: BBC.UNDERSCORE_POUND,
+    ";": BBC.SEMICOLON_PLUS,
+    ":": BBC.COLON_STAR,
+    "]": BBC.RIGHT_SQUARE_BRACKET,
+    ",": BBC.COMMA,
+    ".": BBC.PERIOD,
+    "/": BBC.SLASH,
+};
+
 export function stringToBBCKeys(str) {
     const array = [];
     let shiftState = false;
     let capsLockState = true;
-    for (let i = 0; i < str.length; ++i) {
-        const c = str.charCodeAt(i);
-        let charStr = str.charAt(i);
-        let bbcKey = null;
-        let needsShift = false;
-        let needsCapsLock = true;
-        if (c >= 65 && c <= 90) {
-            // A-Z
-            bbcKey = BBC[charStr];
-        } else if (c >= 97 && c <= 122) {
-            // a-z
-            charStr = String.fromCharCode(c - 32);
-            bbcKey = BBC[charStr];
-            needsCapsLock = false;
-        } else if (c >= 48 && c <= 57) {
-            // 0-9
-            bbcKey = BBC["K" + charStr];
-        } else if (c >= 33 && c <= 41) {
-            // ! to )
-            charStr = String.fromCharCode(c + 16);
-            bbcKey = BBC["K" + charStr];
-            needsShift = true;
-        } else {
-            switch (charStr) {
-                case "\n":
-                    bbcKey = BBC.RETURN;
-                    break;
-                case "\t":
-                    bbcKey = BBC.TAB;
-                    break;
-                case " ":
-                    bbcKey = BBC.SPACE;
-                    break;
-                case "-":
-                    bbcKey = BBC.MINUS;
-                    break;
-                case "=":
-                    bbcKey = BBC.MINUS;
-                    needsShift = true;
-                    break;
-                case "^":
-                    bbcKey = BBC.HAT_TILDE;
-                    break;
-                case "~":
-                    bbcKey = BBC.HAT_TILDE;
-                    needsShift = true;
-                    break;
-                case "\\":
-                    bbcKey = BBC.PIPE_BACKSLASH;
-                    break;
-                case "|":
-                    bbcKey = BBC.PIPE_BACKSLASH;
-                    needsShift = true;
-                    break;
-                case "@":
-                    bbcKey = BBC.AT;
-                    break;
-                case "[":
-                    bbcKey = BBC.LEFT_SQUARE_BRACKET;
-                    break;
-                case "{":
-                    bbcKey = BBC.LEFT_SQUARE_BRACKET;
-                    needsShift = true;
-                    break;
-                case "_":
-                    bbcKey = BBC.UNDERSCORE_POUND;
-                    break;
-                case ";":
-                    bbcKey = BBC.SEMICOLON_PLUS;
-                    break;
-                case "+":
-                    bbcKey = BBC.SEMICOLON_PLUS;
-                    needsShift = true;
-                    break;
-                case ":":
-                    bbcKey = BBC.COLON_STAR;
-                    break;
-                case "*":
-                    bbcKey = BBC.COLON_STAR;
-                    needsShift = true;
-                    break;
-                case "]":
-                    bbcKey = BBC.RIGHT_SQUARE_BRACKET;
-                    break;
-                case "}":
-                    bbcKey = BBC.RIGHT_SQUARE_BRACKET;
-                    needsShift = true;
-                    break;
-                case ",":
-                    bbcKey = BBC.COMMA;
-                    break;
-                case "<":
-                    bbcKey = BBC.COMMA;
-                    needsShift = true;
-                    break;
-                case ".":
-                    bbcKey = BBC.PERIOD;
-                    break;
-                case ">":
-                    bbcKey = BBC.PERIOD;
-                    needsShift = true;
-                    break;
-                case "/":
-                    bbcKey = BBC.SLASH;
-                    break;
-                case "?":
-                    bbcKey = BBC.SLASH;
-                    needsShift = true;
-                    break;
-            }
-        }
+    for (const char of str) {
+        const needs = bbcKeyForCharacter(char);
+        if (!needs) continue;
 
-        if (!bbcKey) continue;
-
-        if ((needsShift && !shiftState) || (!needsShift && shiftState)) {
+        if (needs.shift !== shiftState) {
             array.push(BBC.SHIFT);
-            shiftState = !shiftState;
+            shiftState = needs.shift;
         }
-        if ((needsCapsLock && !capsLockState) || (!needsCapsLock && capsLockState)) {
+        if (needs.upperCase !== capsLockState) {
             array.push(BBC.CAPSLOCK);
-            capsLockState = !capsLockState;
+            capsLockState = needs.upperCase;
         }
-        array.push(bbcKey);
+        array.push(needs.key);
     }
 
     if (shiftState) array.push(BBC.SHIFT);
@@ -404,6 +372,15 @@ export function detectKeyboardLayout() {
     return "UK"; // Default guess of UK
 }
 
+/**
+ * Whether a `KEY.` parameter has claimed this host key. Those name a key by where it is, so they
+ * win over the character it prints in the layout that goes by character.
+ * @param {string} code a `KeyboardEvent.code` name
+ */
+export function isUserRemapped(code) {
+    return userKeymap.some((mapping) => hostKeyCodes(mapping.native).includes(code));
+}
+
 export function getKeyMap(keyLayout) {
     const isUKlayout = detectKeyboardLayout() === "UK";
     const keys2 = [];
@@ -515,69 +492,38 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.DOWN, BBC.DOWN);
 
     if (keyLayout === "natural") {
-        // "natural" keyboard
+        // Keyed by the character the host keyboard produces, not by where a key sits, so the
+        // host's own layout never has to be guessed: press whatever gives a `@` and the BBC
+        // gets a `@`. The BBC holds shift for a different set of characters than a PC does,
+        // so a key says which shift state it needs when that differs from the one being held.
+        const mapCharacter = (hostKey, char) => {
+            const needs = bbcKeyForCharacter(char);
+            if (!needs) return;
+            for (const shiftDown of [false, true]) {
+                // Overriding when the two already agree would take shift away from everything
+                // else held at the same time, and letters want the shift key as it is anyway.
+                const disagrees =
+                    needs.shift !== shiftDown && !IsLetter.test(char) && !ShiftMakesNoDifference.has(needs.key);
+                map(hostKey, disagrees ? withShiftOverride(needs.key, needs.shift) : needs.key, shiftDown);
+            }
+        };
 
+        for (const char of PrintableCharacters) mapCharacter(char, char);
+
+        // The BBC has no backtick, and a US or Dvorak keyboard cannot type a pound sign at all,
+        // so the key that would print one gives the pound sign instead.
+        mapCharacter(keyCodes.BACK_QUOTE, "\u00a3");
+
+        // Keys that print nothing are still known by where they are.
         map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
-
-        // US Keyboard: has Tilde on <Shift>BACK_QUOTE
-        map(keyCodes.BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE);
-        map(keyCodes.APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true);
-        map(keyCodes.K2, isUKlayout ? BBC.K2 : BBC.AT, true);
-
-        // 1st row
-        map(keyCodes.K3, BBC.UNDERSCORE_POUND, true);
-        map(keyCodes.K7, BBC.K6, true);
-        map(keyCodes.K8, BBC.COLON_STAR, true);
-        map(keyCodes.K9, BBC.K8, true);
-        map(keyCodes.K0, BBC.K9, true);
-
-        map(keyCodes.K2, BBC.K2, false);
-        map(keyCodes.K3, BBC.K3, false);
-        map(keyCodes.K7, BBC.K7, false);
-        map(keyCodes.K8, BBC.K8, false);
-        map(keyCodes.K9, BBC.K9, false);
-        map(keyCodes.K0, BBC.K0, false);
-
-        map(keyCodes.K1, BBC.K1);
-        map(keyCodes.K4, BBC.K4);
-        map(keyCodes.K5, BBC.K5);
-        map(keyCodes.K6, BBC.K6, false);
-        map(keyCodes.K6, withShiftOverride(BBC.HAT_TILDE, false), true);
-
-        map(keyCodes.MINUS, BBC.MINUS);
-
-        // 2nd row
-        map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET);
-
-        map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET);
-
-        // 3rd row
-
-        map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
-
-        map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
-
-        // UK prints `#~` on this key, which is the BBC's `^~` pair; a US board prints `\|`.
-        map(keyCodes.BACKSLASH, isUKlayout ? BBC.HAT_TILDE : BBC.PIPE_BACKSLASH);
-        map(keyCodes.INTL_BACKSLASH, BBC.PIPE_BACKSLASH);
-
-        map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
-
         map(keyCodes.END, BBC.COPY);
-
         map(keyCodes.HOME, BBC.SHIFTLOCK);
-
         map(keyCodes.F11, BBC.COPY);
-
         map(keyCodes.ESCAPE, BBC.ESCAPE);
-
         map(keyCodes.CTRL_LEFT, BBC.CTRL);
         map(keyCodes.CTRL_RIGHT, BBC.CTRL);
-
         map(keyCodes.CAPSLOCK, BBC.CAPSLOCK);
-
         map(keyCodes.DELETE, BBC.DELETE);
-
         map(keyCodes.BACKSPACE, BBC.DELETE);
     } else if (keyLayout === "gaming") {
         // gaming keyboard
