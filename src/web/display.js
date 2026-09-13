@@ -43,6 +43,7 @@ export class Display {
         this.paintMsThisTick = 0;
         this.presentMsMax = 0;
         this.presentScheduled = false;
+        this.lastPresentTime = undefined;
 
         this.filterClass = canvasLib.getFilterForMode(mode);
         // Each mode says how many pixels it wants to draw into. Set this before
@@ -115,8 +116,15 @@ export class Display {
         }
     }
 
-    present() {
+    /**
+     * Draws the oldest frame still worth showing. One draw per animation frame:
+     * a second call with the same frame time, from whoever else asks in that
+     * frame, would only overwrite the first before the compositor sees it.
+     */
+    present(frameTime) {
         this.presentScheduled = false;
+        if (frameTime !== undefined && frameTime === this.lastPresentTime) return;
+        this.lastPresentTime = frameTime;
         const start = performance.now();
         while (this.frameQueue.length > 1 && start - this.frameQueue[0].paintedAt > StaleFrameMs)
             this.freeFrames.push(this.frameQueue.shift());
@@ -129,7 +137,7 @@ export class Display {
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
         if (this.frameQueue.length) {
             this.presentScheduled = true;
-            window.requestAnimationFrame(() => this.present());
+            window.requestAnimationFrame((nextFrameTime) => this.present(nextFrameTime));
         }
     }
 

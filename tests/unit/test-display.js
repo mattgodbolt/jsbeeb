@@ -113,6 +113,17 @@ describe("Display", () => {
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
     });
 
+    it("draws once per animation frame however often it is asked in that frame", () => {
+        const display = make();
+        display.onPaint(paintedFrom(), 0, 10, FbWidth, 15);
+        display.onPaint(paintedFrom(), 0, 20, FbWidth, 25);
+        display.present(500);
+        display.present(500);
+        expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
+        display.present(516);
+        expect(fakeCanvas.paint).toHaveBeenCalledTimes(2);
+    });
+
     it("reuses frame buffers rather than allocating one per paint", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
