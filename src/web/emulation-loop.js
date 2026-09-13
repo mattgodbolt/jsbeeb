@@ -51,9 +51,9 @@ class VirtualSpeedUpdater {
  * Runs the machine in real time: the tick that turns wall-clock time into
  * cycles, starting and stopping, the audio lead, fast-forward and the speed
  * readout. Owns `running`, and dispatches a "running" event whenever it
- * changes hands, "tick" on every tick while running (the first only takes the
- * time), and "rewind-capture" every RewindCaptureInterval frames for whoever
- * keeps the rewind history. Anything that needs the machine held still while
+ * changes hands, "tick" on every timer tick and vsync it runs the machine on
+ * (the first only takes the time), and "rewind-capture" every
+ * RewindCaptureInterval frames for whoever keeps the rewind history. Anything that needs the machine held still while
  * it works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a
  * `pause()`; the loop runs again once every hold has let go, provided the user
  * still wants it running.
@@ -184,11 +184,10 @@ export class EmulationLoop extends EventTarget {
         return this.nextTickDue - now;
     }
 
-    // The timer tick keeps the sound chip fed whatever the display does. The
-    // vsync tick runs the machine up to the vsync itself and presents in the same
-    // callback, so a flyback due before a vsync is shown at that vsync, one due
-    // after it cannot be produced until the next, and two flybacks never share a
-    // refresh while the callbacks come on time.
+    // Emulates up to the vsync's own timestamp, then presents in the same
+    // callback: a flyback due before this vsync exists by now and is shown here,
+    // before the next one, due a frame period later, can exist. Two flybacks
+    // share a refresh only when this callback runs later than that.
     scheduleVsyncTick() {
         const token = (this.vsyncToken = {});
         window.requestAnimationFrame((vsyncTime) => {
