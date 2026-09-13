@@ -117,28 +117,32 @@ The definitive lists are `keyCodes` with `keyCodeAliases` (host) and `BBC` (BBC 
 
 ### Emulator Shortcuts
 
-| Shortcut       | Action                          |
-| -------------- | ------------------------------- |
-| `Ctrl+Home`    | Stop and enter debugger         |
-| `Ctrl+Insert`  | Toggle turbo (fast-as-possible) |
-| `Ctrl+End`     | Pause emulation                 |
-| `Ctrl+B`       | Open printer output window      |
-| `Alt+PageDown` | Open rewind scrubber            |
-| `Alt+M`        | Media window, aimed at drive 0  |
-| `Alt+Shift+M`  | Media window, aimed at drive 1  |
-| `Alt+C`        | Media window, aimed at the deck |
+| Shortcut         | Action                                     |
+| ---------------- | ------------------------------------------ |
+| `Alt-S`          | Enter the debugger, or leave it and resume |
+| `Alt-P`          | Pause emulation, or resume                 |
+| `Alt-T`          | Toggle turbo (fast-as-possible)            |
+| `Alt-B`          | Open printer output window                 |
+| `Alt-W`          | Open rewind scrubber                       |
+| `Alt-M`          | Media window, aimed at drive 0             |
+| `Alt-Shift-M`    | Media window, aimed at drive 1             |
+| `Alt-C`          | Media window, aimed at the cassette        |
+| `Alt-1 to Alt-8` | Hold an accessibility switch down          |
+
+Every shortcut is on `Alt`, so that `Ctrl` belongs to the emulated machine: `Ctrl-B` is `VDU 2` on a BBC, `Ctrl-L`
+clears the screen, and jsbeeb should not be taking any of them.
 
 ### Printer Output
 
 Anything the machine prints is captured whether or not the printer window is open, so programs that print (with `VDU 2`, `*FX5,1` and the like) run rather than waiting for a printer that is not there.
 
-Press `Ctrl+B` to open a window showing what has been printed so far; it then keeps up with the output as it arrives. Only the most recent output is kept, roughly a dozen pages' worth, so a program printing forever cannot fill memory.
+Press `Alt-B` to open a window showing what has been printed so far; it then keeps up with the output as it arrives. Only the most recent output is kept, roughly a dozen pages' worth, so a program printing forever cannot fill memory.
 
 ### Save State and Rewind
 
 Save and load full emulator state snapshots from the **State** menu (or `Ctrl+S` / `Ctrl+O` in the Electron app).
 
-The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt+PageDown** to browse recent states as a visual filmstrip:
+The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
 
 - **Left/Right arrows**: navigate between snapshots (the main screen updates live)
 - **Click** a thumbnail to jump to that point

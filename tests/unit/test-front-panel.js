@@ -76,7 +76,7 @@ describe("FrontPanel", () => {
             const printer = new Printer();
             make(false, printer);
             printer.dispatchEvent(new Event("first-output"));
-            expect(toasts()).toEqual([expect.stringContaining("Ctrl-B")]);
+            expect(toasts()).toEqual([expect.stringContaining("Alt-B")]);
         });
 
         it("says when the pop-up was blocked", () => {

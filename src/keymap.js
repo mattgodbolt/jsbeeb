@@ -563,9 +563,9 @@ export function getKeyMap(keyLayout) {
 
         map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
 
-        map(keyCodes.WINDOWS, BBC.SHIFTLOCK);
-
         map(keyCodes.END, BBC.COPY);
+
+        map(keyCodes.HOME, BBC.SHIFTLOCK);
 
         map(keyCodes.F11, BBC.COPY);
 
@@ -635,7 +635,6 @@ export function getKeyMap(keyLayout) {
 
         // not in correct location
         map(keyCodes.ALT_RIGHT, BBC.SHIFTLOCK);
-        map(keyCodes.WINDOWS, BBC.SHIFTLOCK);
     } else {
         // Physical, and default
         map(keyCodes.K1, BBC.K1);
@@ -657,12 +656,12 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.COMMA, BBC.COMMA); // ',' / '<'
         map(keyCodes.PERIOD, BBC.PERIOD); // '.' / '>'
         map(keyCodes.SLASH, BBC.SLASH); // '/' / '?'
-        map(keyCodes.WINDOWS, BBC.SHIFTLOCK); // shift lock mapped to "windows" key
         map(keyCodes.TAB, BBC.TAB); // tab
         map(keyCodes.ENTER, BBC.RETURN); // return
         map(keyCodes.DELETE, BBC.DELETE); // delete
         map(keyCodes.BACKSPACE, BBC.DELETE); // delete
         map(keyCodes.END, BBC.COPY); // copy key is end
+        map(keyCodes.HOME, BBC.SHIFTLOCK);
         map(keyCodes.F11, BBC.COPY); // copy key is end for Apple
         map(keyCodes.ESCAPE, BBC.ESCAPE); // escape
         map(keyCodes.CTRL_LEFT, BBC.CTRL);
