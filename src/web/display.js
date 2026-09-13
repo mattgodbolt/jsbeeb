@@ -112,7 +112,7 @@ export class Display {
         this.paintMsThisTick += performance.now() - start;
         if (!this.presentScheduled) {
             this.presentScheduled = true;
-            window.requestAnimationFrame(() => this.present());
+            window.requestAnimationFrame((frameTime) => this.present(frameTime));
         }
     }
 
