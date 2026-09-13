@@ -54,10 +54,10 @@ class VirtualSpeedUpdater {
  * readout. Owns `running`, and dispatches a "running" event whenever it
  * changes hands, "tick" on every timer tick and on every vsync that runs the
  * machine (the first tick only takes the time), and "rewind-capture" every
- * RewindCaptureInterval frames for whoever keeps the rewind history. Anything that needs the machine held still while
- * it works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a
- * `pause()`; the loop runs again once every hold has let go, provided the user
- * still wants it running.
+ * RewindCaptureInterval frames for whoever keeps the rewind history. Anything
+ * that needs the machine held still while it works (a dialog, a snapshot, the
+ * rewind panel, a hidden tab) takes a `pause()`; the loop runs again once every
+ * hold has let go, provided the user still wants it running.
  */
 export class EmulationLoop extends EventTarget {
     constructor({
@@ -174,11 +174,9 @@ export class EmulationLoop extends EventTarget {
         else window.setTimeout(fire, delayMs);
     }
 
-    // Each tick is booked from the previous one's due time rather than from now,
-    // so the period averages TickMs however late the ticks run, and a flyback
-    // lands at the same point in a tick's span every frame instead of drifting
-    // through it. A tick a whole period late (a stall, a hold, a hidden tab)
-    // starts a fresh schedule instead of a burst of immediate ticks.
+    // Booked from the previous due time, not from now, so the period averages
+    // TickMs and a flyback lands at the same point of a tick every frame. A tick
+    // a whole period late starts afresh rather than a burst of catch-up ticks.
     nextTickDelay(now) {
         if (now - this.nextTickDue > TickMs) this.nextTickDue = now;
         this.nextTickDue += TickMs;
@@ -194,12 +192,11 @@ export class EmulationLoop extends EventTarget {
         });
     }
 
-    // Runs the machine up to the vsync's timestamp and presents in the same
-    // callback, so each flyback is shown at the first vsync after it falls due.
-    // Two flybacks share a refresh only when this callback comes so late that a
-    // timer tick has already reached the next flyback, 20 ms after the last.
+    // Emulates up to the vsync and presents at once, so a flyback is shown at the
+    // first vsync after it; two share a refresh only if a timer tick reached the
+    // next flyback before this callback ran.
     vsyncTick(vsyncTime) {
-        // A timer tick may already be past this vsync; while speedy the ticks run flat out.
+        // While speedy the timer ticks run flat out.
         if (this.emulatedTo !== 0 && !this.isSpeedy() && vsyncTime > this.emulatedTo) this.advance(vsyncTime, false);
         this.display.present(vsyncTime);
     }
@@ -220,10 +217,8 @@ export class EmulationLoop extends EventTarget {
         this.advance(now, speedy);
     }
 
-    // `now` is where the machine is emulated to afterwards; on a vsync that is
-    // the vsync's timestamp, which predates the callback, so the timings are
-    // taken from when this actually ran.
     advance(now, speedy) {
+        // now can be a vsync timestamp, before this ran; the timings use start.
         const start = performance.now();
         const { processor, display, audioHandler } = this;
         this.gamepad.update(processor.sysvia);

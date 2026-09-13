@@ -42,10 +42,8 @@ export class Display {
         this.reportAnyFallback(this.filterClass);
         this.filterClass = this.canvas.filterClass;
 
-        // The emulator paints into its own framebuffer and flyback copies the
-        // finished frame into the canvas. The loop presents it on its vsync tick;
-        // the animation frame asked for here covers paints while the loop is
-        // stopped.
+        // The animation frame asked for at flyback covers paints while the loop
+        // is stopped; while it runs, its vsync tick presents.
         this.videoFb32 = new Uint32Array(this.canvas.fb32.length);
         this.pendingFrame = {
             minx: 0,
@@ -112,7 +110,6 @@ export class Display {
         }
     }
 
-    /** Draws the frame painted since the last present, if there is one; the loop calls this on every vsync. */
     present() {
         if (this.presented) return;
         this.presented = true;
