@@ -109,9 +109,10 @@ describe("EmulationLoop", () => {
         it("runs the machine up to the vsync and presents in the same callback", () => {
             started();
             vi.advanceTimersByTime(10);
-            vsync(performance.now() + 5);
+            const vsyncTime = performance.now() + 5;
+            vsync(vsyncTime);
             expect(cyclesExecuted().at(-1)).toBe((5 * ClocksPerSecond) / 1000);
-            expect(deps.display.present).toHaveBeenCalledTimes(1);
+            expect(deps.display.present).toHaveBeenCalledWith(vsyncTime);
             expect(vsyncCallbacks).toHaveLength(1);
         });
 

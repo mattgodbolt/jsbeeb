@@ -200,7 +200,7 @@ export class EmulationLoop extends EventTarget {
 
     vsyncTick(vsyncTime) {
         if (this.last !== 0 && !this.isSpeedy() && vsyncTime > this.last) this.advance(vsyncTime, false);
-        this.display.present();
+        this.display.present(vsyncTime);
     }
 
     isSpeedy() {
