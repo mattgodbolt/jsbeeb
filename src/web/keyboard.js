@@ -172,7 +172,7 @@ export class Keyboard extends EventTarget {
         const code = this.keyCode(evt);
         const stale = this.releases.get(code);
         if (stale && evt.repeat) {
-            evt.preventDefault();
+            if (!this.inputEnabledFunction() || this._shortcutFor(evt, code)) evt.preventDefault();
             return;
         }
         // A fresh press of a key still held means its key up was lost, as macOS does for a key
@@ -183,10 +183,14 @@ export class Keyboard extends EventTarget {
         if (release) this.releases.set(code, release);
     }
 
+    _shortcutFor(evt, code) {
+        return this.shortcutsBlockedFunction() ? null : this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+    }
+
     /** @returns {(() => void)|null} how to undo the press, or null if there is nothing to undo */
     _press(evt, code) {
         // Shortcuts come first, so they work while the machine is stopped and from inside the media window.
-        const handler = this.shortcutsBlockedFunction() ? null : this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        const handler = this._shortcutFor(evt, code);
         if (handler) {
             evt.preventDefault();
             handler.handler(true, code, evt.shiftKey);

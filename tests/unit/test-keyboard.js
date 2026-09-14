@@ -186,6 +186,19 @@ describe("Keyboard", () => {
         expect(mockProcessor.setReset).not.toHaveBeenCalled();
     });
 
+    test("lets a text field that took focus mid-hold have the key's repeats", () => {
+        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
+        keyboard.setRunning(true);
+        keyboard.keyDown(key);
+        mockInputEnabledFunction.mockReturnValue(true);
+
+        const repeat = { ...key, repeat: true, preventDefault: vi.fn() };
+        keyboard.keyDown(repeat);
+
+        expect(repeat.preventDefault).not.toHaveBeenCalled();
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
+    });
+
     test("presses again when a key comes down whose key up never arrived", () => {
         const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
         keyboard.setRunning(true);

@@ -212,6 +212,17 @@ describe("KeyboardSetup", () => {
             expect(actions.openMedia).not.toHaveBeenCalled();
         });
 
+        it("keeps a held shortcut's repeats out of the media window it just opened", () => {
+            domFromIndexHtml("media-panel");
+            document.getElementById("media-search").focus();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
+
+            const repeat = keyEvent("keydown", keyCodes.M, { alt: true, shift: true, repeat: true });
+            document.dispatchEvent(repeat);
+
+            expect(repeat.defaultPrevented).toBe(true);
+        });
+
         it("lets go of an accessibility switch held while focus moved into the window", () => {
             domFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
