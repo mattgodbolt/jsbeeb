@@ -21,11 +21,12 @@ export class Keyboard extends EventTarget {
      */
     constructor(config) {
         super();
-        const { processor, inputEnabledFunction, keyLayout = "physical", dbgr } = config;
+        const { processor, inputEnabledFunction, shortcutsBlockedFunction, keyLayout = "physical", dbgr } = config;
 
         // Core components
         this.processor = processor;
         this.inputEnabledFunction = inputEnabledFunction;
+        this.shortcutsBlockedFunction = shortcutsBlockedFunction ?? (() => false);
         this.dbgr = dbgr;
 
         this.keyInterface = processor.keyboardInterface;
@@ -172,9 +173,8 @@ export class Keyboard extends EventTarget {
         const code = this.keyCode(evt);
 
         // Shortcuts answer whether or not the machine is running, so the one that stopped it can
-        // start it again, and whatever has focus: every one of them is on Alt, which types
-        // nothing, so the media window's own controls can be driven from inside it.
-        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        // start it again, and from inside the media window, so it can be re-aimed from there.
+        const handler = this.shortcutsBlockedFunction() ? null : this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
             evt.preventDefault();
             // Auto-repeat would toggle a shortcut over and over while the key is simply held.

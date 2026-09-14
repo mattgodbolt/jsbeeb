@@ -174,6 +174,15 @@ describe("KeyboardSetup", () => {
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
         });
 
+        it("leaves the paste box every key, where Alt and a letter types an accented one on a Mac", () => {
+            domFromIndexHtml("paste-form");
+            document.getElementById("paste-text").focus();
+
+            document.dispatchEvent(keyEvent("keydown", keyCodes.C, { alt: true }));
+
+            expect(actions.openMedia).not.toHaveBeenCalled();
+        });
+
         it("lets go of an accessibility switch held while focus moved into the window", () => {
             domFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
