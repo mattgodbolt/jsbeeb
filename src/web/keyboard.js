@@ -21,11 +21,12 @@ export class Keyboard extends EventTarget {
      */
     constructor(config) {
         super();
-        const { processor, inputEnabledFunction, keyLayout = "physical", dbgr } = config;
+        const { processor, inputEnabledFunction, shortcutsBlockedFunction, keyLayout = "physical", dbgr } = config;
 
         // Core components
         this.processor = processor;
         this.inputEnabledFunction = inputEnabledFunction;
+        this.shortcutsBlockedFunction = shortcutsBlockedFunction ?? (() => false);
         this.dbgr = dbgr;
 
         this.keyInterface = processor.keyboardInterface;
@@ -169,19 +170,19 @@ export class Keyboard extends EventTarget {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyDown(evt) {
-        if (this.inputEnabledFunction()) return;
-
         const code = this.keyCode(evt);
 
-        // Shortcuts answer whether or not the machine is running, so the one that stopped it
-        // can start it again.
-        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        // Shortcuts answer whether or not the machine is running, so the one that stopped it can
+        // start it again, and from inside the media window, so it can be re-aimed from there.
+        const handler = this.shortcutsBlockedFunction() ? null : this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
             evt.preventDefault();
             // Auto-repeat would toggle a shortcut over and over while the key is simply held.
             if (!evt.repeat) handler.handler(true, code, evt.shiftKey);
             return;
         }
+
+        if (this.inputEnabledFunction()) return;
 
         if (!this.running) return;
         evt.preventDefault();
@@ -233,16 +234,16 @@ export class Keyboard extends EventTarget {
         this.keyInterface.keyUp(this.heldKeys.get(code) ?? this._machineKey(evt));
         this.heldKeys.delete(code);
 
-        if (this.inputEnabledFunction()) return;
-
-        // A switch held while the machine stopped still has to be released, so the handlers
-        // run whether or not it is running, as they do on the way down.
+        // A switch held while the machine stopped, or while focus moved into a text field, still
+        // has to be released, so the handlers run here as they do on the way down.
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
             evt.preventDefault();
             handler.handler(false, code);
             return;
         }
+
+        if (this.inputEnabledFunction()) return;
 
         // No further special handling needed if not running
         if (!this.running) return;
