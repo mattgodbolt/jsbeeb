@@ -74,6 +74,34 @@ describe("KeyboardSetup", () => {
             expect(accessibilitySwitches.userPort.read()).toBe(0x7f);
         });
 
+        it("lets go of a switch when Alt is released before the digit", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
+
+            document.dispatchEvent(keyEvent("keyup", keyCodes.ALT_LEFT));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.K1));
+
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
+        });
+
+        it("keeps a held switch's repeats away from the machine once Alt is let go", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.ALT_LEFT));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { repeat: true }));
+
+            expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
+        });
+
+        it("lets go of a switch held when the window loses focus", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K2, { alt: true }));
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfd);
+
+            setup.keyboard.clearKeys();
+
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
+        });
+
         it("leaves the function keys to the machine, so Alt-F4 is not a switch", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.F4, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0xff);
@@ -96,12 +124,21 @@ describe("KeyboardSetup", () => {
         it("aims the media window from Alt-M, Alt-Shift-M and Alt-C", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true }));
             expect(actions.openMedia).toHaveBeenLastCalledWith(0);
+            document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true }));
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
             expect(actions.openMedia).toHaveBeenLastCalledWith(1);
             document.dispatchEvent(keyEvent("keydown", keyCodes.C, { alt: true }));
             expect(actions.openMedia).toHaveBeenLastCalledWith("tape");
             expect(actions.openMedia).toHaveBeenCalledTimes(3);
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+        });
+
+        it("does not start a held shortcut again when its repeats outlast a blur", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
+            setup.keyboard.clearKeys();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+
+            expect(actions.toggleDebugger).toHaveBeenCalledTimes(1);
         });
 
         it("fires once however long the key is held", () => {
@@ -183,6 +220,17 @@ describe("KeyboardSetup", () => {
             expect(actions.openMedia).not.toHaveBeenCalled();
         });
 
+        it("keeps a held shortcut's repeats out of the media window it just opened", () => {
+            domFromIndexHtml("media-panel");
+            document.getElementById("media-search").focus();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
+
+            const repeat = keyEvent("keydown", keyCodes.M, { alt: true, shift: true, repeat: true });
+            document.dispatchEvent(repeat);
+
+            expect(repeat.defaultPrevented).toBe(true);
+        });
+
         it("lets go of an accessibility switch held while focus moved into the window", () => {
             domFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
@@ -201,8 +249,8 @@ describe("KeyboardSetup", () => {
             document.getElementById("media-search").focus();
             document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true, shift: true }));
             document.dispatchEvent(keyEvent("keyup", keyCodes.SHIFT_LEFT));
-            expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.M);
             expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.SHIFT_LEFT);
+            expect(processor.sysvia.keyUp).not.toHaveBeenCalledWith(keyCodes.M);
         });
     });
 

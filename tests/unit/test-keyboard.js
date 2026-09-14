@@ -26,6 +26,15 @@ describe("Keyboard", () => {
         return await eventPromise;
     };
 
+    const breakKey = () => ({
+        code: keyCodes.F12,
+        key: "F12",
+        preventDefault: vi.fn(),
+        altKey: false,
+        ctrlKey: false,
+        shiftKey: false,
+    });
+
     beforeEach(() => {
         mockSysvia = {
             keyDown: vi.fn(),
@@ -124,8 +133,8 @@ describe("Keyboard", () => {
             keyboard.keyDown(evt("Digit6", "6", { repeat: true }));
             keyboard.keyUp(evt("Digit6", "6"));
 
-            expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
-            expect(mockSysvia.keyDown).toHaveBeenLastCalledWith("^", false);
+            expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith("^", true);
             expect(mockSysvia.keyUp).toHaveBeenCalledWith("^");
         });
 
@@ -140,12 +149,81 @@ describe("Keyboard", () => {
             }
         });
 
-        test("lets go of everything held when the layout changes under it", () => {
-            keyboard.keyDown(evt("KeyA", "a"));
+        test("releases a held key by its old name when the layout changes under it", () => {
+            keyboard.keyDown(evt("Digit2", '"', { shiftKey: true }));
             keyboard.setKeyLayout("physical");
 
-            expect(mockSysvia.clearKeys).toHaveBeenCalled();
+            expect(mockSysvia.keyUp).toHaveBeenCalledWith('"');
         });
+    });
+
+    test("brings the machine out of reset when Break is released after it stopped", () => {
+        const evt = breakKey();
+        keyboard.setRunning(true);
+        keyboard.keyDown(evt);
+        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(true);
+
+        keyboard.setRunning(false);
+        keyboard.keyUp(evt);
+
+        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(false);
+    });
+
+    test("brings the machine out of reset when the window loses focus with Break held", () => {
+        const evt = breakKey();
+        keyboard.setRunning(true);
+        keyboard.keyDown(evt);
+        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(true);
+
+        keyboard.clearKeys();
+
+        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(false);
+    });
+
+    test("leaves reset alone when the keys are cleared and Break was never pressed", () => {
+        keyboard.clearKeys();
+
+        expect(mockProcessor.setReset).not.toHaveBeenCalled();
+    });
+
+    test("lets a text field that took focus mid-hold have the key's repeats", () => {
+        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
+        keyboard.setRunning(true);
+        keyboard.keyDown(key);
+        mockInputEnabledFunction.mockReturnValue(true);
+
+        const repeat = { ...key, repeat: true, preventDefault: vi.fn() };
+        keyboard.keyDown(repeat);
+
+        expect(repeat.preventDefault).not.toHaveBeenCalled();
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
+    });
+
+    test("brings a key held through a paste back once the paste is over", () => {
+        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
+        mockSysvia.keyUpRaw = vi.fn();
+        keyboard.setRunning(true);
+        keyboard.keyDown(key);
+
+        keyboard.sendRawKeyboard([BBC.B], false);
+        keyboard.keyDown({ ...key, repeat: true });
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
+
+        keyboard.cancelPaste();
+        keyboard.keyDown({ ...key, repeat: true });
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
+    });
+
+    test("presses again when a key comes down whose key up never arrived", () => {
+        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
+        keyboard.setRunning(true);
+
+        keyboard.keyDown(key);
+        keyboard.keyDown(key);
+        keyboard.keyUp(key);
+
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
+        expect(mockSysvia.keyUp).toHaveBeenCalledTimes(2);
     });
 
     test("keyCode is the physical position the event came from", () => {
@@ -234,26 +312,33 @@ describe("Keyboard", () => {
         };
 
         keyboard.setRunning(true);
+        keyboard.keyDown(event);
         keyboard.keyUp(event);
 
         expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
         expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    test("keyUp still releases the key when input is enabled, but leaves the event to the page", () => {
+    test("releases a key pressed before focus moved into a text field", () => {
         const event = {
             code: keyCodes.A,
             preventDefault: vi.fn(),
             altKey: false,
         };
 
-        mockInputEnabledFunction.mockReturnValueOnce(true);
-
         keyboard.setRunning(true);
+        keyboard.keyDown(event);
+        mockInputEnabledFunction.mockReturnValue(true);
         keyboard.keyUp(event);
 
         expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
-        expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+
+    test("does not reach the machine for a key released without being pressed", () => {
+        keyboard.setRunning(true);
+        keyboard.keyUp({ code: keyCodes.A, preventDefault: vi.fn(), altKey: false });
+
+        expect(mockSysvia.keyUp).not.toHaveBeenCalled();
     });
 
     test("keyUp should handle F12/BREAK and emit break event", async () => {
@@ -264,6 +349,7 @@ describe("Keyboard", () => {
         };
 
         keyboard.setRunning(true);
+        keyboard.keyDown(event);
 
         const breakState = await triggerAndWaitForEvent("break", () => {
             keyboard.keyUp(event);
@@ -548,6 +634,7 @@ describe("Keyboard Atom adapter", () => {
 
     test("keyUp should route to PPIA", () => {
         const evt = { code: "KeyA", altKey: false, ctrlKey: false, preventDefault: vi.fn() };
+        keyboard.keyDown(evt);
         keyboard.keyUp(evt);
         expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith("KeyA");
     });
