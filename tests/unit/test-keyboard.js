@@ -199,6 +199,21 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
     });
 
+    test("brings a key held through a paste back once the paste is over", () => {
+        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
+        mockSysvia.keyUpRaw = vi.fn();
+        keyboard.setRunning(true);
+        keyboard.keyDown(key);
+
+        keyboard.sendRawKeyboard([BBC.B], false);
+        keyboard.keyDown({ ...key, repeat: true });
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
+
+        keyboard.cancelPaste();
+        keyboard.keyDown({ ...key, repeat: true });
+        expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
+    });
+
     test("presses again when a key comes down whose key up never arrived", () => {
         const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
         keyboard.setRunning(true);

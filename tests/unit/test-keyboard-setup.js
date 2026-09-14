@@ -133,6 +133,14 @@ describe("KeyboardSetup", () => {
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
         });
 
+        it("does not start a held shortcut again when its repeats outlast a blur", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
+            setup.keyboard.clearKeys();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+
+            expect(actions.toggleDebugger).toHaveBeenCalledTimes(1);
+        });
+
         it("fires once however long the key is held", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
             document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));

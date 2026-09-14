@@ -171,8 +171,12 @@ export class Keyboard extends EventTarget {
     keyDown(evt) {
         const code = this.keyCode(evt);
         const stale = this.releases.get(code);
-        if (stale && evt.repeat) {
-            if (!this.inputEnabledFunction() || this._shortcutFor(evt, code)) evt.preventDefault();
+        if (evt.repeat && this._shortcutFor(evt, code)) {
+            evt.preventDefault();
+            return;
+        }
+        if (evt.repeat && stale) {
+            if (!this.inputEnabledFunction()) evt.preventDefault();
             return;
         }
         // A fresh press of a key still held means its key up was lost, as macOS does for a key
@@ -200,11 +204,6 @@ export class Keyboard extends EventTarget {
         if (this.inputEnabledFunction() || !this.running) return null;
         evt.preventDefault();
 
-        if (this.isPasting && code === keyCodes.ESCAPE) {
-            this.cancelPaste();
-            return null;
-        }
-
         if (code === keyCodes.F12 || code === keyCodes.BREAK) {
             this.dispatchEvent(new CustomEvent("break", { detail: true }));
             this.processor.setReset(true);
@@ -216,6 +215,11 @@ export class Keyboard extends EventTarget {
 
         if (isMac && code === keyCodes.CAPSLOCK) {
             this.handleMacCapsLock();
+            return null;
+        }
+
+        if (this.isPasting) {
+            if (code === keyCodes.ESCAPE) this.cancelPaste();
             return null;
         }
 
@@ -271,6 +275,7 @@ export class Keyboard extends EventTarget {
 
     /** Sends raw keys, and millisecond delays, to the machine: paste and autoboot come through here. */
     sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
+        this.clearKeys();
         this.typist.type(keysToSend, checkCapsAndShiftLocks);
     }
 
