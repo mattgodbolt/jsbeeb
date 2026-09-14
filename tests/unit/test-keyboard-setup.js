@@ -84,6 +84,15 @@ describe("KeyboardSetup", () => {
             expect(accessibilitySwitches.userPort.read()).toBe(0xff);
         });
 
+        it("keeps a held switch's repeats away from the machine once Alt is let go", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.ALT_LEFT));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { repeat: true }));
+
+            expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
+        });
+
         it("lets go of a switch held when the window loses focus", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.K2, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0xfd);
@@ -115,6 +124,7 @@ describe("KeyboardSetup", () => {
         it("aims the media window from Alt-M, Alt-Shift-M and Alt-C", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true }));
             expect(actions.openMedia).toHaveBeenLastCalledWith(0);
+            document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true }));
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
             expect(actions.openMedia).toHaveBeenLastCalledWith(1);
             document.dispatchEvent(keyEvent("keydown", keyCodes.C, { alt: true }));
@@ -220,8 +230,8 @@ describe("KeyboardSetup", () => {
             document.getElementById("media-search").focus();
             document.dispatchEvent(keyEvent("keyup", keyCodes.M, { alt: true, shift: true }));
             document.dispatchEvent(keyEvent("keyup", keyCodes.SHIFT_LEFT));
-            expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.M);
             expect(processor.sysvia.keyUp).toHaveBeenCalledWith(keyCodes.SHIFT_LEFT);
+            expect(processor.sysvia.keyUp).not.toHaveBeenCalledWith(keyCodes.M);
         });
     });
 

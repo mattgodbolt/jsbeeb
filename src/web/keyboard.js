@@ -39,10 +39,7 @@ export class Keyboard extends EventTarget {
         this.stepEmuWhenPaused = false;
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
-        /** What each held physical key pressed, so releasing it releases the same thing. */
-        this.heldKeys = new Map();
-        /** The shortcut each held physical key started, so letting go of the modifier first cannot lose its release. */
-        this.heldHandlers = new Map();
+        this.releases = new Map();
     }
 
     /**
@@ -173,59 +170,54 @@ export class Keyboard extends EventTarget {
      */
     keyDown(evt) {
         const code = this.keyCode(evt);
+        const stale = this.releases.get(code);
+        if (stale && evt.repeat) {
+            evt.preventDefault();
+            return;
+        }
+        // A fresh press of a key still held means its key up was lost, as macOS does for a key
+        // released while Cmd is down.
+        stale?.();
+        this.releases.delete(code);
+        const release = this._press(evt, code);
+        if (release) this.releases.set(code, release);
+    }
 
-        // Shortcuts answer whether or not the machine is running, so the one that stopped it can
-        // start it again, and from inside the media window, so it can be re-aimed from there.
+    /** @returns {(() => void)|null} how to undo the press, or null if there is nothing to undo */
+    _press(evt, code) {
+        // Shortcuts come first, so they work while the machine is stopped and from inside the media window.
         const handler = this.shortcutsBlockedFunction() ? null : this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
             evt.preventDefault();
-            // Auto-repeat would toggle a shortcut over and over while the key is simply held.
-            if (!evt.repeat) {
-                this.heldHandlers.set(code, handler);
-                handler.handler(true, code, evt.shiftKey);
-            }
-            return;
+            handler.handler(true, code, evt.shiftKey);
+            return () => handler.handler(false, code);
         }
 
-        if (this.inputEnabledFunction()) return;
-
-        if (!this.running) return;
+        if (this.inputEnabledFunction() || !this.running) return null;
         evt.preventDefault();
 
         if (this.isPasting && code === keyCodes.ESCAPE) {
             this.cancelPaste();
-            return;
+            return null;
         }
 
-        // Special handling cases that we always want to keep within keyboard.js
-        if (this._handleSpecialKeys(code)) return;
-
-        // In the natural layout the character can change between press and release, as it does
-        // when shift is let go first, so what went down is remembered against the physical key.
-        // Auto-repeat reports the new character too, so a repeat sticks with what it started as.
-        const machineKey = (evt.repeat && this.heldKeys.get(code)) || this._machineKey(evt);
-        this.heldKeys.set(code, machineKey);
-        this.keyInterface.keyDown(machineKey, evt.shiftKey);
-    }
-
-    /**
-     * Handle special keys that must remain in keyboard.js
-     * @param {string} code - The host key, by physical position
-     * @returns {boolean} True if the key was handled specially
-     * @private
-     */
-    _handleSpecialKeys(code) {
         if (code === keyCodes.F12 || code === keyCodes.BREAK) {
             this.dispatchEvent(new CustomEvent("break", { detail: true }));
             this.processor.setReset(true);
-            return true;
-        } else if (isMac && code === keyCodes.CAPSLOCK) {
-            // Special CapsLock handling for Mac
-            this.handleMacCapsLock();
-            return true;
+            return () => {
+                this.dispatchEvent(new CustomEvent("break", { detail: false }));
+                this.processor.setReset(false);
+            };
         }
 
-        return false;
+        if (isMac && code === keyCodes.CAPSLOCK) {
+            this.handleMacCapsLock();
+            return null;
+        }
+
+        const machineKey = this._machineKey(evt);
+        this.keyInterface.keyDown(machineKey, evt.shiftKey);
+        return () => this.keyInterface.keyUp(machineKey);
     }
 
     /**
@@ -233,40 +225,16 @@ export class Keyboard extends EventTarget {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyUp(evt) {
-        // Always let the key ups come through to avoid sticky keys: a key held while focus
-        // moved into a text field or the media window still has to be released in the machine.
         const code = this.keyCode(evt);
-        this.keyInterface.keyUp(this.heldKeys.get(code) ?? this._machineKey(evt));
-        this.heldKeys.delete(code);
-
-        // Break comes out of reset however the machine or the focus changed while it was held,
-        // or a stop in between leaves the machine held in reset.
-        if (code === keyCodes.F12 || code === keyCodes.BREAK) {
-            this.dispatchEvent(new CustomEvent("break", { detail: false }));
-            this.processor.setReset(false);
-        }
-
-        // The shortcut this key started, not one looked up from the modifiers still held: an
-        // accessibility switch whose Alt was let go first would otherwise never be released.
-        const handler = this.heldHandlers.get(code) ?? this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
-        this.heldHandlers.delete(code);
-        if (handler) {
-            evt.preventDefault();
-            handler.handler(false, code);
+        if (isMac && code === keyCodes.CAPSLOCK) {
+            this._press(evt, code);
             return;
         }
-
-        if (this.inputEnabledFunction()) return;
-
-        // No further special handling needed if not running
-        if (!this.running) return;
-
+        const release = this.releases.get(code);
+        if (!release) return;
+        this.releases.delete(code);
         evt.preventDefault();
-
-        if (isMac && code === keyCodes.CAPSLOCK) {
-            // Special CapsLock handling for Mac
-            this.handleMacCapsLock();
-        }
+        release();
     }
 
     /**
@@ -314,10 +282,8 @@ export class Keyboard extends EventTarget {
      * Clears all pressed keys
      */
     clearKeys() {
-        this.heldKeys.clear();
-        // A switch held when the window lost focus never sees its key up, so let go of it here.
-        for (const [code, handler] of this.heldHandlers) handler.handler(false, code);
-        this.heldHandlers.clear();
+        for (const release of this.releases.values()) release();
+        this.releases.clear();
         this.keyInterface.clearKeys();
     }
 
