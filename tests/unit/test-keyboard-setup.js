@@ -162,6 +162,29 @@ describe("KeyboardSetup", () => {
             expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
         });
 
+        it("aims the media window from inside it, where the search box has focus", () => {
+            domFromIndexHtml("media-panel");
+            document.getElementById("media-search").focus();
+
+            document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.C, { alt: true }));
+
+            expect(actions.openMedia).toHaveBeenCalledWith(1);
+            expect(actions.openMedia).toHaveBeenCalledWith("tape");
+            expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+        });
+
+        it("lets go of an accessibility switch held while focus moved into the window", () => {
+            domFromIndexHtml("media-panel");
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
+
+            document.getElementById("media-search").focus();
+            document.dispatchEvent(keyEvent("keyup", keyCodes.K1, { alt: true }));
+
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
+        });
+
         it("releases a key that was held while Alt-Shift-M moved focus into the window", () => {
             domFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.SHIFT_LEFT, { shift: true }));
