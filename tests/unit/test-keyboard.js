@@ -148,6 +148,25 @@ describe("Keyboard", () => {
         });
     });
 
+    test("brings the machine out of reset when Break is released after it stopped", () => {
+        const evt = {
+            code: keyCodes.F12,
+            key: "F12",
+            preventDefault: vi.fn(),
+            altKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+        };
+        keyboard.setRunning(true);
+        keyboard.keyDown(evt);
+        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(true);
+
+        keyboard.setRunning(false);
+        keyboard.keyUp(evt);
+
+        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(false);
+    });
+
     test("keyCode is the physical position the event came from", () => {
         expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
         expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);

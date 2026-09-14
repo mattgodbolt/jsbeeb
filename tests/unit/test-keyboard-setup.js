@@ -74,6 +74,25 @@ describe("KeyboardSetup", () => {
             expect(accessibilitySwitches.userPort.read()).toBe(0x7f);
         });
 
+        it("lets go of a switch when Alt is released before the digit", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
+
+            document.dispatchEvent(keyEvent("keyup", keyCodes.ALT_LEFT));
+            document.dispatchEvent(keyEvent("keyup", keyCodes.K1));
+
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
+        });
+
+        it("lets go of a switch held when the window loses focus", () => {
+            document.dispatchEvent(keyEvent("keydown", keyCodes.K2, { alt: true }));
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfd);
+
+            setup.keyboard.clearKeys();
+
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
+        });
+
         it("leaves the function keys to the machine, so Alt-F4 is not a switch", () => {
             document.dispatchEvent(keyEvent("keydown", keyCodes.F4, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0xff);

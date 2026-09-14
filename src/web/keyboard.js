@@ -41,6 +41,8 @@ export class Keyboard extends EventTarget {
         this.saidCapsLockIsTapped = false;
         /** What each held physical key pressed, so releasing it releases the same thing. */
         this.heldKeys = new Map();
+        /** The shortcut each held physical key started, so letting go of the modifier first cannot lose its release. */
+        this.heldHandlers = new Map();
     }
 
     /**
@@ -178,7 +180,10 @@ export class Keyboard extends EventTarget {
         if (handler) {
             evt.preventDefault();
             // Auto-repeat would toggle a shortcut over and over while the key is simply held.
-            if (!evt.repeat) handler.handler(true, code, evt.shiftKey);
+            if (!evt.repeat) {
+                this.heldHandlers.set(code, handler);
+                handler.handler(true, code, evt.shiftKey);
+            }
             return;
         }
 
@@ -234,9 +239,17 @@ export class Keyboard extends EventTarget {
         this.keyInterface.keyUp(this.heldKeys.get(code) ?? this._machineKey(evt));
         this.heldKeys.delete(code);
 
-        // A switch held while the machine stopped, or while focus moved into a text field, still
-        // has to be released, so the handlers run here as they do on the way down.
-        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        // Break comes out of reset however the machine or the focus changed while it was held,
+        // or a stop in between leaves the machine held in reset.
+        if (code === keyCodes.F12 || code === keyCodes.BREAK) {
+            this.dispatchEvent(new CustomEvent("break", { detail: false }));
+            this.processor.setReset(false);
+        }
+
+        // The shortcut this key started, not one looked up from the modifiers still held: an
+        // accessibility switch whose Alt was let go first would otherwise never be released.
+        const handler = this.heldHandlers.get(code) ?? this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        this.heldHandlers.delete(code);
         if (handler) {
             evt.preventDefault();
             handler.handler(false, code);
@@ -250,11 +263,7 @@ export class Keyboard extends EventTarget {
 
         evt.preventDefault();
 
-        // Handle special key cases
-        if (code === keyCodes.F12 || code === keyCodes.BREAK) {
-            this.dispatchEvent(new CustomEvent("break", { detail: false }));
-            this.processor.setReset(false);
-        } else if (isMac && code === keyCodes.CAPSLOCK) {
+        if (isMac && code === keyCodes.CAPSLOCK) {
             // Special CapsLock handling for Mac
             this.handleMacCapsLock();
         }
@@ -306,6 +315,9 @@ export class Keyboard extends EventTarget {
      */
     clearKeys() {
         this.heldKeys.clear();
+        // A switch held when the window lost focus never sees its key up, so let go of it here.
+        for (const [code, handler] of this.heldHandlers) handler.handler(false, code);
+        this.heldHandlers.clear();
         this.keyInterface.clearKeys();
     }
 
