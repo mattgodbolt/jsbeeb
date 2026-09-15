@@ -1084,6 +1084,46 @@ describe("Video", () => {
         });
     });
 
+    describe("debugPaint", () => {
+        beforeEach(() => mockPaintExt.mockClear());
+
+        const paintedRows = () => {
+            const [, top, , bottom] = mockPaintExt.mock.calls.at(-1);
+            return { top, bottom };
+        };
+
+        it("paints from the top of the picture down to just past the beam", () => {
+            video.bitmapY = 200;
+            video.debugPaint();
+            expect(mockPaintExt).toHaveBeenCalledTimes(1);
+            const { top, bottom } = paintedRows();
+            expect(top).toBe(video.topBorder);
+            expect(bottom).toBeGreaterThan(200);
+            expect(bottom).toBeLessThan(230);
+        });
+
+        it("paints the whole picture once the beam is below it", () => {
+            video.bitmapY = 700;
+            video.debugPaint();
+            expect(paintedRows().bottom).toBe(625 - video.bottomBorder);
+        });
+
+        it("still paints a row with the beam above the picture", () => {
+            video.bitmapY = -1;
+            video.debugPaint();
+            const { top, bottom } = paintedRows();
+            expect(bottom).toBeGreaterThan(top);
+        });
+
+        it("leaves the framebuffer as it was", () => {
+            video.fb32.fill(0x12345678);
+            video.bitmapX = 500;
+            video.bitmapY = 300;
+            video.debugPaint();
+            expect(video.fb32.every((pixel) => pixel === 0x12345678)).toBe(true);
+        });
+    });
+
     describe("snapshotState / restoreState", () => {
         // These tests use fresh (non-mocked) Video instances since snapshot
         // needs the real Teletext with snapshotState/restoreState.
