@@ -1165,6 +1165,67 @@ describe("Video", () => {
         });
     });
 
+    describe("debugPaint", () => {
+        beforeEach(() => mockPaintExt.mockClear());
+
+        const painted = () => {
+            const [, top, , bottom, paintedTo] = mockPaintExt.mock.calls.at(-1);
+            return { top, bottom, paintedTo };
+        };
+
+        // The beam dot is drawn ten rows either side of the beam.
+        const DotRadius = 10;
+
+        it("hands over the whole picture's extent but only the rows down to the beam's dot", () => {
+            video.bitmapY = 200;
+            expect(video.doublesLines()).toBe(true);
+            video.debugPaint();
+            expect(mockPaintExt).toHaveBeenCalledTimes(1);
+            const { top, bottom, paintedTo } = painted();
+            expect(top).toBe(video.topBorder);
+            expect(bottom).toBe(625 - video.bottomBorder);
+            expect(paintedTo).toBe(200 + 2 + DotRadius);
+        });
+
+        it("counts the beam as one row when scanlines are not doubled", () => {
+            video.crtc.write(0, 8);
+            video.crtc.write(1, 3);
+            video.bitmapY = 200;
+            expect(video.doublesLines()).toBe(false);
+            video.debugPaint();
+            expect(painted().paintedTo).toBe(200 + 1 + DotRadius);
+        });
+
+        it("hands over every row once the beam is below the picture", () => {
+            video.bitmapY = 700;
+            video.debugPaint();
+            const { bottom, paintedTo } = painted();
+            expect(paintedTo).toBe(bottom);
+        });
+
+        it("hands over no rows with the beam above the picture", () => {
+            video.bitmapY = -1;
+            video.debugPaint();
+            const { top, paintedTo } = painted();
+            expect(paintedTo).toBe(top);
+        });
+
+        it("takes the beam from the 6847 on an Atom, whose position reaches the wrapper only at flyback", () => {
+            video.bitmapY = 700;
+            video.video6847 = { bitmapX: 100, bitmapY: 300 };
+            video.debugPaint();
+            expect(painted().paintedTo).toBe(300 + 2 + DotRadius);
+        });
+
+        it("leaves the framebuffer as it was", () => {
+            video.fb32.fill(0x12345678);
+            video.bitmapX = 500;
+            video.bitmapY = 300;
+            video.debugPaint();
+            expect(video.fb32.every((pixel) => pixel === 0x12345678)).toBe(true);
+        });
+    });
+
     describe("snapshotState / restoreState", () => {
         // These tests use fresh (non-mocked) Video instances since snapshot
         // needs the real Teletext with snapshotState/restoreState.
