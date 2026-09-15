@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
@@ -40,7 +41,7 @@ describe("Display", () => {
     };
 
     const paintedFrom = (frameSkipCount = 0) => ({
-        lineGrid: new Uint8Array(4),
+        lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
         lineBaseOdd: 2,
         frameSkipCount,
@@ -86,6 +87,25 @@ describe("Display", () => {
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
     });
 
+    it("copies only the rows it is told to, pixels and line grid alike, and presents the whole extent", () => {
+        const display = make();
+        display.videoFb32.fill(3);
+        const earlier = paintedFrom();
+        earlier.lineGrid = new Uint8Array(LineGridRows).fill(5);
+        display.onPaint(earlier, 0, 10, FbWidth, 100);
+        presentAll();
+        display.videoFb32.fill(7);
+        const partial = paintedFrom();
+        partial.lineGrid = new Uint8Array(LineGridRows).fill(9);
+        display.onPaint(partial, 0, 10, FbWidth, 100, 40);
+        presentAll();
+        expect(fakeCanvas.fb32[39 * FbWidth]).toBe(7);
+        expect(fakeCanvas.fb32[40 * FbWidth]).toBe(3);
+        expect(display.pendingFrame.lineGrid[39]).toBe(9);
+        expect(display.pendingFrame.lineGrid[40]).toBe(5);
+        expect(fakeCanvas.paint.mock.calls.at(-1).slice(0, 4)).toEqual([0, 10, FbWidth, 100]);
+    });
+
     it("schedules another present once the first has run", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
@@ -99,6 +119,18 @@ describe("Display", () => {
     it("skips paints when told to, on a cycle of frameSkip frames", () => {
         const display = make({ frameSkip: 3 });
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        expect(rafCallbacks).toHaveLength(0);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        expect(rafCallbacks).toHaveLength(1);
+    });
+
+    it("never skips a debug paint, and does not count it against the cycle", () => {
+        const display = make({ frameSkip: 3 });
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8, 4);
+        expect(rafCallbacks).toHaveLength(1);
+        presentAll();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
         expect(rafCallbacks).toHaveLength(0);
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
@@ -134,7 +166,7 @@ describe("Display", () => {
         display.onPaint(from, 0, 0, FbWidth, 8);
         expect(display.pendingFrame.lineBaseEven).toBe(5);
         expect(display.pendingFrame.lineBaseOdd).toBe(6);
-        expect([...display.pendingFrame.lineGrid]).toEqual([1, 2, 3]);
+        expect([...display.pendingFrame.lineGrid.subarray(0, 4)]).toEqual([1, 2, 3, 0]);
     });
 
     it("hands over the timing counters and starts them afresh", () => {

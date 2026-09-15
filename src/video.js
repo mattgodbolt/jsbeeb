@@ -648,21 +648,30 @@ export class Video {
         return y * 1024 + x;
     }
 
+    // Hands over the rows down to the beam only, so the canvas keeps the previous
+    // frame below it: this frame above the beam, the last one under it, as a
+    // camera would see.
     debugPaint() {
         if (!this.debugPrevScreen) {
             this.debugPrevScreen = new Uint32Array(1024 * 768);
         }
         debugCopyFb(this.debugPrevScreen, this.fb32);
+        // The 6847 keeps its own beam and copies it here only at flyback.
+        const beam = this.video6847 ?? this;
         const dotSize = 10;
         for (let y = -dotSize; y <= dotSize; y++) {
             for (let x = -dotSize; x <= dotSize; ++x) {
                 const dist = Math.sqrt(x * x + y * y) / dotSize;
                 if (dist > 1) continue;
-                const offset = this.debugOffset(this.bitmapX + x, this.bitmapY + y);
+                const offset = this.debugOffset(beam.bitmapX + x, beam.bitmapY + y);
                 this.fb32[offset] = lerp(this.fb32[offset], OPAQUE_WHITE, Math.pow(1 - dist, 2));
             }
         }
-        this.paint();
+        const beamRows = this.video6847 || this.doublesLines() ? 2 : 1;
+        const top = this.topBorder;
+        const bottom = 625 - this.bottomBorder;
+        const paintedTo = Math.max(top, Math.min(bottom, beam.bitmapY + beamRows + dotSize));
+        this.paint_ext(this.leftBorder, top, 1024 - this.rightBorder, bottom, paintedTo);
         debugCopyFb(this.fb32, this.debugPrevScreen);
     }
 
