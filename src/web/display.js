@@ -91,7 +91,7 @@ export class Display {
         this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);
         if (this.pendingFrame.lineGrid.length !== video.lineGrid.length)
             this.pendingFrame.lineGrid = new Uint8Array(video.lineGrid.length);
-        this.pendingFrame.lineGrid.set(video.lineGrid);
+        this.pendingFrame.lineGrid.set(video.lineGrid.subarray(miny, paintedTo), miny);
         Object.assign(this.pendingFrame, {
             minx,
             miny,
