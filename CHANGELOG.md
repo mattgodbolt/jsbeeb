@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.1...v2.0.2) (2026-09-14)
+
+
+### Bug Fixes
+
+* decide what a key does once, on the press ([#1143](https://github.com/mattgodbolt/jsbeeb/issues/1143)) ([76661fa](https://github.com/mattgodbolt/jsbeeb/commit/76661fa982ae1de60108c7caf434266a53179cb4))
+* let the shortcuts answer while a text field has focus ([#1141](https://github.com/mattgodbolt/jsbeeb/issues/1141)) ([b41379d](https://github.com/mattgodbolt/jsbeeb/commit/b41379d6be2d444f89c22db57ed383a4bf00c7c3))
+
 ## [2.0.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.0...v2.0.1) (2026-09-13)
 
 
