@@ -13,6 +13,14 @@ export function getFilterForMode(mode) {
     return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
 }
 
+/** The display modes that simulate phosphor persistence, with the setting that holds each one's amount. */
+export function persistenceSettings() {
+    return Object.entries(DISPLAY_MODE_FILTERS).flatMap(([mode, filterClass]) => {
+        const persistence = filterClass.getDisplayConfig().persistence;
+        return persistence ? [{ mode, ...persistence }] : [];
+    });
+}
+
 // The hint asks the browser to skip the renderer compositor queue and hand the buffer straight to
 // the display controller, saving a frame or so of output latency. It is only a hint, so read back
 // what we actually got.
@@ -49,6 +57,11 @@ export class Canvas {
     /** Nothing to release: the 2D context owns no objects of ours. */
     dispose() {}
 
+    /** How much of the previous frame each new one is blended over, 0 for none. */
+    setPersistence(persistence) {
+        this.ctx.globalAlpha = 1 - persistence;
+    }
+
     setFilter(filterClass) {
         if (filterClass !== PassthroughFilter)
             throw new Error(`${filterClass.getDisplayConfig().name} needs WebGL, which is not in use here`);
@@ -79,9 +92,9 @@ export class GlCanvas {
             alpha: false,
             antialias: false,
             depth: false,
-            // A desynchronized context can be scanned out while it is cleared but not yet redrawn,
-            // which flickers unless the buffer is preserved between frames.
-            preserveDrawingBuffer: lowLatency,
+            // Phosphor persistence blends each frame over the one before it, which has to still be
+            // there; a desynchronized context also flickers without it.
+            preserveDrawingBuffer: true,
             stencil: false,
             failIfMajorPerformanceCaveat: true,
             desynchronized: lowLatency,
@@ -172,6 +185,18 @@ export class GlCanvas {
         };
         for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
         this.attribLocations = [bindAttribute("pos", this.vertexPositionBuffer), bindAttribute("uvIn", this.uvBuffer)];
+    }
+
+    /** How much of the previous frame each new one is blended over, 0 for none. */
+    setPersistence(persistence) {
+        const gl = this.checkedGl;
+        if (persistence <= 0) {
+            gl.disable(gl.BLEND);
+            return;
+        }
+        gl.enable(gl.BLEND);
+        gl.blendColor(0, 0, 0, persistence);
+        gl.blendFunc(gl.ONE_MINUS_CONSTANT_ALPHA, gl.CONSTANT_ALPHA);
     }
 
     /**

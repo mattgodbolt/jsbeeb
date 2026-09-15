@@ -17,6 +17,7 @@ import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
+import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
 import { EmulationLoop } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
@@ -303,6 +304,10 @@ settings.on("displayMode", (mode) => {
     // The monitor picture may have changed shape.
     layout.resize();
 });
+for (const { mode, setting } of persistenceSettings()) {
+    display.setPersistence(mode, settings[setting]);
+    settings.on(setting, (persistence) => display.setPersistence(mode, persistence));
+}
 settings.on("keyLayout", (chosen) => keyboard.setKeyLayout(chosen));
 settings.on("tubeCpuMultiplier", (multiplier) => {
     if (processor.hasTube) processor.tube.cpuMultiplier = multiplier;

@@ -29,6 +29,7 @@ export class PALCompositeFilter {
             visibleHeight: 600,
             canvasWidth: 896,
             canvasHeight: 600,
+            persistence: { setting: "palPersistence", default: 0.9 },
         };
     }
 

@@ -27,6 +27,8 @@ export class Display {
                 : new canvasLib.Canvas(canvasEl, lowLatency),
     }) {
         this.screenCanvas = screenCanvas;
+        this.mode = mode;
+        this.persistence = {};
         this.frames = 0;
         this.frameSkip = frameSkip;
         this.paintMsThisTick = 0;
@@ -123,8 +125,15 @@ export class Display {
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
     }
 
+    /** Sets how much of the previous frame `mode` keeps under each new one; applied when that mode is showing. */
+    setPersistence(mode, persistence) {
+        this.persistence[mode] = persistence;
+        if (mode === this.mode) this.canvas.setPersistence(persistence);
+    }
+
     /** The mode is changed from a modal, which stops the emulator, so this repaints itself. */
     setMode(mode) {
+        this.mode = mode;
         const newFilterClass = canvasLib.getFilterForMode(mode);
         // Everything but the filter is the same whatever the mode: the framebuffer
         // texture, the vertex buffers and fb32 all carry over untouched.
@@ -136,6 +145,7 @@ export class Display {
         this.filterClass = this.canvas.filterClass;
         // Back to the mode's own size, undoing any scaling the last one asked for.
         this.sizeCanvasFor(this.filterClass);
+        this.canvas.setPersistence(this.persistence[mode] ?? 0);
         this.video.paint();
         this.setCrtPic();
     }

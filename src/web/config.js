@@ -1,6 +1,8 @@
 import { allModels, findModel, tubeModelFor } from "../models.js";
-import { getFilterForMode } from "./canvas.js";
+import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { AudioOutputs } from "../audio-output.js";
+
+const persistenceSettingFor = (mode) => persistenceSettings().find((persistence) => persistence.mode === mode);
 
 const round = (value) => Number(value.toFixed(2));
 
@@ -159,6 +161,13 @@ export class Config extends EventTarget {
             settings.set({ speakerAmount: parseFloat(e.currentTarget.value) });
         });
 
+        document.getElementById("persistenceSetting").addEventListener("input", (e) => {
+            const persistence = persistenceSettingFor(settings.displayMode);
+            if (persistence) settings.set({ [persistence.setting]: parseFloat(e.currentTarget.value) });
+        });
+        for (const { setting } of persistenceSettings())
+            settings.on(setting, () => this.setPersistenceSlider(settings));
+
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
                 e.preventDefault();
@@ -207,6 +216,15 @@ export class Config extends EventTarget {
     setDisplayMode(mode) {
         const config = getFilterForMode(mode).getDisplayConfig();
         for (const el of document.querySelectorAll(".display-mode-text")) el.textContent = config.name;
+        this.setPersistenceSlider(this.settings);
+    }
+
+    /** The slider edits the showing display mode's persistence, and is disabled for a mode without one. */
+    setPersistenceSlider(settings) {
+        const slider = document.getElementById("persistenceSetting");
+        const persistence = persistenceSettingFor(settings.displayMode);
+        slider.disabled = !persistence;
+        slider.value = persistence ? settings[persistence.setting] : 0;
     }
 
     /** Names the running machine everywhere the page shows it. */

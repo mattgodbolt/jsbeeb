@@ -305,6 +305,25 @@ describe("Config", () => {
             expect(settings.speakerAmount).toBe(0.5);
         });
 
+        it("gives the persistence slider to the showing display, and no display without one", () => {
+            const slider = document.getElementById("persistenceSetting");
+            settings.set({ displayMode: "pal" });
+            expect(slider.disabled).toBe(false);
+            expect(slider.value).toBe("0.9");
+            slider.value = 0.4;
+            slider.dispatchEvent(new Event("input"));
+            expect(settings.palPersistence).toBe(0.4);
+            expect(settings.rgbPersistence).toBe(0);
+            settings.set({ displayMode: "rgb" });
+            expect(slider.value).toBe("0");
+            settings.set({ rgbPersistence: 0.2 });
+            expect(slider.value).toBe("0.2");
+            settings.set({ displayMode: "xbr" });
+            expect(slider.disabled).toBe(true);
+            slider.dispatchEvent(new Event("input"));
+            expect(settings.palPersistence).toBe(0.4);
+        });
+
         it("follows a live setting changed elsewhere", () => {
             settings.set({ audioOutput: "off", displayMode: "xbr", speakerAmount: 0.25 });
             expect(document.querySelector(".audio-output-text").textContent).toBe("Unfiltered");

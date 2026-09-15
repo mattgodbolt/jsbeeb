@@ -36,6 +36,8 @@ export const UrlParamTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     speakerAmount: ParamTypes.FLOAT,
+    palPersistence: ParamTypes.FLOAT,
+    rgbPersistence: ParamTypes.FLOAT,
     audioLatencyMs: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
     tubeCpuMultiplier: ParamTypes.FLOAT,

@@ -25,7 +25,7 @@ function recordingGl() {
         "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
         "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
         "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
-        "TRIANGLE_STRIP HIGH_FLOAT"
+        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE_MINUS_CONSTANT_ALPHA"
     )
         .split(" ")
         .entries())
@@ -60,7 +60,8 @@ function recordingGl() {
     for (const name of (
         "shaderSource compileShader attachShader linkProgram useProgram depthMask viewport " +
         "bindTexture bindBuffer bufferData texImage2D texSubImage2D texParameteri pixelStorei activeTexture " +
-        "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f"
+        "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f " +
+        "enable disable blendColor blendFunc"
     ).split(" "))
         gl[name] = () => {};
 
@@ -208,13 +209,13 @@ describe("low latency canvas", () => {
         expect(element.asked[0].preserveDrawingBuffer).toBe(true);
     });
 
-    it("does not when turned off", () => {
+    it("does not when turned off, but still keeps the drawing buffer for persistence", () => {
         const element = attributeRecordingElement(recordingGl());
 
         new GlCanvas(element, PassthroughFilter, false);
 
         expect(element.asked[0].desynchronized).toBe(false);
-        expect(element.asked[0].preserveDrawingBuffer).toBe(false);
+        expect(element.asked[0].preserveDrawingBuffer).toBe(true);
     });
 
     it("survives a context that reports no attributes at all", () => {
@@ -230,6 +231,26 @@ describe("low latency canvas", () => {
         bestCanvas(element, PassthroughFilter, false);
 
         expect(element.asked[0].desynchronized).toBe(false);
+    });
+});
+
+describe("phosphor persistence", () => {
+    it("blends each frame over the last by the amount asked, and stops when asked for none", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["enable", "disable", "blendColor", "blendFunc"])
+            gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+
+        canvas.setPersistence(0.6);
+        expect(calls).toEqual([
+            ["enable", gl.BLEND],
+            ["blendColor", 0, 0, 0, 0.6],
+            ["blendFunc", gl.ONE_MINUS_CONSTANT_ALPHA, gl.CONSTANT_ALPHA],
+        ]);
+        calls.length = 0;
+        canvas.setPersistence(0);
+        expect(calls).toEqual([["disable", gl.BLEND]]);
     });
 });
 

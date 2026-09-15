@@ -25,7 +25,13 @@ describe("Display", () => {
             model: { isMaster: false, isAtom: false },
             mode: "rgb",
             makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = { fb32: new Uint32Array(FbWidth * 625), paint: vi.fn(), filterClass };
+                fakeCanvas = {
+                    fb32: new Uint32Array(FbWidth * 625),
+                    paint: vi.fn(),
+                    setPersistence: vi.fn(),
+                    setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
+                    filterClass,
+                };
                 return fakeCanvas;
             },
             ...options,
@@ -84,6 +90,18 @@ describe("Display", () => {
         display.present();
         display.present();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies a persistence to the canvas only while its display is showing", () => {
+        const display = make({ mode: "pal" });
+        display.setPersistence("rgb", 0.3);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+        display.setPersistence("pal", 0.8);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.8);
+        display.setMode("rgb");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.3);
+        display.setMode("xbr");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
     });
 
     it("schedules another present once the first has run", () => {

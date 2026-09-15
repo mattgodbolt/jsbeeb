@@ -39,6 +39,15 @@ describe("Settings", () => {
             expect(settings.speakerAmount).toBe(1);
         });
 
+        it("takes each display's persistence from its filter, then storage, then the URL", () => {
+            expect(make().palPersistence).toBe(0.9);
+            expect(make().rgbPersistence).toBe(0);
+            window.localStorage.palPersistence = "0.5";
+            expect(make().palPersistence).toBe(0.5);
+            urlState.params.palPersistence = 0.25;
+            expect(make().palPersistence).toBe(0.25);
+        });
+
         it("lower-cases a key layout from the URL", () => {
             urlState.params.keyLayout = "GAMING";
             expect(make().keyLayout).toBe("gaming");
@@ -86,6 +95,18 @@ describe("Settings", () => {
             expect(window.localStorage.hasMusic5000).toBeUndefined();
             expect(window.localStorage.keyLayout).toBe("natural");
             expect(urlState.params.hasMusic5000).toBe(true);
+        });
+
+        it("remembers a persistence and lets its drag settle", () => {
+            const settings = make();
+            settings.set({ palPersistence: 0.6 });
+            settings.set({ palPersistence: 0.7 });
+            expect(settings.palPersistence).toBe(0.7);
+            expect(window.localStorage.palPersistence).toBe("0.7");
+            expect(urlState.params.palPersistence).toBe(0.7);
+            expect(urlState.updateUrl).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(300);
+            expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
         });
 
         it("lets a speaker amount drag settle before writing one history entry", () => {

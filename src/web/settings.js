@@ -2,10 +2,20 @@ import { DefaultModel, findModel } from "../models.js";
 import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { guessModelFromHostname } from "../url-params.js";
 import { fittedRoms } from "./config.js";
+import { persistenceSettings } from "./canvas.js";
 import { toast } from "./toast.js";
 
 // Kept in browser storage for next time, as well as in the URL.
 const StoredSettings = ["keyLayout", "displayMode", "audioOutput", "speakerAmount"];
+// Set by sliders, so a burst of changes makes one history entry.
+const SlidSettings = ["speakerAmount"];
+for (const { setting } of persistenceSettings()) {
+    StoredSettings.push(setting);
+    SlidSettings.push(setting);
+}
+
+const storedNumber = (params, name, fallback) =>
+    [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
 
 /** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
 export function mapLegacyModels(parsedQuery) {
@@ -60,8 +70,9 @@ export class Settings extends EventTarget {
         this.displayMode = params.displayMode || window.localStorage.displayMode || "rgb";
         this.audioOutput =
             [params.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
-        this.speakerAmount =
-            [params.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
+        this.speakerAmount = storedNumber(params, "speakerAmount", 1);
+        for (const { setting, default: fallback } of persistenceSettings())
+            this[setting] = storedNumber(params, setting, fallback);
     }
 
     get extraRoms() {
@@ -81,7 +92,7 @@ export class Settings extends EventTarget {
             if (value === undefined) window.localStorage.removeItem(name);
             else window.localStorage[name] = value;
         }
-        this.urlState.set(changes, { settle: "speakerAmount" in changes });
+        this.urlState.set(changes, { settle: Object.keys(changes).some((name) => SlidSettings.includes(name)) });
         for (const name of Object.keys(changes)) this.dispatchEvent(new Event(name));
         this.dispatchEvent(new CustomEvent("change", { detail: changes }));
     }
