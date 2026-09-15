@@ -191,6 +191,8 @@ export class Display {
         // Back to the mode's own size, undoing any scaling the last one asked for.
         this.sizeCanvasFor(this.filterClass);
         this.applyPersistence();
+        // The new mode's picture replaces the old one's, not glows through it.
+        this.fieldsSincePresent = MaxDecayFields;
         this.video.paint();
         this.setCrtPic();
     }

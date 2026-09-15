@@ -212,6 +212,15 @@ describe("Display", () => {
         expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(1);
     });
 
+    it("replaces the picture on a mode change rather than glowing the old mode through it", () => {
+        const display = make({ mode: "pal" });
+        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        presentAll();
+        display.setMode("rgb");
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
+    });
+
     it("reports no persistence setting where the canvas cannot keep a picture", () => {
         const display = make({ mode: "pal" });
         fakeCanvas.canPersist = false;
