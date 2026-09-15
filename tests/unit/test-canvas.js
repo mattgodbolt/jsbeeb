@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from "vitest";
 import { GlCanvas, Canvas, bestCanvas, useBestFilter } from "../../src/web/canvas.js";
 import PAL_FRAG_SHADER from "../../src/video-filters/shaders/pal-composite.frag.glsl?raw";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
@@ -25,7 +26,7 @@ function recordingGl() {
         "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
         "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
         "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
-        "TRIANGLE_STRIP HIGH_FLOAT"
+        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE ZERO FUNC_ADD MAX_EXT"
     )
         .split(" ")
         .entries())
@@ -55,12 +56,14 @@ function recordingGl() {
         getAttribLocation: () => 0,
         getUniformLocation: () => ({}),
         getShaderPrecisionFormat: () => ({ precision: 23 }),
+        getExtension: (name) => (name === "EXT_blend_minmax" ? { MAX_EXT: gl.MAX_EXT } : null),
     });
 
     for (const name of (
         "shaderSource compileShader attachShader linkProgram useProgram depthMask viewport " +
         "bindTexture bindBuffer bufferData texImage2D texSubImage2D texParameteri pixelStorei activeTexture " +
-        "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f"
+        "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f " +
+        "enable disable blendEquation blendColor blendFunc"
     ).split(" "))
         gl[name] = () => {};
 
@@ -208,13 +211,13 @@ describe("low latency canvas", () => {
         expect(element.asked[0].preserveDrawingBuffer).toBe(true);
     });
 
-    it("does not when turned off", () => {
+    it("does not when turned off, but still keeps the drawing buffer for persistence", () => {
         const element = attributeRecordingElement(recordingGl());
 
         new GlCanvas(element, PassthroughFilter, false);
 
         expect(element.asked[0].desynchronized).toBe(false);
-        expect(element.asked[0].preserveDrawingBuffer).toBe(false);
+        expect(element.asked[0].preserveDrawingBuffer).toBe(true);
     });
 
     it("survives a context that reports no attributes at all", () => {
@@ -230,6 +233,66 @@ describe("low latency canvas", () => {
         bestCanvas(element, PassthroughFilter, false);
 
         expect(element.asked[0].desynchronized).toBe(false);
+    });
+});
+
+describe("phosphor persistence", () => {
+    const frame = { lineGrid: new Uint8Array(0), lineBaseEven: 0, lineBaseOdd: 0, phaseBaseEven: 0, phaseBaseOdd: 0 };
+
+    it("scales the old picture down by the persistence, then keeps the brighter of it and the frame", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["enable", "disable", "blendEquation", "blendColor", "blendFunc", "drawArrays"])
+            gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+
+        canvas.setPersistence(0.6);
+        expect(calls).toEqual([
+            ["enable", gl.BLEND],
+            ["blendColor", 0, 0, 0, 0.6],
+        ]);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["blendEquation", gl.FUNC_ADD],
+            ["blendFunc", gl.ZERO, gl.CONSTANT_ALPHA],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            ["blendEquation", gl.MAX_EXT],
+            ["blendFunc", gl.ONE, gl.ONE],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
+        calls.length = 0;
+        canvas.setPersistence(0);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["disable", gl.BLEND],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
+    });
+
+    it("shows each frame plain when the driver cannot keep the brighter of two colours", () => {
+        const gl = recordingGl();
+        gl.getExtension = () => null;
+        const calls = [];
+        for (const name of ["enable", "disable", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["disable", gl.BLEND],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
+    });
+
+    it("draws the frame with the filter's program and attributes after the decay", () => {
+        const gl = recordingGl();
+        const programs = [];
+        gl.useProgram = (program) => programs.push(program);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        programs.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(programs).toEqual([canvas.decayProgram, canvas.filter.program]);
     });
 });
 
@@ -283,6 +346,43 @@ describe("useBestFilter", () => {
 });
 
 describe("Canvas", () => {
+    function fake2dContext() {
+        return {
+            globalAlpha: 1,
+            fillStyle: "",
+            fillRect: () => {},
+            createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+            putImageData: () => {},
+            drawImage: vi.fn(),
+            getContextAttributes: () => ({}),
+        };
+    }
+
+    it("washes the old picture down by the decay, then keeps the brighter of it and the new frame", () => {
+        const ctx = fake2dContext();
+        const calls = [];
+        ctx.fillRect = (...args) => calls.push(["fillRect", ctx.globalCompositeOperation, ctx.globalAlpha, ...args]);
+        ctx.drawImage = () => calls.push(["drawImage", ctx.globalCompositeOperation, ctx.globalAlpha]);
+        const backCtx = fake2dContext();
+        const createElement = vi.spyOn(document, "createElement").mockReturnValue({ getContext: () => backCtx });
+        try {
+            const canvas = new Canvas({ width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) });
+            calls.length = 0;
+            canvas.setPersistence(0.6);
+            canvas.paint(0, 0, 1024, 625, {});
+            expect(calls).toEqual([
+                ["fillRect", "source-over", expect.closeTo(0.4, 5), 0, 0, 896, 600],
+                ["drawImage", "lighten", 1],
+            ]);
+            calls.length = 0;
+            canvas.setPersistence(0);
+            canvas.paint(0, 0, 1024, 625, {});
+            expect(calls).toEqual([["drawImage", "source-over", 1]]);
+        } finally {
+            createElement.mockRestore();
+        }
+    });
+
     it("can be disposed even though it owns no GL objects", () => {
         // Callers should not have to know which sort of canvas they have.
         const backing = { width: 1024, height: 625, getContext: () => null };

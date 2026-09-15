@@ -357,6 +357,9 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `audiofilterfreq` / `audiofilterq` - the corner frequency in Hz and the Q of the lowpass modelling the board's output
   filter, applied to the sound chip before it is resampled. The defaults, 7234 and 0.696, are the Beeb's own.
   `audiofilterfreq=0` turns the whole output path off.
+- `palPersistenceMs` / `rgbPersistenceMs` - the phosphor afterglow of the PAL TV and RGB monitor displays, the time
+  in milliseconds the last picture takes to fade under the next, from 0 (none) to 500; the slider in the configuration
+  dialog sets the showing display's amount live and remembers it.
 - `displayMode=X` - picks the display: `rgb` (the default, a plain monitor), `pal` (a television fed by the Beeb's UHF modulator)
   or `xbr` (an upscaler, see [docs/xbr-display-mode.md](docs/xbr-display-mode.md)). The top bar has the same choice, and remembers it.
 

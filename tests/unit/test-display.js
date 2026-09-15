@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
@@ -26,7 +27,13 @@ describe("Display", () => {
             model: { isMaster: false, isAtom: false },
             mode: "rgb",
             makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = { fb32: new Uint32Array(FbWidth * 625), paint: vi.fn(), filterClass };
+                fakeCanvas = {
+                    fb32: new Uint32Array(FbWidth * 625),
+                    paint: vi.fn(),
+                    setPersistence: vi.fn(),
+                    setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
+                    filterClass,
+                };
                 return fakeCanvas;
             },
             ...options,
@@ -85,6 +92,54 @@ describe("Display", () => {
         display.present();
         display.present();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies a persistence to the canvas only while the filter that declares it is in use", () => {
+        const display = make({ mode: "pal" });
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("rgbPersistenceMs", 20);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-0.5));
+        display.setMode("rgb");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
+        display.setMode("xbr");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+    });
+
+    it("gives a fallback display its own persistence, not the amount of the mode asked for", () => {
+        const display = make({
+            mode: "pal",
+            makeCanvas: (canvasEl, filterClass) => {
+                fakeCanvas = { fb32: new Uint32Array(FbWidth * 625), paint: vi.fn(), setPersistence: vi.fn() };
+                fakeCanvas.filterClass = PassthroughFilter;
+                fakeCanvas.fallbackReason = `${filterClass.getDisplayConfig().name} declined`;
+                return fakeCanvas;
+            },
+        });
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+        display.setPersistence("rgbPersistenceMs", 20);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
+    });
+
+    it("converts an afterglow with the Atom's shorter field", () => {
+        const display = make({ mode: "rgb", model: { isMaster: false, isAtom: true } });
+        display.setPersistence("rgbPersistenceMs", 50);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1000 / 60 / 50));
+    });
+
+    it("keeps an afterglow within what the canvas can show, and takes anything else as none", () => {
+        const display = make({ mode: "pal" });
+        display.setPersistence("palPersistenceMs", 5000);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-20 / 500));
+        display.setPersistence("palPersistenceMs", -1);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+        display.setPersistence("palPersistenceMs", 0);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+        display.setPersistence("palPersistenceMs", undefined);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
     });
 
     it("copies only the rows it is told to, pixels and line grid alike, and presents the whole extent", () => {

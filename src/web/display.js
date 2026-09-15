@@ -1,4 +1,5 @@
 import * as canvasLib from "./canvas.js";
+import { MaxPersistenceMs, persistenceFromMs } from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
 import { LineGridRows } from "../video-filters/pixel-grid.js";
 import { toast } from "./toast.js";
@@ -28,6 +29,8 @@ export class Display {
                 : new canvasLib.Canvas(canvasEl, lowLatency),
     }) {
         this.screenCanvas = screenCanvas;
+        this.persistence = {};
+        this.fieldMs = 1000 / (model.isAtom ? 60 : 50);
         this.frames = 0;
         this.frameSkip = frameSkip;
         this.paintMsThisTick = 0;
@@ -130,6 +133,28 @@ export class Display {
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
     }
 
+    /**
+     * Sets a display's afterglow time in milliseconds, by the name of its
+     * setting; it applies while the filter in use is the one that declares that
+     * setting, so a fallback gets its own amount, not the amount of the mode
+     * that was asked for.
+     */
+    setPersistence(setting, afterglowMs) {
+        this.persistence[setting] = Number.isFinite(afterglowMs)
+            ? persistenceFromMs(Math.min(MaxPersistenceMs, Math.max(0, afterglowMs)), this.fieldMs)
+            : 0;
+        if (setting === this.persistenceSetting()) this.applyPersistence();
+    }
+
+    persistenceSetting() {
+        return this.filterClass.getDisplayConfig().persistence?.setting;
+    }
+
+    applyPersistence() {
+        const setting = this.persistenceSetting();
+        this.canvas.setPersistence(setting === undefined ? 0 : (this.persistence[setting] ?? 0));
+    }
+
     /** The mode is changed from a modal, which stops the emulator, so this repaints itself. */
     setMode(mode) {
         const newFilterClass = canvasLib.getFilterForMode(mode);
@@ -143,6 +168,7 @@ export class Display {
         this.filterClass = this.canvas.filterClass;
         // Back to the mode's own size, undoing any scaling the last one asked for.
         this.sizeCanvasFor(this.filterClass);
+        this.applyPersistence();
         this.video.paint();
         this.setCrtPic();
     }
