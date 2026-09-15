@@ -1,6 +1,7 @@
 import * as canvasLib from "./canvas.js";
 import { MaxPersistence } from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
+import { LineGridRows } from "../video-filters/pixel-grid.js";
 import { toast } from "./toast.js";
 
 // While running fast the state machines still run accurately, but painting is
@@ -56,7 +57,7 @@ export class Display {
             lineBaseOdd: 0,
             phaseBaseEven: 0,
             phaseBaseOdd: 0,
-            lineGrid: new Uint8Array(0),
+            lineGrid: new Uint8Array(LineGridRows),
         };
 
         const display = this;
@@ -65,8 +66,8 @@ export class Display {
             : new Video(
                   model.isMaster,
                   this.videoFb32,
-                  function paint(minx, miny, maxx, maxy) {
-                      display.onPaint(this, minx, miny, maxx, maxy);
+                  function paint(minx, miny, maxx, maxy, paintedTo) {
+                      display.onPaint(this, minx, miny, maxx, maxy, paintedTo);
                   },
                   { isAtom: model.isAtom },
               );
@@ -84,17 +85,23 @@ export class Display {
         this.video.frameSkipCount = speedy ? (skip % 2 ? skip : skip + 1) : 0;
     }
 
-    onPaint(video, minx, miny, maxx, maxy) {
-        if (!video.frameSkipCount) {
-            this.frames++;
-            if (this.frames < this.frameSkip) return;
-            this.frames = 0;
+    /**
+     * `paintedTo` is the row the copy stops at; the rows below it keep what the
+     * canvas last showed. A paint that gives one is the debugger's and is never
+     * skipped.
+     */
+    onPaint(video, minx, miny, maxx, maxy, paintedTo) {
+        if (paintedTo === undefined) {
+            paintedTo = maxy;
+            if (!video.frameSkipCount) {
+                this.frames++;
+                if (this.frames < this.frameSkip) return;
+                this.frames = 0;
+            }
         }
         const start = performance.now();
-        this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
-        if (this.pendingFrame.lineGrid.length !== video.lineGrid.length)
-            this.pendingFrame.lineGrid = new Uint8Array(video.lineGrid.length);
-        this.pendingFrame.lineGrid.set(video.lineGrid);
+        this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);
+        this.pendingFrame.lineGrid.set(video.lineGrid.subarray(miny, paintedTo), miny);
         Object.assign(this.pendingFrame, {
             minx,
             miny,

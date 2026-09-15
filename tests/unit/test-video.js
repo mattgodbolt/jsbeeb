@@ -1045,17 +1045,71 @@ describe("Video", () => {
             expect(Math.abs(((ScanlinesPerFrame * PalPhasePerLine) % 1) - 0.5)).toBeGreaterThan(0.1);
         });
 
-        it("should record each field's phase at its first row, a frame apart without interlace", () => {
-            const phases = [];
-            const v = makeVideo((video) => phases.push({ even: video.phaseBaseEven, odd: video.phaseBaseOdd }));
-            programNonInterlacedFrame(v);
+        // The phase bases of each painted frame, alongside the line bases they belong with.
+        function paintedPhases(program, frames) {
+            const painted = [];
+            const v = makeVideo((video) =>
+                painted.push({
+                    lineEven: video.lineBaseEven,
+                    lineOdd: video.lineBaseOdd,
+                    phaseEven: video.phaseBaseEven,
+                    phaseOdd: video.phaseBaseOdd,
+                }),
+            );
+            program(v);
             v.run(SettleFrames * ClocksPerFrame);
-            phases.length = 0;
-            v.run(4 * ClocksPerFrame);
-            expect(phases.map((p) => p.odd)).toEqual(phases.map((p) => p.even));
-            const perFrame = (ScanlinesPerFrame * PalPhasePerLine) % 1;
-            for (let i = 1; i < phases.length; ++i)
-                expect((phases[i].even - phases[i - 1].even + 1) % 1).toBeCloseTo(perFrame, 6);
+            painted.length = 0;
+            v.run(frames * ClocksPerFrame);
+            return painted;
+        }
+
+        const phaseStep = (lines) => (((lines * PalPhasePerLine) % 1) + 1) % 1;
+        const phaseAdvance = (from, to) => (to - from + 1) % 1;
+        const circularDistance = (a, b) => Math.min(Math.abs(a - b), 1 - Math.abs(a - b));
+
+        // Line counts come back modulo LineCountPeriod, which the phase is not periodic in,
+        // so the lines really elapsed may be a period more, or a period fewer when the
+        // later base was recorded first.
+        function expectPhaseAdvanceOver(lines, from, to) {
+            const advance = phaseAdvance(from, to);
+            const candidates = [-1, 0, 1].map((periods) => phaseStep(lines + periods * LineCountPeriod));
+            expect(Math.min(...candidates.map((c) => circularDistance(advance, c)))).toBeLessThan(1e-6);
+        }
+
+        it("should record each field's phase at its first row, a frame apart without interlace", () => {
+            const painted = paintedPhases(programNonInterlacedFrame, 4);
+            expect(painted.map((p) => p.phaseOdd)).toEqual(painted.map((p) => p.phaseEven));
+            for (let i = 1; i < painted.length; ++i)
+                expectPhaseAdvanceOver(ScanlinesPerFrame, painted[i - 1].phaseEven, painted[i].phaseEven);
+        });
+
+        it("should advance the phase by each field's own line count with interlace sync", () => {
+            const painted = paintedPhases(programInterlaceSyncFrame, 8);
+            expect(painted.length).toBeGreaterThanOrEqual(6);
+            for (let i = 1; i < painted.length; ++i) {
+                const lines = (painted[i].lineEven - painted[i - 1].lineEven + LineCountPeriod) % LineCountPeriod;
+                expect([312, 313]).toContain(lines);
+                expectPhaseAdvanceOver(lines, painted[i - 1].phaseEven, painted[i].phaseEven);
+            }
+        });
+
+        it("should give the odd field's first row one more line of phase with interlace sync and video", () => {
+            const painted = paintedPhases(programInterlaceSyncAndVideoFrame, 8);
+            expect(painted.length).toBeGreaterThanOrEqual(6);
+            const lineOf = (p, key) => p[key];
+            for (let i = 1; i < painted.length; ++i) {
+                for (const [line, phase] of [
+                    ["lineEven", "phaseEven"],
+                    ["lineOdd", "phaseOdd"],
+                ]) {
+                    const lines =
+                        (lineOf(painted[i], line) - lineOf(painted[i - 1], line) + LineCountPeriod) % LineCountPeriod;
+                    expectPhaseAdvanceOver(lines, painted[i - 1][phase], painted[i][phase]);
+                }
+            }
+            const last = painted.at(-1);
+            const between = (last.lineOdd - last.lineEven + LineCountPeriod) % LineCountPeriod;
+            expectPhaseAdvanceOver(between, last.phaseEven, last.phaseOdd);
         });
 
         it("should advance both bases by a whole frame of lines without interlace", () => {
@@ -1108,6 +1162,67 @@ describe("Video", () => {
                 programInterlaceSyncAndVideoFrame(v);
                 v.writeCrtc(6, 40);
             });
+        });
+    });
+
+    describe("debugPaint", () => {
+        beforeEach(() => mockPaintExt.mockClear());
+
+        const painted = () => {
+            const [, top, , bottom, paintedTo] = mockPaintExt.mock.calls.at(-1);
+            return { top, bottom, paintedTo };
+        };
+
+        // The beam dot is drawn ten rows either side of the beam.
+        const DotRadius = 10;
+
+        it("hands over the whole picture's extent but only the rows down to the beam's dot", () => {
+            video.bitmapY = 200;
+            expect(video.doublesLines()).toBe(true);
+            video.debugPaint();
+            expect(mockPaintExt).toHaveBeenCalledTimes(1);
+            const { top, bottom, paintedTo } = painted();
+            expect(top).toBe(video.topBorder);
+            expect(bottom).toBe(625 - video.bottomBorder);
+            expect(paintedTo).toBe(200 + 2 + DotRadius);
+        });
+
+        it("counts the beam as one row when scanlines are not doubled", () => {
+            video.crtc.write(0, 8);
+            video.crtc.write(1, 3);
+            video.bitmapY = 200;
+            expect(video.doublesLines()).toBe(false);
+            video.debugPaint();
+            expect(painted().paintedTo).toBe(200 + 1 + DotRadius);
+        });
+
+        it("hands over every row once the beam is below the picture", () => {
+            video.bitmapY = 700;
+            video.debugPaint();
+            const { bottom, paintedTo } = painted();
+            expect(paintedTo).toBe(bottom);
+        });
+
+        it("hands over no rows with the beam above the picture", () => {
+            video.bitmapY = -1;
+            video.debugPaint();
+            const { top, paintedTo } = painted();
+            expect(paintedTo).toBe(top);
+        });
+
+        it("takes the beam from the 6847 on an Atom, whose position reaches the wrapper only at flyback", () => {
+            video.bitmapY = 700;
+            video.video6847 = { bitmapX: 100, bitmapY: 300 };
+            video.debugPaint();
+            expect(painted().paintedTo).toBe(300 + 2 + DotRadius);
+        });
+
+        it("leaves the framebuffer as it was", () => {
+            video.fb32.fill(0x12345678);
+            video.bitmapX = 500;
+            video.bitmapY = 300;
+            video.debugPaint();
+            expect(video.fb32.every((pixel) => pixel === 0x12345678)).toBe(true);
         });
     });
 
@@ -1165,6 +1280,9 @@ describe("Video", () => {
             v.hsyncCount = 1234;
             v.lineBaseEven = 1000;
             v.lineBaseOdd = 1313;
+            v.subcarrierPhase = 0.125;
+            v.phaseBaseEven = 0.375;
+            v.phaseBaseOdd = 0.625;
 
             const v2 = makeRealVideo();
             v2.restoreState(v.snapshotState());
@@ -1172,6 +1290,9 @@ describe("Video", () => {
             expect(v2.hsyncCount).toBe(1234);
             expect(v2.lineBaseEven).toBe(1000);
             expect(v2.lineBaseOdd).toBe(1313);
+            expect(v2.subcarrierPhase).toBe(0.125);
+            expect(v2.phaseBaseEven).toBe(0.375);
+            expect(v2.phaseBaseOdd).toBe(0.625);
         });
 
         it("should restart the PAL line phase from zero for a snapshot without it", () => {
