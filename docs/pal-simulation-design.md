@@ -270,9 +270,9 @@ luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current;
 
 ### PAL Parameters
 
-- **Subcarrier frequency:** 4.43361875 MHz nominal plus `PalSubcarrierOffsetHz` (239 Hz, as measured on a real Master; `video.js` owns both), 283.7669 cycles per 64 μs scanline
-- **Line phase offset:** 0.7669 fractional cycles per line, so the residual dot pattern roughly repeats every four lines
-- **Frame phase step:** whatever the frame's line count gives. At exactly nominal the Beeb's usual 312-line non-interlaced frame would step 0.4992 cycles and the dots would invert every frame, a 25 Hz strobe; with the offset it steps 0.27 cycles and the pattern crawls (#962)
+- **Subcarrier frequency:** the nominal 4.43361875 MHz plus `PalSubcarrierOffsetHz`, a stock crystal's offset as measured on a real Master. `video.js` owns both and derives `PalCyclesPerLine` (over the 64 μs line) and `PalPhasePerLine` (its fractional part) from them; nothing else holds the numbers
+- **Line phase offset:** `PalPhasePerLine`, a little over three quarters of a cycle, so the residual dot pattern roughly repeats every four lines
+- **Frame phase step:** whatever the frame's line count gives. At exactly nominal the fraction is 0.7516, and the Beeb's usual 312-line non-interlaced frame steps 0.4992 cycles: the dots invert every frame, a 25 Hz strobe. Any offset of a few hundred hertz moves the step well away from a half cycle and the pattern crawls instead (#962)
 - **V phase alternation:** ±1 per scanline (PAL's defining characteristic)
 - **Phase accumulation:** the phase is a free-running accumulator, not periodic in any line count, so the shader is given each field's starting phase rather than a line number to multiply
 
