@@ -122,13 +122,15 @@ export class Display {
         });
         // How many fields the phosphor has decayed over since the frame the
         // canvas shows: one usually, more under a frame skip or when paints
-        // outrun the animation frame, none for a repaint of the same frame. A
-        // count that went backwards is a restore, whose picture owes the old
-        // one nothing. The 6847 keeps its own count and syncs it after painting.
+        // outrun the animation frame, none for a repaint of the same frame, and
+        // all of them after a restore, whose picture owes the old one nothing.
+        // The 6847 keeps its own count and syncs it after painting.
         const frameCount = (video.video6847 ?? video).frameCount;
-        const elapsed = frameCount - this.lastPaintedFrameCount;
-        this.fieldsSincePresent =
-            elapsed < 0 ? MaxDecayFields : Math.min(MaxDecayFields, this.fieldsSincePresent + elapsed);
+        const elapsed = Math.max(0, frameCount - this.lastPaintedFrameCount);
+        this.fieldsSincePresent = video.paintsAfresh
+            ? MaxDecayFields
+            : Math.min(MaxDecayFields, this.fieldsSincePresent + elapsed);
+        video.paintsAfresh = false;
         this.pendingFrame.fields = this.fieldsSincePresent;
         this.lastPaintedFrameCount = frameCount;
         this.paintMsThisTick += performance.now() - start;
@@ -165,8 +167,9 @@ export class Display {
         if (setting === this.persistenceSetting()) this.applyPersistence();
     }
 
+    /** The setting that governs the display in use, or nothing where the canvas cannot keep a picture. */
     persistenceSetting() {
-        return this.filterClass.getDisplayConfig().persistence?.setting;
+        return this.canvas.canPersist ? this.filterClass.getDisplayConfig().persistence?.setting : undefined;
     }
 
     applyPersistence() {

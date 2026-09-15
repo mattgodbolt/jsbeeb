@@ -1295,6 +1295,13 @@ describe("Video", () => {
             expect(v2.phaseBaseOdd).toBe(0.625);
         });
 
+        it("should paint afresh after a restore", () => {
+            const v = makeRealVideo();
+            expect(v.paintsAfresh).toBe(false);
+            v.restoreState(makeRealVideo().snapshotState());
+            expect(v.paintsAfresh).toBe(true);
+        });
+
         it("should restart the PAL line phase from zero for a snapshot without it", () => {
             const v = makeRealVideo();
             const { hsyncCount, lineBaseEven, lineBaseOdd, subcarrierPhase, phaseBaseEven, phaseBaseOdd, ...older } =

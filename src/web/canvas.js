@@ -86,6 +86,10 @@ export class Canvas {
     /** Nothing to release: the 2D context owns no objects of ours. */
     dispose() {}
 
+    get canPersist() {
+        return true;
+    }
+
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
         this.persistence = persistence;
@@ -102,7 +106,9 @@ export class Canvas {
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
         // Set on every paint: a resize resets the context's state. The decay is
         // a black wash over the old picture; "lighten" then keeps the brighter
-        // of that and the new frame, per channel.
+        // of that and the new frame, per channel. The wash rounds a value of a
+        // few levels back to itself, so a trail here ends a shade above black;
+        // the 2D canvas has no subtract that would not also flicker black.
         const ctx = this.ctx;
         if (this.persistence > 0) {
             ctx.globalCompositeOperation = "source-over";
@@ -265,10 +271,15 @@ export class GlCanvas {
         gl.blendFunc(gl.ONE, gl.ONE);
     }
 
+    /** Whether the driver can keep the brighter of two colours, without which there is no persistence. */
+    get canPersist() {
+        return !!this.blendMinMax;
+    }
+
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
         const gl = this.checkedGl;
-        this.persistence = this.blendMinMax ? persistence : 0;
+        this.persistence = this.canPersist ? persistence : 0;
         if (this.persistence <= 0) {
             gl.disable(gl.BLEND);
             return;

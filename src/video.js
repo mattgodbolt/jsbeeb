@@ -372,6 +372,7 @@ export class Video {
         this.lineBaseOdd = 0;
         this.phaseBaseEven = 0;
         this.phaseBaseOdd = 0;
+        this.paintsAfresh = false;
         this.doEvenFrameLogic = false;
         this.isEvenRender = true;
         this.lastRenderWasEven = false;
@@ -555,6 +556,8 @@ export class Video {
         this.inHSync = state.inHSync;
         this.inVSync = state.inVSync;
         this.hadVSyncThisRow = state.hadVSyncThisRow;
+        // The next paint replaces the picture rather than following on from it.
+        this.paintsAfresh = true;
         this.checkVertAdjust = state.checkVertAdjust;
         this.endOfMainLatched = state.endOfMainLatched;
         this.endOfVertAdjustLatched = state.endOfVertAdjustLatched;

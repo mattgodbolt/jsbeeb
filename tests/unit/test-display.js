@@ -31,6 +31,7 @@ describe("Display", () => {
                     fb32: new Uint32Array(FbWidth * 625),
                     paint: vi.fn(),
                     setPersistence: vi.fn(),
+                    canPersist: true,
                     setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
                     filterClass,
                 };
@@ -112,7 +113,12 @@ describe("Display", () => {
         const display = make({
             mode: "pal",
             makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = { fb32: new Uint32Array(FbWidth * 625), paint: vi.fn(), setPersistence: vi.fn() };
+                fakeCanvas = {
+                    fb32: new Uint32Array(FbWidth * 625),
+                    paint: vi.fn(),
+                    setPersistence: vi.fn(),
+                    canPersist: true,
+                };
                 fakeCanvas.filterClass = PassthroughFilter;
                 fakeCanvas.fallbackReason = `${filterClass.getDisplayConfig().name} declined`;
                 return fakeCanvas;
@@ -191,13 +197,28 @@ describe("Display", () => {
         expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(2);
     });
 
-    it("owes the old picture nothing after a restore that moved the frame count back", () => {
+    it("owes the old picture nothing after a restore", () => {
         const display = make();
         display.onPaint(paintedFrom(0, 100), 0, 0, FbWidth, 8);
         presentAll();
-        display.onPaint(paintedFrom(0, 3), 0, 0, FbWidth, 8);
+        const restored = paintedFrom(0, 3);
+        restored.paintsAfresh = true;
+        display.onPaint(restored, 0, 0, FbWidth, 8);
         presentAll();
         expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
+        expect(restored.paintsAfresh).toBe(false);
+        display.onPaint(paintedFrom(0, 4), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(1);
+    });
+
+    it("reports no persistence setting where the canvas cannot keep a picture", () => {
+        const display = make({ mode: "pal" });
+        fakeCanvas.canPersist = false;
+        expect(display.persistenceSetting()).toBeUndefined();
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
     });
 
     it("counts the Atom's fields from the 6847, which syncs its count only after painting", () => {
