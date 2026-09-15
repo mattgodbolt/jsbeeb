@@ -97,12 +97,12 @@ describe("Display", () => {
     it("applies a persistence to the canvas only while the filter that declares it is in use", () => {
         const display = make({ mode: "pal" });
         fakeCanvas.setPersistence.mockClear();
-        display.setPersistence("rgbPersistence", 0.3);
+        display.setPersistence("rgbPersistenceMs", 20);
         expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
-        display.setPersistence("palPersistence", 0.8);
-        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.8);
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-0.5));
         display.setMode("rgb");
-        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.3);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
         display.setMode("xbr");
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
     });
@@ -118,19 +118,21 @@ describe("Display", () => {
             },
         });
         fakeCanvas.setPersistence.mockClear();
-        display.setPersistence("palPersistence", 0.8);
+        display.setPersistence("palPersistenceMs", 40);
         expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
-        display.setPersistence("rgbPersistence", 0.3);
-        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.3);
+        display.setPersistence("rgbPersistenceMs", 20);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
     });
 
-    it("keeps a persistence within what the canvas can show", () => {
+    it("keeps an afterglow within what the canvas can show, and takes anything else as none", () => {
         const display = make({ mode: "pal" });
-        display.setPersistence("palPersistence", 2);
-        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.98);
-        display.setPersistence("palPersistence", -1);
+        display.setPersistence("palPersistenceMs", 5000);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-20 / 500));
+        display.setPersistence("palPersistenceMs", -1);
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
-        display.setPersistence("palPersistence", undefined);
+        display.setPersistence("palPersistenceMs", 0);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+        display.setPersistence("palPersistenceMs", undefined);
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
     });
 

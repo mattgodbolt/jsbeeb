@@ -2,7 +2,7 @@ import { DefaultModel, findModel } from "../models.js";
 import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { guessModelFromHostname } from "../url-params.js";
 import { fittedRoms } from "./config.js";
-import { MaxPersistence, persistenceSettings } from "./canvas.js";
+import { MaxPersistenceMs, persistenceSettings } from "./canvas.js";
 import { toast } from "./toast.js";
 
 // Kept in browser storage for next time, as well as in the URL.
@@ -18,7 +18,7 @@ const storedNumber = (params, name, fallback) =>
     [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
 
 const PersistenceDefaults = new Map(persistenceSettings().map(({ setting, default: fallback }) => [setting, fallback]));
-const clampPersistence = (value) => Math.min(MaxPersistence, Math.max(0, value));
+const clampPersistence = (value) => Math.min(MaxPersistenceMs, Math.max(0, value));
 
 /** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
 export function mapLegacyModels(parsedQuery) {

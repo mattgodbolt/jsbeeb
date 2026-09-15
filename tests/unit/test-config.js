@@ -309,30 +309,30 @@ describe("Config", () => {
             const slider = document.getElementById("persistenceSetting");
             settings.set({ displayMode: "pal" });
             expect(slider.disabled).toBe(false);
-            expect(slider.value).toBe("0.6");
-            slider.value = 0.4;
+            expect(slider.value).toBe("40");
+            slider.value = 80;
             slider.dispatchEvent(new Event("input"));
-            expect(settings.palPersistence).toBe(0.4);
-            expect(settings.rgbPersistence).toBe(0);
+            expect(settings.palPersistenceMs).toBe(80);
+            expect(settings.rgbPersistenceMs).toBe(0);
             settings.set({ displayMode: "rgb" });
             expect(slider.value).toBe("0");
-            settings.set({ rgbPersistence: 0.2 });
-            expect(slider.value).toBe("0.2");
+            settings.set({ rgbPersistenceMs: 20 });
+            expect(slider.value).toBe("20");
             settings.set({ displayMode: "xbr" });
             expect(slider.disabled).toBe(true);
             slider.dispatchEvent(new Event("input"));
-            expect(settings.palPersistence).toBe(0.4);
+            expect(settings.palPersistenceMs).toBe(80);
         });
 
         it("gives the slider to the display actually in use when the one asked for fell back", () => {
             const slider = document.getElementById("persistenceSetting");
             settings.set({ displayMode: "pal" });
-            config.setPersistenceInUse("rgbPersistence");
+            config.setPersistenceInUse("rgbPersistenceMs");
             expect(slider.value).toBe("0");
-            slider.value = 0.3;
+            slider.value = 30;
             slider.dispatchEvent(new Event("input"));
-            expect(settings.rgbPersistence).toBe(0.3);
-            expect(settings.palPersistence).toBe(0.6);
+            expect(settings.rgbPersistenceMs).toBe(30);
+            expect(settings.palPersistenceMs).toBe(40);
         });
 
         it("follows a live setting changed elsewhere", () => {

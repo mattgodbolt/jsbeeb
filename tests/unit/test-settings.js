@@ -39,20 +39,20 @@ describe("Settings", () => {
             expect(settings.speakerAmount).toBe(1);
         });
 
-        it("takes each display's persistence from its filter, then storage, then the URL", () => {
-            expect(make().palPersistence).toBe(0.6);
-            expect(make().rgbPersistence).toBe(0);
-            window.localStorage.palPersistence = "0.5";
-            expect(make().palPersistence).toBe(0.5);
-            urlState.params.palPersistence = 0.25;
-            expect(make().palPersistence).toBe(0.25);
+        it("takes each display's afterglow from its filter, then storage, then the URL", () => {
+            expect(make().palPersistenceMs).toBe(40);
+            expect(make().rgbPersistenceMs).toBe(0);
+            window.localStorage.palPersistenceMs = "25";
+            expect(make().palPersistenceMs).toBe(25);
+            urlState.params.palPersistenceMs = 100;
+            expect(make().palPersistenceMs).toBe(100);
         });
 
-        it("keeps a persistence within what a display can show", () => {
-            urlState.params.palPersistence = 2;
-            expect(make().palPersistence).toBe(0.98);
-            window.localStorage.rgbPersistence = "-1";
-            expect(make().rgbPersistence).toBe(0);
+        it("keeps an afterglow within what a display can show", () => {
+            urlState.params.palPersistenceMs = 5000;
+            expect(make().palPersistenceMs).toBe(500);
+            window.localStorage.rgbPersistenceMs = "-1";
+            expect(make().rgbPersistenceMs).toBe(0);
         });
 
         it("lower-cases a key layout from the URL", () => {
@@ -104,30 +104,30 @@ describe("Settings", () => {
             expect(urlState.params.hasMusic5000).toBe(true);
         });
 
-        it("keeps a persistence set live within what a display can show, everywhere it goes", () => {
+        it("keeps an afterglow set live within what a display can show, everywhere it goes", () => {
             const settings = make();
-            settings.set({ palPersistence: 2 });
-            expect(settings.palPersistence).toBe(0.98);
-            expect(window.localStorage.palPersistence).toBe("0.98");
-            expect(urlState.params.palPersistence).toBe(0.98);
+            settings.set({ palPersistenceMs: 5000 });
+            expect(settings.palPersistenceMs).toBe(500);
+            expect(window.localStorage.palPersistenceMs).toBe("500");
+            expect(urlState.params.palPersistenceMs).toBe(500);
         });
 
-        it("puts a cleared persistence back at its display's default, remembered nowhere", () => {
+        it("puts a cleared afterglow back at its display's default, remembered nowhere", () => {
             const settings = make();
-            settings.set({ palPersistence: 0.3 });
-            settings.set({ palPersistence: undefined });
-            expect(settings.palPersistence).toBe(0.6);
-            expect(window.localStorage.palPersistence).toBeUndefined();
-            expect(urlState.params.palPersistence).toBeUndefined();
+            settings.set({ palPersistenceMs: 30 });
+            settings.set({ palPersistenceMs: undefined });
+            expect(settings.palPersistenceMs).toBe(40);
+            expect(window.localStorage.palPersistenceMs).toBeUndefined();
+            expect(urlState.params.palPersistenceMs).toBeUndefined();
         });
 
-        it("remembers a persistence and lets its drag settle", () => {
+        it("remembers an afterglow and lets its drag settle", () => {
             const settings = make();
-            settings.set({ palPersistence: 0.6 });
-            settings.set({ palPersistence: 0.7 });
-            expect(settings.palPersistence).toBe(0.7);
-            expect(window.localStorage.palPersistence).toBe("0.7");
-            expect(urlState.params.palPersistence).toBe(0.7);
+            settings.set({ palPersistenceMs: 60 });
+            settings.set({ palPersistenceMs: 70 });
+            expect(settings.palPersistenceMs).toBe(70);
+            expect(window.localStorage.palPersistenceMs).toBe("70");
+            expect(urlState.params.palPersistenceMs).toBe(70);
             expect(urlState.updateUrl).not.toHaveBeenCalled();
             vi.advanceTimersByTime(300);
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);

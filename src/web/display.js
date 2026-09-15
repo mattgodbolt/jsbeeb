@@ -1,5 +1,5 @@
 import * as canvasLib from "./canvas.js";
-import { MaxPersistence } from "./canvas.js";
+import { MaxPersistenceMs, persistenceFromMs } from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
 import { LineGridRows } from "../video-filters/pixel-grid.js";
 import { toast } from "./toast.js";
@@ -133,14 +133,14 @@ export class Display {
     }
 
     /**
-     * Sets how much of the previous frame a display keeps under each new one,
-     * by the name of its setting; it applies while the filter in use is the one
-     * that declares that setting, so a fallback gets its own amount, not the
-     * amount of the mode that was asked for.
+     * Sets a display's afterglow time in milliseconds, by the name of its
+     * setting; it applies while the filter in use is the one that declares that
+     * setting, so a fallback gets its own amount, not the amount of the mode
+     * that was asked for.
      */
-    setPersistence(setting, persistence) {
-        this.persistence[setting] = Number.isFinite(persistence)
-            ? Math.min(MaxPersistence, Math.max(0, persistence))
+    setPersistence(setting, afterglowMs) {
+        this.persistence[setting] = Number.isFinite(afterglowMs)
+            ? persistenceFromMs(Math.min(MaxPersistenceMs, Math.max(0, afterglowMs)))
             : 0;
         if (setting === this.persistenceSetting()) this.applyPersistence();
     }

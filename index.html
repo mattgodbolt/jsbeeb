@@ -1128,7 +1128,7 @@
               </div>
               <div class="row align-items-center" style="margin-top: 10px">
                 <div class="col-sm-6">
-                  <label for="persistenceSetting" class="col-form-label">Phosphor persistence:</label>
+                  <label for="persistenceSetting" class="col-form-label">Phosphor afterglow (ms):</label>
                 </div>
                 <div class="col-sm-6">
                   <input
@@ -1136,10 +1136,10 @@
                     class="form-range"
                     id="persistenceSetting"
                     min="0"
-                    max="0.98"
-                    step="0.01"
+                    max="500"
+                    step="5"
                     value="0"
-                    title="How much of the previous frame shows through each new one: 0 is none, higher fades slower"
+                    title="How long the last picture takes to fade under the next, in milliseconds: 0 is no afterglow"
                   />
                 </div>
               </div>
