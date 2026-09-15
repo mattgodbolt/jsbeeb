@@ -1129,6 +1129,13 @@ describe("Video", () => {
             expect(paintedTo).toBe(top);
         });
 
+        it("takes the beam from the 6847 on an Atom, whose position reaches the wrapper only at flyback", () => {
+            video.bitmapY = 700;
+            video.video6847 = { bitmapX: 100, bitmapY: 300 };
+            video.debugPaint();
+            expect(painted().paintedTo).toBe(300 + 2 + DotRadius);
+        });
+
         it("leaves the framebuffer as it was", () => {
             video.fb32.fill(0x12345678);
             video.bitmapX = 500;

@@ -81,12 +81,19 @@ export class Display {
         this.video.frameSkipCount = speedy ? (skip % 2 ? skip : skip + 1) : 0;
     }
 
-    /** `paintedTo` is the row the copy stops at; the rows below it keep what the canvas last showed. */
-    onPaint(video, minx, miny, maxx, maxy, paintedTo = maxy) {
-        if (!video.frameSkipCount) {
-            this.frames++;
-            if (this.frames < this.frameSkip) return;
-            this.frames = 0;
+    /**
+     * `paintedTo` is the row the copy stops at; the rows below it keep what the
+     * canvas last showed. A paint that gives one is the debugger's and is never
+     * skipped.
+     */
+    onPaint(video, minx, miny, maxx, maxy, paintedTo) {
+        if (paintedTo === undefined) {
+            paintedTo = maxy;
+            if (!video.frameSkipCount) {
+                this.frames++;
+                if (this.frames < this.frameSkip) return;
+                this.frames = 0;
+            }
         }
         const start = performance.now();
         this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);

@@ -125,6 +125,18 @@ describe("Display", () => {
         expect(rafCallbacks).toHaveLength(1);
     });
 
+    it("never skips a debug paint, and does not count it against the cycle", () => {
+        const display = make({ frameSkip: 3 });
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8, 4);
+        expect(rafCallbacks).toHaveLength(1);
+        presentAll();
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        expect(rafCallbacks).toHaveLength(0);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+        expect(rafCallbacks).toHaveLength(1);
+    });
+
     describe("running fast", () => {
         it("moves the skip into the video chip and back out again", () => {
             const display = make();
