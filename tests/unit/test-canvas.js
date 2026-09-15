@@ -253,6 +253,37 @@ describe("phosphor persistence", () => {
         canvas.setPersistence(0);
         expect(calls).toEqual([["disable", gl.BLEND]]);
     });
+
+    it("draws the first frame into a fresh drawing buffer whole, then blends again", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["enable", "disable", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        calls.length = 0;
+        const frame = {
+            lineGrid: new Uint8Array(0),
+            lineBaseEven: 0,
+            lineBaseOdd: 0,
+            phaseBaseEven: 0,
+            phaseBaseOdd: 0,
+        };
+        gl.drawingBufferWidth = 896;
+        gl.drawingBufferHeight = 600;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["disable", gl.BLEND],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            ["enable", gl.BLEND],
+        ]);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([["drawArrays", gl.TRIANGLE_STRIP, 0, 4]]);
+        gl.drawingBufferHeight = 300;
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls[0]).toEqual(["disable", gl.BLEND]);
+    });
 });
 
 describe("bestCanvas", () => {
@@ -322,13 +353,21 @@ describe("Canvas", () => {
         const backCtx = fake2dContext();
         const createElement = vi.spyOn(document, "createElement").mockReturnValue({ getContext: () => backCtx });
         try {
-            const canvas = new Canvas({ width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) });
+            const backing = { width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) };
+            const canvas = new Canvas(backing);
             const paint = () => canvas.paint(0, 0, 1024, 625, {});
             canvas.setPersistence(0.6);
             paint();
-            expect(ctx.globalAlpha).toBeCloseTo(0.4);
+            expect(ctx.globalAlpha).toBe(1);
             expect(ctx.drawImage).toHaveBeenCalledTimes(1);
+            paint();
+            expect(ctx.globalAlpha).toBeCloseTo(0.4);
             ctx.globalAlpha = 1;
+            paint();
+            expect(ctx.globalAlpha).toBeCloseTo(0.4);
+            backing.width = 448;
+            paint();
+            expect(ctx.globalAlpha).toBe(1);
             paint();
             expect(ctx.globalAlpha).toBeCloseTo(0.4);
             canvas.setPersistence(0);

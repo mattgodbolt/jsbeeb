@@ -54,6 +54,7 @@ export class Canvas {
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvas = canvas;
         this.persistence = 0;
+        this.paintedSize = { width: 0, height: 0 };
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
@@ -75,8 +76,11 @@ export class Canvas {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        // Set each time, like the size: a resize resets the context's state.
-        this.ctx.globalAlpha = 1 - this.persistence;
+        // A resize clears the canvas and resets the context's state: the first
+        // frame into it is drawn whole, and the alpha is set every time.
+        const resized = this.canvas.width !== this.paintedSize.width || this.canvas.height !== this.paintedSize.height;
+        this.paintedSize = { width: this.canvas.width, height: this.canvas.height };
+        this.ctx.globalAlpha = resized ? 1 : 1 - this.persistence;
         this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
     }
 }
@@ -145,6 +149,7 @@ export class GlCanvas {
         this.filter = null;
         this.attribLocations = [];
         this.viewportWidth = this.viewportHeight = 0;
+        this.persistence = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
@@ -194,13 +199,18 @@ export class GlCanvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
+        this.persistence = persistence;
+        this.applyBlend(persistence > 0);
+    }
+
+    applyBlend(on) {
         const gl = this.checkedGl;
-        if (persistence <= 0) {
+        if (!on) {
             gl.disable(gl.BLEND);
             return;
         }
         gl.enable(gl.BLEND);
-        gl.blendColor(0, 0, 0, persistence);
+        gl.blendColor(0, 0, 0, this.persistence);
         gl.blendFunc(gl.ONE_MINUS_CONSTANT_ALPHA, gl.CONSTANT_ALPHA);
     }
 
@@ -224,10 +234,14 @@ export class GlCanvas {
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
         // follow it.
-        if (gl.drawingBufferWidth !== this.viewportWidth || gl.drawingBufferHeight !== this.viewportHeight) {
+        // A resized drawing buffer is also a cleared one, so the first frame
+        // into it is drawn whole rather than blended over black.
+        const resized = gl.drawingBufferWidth !== this.viewportWidth || gl.drawingBufferHeight !== this.viewportHeight;
+        if (resized) {
             this.viewportWidth = gl.drawingBufferWidth;
             this.viewportHeight = gl.drawingBufferHeight;
             gl.viewport(0, 0, this.viewportWidth, this.viewportHeight);
+            if (this.persistence > 0) this.applyBlend(false);
         }
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -282,6 +296,7 @@ export class GlCanvas {
         });
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        if (resized && this.persistence > 0) this.applyBlend(true);
     }
 }
 
