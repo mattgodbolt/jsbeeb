@@ -1,5 +1,6 @@
 import * as canvasLib from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
+import { LineGridRows } from "../video-filters/pixel-grid.js";
 import { toast } from "./toast.js";
 
 // While running fast the state machines still run accurately, but painting is
@@ -52,7 +53,7 @@ export class Display {
             maxy: 0,
             lineBaseEven: 0,
             lineBaseOdd: 0,
-            lineGrid: new Uint8Array(0),
+            lineGrid: new Uint8Array(LineGridRows),
         };
 
         const display = this;
@@ -89,8 +90,6 @@ export class Display {
         }
         const start = performance.now();
         this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);
-        if (this.pendingFrame.lineGrid.length !== video.lineGrid.length)
-            this.pendingFrame.lineGrid = new Uint8Array(video.lineGrid.length);
         this.pendingFrame.lineGrid.set(video.lineGrid.subarray(miny, paintedTo), miny);
         Object.assign(this.pendingFrame, {
             minx,

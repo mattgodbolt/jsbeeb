@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
@@ -40,7 +41,7 @@ describe("Display", () => {
     };
 
     const paintedFrom = (frameSkipCount = 0) => ({
-        lineGrid: new Uint8Array(625),
+        lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
         lineBaseOdd: 2,
         frameSkipCount,
@@ -90,12 +91,12 @@ describe("Display", () => {
         const display = make();
         display.videoFb32.fill(3);
         const earlier = paintedFrom();
-        earlier.lineGrid = new Uint8Array(625).fill(5);
+        earlier.lineGrid = new Uint8Array(LineGridRows).fill(5);
         display.onPaint(earlier, 0, 10, FbWidth, 100);
         presentAll();
         display.videoFb32.fill(7);
         const partial = paintedFrom();
-        partial.lineGrid = new Uint8Array(625).fill(9);
+        partial.lineGrid = new Uint8Array(LineGridRows).fill(9);
         display.onPaint(partial, 0, 10, FbWidth, 100, 40);
         presentAll();
         expect(fakeCanvas.fb32[39 * FbWidth]).toBe(7);
@@ -153,7 +154,7 @@ describe("Display", () => {
         display.onPaint(from, 0, 0, FbWidth, 8);
         expect(display.pendingFrame.lineBaseEven).toBe(5);
         expect(display.pendingFrame.lineBaseOdd).toBe(6);
-        expect([...display.pendingFrame.lineGrid]).toEqual([1, 2, 3]);
+        expect([...display.pendingFrame.lineGrid.subarray(0, 4)]).toEqual([1, 2, 3, 0]);
     });
 
     it("hands over the timing counters and starts them afresh", () => {
