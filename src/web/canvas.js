@@ -2,6 +2,18 @@ import webglDebug from "../lib/webgl-debug.js";
 import { PALCompositeFilter } from "../video-filters/pal-composite.js";
 import { PassthroughFilter } from "../video-filters/passthrough-filter.js";
 import { XbrFilter } from "../video-filters/xbr-filter.js";
+import { compileProgram } from "../video-filters/shader-program.js";
+
+// The phosphor decay is a black quad blended so as to scale the old picture
+// down; the frame is then drawn over it keeping whichever is brighter.
+const DecayVertexShader = `attribute vec2 pos;
+void main() {
+    gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);
+}`;
+const DecayFragmentShader = `precision mediump float;
+void main() {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+}`;
 
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
@@ -16,9 +28,10 @@ export function getFilterForMode(mode) {
 // Persistence is set as an afterglow time, the time constant of the fade in
 // milliseconds, which is what the eye judges; the canvases take the share of
 // the previous field's glow left after one field of the machine's own length.
-// A phosphor lights fully when the beam hits it and decays from there, so each
-// new field is drawn whole and the old picture decays under it, whichever is
-// brighter showing; averaging the two instead would dim anything that moves.
+// A phosphor lights fully when the beam hits it and decays from there, so the
+// old picture is scaled down by that share and each new field drawn whole over
+// it, whichever is brighter showing; averaging the two would dim anything that
+// moves.
 export const MaxPersistenceMs = 500;
 
 export function persistenceFromMs(afterglowMs, fieldMs) {
@@ -136,9 +149,11 @@ export class GlCanvas {
         });
 
         checkedGl.depthMask(false);
-        // The phosphor blend keeps the brighter of the new frame and the decayed
-        // old one, which WebGL 1 offers through this extension.
+        // Keeping the brighter of two colours is a blend equation WebGL 1 only
+        // has through this extension; without it there is no persistence.
         this.blendMinMax = gl.getExtension("EXT_blend_minmax");
+        this.decayProgram = compileProgram(checkedGl, DecayVertexShader, DecayFragmentShader, "phosphor decay");
+        this.decayPosLocation = checkedGl.getAttribLocation(this.decayProgram, "pos");
 
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
@@ -196,7 +211,6 @@ export class GlCanvas {
         const filter = new filterClass(gl);
         this.filter?.dispose();
         this.filter = filter;
-        gl.useProgram(filter.program);
 
         // Filters that pick their own samples want the texels they asked for,
         // not a hardware blend of the ones either side.
@@ -205,9 +219,16 @@ export class GlCanvas {
         gl.bindTexture(gl.TEXTURE_2D, this.texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sampling);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, sampling);
+        this.useFilterProgram();
+    }
 
+    /** Makes the filter's program current with its attributes pointed at our buffers. */
+    useFilterProgram() {
+        const gl = this.checkedGl;
+        const program = this.filter.program;
+        gl.useProgram(program);
         const bindAttribute = (name, buffer) => {
-            const location = gl.getAttribLocation(filter.program, name);
+            const location = gl.getAttribLocation(program, name);
             gl.enableVertexAttribArray(location);
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
             gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
@@ -217,18 +238,39 @@ export class GlCanvas {
         this.attribLocations = [bindAttribute("pos", this.vertexPositionBuffer), bindAttribute("uvIn", this.uvBuffer)];
     }
 
+    /**
+     * Scales the old picture down by the persistence: the blend factors do the
+     * scaling and the black quad contributes nothing. The frame that follows
+     * keeps the brighter of itself and what is left, which is a blend equation
+     * the factors do not apply to.
+     */
+    decayOldPicture() {
+        const gl = this.checkedGl;
+        gl.useProgram(this.decayProgram);
+        for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
+        gl.enableVertexAttribArray(this.decayPosLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexPositionBuffer);
+        gl.vertexAttribPointer(this.decayPosLocation, 2, gl.FLOAT, false, 0, 0);
+        gl.blendEquation(gl.FUNC_ADD);
+        gl.blendFunc(gl.ZERO, gl.CONSTANT_ALPHA);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disableVertexAttribArray(this.decayPosLocation);
+        this.attribLocations = [];
+        this.useFilterProgram();
+        gl.blendEquation(this.blendMinMax.MAX_EXT);
+        gl.blendFunc(gl.ONE, gl.ONE);
+    }
+
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
         const gl = this.checkedGl;
-        this.persistence = persistence;
-        if (persistence <= 0 || !this.blendMinMax) {
+        this.persistence = this.blendMinMax ? persistence : 0;
+        if (this.persistence <= 0) {
             gl.disable(gl.BLEND);
             return;
         }
         gl.enable(gl.BLEND);
-        gl.blendEquation(this.blendMinMax.MAX_EXT);
-        gl.blendColor(0, 0, 0, persistence);
-        gl.blendFunc(gl.ONE, gl.CONSTANT_ALPHA);
+        gl.blendColor(0, 0, 0, this.persistence);
     }
 
     /**
@@ -240,6 +282,8 @@ export class GlCanvas {
         const gl = this.checkedGl;
         this.filter?.dispose();
         this.filter = null;
+        gl.deleteProgram(this.decayProgram);
+        this.decayProgram = null;
         gl.deleteTexture(this.texture);
         gl.deleteBuffer(this.vertexPositionBuffer);
         gl.deleteBuffer(this.uvBuffer);
@@ -248,6 +292,7 @@ export class GlCanvas {
 
     paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
+        if (this.persistence > 0) this.decayOldPicture();
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
         // follow it.

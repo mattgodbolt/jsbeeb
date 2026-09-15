@@ -26,7 +26,7 @@ function recordingGl() {
         "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
         "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
         "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
-        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE MAX_EXT"
+        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE ZERO FUNC_ADD MAX_EXT"
     )
         .split(" ")
         .entries())
@@ -237,33 +237,62 @@ describe("low latency canvas", () => {
 });
 
 describe("phosphor persistence", () => {
-    it("keeps the brighter of the new frame and the decayed old one, and stops when asked for none", () => {
+    const frame = { lineGrid: new Uint8Array(0), lineBaseEven: 0, lineBaseOdd: 0, phaseBaseEven: 0, phaseBaseOdd: 0 };
+
+    it("scales the old picture down by the persistence, then keeps the brighter of it and the frame", () => {
         const gl = recordingGl();
         const calls = [];
-        for (const name of ["enable", "disable", "blendEquation", "blendColor", "blendFunc"])
+        for (const name of ["enable", "disable", "blendEquation", "blendColor", "blendFunc", "drawArrays"])
             gl[name] = (...args) => calls.push([name, ...args]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
 
         canvas.setPersistence(0.6);
         expect(calls).toEqual([
             ["enable", gl.BLEND],
-            ["blendEquation", gl.MAX_EXT],
             ["blendColor", 0, 0, 0, 0.6],
-            ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
+        ]);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["blendEquation", gl.FUNC_ADD],
+            ["blendFunc", gl.ZERO, gl.CONSTANT_ALPHA],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            ["blendEquation", gl.MAX_EXT],
+            ["blendFunc", gl.ONE, gl.ONE],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
         ]);
         calls.length = 0;
         canvas.setPersistence(0);
-        expect(calls).toEqual([["disable", gl.BLEND]]);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["disable", gl.BLEND],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
     });
 
-    it("shows each frame plain when the driver has no max blend", () => {
+    it("shows each frame plain when the driver cannot keep the brighter of two colours", () => {
         const gl = recordingGl();
         gl.getExtension = () => null;
         const calls = [];
-        for (const name of ["enable", "disable"]) gl[name] = (...args) => calls.push([name, ...args]);
+        for (const name of ["enable", "disable", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         canvas.setPersistence(0.6);
-        expect(calls).toEqual([["disable", gl.BLEND]]);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["disable", gl.BLEND],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
+    });
+
+    it("draws the frame with the filter's program and attributes after the decay", () => {
+        const gl = recordingGl();
+        const programs = [];
+        gl.useProgram = (program) => programs.push(program);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        programs.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(programs).toEqual([canvas.decayProgram, canvas.filter.program]);
     });
 });
 
