@@ -7,7 +7,8 @@ import {
     USERDISPENABLE,
     EVERYTHINGENABLED,
     OPAQUE_BLACK,
-    PalPhasePeriodLines,
+    LineCountPeriod,
+    PalPhasePerLine,
 } from "../../src/video.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../line-grid.js";
@@ -985,7 +986,7 @@ describe("Video", () => {
         }
 
         function advances(values) {
-            return values.slice(1).map((value, i) => (value - values[i] + PalPhasePeriodLines) % PalPhasePeriodLines);
+            return values.slice(1).map((value, i) => (value - values[i] + LineCountPeriod) % LineCountPeriod);
         }
 
         // Every painted row must decode to the hsync count it was drawn under,
@@ -998,7 +999,7 @@ describe("Video", () => {
                 paints++;
                 for (const [row, line] of drawnUnder) {
                     const base = row & 1 ? video.lineBaseOdd : video.lineBaseEven;
-                    const decoded = (base + (row >> 1)) % PalPhasePeriodLines;
+                    const decoded = (base + (row >> 1)) % LineCountPeriod;
                     if (decoded !== line) mismatches.push({ row, line, decoded });
                 }
             });
@@ -1023,19 +1024,99 @@ describe("Video", () => {
             return video;
         }
 
-        it("should count hsyncs modulo the phase period", () => {
+        it("should count hsyncs modulo the line count period", () => {
             const v = makeVideo();
             programStandardFrame(v);
             v.run(10 * ClocksPerFrame);
-            expect(v.video.hsyncCount).toBeLessThan(PalPhasePeriodLines);
+            expect(v.video.hsyncCount).toBeLessThan(LineCountPeriod);
             expect(v.video.hsyncCount).toBeGreaterThanOrEqual(0);
+        });
+
+        it("should advance the subcarrier phase by its fraction of a cycle per line", () => {
+            const v = makeVideo();
+            programStandardFrame(v);
+            v.run(ClocksPerFrame);
+            const linesSeen = v.video.hsyncCount;
+            expect(linesSeen).toBeGreaterThan(100);
+            expect(v.video.subcarrierPhase).toBeCloseTo((linesSeen * PalPhasePerLine) % 1, 6);
+        });
+
+        it("should not advance the phase by half a cycle over a 312-line frame", () => {
+            expect(Math.abs(((ScanlinesPerFrame * PalPhasePerLine) % 1) - 0.5)).toBeGreaterThan(0.1);
+        });
+
+        // The phase bases of each painted frame, alongside the line bases they belong with.
+        function paintedPhases(program, frames) {
+            const painted = [];
+            const v = makeVideo((video) =>
+                painted.push({
+                    lineEven: video.lineBaseEven,
+                    lineOdd: video.lineBaseOdd,
+                    phaseEven: video.phaseBaseEven,
+                    phaseOdd: video.phaseBaseOdd,
+                }),
+            );
+            program(v);
+            v.run(SettleFrames * ClocksPerFrame);
+            painted.length = 0;
+            v.run(frames * ClocksPerFrame);
+            return painted;
+        }
+
+        const phaseStep = (lines) => (((lines * PalPhasePerLine) % 1) + 1) % 1;
+        const phaseAdvance = (from, to) => (to - from + 1) % 1;
+        const circularDistance = (a, b) => Math.min(Math.abs(a - b), 1 - Math.abs(a - b));
+
+        // Line counts come back modulo LineCountPeriod, which the phase is not periodic in,
+        // so the lines really elapsed may be a period more, or a period fewer when the
+        // later base was recorded first.
+        function expectPhaseAdvanceOver(lines, from, to) {
+            const advance = phaseAdvance(from, to);
+            const candidates = [-1, 0, 1].map((periods) => phaseStep(lines + periods * LineCountPeriod));
+            expect(Math.min(...candidates.map((c) => circularDistance(advance, c)))).toBeLessThan(1e-6);
+        }
+
+        it("should record each field's phase at its first row, a frame apart without interlace", () => {
+            const painted = paintedPhases(programNonInterlacedFrame, 4);
+            expect(painted.map((p) => p.phaseOdd)).toEqual(painted.map((p) => p.phaseEven));
+            for (let i = 1; i < painted.length; ++i)
+                expectPhaseAdvanceOver(ScanlinesPerFrame, painted[i - 1].phaseEven, painted[i].phaseEven);
+        });
+
+        it("should advance the phase by each field's own line count with interlace sync", () => {
+            const painted = paintedPhases(programInterlaceSyncFrame, 8);
+            expect(painted.length).toBeGreaterThanOrEqual(6);
+            for (let i = 1; i < painted.length; ++i) {
+                const lines = (painted[i].lineEven - painted[i - 1].lineEven + LineCountPeriod) % LineCountPeriod;
+                expect([312, 313]).toContain(lines);
+                expectPhaseAdvanceOver(lines, painted[i - 1].phaseEven, painted[i].phaseEven);
+            }
+        });
+
+        it("should give the odd field's first row one more line of phase with interlace sync and video", () => {
+            const painted = paintedPhases(programInterlaceSyncAndVideoFrame, 8);
+            expect(painted.length).toBeGreaterThanOrEqual(6);
+            const lineOf = (p, key) => p[key];
+            for (let i = 1; i < painted.length; ++i) {
+                for (const [line, phase] of [
+                    ["lineEven", "phaseEven"],
+                    ["lineOdd", "phaseOdd"],
+                ]) {
+                    const lines =
+                        (lineOf(painted[i], line) - lineOf(painted[i - 1], line) + LineCountPeriod) % LineCountPeriod;
+                    expectPhaseAdvanceOver(lines, painted[i - 1][phase], painted[i][phase]);
+                }
+            }
+            const last = painted.at(-1);
+            const between = (last.lineOdd - last.lineEven + LineCountPeriod) % LineCountPeriod;
+            expectPhaseAdvanceOver(between, last.phaseEven, last.phaseOdd);
         });
 
         it("should advance both bases by a whole frame of lines without interlace", () => {
             const bases = paintedBases(programNonInterlacedFrame, 10);
             expect(bases.map((b) => b.odd)).toEqual(bases.map((b) => b.even));
             expect(advances(bases.map((b) => b.even))).toEqual(Array(9).fill(ScanlinesPerFrame));
-            for (const { even } of bases) expect(even).toBeLessThan(PalPhasePeriodLines);
+            for (const { even } of bases) expect(even).toBeLessThan(LineCountPeriod);
         });
 
         it("should advance by alternate 312 and 313 line fields with interlace sync", () => {
@@ -1199,6 +1280,9 @@ describe("Video", () => {
             v.hsyncCount = 1234;
             v.lineBaseEven = 1000;
             v.lineBaseOdd = 1313;
+            v.subcarrierPhase = 0.125;
+            v.phaseBaseEven = 0.375;
+            v.phaseBaseOdd = 0.625;
 
             const v2 = makeRealVideo();
             v2.restoreState(v.snapshotState());
@@ -1206,20 +1290,30 @@ describe("Video", () => {
             expect(v2.hsyncCount).toBe(1234);
             expect(v2.lineBaseEven).toBe(1000);
             expect(v2.lineBaseOdd).toBe(1313);
+            expect(v2.subcarrierPhase).toBe(0.125);
+            expect(v2.phaseBaseEven).toBe(0.375);
+            expect(v2.phaseBaseOdd).toBe(0.625);
         });
 
         it("should restart the PAL line phase from zero for a snapshot without it", () => {
             const v = makeRealVideo();
-            const { hsyncCount, lineBaseEven, lineBaseOdd, ...older } = v.snapshotState();
-            expect([hsyncCount, lineBaseEven, lineBaseOdd]).toEqual([0, 0, 0]);
+            const { hsyncCount, lineBaseEven, lineBaseOdd, subcarrierPhase, phaseBaseEven, phaseBaseOdd, ...older } =
+                v.snapshotState();
+            expect([hsyncCount, lineBaseEven, lineBaseOdd, subcarrierPhase, phaseBaseEven, phaseBaseOdd]).toEqual([
+                0, 0, 0, 0, 0, 0,
+            ]);
 
             const v2 = makeRealVideo();
             v2.hsyncCount = 99;
             v2.lineBaseEven = 98;
             v2.lineBaseOdd = 97;
+            v2.subcarrierPhase = 0.5;
+            v2.phaseBaseEven = 0.25;
+            v2.phaseBaseOdd = 0.75;
             v2.restoreState(older);
 
             expect([v2.hsyncCount, v2.lineBaseEven, v2.lineBaseOdd]).toEqual([0, 0, 0]);
+            expect([v2.subcarrierPhase, v2.phaseBaseEven, v2.phaseBaseOdd]).toEqual([0, 0, 0]);
         });
 
         it("should rebuild the line grid descriptor on restore", () => {

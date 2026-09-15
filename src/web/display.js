@@ -53,6 +53,8 @@ export class Display {
             maxy: 0,
             lineBaseEven: 0,
             lineBaseOdd: 0,
+            phaseBaseEven: 0,
+            phaseBaseOdd: 0,
             lineGrid: new Uint8Array(LineGridRows),
         };
 
@@ -105,6 +107,8 @@ export class Display {
             maxy,
             lineBaseEven: video.lineBaseEven,
             lineBaseOdd: video.lineBaseOdd,
+            phaseBaseEven: video.phaseBaseEven,
+            phaseBaseOdd: video.phaseBaseOdd,
         });
         this.paintMsThisTick += performance.now() - start;
         this.presented = false;
