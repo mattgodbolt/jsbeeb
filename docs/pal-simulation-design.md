@@ -270,11 +270,11 @@ luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current;
 
 ### PAL Parameters
 
-- **Subcarrier frequency:** 283.7516 cycles per scanline (4.43361875 MHz over 64μs)
-- **Line phase offset:** 0.7516 fractional cycles per line, so the residual dot pattern repeats every four lines
-- **Frame phase step:** whatever the frame's line count gives. The Beeb's usual 312-line non-interlaced frame steps 0.4992 cycles, so the dots nearly invert every frame (a 25 Hz twinkle) and drift through a cycle in about 50 s; a 312.5-line interlaced field steps 0.375 cycles
+- **Subcarrier frequency:** 4.43361875 MHz nominal plus `PalSubcarrierOffsetHz` (239 Hz, as measured on a real Master; `video.js` owns both), 283.7669 cycles per 64 μs scanline
+- **Line phase offset:** 0.7669 fractional cycles per line, so the residual dot pattern roughly repeats every four lines
+- **Frame phase step:** whatever the frame's line count gives. At exactly nominal the Beeb's usual 312-line non-interlaced frame would step 0.4992 cycles and the dots would invert every frame, a 25 Hz strobe; with the offset it steps 0.27 cycles and the pattern crawls (#962)
 - **V phase alternation:** ±1 per scanline (PAL's defining characteristic)
-- **Phase period:** 0.7516 = 1879 / 2500, so the line counter that drives the phase wraps at 2500 lines and never drifts
+- **Phase accumulation:** the phase is a free-running accumulator, not periodic in any line count, so the shader is given each field's starting phase rather than a line number to multiply
 
 ### Color Space Conversion
 
@@ -322,16 +322,18 @@ No gamma handling is needed, and an sRGB framebuffer would be the wrong directio
 
 ## Integration with jsbeeb
 
-### Line Number Propagation
+### Line and Phase Propagation
 
-`video.js` counts hsyncs in `hsyncCount`, modulo 2500, and at each flyback records the count that texture rows 0 and 1 are about to be drawn under (`lineBaseEven`, `lineBaseOdd`): the even field's row 0 is the rest of the line the vsync fell in, the odd interlaced field's row 1 is the first hsync after it, and a doubled scanline gives both rows the same line. Row `r` was drawn during line `lineBase[r & 1] + (r >> 1)`. In interlaced modes the texture holds both fields, so each parity keeps the base from its own field's flyback. The bases travel with each painted frame:
+`video.js` advances `subcarrierPhase` by `PalPhasePerLine` (the fractional cycles per line, in double precision) on every hsync, and counts hsyncs in `hsyncCount` modulo 2500, which now only supplies a line's parity for the V-switch. At each flyback it records, for texture rows 0 and 1, the count and the phase they are about to be drawn under (`lineBaseEven`/`lineBaseOdd`, `phaseBaseEven`/`phaseBaseOdd`): the even field's row 0 is the rest of the line the vsync fell in, the odd interlaced field's row 1 is the first hsync after it (one more line of phase), and a doubled scanline gives both rows the same line. Row `r` was drawn during line `lineBase[r & 1] + (r >> 1)`, at phase `phaseBase[r & 1] + (r >> 1) * PalPhasePerLine`. In interlaced modes the texture holds both fields, so each parity keeps the bases from its own field's flyback. The bases travel with each painted frame:
 
 ```javascript
-// video.js → main.js → canvas.js → shader
+// video.js → display.js → canvas.js → shader
 video.lineBaseEven, video.lineBaseOdd → gl.uniform2f(uLineBase, even, odd)
+video.phaseBaseEven, video.phaseBaseOdd → gl.uniform2f(uPhaseBase, even, odd)
+PalCyclesPerLine, PalPhasePerLine → gl.uniform1f(uCyclesPerLine), gl.uniform1f(uPhasePerLine)
 ```
 
-The shader takes `line = uLineBase[row & 1] + floor(row / 2)`, the V-switch from the line's parity and `phase = fract(line * 0.7516)`; the previous scanline of the same field is `line - 1`, two rows up. Nothing is reset per frame, so the phase steps between frames by the frame's true line count.
+The shader takes `line = uLineBase[row & 1] + floor(row / 2)` for the V-switch and `phase = fract(uPhaseBase[row & 1] + floor(row / 2) * uPhasePerLine)`; the previous scanline of the same field is one step of phase back, two rows up. Nothing is reset per frame, so the phase steps between frames by the frame's true line count.
 
 ### Interlaced Rendering Interaction
 

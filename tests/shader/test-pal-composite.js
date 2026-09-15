@@ -51,11 +51,10 @@ const LineReach = 2;
 /** Context around each pattern so its outermost texels see picture rather than nothing. */
 const Padding = { x: Reach + 2, y: LineReach + 1 };
 
-/** The subcarrier's phase against the line repeats every 2500 lines; see video.js. */
 /** A line count far enough along that a per-line multiply in single precision would drift. */
 const FarLine = 2500;
 
-/** Line numbers spanning the four-line phase cycle and both V-switch parities, and the last before the period wraps. */
+/** Line numbers spanning the four-line phase cycle and both V-switch parities, and one far along. */
 const LineBases = [0, 1, 2, 3, FarLine - 1];
 
 /** WebGL setup as PALCompositeFilter does it; see render.js for why these run in the page. */
