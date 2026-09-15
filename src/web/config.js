@@ -226,8 +226,14 @@ export class Config extends EventTarget {
 
     setPersistenceSlider() {
         const slider = document.getElementById("persistenceSetting");
+        const afterglowMs = this.persistenceSetting ? this.settings[this.persistenceSetting] : 0;
         slider.disabled = !this.persistenceSetting;
-        slider.value = this.persistenceSetting ? this.settings[this.persistenceSetting] : 0;
+        slider.value = afterglowMs;
+        document.getElementById("persistenceValue").textContent = !this.persistenceSetting
+            ? "not available"
+            : afterglowMs > 0
+              ? `${afterglowMs} ms`
+              : "none";
     }
 
     /** Names the running machine everywhere the page shows it. */

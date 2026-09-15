@@ -307,19 +307,24 @@ describe("Config", () => {
 
         it("gives the persistence slider to the showing display, and no display without one", () => {
             const slider = document.getElementById("persistenceSetting");
+            const readout = () => document.getElementById("persistenceValue").textContent;
             settings.set({ displayMode: "pal" });
             expect(slider.disabled).toBe(false);
             expect(slider.value).toBe("40");
+            expect(readout()).toBe("40 ms");
             slider.value = 80;
             slider.dispatchEvent(new Event("input"));
             expect(settings.palPersistenceMs).toBe(80);
             expect(settings.rgbPersistenceMs).toBe(0);
+            expect(readout()).toBe("80 ms");
             settings.set({ displayMode: "rgb" });
             expect(slider.value).toBe("0");
+            expect(readout()).toBe("none");
             settings.set({ rgbPersistenceMs: 20 });
             expect(slider.value).toBe("20");
             settings.set({ displayMode: "xbr" });
             expect(slider.disabled).toBe(true);
+            expect(readout()).toBe("not available");
             slider.dispatchEvent(new Event("input"));
             expect(settings.palPersistenceMs).toBe(80);
         });
