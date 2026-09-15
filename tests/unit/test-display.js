@@ -47,7 +47,8 @@ describe("Display", () => {
         return display;
     };
 
-    const paintedFrom = (frameSkipCount = 0) => ({
+    const paintedFrom = (frameSkipCount = 0, frameCount = 0) => ({
+        frameCount,
         lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
         lineBaseOdd: 2,
@@ -159,6 +160,25 @@ describe("Display", () => {
         expect(display.pendingFrame.lineGrid[39]).toBe(9);
         expect(display.pendingFrame.lineGrid[40]).toBe(5);
         expect(fakeCanvas.paint.mock.calls.at(-1).slice(0, 4)).toEqual([0, 10, FbWidth, 100]);
+    });
+
+    it("tells the canvas how many fields have passed since the frame it last showed", () => {
+        const display = make();
+        const fieldsShown = () => fakeCanvas.paint.mock.calls.at(-1)[4].fields;
+        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        presentAll();
+        display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fieldsShown()).toBe(1);
+        display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fieldsShown()).toBe(10);
+        display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8, 4);
+        presentAll();
+        expect(fieldsShown()).toBe(0);
+        display.onPaint(paintedFrom(0, 5000), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fieldsShown()).toBe(50);
     });
 
     it("schedules another present once the first has run", () => {

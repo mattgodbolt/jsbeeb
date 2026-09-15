@@ -9,6 +9,9 @@ import { toast } from "./toast.js";
 // interlaced modes (MODE 7) alternate fields across the frames that do paint.
 const SpeedyFrameSkip = 9;
 
+// More fields of decay than this leaves nothing to show anyway.
+const MaxDecayFields = 50;
+
 /**
  * The picture: the canvas and its filter, the video chip that paints into a
  * framebuffer of our own, and the animation frame that presents it. A stalled
@@ -59,7 +62,9 @@ export class Display {
             phaseBaseEven: 0,
             phaseBaseOdd: 0,
             lineGrid: new Uint8Array(LineGridRows),
+            fields: 1,
         };
+        this.lastPaintedFrameCount = 0;
 
         const display = this;
         this.video = fakeVideo
@@ -112,7 +117,12 @@ export class Display {
             lineBaseOdd: video.lineBaseOdd,
             phaseBaseEven: video.phaseBaseEven,
             phaseBaseOdd: video.phaseBaseOdd,
+            // How many fields the phosphor has decayed over since the frame it
+            // last showed: one usually, more under a frame skip, none for a
+            // repaint of the same frame.
+            fields: Math.max(0, Math.min(MaxDecayFields, video.frameCount - this.lastPaintedFrameCount)),
         });
+        this.lastPaintedFrameCount = video.frameCount;
         this.paintMsThisTick += performance.now() - start;
         this.presented = false;
         if (!this.presentScheduled) {

@@ -247,13 +247,11 @@ describe("phosphor persistence", () => {
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
 
         canvas.setPersistence(0.6);
-        expect(calls).toEqual([
-            ["enable", gl.BLEND],
-            ["blendColor", 0, 0, 0, 0.6],
-        ]);
+        expect(calls).toEqual([["enable", gl.BLEND]]);
         calls.length = 0;
         canvas.paint(0, 0, 1024, 625, frame);
         expect(calls).toEqual([
+            ["blendColor", 0, 0, 0, 0.6],
             ["blendEquation", gl.FUNC_REVERSE_SUBTRACT],
             ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
@@ -268,6 +266,20 @@ describe("phosphor persistence", () => {
             ["disable", gl.BLEND],
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
         ]);
+    });
+
+    it("decays over every field since the frame last shown, and not at all for the same frame again", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["blendColor", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.5);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, { ...frame, fields: 3 });
+        expect(calls[0]).toEqual(["blendColor", 0, 0, 0, 0.125]);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, { ...frame, fields: 0 });
+        expect(calls).toEqual([["drawArrays", gl.TRIANGLE_STRIP, 0, 4]]);
     });
 
     it("shows each frame plain when the driver cannot keep the brighter of two colours", () => {
@@ -374,6 +386,9 @@ describe("Canvas", () => {
                 ["fillRect", "source-over", expect.closeTo(0.4, 5), 0, 0, 896, 600],
                 ["drawImage", "lighten", 1],
             ]);
+            calls.length = 0;
+            canvas.paint(0, 0, 1024, 625, { fields: 2 });
+            expect(calls[0]).toEqual(["fillRect", "source-over", expect.closeTo(0.64, 5), 0, 0, 896, 600]);
             calls.length = 0;
             canvas.setPersistence(0);
             canvas.paint(0, 0, 1024, 625, {});

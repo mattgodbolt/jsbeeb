@@ -96,7 +96,7 @@ export class Canvas {
             throw new Error(`${filterClass.getDisplayConfig().name} needs WebGL, which is not in use here`);
     }
 
-    paint(minx, miny, maxx, maxy, _frame) {
+    paint(minx, miny, maxx, maxy, frame) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
@@ -106,7 +106,7 @@ export class Canvas {
         const ctx = this.ctx;
         if (this.persistence > 0) {
             ctx.globalCompositeOperation = "source-over";
-            ctx.globalAlpha = 1 - this.persistence;
+            ctx.globalAlpha = 1 - this.persistence ** (frame.fields ?? 1);
             ctx.fillStyle = "black";
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             ctx.globalCompositeOperation = "lighten";
@@ -247,8 +247,9 @@ export class GlCanvas {
      * subtracted. The frame that follows keeps the brighter of itself and what
      * is left, which is a blend equation the factors do not apply to.
      */
-    decayOldPicture() {
+    decayOldPicture(fields) {
         const gl = this.checkedGl;
+        gl.blendColor(0, 0, 0, this.persistence ** fields);
         gl.useProgram(this.decayProgram);
         for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
         gl.enableVertexAttribArray(this.decayPosLocation);
@@ -273,7 +274,6 @@ export class GlCanvas {
             return;
         }
         gl.enable(gl.BLEND);
-        gl.blendColor(0, 0, 0, this.persistence);
     }
 
     /**
@@ -295,7 +295,8 @@ export class GlCanvas {
 
     paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
-        if (this.persistence > 0) this.decayOldPicture();
+        const fields = frame.fields ?? 1;
+        if (this.persistence > 0 && fields > 0) this.decayOldPicture(fields);
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
         // follow it.
