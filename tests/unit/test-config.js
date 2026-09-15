@@ -324,6 +324,17 @@ describe("Config", () => {
             expect(settings.palPersistence).toBe(0.4);
         });
 
+        it("gives the slider to the display actually in use when the one asked for fell back", () => {
+            const slider = document.getElementById("persistenceSetting");
+            settings.set({ displayMode: "pal" });
+            config.setPersistenceInUse("rgbPersistence");
+            expect(slider.value).toBe("0");
+            slider.value = 0.3;
+            slider.dispatchEvent(new Event("input"));
+            expect(settings.rgbPersistence).toBe(0.3);
+            expect(settings.palPersistence).toBe(0.9);
+        });
+
         it("follows a live setting changed elsewhere", () => {
             settings.set({ audioOutput: "off", displayMode: "xbr", speakerAmount: 0.25 });
             expect(document.querySelector(".audio-output-text").textContent).toBe("Unfiltered");

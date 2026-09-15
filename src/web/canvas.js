@@ -13,7 +13,7 @@ export function getFilterForMode(mode) {
     return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
 }
 
-/** The most of the previous frame a display may keep: at 1 nothing new would ever show. */
+/** The largest share of the previous frame a display may keep: at 1 nothing new would ever show. */
 export const MaxPersistence = 0.98;
 
 /** The display modes that simulate phosphor persistence, with the setting that holds each one's amount. */

@@ -301,9 +301,11 @@ settings.on("audioOutput", (output) => audioHandler.setAudioOutput(output));
 settings.on("speakerAmount", (amount) => audioHandler.setSpeakerAmount(amount));
 settings.on("displayMode", (mode) => {
     display.setMode(mode);
+    config.setPersistenceInUse(display.persistenceSetting());
     // The monitor picture may have changed shape.
     layout.resize();
 });
+config.setPersistenceInUse(display.persistenceSetting());
 for (const { setting } of persistenceSettings()) {
     display.setPersistence(setting, settings[setting]);
     settings.on(setting, (persistence) => display.setPersistence(setting, persistence));

@@ -17,6 +17,9 @@ for (const { setting } of persistenceSettings()) {
 const storedNumber = (params, name, fallback) =>
     [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
 
+const PersistenceNames = new Set(persistenceSettings().map(({ setting }) => setting));
+const clampPersistence = (value) => Math.min(MaxPersistence, Math.max(0, value));
+
 /** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
 export function mapLegacyModels(parsedQuery) {
     if (!parsedQuery.model) return;
@@ -72,7 +75,7 @@ export class Settings extends EventTarget {
             [params.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
         this.speakerAmount = storedNumber(params, "speakerAmount", 1);
         for (const { setting, default: fallback } of persistenceSettings())
-            this[setting] = Math.min(MaxPersistence, Math.max(0, storedNumber(params, setting, fallback)));
+            this[setting] = clampPersistence(storedNumber(params, setting, fallback));
     }
 
     get extraRoms() {
@@ -86,6 +89,9 @@ export class Settings extends EventTarget {
 
     /** Adopts `changes` (an undefined value clears a setting), persists them and tells the subscribers. */
     set(changes) {
+        for (const name of Object.keys(changes))
+            if (PersistenceNames.has(name) && changes[name] !== undefined)
+                changes[name] = clampPersistence(changes[name]);
         for (const [name, value] of Object.entries(changes)) {
             this[name] = name === "model" ? (findModel(value) ?? this.model) : value;
             if (!StoredSettings.includes(name)) continue;

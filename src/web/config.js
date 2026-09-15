@@ -2,8 +2,6 @@ import { allModels, findModel, tubeModelFor } from "../models.js";
 import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { AudioOutputs } from "../audio-output.js";
 
-const persistenceSettingFor = (mode) => persistenceSettings().find((persistence) => persistence.mode === mode);
-
 const round = (value) => Number(value.toFixed(2));
 
 /** @returns {string} the speed a multiplier gives this machine's co-processor, e.g. "1.6x (4.8MHz)". */
@@ -61,6 +59,9 @@ export class Config extends EventTarget {
         super();
         this.settings = settings;
         this.changed = {};
+        // The setting the display in use declares, which is the mode asked for
+        // unless that fell back; the page says which once the display exists.
+        this.persistenceSetting = undefined;
         // Built before anything can change, so this is what the running machine was built with.
         this.runningSettings = this.proposedSettings();
         this.setModel(settings.model);
@@ -162,11 +163,9 @@ export class Config extends EventTarget {
         });
 
         document.getElementById("persistenceSetting").addEventListener("input", (e) => {
-            const persistence = persistenceSettingFor(settings.displayMode);
-            if (persistence) settings.set({ [persistence.setting]: parseFloat(e.currentTarget.value) });
+            if (this.persistenceSetting) settings.set({ [this.persistenceSetting]: parseFloat(e.currentTarget.value) });
         });
-        for (const { setting } of persistenceSettings())
-            settings.on(setting, () => this.setPersistenceSlider(settings));
+        for (const { setting } of persistenceSettings()) settings.on(setting, () => this.setPersistenceSlider());
 
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
@@ -216,15 +215,19 @@ export class Config extends EventTarget {
     setDisplayMode(mode) {
         const config = getFilterForMode(mode).getDisplayConfig();
         for (const el of document.querySelectorAll(".display-mode-text")) el.textContent = config.name;
-        this.setPersistenceSlider(this.settings);
+        this.setPersistenceInUse(config.persistence?.setting);
     }
 
-    /** The slider edits the showing display mode's persistence, and is disabled for a mode without one. */
-    setPersistenceSlider(settings) {
+    /** The slider edits the persistence of the display in use, and is disabled for one without it. */
+    setPersistenceInUse(setting) {
+        this.persistenceSetting = setting;
+        this.setPersistenceSlider();
+    }
+
+    setPersistenceSlider() {
         const slider = document.getElementById("persistenceSetting");
-        const persistence = persistenceSettingFor(settings.displayMode);
-        slider.disabled = !persistence;
-        slider.value = persistence ? settings[persistence.setting] : 0;
+        slider.disabled = !this.persistenceSetting;
+        slider.value = this.persistenceSetting ? this.settings[this.persistenceSetting] : 0;
     }
 
     /** Names the running machine everywhere the page shows it. */

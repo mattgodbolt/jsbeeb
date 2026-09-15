@@ -104,6 +104,14 @@ describe("Settings", () => {
             expect(urlState.params.hasMusic5000).toBe(true);
         });
 
+        it("keeps a persistence set live within what a display can show, everywhere it goes", () => {
+            const settings = make();
+            settings.set({ palPersistence: 2 });
+            expect(settings.palPersistence).toBe(0.98);
+            expect(window.localStorage.palPersistence).toBe("0.98");
+            expect(urlState.params.palPersistence).toBe(0.98);
+        });
+
         it("remembers a persistence and lets its drag settle", () => {
             const settings = make();
             settings.set({ palPersistence: 0.6 });
