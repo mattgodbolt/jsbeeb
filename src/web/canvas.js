@@ -15,12 +15,11 @@ export function getFilterForMode(mode) {
 
 // Persistence is set as an afterglow time, the time constant of the fade in
 // milliseconds, which is what the eye judges; the canvases take the share of
-// the previous field that leaves over one 20 ms field.
-const FieldMs = 20;
+// the previous field that is left after one field of the machine's own length.
 export const MaxPersistenceMs = 500;
 
-export function persistenceFromMs(afterglowMs) {
-    return afterglowMs > 0 ? Math.exp(-FieldMs / afterglowMs) : 0;
+export function persistenceFromMs(afterglowMs, fieldMs) {
+    return afterglowMs > 0 ? Math.exp(-fieldMs / afterglowMs) : 0;
 }
 
 /** The display modes that simulate phosphor persistence, with the setting that holds each one's afterglow time. */

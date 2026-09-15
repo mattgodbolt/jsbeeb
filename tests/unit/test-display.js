@@ -124,6 +124,12 @@ describe("Display", () => {
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
     });
 
+    it("converts an afterglow with the Atom's shorter field", () => {
+        const display = make({ mode: "rgb", model: { isMaster: false, isAtom: true } });
+        display.setPersistence("rgbPersistenceMs", 50);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1000 / 60 / 50));
+    });
+
     it("keeps an afterglow within what the canvas can show, and takes anything else as none", () => {
         const display = make({ mode: "pal" });
         display.setPersistence("palPersistenceMs", 5000);

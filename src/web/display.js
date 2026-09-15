@@ -30,6 +30,7 @@ export class Display {
     }) {
         this.screenCanvas = screenCanvas;
         this.persistence = {};
+        this.fieldMs = 1000 / (model.isAtom ? 60 : 50);
         this.frames = 0;
         this.frameSkip = frameSkip;
         this.paintMsThisTick = 0;
@@ -140,7 +141,7 @@ export class Display {
      */
     setPersistence(setting, afterglowMs) {
         this.persistence[setting] = Number.isFinite(afterglowMs)
-            ? persistenceFromMs(Math.min(MaxPersistenceMs, Math.max(0, afterglowMs)))
+            ? persistenceFromMs(Math.min(MaxPersistenceMs, Math.max(0, afterglowMs)), this.fieldMs)
             : 0;
         if (setting === this.persistenceSetting()) this.applyPersistence();
     }
