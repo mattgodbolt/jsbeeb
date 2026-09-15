@@ -9,8 +9,9 @@ import { toast } from "./toast.js";
 // interlaced modes (MODE 7) alternate fields across the frames that do paint.
 const SpeedyFrameSkip = 9;
 
-// More fields of decay than this leaves nothing to show anyway.
-const MaxDecayFields = 50;
+// More fields of decay than this leaves nothing at any setting: at the longest
+// afterglow a field keeps 96%, and this many take that below a level.
+const MaxDecayFields = 250;
 
 /**
  * The picture: the canvas and its filter, the video chip that paints into a

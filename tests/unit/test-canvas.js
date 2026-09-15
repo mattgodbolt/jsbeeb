@@ -247,7 +247,11 @@ describe("phosphor persistence", () => {
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
 
         canvas.setPersistence(0.6);
-        expect(calls).toEqual([["enable", gl.BLEND]]);
+        expect(calls).toEqual([
+            ["enable", gl.BLEND],
+            ["blendEquation", gl.MAX_EXT],
+            ["blendFunc", gl.ONE, gl.ONE],
+        ]);
         calls.length = 0;
         canvas.paint(0, 0, 1024, 625, frame);
         expect(calls).toEqual([

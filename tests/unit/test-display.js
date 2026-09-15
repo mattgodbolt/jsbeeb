@@ -178,7 +178,7 @@ describe("Display", () => {
         expect(fieldsShown()).toBe(0);
         display.onPaint(paintedFrom(0, 5000), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fieldsShown()).toBe(50);
+        expect(fieldsShown()).toBe(250);
     });
 
     it("adds up the fields of paints that arrive before one animation frame", () => {
@@ -197,7 +197,7 @@ describe("Display", () => {
         presentAll();
         display.onPaint(paintedFrom(0, 3), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(50);
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
     });
 
     it("counts the Atom's fields from the 6847, which syncs its count only after painting", () => {

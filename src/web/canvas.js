@@ -274,6 +274,10 @@ export class GlCanvas {
             return;
         }
         gl.enable(gl.BLEND);
+        // The frame's own blend, set here as well as after each decay pass so a
+        // repaint with no decay to do finds it in place.
+        gl.blendEquation(this.blendMinMax.MAX_EXT);
+        gl.blendFunc(gl.ONE, gl.ONE);
     }
 
     /**
