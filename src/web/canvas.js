@@ -4,15 +4,18 @@ import { PassthroughFilter } from "../video-filters/passthrough-filter.js";
 import { XbrFilter } from "../video-filters/xbr-filter.js";
 import { compileProgram } from "../video-filters/shader-program.js";
 
-// The phosphor decay is a black quad blended so as to scale the old picture
-// down; the frame is then drawn over it keeping whichever is brighter.
+// The phosphor decay is a quad blended so as to scale the old picture down and
+// take one level off it; the frame is then drawn over it keeping whichever is
+// brighter. The level off is what lets a dim trail reach black: scaled alone,
+// an eight-bit value rounds back to itself once it is small enough (at the
+// slider's top anything up to a twentieth of full brightness would stay).
 const DecayVertexShader = `attribute vec2 pos;
 void main() {
     gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);
 }`;
 const DecayFragmentShader = `precision mediump float;
 void main() {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_FragColor = vec4(vec3(1.0 / 255.0), 1.0);
 }`;
 
 const DISPLAY_MODE_FILTERS = {
@@ -239,10 +242,10 @@ export class GlCanvas {
     }
 
     /**
-     * Scales the old picture down by the persistence: the blend factors do the
-     * scaling and the black quad contributes nothing. The frame that follows
-     * keeps the brighter of itself and what is left, which is a blend equation
-     * the factors do not apply to.
+     * Scales the old picture down by the persistence and takes a level off it:
+     * the destination factor does the scaling and the quad's colour is what is
+     * subtracted. The frame that follows keeps the brighter of itself and what
+     * is left, which is a blend equation the factors do not apply to.
      */
     decayOldPicture() {
         const gl = this.checkedGl;
@@ -251,8 +254,8 @@ export class GlCanvas {
         gl.enableVertexAttribArray(this.decayPosLocation);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexPositionBuffer);
         gl.vertexAttribPointer(this.decayPosLocation, 2, gl.FLOAT, false, 0, 0);
-        gl.blendEquation(gl.FUNC_ADD);
-        gl.blendFunc(gl.ZERO, gl.CONSTANT_ALPHA);
+        gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+        gl.blendFunc(gl.ONE, gl.CONSTANT_ALPHA);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         gl.disableVertexAttribArray(this.decayPosLocation);
         this.attribLocations = [];

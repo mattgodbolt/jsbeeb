@@ -26,7 +26,7 @@ function recordingGl() {
         "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
         "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
         "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
-        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE ZERO FUNC_ADD MAX_EXT"
+        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE FUNC_REVERSE_SUBTRACT MAX_EXT"
     )
         .split(" ")
         .entries())
@@ -254,8 +254,8 @@ describe("phosphor persistence", () => {
         calls.length = 0;
         canvas.paint(0, 0, 1024, 625, frame);
         expect(calls).toEqual([
-            ["blendEquation", gl.FUNC_ADD],
-            ["blendFunc", gl.ZERO, gl.CONSTANT_ALPHA],
+            ["blendEquation", gl.FUNC_REVERSE_SUBTRACT],
+            ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
             ["blendEquation", gl.MAX_EXT],
             ["blendFunc", gl.ONE, gl.ONE],
