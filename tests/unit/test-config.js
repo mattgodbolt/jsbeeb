@@ -309,7 +309,7 @@ describe("Config", () => {
             const slider = document.getElementById("persistenceSetting");
             settings.set({ displayMode: "pal" });
             expect(slider.disabled).toBe(false);
-            expect(slider.value).toBe("0.9");
+            expect(slider.value).toBe("0.6");
             slider.value = 0.4;
             slider.dispatchEvent(new Event("input"));
             expect(settings.palPersistence).toBe(0.4);
@@ -332,7 +332,7 @@ describe("Config", () => {
             slider.value = 0.3;
             slider.dispatchEvent(new Event("input"));
             expect(settings.rgbPersistence).toBe(0.3);
-            expect(settings.palPersistence).toBe(0.9);
+            expect(settings.palPersistence).toBe(0.6);
         });
 
         it("follows a live setting changed elsewhere", () => {

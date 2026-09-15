@@ -40,7 +40,7 @@ describe("Settings", () => {
         });
 
         it("takes each display's persistence from its filter, then storage, then the URL", () => {
-            expect(make().palPersistence).toBe(0.9);
+            expect(make().palPersistence).toBe(0.6);
             expect(make().rgbPersistence).toBe(0);
             window.localStorage.palPersistence = "0.5";
             expect(make().palPersistence).toBe(0.5);
@@ -116,7 +116,7 @@ describe("Settings", () => {
             const settings = make();
             settings.set({ palPersistence: 0.3 });
             settings.set({ palPersistence: undefined });
-            expect(settings.palPersistence).toBe(0.9);
+            expect(settings.palPersistence).toBe(0.6);
             expect(window.localStorage.palPersistence).toBeUndefined();
             expect(urlState.params.palPersistence).toBeUndefined();
         });
