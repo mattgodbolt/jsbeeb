@@ -241,6 +241,8 @@ export class GlCanvas {
             height,
             lineBaseEven: frame.lineBaseEven,
             lineBaseOdd: frame.lineBaseOdd,
+            phaseBaseEven: frame.phaseBaseEven,
+            phaseBaseOdd: frame.phaseBaseOdd,
             lineGrid: frame.lineGrid,
             // How much of the framebuffer each output pixel covers, which sets
             // how wide an edge-smoothing ramp should be. `extent` holds texel

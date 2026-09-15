@@ -20,9 +20,16 @@ export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
 
-// The PAL subcarrier advances 283.7516 cycles per line (4433618.75 Hz / 15625 Hz), and
-// 0.7516 = 1879 / 2500, so its phase against the line is periodic in 2500 lines.
-export const PalPhasePeriodLines = 2500;
+// How far off nominal (4433618.75 Hz) the subcarrier runs, as measured on Matt's
+// BBC Master 128. Exactly nominal, a 312-line frame advances the subcarrier by
+// half a cycle to four decimal places, so the cross-colour left by the decoder
+// inverts every frame; an offset of this order makes it crawl instead (#962).
+export const PalSubcarrierOffsetHz = 239;
+export const PalCyclesPerLine = (4433618.75 + PalSubcarrierOffsetHz) / 15625;
+export const PalPhasePerLine = PalCyclesPerLine % 1;
+
+// The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
+export const LineCountPeriod = 2500;
 
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
@@ -354,10 +361,15 @@ export class Video {
         this.oddClock = false;
         this.frameCount = 0;
         this.hsyncCount = 0;
-        // The hsyncCount in effect while framebuffer rows 0 and 1 were drawn: row r was drawn
-        // during line lineBase[r & 1] + (r >> 1), which sets its PAL subcarrier phase.
+        // Where the subcarrier is, in cycles, at the start of the current line.
+        this.subcarrierPhase = 0;
+        // The hsyncCount and subcarrier phase in effect while framebuffer rows 0 and 1 were
+        // drawn: row r was drawn during line lineBase[r & 1] + (r >> 1), and its phase is
+        // phaseBase[r & 1] plus PalPhasePerLine per line after it.
         this.lineBaseEven = 0;
         this.lineBaseOdd = 0;
+        this.phaseBaseEven = 0;
+        this.phaseBaseOdd = 0;
         this.doEvenFrameLogic = false;
         this.isEvenRender = true;
         this.lastRenderWasEven = false;
@@ -471,8 +483,11 @@ export class Video {
             oddClock: this.oddClock,
             frameCount: this.frameCount,
             hsyncCount: this.hsyncCount,
+            subcarrierPhase: this.subcarrierPhase,
             lineBaseEven: this.lineBaseEven,
             lineBaseOdd: this.lineBaseOdd,
+            phaseBaseEven: this.phaseBaseEven,
+            phaseBaseOdd: this.phaseBaseOdd,
             doEvenFrameLogic: this.doEvenFrameLogic,
             isEvenRender: this.isEvenRender,
             lastRenderWasEven: this.lastRenderWasEven,
@@ -526,8 +541,11 @@ export class Video {
         this.oddClock = state.oddClock;
         this.frameCount = state.frameCount;
         this.hsyncCount = state.hsyncCount ?? 0;
+        this.subcarrierPhase = state.subcarrierPhase ?? 0;
         this.lineBaseEven = state.lineBaseEven ?? 0;
         this.lineBaseOdd = state.lineBaseOdd ?? 0;
+        this.phaseBaseEven = state.phaseBaseEven ?? 0;
+        this.phaseBaseOdd = state.phaseBaseOdd ?? 0;
         this.doEvenFrameLogic = state.doEvenFrameLogic;
         this.isEvenRender = state.isEvenRender;
         this.lastRenderWasEven = state.lastRenderWasEven;
@@ -628,13 +646,17 @@ export class Video {
 
         // The even field draws the rest of the vsync line on row 0; the odd field's first row
         // is the first hsync after it.
-        const firstRowLine = (this.hsyncCount + (oddField ? 1 : 0)) % PalPhasePeriodLines;
+        const firstRowLine = (this.hsyncCount + (oddField ? 1 : 0)) % LineCountPeriod;
+        const firstRowPhase = oddField ? (this.subcarrierPhase + PalPhasePerLine) % 1 : this.subcarrierPhase;
         if (this.doublesLines()) {
             this.lineBaseEven = this.lineBaseOdd = firstRowLine;
+            this.phaseBaseEven = this.phaseBaseOdd = firstRowPhase;
         } else if (oddField) {
             this.lineBaseOdd = firstRowLine;
+            this.phaseBaseOdd = firstRowPhase;
         } else {
             this.lineBaseEven = firstRowLine;
+            this.phaseBaseEven = firstRowPhase;
         }
     }
 
@@ -930,7 +952,8 @@ export class Video {
             // The CRT vertical beam speed is constant, so this is actually
             // an approximation that works if hsyncs are spaced evenly.
             this.bitmapY += 2;
-            this.hsyncCount = (this.hsyncCount + 1) % PalPhasePeriodLines;
+            this.hsyncCount = (this.hsyncCount + 1) % LineCountPeriod;
+            this.subcarrierPhase = (this.subcarrierPhase + PalPhasePerLine) % 1;
 
             // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
             return this.bitmapY >= 768;

@@ -13,6 +13,7 @@
 import VERT_SHADER from "./shaders/pal-composite.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";
+import { PalCyclesPerLine, PalPhasePerLine } from "../video.js";
 
 export class PALCompositeFilter {
     static getDisplayConfig() {
@@ -39,6 +40,9 @@ export class PALCompositeFilter {
             uResolution: gl.getUniformLocation(this.program, "uResolution"),
             uTexelSize: gl.getUniformLocation(this.program, "uTexelSize"),
             uLineBase: gl.getUniformLocation(this.program, "uLineBase"),
+            uPhaseBase: gl.getUniformLocation(this.program, "uPhaseBase"),
+            uCyclesPerLine: gl.getUniformLocation(this.program, "uCyclesPerLine"),
+            uPhasePerLine: gl.getUniformLocation(this.program, "uPhasePerLine"),
         };
     }
 
@@ -54,5 +58,8 @@ export class PALCompositeFilter {
         gl.uniform2f(this.locations.uResolution, params.width, params.height);
         gl.uniform2f(this.locations.uTexelSize, 1.0 / params.width, 1.0 / params.height);
         gl.uniform2f(this.locations.uLineBase, params.lineBaseEven, params.lineBaseOdd);
+        gl.uniform2f(this.locations.uPhaseBase, params.phaseBaseEven, params.phaseBaseOdd);
+        gl.uniform1f(this.locations.uCyclesPerLine, PalCyclesPerLine);
+        gl.uniform1f(this.locations.uPhasePerLine, PalPhasePerLine);
     }
 }

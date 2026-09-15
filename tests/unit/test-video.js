@@ -7,7 +7,8 @@ import {
     USERDISPENABLE,
     EVERYTHINGENABLED,
     OPAQUE_BLACK,
-    PalPhasePeriodLines,
+    LineCountPeriod,
+    PalPhasePerLine,
 } from "../../src/video.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../line-grid.js";
@@ -985,7 +986,7 @@ describe("Video", () => {
         }
 
         function advances(values) {
-            return values.slice(1).map((value, i) => (value - values[i] + PalPhasePeriodLines) % PalPhasePeriodLines);
+            return values.slice(1).map((value, i) => (value - values[i] + LineCountPeriod) % LineCountPeriod);
         }
 
         // Every painted row must decode to the hsync count it was drawn under,
@@ -998,7 +999,7 @@ describe("Video", () => {
                 paints++;
                 for (const [row, line] of drawnUnder) {
                     const base = row & 1 ? video.lineBaseOdd : video.lineBaseEven;
-                    const decoded = (base + (row >> 1)) % PalPhasePeriodLines;
+                    const decoded = (base + (row >> 1)) % LineCountPeriod;
                     if (decoded !== line) mismatches.push({ row, line, decoded });
                 }
             });
@@ -1023,19 +1024,45 @@ describe("Video", () => {
             return video;
         }
 
-        it("should count hsyncs modulo the phase period", () => {
+        it("should count hsyncs modulo the line count period", () => {
             const v = makeVideo();
             programStandardFrame(v);
             v.run(10 * ClocksPerFrame);
-            expect(v.video.hsyncCount).toBeLessThan(PalPhasePeriodLines);
+            expect(v.video.hsyncCount).toBeLessThan(LineCountPeriod);
             expect(v.video.hsyncCount).toBeGreaterThanOrEqual(0);
+        });
+
+        it("should advance the subcarrier phase by its fraction of a cycle per line", () => {
+            const v = makeVideo();
+            programStandardFrame(v);
+            v.run(ClocksPerFrame);
+            const linesSeen = v.video.hsyncCount;
+            expect(linesSeen).toBeGreaterThan(100);
+            expect(v.video.subcarrierPhase).toBeCloseTo((linesSeen * PalPhasePerLine) % 1, 6);
+        });
+
+        it("should not advance the phase by half a cycle over a 312-line frame", () => {
+            expect(Math.abs(((ScanlinesPerFrame * PalPhasePerLine) % 1) - 0.5)).toBeGreaterThan(0.1);
+        });
+
+        it("should record each field's phase at its first row, a frame apart without interlace", () => {
+            const phases = [];
+            const v = makeVideo((video) => phases.push({ even: video.phaseBaseEven, odd: video.phaseBaseOdd }));
+            programNonInterlacedFrame(v);
+            v.run(SettleFrames * ClocksPerFrame);
+            phases.length = 0;
+            v.run(4 * ClocksPerFrame);
+            expect(phases.map((p) => p.odd)).toEqual(phases.map((p) => p.even));
+            const perFrame = (ScanlinesPerFrame * PalPhasePerLine) % 1;
+            for (let i = 1; i < phases.length; ++i)
+                expect((phases[i].even - phases[i - 1].even + 1) % 1).toBeCloseTo(perFrame, 6);
         });
 
         it("should advance both bases by a whole frame of lines without interlace", () => {
             const bases = paintedBases(programNonInterlacedFrame, 10);
             expect(bases.map((b) => b.odd)).toEqual(bases.map((b) => b.even));
             expect(advances(bases.map((b) => b.even))).toEqual(Array(9).fill(ScanlinesPerFrame));
-            for (const { even } of bases) expect(even).toBeLessThan(PalPhasePeriodLines);
+            for (const { even } of bases) expect(even).toBeLessThan(LineCountPeriod);
         });
 
         it("should advance by alternate 312 and 313 line fields with interlace sync", () => {
