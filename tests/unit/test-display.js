@@ -86,6 +86,17 @@ describe("Display", () => {
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
     });
 
+    it("copies only the rows it is told to, and presents the whole extent", () => {
+        const display = make();
+        fakeCanvas.fb32.fill(3);
+        display.videoFb32.fill(7);
+        display.onPaint(paintedFrom(), 0, 10, FbWidth, 100, 40);
+        presentAll();
+        expect(fakeCanvas.fb32[39 * FbWidth]).toBe(7);
+        expect(fakeCanvas.fb32[40 * FbWidth]).toBe(3);
+        expect(fakeCanvas.paint.mock.calls[0].slice(0, 4)).toEqual([0, 10, FbWidth, 100]);
+    });
+
     it("schedules another present once the first has run", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);

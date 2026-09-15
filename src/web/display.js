@@ -61,8 +61,8 @@ export class Display {
             : new Video(
                   model.isMaster,
                   this.videoFb32,
-                  function paint(minx, miny, maxx, maxy) {
-                      display.onPaint(this, minx, miny, maxx, maxy);
+                  function paint(minx, miny, maxx, maxy, paintedTo) {
+                      display.onPaint(this, minx, miny, maxx, maxy, paintedTo);
                   },
                   { isAtom: model.isAtom },
               );
@@ -80,14 +80,15 @@ export class Display {
         this.video.frameSkipCount = speedy ? (skip % 2 ? skip : skip + 1) : 0;
     }
 
-    onPaint(video, minx, miny, maxx, maxy) {
+    /** `paintedTo` is the row the copy stops at; the rows below it keep what the canvas last showed. */
+    onPaint(video, minx, miny, maxx, maxy, paintedTo = maxy) {
         if (!video.frameSkipCount) {
             this.frames++;
             if (this.frames < this.frameSkip) return;
             this.frames = 0;
         }
         const start = performance.now();
-        this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
+        this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);
         if (this.pendingFrame.lineGrid.length !== video.lineGrid.length)
             this.pendingFrame.lineGrid = new Uint8Array(video.lineGrid.length);
         this.pendingFrame.lineGrid.set(video.lineGrid);

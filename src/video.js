@@ -648,8 +648,9 @@ export class Video {
         return y * 1024 + x;
     }
 
-    // Paints down to the beam only, so the canvas keeps the previous frame below
-    // it: this frame above the beam, the last one under it, as a camera would see.
+    // Hands over the rows down to the beam only, so the canvas keeps the previous
+    // frame below it: this frame above the beam, the last one under it, as a
+    // camera would see.
     debugPaint() {
         if (!this.debugPrevScreen) {
             this.debugPrevScreen = new Uint32Array(1024 * 768);
@@ -666,8 +667,9 @@ export class Video {
         }
         const beamRows = this.doublesLines() ? 2 : 1;
         const top = this.topBorder;
-        const bottom = Math.max(top + 1, Math.min(625 - this.bottomBorder, this.bitmapY + beamRows + dotSize));
-        this.paint_ext(this.leftBorder, top, 1024 - this.rightBorder, bottom);
+        const bottom = 625 - this.bottomBorder;
+        const paintedTo = Math.max(top, Math.min(bottom, this.bitmapY + beamRows + dotSize));
+        this.paint_ext(this.leftBorder, top, 1024 - this.rightBorder, bottom, paintedTo);
         debugCopyFb(this.fb32, this.debugPrevScreen);
     }
 

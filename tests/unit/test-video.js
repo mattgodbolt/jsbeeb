@@ -1087,32 +1087,34 @@ describe("Video", () => {
     describe("debugPaint", () => {
         beforeEach(() => mockPaintExt.mockClear());
 
-        const paintedRows = () => {
-            const [, top, , bottom] = mockPaintExt.mock.calls.at(-1);
-            return { top, bottom };
+        const painted = () => {
+            const [, top, , bottom, paintedTo] = mockPaintExt.mock.calls.at(-1);
+            return { top, bottom, paintedTo };
         };
 
-        it("paints from the top of the picture down to just past the beam", () => {
+        it("hands over the whole picture's extent but only the rows down to just past the beam", () => {
             video.bitmapY = 200;
             video.debugPaint();
             expect(mockPaintExt).toHaveBeenCalledTimes(1);
-            const { top, bottom } = paintedRows();
+            const { top, bottom, paintedTo } = painted();
             expect(top).toBe(video.topBorder);
-            expect(bottom).toBeGreaterThan(200);
-            expect(bottom).toBeLessThan(230);
+            expect(bottom).toBe(625 - video.bottomBorder);
+            expect(paintedTo).toBeGreaterThan(200);
+            expect(paintedTo).toBeLessThan(230);
         });
 
-        it("paints the whole picture once the beam is below it", () => {
+        it("hands over every row once the beam is below the picture", () => {
             video.bitmapY = 700;
             video.debugPaint();
-            expect(paintedRows().bottom).toBe(625 - video.bottomBorder);
+            const { bottom, paintedTo } = painted();
+            expect(paintedTo).toBe(bottom);
         });
 
-        it("still paints a row with the beam above the picture", () => {
+        it("hands over no rows with the beam above the picture", () => {
             video.bitmapY = -1;
             video.debugPaint();
-            const { top, bottom } = paintedRows();
-            expect(bottom).toBeGreaterThan(top);
+            const { top, paintedTo } = painted();
+            expect(paintedTo).toBe(top);
         });
 
         it("leaves the framebuffer as it was", () => {
