@@ -1,4 +1,5 @@
 import * as canvasLib from "./canvas.js";
+import { MaxPersistence } from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
 import { toast } from "./toast.js";
 
@@ -27,7 +28,6 @@ export class Display {
                 : new canvasLib.Canvas(canvasEl, lowLatency),
     }) {
         this.screenCanvas = screenCanvas;
-        this.mode = mode;
         this.persistence = {};
         this.frames = 0;
         this.frameSkip = frameSkip;
@@ -125,15 +125,28 @@ export class Display {
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
     }
 
-    /** Sets how much of the previous frame `mode` keeps under each new one; applied when that mode is showing. */
-    setPersistence(mode, persistence) {
-        this.persistence[mode] = persistence;
-        if (mode === this.mode) this.canvas.setPersistence(persistence);
+    /**
+     * Sets how much of the previous frame a display keeps under each new one,
+     * by the name of its setting; it applies while the filter in use is the one
+     * that declares that setting, so a fallback gets its own amount, not the
+     * amount of the mode that was asked for.
+     */
+    setPersistence(setting, persistence) {
+        this.persistence[setting] = Math.min(MaxPersistence, Math.max(0, persistence));
+        if (setting === this.persistenceSetting()) this.applyPersistence();
+    }
+
+    persistenceSetting() {
+        return this.filterClass.getDisplayConfig().persistence?.setting;
+    }
+
+    applyPersistence() {
+        const setting = this.persistenceSetting();
+        this.canvas.setPersistence(setting === undefined ? 0 : (this.persistence[setting] ?? 0));
     }
 
     /** The mode is changed from a modal, which stops the emulator, so this repaints itself. */
     setMode(mode) {
-        this.mode = mode;
         const newFilterClass = canvasLib.getFilterForMode(mode);
         // Everything but the filter is the same whatever the mode: the framebuffer
         // texture, the vertex buffers and fb32 all carry over untouched.
@@ -145,7 +158,7 @@ export class Display {
         this.filterClass = this.canvas.filterClass;
         // Back to the mode's own size, undoing any scaling the last one asked for.
         this.sizeCanvasFor(this.filterClass);
-        this.canvas.setPersistence(this.persistence[mode] ?? 0);
+        this.applyPersistence();
         this.video.paint();
         this.setCrtPic();
     }

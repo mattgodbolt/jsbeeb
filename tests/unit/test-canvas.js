@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from "vitest";
 import { GlCanvas, Canvas, bestCanvas, useBestFilter } from "../../src/web/canvas.js";
 import PAL_FRAG_SHADER from "../../src/video-filters/shaders/pal-composite.frag.glsl?raw";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
@@ -304,6 +305,40 @@ describe("useBestFilter", () => {
 });
 
 describe("Canvas", () => {
+    function fake2dContext() {
+        return {
+            globalAlpha: 1,
+            fillStyle: "",
+            fillRect: () => {},
+            createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+            putImageData: () => {},
+            drawImage: vi.fn(),
+            getContextAttributes: () => ({}),
+        };
+    }
+
+    it("blends each frame over the last by the amount asked, even after the context has lost its state", () => {
+        const ctx = fake2dContext();
+        const backCtx = fake2dContext();
+        const createElement = vi.spyOn(document, "createElement").mockReturnValue({ getContext: () => backCtx });
+        try {
+            const canvas = new Canvas({ width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) });
+            const paint = () => canvas.paint(0, 0, 1024, 625, {});
+            canvas.setPersistence(0.6);
+            paint();
+            expect(ctx.globalAlpha).toBeCloseTo(0.4);
+            expect(ctx.drawImage).toHaveBeenCalledTimes(1);
+            ctx.globalAlpha = 1;
+            paint();
+            expect(ctx.globalAlpha).toBeCloseTo(0.4);
+            canvas.setPersistence(0);
+            paint();
+            expect(ctx.globalAlpha).toBe(1);
+        } finally {
+            createElement.mockRestore();
+        }
+    });
+
     it("can be disposed even though it owns no GL objects", () => {
         // Callers should not have to know which sort of canvas they have.
         const backing = { width: 1024, height: 625, getContext: () => null };

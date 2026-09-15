@@ -2,7 +2,7 @@ import { DefaultModel, findModel } from "../models.js";
 import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { guessModelFromHostname } from "../url-params.js";
 import { fittedRoms } from "./config.js";
-import { persistenceSettings } from "./canvas.js";
+import { MaxPersistence, persistenceSettings } from "./canvas.js";
 import { toast } from "./toast.js";
 
 // Kept in browser storage for next time, as well as in the URL.
@@ -72,7 +72,7 @@ export class Settings extends EventTarget {
             [params.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
         this.speakerAmount = storedNumber(params, "speakerAmount", 1);
         for (const { setting, default: fallback } of persistenceSettings())
-            this[setting] = storedNumber(params, setting, fallback);
+            this[setting] = Math.min(MaxPersistence, Math.max(0, storedNumber(params, setting, fallback)));
     }
 
     get extraRoms() {

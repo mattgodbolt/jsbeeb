@@ -304,9 +304,9 @@ settings.on("displayMode", (mode) => {
     // The monitor picture may have changed shape.
     layout.resize();
 });
-for (const { mode, setting } of persistenceSettings()) {
-    display.setPersistence(mode, settings[setting]);
-    settings.on(setting, (persistence) => display.setPersistence(mode, persistence));
+for (const { setting } of persistenceSettings()) {
+    display.setPersistence(setting, settings[setting]);
+    settings.on(setting, (persistence) => display.setPersistence(setting, persistence));
 }
 settings.on("keyLayout", (chosen) => keyboard.setKeyLayout(chosen));
 settings.on("tubeCpuMultiplier", (multiplier) => {

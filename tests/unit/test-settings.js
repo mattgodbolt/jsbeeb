@@ -48,6 +48,13 @@ describe("Settings", () => {
             expect(make().palPersistence).toBe(0.25);
         });
 
+        it("keeps a persistence within what a display can show", () => {
+            urlState.params.palPersistence = 2;
+            expect(make().palPersistence).toBe(0.98);
+            window.localStorage.rgbPersistence = "-1";
+            expect(make().rgbPersistence).toBe(0);
+        });
+
         it("lower-cases a key layout from the URL", () => {
             urlState.params.keyLayout = "GAMING";
             expect(make().keyLayout).toBe("gaming");

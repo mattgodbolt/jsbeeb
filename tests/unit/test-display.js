@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
@@ -92,15 +93,41 @@ describe("Display", () => {
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
     });
 
-    it("applies a persistence to the canvas only while its display is showing", () => {
+    it("applies a persistence to the canvas only while the filter that declares it is in use", () => {
         const display = make({ mode: "pal" });
-        display.setPersistence("rgb", 0.3);
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("rgbPersistence", 0.3);
         expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
-        display.setPersistence("pal", 0.8);
+        display.setPersistence("palPersistence", 0.8);
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.8);
         display.setMode("rgb");
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.3);
         display.setMode("xbr");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+    });
+
+    it("gives a fallback display its own persistence, not the amount of the mode asked for", () => {
+        const display = make({
+            mode: "pal",
+            makeCanvas: (canvasEl, filterClass) => {
+                fakeCanvas = { fb32: new Uint32Array(FbWidth * 625), paint: vi.fn(), setPersistence: vi.fn() };
+                fakeCanvas.filterClass = PassthroughFilter;
+                fakeCanvas.fallbackReason = `${filterClass.getDisplayConfig().name} declined`;
+                return fakeCanvas;
+            },
+        });
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("palPersistence", 0.8);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+        display.setPersistence("rgbPersistence", 0.3);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.3);
+    });
+
+    it("keeps a persistence within what the canvas can show", () => {
+        const display = make({ mode: "pal" });
+        display.setPersistence("palPersistence", 2);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.98);
+        display.setPersistence("palPersistence", -1);
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
     });
 

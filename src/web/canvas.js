@@ -13,6 +13,9 @@ export function getFilterForMode(mode) {
     return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
 }
 
+/** The most of the previous frame a display may keep: at 1 nothing new would ever show. */
+export const MaxPersistence = 0.98;
+
 /** The display modes that simulate phosphor persistence, with the setting that holds each one's amount. */
 export function persistenceSettings() {
     return Object.entries(DISPLAY_MODE_FILTERS).flatMap(([mode, filterClass]) => {
@@ -50,6 +53,7 @@ export class Canvas {
         this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvas = canvas;
+        this.persistence = 0;
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
@@ -59,7 +63,7 @@ export class Canvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
-        this.ctx.globalAlpha = 1 - persistence;
+        this.persistence = persistence;
     }
 
     setFilter(filterClass) {
@@ -71,7 +75,8 @@ export class Canvas {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        // Read the size each time: it can change when the window is resized.
+        // Set each time, like the size: a resize resets the context's state.
+        this.ctx.globalAlpha = 1 - this.persistence;
         this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
     }
 }
