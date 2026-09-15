@@ -15,7 +15,10 @@ export function getFilterForMode(mode) {
 
 // Persistence is set as an afterglow time, the time constant of the fade in
 // milliseconds, which is what the eye judges; the canvases take the share of
-// the previous field that is left after one field of the machine's own length.
+// the previous field's glow left after one field of the machine's own length.
+// A phosphor lights fully when the beam hits it and decays from there, so each
+// new field is drawn whole and the old picture decays under it, whichever is
+// brighter showing; averaging the two instead would dim anything that moves.
 export const MaxPersistenceMs = 500;
 
 export function persistenceFromMs(afterglowMs, fieldMs) {
@@ -60,7 +63,6 @@ export class Canvas {
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvas = canvas;
         this.persistence = 0;
-        this.paintedSize = { width: 0, height: 0 };
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
@@ -82,12 +84,21 @@ export class Canvas {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        // A resize clears the canvas and resets the context's state: the first
-        // frame into it is drawn whole, and the alpha is set every time.
-        const resized = this.canvas.width !== this.paintedSize.width || this.canvas.height !== this.paintedSize.height;
-        this.paintedSize = { width: this.canvas.width, height: this.canvas.height };
-        this.ctx.globalAlpha = resized ? 1 : 1 - this.persistence;
-        this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
+        // Set on every paint: a resize resets the context's state. The decay is
+        // a black wash over the old picture; "lighten" then keeps the brighter
+        // of that and the new frame, per channel.
+        const ctx = this.ctx;
+        if (this.persistence > 0) {
+            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = 1 - this.persistence;
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.globalCompositeOperation = "lighten";
+        } else {
+            ctx.globalCompositeOperation = "source-over";
+        }
+        ctx.globalAlpha = 1;
+        ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
     }
 }
 
@@ -125,6 +136,9 @@ export class GlCanvas {
         });
 
         checkedGl.depthMask(false);
+        // The phosphor blend keeps the brighter of the new frame and the decayed
+        // old one, which WebGL 1 offers through this extension.
+        this.blendMinMax = gl.getExtension("EXT_blend_minmax");
 
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
@@ -205,19 +219,16 @@ export class GlCanvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
-        this.persistence = persistence;
-        this.applyBlend(persistence > 0);
-    }
-
-    applyBlend(on) {
         const gl = this.checkedGl;
-        if (!on) {
+        this.persistence = persistence;
+        if (persistence <= 0 || !this.blendMinMax) {
             gl.disable(gl.BLEND);
             return;
         }
         gl.enable(gl.BLEND);
-        gl.blendColor(0, 0, 0, this.persistence);
-        gl.blendFunc(gl.ONE_MINUS_CONSTANT_ALPHA, gl.CONSTANT_ALPHA);
+        gl.blendEquation(this.blendMinMax.MAX_EXT);
+        gl.blendColor(0, 0, 0, persistence);
+        gl.blendFunc(gl.ONE, gl.CONSTANT_ALPHA);
     }
 
     /**
@@ -240,14 +251,10 @@ export class GlCanvas {
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
         // follow it.
-        // A resized drawing buffer is also a cleared one, so the first frame
-        // into it is drawn whole rather than blended over black.
-        const resized = gl.drawingBufferWidth !== this.viewportWidth || gl.drawingBufferHeight !== this.viewportHeight;
-        if (resized) {
+        if (gl.drawingBufferWidth !== this.viewportWidth || gl.drawingBufferHeight !== this.viewportHeight) {
             this.viewportWidth = gl.drawingBufferWidth;
             this.viewportHeight = gl.drawingBufferHeight;
             gl.viewport(0, 0, this.viewportWidth, this.viewportHeight);
-            if (this.persistence > 0) this.applyBlend(false);
         }
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -302,7 +309,6 @@ export class GlCanvas {
         });
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        if (resized && this.persistence > 0) this.applyBlend(true);
     }
 }
 

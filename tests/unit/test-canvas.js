@@ -26,7 +26,7 @@ function recordingGl() {
         "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
         "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
         "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
-        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE_MINUS_CONSTANT_ALPHA"
+        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE MAX_EXT"
     )
         .split(" ")
         .entries())
@@ -56,13 +56,14 @@ function recordingGl() {
         getAttribLocation: () => 0,
         getUniformLocation: () => ({}),
         getShaderPrecisionFormat: () => ({ precision: 23 }),
+        getExtension: (name) => (name === "EXT_blend_minmax" ? { MAX_EXT: gl.MAX_EXT } : null),
     });
 
     for (const name of (
         "shaderSource compileShader attachShader linkProgram useProgram depthMask viewport " +
         "bindTexture bindBuffer bufferData texImage2D texSubImage2D texParameteri pixelStorei activeTexture " +
         "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f " +
-        "enable disable blendColor blendFunc"
+        "enable disable blendEquation blendColor blendFunc"
     ).split(" "))
         gl[name] = () => {};
 
@@ -236,53 +237,33 @@ describe("low latency canvas", () => {
 });
 
 describe("phosphor persistence", () => {
-    it("blends each frame over the last by the amount asked, and stops when asked for none", () => {
+    it("keeps the brighter of the new frame and the decayed old one, and stops when asked for none", () => {
         const gl = recordingGl();
         const calls = [];
-        for (const name of ["enable", "disable", "blendColor", "blendFunc"])
+        for (const name of ["enable", "disable", "blendEquation", "blendColor", "blendFunc"])
             gl[name] = (...args) => calls.push([name, ...args]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
 
         canvas.setPersistence(0.6);
         expect(calls).toEqual([
             ["enable", gl.BLEND],
+            ["blendEquation", gl.MAX_EXT],
             ["blendColor", 0, 0, 0, 0.6],
-            ["blendFunc", gl.ONE_MINUS_CONSTANT_ALPHA, gl.CONSTANT_ALPHA],
+            ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
         ]);
         calls.length = 0;
         canvas.setPersistence(0);
         expect(calls).toEqual([["disable", gl.BLEND]]);
     });
 
-    it("draws the first frame into a fresh drawing buffer whole, then blends again", () => {
+    it("shows each frame plain when the driver has no max blend", () => {
         const gl = recordingGl();
+        gl.getExtension = () => null;
         const calls = [];
-        for (const name of ["enable", "disable", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        for (const name of ["enable", "disable"]) gl[name] = (...args) => calls.push([name, ...args]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         canvas.setPersistence(0.6);
-        calls.length = 0;
-        const frame = {
-            lineGrid: new Uint8Array(0),
-            lineBaseEven: 0,
-            lineBaseOdd: 0,
-            phaseBaseEven: 0,
-            phaseBaseOdd: 0,
-        };
-        gl.drawingBufferWidth = 896;
-        gl.drawingBufferHeight = 600;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls).toEqual([
-            ["disable", gl.BLEND],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
-            ["enable", gl.BLEND],
-        ]);
-        calls.length = 0;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls).toEqual([["drawArrays", gl.TRIANGLE_STRIP, 0, 4]]);
-        gl.drawingBufferHeight = 300;
-        calls.length = 0;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls[0]).toEqual(["disable", gl.BLEND]);
+        expect(calls).toEqual([["disable", gl.BLEND]]);
     });
 });
 
@@ -348,31 +329,26 @@ describe("Canvas", () => {
         };
     }
 
-    it("blends each frame over the last by the amount asked, even after the context has lost its state", () => {
+    it("washes the old picture down by the decay, then keeps the brighter of it and the new frame", () => {
         const ctx = fake2dContext();
+        const calls = [];
+        ctx.fillRect = (...args) => calls.push(["fillRect", ctx.globalCompositeOperation, ctx.globalAlpha, ...args]);
+        ctx.drawImage = () => calls.push(["drawImage", ctx.globalCompositeOperation, ctx.globalAlpha]);
         const backCtx = fake2dContext();
         const createElement = vi.spyOn(document, "createElement").mockReturnValue({ getContext: () => backCtx });
         try {
-            const backing = { width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) };
-            const canvas = new Canvas(backing);
-            const paint = () => canvas.paint(0, 0, 1024, 625, {});
+            const canvas = new Canvas({ width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) });
+            calls.length = 0;
             canvas.setPersistence(0.6);
-            paint();
-            expect(ctx.globalAlpha).toBe(1);
-            expect(ctx.drawImage).toHaveBeenCalledTimes(1);
-            paint();
-            expect(ctx.globalAlpha).toBeCloseTo(0.4);
-            ctx.globalAlpha = 1;
-            paint();
-            expect(ctx.globalAlpha).toBeCloseTo(0.4);
-            backing.width = 448;
-            paint();
-            expect(ctx.globalAlpha).toBe(1);
-            paint();
-            expect(ctx.globalAlpha).toBeCloseTo(0.4);
+            canvas.paint(0, 0, 1024, 625, {});
+            expect(calls).toEqual([
+                ["fillRect", "source-over", expect.closeTo(0.4, 5), 0, 0, 896, 600],
+                ["drawImage", "lighten", 1],
+            ]);
+            calls.length = 0;
             canvas.setPersistence(0);
-            paint();
-            expect(ctx.globalAlpha).toBe(1);
+            canvas.paint(0, 0, 1024, 625, {});
+            expect(calls).toEqual([["drawImage", "source-over", 1]]);
         } finally {
             createElement.mockRestore();
         }
