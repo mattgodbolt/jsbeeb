@@ -41,9 +41,9 @@ describe("Settings", () => {
 
         it("takes each display's afterglow from its filter, then storage, then the URL", () => {
             expect(make().palPersistenceMs).toBe(40);
-            expect(make().rgbPersistenceMs).toBe(0);
-            window.localStorage.palPersistenceMs = "25";
-            expect(make().palPersistenceMs).toBe(25);
+            expect(make().rgbPersistenceMs).toBe(25);
+            window.localStorage.palPersistenceMs = "30";
+            expect(make().palPersistenceMs).toBe(30);
             urlState.params.palPersistenceMs = 100;
             expect(make().palPersistenceMs).toBe(100);
         });

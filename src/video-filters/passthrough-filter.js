@@ -16,7 +16,7 @@ export class PassthroughFilter {
             visibleHeight: 600,
             canvasWidth: 896,
             canvasHeight: 600,
-            persistence: { setting: "rgbPersistenceMs", default: 0 },
+            persistence: { setting: "rgbPersistenceMs", default: 25 },
         };
     }
 

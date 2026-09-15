@@ -315,13 +315,14 @@ describe("Config", () => {
             slider.value = 80;
             slider.dispatchEvent(new Event("input"));
             expect(settings.palPersistenceMs).toBe(80);
-            expect(settings.rgbPersistenceMs).toBe(0);
+            expect(settings.rgbPersistenceMs).toBe(25);
             expect(readout()).toBe("80 ms");
             settings.set({ displayMode: "rgb" });
+            expect(slider.value).toBe("25");
+            expect(readout()).toBe("25 ms");
+            settings.set({ rgbPersistenceMs: 0 });
             expect(slider.value).toBe("0");
             expect(readout()).toBe("none");
-            settings.set({ rgbPersistenceMs: 20 });
-            expect(slider.value).toBe("20");
             settings.set({ displayMode: "xbr" });
             expect(slider.disabled).toBe(true);
             expect(readout()).toBe("not available");
@@ -333,7 +334,7 @@ describe("Config", () => {
             const slider = document.getElementById("persistenceSetting");
             settings.set({ displayMode: "pal" });
             config.setPersistenceInUse("rgbPersistenceMs");
-            expect(slider.value).toBe("0");
+            expect(slider.value).toBe("25");
             slider.value = 30;
             slider.dispatchEvent(new Event("input"));
             expect(settings.rgbPersistenceMs).toBe(30);
