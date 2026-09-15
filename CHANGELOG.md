@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.3](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.2...v2.0.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* the debugger shows the previous frame below the beam instead of black ([#1144](https://github.com/mattgodbolt/jsbeeb/issues/1144)) ([e2f0076](https://github.com/mattgodbolt/jsbeeb/commit/e2f0076e8733b9649640b44435aad279133b964d))
+
 ## [2.0.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.1...v2.0.2) (2026-09-14)
 
 
