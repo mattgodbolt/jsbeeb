@@ -1092,15 +1092,27 @@ describe("Video", () => {
             return { top, bottom, paintedTo };
         };
 
-        it("hands over the whole picture's extent but only the rows down to just past the beam", () => {
+        // The beam dot is drawn ten rows either side of the beam.
+        const DotRadius = 10;
+
+        it("hands over the whole picture's extent but only the rows down to the beam's dot", () => {
             video.bitmapY = 200;
+            expect(video.doublesLines()).toBe(true);
             video.debugPaint();
             expect(mockPaintExt).toHaveBeenCalledTimes(1);
             const { top, bottom, paintedTo } = painted();
             expect(top).toBe(video.topBorder);
             expect(bottom).toBe(625 - video.bottomBorder);
-            expect(paintedTo).toBeGreaterThan(200);
-            expect(paintedTo).toBeLessThan(230);
+            expect(paintedTo).toBe(200 + 2 + DotRadius);
+        });
+
+        it("counts the beam as one row when scanlines are not doubled", () => {
+            video.crtc.write(0, 8);
+            video.crtc.write(1, 3);
+            video.bitmapY = 200;
+            expect(video.doublesLines()).toBe(false);
+            video.debugPaint();
+            expect(painted().paintedTo).toBe(200 + 1 + DotRadius);
         });
 
         it("hands over every row once the beam is below the picture", () => {
