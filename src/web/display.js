@@ -65,6 +65,7 @@ export class Display {
             fields: 1,
         };
         this.lastPaintedFrameCount = 0;
+        this.fieldsSincePresent = 0;
 
         const display = this;
         this.video = fakeVideo
@@ -117,12 +118,18 @@ export class Display {
             lineBaseOdd: video.lineBaseOdd,
             phaseBaseEven: video.phaseBaseEven,
             phaseBaseOdd: video.phaseBaseOdd,
-            // How many fields the phosphor has decayed over since the frame it
-            // last showed: one usually, more under a frame skip, none for a
-            // repaint of the same frame.
-            fields: Math.max(0, Math.min(MaxDecayFields, video.frameCount - this.lastPaintedFrameCount)),
         });
-        this.lastPaintedFrameCount = video.frameCount;
+        // How many fields the phosphor has decayed over since the frame the
+        // canvas shows: one usually, more under a frame skip or when paints
+        // outrun the animation frame, none for a repaint of the same frame. A
+        // count that went backwards is a restore, whose picture owes the old
+        // one nothing. The 6847 keeps its own count and syncs it after painting.
+        const frameCount = (video.video6847 ?? video).frameCount;
+        const elapsed = frameCount - this.lastPaintedFrameCount;
+        this.fieldsSincePresent =
+            elapsed < 0 ? MaxDecayFields : Math.min(MaxDecayFields, this.fieldsSincePresent + elapsed);
+        this.pendingFrame.fields = this.fieldsSincePresent;
+        this.lastPaintedFrameCount = frameCount;
         this.paintMsThisTick += performance.now() - start;
         this.presented = false;
         if (!this.presentScheduled) {
@@ -140,6 +147,7 @@ export class Display {
         const start = performance.now();
         const { minx, miny, maxx, maxy } = this.pendingFrame;
         this.canvas.paint(minx, miny, maxx, maxy, this.pendingFrame);
+        this.fieldsSincePresent = 0;
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
     }
 

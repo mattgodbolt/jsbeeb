@@ -181,6 +181,37 @@ describe("Display", () => {
         expect(fieldsShown()).toBe(50);
     });
 
+    it("adds up the fields of paints that arrive before one animation frame", () => {
+        const display = make();
+        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        presentAll();
+        display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(0, 12), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(2);
+    });
+
+    it("owes the old picture nothing after a restore that moved the frame count back", () => {
+        const display = make();
+        display.onPaint(paintedFrom(0, 100), 0, 0, FbWidth, 8);
+        presentAll();
+        display.onPaint(paintedFrom(0, 3), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(50);
+    });
+
+    it("counts the Atom's fields from the 6847, which syncs its count only after painting", () => {
+        const display = make({ model: { isMaster: false, isAtom: true } });
+        const atom = paintedFrom(0, 0);
+        atom.video6847 = { frameCount: 7 };
+        display.onPaint(atom, 0, 0, FbWidth, 8);
+        presentAll();
+        atom.video6847.frameCount = 10;
+        display.onPaint(atom, 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(3);
+    });
+
     it("schedules another present once the first has run", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
