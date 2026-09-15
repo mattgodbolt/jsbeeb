@@ -139,7 +139,9 @@ export class Display {
      * amount of the mode that was asked for.
      */
     setPersistence(setting, persistence) {
-        this.persistence[setting] = Math.min(MaxPersistence, Math.max(0, persistence));
+        this.persistence[setting] = Number.isFinite(persistence)
+            ? Math.min(MaxPersistence, Math.max(0, persistence))
+            : 0;
         if (setting === this.persistenceSetting()) this.applyPersistence();
     }
 

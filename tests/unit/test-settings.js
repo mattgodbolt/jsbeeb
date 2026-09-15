@@ -112,6 +112,15 @@ describe("Settings", () => {
             expect(urlState.params.palPersistence).toBe(0.98);
         });
 
+        it("puts a cleared persistence back at its display's default, remembered nowhere", () => {
+            const settings = make();
+            settings.set({ palPersistence: 0.3 });
+            settings.set({ palPersistence: undefined });
+            expect(settings.palPersistence).toBe(0.9);
+            expect(window.localStorage.palPersistence).toBeUndefined();
+            expect(urlState.params.palPersistence).toBeUndefined();
+        });
+
         it("remembers a persistence and lets its drag settle", () => {
             const settings = make();
             settings.set({ palPersistence: 0.6 });

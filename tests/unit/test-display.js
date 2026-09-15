@@ -130,6 +130,8 @@ describe("Display", () => {
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0.98);
         display.setPersistence("palPersistence", -1);
         expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+        display.setPersistence("palPersistence", undefined);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
     });
 
     it("copies only the rows it is told to, pixels and line grid alike, and presents the whole extent", () => {

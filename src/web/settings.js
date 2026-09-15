@@ -17,7 +17,7 @@ for (const { setting } of persistenceSettings()) {
 const storedNumber = (params, name, fallback) =>
     [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
 
-const PersistenceNames = new Set(persistenceSettings().map(({ setting }) => setting));
+const PersistenceDefaults = new Map(persistenceSettings().map(({ setting, default: fallback }) => [setting, fallback]));
 const clampPersistence = (value) => Math.min(MaxPersistence, Math.max(0, value));
 
 /** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
@@ -90,10 +90,13 @@ export class Settings extends EventTarget {
     /** Adopts `changes` (an undefined value clears a setting), persists them and tells the subscribers. */
     set(changes) {
         for (const name of Object.keys(changes))
-            if (PersistenceNames.has(name) && changes[name] !== undefined)
+            if (PersistenceDefaults.has(name) && changes[name] !== undefined)
                 changes[name] = clampPersistence(changes[name]);
         for (const [name, value] of Object.entries(changes)) {
-            this[name] = name === "model" ? (findModel(value) ?? this.model) : value;
+            // A cleared persistence is back at its display's default, though nothing remembers it.
+            if (name === "model") this[name] = findModel(value) ?? this.model;
+            else if (value === undefined && PersistenceDefaults.has(name)) this[name] = PersistenceDefaults.get(name);
+            else this[name] = value;
             if (!StoredSettings.includes(name)) continue;
             if (value === undefined) window.localStorage.removeItem(name);
             else window.localStorage[name] = value;
