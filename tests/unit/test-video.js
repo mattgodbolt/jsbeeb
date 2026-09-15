@@ -1297,16 +1297,23 @@ describe("Video", () => {
 
         it("should restart the PAL line phase from zero for a snapshot without it", () => {
             const v = makeRealVideo();
-            const { hsyncCount, lineBaseEven, lineBaseOdd, ...older } = v.snapshotState();
-            expect([hsyncCount, lineBaseEven, lineBaseOdd]).toEqual([0, 0, 0]);
+            const { hsyncCount, lineBaseEven, lineBaseOdd, subcarrierPhase, phaseBaseEven, phaseBaseOdd, ...older } =
+                v.snapshotState();
+            expect([hsyncCount, lineBaseEven, lineBaseOdd, subcarrierPhase, phaseBaseEven, phaseBaseOdd]).toEqual([
+                0, 0, 0, 0, 0, 0,
+            ]);
 
             const v2 = makeRealVideo();
             v2.hsyncCount = 99;
             v2.lineBaseEven = 98;
             v2.lineBaseOdd = 97;
+            v2.subcarrierPhase = 0.5;
+            v2.phaseBaseEven = 0.25;
+            v2.phaseBaseOdd = 0.75;
             v2.restoreState(older);
 
             expect([v2.hsyncCount, v2.lineBaseEven, v2.lineBaseOdd]).toEqual([0, 0, 0]);
+            expect([v2.subcarrierPhase, v2.phaseBaseEven, v2.phaseBaseOdd]).toEqual([0, 0, 0]);
         });
 
         it("should rebuild the line grid descriptor on restore", () => {

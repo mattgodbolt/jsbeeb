@@ -25,7 +25,9 @@ export const MinPaintedFrameRows = 64;
 // half a cycle to four decimal places, so the cross-colour left by the decoder
 // inverts every frame; an offset of this order makes it crawl instead (#962).
 export const PalSubcarrierOffsetHz = 239;
-export const PalCyclesPerLine = (4433618.75 + PalSubcarrierOffsetHz) / 15625;
+const PalNominalSubcarrierHz = 4433618.75;
+const PalLineHz = 15625;
+export const PalCyclesPerLine = (PalNominalSubcarrierHz + PalSubcarrierOffsetHz) / PalLineHz;
 export const PalPhasePerLine = PalCyclesPerLine % 1;
 
 // The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
