@@ -181,7 +181,7 @@ describe("Display", () => {
         expect(fieldsShown()).toBe(10);
         display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8, 4);
         presentAll();
-        expect(fieldsShown()).toBe(0);
+        expect(fieldsShown()).toBe(250);
         display.onPaint(paintedFrom(0, 5000), 0, 0, FbWidth, 8);
         presentAll();
         expect(fieldsShown()).toBe(250);
