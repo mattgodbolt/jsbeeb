@@ -12,6 +12,11 @@ uniform vec2 uPhaseBase;
 uniform float uCyclesPerLine;
 // fract(uCyclesPerLine), taken in double precision by the caller
 uniform float uPhasePerLine;
+// The quad's extent in texture coordinates: its centre and half its size
+uniform vec2 uExtentCentre;
+uniform vec2 uExtentHalfSize;
+// How far the picture bows outwards at the middle of each edge, as a fraction of its half size
+uniform vec2 uCurvature;
 
 const float PI = 3.14159265359;
 
@@ -74,9 +79,21 @@ vec2 demodulate_uv(vec2 xy, float pixel_x, float offset_pixels, float v_switch, 
     return vec2(composite * sin(t), composite * cos(t) * v_switch);
 }
 
+// Where on the flat picture a point on the convex screen looks up: the further up or down
+// it is, the further across the picture it reaches, and vice versa, so the raster's edges
+// bow outwards and its corners pull in.
+vec2 picture_position(vec2 screen) {
+    return screen * (1.0 + screen.yx * screen.yx * uCurvature);
+}
+
 void main() {
+    vec2 picture = picture_position((vTexCoord - uExtentCentre) / uExtentHalfSize);
+    // Beyond the raster's pulled-in corners there is nothing to light
+    float lit = step(max(abs(picture.x), abs(picture.y)), 1.0);
+    vec2 texCoord = uExtentCentre + picture * uExtentHalfSize;
+
     // Texel column and row, whatever size the drawing buffer is.
-    vec2 pixelCoord = floor(vTexCoord * uResolution);
+    vec2 pixelCoord = floor(texCoord * uResolution);
 
     // BEGIN_FIR_COEFFICIENTS
     // This section is replaced by the Vite build to include FIR filter coefficients.
@@ -111,13 +128,13 @@ void main() {
     vec2 filtered_uv_curr = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
         float offset = float(i - (FIRTAPS - 1) / 2);
-        vec2 uv = demodulate_uv(vTexCoord, pixelCoord.x, offset, v_switch, cycles_per_pixel, phase_offset);
+        vec2 uv = demodulate_uv(texCoord, pixelCoord.x, offset, v_switch, cycles_per_pixel, phase_offset);
         filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
 
     // Step 2: Demodulate the previous scanline of the same field (two rows up, one line
     // earlier) with FIR filter. This represents the TV's 1H delay line.
-    vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
+    vec2 prev_uv = texCoord - vec2(0.0, 2.0 * uTexelSize.y);
     float prev_v_switch = -v_switch;
     float prev_phase_offset = fract(phase_offset - uPhasePerLine + 1.0);
 
@@ -136,9 +153,9 @@ void main() {
     for (int i = 0; i < LUMA_TAPS; i++) {
         float offset = float(i - (LUMA_TAPS - 1) / 2);
         float t = carrier_phase(pixelCoord.x, offset, cycles_per_pixel, phase_offset);
-        y_out += encode_composite(vTexCoord, offset, t, v_switch) * LUMA_FIR[i];
+        y_out += encode_composite(texCoord, offset, t, v_switch) * LUMA_FIR[i];
     }
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));
-    gl_FragColor = vec4(clamp(rgb_out, 0.0, 1.0), 1.0);
+    gl_FragColor = vec4(lit * clamp(rgb_out, 0.0, 1.0), 1.0);
 }

@@ -15,18 +15,25 @@ import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";
 import { PalCyclesPerLine, PalPhasePerLine } from "../video.js";
 
+/**
+ * How far the raster bows outwards at the middle of each edge, as a fraction of its half
+ * size, to roughly match the bezel in tv.png; canvasLeft and canvasTop below place it in
+ * the bezel.
+ */
+export const PalScreenCurvature = { x: 1 / 48, y: 1 / 48 };
+
 export class PALCompositeFilter {
     static getDisplayConfig() {
         return {
             name: "PAL TV",
             image: "images/tv.png",
-            imageAlt: "A SolaVox television",
+            imageAlt: "A Ferguson television",
             imageWidth: 1000,
             imageHeight: 719,
-            canvasLeft: 50,
-            canvasTop: 70,
-            visibleWidth: 800,
-            visibleHeight: 600,
+            canvasLeft: 25,
+            canvasTop: 60,
+            visibleWidth: 825,
+            visibleHeight: 620,
             canvasWidth: 896,
             canvasHeight: 600,
             persistence: { setting: "palPersistenceMs", default: 40 },
@@ -44,6 +51,9 @@ export class PALCompositeFilter {
             uPhaseBase: gl.getUniformLocation(this.program, "uPhaseBase"),
             uCyclesPerLine: gl.getUniformLocation(this.program, "uCyclesPerLine"),
             uPhasePerLine: gl.getUniformLocation(this.program, "uPhasePerLine"),
+            uExtentCentre: gl.getUniformLocation(this.program, "uExtentCentre"),
+            uExtentHalfSize: gl.getUniformLocation(this.program, "uExtentHalfSize"),
+            uCurvature: gl.getUniformLocation(this.program, "uCurvature"),
         };
     }
 
@@ -62,5 +72,13 @@ export class PALCompositeFilter {
         gl.uniform2f(this.locations.uPhaseBase, params.phaseBaseEven, params.phaseBaseOdd);
         gl.uniform1f(this.locations.uCyclesPerLine, PalCyclesPerLine);
         gl.uniform1f(this.locations.uPhasePerLine, PalPhasePerLine);
+        const { minx, miny, maxx, maxy } = params.extent;
+        gl.uniform2f(this.locations.uExtentCentre, (minx + maxx) / 2 / params.width, (miny + maxy) / 2 / params.height);
+        gl.uniform2f(
+            this.locations.uExtentHalfSize,
+            (maxx - minx) / 2 / params.width,
+            (maxy - miny) / 2 / params.height,
+        );
+        gl.uniform2f(this.locations.uCurvature, PalScreenCurvature.x, PalScreenCurvature.y);
     }
 }

@@ -33,7 +33,7 @@ const ShaderDir = new URL("../../src/video-filters/shaders/", import.meta.url);
  *     framebuffer texture bound on unit 0; returns whatever `bind` needs
  * @property {(gl: WebGLRenderingContext, state: object, params: object) => void} bind
  *     runs before each draw with what the app's GlCanvas passes to
- *     `setUniforms`: `width`, `height`, `texelsPerOutputPixel`, plus the job's
+ *     `setUniforms`: `width`, `height`, `extent`, `texelsPerOutputPixel`, plus the job's
  *     own `params` and decoded `bytes`
  */
 
@@ -263,6 +263,7 @@ for (const job of jobs) {
     bind(gl, state, {
         width: TextureSize,
         height: TextureSize,
+        extent: { minx: job.extent.left, miny: job.extent.top, maxx: job.extent.right, maxy: job.extent.bottom },
         texelsPerOutputPixel: (job.extent.right - job.extent.left) / gl.drawingBufferWidth,
         ...job.params,
         ...bytes,
