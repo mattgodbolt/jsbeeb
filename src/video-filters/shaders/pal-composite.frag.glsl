@@ -5,8 +5,13 @@ varying vec2 vTexCoord;
 uniform sampler2D uFramebuffer;
 uniform vec2 uResolution;
 uniform vec2 uTexelSize;
-// Line numbers of texture rows 0 (x) and 1 (y)
+// Line numbers of texture rows 0 (x) and 1 (y), for the V-switch
 uniform vec2 uLineBase;
+// Subcarrier phase, in cycles, at the start of texture rows 0 (x) and 1 (y)
+uniform vec2 uPhaseBase;
+uniform float uCyclesPerLine;
+// fract(uCyclesPerLine), taken in double precision by the caller
+uniform float uPhasePerLine;
 
 const float PI = 3.14159265359;
 
@@ -19,23 +24,13 @@ const float PI = 3.14159265359;
 // 6. Combine luma and chroma, convert back to RGB
 //
 // NOTE: Texture rows are half-lines, so the previous scanline of the same field is two rows
-// up, and the subcarrier phase and V-switch come from uLineBase, not from the row.
+// up, and the subcarrier phase and V-switch come from uPhaseBase and uLineBase, not from the row.
 
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
 
 // Chroma vertical blending weight (0.0 = no blend, 0.5 = equal blend)
 const float CHROMA_BLEND_WEIGHT = 0.5;
-
-// PAL standard base parameters
-const float PAL_TOTAL_LINES = 625.0;         // Total scanlines per frame
-const float PAL_FRAME_RATE = 25.0;           // Frames per second
-const float PAL_SUBCARRIER_MHZ = 4.43361875; // PAL color subcarrier frequency (exact)
-
-// Derived PAL parameters
-const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * 1e6 / (PAL_TOTAL_LINES * PAL_FRAME_RATE);
-// fract(PAL_CYCLES_PER_LINE), spelt out: float keeps more of it alone than inside 283.7516
-const float PAL_LINE_PHASE_OFFSET = 0.7516;
 
 // RGB → YUV conversion with proper PAL signal levels baked in
 // Derived from ITU-R BT.470-6: white at 0.7V, peak at 0.931V
@@ -99,16 +94,18 @@ void main() {
     // END_LUMA_COEFFICIENTS
 
     float row = pixelCoord.y;
-    float line = (mod(row, 2.0) < 1.0 ? uLineBase.x : uLineBase.y) + floor(row / 2.0);
+    bool evenRow = mod(row, 2.0) < 1.0;
+    float lineInField = floor(row / 2.0);
+    float line = (evenRow ? uLineBase.x : uLineBase.y) + lineInField;
 
     // PAL phase alternates each scanline (V component inverts)
     float v_switch = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
 
     // Map PAL subcarrier across the full line, blanking included
-    float cycles_per_pixel = PAL_CYCLES_PER_LINE / uResolution.x;
+    float cycles_per_pixel = uCyclesPerLine / uResolution.x;
 
-    // Subcarrier phase at the start of this line, carried across frames by the line count
-    float phase_offset = fract(line * PAL_LINE_PHASE_OFFSET);
+    // Subcarrier phase at the start of this line: the field's base, a step per line after it
+    float phase_offset = fract((evenRow ? uPhaseBase.x : uPhaseBase.y) + lineInField * uPhasePerLine);
 
     // Step 1: Demodulate current line with FIR filter
     vec2 filtered_uv_curr = vec2(0.0);
@@ -122,7 +119,7 @@ void main() {
     // earlier) with FIR filter. This represents the TV's 1H delay line.
     vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
     float prev_v_switch = -v_switch;
-    float prev_phase_offset = fract((line - 1.0) * PAL_LINE_PHASE_OFFSET);
+    float prev_phase_offset = fract(phase_offset - uPhasePerLine + 1.0);
 
     vec2 filtered_uv_prev = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {

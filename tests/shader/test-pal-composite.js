@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { buildPattern, eachPixel, pixelAt, renderJobs, TextureSize } from "./render.js";
 import { applyFirCoefficients, applyLumaCoefficients } from "../../tools/vite-plugin-fir-shader.js";
 import { LumaTaps } from "../../tools/luma-fir-generator.js";
+import { PalCyclesPerLine, PalPhasePerLine } from "../../src/video.js";
 
 // These run the PAL composite shader itself, as shipped, and assert on what it
 // draws; see test-xbr.js for why that means headless Chrome. The properties
@@ -50,23 +51,28 @@ const LineReach = 2;
 /** Context around each pattern so its outermost texels see picture rather than nothing. */
 const Padding = { x: Reach + 2, y: LineReach + 1 };
 
-/** The subcarrier's phase against the line repeats every 2500 lines; see video.js. */
-const PhasePeriodLines = 2500;
+/** A line count far enough along that a per-line multiply in single precision would drift. */
+const FarLine = 2500;
 
-/** Line numbers spanning the four-line phase cycle and both V-switch parities, and the last before the period wraps. */
-const LineBases = [0, 1, 2, 3, PhasePeriodLines - 1];
+/** Line numbers spanning the four-line phase cycle and both V-switch parities, and one far along. */
+const LineBases = [0, 1, 2, 3, FarLine - 1];
 
 /** WebGL setup as PALCompositeFilter does it; see render.js for why these run in the page. */
 const PalHarness = {
     vert: "pal-composite.vert.glsl",
     frag: "pal-composite.frag.glsl",
     prepareFragment: (source) => applyLumaCoefficients(applyFirCoefficients(source).code).code,
-    setup(gl, program) {
+    constants: { cyclesPerLine: PalCyclesPerLine, phasePerLine: PalPhasePerLine },
+    setup(gl, program, constants) {
         return {
+            constants,
             uFramebuffer: gl.getUniformLocation(program, "uFramebuffer"),
             uResolution: gl.getUniformLocation(program, "uResolution"),
             uTexelSize: gl.getUniformLocation(program, "uTexelSize"),
             uLineBase: gl.getUniformLocation(program, "uLineBase"),
+            uPhaseBase: gl.getUniformLocation(program, "uPhaseBase"),
+            uCyclesPerLine: gl.getUniformLocation(program, "uCyclesPerLine"),
+            uPhasePerLine: gl.getUniformLocation(program, "uPhasePerLine"),
         };
     },
     bind(gl, state, params) {
@@ -74,11 +80,29 @@ const PalHarness = {
         gl.uniform2f(state.uResolution, params.width, params.height);
         gl.uniform2f(state.uTexelSize, 1 / params.width, 1 / params.height);
         gl.uniform2f(state.uLineBase, params.lineBaseEven ?? 0, params.lineBaseOdd ?? 0);
+        gl.uniform2f(state.uPhaseBase, params.phaseBaseEven ?? 0, params.phaseBaseOdd ?? 0);
+        gl.uniform1f(state.uCyclesPerLine, state.constants.cyclesPerLine);
+        gl.uniform1f(state.uPhasePerLine, state.constants.phasePerLine);
     },
 };
 
+/** The subcarrier phase at the start of a line, as video.js accumulates it from line 0. */
+const phaseOfLine = (line) => (line * PalPhasePerLine) % 1;
+
 /** Both rows of a doubled scanline drawn under the same line, as video.js records it. */
-const sameLine = (lineBase) => ({ lineBaseEven: lineBase, lineBaseOdd: lineBase });
+const sameLine = (lineBase) => ({
+    lineBaseEven: lineBase,
+    lineBaseOdd: lineBase,
+    phaseBaseEven: phaseOfLine(lineBase),
+    phaseBaseOdd: phaseOfLine(lineBase),
+});
+
+/** The same line's parity and phase, recorded against a line count far along. */
+const sameLineFarAlong = (lineBase) => ({
+    ...sameLine(lineBase),
+    lineBaseEven: lineBase + FarLine,
+    lineBaseOdd: lineBase + FarLine,
+});
 
 const flatRows = (colour, width, height) => Array.from({ length: height }, () => Array(width).fill(colour));
 
@@ -221,9 +245,9 @@ function buildJobs() {
     jobs.push(
         buildPattern({
             ...DoubledStripes,
-            name: stripeName(StripeBase + PhasePeriodLines, StripeOrigin),
+            name: stripeName(StripeBase + FarLine, StripeOrigin),
             origin: StripeOrigin,
-            params: sameLine(StripeBase + PhasePeriodLines),
+            params: sameLineFarAlong(StripeBase),
         }),
     );
     for (const lineBase of [StripeBase, StripeBase - 1])
@@ -442,10 +466,10 @@ describe("PAL composite shader", () => {
             expect(pictureDifference(sameLines, reference)).toBeLessThanOrEqual(Tolerance);
         });
 
-        it("repeats its phase every 2500 lines", () => {
+        it("takes its phase from the base it is given, whatever the line count", () => {
             const reference = rendered[stripeName(StripeBase, StripeOrigin)];
-            const wrapped = rendered[stripeName(StripeBase + PhasePeriodLines, StripeOrigin)];
-            expect(pictureDifference(wrapped, reference)).toBeLessThanOrEqual(Tolerance);
+            const farAlong = rendered[stripeName(StripeBase + FarLine, StripeOrigin)];
+            expect(pictureDifference(farAlong, reference)).toBeLessThanOrEqual(Tolerance);
         });
 
         it("decodes consecutive lines differently", () => {
