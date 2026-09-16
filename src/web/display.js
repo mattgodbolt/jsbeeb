@@ -99,6 +99,9 @@ export class Display {
      * skipped.
      */
     onPaint(video, minx, miny, maxx, maxy, paintedTo) {
+        // The debugger's paint replaces the picture: its beam dot would otherwise
+        // outshine the black it moved off and stay, every step leaving another.
+        const replacesPicture = video.paintsAfresh || paintedTo !== undefined;
         if (paintedTo === undefined) {
             paintedTo = maxy;
             if (!video.frameSkipCount) {
@@ -127,7 +130,7 @@ export class Display {
         // The 6847 keeps its own count and syncs it after painting.
         const frameCount = (video.video6847 ?? video).frameCount;
         const elapsed = Math.max(0, frameCount - this.lastPaintedFrameCount);
-        this.fieldsSincePresent = video.paintsAfresh
+        this.fieldsSincePresent = replacesPicture
             ? MaxDecayFields
             : Math.min(MaxDecayFields, this.fieldsSincePresent + elapsed);
         video.paintsAfresh = false;
