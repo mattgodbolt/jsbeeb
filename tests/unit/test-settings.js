@@ -39,6 +39,22 @@ describe("Settings", () => {
             expect(settings.speakerAmount).toBe(1);
         });
 
+        it("takes each display's afterglow from its filter, then storage, then the URL", () => {
+            expect(make().palPersistenceMs).toBe(40);
+            expect(make().rgbPersistenceMs).toBe(25);
+            window.localStorage.palPersistenceMs = "30";
+            expect(make().palPersistenceMs).toBe(30);
+            urlState.params.palPersistenceMs = 100;
+            expect(make().palPersistenceMs).toBe(100);
+        });
+
+        it("keeps an afterglow within what a display can show", () => {
+            urlState.params.palPersistenceMs = 5000;
+            expect(make().palPersistenceMs).toBe(500);
+            window.localStorage.rgbPersistenceMs = "-1";
+            expect(make().rgbPersistenceMs).toBe(0);
+        });
+
         it("lower-cases a key layout from the URL", () => {
             urlState.params.keyLayout = "GAMING";
             expect(make().keyLayout).toBe("gaming");
@@ -86,6 +102,35 @@ describe("Settings", () => {
             expect(window.localStorage.hasMusic5000).toBeUndefined();
             expect(window.localStorage.keyLayout).toBe("natural");
             expect(urlState.params.hasMusic5000).toBe(true);
+        });
+
+        it("keeps an afterglow set live within what a display can show, everywhere it goes", () => {
+            const settings = make();
+            settings.set({ palPersistenceMs: 5000 });
+            expect(settings.palPersistenceMs).toBe(500);
+            expect(window.localStorage.palPersistenceMs).toBe("500");
+            expect(urlState.params.palPersistenceMs).toBe(500);
+        });
+
+        it("puts a cleared afterglow back at its display's default, remembered nowhere", () => {
+            const settings = make();
+            settings.set({ palPersistenceMs: 30 });
+            settings.set({ palPersistenceMs: undefined });
+            expect(settings.palPersistenceMs).toBe(40);
+            expect(window.localStorage.palPersistenceMs).toBeUndefined();
+            expect(urlState.params.palPersistenceMs).toBeUndefined();
+        });
+
+        it("remembers an afterglow and lets its drag settle", () => {
+            const settings = make();
+            settings.set({ palPersistenceMs: 60 });
+            settings.set({ palPersistenceMs: 70 });
+            expect(settings.palPersistenceMs).toBe(70);
+            expect(window.localStorage.palPersistenceMs).toBe("70");
+            expect(urlState.params.palPersistenceMs).toBe(70);
+            expect(urlState.updateUrl).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(300);
+            expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
         });
 
         it("lets a speaker amount drag settle before writing one history entry", () => {

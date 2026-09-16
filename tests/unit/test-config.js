@@ -305,6 +305,42 @@ describe("Config", () => {
             expect(settings.speakerAmount).toBe(0.5);
         });
 
+        it("gives the persistence slider to the showing display, and no display without one", () => {
+            const slider = document.getElementById("persistenceSetting");
+            const readout = () => document.getElementById("persistenceValue").textContent;
+            settings.set({ displayMode: "pal" });
+            expect(slider.disabled).toBe(false);
+            expect(slider.value).toBe("40");
+            expect(readout()).toBe("40 ms");
+            slider.value = 80;
+            slider.dispatchEvent(new Event("input"));
+            expect(settings.palPersistenceMs).toBe(80);
+            expect(settings.rgbPersistenceMs).toBe(25);
+            expect(readout()).toBe("80 ms");
+            settings.set({ displayMode: "rgb" });
+            expect(slider.value).toBe("25");
+            expect(readout()).toBe("25 ms");
+            settings.set({ rgbPersistenceMs: 0 });
+            expect(slider.value).toBe("0");
+            expect(readout()).toBe("none");
+            settings.set({ displayMode: "xbr" });
+            expect(slider.disabled).toBe(true);
+            expect(readout()).toBe("not available");
+            slider.dispatchEvent(new Event("input"));
+            expect(settings.palPersistenceMs).toBe(80);
+        });
+
+        it("gives the slider to the display actually in use when the one asked for fell back", () => {
+            const slider = document.getElementById("persistenceSetting");
+            settings.set({ displayMode: "pal" });
+            config.setPersistenceInUse("rgbPersistenceMs");
+            expect(slider.value).toBe("25");
+            slider.value = 30;
+            slider.dispatchEvent(new Event("input"));
+            expect(settings.rgbPersistenceMs).toBe(30);
+            expect(settings.palPersistenceMs).toBe(40);
+        });
+
         it("follows a live setting changed elsewhere", () => {
             settings.set({ audioOutput: "off", displayMode: "xbr", speakerAmount: 0.25 });
             expect(document.querySelector(".audio-output-text").textContent).toBe("Unfiltered");

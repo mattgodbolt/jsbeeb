@@ -1,4 +1,5 @@
 import * as canvasLib from "./canvas.js";
+import { MaxPersistenceMs, persistenceFromMs } from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
 import { LineGridRows } from "../video-filters/pixel-grid.js";
 import { toast } from "./toast.js";
@@ -7,6 +8,10 @@ import { toast } from "./toast.js";
 // the most expensive part of jsbeeb, so most frames are skipped. Odd, so that
 // interlaced modes (MODE 7) alternate fields across the frames that do paint.
 const SpeedyFrameSkip = 9;
+
+// More fields of decay than this leaves nothing at any setting: at the longest
+// afterglow a field keeps 96%, and this many take that below a level.
+const MaxDecayFields = 250;
 
 /**
  * The picture: the canvas and its filter, the video chip that paints into a
@@ -28,6 +33,8 @@ export class Display {
                 : new canvasLib.Canvas(canvasEl, lowLatency),
     }) {
         this.screenCanvas = screenCanvas;
+        this.persistence = {};
+        this.fieldMs = 1000 / (model.isAtom ? 60 : 50);
         this.frames = 0;
         this.frameSkip = frameSkip;
         this.paintMsThisTick = 0;
@@ -56,7 +63,10 @@ export class Display {
             phaseBaseEven: 0,
             phaseBaseOdd: 0,
             lineGrid: new Uint8Array(LineGridRows),
+            fields: 1,
         };
+        this.lastPaintedFrameCount = 0;
+        this.fieldsSincePresent = 0;
 
         const display = this;
         this.video = fakeVideo
@@ -110,6 +120,19 @@ export class Display {
             phaseBaseEven: video.phaseBaseEven,
             phaseBaseOdd: video.phaseBaseOdd,
         });
+        // How many fields the phosphor has decayed over since the frame the
+        // canvas shows: one usually, more under a frame skip or when paints
+        // outrun the animation frame, none for a repaint of the same frame, and
+        // all of them after a restore, whose picture owes the old one nothing.
+        // The 6847 keeps its own count and syncs it after painting.
+        const frameCount = (video.video6847 ?? video).frameCount;
+        const elapsed = Math.max(0, frameCount - this.lastPaintedFrameCount);
+        this.fieldsSincePresent = video.paintsAfresh
+            ? MaxDecayFields
+            : Math.min(MaxDecayFields, this.fieldsSincePresent + elapsed);
+        video.paintsAfresh = false;
+        this.pendingFrame.fields = this.fieldsSincePresent;
+        this.lastPaintedFrameCount = frameCount;
         this.paintMsThisTick += performance.now() - start;
         this.presented = false;
         if (!this.presentScheduled) {
@@ -127,7 +150,31 @@ export class Display {
         const start = performance.now();
         const { minx, miny, maxx, maxy } = this.pendingFrame;
         this.canvas.paint(minx, miny, maxx, maxy, this.pendingFrame);
+        this.fieldsSincePresent = 0;
         this.presentMsMax = Math.max(this.presentMsMax, performance.now() - start);
+    }
+
+    /**
+     * Sets a display's afterglow time in milliseconds, by the name of its
+     * setting; it applies while the filter in use is the one that declares that
+     * setting, so a fallback gets its own amount, not the amount of the mode
+     * that was asked for.
+     */
+    setPersistence(setting, afterglowMs) {
+        this.persistence[setting] = Number.isFinite(afterglowMs)
+            ? persistenceFromMs(Math.min(MaxPersistenceMs, Math.max(0, afterglowMs)), this.fieldMs)
+            : 0;
+        if (setting === this.persistenceSetting()) this.applyPersistence();
+    }
+
+    /** The setting that governs the display in use, or nothing where the canvas cannot keep a picture. */
+    persistenceSetting() {
+        return this.canvas.canPersist ? this.filterClass.getDisplayConfig().persistence?.setting : undefined;
+    }
+
+    applyPersistence() {
+        const setting = this.persistenceSetting();
+        this.canvas.setPersistence(setting === undefined ? 0 : (this.persistence[setting] ?? 0));
     }
 
     /** The mode is changed from a modal, which stops the emulator, so this repaints itself. */
@@ -143,6 +190,9 @@ export class Display {
         this.filterClass = this.canvas.filterClass;
         // Back to the mode's own size, undoing any scaling the last one asked for.
         this.sizeCanvasFor(this.filterClass);
+        this.applyPersistence();
+        // The new mode's picture replaces the old one's, not glows through it.
+        this.fieldsSincePresent = MaxDecayFields;
         this.video.paint();
         this.setCrtPic();
     }

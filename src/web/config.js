@@ -1,5 +1,5 @@
 import { allModels, findModel, tubeModelFor } from "../models.js";
-import { getFilterForMode } from "./canvas.js";
+import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { AudioOutputs } from "../audio-output.js";
 
 const round = (value) => Number(value.toFixed(2));
@@ -59,6 +59,9 @@ export class Config extends EventTarget {
         super();
         this.settings = settings;
         this.changed = {};
+        // The setting the display in use declares, which is the mode asked for
+        // unless that fell back; the page says which once the display exists.
+        this.persistenceSetting = undefined;
         // Built before anything can change, so this is what the running machine was built with.
         this.runningSettings = this.proposedSettings();
         this.setModel(settings.model);
@@ -159,6 +162,11 @@ export class Config extends EventTarget {
             settings.set({ speakerAmount: parseFloat(e.currentTarget.value) });
         });
 
+        document.getElementById("persistenceSetting").addEventListener("input", (e) => {
+            if (this.persistenceSetting) settings.set({ [this.persistenceSetting]: parseFloat(e.currentTarget.value) });
+        });
+        for (const { setting } of persistenceSettings()) settings.on(setting, () => this.setPersistenceSlider());
+
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
                 e.preventDefault();
@@ -207,6 +215,25 @@ export class Config extends EventTarget {
     setDisplayMode(mode) {
         const config = getFilterForMode(mode).getDisplayConfig();
         for (const el of document.querySelectorAll(".display-mode-text")) el.textContent = config.name;
+        this.setPersistenceInUse(config.persistence?.setting);
+    }
+
+    /** The slider edits the persistence of the display in use, and is disabled for one without it. */
+    setPersistenceInUse(setting) {
+        this.persistenceSetting = setting;
+        this.setPersistenceSlider();
+    }
+
+    setPersistenceSlider() {
+        const slider = document.getElementById("persistenceSetting");
+        const afterglowMs = this.persistenceSetting ? this.settings[this.persistenceSetting] : 0;
+        slider.disabled = !this.persistenceSetting;
+        slider.value = afterglowMs;
+        document.getElementById("persistenceValue").textContent = !this.persistenceSetting
+            ? "not available"
+            : afterglowMs > 0
+              ? `${afterglowMs} ms`
+              : "none";
     }
 
     /** Names the running machine everywhere the page shows it. */

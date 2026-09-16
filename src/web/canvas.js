@@ -2,6 +2,21 @@ import webglDebug from "../lib/webgl-debug.js";
 import { PALCompositeFilter } from "../video-filters/pal-composite.js";
 import { PassthroughFilter } from "../video-filters/passthrough-filter.js";
 import { XbrFilter } from "../video-filters/xbr-filter.js";
+import { compileProgram } from "../video-filters/shader-program.js";
+
+// The phosphor decay is a quad blended so as to scale the old picture down and
+// take one level off it; the frame is then drawn over it keeping whichever is
+// brighter. The level off is what lets a dim trail reach black: scaled alone,
+// an eight-bit value rounds back to itself once it is small enough (at the
+// slider's top anything up to a twentieth of full brightness would stay).
+const DecayVertexShader = `attribute vec2 pos;
+void main() {
+    gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);
+}`;
+const DecayFragmentShader = `precision mediump float;
+void main() {
+    gl_FragColor = vec4(vec3(1.0 / 255.0), 1.0);
+}`;
 
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
@@ -11,6 +26,27 @@ const DISPLAY_MODE_FILTERS = {
 
 export function getFilterForMode(mode) {
     return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
+}
+
+// Persistence is set as an afterglow time, the time constant of the fade in
+// milliseconds, which is what the eye judges; the canvases take the share of
+// the previous field's glow left after one field of the machine's own length.
+// A phosphor lights fully when the beam hits it and decays from there, so the
+// old picture is scaled down by that share and each new field drawn whole over
+// it, whichever is brighter showing; averaging the two would dim anything that
+// moves.
+export const MaxPersistenceMs = 500;
+
+export function persistenceFromMs(afterglowMs, fieldMs) {
+    return afterglowMs > 0 ? Math.exp(-fieldMs / afterglowMs) : 0;
+}
+
+/** The display modes that simulate phosphor persistence, with the setting that holds each one's afterglow time. */
+export function persistenceSettings() {
+    return Object.entries(DISPLAY_MODE_FILTERS).flatMap(([mode, filterClass]) => {
+        const persistence = filterClass.getDisplayConfig().persistence;
+        return persistence ? [{ mode, ...persistence }] : [];
+    });
 }
 
 // The hint asks the browser to skip the renderer compositor queue and hand the buffer straight to
@@ -42,6 +78,7 @@ export class Canvas {
         this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvas = canvas;
+        this.persistence = 0;
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
@@ -49,17 +86,41 @@ export class Canvas {
     /** Nothing to release: the 2D context owns no objects of ours. */
     dispose() {}
 
+    get canPersist() {
+        return true;
+    }
+
+    /** How much of the previous frame each new one is blended over, 0 for none. */
+    setPersistence(persistence) {
+        this.persistence = persistence;
+    }
+
     setFilter(filterClass) {
         if (filterClass !== PassthroughFilter)
             throw new Error(`${filterClass.getDisplayConfig().name} needs WebGL, which is not in use here`);
     }
 
-    paint(minx, miny, maxx, maxy, _frame) {
+    paint(minx, miny, maxx, maxy, frame) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        // Read the size each time: it can change when the window is resized.
-        this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
+        // Set on every paint: a resize resets the context's state. The decay is
+        // a black wash over the old picture; "lighten" then keeps the brighter
+        // of that and the new frame, per channel. The wash rounds a value of a
+        // few levels back to itself, so a trail here ends a shade above black;
+        // the 2D canvas has no subtract that would not also flicker black.
+        const ctx = this.ctx;
+        if (this.persistence > 0) {
+            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = 1 - this.persistence ** (frame.fields ?? 1);
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.globalCompositeOperation = "lighten";
+        } else {
+            ctx.globalCompositeOperation = "source-over";
+        }
+        ctx.globalAlpha = 1;
+        ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
     }
 }
 
@@ -79,9 +140,9 @@ export class GlCanvas {
             alpha: false,
             antialias: false,
             depth: false,
-            // A desynchronized context can be scanned out while it is cleared but not yet redrawn,
-            // which flickers unless the buffer is preserved between frames.
-            preserveDrawingBuffer: lowLatency,
+            // Phosphor persistence blends each frame over the one before it, which has to still be
+            // there; a desynchronized context also flickers without it.
+            preserveDrawingBuffer: true,
             stencil: false,
             failIfMajorPerformanceCaveat: true,
             desynchronized: lowLatency,
@@ -97,6 +158,11 @@ export class GlCanvas {
         });
 
         checkedGl.depthMask(false);
+        // Keeping the brighter of two colours is a blend equation WebGL 1 only
+        // has through this extension; without it there is no persistence.
+        this.blendMinMax = gl.getExtension("EXT_blend_minmax");
+        this.decayProgram = compileProgram(checkedGl, DecayVertexShader, DecayFragmentShader, "phosphor decay");
+        this.decayPosLocation = checkedGl.getAttribLocation(this.decayProgram, "pos");
 
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
@@ -127,6 +193,7 @@ export class GlCanvas {
         this.filter = null;
         this.attribLocations = [];
         this.viewportWidth = this.viewportHeight = 0;
+        this.persistence = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
@@ -153,7 +220,6 @@ export class GlCanvas {
         const filter = new filterClass(gl);
         this.filter?.dispose();
         this.filter = filter;
-        gl.useProgram(filter.program);
 
         // Filters that pick their own samples want the texels they asked for,
         // not a hardware blend of the ones either side.
@@ -162,9 +228,16 @@ export class GlCanvas {
         gl.bindTexture(gl.TEXTURE_2D, this.texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sampling);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, sampling);
+        this.useFilterProgram();
+    }
 
+    /** Makes the filter's program current with its attributes pointed at our buffers. */
+    useFilterProgram() {
+        const gl = this.checkedGl;
+        const program = this.filter.program;
+        gl.useProgram(program);
         const bindAttribute = (name, buffer) => {
-            const location = gl.getAttribLocation(filter.program, name);
+            const location = gl.getAttribLocation(program, name);
             gl.enableVertexAttribArray(location);
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
             gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
@@ -172,6 +245,50 @@ export class GlCanvas {
         };
         for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
         this.attribLocations = [bindAttribute("pos", this.vertexPositionBuffer), bindAttribute("uvIn", this.uvBuffer)];
+    }
+
+    /**
+     * Scales the old picture down by the persistence and takes a level off it:
+     * the destination factor does the scaling and the quad's colour is what is
+     * subtracted. The frame that follows keeps the brighter of itself and what
+     * is left, which is a blend equation the factors do not apply to.
+     */
+    decayOldPicture(fields) {
+        const gl = this.checkedGl;
+        gl.blendColor(0, 0, 0, this.persistence ** fields);
+        gl.useProgram(this.decayProgram);
+        for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
+        gl.enableVertexAttribArray(this.decayPosLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexPositionBuffer);
+        gl.vertexAttribPointer(this.decayPosLocation, 2, gl.FLOAT, false, 0, 0);
+        gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+        gl.blendFunc(gl.ONE, gl.CONSTANT_ALPHA);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disableVertexAttribArray(this.decayPosLocation);
+        this.attribLocations = [];
+        this.useFilterProgram();
+        gl.blendEquation(this.blendMinMax.MAX_EXT);
+        gl.blendFunc(gl.ONE, gl.ONE);
+    }
+
+    /** Whether the driver can keep the brighter of two colours, without which there is no persistence. */
+    get canPersist() {
+        return !!this.blendMinMax;
+    }
+
+    /** How much of the previous frame each new one is blended over, 0 for none. */
+    setPersistence(persistence) {
+        const gl = this.checkedGl;
+        this.persistence = this.canPersist ? persistence : 0;
+        if (this.persistence <= 0) {
+            gl.disable(gl.BLEND);
+            return;
+        }
+        gl.enable(gl.BLEND);
+        // The frame's own blend, set here as well as after each decay pass so a
+        // repaint with no decay to do finds it in place.
+        gl.blendEquation(this.blendMinMax.MAX_EXT);
+        gl.blendFunc(gl.ONE, gl.ONE);
     }
 
     /**
@@ -183,6 +300,8 @@ export class GlCanvas {
         const gl = this.checkedGl;
         this.filter?.dispose();
         this.filter = null;
+        gl.deleteProgram(this.decayProgram);
+        this.decayProgram = null;
         gl.deleteTexture(this.texture);
         gl.deleteBuffer(this.vertexPositionBuffer);
         gl.deleteBuffer(this.uvBuffer);
@@ -191,6 +310,8 @@ export class GlCanvas {
 
     paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
+        const fields = frame.fields ?? 1;
+        if (this.persistence > 0 && fields > 0) this.decayOldPicture(fields);
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
         // follow it.

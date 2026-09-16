@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
@@ -26,7 +27,14 @@ describe("Display", () => {
             model: { isMaster: false, isAtom: false },
             mode: "rgb",
             makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = { fb32: new Uint32Array(FbWidth * 625), paint: vi.fn(), filterClass };
+                fakeCanvas = {
+                    fb32: new Uint32Array(FbWidth * 625),
+                    paint: vi.fn(),
+                    setPersistence: vi.fn(),
+                    canPersist: true,
+                    setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
+                    filterClass,
+                };
                 return fakeCanvas;
             },
             ...options,
@@ -40,7 +48,8 @@ describe("Display", () => {
         return display;
     };
 
-    const paintedFrom = (frameSkipCount = 0) => ({
+    const paintedFrom = (frameSkipCount = 0, frameCount = 0) => ({
+        frameCount,
         lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
         lineBaseOdd: 2,
@@ -87,6 +96,59 @@ describe("Display", () => {
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
     });
 
+    it("applies a persistence to the canvas only while the filter that declares it is in use", () => {
+        const display = make({ mode: "pal" });
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("rgbPersistenceMs", 20);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-0.5));
+        display.setMode("rgb");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
+        display.setMode("xbr");
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+    });
+
+    it("gives a fallback display its own persistence, not the amount of the mode asked for", () => {
+        const display = make({
+            mode: "pal",
+            makeCanvas: (canvasEl, filterClass) => {
+                fakeCanvas = {
+                    fb32: new Uint32Array(FbWidth * 625),
+                    paint: vi.fn(),
+                    setPersistence: vi.fn(),
+                    canPersist: true,
+                };
+                fakeCanvas.filterClass = PassthroughFilter;
+                fakeCanvas.fallbackReason = `${filterClass.getDisplayConfig().name} declined`;
+                return fakeCanvas;
+            },
+        });
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+        display.setPersistence("rgbPersistenceMs", 20);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1));
+    });
+
+    it("converts an afterglow with the Atom's shorter field", () => {
+        const display = make({ mode: "rgb", model: { isMaster: false, isAtom: true } });
+        display.setPersistence("rgbPersistenceMs", 50);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-1000 / 60 / 50));
+    });
+
+    it("keeps an afterglow within what the canvas can show, and takes anything else as none", () => {
+        const display = make({ mode: "pal" });
+        display.setPersistence("palPersistenceMs", 5000);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(Math.exp(-20 / 500));
+        display.setPersistence("palPersistenceMs", -1);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+        display.setPersistence("palPersistenceMs", 0);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+        display.setPersistence("palPersistenceMs", undefined);
+        expect(fakeCanvas.setPersistence).toHaveBeenLastCalledWith(0);
+    });
+
     it("copies only the rows it is told to, pixels and line grid alike, and presents the whole extent", () => {
         const display = make();
         display.videoFb32.fill(3);
@@ -104,6 +166,80 @@ describe("Display", () => {
         expect(display.pendingFrame.lineGrid[39]).toBe(9);
         expect(display.pendingFrame.lineGrid[40]).toBe(5);
         expect(fakeCanvas.paint.mock.calls.at(-1).slice(0, 4)).toEqual([0, 10, FbWidth, 100]);
+    });
+
+    it("tells the canvas how many fields have passed since the frame it last showed", () => {
+        const display = make();
+        const fieldsShown = () => fakeCanvas.paint.mock.calls.at(-1)[4].fields;
+        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        presentAll();
+        display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fieldsShown()).toBe(1);
+        display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fieldsShown()).toBe(10);
+        display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8, 4);
+        presentAll();
+        expect(fieldsShown()).toBe(0);
+        display.onPaint(paintedFrom(0, 5000), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fieldsShown()).toBe(250);
+    });
+
+    it("adds up the fields of paints that arrive before one animation frame", () => {
+        const display = make();
+        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        presentAll();
+        display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(0, 12), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(2);
+    });
+
+    it("owes the old picture nothing after a restore", () => {
+        const display = make();
+        display.onPaint(paintedFrom(0, 100), 0, 0, FbWidth, 8);
+        presentAll();
+        const restored = paintedFrom(0, 3);
+        restored.paintsAfresh = true;
+        display.onPaint(restored, 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
+        expect(restored.paintsAfresh).toBe(false);
+        display.onPaint(paintedFrom(0, 4), 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(1);
+    });
+
+    it("replaces the picture on a mode change rather than glowing the old mode through it", () => {
+        const display = make({ mode: "pal" });
+        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        presentAll();
+        display.setMode("rgb");
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
+    });
+
+    it("reports no persistence setting where the canvas cannot keep a picture", () => {
+        const display = make({ mode: "pal" });
+        fakeCanvas.canPersist = false;
+        expect(display.persistenceSetting()).toBeUndefined();
+        fakeCanvas.setPersistence.mockClear();
+        display.setPersistence("palPersistenceMs", 40);
+        expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
+    });
+
+    it("counts the Atom's fields from the 6847, which syncs its count only after painting", () => {
+        const display = make({ model: { isMaster: false, isAtom: true } });
+        const atom = paintedFrom(0, 0);
+        atom.video6847 = { frameCount: 7 };
+        display.onPaint(atom, 0, 0, FbWidth, 8);
+        presentAll();
+        atom.video6847.frameCount = 10;
+        display.onPaint(atom, 0, 0, FbWidth, 8);
+        presentAll();
+        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(3);
     });
 
     it("schedules another present once the first has run", () => {
