@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.2...v2.1.0) (2026-09-16)
+
+
+### Features
+
+* phosphor persistence on the PAL television, with a slider in the settings ([#1146](https://github.com/mattgodbolt/jsbeeb/issues/1146)) ([876e58d](https://github.com/mattgodbolt/jsbeeb/commit/876e58df579f14b0bcfb3031f37a2a743ce2adb8))
+
+
+### Bug Fixes
+
+* the debugger shows the previous frame below the beam instead of black ([#1144](https://github.com/mattgodbolt/jsbeeb/issues/1144)) ([e2f0076](https://github.com/mattgodbolt/jsbeeb/commit/e2f0076e8733b9649640b44435aad279133b964d))
+* the PAL subcarrier runs 239 Hz off nominal and its phase is accumulated, not derived from a line count ([#1145](https://github.com/mattgodbolt/jsbeeb/issues/1145)) ([ce4b629](https://github.com/mattgodbolt/jsbeeb/commit/ce4b629b76c233eb47dc7c5220d9467214a22f76))
+
 ## [2.0.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.1...v2.0.2) (2026-09-14)
 
 
