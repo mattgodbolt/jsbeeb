@@ -17,22 +17,23 @@ import { PalCyclesPerLine, PalPhasePerLine } from "../video.js";
 
 /**
  * How far the raster bows outwards at the middle of each edge, as a fraction of its half
- * size, to match the bezel in tv.png; canvasLeft and canvasTop below place it in the bezel.
+ * size, to roughly match the bezel in tv.png; canvasLeft and canvasTop below place it in
+ * the bezel.
  */
-export const PalScreenCurvature = { x: 1 / 32, y: 1 / 32 };
+export const PalScreenCurvature = { x: 1 / 48, y: 1 / 48 };
 
 export class PALCompositeFilter {
     static getDisplayConfig() {
         return {
             name: "PAL TV",
             image: "images/tv.png",
-            imageAlt: "A SolaVox television",
+            imageAlt: "A Ferguson television",
             imageWidth: 1000,
             imageHeight: 719,
-            canvasLeft: 50,
-            canvasTop: 70,
-            visibleWidth: 800,
-            visibleHeight: 600,
+            canvasLeft: 25,
+            canvasTop: 60,
+            visibleWidth: 825,
+            visibleHeight: 620,
             canvasWidth: 896,
             canvasHeight: 600,
             persistence: { setting: "palPersistenceMs", default: 40 },
