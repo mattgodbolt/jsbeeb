@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.1.0...v2.2.0) (2026-09-16)
+
+
+### Features
+
+* the PAL television's picture bows with the tube, as the bezel does ([#1154](https://github.com/mattgodbolt/jsbeeb/issues/1154)) ([9587f31](https://github.com/mattgodbolt/jsbeeb/commit/9587f31eb4bf1b5829a24a2ac70c134725b9a97b))
+
+
+### Bug Fixes
+
+* single-stepping in the debugger no longer leaves a trail of beam dots ([#1151](https://github.com/mattgodbolt/jsbeeb/issues/1151)) ([94705d5](https://github.com/mattgodbolt/jsbeeb/commit/94705d53ad897eb2b3ec83d28f431779c840d06c))
+
 ## [2.1.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.0.2...v2.1.0) (2026-09-16)
 
 
