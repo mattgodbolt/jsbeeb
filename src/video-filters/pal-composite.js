@@ -15,6 +15,12 @@ import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";
 import { PalCyclesPerLine, PalPhasePerLine } from "../video.js";
 
+/**
+ * How far the raster bows outwards at the middle of each edge, as a fraction of its half
+ * size, to match the bezel in tv.png; canvasLeft and canvasTop below place it in the bezel.
+ */
+export const PalScreenCurvature = { x: 1 / 32, y: 1 / 32 };
+
 export class PALCompositeFilter {
     static getDisplayConfig() {
         return {
@@ -44,6 +50,9 @@ export class PALCompositeFilter {
             uPhaseBase: gl.getUniformLocation(this.program, "uPhaseBase"),
             uCyclesPerLine: gl.getUniformLocation(this.program, "uCyclesPerLine"),
             uPhasePerLine: gl.getUniformLocation(this.program, "uPhasePerLine"),
+            uExtentCentre: gl.getUniformLocation(this.program, "uExtentCentre"),
+            uExtentHalfSize: gl.getUniformLocation(this.program, "uExtentHalfSize"),
+            uCurvature: gl.getUniformLocation(this.program, "uCurvature"),
         };
     }
 
@@ -62,5 +71,13 @@ export class PALCompositeFilter {
         gl.uniform2f(this.locations.uPhaseBase, params.phaseBaseEven, params.phaseBaseOdd);
         gl.uniform1f(this.locations.uCyclesPerLine, PalCyclesPerLine);
         gl.uniform1f(this.locations.uPhasePerLine, PalPhasePerLine);
+        const { minx, miny, maxx, maxy } = params.extent;
+        gl.uniform2f(this.locations.uExtentCentre, (minx + maxx) / 2 / params.width, (miny + maxy) / 2 / params.height);
+        gl.uniform2f(
+            this.locations.uExtentHalfSize,
+            (maxx - minx) / 2 / params.width,
+            (maxy - miny) / 2 / params.height,
+        );
+        gl.uniform2f(this.locations.uCurvature, PalScreenCurvature.x, PalScreenCurvature.y);
     }
 }

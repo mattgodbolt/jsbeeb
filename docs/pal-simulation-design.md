@@ -344,6 +344,10 @@ jsbeeb simulates interlacing by clearing alternate lines each frame:
 
 Texture rows are half-lines, so the previous scanline is two rows up in every mode; in an interlaced mode that tap lands in the same field, never on the other field's stale or black row.
 
+### Screen Geometry
+
+The television's tube is convex, so the raster's edges bow outwards and its corners pull in behind the bezel. The shader draws this as an inverse warp: each output pixel finds where on the flat picture it looks up, and the decoder runs at that position, so the chroma and luma taps still walk along the source line. Pixels the pulled-in raster no longer reaches are black. The amount is `PalScreenCurvature` in `pal-composite.js`, chosen so the bow matches the bezel in `tv.png`; the picture's place in the bezel is `canvasLeft` and `canvasTop` in the same file's display config.
+
 ## References
 
 ### PAL Standards

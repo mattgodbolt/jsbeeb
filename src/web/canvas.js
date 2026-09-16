@@ -365,10 +365,11 @@ export class GlCanvas {
             phaseBaseEven: frame.phaseBaseEven,
             phaseBaseOdd: frame.phaseBaseOdd,
             lineGrid: frame.lineGrid,
-            // How much of the framebuffer each output pixel covers, which sets
-            // how wide an edge-smoothing ramp should be. `extent` holds texel
-            // counts; the scaling into texture coordinates above applies only
+            // In texels; the scaling into texture coordinates above applies only
             // to the local copies that go into the UV buffer.
+            extent,
+            // How much of the framebuffer each output pixel covers, which sets
+            // how wide an edge-smoothing ramp should be.
             texelsPerOutputPixel: (extent.maxx - extent.minx) / gl.drawingBufferWidth,
         });
 

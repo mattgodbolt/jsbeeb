@@ -73,6 +73,9 @@ const PalHarness = {
             uPhaseBase: gl.getUniformLocation(program, "uPhaseBase"),
             uCyclesPerLine: gl.getUniformLocation(program, "uCyclesPerLine"),
             uPhasePerLine: gl.getUniformLocation(program, "uPhasePerLine"),
+            uExtentCentre: gl.getUniformLocation(program, "uExtentCentre"),
+            uExtentHalfSize: gl.getUniformLocation(program, "uExtentHalfSize"),
+            uCurvature: gl.getUniformLocation(program, "uCurvature"),
         };
     },
     bind(gl, state, params) {
@@ -83,6 +86,11 @@ const PalHarness = {
         gl.uniform2f(state.uPhaseBase, params.phaseBaseEven ?? 0, params.phaseBaseOdd ?? 0);
         gl.uniform1f(state.uCyclesPerLine, state.constants.cyclesPerLine);
         gl.uniform1f(state.uPhasePerLine, state.constants.phasePerLine);
+        const { minx, miny, maxx, maxy } = params.extent;
+        gl.uniform2f(state.uExtentCentre, (minx + maxx) / 2 / params.width, (miny + maxy) / 2 / params.height);
+        gl.uniform2f(state.uExtentHalfSize, (maxx - minx) / 2 / params.width, (maxy - miny) / 2 / params.height);
+        const curvature = params.curvature ?? { x: 0, y: 0 };
+        gl.uniform2f(state.uCurvature, curvature.x, curvature.y);
     },
 };
 
@@ -184,6 +192,25 @@ const StripeOrigin = { x: 0, y: 0 };
 /** Two texel rows lower: the next scanline's rows. */
 const NextScanlineOrigin = { x: 0, y: 2 };
 
+/**
+ * The screen's bow, coarse enough to move things by whole pixels in pictures this small:
+ * a white bar off-centre across a black field, drawn once each way round, and a white
+ * field whose corners the bowed raster no longer reaches.
+ */
+const TestCurvature = 0.25;
+const CornerCurvature = 0.5;
+const BowLength = 64;
+const BowDepth = 16;
+const BowBarStart = 48;
+const BowBarWidth = 8;
+const bowBarRows = (across) =>
+    Array.from({ length: across ? BowDepth : BowLength }, (_, y) =>
+        Array.from({ length: across ? BowLength : BowDepth }, (_, x) => {
+            const along = across ? x : y;
+            return along >= BowBarStart && along < BowBarStart + BowBarWidth ? "white" : "black";
+        }),
+    );
+
 function buildJobs() {
     const jobs = [];
     for (const colour of Object.keys(Palette))
@@ -259,6 +286,29 @@ function buildJobs() {
                 params: sameLine(lineBase),
             }),
         );
+    jobs.push(
+        buildPattern({
+            name: "bow-across",
+            rows: bowBarRows(true),
+            palette: Palette,
+            padding: Padding,
+            params: { ...sameLine(0), curvature: { x: TestCurvature, y: 0 } },
+        }),
+        buildPattern({
+            name: "bow-down",
+            rows: bowBarRows(false),
+            palette: Palette,
+            padding: Padding,
+            params: { ...sameLine(0), curvature: { x: 0, y: TestCurvature } },
+        }),
+        buildPattern({
+            name: "bow-corners",
+            rows: flatRows("white", FlatWidth, FlatHeight),
+            palette: Palette,
+            padding: Padding,
+            params: { ...sameLine(0), curvature: { x: CornerCurvature, y: CornerCurvature } },
+        }),
+    );
     return jobs;
 }
 
@@ -296,6 +346,35 @@ function pictureDifference(a, b) {
         for (let x = 0; x < a.width; ++x)
             worst = Math.max(worst, channelDifference(pixelAt(a, x, y), pixelAt(b, x, y)));
     return worst;
+}
+
+/** Where the shader puts a picture position (0..1) on the row or column `across` (0..1), bowing it. */
+function bowedTo(position, across, curvature) {
+    const centred = position * 2 - 1;
+    const centredAcross = across * 2 - 1;
+    return (centred / (1 + centredAcross * centredAcross * curvature) + 1) / 2;
+}
+
+/** Where the picture position (0..1) that the pixel at `position` (0..1) shows lies, past 1 when it is off the raster. */
+function bowedFrom(position, across, curvature) {
+    const centred = position * 2 - 1;
+    const centredAcross = across * 2 - 1;
+    return Math.abs(centred * (1 + centredAcross * centredAcross * curvature));
+}
+
+const brightness = (pixel) => pixel[0] + pixel[1] + pixel[2];
+
+/** The brightness-weighted mean position along a row (`across`) or a column of the picture. */
+function centroid(image, index, across) {
+    const length = across ? image.width : image.height;
+    let sum = 0;
+    let weight = 0;
+    for (let i = 0; i < length; ++i) {
+        const pixel = across ? pixelAt(image, i, index) : pixelAt(image, index, i);
+        sum += brightness(pixel) * (i + 0.5);
+        weight += brightness(pixel);
+    }
+    return sum / weight;
 }
 
 /** Box-filter a picture drawn at `scale` back down to one output pixel per logical pixel. */
@@ -384,6 +463,47 @@ describe("PAL composite shader", () => {
             const expected = renderedNearest["bars-1"];
             const actual = downsample(renderedNearest["bars-2"], 2);
             expect(pictureDifference(actual, expected)).toBeLessThanOrEqual(Tolerance);
+        });
+    });
+
+    describe("screen geometry", () => {
+        /** Half a pixel: the bar is blurred symmetrically, so its centroid should land where its middle maps to. */
+        const PositionTolerance = 0.5;
+
+        const barMiddle = (BowBarStart + BowBarWidth / 2) / BowLength;
+
+        it("bows a bar outwards, further the nearer the top and bottom", () => {
+            const image = rendered["bow-across"];
+            for (let y = 0; y < image.height; ++y) {
+                const expected = bowedTo(barMiddle, (y + 0.5) / image.height, TestCurvature) * image.width;
+                expect(Math.abs(centroid(image, y, true) - expected)).toBeLessThanOrEqual(PositionTolerance);
+            }
+            expect(centroid(image, 0, true)).toBeLessThan(centroid(image, image.height / 2, true) - 3);
+        });
+
+        it("bows a row outwards, further the nearer the left and right", () => {
+            const image = rendered["bow-down"];
+            for (let x = 0; x < image.width; ++x) {
+                const expected = bowedTo(barMiddle, (x + 0.5) / image.width, TestCurvature) * image.height;
+                expect(Math.abs(centroid(image, x, false) - expected)).toBeLessThanOrEqual(PositionTolerance);
+            }
+            expect(centroid(image, 0, false)).toBeLessThan(centroid(image, image.width / 2, false) - 3);
+        });
+
+        it("lights only what the bowed raster reaches, leaving the corners black", () => {
+            const image = rendered["bow-corners"];
+            let dark = 0;
+            for (let y = 0; y < image.height; ++y)
+                for (let x = 0; x < image.width; ++x) {
+                    const across = (x + 0.5) / image.width;
+                    const down = (y + 0.5) / image.height;
+                    const reached =
+                        bowedFrom(across, down, CornerCurvature) <= 1 && bowedFrom(down, across, CornerCurvature) <= 1;
+                    expect(isColour(pixelAt(image, x, y), reached ? White : Black)).toBe(true);
+                    if (!reached) ++dark;
+                }
+            expect(dark).toBeGreaterThan(0);
+            expect(dark).toBeLessThan((image.width * image.height) / 2);
         });
     });
 
