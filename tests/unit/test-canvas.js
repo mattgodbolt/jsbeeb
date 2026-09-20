@@ -26,14 +26,14 @@ function recordingGl() {
         "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
         "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
         "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
-        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE FUNC_REVERSE_SUBTRACT MAX_EXT"
+        "TRIANGLE_STRIP HIGH_FLOAT BLEND CONSTANT_ALPHA ONE FUNC_REVERSE_SUBTRACT MAX_EXT FRAMEBUFFER COLOR_ATTACHMENT0"
     )
         .split(" ")
         .entries())
         gl[name] = index + 1;
     gl.NO_ERROR = 0;
 
-    for (const kind of ["Texture", "Buffer", "Program", "Shader"]) {
+    for (const kind of ["Texture", "Buffer", "Program", "Shader", "Framebuffer"]) {
         gl[`create${kind}`] = () => {
             const object = { kind, id: nextId++ };
             live.add(object);
@@ -63,7 +63,7 @@ function recordingGl() {
         "shaderSource compileShader attachShader linkProgram useProgram depthMask viewport " +
         "bindTexture bindBuffer bufferData texImage2D texSubImage2D texParameteri pixelStorei activeTexture " +
         "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f " +
-        "enable disable blendEquation blendColor blendFunc"
+        "enable disable blendEquation blendColor blendFunc bindFramebuffer framebufferTexture2D"
     ).split(" "))
         gl[name] = () => {};
 
@@ -239,7 +239,7 @@ describe("low latency canvas", () => {
 describe("phosphor persistence", () => {
     const frame = { lineGrid: new Uint8Array(0), lineBaseEven: 0, lineBaseOdd: 0, phaseBaseEven: 0, phaseBaseOdd: 0 };
 
-    it("scales the old picture down by the persistence, then keeps the brighter of it and the frame", () => {
+    it("scales the old picture down by the persistence, keeps the brighter of it and the frame, then shows it", () => {
         const gl = recordingGl();
         const calls = [];
         for (const name of ["enable", "disable", "blendEquation", "blendColor", "blendFunc", "drawArrays"])
@@ -247,20 +247,19 @@ describe("phosphor persistence", () => {
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
 
         canvas.setPersistence(0.6);
+        expect(calls).toEqual([]);
+        canvas.paint(0, 0, 1024, 625, frame);
         expect(calls).toEqual([
+            ["enable", gl.BLEND],
+            ["blendEquation", gl.FUNC_REVERSE_SUBTRACT],
+            ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
+            ["blendColor", 0, 0, 0, 0.6],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
             ["enable", gl.BLEND],
             ["blendEquation", gl.MAX_EXT],
             ["blendFunc", gl.ONE, gl.ONE],
-        ]);
-        calls.length = 0;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls).toEqual([
-            ["blendColor", 0, 0, 0, 0.6],
-            ["blendEquation", gl.FUNC_REVERSE_SUBTRACT],
-            ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
-            ["blendEquation", gl.MAX_EXT],
-            ["blendFunc", gl.ONE, gl.ONE],
+            ["disable", gl.BLEND],
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
         ]);
         calls.length = 0;
@@ -269,6 +268,44 @@ describe("phosphor persistence", () => {
         expect(calls).toEqual([
             ["disable", gl.BLEND],
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
+    });
+
+    it("decays and blends off screen, and puts the finished picture on the screen in one draw", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["bindFramebuffer", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([
+            ["bindFramebuffer", gl.FRAMEBUFFER, canvas.phosphorFramebuffer],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            ["bindFramebuffer", gl.FRAMEBUFFER, null],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
+    });
+
+    it("sizes the phosphor to the drawing buffer, again when that changes", () => {
+        const gl = recordingGl();
+        const sizes = [];
+        gl.texImage2D = (target, level, format, width, height) => sizes.push([width, height]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        sizes.length = 0;
+        gl.drawingBufferWidth = 896;
+        gl.drawingBufferHeight = 600;
+        canvas.paint(0, 0, 1024, 625, frame);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(sizes).toEqual([[896, 600]]);
+        gl.drawingBufferWidth = 1792;
+        gl.drawingBufferHeight = 1200;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(sizes).toEqual([
+            [896, 600],
+            [1792, 1200],
         ]);
     });
 
@@ -283,7 +320,10 @@ describe("phosphor persistence", () => {
         expect(calls[0]).toEqual(["blendColor", 0, 0, 0, 0.125]);
         calls.length = 0;
         canvas.paint(0, 0, 1024, 625, { ...frame, fields: 0 });
-        expect(calls).toEqual([["drawArrays", gl.TRIANGLE_STRIP, 0, 4]]);
+        expect(calls).toEqual([
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+        ]);
     });
 
     it("shows each frame plain when the driver cannot keep the brighter of two colours", () => {
@@ -300,7 +340,7 @@ describe("phosphor persistence", () => {
         ]);
     });
 
-    it("draws the frame with the filter's program and attributes after the decay", () => {
+    it("draws the frame with the filter's program between the decay and the copy, and leaves it current", () => {
         const gl = recordingGl();
         const programs = [];
         gl.useProgram = (program) => programs.push(program);
@@ -308,7 +348,12 @@ describe("phosphor persistence", () => {
         canvas.setPersistence(0.6);
         programs.length = 0;
         canvas.paint(0, 0, 1024, 625, frame);
-        expect(programs).toEqual([canvas.decayProgram, canvas.filter.program]);
+        expect(programs).toEqual([
+            canvas.decayProgram,
+            canvas.filter.program,
+            canvas.copyProgram,
+            canvas.filter.program,
+        ]);
     });
 });
 
@@ -374,29 +419,45 @@ describe("Canvas", () => {
         };
     }
 
-    it("washes the old picture down by the decay, then keeps the brighter of it and the new frame", () => {
-        const ctx = fake2dContext();
+    it("washes the old picture down by the decay and keeps the brighter of it and the frame off screen, then shows it", () => {
         const calls = [];
-        ctx.fillRect = (...args) => calls.push(["fillRect", ctx.globalCompositeOperation, ctx.globalAlpha, ...args]);
-        ctx.drawImage = () => calls.push(["drawImage", ctx.globalCompositeOperation, ctx.globalAlpha]);
-        const backCtx = fake2dContext();
-        const createElement = vi.spyOn(document, "createElement").mockReturnValue({ getContext: () => backCtx });
+        const recording = (name) => {
+            const ctx = fake2dContext();
+            ctx.fillRect = (...args) =>
+                calls.push([name, "fillRect", ctx.globalCompositeOperation, ctx.globalAlpha, ...args]);
+            ctx.drawImage = (source) =>
+                calls.push([name, "drawImage", ctx.globalCompositeOperation, ctx.globalAlpha, source]);
+            return ctx;
+        };
+        const screen = recording("screen");
+        const backBuffer = { getContext: () => fake2dContext() };
+        const phosphor = { width: 0, height: 0, getContext: () => recording("phosphor") };
+        const createElement = vi
+            .spyOn(document, "createElement")
+            .mockReturnValueOnce(backBuffer)
+            .mockReturnValueOnce(phosphor);
         try {
-            const canvas = new Canvas({ width: 896, height: 600, getContext: (kind) => (kind === "2d" ? ctx : null) });
+            const canvas = new Canvas({
+                width: 896,
+                height: 600,
+                getContext: (kind) => (kind === "2d" ? screen : null),
+            });
             calls.length = 0;
             canvas.setPersistence(0.6);
             canvas.paint(0, 0, 1024, 625, {});
             expect(calls).toEqual([
-                ["fillRect", "source-over", expect.closeTo(0.4, 5), 0, 0, 896, 600],
-                ["drawImage", "lighten", 1],
+                ["phosphor", "fillRect", "source-over", expect.closeTo(0.4, 5), 0, 0, 896, 600],
+                ["phosphor", "drawImage", "lighten", 1, backBuffer],
+                ["screen", "drawImage", "source-over", 1, phosphor],
             ]);
+            expect([phosphor.width, phosphor.height]).toEqual([896, 600]);
             calls.length = 0;
             canvas.paint(0, 0, 1024, 625, { fields: 2 });
-            expect(calls[0]).toEqual(["fillRect", "source-over", expect.closeTo(0.64, 5), 0, 0, 896, 600]);
+            expect(calls[0]).toEqual(["phosphor", "fillRect", "source-over", expect.closeTo(0.64, 5), 0, 0, 896, 600]);
             calls.length = 0;
             canvas.setPersistence(0);
             canvas.paint(0, 0, 1024, 625, {});
-            expect(calls).toEqual([["drawImage", "source-over", 1]]);
+            expect(calls).toEqual([["screen", "drawImage", "source-over", 1, backBuffer]]);
         } finally {
             createElement.mockRestore();
         }
