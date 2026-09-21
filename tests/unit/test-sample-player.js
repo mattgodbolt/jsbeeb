@@ -4,12 +4,10 @@ import { SamplePlayer } from "../../src/sample-player.js";
 function createStubContext(state = "running") {
     return {
         state,
-        currentTime: 0,
         createGain() {
             return {
-                gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
+                gain: { value: 1 },
                 connect: vi.fn(),
-                disconnect: vi.fn(),
             };
         },
         createBufferSource() {
@@ -78,44 +76,6 @@ describe("SamplePlayer", () => {
             const source = player.playing[0];
             source.onended();
             expect(player.playing).toHaveLength(0);
-        });
-    });
-
-    describe("startOneShot", () => {
-        it("plays through a gain of its own into the player's, and says when it started", () => {
-            context.currentTime = 2.5;
-            const player = new SamplePlayer(context, destination, 0.4);
-            const playing = player.startOneShot({ duration: 1.0 });
-            expect(playing.fade.connect).toHaveBeenCalledWith(player.gain);
-            expect(playing.source.connect).toHaveBeenCalledWith(playing.fade);
-            expect(playing.source.start).toHaveBeenCalled();
-            expect(playing.startedAt).toBe(2.5);
-            expect(playing.ended).toBe(false);
-            playing.source.onended();
-            expect(playing.ended).toBe(true);
-            expect(playing.fade.disconnect).toHaveBeenCalled();
-            expect(player.playing).toHaveLength(0);
-        });
-
-        it("plays nothing when the context is not running", () => {
-            context.state = "suspended";
-            const player = new SamplePlayer(context, destination, 0.4);
-            expect(player.startOneShot({ duration: 1.0 })).toBeNull();
-        });
-    });
-
-    describe("cutShort", () => {
-        it("fades the one-shot out from where it is and stops it a few milliseconds on", () => {
-            context.currentTime = 4;
-            const player = new SamplePlayer(context, destination, 0.4);
-            const playing = player.startOneShot({ duration: 1.0 });
-            player.cutShort(playing);
-            expect(playing.fade.gain.setValueAtTime).toHaveBeenCalledWith(1, 4);
-            const [level, at] = playing.fade.gain.linearRampToValueAtTime.mock.calls[0];
-            expect(level).toBe(0);
-            expect(at).toBeGreaterThan(4);
-            expect(at).toBeLessThan(4.02);
-            expect(playing.source.stop).toHaveBeenCalledWith(at);
         });
     });
 

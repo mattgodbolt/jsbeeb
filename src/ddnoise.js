@@ -4,15 +4,13 @@ const Idle = 0;
 const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
-/** A seek noise sounds for at least this long before a newer movement replaces it. */
-const SeekHoldSeconds = 0.1;
-
 export class DdNoise extends SamplePlayer {
     constructor(context, destination) {
         super(context, destination, Volume);
         this.state = Idle;
         this.motor = null;
-        this.seeking = null;
+        this.seekSound = null;
+        this.seekSoundEnds = 0;
     }
 
     async initialise() {
@@ -56,23 +54,23 @@ export class DdNoise extends SamplePlayer {
 
     /**
      * The noise of the head crossing `diff` tracks: a click for a step, a
-     * recorded run for anything longer. There is one head, so a movement that
-     * begins while the last is still sounding takes over from it, provided the
-     * last has sounded long enough to be heard as its own.
+     * recorded run for anything longer. A sound plays whole and holds off the
+     * next, except that a click is heard over the tail of a run, which sounds
+     * on after the head has come to rest.
      */
     seek(diff) {
         if (diff < 0) diff = -diff;
         if (diff === 0) return 0;
-        const sound = this.seekSound(diff);
-        if (this.seeking && !this.seeking.ended) {
-            if (this.context.currentTime - this.seeking.startedAt < SeekHoldSeconds) return 0;
-            this.cutShort(this.seeking);
-        }
-        this.seeking = this.startOneShot(sound);
+        const sound = this.seekSoundFor(diff);
+        const now = this.context.currentTime;
+        const clickOverRun = sound === this.sounds.step && this.seekSound !== this.sounds.step;
+        if (now < this.seekSoundEnds && !clickOverRun) return 0;
+        this.seekSound = sound;
+        this.seekSoundEnds = now + this.oneShot(sound);
         return sound.duration;
     }
 
-    seekSound(tracks) {
+    seekSoundFor(tracks) {
         if (tracks <= 2) return this.sounds.step;
         if (tracks <= 20) return this.sounds.seek;
         if (tracks <= 40) return this.sounds.seek2;

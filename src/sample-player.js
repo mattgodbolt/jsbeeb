@@ -1,7 +1,5 @@
 import { loadData } from "./loader.js";
 
-const CutShortSeconds = 0.005;
-
 /**
  * Base class for audio components that load and play back sample buffers
  * (e.g. disc drive noise, cassette relay clicks).
@@ -48,39 +46,17 @@ export class SamplePlayer {
      * Fire-and-forget: play a buffer once, return its duration.
      */
     oneShot(sound) {
-        this.startOneShot(sound);
-        return sound.duration;
-    }
-
-    /**
-     * Play a buffer once through a gain of its own, so it can be cut short
-     * without a pop. Returns what `cutShort` needs, or null when the context
-     * is not running.
-     */
-    startOneShot(sound) {
-        if (this.context.state !== "running") return null;
-        const fade = this.context.createGain();
-        fade.connect(this.gain);
+        const duration = sound.duration;
+        if (this.context.state !== "running") return duration;
         const source = this.context.createBufferSource();
         source.buffer = sound;
-        source.connect(fade);
-        const playing = { source, fade, startedAt: this.context.currentTime, ended: false };
+        source.connect(this.gain);
         source.onended = () => {
-            playing.ended = true;
             this.playing = this.playing.filter((s) => s !== source);
-            fade.disconnect();
         };
         source.start();
         this.playing.push(source);
-        return playing;
-    }
-
-    /** Fade a one-shot out over a few milliseconds and stop it. */
-    cutShort({ source, fade }) {
-        const now = this.context.currentTime;
-        fade.gain.setValueAtTime(fade.gain.value, now);
-        fade.gain.linearRampToValueAtTime(0, now + CutShortSeconds);
-        source.stop(now + CutShortSeconds);
+        return duration;
     }
 
     /**

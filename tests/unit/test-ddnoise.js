@@ -15,11 +15,7 @@ function stubContext() {
     return {
         state: "running",
         currentTime: 0,
-        createGain: () => ({
-            gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
-            connect: vi.fn(),
-            disconnect: vi.fn(),
-        }),
+        createGain: () => ({ gain: { value: 1 }, connect: vi.fn() }),
         createBufferSource: () => ({
             buffer: null,
             loop: false,
@@ -67,41 +63,40 @@ describe("DdNoise seeks", () => {
         }
     });
 
-    it("lets a movement that has only just begun sound, rather than starting the next", () => {
-        ddNoise.seek(30);
+    it("lets a sound finish before starting another of any length", () => {
+        ddNoise.seek(1);
         context.currentTime = 0.05;
         expect(ddNoise.seek(1)).toBe(0);
-        expect(started()).toEqual([Sounds.seek2]);
-        expect(ddNoise.playing[0].stop).not.toHaveBeenCalled();
+        expect(ddNoise.seek(30)).toBe(0);
+        context.currentTime = 0.1;
+        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
+        context.currentTime = 0.6;
+        expect(ddNoise.seek(30)).toBe(0);
+        expect(ddNoise.seek(5)).toBe(0);
+        expect(started()).toEqual([Sounds.step, Sounds.seek2]);
     });
 
-    it("cuts a run short for a movement that begins once it has been heard", () => {
+    it("sounds a click over the tail of a run, and never cuts anything short", () => {
         ddNoise.seek(30);
-        const run = ddNoise.seeking;
         context.currentTime = 0.6;
         expect(ddNoise.seek(1)).toBe(Sounds.step.duration);
-        expect(started()).toEqual([Sounds.seek2, Sounds.step]);
-        expect(run.fade.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.closeTo(0.605, 3));
-        expect(run.source.stop).toHaveBeenCalled();
-        expect(ddNoise.seeking.fade.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+        context.currentTime = 0.65;
+        expect(ddNoise.seek(1)).toBe(0);
+        context.currentTime = 1.0;
+        expect(ddNoise.seek(1)).toBe(Sounds.step.duration);
+        expect(started()).toEqual([Sounds.seek2, Sounds.step, Sounds.step]);
+        for (const source of ddNoise.playing) expect(source.stop).not.toHaveBeenCalled();
     });
 
-    it("has nothing to cut once the last movement has finished sounding", () => {
-        ddNoise.seek(1);
-        const click = ddNoise.playing[0];
-        click.onended();
-        context.currentTime = 0.5;
-        ddNoise.seek(1);
-        expect(click.stop).not.toHaveBeenCalled();
-        expect(started()).toEqual([Sounds.step]);
-    });
-
-    it("carries on once a suspended context is running again", () => {
+    it("holds the next sound off for the full length even when the context could not play it", () => {
         context.state = "suspended";
         expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
         expect(started()).toEqual([]);
         context.state = "running";
-        expect(ddNoise.seek(1)).toBe(Sounds.step.duration);
-        expect(started()).toEqual([Sounds.step]);
+        context.currentTime = 0.5;
+        expect(ddNoise.seek(30)).toBe(0);
+        context.currentTime = 1.1;
+        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
+        expect(started()).toEqual([Sounds.seek2]);
     });
 });
