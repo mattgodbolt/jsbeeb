@@ -30,6 +30,7 @@ const ForceInterrupt = 0xd0;
 const AllFlagCombinations = [...Array(16).keys()];
 // Type I, II and III commands with the spin-up wait disabled so they start without six
 // revolutions of delay.
+const RestoreCommand = 0x08;
 const SeekCommand = 0x18;
 const ReadSectorCommand = 0x88;
 const ReadAddressCommand = 0xc8;
@@ -82,7 +83,7 @@ function makeFdc({
     if (disc) drives[0].setDisc(disc);
     const fdc = new WdFdc(cpu, scheduler, drives, {}, variant);
     fdc.write(controlRegister, control);
-    return { cpu, scheduler, fdc };
+    return { cpu, scheduler, fdc, drives };
 }
 
 /**
@@ -265,6 +266,33 @@ describe("WD1770 FDC tests", () => {
                 scheduler.polltime(ShortWaitTicks);
                 expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
             }
+        });
+    });
+
+    describe("seek noise", () => {
+        const seekNoises = (drive) => {
+            const amounts = [];
+            drive.addEventListener("step", (event) => amounts.push(event.stepAmount));
+            return amounts;
+        };
+
+        it("is the difference between the track asked for and the track register", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            const amounts = seekNoises(drives[0]);
+            fdc.write(TrackRegister, 5);
+            fdc.write(DataRegister, 35);
+            runCommand(fdc, scheduler, SeekCommand);
+            expect(amounts).toEqual([30]);
+        });
+
+        it("is the distance the head steps out on a restore, whatever the track register says", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            for (let track = 0; track < 20; ++track) drives[0].seekOneTrack(1);
+            const amounts = seekNoises(drives[0]);
+            fdc.write(TrackRegister, 3);
+            runCommand(fdc, scheduler, RestoreCommand);
+            expect(amounts).toEqual([-20]);
+            expect(drives[0].track).toBe(0);
         });
     });
 

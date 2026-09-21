@@ -4,12 +4,15 @@ const Idle = 0;
 const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
+/** A seek noise sounds for at least this long before a newer movement replaces it. */
+const SeekHoldSeconds = 0.1;
 
 export class DdNoise extends SamplePlayer {
     constructor(context, destination) {
         super(context, destination, Volume);
         this.state = Idle;
         this.motor = null;
+        this.seeking = null;
     }
 
     async initialise() {
@@ -51,13 +54,29 @@ export class DdNoise extends SamplePlayer {
         }
     }
 
+    /**
+     * The noise of the head crossing `diff` tracks: a click for a step, a
+     * recorded run for anything longer. There is one head, so a movement that
+     * begins while the last is still sounding takes over from it, once that
+     * has had long enough to be heard as its own.
+     */
     seek(diff) {
         if (diff < 0) diff = -diff;
         if (diff === 0) return 0;
-        else if (diff <= 2) return this.oneShot(this.sounds.step);
-        else if (diff <= 20) return this.oneShot(this.sounds.seek);
-        else if (diff <= 40) return this.oneShot(this.sounds.seek2);
-        else return this.oneShot(this.sounds.seek3);
+        const sound = this.seekSound(diff);
+        if (this.seeking && !this.seeking.ended) {
+            if (this.context.currentTime - this.seeking.startedAt < SeekHoldSeconds) return 0;
+            this.cutShort(this.seeking);
+        }
+        this.seeking = this.startOneShot(sound);
+        return sound.duration;
+    }
+
+    seekSound(tracks) {
+        if (tracks <= 2) return this.sounds.step;
+        if (tracks <= 20) return this.sounds.seek;
+        if (tracks <= 40) return this.sounds.seek2;
+        return this.sounds.seek3;
     }
 }
 

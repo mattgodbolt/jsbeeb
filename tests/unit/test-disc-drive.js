@@ -216,15 +216,12 @@ describe("40 track discs", () => {
 describe("drive noise", () => {
     afterEach(() => vi.useRealTimers());
 
-    function noisyDrives(seekSeconds = 0) {
+    function noisyDrives() {
         const calls = [];
         const ddNoise = {
             spinUp: () => calls.push("spinUp"),
             spinDown: () => calls.push("spinDown"),
-            seek: (amount) => {
-                calls.push(`seek ${amount}`);
-                return seekSeconds;
-            },
+            seek: (amount) => calls.push(`seek ${amount}`),
         };
         const scheduler = new Scheduler();
         const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
@@ -251,28 +248,13 @@ describe("drive noise", () => {
         expect(calls.filter((call) => call === "spinDown")).toHaveLength(1);
     });
 
-    it("seeks by the tracks the head crosses", () => {
-        vi.useFakeTimers();
-        const { drives, calls } = noisyDrives(0.5);
+    it("passes every seek on, by the tracks the head crosses", () => {
+        const { drives, calls } = noisyDrives();
 
         drives[0].notifySeekAmount(5);
-        vi.advanceTimersByTime(600);
         drives[1].notifySeekAmount(-3);
-
-        expect(calls).toEqual(["seek 5", "seek -3"]);
-    });
-
-    it("lets one seek noise finish before starting another", () => {
-        vi.useFakeTimers();
-        const { drives, calls } = noisyDrives(0.5);
-
         drives[0].notifySeekAmount(1);
-        vi.advanceTimersByTime(400);
-        drives[0].notifySeekAmount(1);
-        expect(calls).toEqual(["seek 1"]);
 
-        vi.advanceTimersByTime(200);
-        drives[0].notifySeekAmount(1);
-        expect(calls).toEqual(["seek 1", "seek 1"]);
+        expect(calls).toEqual(["seek 5", "seek -3", "seek 1"]);
     });
 });

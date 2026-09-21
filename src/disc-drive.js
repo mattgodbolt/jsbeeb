@@ -14,7 +14,6 @@ const SpinDebounceMs = 2;
  * @param {import("./ddnoise.js").DdNoise|import("./ddnoise.js").FakeDdNoise} ddNoise
  */
 export function attachDriveNoise(drives, ddNoise) {
-    let nextSeekTime = 0;
     let numSpinning = 0;
     const updateSpinStatus = () => {
         if (numSpinning) ddNoise.spinUp();
@@ -29,10 +28,7 @@ export function attachDriveNoise(drives, ddNoise) {
             numSpinning--;
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
-        drive.addEventListener("step", (evt) => {
-            const now = Date.now();
-            if (now > nextSeekTime) nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
-        });
+        drive.addEventListener("step", (evt) => ddNoise.seek(evt.stepAmount));
     }
 }
 
