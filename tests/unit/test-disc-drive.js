@@ -225,6 +225,21 @@ describe("40 track discs", () => {
         const surfaceTracksLeft = IbmDiscFormat.tracksPerDisc - 2 - drive.track;
         expect(steps).toEqual([-4, surfaceTracksLeft]);
     });
+
+    it("counts from where the head is, between the pitches of a switch made mid-surface", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(fortyTrackDisc());
+        drive.seekOneTrack(1);
+        drive.tracksPerStep = 2;
+        const steps = [];
+        drive.addEventListener("step", (event) => steps.push(event.stepAmount));
+
+        drive.notifySeekAmount(-1);
+        drive.notifySeekAmount(2);
+
+        // From physical track 1: one track out to the edge, and four in for two double steps.
+        expect(steps).toEqual([-1, 4]);
+    });
 });
 
 describe("drive noise", () => {
