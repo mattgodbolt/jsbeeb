@@ -77,12 +77,13 @@ describe("DdNoise seeks", () => {
 
     it("cuts a run short for a movement that begins once it has been heard", () => {
         ddNoise.seek(30);
-        const run = ddNoise.playing[0];
+        const run = ddNoise.seeking;
         context.currentTime = 0.6;
         expect(ddNoise.seek(1)).toBe(Sounds.step.duration);
         expect(started()).toEqual([Sounds.seek2, Sounds.step]);
-        expect(run.stop).toHaveBeenCalled();
-        expect(ddNoise.seeking.fade.gain.setValueAtTime).not.toHaveBeenCalled();
+        expect(run.fade.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.closeTo(0.605, 3));
+        expect(run.source.stop).toHaveBeenCalled();
+        expect(ddNoise.seeking.fade.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
     });
 
     it("has nothing to cut once the last movement has finished sounding", () => {

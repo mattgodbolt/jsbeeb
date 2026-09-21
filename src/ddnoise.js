@@ -57,8 +57,8 @@ export class DdNoise extends SamplePlayer {
     /**
      * The noise of the head crossing `diff` tracks: a click for a step, a
      * recorded run for anything longer. There is one head, so a movement that
-     * begins while the last is still sounding takes over from it, once that
-     * has had long enough to be heard as its own.
+     * begins while the last is still sounding takes over from it, provided the
+     * last has sounded long enough to be heard as its own.
      */
     seek(diff) {
         if (diff < 0) diff = -diff;
