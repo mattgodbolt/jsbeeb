@@ -4,6 +4,7 @@ const Idle = 0;
 const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
+
 export class DdNoise extends SamplePlayer {
     constructor(context, destination) {
         super(context, destination, Volume);
