@@ -10,6 +10,8 @@ export class DdNoise extends SamplePlayer {
         super(context, destination, Volume);
         this.state = Idle;
         this.motor = null;
+        this.clickEnds = 0;
+        this.runEnds = 0;
     }
 
     async initialise() {
@@ -51,13 +53,30 @@ export class DdNoise extends SamplePlayer {
         }
     }
 
+    /**
+     * The noise of the head crossing `diff` tracks: a click for a step, a
+     * recorded run for anything longer. A sound plays whole and holds off the
+     * next, except that a click is heard over the tail of a run, which sounds
+     * on after the head has come to rest.
+     */
     seek(diff) {
         if (diff < 0) diff = -diff;
         if (diff === 0) return 0;
-        else if (diff <= 2) return this.oneShot(this.sounds.step);
-        else if (diff <= 20) return this.oneShot(this.sounds.seek);
-        else if (diff <= 40) return this.oneShot(this.sounds.seek2);
-        else return this.oneShot(this.sounds.seek3);
+        const sound = this.seekSoundFor(diff);
+        const now = this.context.currentTime;
+        const isClick = sound === this.sounds.step;
+        if (now < this.clickEnds || (!isClick && now < this.runEnds)) return 0;
+        const ends = now + this.oneShot(sound);
+        if (isClick) this.clickEnds = ends;
+        else this.runEnds = ends;
+        return sound.duration;
+    }
+
+    seekSoundFor(tracks) {
+        if (tracks <= 2) return this.sounds.step;
+        if (tracks <= 20) return this.sounds.seek;
+        if (tracks <= 40) return this.sounds.seek2;
+        return this.sounds.seek3;
     }
 }
 

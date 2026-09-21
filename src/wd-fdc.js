@@ -676,10 +676,13 @@ export class WdFdc {
                 this._trackRegister = 0xff;
                 this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
-            // Falls through...
-            case Command.seek:
+                // The head steps out from wherever it is, whatever the track register says
+                this._makeSeekNoise(-this._currentDrive.logicalTrack);
                 this._doSeekStepOrVerify();
+                break;
+            case Command.seek:
                 this._makeSeekNoise(this._dataRegister - this._trackRegister);
+                this._doSeekStepOrVerify();
                 break;
             case Command.stepInNoUpdate:
                 this._doSeekStep(1, false);

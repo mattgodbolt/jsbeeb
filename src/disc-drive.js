@@ -14,7 +14,6 @@ const SpinDebounceMs = 2;
  * @param {import("./ddnoise.js").DdNoise|import("./ddnoise.js").FakeDdNoise} ddNoise
  */
 export function attachDriveNoise(drives, ddNoise) {
-    let nextSeekTime = 0;
     let numSpinning = 0;
     const updateSpinStatus = () => {
         if (numSpinning) ddNoise.spinUp();
@@ -29,10 +28,7 @@ export function attachDriveNoise(drives, ddNoise) {
             numSpinning--;
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
-        drive.addEventListener("step", (evt) => {
-            const now = Date.now();
-            if (now > nextSeekTime) nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
-        });
+        drive.addEventListener("step", (evt) => ddNoise.seek(evt.stepAmount));
     }
 }
 
@@ -411,8 +407,12 @@ export class DiscDrive extends BaseDiscDrive {
      * Notify that an overall seek is happening by some delta amount. Purely informational.
      */
     notifySeekAmount(delta) {
-        // The step drives the seek noise, so it counts the tracks the head crosses.
-        this.dispatchEvent(new StepEvent(delta * this._tracksPerStep));
+        // The step drives the seek noise, so it counts the tracks the head crosses: none past
+        // either end of the surface, whatever the controller asked for.
+        const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
+        const target = Math.min(lastTrack, Math.max(0, this._track + delta * this._tracksPerStep));
+        const crossed = target - this._track;
+        if (crossed) this.dispatchEvent(new StepEvent(crossed));
     }
 
     /**
