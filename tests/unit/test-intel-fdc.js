@@ -96,6 +96,25 @@ describe("Intel 8271 tests", function () {
         expect(fakeDrive.track).toBe(4);
     });
 
+    describe("head load", () => {
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+
+        it("loads the head over eight milliseconds a unit, as a 5.25 inch drive doubles it", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, driveSelect1);
+            sendCommand(fdc, seekCmd, 1);
+            // Steps at the 24 ms the specify asked for, two extra for the bad track registers.
+            while (scheduler.headroom() === 24 * 2000) scheduler.polltime(scheduler.headroom());
+            expect(fakeDrive.track).toBe(3);
+            // The head, unloaded until now, takes 8 units of 8 ms to load.
+            expect(scheduler.headroom()).toBe(8 * 8 * 2000);
+        });
+    });
+
     describe("status register", () => {
         const statusAddr = 0;
         const resultAddr = 1;
