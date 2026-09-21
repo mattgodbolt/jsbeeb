@@ -88,6 +88,17 @@ describe("DdNoise seeks", () => {
         for (const source of ddNoise.playing) expect(source.stop).not.toHaveBeenCalled();
     });
 
+    it("still holds a run off until the last run has finished, clicks over it or not", () => {
+        ddNoise.seek(30);
+        context.currentTime = 0.6;
+        ddNoise.seek(1);
+        context.currentTime = 1.0;
+        expect(ddNoise.seek(30)).toBe(0);
+        context.currentTime = 1.1;
+        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
+        expect(started()).toEqual([Sounds.seek2, Sounds.step, Sounds.seek2]);
+    });
+
     it("holds the next sound off for the full length even when the context could not play it", () => {
         context.state = "suspended";
         expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);

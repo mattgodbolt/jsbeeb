@@ -285,6 +285,16 @@ describe("WD1770 FDC tests", () => {
             expect(amounts).toEqual([30]);
         });
 
+        it("is nothing for a seek outwards with the head already at track 0", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            const amounts = seekNoises(drives[0]);
+            fdc.write(TrackRegister, 5);
+            fdc.write(DataRegister, 0);
+            runCommand(fdc, scheduler, SeekCommand);
+            expect(amounts).toEqual([]);
+            expect(drives[0].track).toBe(0);
+        });
+
         it("is the distance the head steps out on a restore, whatever the track register says", () => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
             for (let track = 0; track < 20; ++track) drives[0].seekOneTrack(1);

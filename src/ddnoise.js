@@ -10,8 +10,8 @@ export class DdNoise extends SamplePlayer {
         super(context, destination, Volume);
         this.state = Idle;
         this.motor = null;
-        this.seekSound = null;
-        this.seekSoundEnds = 0;
+        this.clickEnds = 0;
+        this.runEnds = 0;
     }
 
     async initialise() {
@@ -64,10 +64,11 @@ export class DdNoise extends SamplePlayer {
         if (diff === 0) return 0;
         const sound = this.seekSoundFor(diff);
         const now = this.context.currentTime;
-        const clickOverRun = sound === this.sounds.step && this.seekSound !== this.sounds.step;
-        if (now < this.seekSoundEnds && !clickOverRun) return 0;
-        this.seekSound = sound;
-        this.seekSoundEnds = now + this.oneShot(sound);
+        const isClick = sound === this.sounds.step;
+        if (now < this.clickEnds || (!isClick && now < this.runEnds)) return 0;
+        const ends = now + this.oneShot(sound);
+        if (isClick) this.clickEnds = ends;
+        else this.runEnds = ends;
         return sound.duration;
     }
 

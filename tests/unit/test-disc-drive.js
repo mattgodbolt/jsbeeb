@@ -211,6 +211,20 @@ describe("40 track discs", () => {
         // Ten of the tracks the controller counts in, which is twenty of the surface's.
         expect(steps).toEqual([20]);
     });
+
+    it("makes the noise of the tracks the head can cross, none past either end of the surface", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), 2);
+        const steps = [];
+        drive.addEventListener("step", (event) => steps.push(event.stepAmount));
+
+        drive.notifySeekAmount(-5);
+        drive.notifySeekAmount(100);
+        drive.notifySeekAmount(0);
+
+        // Two tracks in, so two out to the edge; the rest of the surface inwards, double stepped.
+        const surfaceTracksLeft = IbmDiscFormat.tracksPerDisc - 2 - drive.track;
+        expect(steps).toEqual([-4, surfaceTracksLeft]);
+    });
 });
 
 describe("drive noise", () => {
@@ -252,9 +266,9 @@ describe("drive noise", () => {
         const { drives, calls } = noisyDrives();
 
         drives[0].notifySeekAmount(5);
-        drives[1].notifySeekAmount(-3);
+        drives[1].notifySeekAmount(3);
         drives[0].notifySeekAmount(1);
 
-        expect(calls).toEqual(["seek 5", "seek -3", "seek 1"]);
+        expect(calls).toEqual(["seek 5", "seek 3", "seek 1"]);
     });
 });

@@ -407,8 +407,12 @@ export class DiscDrive extends BaseDiscDrive {
      * Notify that an overall seek is happening by some delta amount. Purely informational.
      */
     notifySeekAmount(delta) {
-        // The step drives the seek noise, so it counts the tracks the head crosses.
-        this.dispatchEvent(new StepEvent(delta * this._tracksPerStep));
+        // The step drives the seek noise, so it counts the tracks the head crosses: none past
+        // either end of the surface, whatever the controller asked for.
+        const lastTrack = ((IbmDiscFormat.tracksPerDisc / this._tracksPerStep) | 0) - 1;
+        const target = Math.min(lastTrack, Math.max(0, this.logicalTrack + delta));
+        const crossed = (target - this.logicalTrack) * this._tracksPerStep;
+        if (crossed) this.dispatchEvent(new StepEvent(crossed));
     }
 
     /**
