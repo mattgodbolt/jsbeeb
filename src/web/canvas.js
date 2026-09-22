@@ -290,6 +290,8 @@ export class GlCanvas {
         const error = drainErrors();
         if (error !== gl.NO_ERROR) {
             filter.dispose();
+            // The refused filter may have made its own program current as it was built.
+            if (this.filter) this.useFilterProgram();
             throw new Error(
                 `${filterClass.getDisplayConfig().name} failed to set up: ${webglDebug.glEnumToString(error)}`,
             );

@@ -194,6 +194,18 @@ describe("GlCanvas", () => {
         expect(gl.getError()).toBe(0);
     });
 
+    it("goes back to the filter it has, program and all, after refusing one that made itself current", () => {
+        const gl = recordingGl();
+        const programs = [];
+        gl.useProgram = (program) => programs.push(program);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        const kept = canvas.filter;
+        xbrSetupRaises(gl, [invalidOperation]);
+        expect(() => canvas.setFilter(XbrFilter)).toThrow(/failed to set up/);
+        expect(canvas.filter).toBe(kept);
+        expect(programs.at(-1)).toBe(kept.program);
+    });
+
     it("does not blame a filter for an error a frame left pending before it was built", () => {
         const gl = recordingGl();
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
