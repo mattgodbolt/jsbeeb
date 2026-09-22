@@ -5,10 +5,11 @@ import { Schemas, splitImage } from "../media-resolver.js";
  * One shape for everything the media window can list, whichever source it
  * came from:
  *
- *   { ref, kind, title, publisher, detail, source, savesChanges, url? }
+ *   { ref, kind, title, publisher, detail, source, savesChanges, url?, requires? }
  *
  * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL; `url` is a
- * page about the entry, when its source has one.
+ * page about the entry, when its source has one; `requires` is the machine the entry runs on,
+ * as `{ model, coProcessor, name }`, when its source says.
  */
 
 // `name` heads a chip; `phrase` sits mid-sentence in a slot's status line.
@@ -101,6 +102,28 @@ export function describeHfeEntry(file) {
 // The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
 const stripTags = (text) => text.replace(/<[^>]*>/g, "");
 
+/** What each `machine` the Bitshifters manifest names asks for, as the URL spells the model and its fitting. */
+export const BitshiftersMachines = Object.freeze({
+    Master: Object.freeze({ model: "Master", coProcessor: false, name: "BBC Master 128" }),
+    MasterTurbo: Object.freeze({
+        model: "Master",
+        coProcessor: true,
+        name: "BBC Master 128 with a 65C102 co-processor",
+    }),
+});
+
+function bitshiftersRequirement(machine) {
+    if (machine === undefined) return undefined;
+    const requires = BitshiftersMachines[machine];
+    if (!requires) console.log(`Bitshifters names a machine this emulator has no table entry for: ${machine}`);
+    return requires;
+}
+
+/** Whether a machine meets a requirement: any Master, with a Tube where the requirement has one. */
+export function satisfiesRequirement(requires, { model, hasTube }) {
+    return model.isMaster && (hasTube || !requires.coProcessor);
+}
+
 export function describeBitshiftersEntry(file) {
     const detail = [file.type, file.machine, file.year, file.authors && stripTags(file.authors)];
     return {
@@ -112,6 +135,7 @@ export function describeBitshiftersEntry(file) {
         source: "bitshifters",
         savesChanges: false,
         url: file.url,
+        requires: bitshiftersRequirement(file.machine),
     };
 }
 

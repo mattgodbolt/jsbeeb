@@ -10,7 +10,7 @@ session and the MCP server all go through the same two.
 Every listed entry is one descriptor, whichever source it came from:
 
 ```js
-{ ref, kind, title, publisher, detail, source, savesChanges, url? }
+{ ref, kind, title, publisher, detail, source, savesChanges, url?, requires? }
 ```
 
 - `ref` is what `loadDiscImage` or `loadTapeImage` takes and what goes in the URL, schema
@@ -23,6 +23,11 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
+- `requires`, when present, is the machine the entry runs on: `{ model, coProcessor, name }`, with
+  `model` as the URL spells it (a synonym in `src/models.js`), `coProcessor` for a Tube and `name`
+  for the dialog and the toast. `satisfiesRequirement` in `media-catalogue.js` holds it against the
+  running machine, and `MachineSwitch` in `src/web/machine-switch.js` reloads the page as that
+  machine when it does not: without asking when the disc is to boot, after asking otherwise.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,
@@ -59,6 +64,13 @@ The disc itself is at `https://bitshifters.github.io/content/<path>`. `authors` 
 `publisher` is not always Bitshifters, and a publisher or author may carry HTML, which is
 stripped. Both the manifest and the discs are served with `Access-Control-Allow-Origin: *`,
 which any remote source needs, since the browser fetches them cross-origin.
+
+`machine` is a requirement, and is trusted as one: `BitshiftersMachines` in `media-catalogue.js`
+maps each value to the descriptor's `requires` (`Master` is any Master 128; `MasterTurbo` is a
+Master 128 with the 65C102 co-processor), and picking a disc whose machine is not the running one
+switches to it. A value the table does not know is logged to the console and requires nothing,
+so a new value upstream cannot stop a disc loading. Any other field we come to read, or need the
+manifest to gain, is documented here in the same change that starts reading it.
 
 ## Adding a source
 

@@ -38,6 +38,7 @@ import { Printer } from "./printer.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
+import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
@@ -241,8 +242,9 @@ const autoBoot = new Autoboot({
 });
 new SthSource({ media });
 new HfeSource({ media });
-new BitshiftersSource({ media });
+const bitshiftersSource = new BitshiftersSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
+const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -289,6 +291,7 @@ const mediaWindow = new MediaWindow({
     visualiser: discVisualiser,
     autoboot: (image) => autoBoot.boot(image),
     driveSource: googleDriveSource,
+    machineSwitch,
 });
 
 const layout = new Layout({
@@ -339,6 +342,16 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
 if (parsedQuery.loadBasic) needsAutoboot = "";
+
+// The Bitshifters catalogue is fetched while the machine starts, so a link that boots one of its
+// discs without naming a model can be switched to the machine the disc needs before the boot.
+async function switchForBootDisc() {
+    if (needsAutoboot !== "boot" || parsedQuery.model) return false;
+    const d = await bitshiftersSource.describe(discImage);
+    if (!d || machineSwitch.satisfies(d)) return false;
+    return machineSwitch.switchFor(d, media.slots.drive(0), { boot: true });
+}
+const switching = switchForBootDisc();
 const startPromise = machine.start({
     media,
     autoBoot,
@@ -355,6 +368,7 @@ const startPromise = machine.start({
 (async () => {
     try {
         await startPromise;
+        if (await switching) return;
 
         switch (needsAutoboot) {
             case "boot":
@@ -379,6 +393,7 @@ const startPromise = machine.start({
 
         // Restore the state a cross-model reload stashed, if there is one.
         await snapshots.restorePendingState();
+        machineSwitch.announce();
 
         loop.go();
     } catch (error) {

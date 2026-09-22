@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaWindow, shortName } from "../../src/web/media-window.js";
-import { describeRef, sourceOf } from "../../src/web/media-catalogue.js";
+import { BitshiftersMachines, describeRef, sourceOf } from "../../src/web/media-catalogue.js";
+import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { Schemas } from "../../src/media-resolver.js";
 import { MediaSlots } from "../../src/web/media-slots.js";
 import { Drives } from "../../src/web/drives.js";
@@ -26,6 +27,7 @@ describe("MediaWindow", () => {
     let tapeInterface;
     let loop;
     let urlState;
+    let confirm;
 
     beforeEach(() => {
         domFromIndexHtml("navbarSupportedContent", "leds", "drop-zone", "media-panel", "drive-bay-template");
@@ -62,11 +64,13 @@ describe("MediaWindow", () => {
             setAutoboot: vi.fn((on) => urlState.set({ autoboot: on ? true : undefined })),
         });
         media.slots = new MediaSlots({ loader: media, drives, processor, urlState });
+        const model = { isAtom: false };
+        confirm = vi.fn();
         deps = {
             media,
             drives,
             processor,
-            model: { isAtom: false },
+            model,
             loop,
             visualiser: { openOn: vi.fn() },
             autoboot: vi.fn(),
@@ -76,6 +80,7 @@ describe("MediaWindow", () => {
                 createBlank: vi.fn(),
                 createFrom: vi.fn(),
             },
+            machineSwitch: new MachineSwitch({ model, processor, urlState, modals: { confirm } }),
         };
     });
 
@@ -83,6 +88,8 @@ describe("MediaWindow", () => {
     afterEach(() => {
         made?.dispose();
         made = null;
+        window.history.replaceState(null, "", window.location.pathname);
+        sessionStorage.clear();
         return teardownDom();
     });
 
@@ -1029,6 +1036,100 @@ describe("MediaWindow", () => {
             expect(text(document.getElementById("media-count"))).toBe("showing 100 of 120; keep typing to narrow it");
             search("Disc 11");
             expect(text(document.getElementById("media-count"))).toBe("11 of 120");
+        });
+    });
+
+    describe("a disc that needs another machine", () => {
+        const paradroid = {
+            ref: "bitshifters:bs-paradroid.ssd",
+            kind: "disc",
+            title: "Paradroid",
+            publisher: "Bitshifters",
+            detail: "Game · Master · 2026",
+            source: "bitshifters",
+            savesChanges: false,
+            requires: BitshiftersMachines.Master,
+        };
+        const row = () => document.querySelector("#media-list .media-row-main");
+        const shiftClick = (el) => el.dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
+        const navigated = () => window.location.hash === "#switched";
+        const expectSwitch = () => vi.spyOn(urlState, "urlWith").mockReturnValue(`${window.location.href}#switched`);
+
+        it("loads as any other disc when the machine is one it runs on", async () => {
+            deps.model.isMaster = true;
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            const urlWith = expectSwitch();
+            await openWith([paradroid]);
+            row().click();
+            await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
+            expect(urlWith).not.toHaveBeenCalled();
+            expect(confirm).not.toHaveBeenCalled();
+        });
+
+        it("switches machine without asking when Autoboot is ticked, leaving word for the next page", async () => {
+            deps.media.params.autoboot = "";
+            const urlWith = expectSwitch();
+            await openWith([paradroid]);
+            row().click();
+            await vi.waitFor(() => expect(navigated()).toBe(true));
+            expect(urlWith).toHaveBeenCalledWith({
+                disc: undefined,
+                disc1: paradroid.ref,
+                model: "Master",
+                autoboot: true,
+            });
+            expect(sessionStorage.getItem("jsbeeb-pending-switch")).toBe("Switched to a BBC Master 128 for Paradroid");
+            expect(confirm).not.toHaveBeenCalled();
+            expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(deps.processor.reset).not.toHaveBeenCalled();
+        });
+
+        it("treats a shift-click as a boot: the switch carries Autoboot into the URL", async () => {
+            const urlWith = expectSwitch();
+            await openWith([paradroid]);
+            shiftClick(row());
+            await vi.waitFor(() => expect(navigated()).toBe(true));
+            expect(urlWith).toHaveBeenCalledWith(expect.objectContaining({ autoboot: true }));
+            expect(confirm).not.toHaveBeenCalled();
+        });
+
+        it("asks before switching when the disc is only to be loaded, and goes on a yes", async () => {
+            confirm.mockResolvedValue(true);
+            const urlWith = expectSwitch();
+            await openWith([paradroid]);
+            row().click();
+            await vi.waitFor(() => expect(navigated()).toBe(true));
+            expect(confirm).toHaveBeenCalledWith(
+                expect.stringContaining("Paradroid needs a BBC Master 128"),
+                "Switch machine",
+                "Load it here",
+            );
+            expect(urlWith).toHaveBeenCalledWith({ disc: undefined, disc1: paradroid.ref, model: "Master" });
+            expect(sessionStorage.getItem("jsbeeb-pending-switch")).toBeNull();
+            expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+        });
+
+        it("loads the disc into this machine on a no", async () => {
+            confirm.mockResolvedValue(false);
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            const urlWith = expectSwitch();
+            const window = await openWith([paradroid]);
+            row().click();
+            await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
+            expect(urlWith).not.toHaveBeenCalled();
+            expect(navigated()).toBe(false);
+            await vi.waitFor(() => expect(window.isOpen).toBe(false));
+        });
+
+        it("asks even with Autoboot ticked for the other drive, which does not boot, and names that drive", async () => {
+            deps.media.params.autoboot = "";
+            confirm.mockResolvedValue(true);
+            const urlWith = expectSwitch();
+            await openWith([paradroid]);
+            document.querySelector("#media-list .media-target").click();
+            await vi.waitFor(() => expect(navigated()).toBe(true));
+            expect(confirm).toHaveBeenCalled();
+            expect(urlWith).toHaveBeenCalledWith({ disc2: paradroid.ref, model: "Master" });
         });
     });
 

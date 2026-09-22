@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+    BitshiftersMachines,
     browserDiscNames,
     describeBitshiftersEntry,
     describeBrowserDisc,
@@ -13,12 +14,17 @@ import {
     describeSthTape,
     compareForQuery,
     matchesQuery,
+    satisfiesRequirement,
     scoreQuery,
 } from "../../src/web/media-catalogue.js";
 import { Provenance } from "../../src/bbcdiscs.js";
+import { findModel } from "../../src/models.js";
 
 describe("the media catalogue", () => {
-    afterEach(() => window.localStorage.clear());
+    afterEach(() => {
+        window.localStorage.clear();
+        vi.restoreAllMocks();
+    });
 
     describe("STH", () => {
         it("reads the publisher and title out of the path", () => {
@@ -90,7 +96,25 @@ describe("the media catalogue", () => {
                 source: "bitshifters",
                 savesChanges: false,
                 url: "https://bitshifters.github.io/posts/prods/bs-paradroid.html",
+                requires: { model: "Master", coProcessor: false, name: "BBC Master 128" },
             });
+        });
+
+        it("carries the machine an entry needs as the URL spells it, a co-processor and all", () => {
+            const requiredBy = (machine) => describeBitshiftersEntry({ path: "x.ssd", machine }).requires;
+            expect(requiredBy("Master")).toBe(BitshiftersMachines.Master);
+            expect(requiredBy("MasterTurbo")).toEqual({
+                model: "Master",
+                coProcessor: true,
+                name: "BBC Master 128 with a 65C102 co-processor",
+            });
+            expect(requiredBy(undefined)).toBeUndefined();
+        });
+
+        it("requires nothing for a machine the table has no entry for, and says so on the console", () => {
+            const log = vi.spyOn(console, "log").mockImplementation(() => {});
+            expect(describeBitshiftersEntry({ path: "x.ssd", machine: "Electron" }).requires).toBeUndefined();
+            expect(log).toHaveBeenCalledWith(expect.stringContaining("Electron"));
         });
 
         it("strips the markup the manifest carries, and leaves out what an entry does not have", () => {
@@ -109,6 +133,28 @@ describe("the media catalogue", () => {
             expect(describeBitshiftersEntry({ path: "nj-beeb3d.ssd", title: "Beeb 3D", year: 1994 }).detail).toBe(
                 "1994",
             );
+        });
+    });
+
+    describe("what a requirement is satisfied by", () => {
+        const machine = (name, hasTube = false) => ({ model: findModel(name), hasTube });
+        const { Master, MasterTurbo } = BitshiftersMachines;
+
+        it("takes any Master for a Master, whichever filing system it boots", () => {
+            for (const name of ["Master", "MasterADFS", "MasterANFS"])
+                expect(satisfiesRequirement(Master, machine(name))).toBe(true);
+            for (const name of ["B-DFS1.2", "B", "B1770", "B1770A"])
+                expect(satisfiesRequirement(Master, machine(name))).toBe(false);
+        });
+
+        it("needs the co-processor as well for a Master Turbo, and a Master under it", () => {
+            expect(satisfiesRequirement(MasterTurbo, machine("Master", true))).toBe(true);
+            expect(satisfiesRequirement(MasterTurbo, machine("Master"))).toBe(false);
+            expect(satisfiesRequirement(MasterTurbo, machine("B-DFS1.2", true))).toBe(false);
+        });
+
+        it("is not put off a plain Master by a co-processor it does not need", () => {
+            expect(satisfiesRequirement(Master, machine("Master", true))).toBe(true);
         });
     });
 
