@@ -8,6 +8,12 @@ import { fakeUrlState, stubNavigation, teardownDom, toasts } from "./helpers.js"
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
+afterEach(() => {
+    window.history.replaceState(null, "", window.location.pathname);
+    sessionStorage.clear();
+    return teardownDom();
+});
+
 describe("MachineSwitch", () => {
     let deps;
 
@@ -18,12 +24,6 @@ describe("MachineSwitch", () => {
             urlState: stubNavigation(fakeUrlState("?disc1=elite.ssd&autoboot&autotype=RUN&loadBasic=a.bas&patch=@1")),
             modals: { confirm: vi.fn() },
         };
-    });
-
-    afterEach(() => {
-        window.history.replaceState(null, "", window.location.pathname);
-        sessionStorage.clear();
-        return teardownDom();
     });
 
     const make = () => new MachineSwitch(deps);
@@ -85,12 +85,6 @@ describe("MachineSwitch", () => {
 });
 
 describe("reloading as another machine", () => {
-    afterEach(() => {
-        window.history.replaceState(null, "", window.location.pathname);
-        sessionStorage.clear();
-        return teardownDom();
-    });
-
     const pageThatDidThings = () =>
         stubNavigation(
             fakeUrlState(
