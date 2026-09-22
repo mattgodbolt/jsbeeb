@@ -309,28 +309,31 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 
 #### Intel 8271 (`state.fdc` when model is BBC B)
 
-| Field                | Type         | Description                                    |
-| -------------------- | ------------ | ---------------------------------------------- |
-| `regs`               | Uint8Array   | 32 internal registers                          |
-| `status`             | number       | Status register                                |
-| `isResultReady`      | boolean      | Result register has data                       |
-| `mmioData`           | number       | MMIO data register                             |
-| `mmioClocks`         | number       | MMIO clocks register                           |
-| `driveOut`           | number       | Drive output latch                             |
-| `shiftRegister`      | number       | Data shift register                            |
-| `numShifts`          | number       | Shift count                                    |
-| `state`              | number       | State machine state                            |
-| `stateCount`         | number       | State counter                                  |
-| `stateIsIndexPulse`  | boolean      | Index pulse seen in current state              |
-| `crc`                | number       | Running CRC                                    |
-| `onDiscCrc`          | number       | CRC read from disc                             |
-| `paramCallback`      | number       | Parameter acceptance state                     |
-| `indexPulseCallback` | number       | Index pulse callback state                     |
-| `timerState`         | number       | Timer state machine                            |
-| `callContext`        | number       | Call context state                             |
-| `didSeekStep`        | boolean      | Seek step taken flag                           |
-| `timerTaskOffset`    | number\|null | Timer task offset from scheduler epoch         |
-| `drives`             | object[]     | Array of 2 drive states (see Disc drive below) |
+| Field                | Type         | Description                                                     |
+| -------------------- | ------------ | --------------------------------------------------------------- |
+| `regs`               | Uint8Array   | 32 internal registers                                           |
+| `status`             | number       | Status register                                                 |
+| `isResultReady`      | boolean      | Result register has data                                        |
+| `mmioData`           | number       | MMIO data register                                              |
+| `mmioClocks`         | number       | MMIO clocks register                                            |
+| `driveOut`           | number       | Drive output latch                                              |
+| `shiftRegister`      | number       | Data shift register                                             |
+| `numShifts`          | number       | Shift count                                                     |
+| `state`              | number       | State machine state                                             |
+| `stateCount`         | number       | State counter                                                   |
+| `stateIsIndexPulse`  | boolean      | Index pulse seen in current state                               |
+| `crc`                | number       | Running CRC                                                     |
+| `onDiscCrc`          | number       | CRC read from disc                                              |
+| `paramCallback`      | number       | Parameter acceptance state                                      |
+| `indexPulseCallback` | number       | Index pulse callback state                                      |
+| `timerState`         | number       | Timer state machine                                             |
+| `callContext`        | number       | Call context state                                              |
+| `didSeekStep`        | boolean      | Seek step taken flag                                            |
+| `ready`              | boolean      | The Model B's index-derived ready latch for the selected drive  |
+| `readyPulses`        | number       | Index pulses seen in time since selection or the last timeout   |
+| `sinceIndexPulse`    | number\|null | Cycles since the last index pulse, null if none since selection |
+| `timerTaskOffset`    | number\|null | Timer task offset from scheduler epoch                          |
+| `drives`             | object[]     | Array of 2 drive states (see Disc drive below)                  |
 
 `_currentDrive` is derived from `driveOut` select bits on restore.
 
@@ -379,17 +382,18 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 
 ### Disc drive (`state.fdc.drives[n]`)
 
-| Field             | Type         | Description                            |
-| ----------------- | ------------ | -------------------------------------- |
-| `track`           | number       | Physical track position (0-83)         |
-| `isSideUpper`     | boolean      | Selected disc side                     |
-| `headPosition`    | number       | Head position within track             |
-| `pulsePosition`   | number       | Sub-pulse position (0 or 16)           |
-| `in32usMode`      | boolean      | Double density (MFM) mode              |
-| `spinning`        | boolean      | Drive motor spinning                   |
-| `is40Track`       | boolean      | Drive double steps for a 40 track disc |
-| `timerTaskOffset` | number\|null | Timer task offset from scheduler epoch |
-| `disc`            | object\|null | Disc state (null if no disc loaded)    |
+| Field             | Type         | Description                                                       |
+| ----------------- | ------------ | ----------------------------------------------------------------- |
+| `track`           | number       | Physical track position (0-83)                                    |
+| `isSideUpper`     | boolean      | Selected disc side                                                |
+| `headPosition`    | number       | Head position within track                                        |
+| `pulsePosition`   | number       | Sub-pulse position (0 or 16)                                      |
+| `in32usMode`      | boolean      | Double density (MFM) mode                                         |
+| `spinning`        | boolean      | Drive motor spinning                                              |
+| `speed`           | number       | Disc speed as a fraction of 300 rpm, spinning up or coasting down |
+| `is40Track`       | boolean      | Drive double steps for a 40 track disc                            |
+| `timerTaskOffset` | number\|null | Timer task offset from scheduler epoch                            |
+| `disc`            | object\|null | Disc state (null if no disc loaded)                               |
 
 ### Disc (`state.fdc.drives[n].disc`)
 

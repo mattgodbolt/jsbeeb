@@ -202,6 +202,14 @@ const ParamAccept = Object.freeze({
  * @readonly
  * @enum {Number}
  */
+/**
+ * The Model B does not wire the drives' Ready lines to the 8271. Its own logic (ICs 83 to 86)
+ * makes a selected drive ready on the second index pulse after selection and drops it as soon
+ * as 8192 counts of a 31.25 kHz clock pass without one: 262 ms, a disc below about 230 rpm.
+ */
+const ReadyTimeoutTicks = 8192 * 64;
+const ReadyIndexPulses = 2;
+
 const IndexPulse = Object.freeze({
     none: 1,
     timeout: 2,
@@ -295,6 +303,10 @@ export class IntelFdc {
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
         /** @type {BaseDiscDrive} */
         this._currentDrive = null;
+        this._scheduler = scheduler;
+        this._ready = false;
+        this._readyPulses = 0;
+        this._lastIndexEpoch = -Infinity;
 
         this._paramCallback = ParamAccept.none;
         this._indexPulseCallback = IndexPulse.none;
@@ -452,6 +464,7 @@ export class IntelFdc {
         // Looking for pulse going high
         if (!this._stateIsIndexPulse || wasIndexPulse) return;
 
+        this._noteIndexPulse();
         switch (this._indexPulseCallback) {
             case IndexPulse.none:
                 break;
@@ -500,6 +513,16 @@ export class IntelFdc {
             default:
                 throw new Error(`Unexpected index pulse callback ${this._indexPulseCallback}`);
         }
+    }
+
+    _noteIndexPulse() {
+        const epoch = this._scheduler.epoch;
+        if (epoch - this._lastIndexEpoch >= ReadyTimeoutTicks) {
+            this._ready = false;
+            this._readyPulses = 0;
+        }
+        this._lastIndexEpoch = epoch;
+        if (++this._readyPulses >= ReadyIndexPulses) this._ready = true;
     }
 
     _pulsesCallback(pulses, count) {
@@ -1195,6 +1218,11 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
         else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
 
+        if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
+            this._ready = false;
+            this._readyPulses = 0;
+            this._lastIndexEpoch = -Infinity;
+        }
         if (this._currentDrive) {
             if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
             this._currentDrive.selectSide(!!(driveOut & DriveOut.side));
@@ -1459,10 +1487,11 @@ export class IntelFdc {
         if (this._currentDiscIsSpinning) {
             // TRK0
             if (this._trk0) driveIn |= 0x02;
-            // RDY0
-            if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
-            // RDY1
-            if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
+            // RDY0 and RDY1
+            if (this._ready) {
+                if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
+                if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
+            }
             // WR PROT
             if (this._wrProt) driveIn |= 0x08;
             // INDEX
@@ -1675,6 +1704,9 @@ export class IntelFdc {
             timerState: this._timerState,
             callContext: this._callContext,
             didSeekStep: this._didSeekStep,
+            ready: this._ready,
+            readyPulses: this._readyPulses,
+            sinceIndexPulse: Number.isFinite(this._lastIndexEpoch) ? scheduler.epoch - this._lastIndexEpoch : null,
             timerTaskOffset: this._timerTask.scheduled() ? this._timerTask.expireEpoch - scheduler.epoch : null,
             drives: this._drives.map((d) => d.snapshotState()),
         };
@@ -1687,6 +1719,12 @@ export class IntelFdc {
         this._mmioData = state.mmioData;
         this._mmioClocks = state.mmioClocks;
         this._driveOut = state.driveOut;
+        this._ready = state.ready ?? true;
+        this._readyPulses = state.readyPulses ?? ReadyIndexPulses;
+        this._lastIndexEpoch =
+            state.sinceIndexPulse === null || state.sinceIndexPulse === undefined
+                ? -Infinity
+                : this._scheduler.epoch - state.sinceIndexPulse;
         this._shiftRegister = state.shiftRegister;
         this._numShifts = state.numShifts;
         this._state = state.state;
