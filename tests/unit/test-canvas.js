@@ -307,6 +307,27 @@ describe("phosphor persistence", () => {
         ]);
     });
 
+    it("samples the phosphor linearly, so an edge rounding error blends rather than skips a row", () => {
+        const gl = recordingGl();
+        const filters = new Map();
+        gl.bindTexture = (target, texture) => (gl.bound = texture);
+        gl.texParameteri = (target, name, value) => filters.set(`${gl.bound?.id}:${name}`, value);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        expect(filters.get(`${canvas.phosphorTexture.id}:${gl.TEXTURE_MAG_FILTER}`)).toBe(gl.LINEAR);
+        expect(filters.get(`${canvas.phosphorTexture.id}:${gl.TEXTURE_MIN_FILTER}`)).toBe(gl.LINEAR);
+    });
+
+    it("never touches the phosphor framebuffer with the afterglow off", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["bindFramebuffer", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(calls).toEqual([["drawArrays", gl.TRIANGLE_STRIP, 0, 4]]);
+    });
+
     it("starts the phosphor black again when afterglow is turned back on, not from what it last held", () => {
         const gl = recordingGl();
         const sizes = [];

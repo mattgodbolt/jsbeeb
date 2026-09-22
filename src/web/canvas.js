@@ -110,7 +110,7 @@ export class Canvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
-        // With none, frames go straight to the screen and the phosphor keeps a stale picture
+        // As GlCanvas.setPersistence: what the phosphor held with none on is stale.
         if (this.persistence <= 0 && persistence > 0) this.phosphor.width = 0;
         this.persistence = persistence;
     }
@@ -201,7 +201,7 @@ export class GlCanvas {
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
         // Copied at one to one, where linear sampling reads each texel exactly and turns a
-        // rounding error at an edge into a blend rather than a skipped row
+        // rounding error at an edge into a blend rather than a skipped row.
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
         this.phosphorFramebuffer = checkedGl.createFramebuffer();
@@ -369,7 +369,7 @@ export class GlCanvas {
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
         persistence = this.canPersist ? persistence : 0;
-        // With none, frames go straight to the screen and the phosphor keeps a stale picture
+        // With none, frames go straight to the screen and the phosphor keeps a stale picture.
         if (this.persistence <= 0 && persistence > 0) this.phosphorWidth = this.phosphorHeight = 0;
         this.persistence = persistence;
     }
