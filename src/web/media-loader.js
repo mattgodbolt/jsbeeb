@@ -114,10 +114,7 @@ export class MediaLoader extends EventTarget {
         this.listers.set(source, lister);
     }
 
-    /**
-     * Register how a source describes one of its entries by path, for a source whose
-     * descriptors say more than the path does (a machine requirement, say); most need not.
-     */
+    /** How a source describes one entry by path; only a source whose descriptors carry a requirement needs one. */
     addDescriber(source, describer) {
         this.describers.set(source, describer);
     }

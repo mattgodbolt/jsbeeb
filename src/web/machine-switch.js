@@ -4,7 +4,6 @@ import { noteEvent } from "./analytics.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
-// What the page did at startup is not done again on the page switched to; the boot is its own.
 const NoStartupActions = {
     autoboot: undefined,
     autochain: undefined,
@@ -16,8 +15,8 @@ const NoStartupActions = {
 };
 
 /**
- * Moving to the machine a disc needs, which is a page reload: the model and its fitting go in
- * the URL with the disc, and word of the change is stashed for the page that comes up.
+ * Switches to the machine a disc needs by reloading with the model, its co-processor and the
+ * disc in the URL. The toast for the new page is stashed in sessionStorage until it arrives.
  */
 export class MachineSwitch {
     constructor({ model, processor, urlState, modals }) {
@@ -27,17 +26,16 @@ export class MachineSwitch {
         this.modals = modals;
     }
 
-    /** Whether the running machine is one the disc runs on, which a disc that names none always is. */
+    /** Whether the running machine meets the disc's requirement; a disc without one is always met. */
     satisfies(d) {
         return !d.requires || satisfiesRequirement(d.requires, { model: this.model, hasTube: this.processor.hasTube });
     }
 
     /**
-     * Reloads as the machine `d` needs, with `d` in `slot`: without asking when the disc is to
-     * boot, after a yes otherwise, since the reload throws away whatever the machine was doing.
-     * @param {object} options `boot`: Autoboot goes in the URL; `replace`: the page switched from
-     *   was never one to come back to, so it leaves no history
-     * @returns {Promise<boolean>} true once the page is on its way; false to load the disc here after all
+     * Reloads as the machine `d` needs with `d` in `slot`: unasked when the disc is to boot,
+     * after a confirm otherwise, since the reload discards the running machine.
+     * @param {object} options `boot` puts Autoboot in the URL; `replace` leaves no history entry
+     * @returns {Promise<boolean>} true once the reload is under way; false to load the disc here
      */
     async switchFor(d, slot, { boot, replace = false }) {
         const { requires } = d;
@@ -63,7 +61,7 @@ export class MachineSwitch {
         return true;
     }
 
-    /** Says which machine the last reload switched to, once, on the page it landed on. */
+    /** Toasts the switch the last reload made, once. */
     announce() {
         const notice = sessionStorage.getItem(PendingSwitchKey);
         if (!notice) return;
