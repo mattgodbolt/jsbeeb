@@ -89,31 +89,40 @@ export class DdNoise extends SamplePlayer {
                 duration: RunClickSeconds,
                 fadeSeconds: GrainFadeSeconds,
             });
-            if (source) grains.push({ source, at });
+            grains.push({ source, at });
         }
         const settle = this.startSound(this.sounds.step, {
             when: now + steps * stepSeconds,
             offset: SettleOffsetSeconds,
         });
-        this.run = { grains, settle };
+        this.run = { grains, settle, start: now, stepSeconds };
     }
 
-    /** The head has stopped, early if the controller found track 0 or the surface's end first. */
-    seekEnd() {
-        if (this.cancelRun()) this.startSound(this.sounds.step, { offset: SettleOffsetSeconds });
+    /**
+     * The head has stopped after `steps` steps, fewer than announced if the controller found
+     * track 0 or the surface's end first: the clicks past that are dropped and the ring
+     * brought forward to where the last of them was to sound.
+     */
+    seekEnd(steps) {
+        const run = this.run;
+        this.run = null;
+        if (!run || steps >= run.grains.length) return;
+        for (const grain of run.grains.slice(steps)) grain.source?.stop();
+        run.settle?.stop();
+        this.startSound(this.sounds.step, {
+            when: run.start + steps * run.stepSeconds,
+            offset: SettleOffsetSeconds,
+        });
     }
 
-    /** Stops the grains of a run that have not yet sounded; true if there were any. */
+    /** Stops the grains of a run that have not yet sounded. */
     cancelRun() {
-        if (!this.run) return false;
+        if (!this.run) return;
         const { grains, settle } = this.run;
         this.run = null;
         const now = this.context.currentTime;
-        const unstarted = grains.filter((grain) => grain.at > now);
-        if (unstarted.length === 0) return false;
-        for (const grain of unstarted) grain.source.stop();
+        for (const grain of grains) if (grain.at > now) grain.source?.stop();
         settle?.stop();
-        return true;
     }
 }
 

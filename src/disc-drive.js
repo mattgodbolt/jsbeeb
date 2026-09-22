@@ -38,7 +38,7 @@ export function attachDriveNoise(drives, ddNoise) {
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
         drive.addEventListener("seekStart", (evt) => ddNoise.seekStart(evt.steps, evt.stepMs));
-        drive.addEventListener("seekEnd", () => ddNoise.seekEnd());
+        drive.addEventListener("seekEnd", (evt) => ddNoise.seekEnd(evt.steps));
     }
 }
 
@@ -48,6 +48,14 @@ class SeekEvent extends Event {
         super("seekStart");
         this.steps = steps;
         this.stepMs = stepMs;
+    }
+}
+
+/** The head has stopped after `steps` of the steps it was about to take. */
+class SeekEndEvent extends Event {
+    constructor(steps) {
+        super("seekEnd");
+        this.steps = steps;
     }
 }
 
@@ -228,7 +236,7 @@ export class DiscDrive extends BaseDiscDrive {
 
         this._timer = this._scheduler.newTask(this._onTimer.bind(this));
         this._spinning = false;
-        this._seekAnnounced = false;
+        this._seekSteps = null;
         // Speed as a fraction of 300 rpm when the motor last started or stopped, and when.
         this._speedThen = 0;
         this._speedEpoch = 0;
@@ -429,7 +437,9 @@ export class DiscDrive extends BaseDiscDrive {
      * @param {Number} delta track step delta, either 1 or -1
      */
     seekOneTrack(delta) {
+        const from = this._track;
         this._selectTrack(this._track + delta * this._tracksPerStep);
+        if (this._seekSteps !== null && this._track !== from) ++this._seekSteps;
     }
 
     /**
@@ -451,15 +461,16 @@ export class DiscDrive extends BaseDiscDrive {
         const target = Math.min(lastTrack, Math.max(0, this._track + delta * this._tracksPerStep));
         const steps = Math.sign(delta) * Math.ceil(Math.abs(target - this._track) / this._tracksPerStep);
         if (!steps) return;
-        this._seekAnnounced = true;
+        this._seekSteps = 0;
         this.dispatchEvent(new SeekEvent(steps, stepMs));
     }
 
     /** The controller has finished stepping, whether or not it got as far as it said. */
     notifySeekEnd() {
-        if (!this._seekAnnounced) return;
-        this._seekAnnounced = false;
-        this.dispatchEvent(new Event("seekEnd"));
+        if (this._seekSteps === null) return;
+        const steps = this._seekSteps;
+        this._seekSteps = null;
+        this.dispatchEvent(new SeekEndEvent(steps));
     }
 
     /**

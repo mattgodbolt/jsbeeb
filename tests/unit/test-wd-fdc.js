@@ -274,7 +274,7 @@ describe("WD1770 FDC tests", () => {
         const seekNoises = (drive) => {
             const events = [];
             drive.addEventListener("seekStart", (event) => events.push([event.steps, event.stepMs]));
-            drive.addEventListener("seekEnd", () => events.push("end"));
+            drive.addEventListener("seekEnd", (event) => events.push(`end after ${event.steps}`));
             return events;
         };
         const StepRate12ms = 0x01;
@@ -287,7 +287,7 @@ describe("WD1770 FDC tests", () => {
             fdc.write(TrackRegister, 5);
             fdc.write(DataRegister, 35);
             runCommand(fdc, scheduler, SeekCommand | StepRate12ms);
-            expect(events).toEqual([[30, 12], "end"]);
+            expect(events).toEqual([[30, 12], "end after 30"]);
         });
 
         it("is nothing for a seek outwards with the head already at track 0", () => {
@@ -306,7 +306,7 @@ describe("WD1770 FDC tests", () => {
             const events = seekNoises(drives[0]);
             fdc.write(TrackRegister, 3);
             runCommand(fdc, scheduler, RestoreCommand);
-            expect(events).toEqual([[-20, 6], "end"]);
+            expect(events).toEqual([[-20, 6], "end after 20"]);
             expect(drives[0].track).toBe(0);
         });
 
@@ -314,7 +314,7 @@ describe("WD1770 FDC tests", () => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
             const events = seekNoises(drives[0]);
             runCommand(fdc, scheduler, StepInCommand);
-            expect(events).toEqual([[1, 6], "end"]);
+            expect(events).toEqual([[1, 6], "end after 1"]);
             expect(drives[0].track).toBe(1);
         });
 
@@ -323,7 +323,7 @@ describe("WD1770 FDC tests", () => {
             drives[0].seekOneTrack(1);
             const events = seekNoises(drives[0]);
             runCommand(fdc, scheduler, StepOutCommand);
-            expect(events).toEqual([[-1, 6], "end"]);
+            expect(events).toEqual([[-1, 6], "end after 1"]);
             expect(drives[0].track).toBe(0);
         });
     });

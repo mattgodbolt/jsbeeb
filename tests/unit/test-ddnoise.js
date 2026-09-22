@@ -96,25 +96,24 @@ describe("DdNoise seeks", () => {
         expect(grain.offset + RunClickSeconds).toBeGreaterThan(Sounds.seek3.duration - 2 * RunClickSeconds);
     });
 
-    it("stops the clicks still to come when the head stops early, and lets it ring from there", () => {
+    it("drops the clicks past the step the head stopped at, and lets it ring from there", () => {
+        context.currentTime = 5;
         ddNoise.seekStart(30, 24);
         const made = ddNoise.playing.slice();
-        context.currentTime = 10 * 0.024 + 0.001;
-        ddNoise.seekEnd();
+        ddNoise.seekEnd(11);
         made.slice(0, 11).forEach((source) => expect(source.stop).not.toHaveBeenCalled());
         made.slice(11, 30).forEach((source) => expect(source.stop).toHaveBeenCalled());
         expect(made[30].stop).toHaveBeenCalled();
         const settle = starts(ddNoise).at(-1);
         expect(settle.sound).toBe(Sounds.step);
-        expect(settle.when).toBe(0);
+        expect(settle.when).toBeCloseTo(5 + 11 * 0.024, 6);
         expect(settle.offset).toBe(0.024);
     });
 
     it("leaves a run alone when the head stops where it was told to", () => {
         ddNoise.seekStart(5, 24);
         const made = ddNoise.playing.slice();
-        context.currentTime = 5 * 0.024 + 0.01;
-        ddNoise.seekEnd();
+        ddNoise.seekEnd(5);
         made.forEach((source) => expect(source.stop).not.toHaveBeenCalled());
         expect(ddNoise.playing).toHaveLength(made.length);
     });
@@ -132,6 +131,6 @@ describe("DdNoise seeks", () => {
         context.state = "suspended";
         ddNoise.seekStart(30, 24);
         expect(ddNoise.playing).toEqual([]);
-        expect(() => ddNoise.seekEnd()).not.toThrow();
+        expect(() => ddNoise.seekEnd(3)).not.toThrow();
     });
 });

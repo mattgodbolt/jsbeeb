@@ -237,18 +237,31 @@ describe("40 track discs", () => {
 
     it("announces the end of a seek it announced the start of, and no other", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), 2);
-        let ends = 0;
-        drive.addEventListener("seekEnd", () => ++ends);
+        const ends = [];
+        drive.addEventListener("seekEnd", (event) => ends.push(event.steps));
 
         drive.notifySeekEnd();
-        expect(ends).toBe(0);
+        expect(ends).toEqual([]);
         drive.notifySeekAmount(3, 24);
         drive.notifySeekEnd();
         drive.notifySeekEnd();
-        expect(ends).toBe(1);
+        expect(ends).toEqual([0]);
         drive.notifySeekAmount(0, 24);
         drive.notifySeekEnd();
-        expect(ends).toBe(1);
+        expect(ends).toEqual([0]);
+    });
+
+    it("ends with the steps the head took, not the ones it was stopped from taking", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), 2);
+        const ends = [];
+        drive.addEventListener("seekEnd", (event) => ends.push(event.steps));
+
+        drive.notifySeekAmount(-5, 24);
+        for (let step = 0; step < 5; ++step) drive.seekOneTrack(-1);
+        drive.notifySeekEnd();
+
+        expect(ends).toEqual([2]);
+        expect(drive.track).toBe(0);
     });
 
     it("counts from where the head is, between the pitches of a switch made mid-surface", () => {
@@ -351,7 +364,7 @@ describe("drive noise", () => {
             spinUp: () => calls.push("spinUp"),
             spinDown: () => calls.push("spinDown"),
             seekStart: (tracks, stepMs) => calls.push(`seek ${tracks} at ${stepMs}`),
-            seekEnd: () => calls.push("seek end"),
+            seekEnd: (steps) => calls.push(`seek end after ${steps}`),
         };
         const scheduler = new Scheduler();
         const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
@@ -382,10 +395,11 @@ describe("drive noise", () => {
         const { drives, calls } = noisyDrives();
 
         drives[0].notifySeekAmount(5, 24);
+        drives[0].seekOneTrack(1);
         drives[0].notifySeekEnd();
         drives[1].notifySeekAmount(3, 6);
         drives[1].notifySeekEnd();
 
-        expect(calls).toEqual(["seek 5 at 24", "seek end", "seek 3 at 6", "seek end"]);
+        expect(calls).toEqual(["seek 5 at 24", "seek end after 1", "seek 3 at 6", "seek end after 0"]);
     });
 });
