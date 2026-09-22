@@ -8,7 +8,8 @@ description: The review loop that runs before `gh pr create` and before every pu
 Run this before `gh pr create` and before every `git push` to a branch with an open PR. Never skip
 it because the change is small; the small ones are where the whitespace goes missing. A push to a
 branch with no PR yet, for someone to pull and try, needs no review; the review comes before the
-PR. Copilot and the maintainer are the second review, not the first.
+PR. What the reviewer checks, how it reports and what it needs to be told are its own
+(`.claude/agents/local-reviewer.md`); this is the loop around it.
 
 ## 1. Establish the diff
 
@@ -35,13 +36,9 @@ this push. The reviewer checks them against the diff, so they come first, not af
 
 Use the Agent tool with `subagent_type: local-reviewer`, in the foreground, and wait for the report.
 Do not run it in the background; a backgrounded report can arrive after the session has moved on.
-The brief carries:
-
-- the base ref
-- the PR title and body from step 2
-- the round number
-- every finding from earlier rounds that was taken, with the commit that took it
-- every finding from earlier rounds that was declined, with the reason
+The brief carries what the reviewer's Input section asks for: the base, the PR text from step 2,
+the round number, and the findings earlier rounds took (with their commits) or declined (with
+their reasons).
 
 ## 4. Act on the report
 
@@ -54,9 +51,8 @@ For each blocking or should-fix finding:
   else could evaluate. "Out of scope" has to say where the work goes instead (an issue, a follow-up
   PR).
 
-A note is a judgement call the reviewer has left to the session: decide it, and record the
-decision in the PR body where it bears on what the reader should know (a trade-off taken, a thing
-left undone). A note needs no fix and no reason to be declined.
+A note is left to the session: decide it, and record the decision in the PR body where it bears on
+what the reader should know. It needs no fix and no reason.
 
 ## 5. Repeat
 
