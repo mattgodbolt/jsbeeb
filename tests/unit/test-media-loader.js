@@ -238,17 +238,21 @@ describe("MediaLoader", () => {
             ]);
         });
 
-        it("describes one reference through its own source, and nothing for one it cannot", async () => {
+        it("describes one reference through its source's describer, and nothing without one or when it fails", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             const media = make();
-            media.addLister("sth", async () => [{ ref: "sth:Games/Elite.zip", title: "Elite" }]);
-            media.addLister("hfe", async () => {
+            const elite = { ref: "sth:Games/Elite.zip", title: "Elite" };
+            media.addDescriber("sth", async (path) => (path === "Games/Elite.zip" ? elite : undefined));
+            media.addDescriber("hfe", async () => {
                 throw new Error("offline");
             });
+            const listed = vi.fn();
+            media.addLister("builtin", listed);
             for (const ref of ["sth:Games/Elite.zip", "|Games/Elite.zip"])
-                await expect(media.describe(ref)).resolves.toEqual({ ref: "sth:Games/Elite.zip", title: "Elite" });
-            for (const ref of ["sth:Games/Exile.zip", "hfe:a.hfe", "gd:1/a.ssd"])
+                await expect(media.describe(ref)).resolves.toBe(elite);
+            for (const ref of ["sth:Games/Exile.zip", "hfe:a.hfe", "elite.ssd"])
                 await expect(media.describe(ref)).resolves.toBeNull();
+            expect(listed).not.toHaveBeenCalled();
         });
 
         it("keeps listing when one source fails, and says which", async () => {

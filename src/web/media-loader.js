@@ -69,6 +69,7 @@ export class MediaLoader extends EventTarget {
         this.loadSnapshot = loadSnapshot;
         this.slots = new MediaSlots({ loader: this, drives, processor, urlState });
         this.listers = new Map();
+        this.describers = new Map();
         /** Files opened this session, by name: the only media the URL cannot name. */
         this.sessionFiles = new Map();
         this.resolver.addSource("session", (name) => {
@@ -114,17 +115,24 @@ export class MediaLoader extends EventTarget {
     }
 
     /**
-     * The descriptor a reference's own source lists for it, whichever way the reference spells
-     * the schema, or null: for a schema no lister owns, a reference the source does not list, or
-     * a source that cannot be listed.
+     * Register how a source describes one of its entries by path, for a source whose
+     * descriptors say more than the path does (a machine requirement, say); most need not.
+     */
+    addDescriber(source, describer) {
+        this.describers.set(source, describer);
+    }
+
+    /**
+     * The descriptor a reference's own source gives for it, whichever way the reference spells
+     * the schema, or null: for a source with no describer, a reference it does not know, or a
+     * source that cannot answer.
      */
     async describe(ref) {
         const { schema, image } = splitImage(ref);
-        const lister = this.listers.get(Schemas[schema]?.source);
-        if (!lister) return null;
+        const describer = this.describers.get(Schemas[schema]?.source);
+        if (!describer) return null;
         try {
-            const descriptors = await lister();
-            return descriptors.find((d) => splitImage(d.ref).image === image) ?? null;
+            return (await describer(image)) ?? null;
         } catch (error) {
             console.error(`Describing ${ref} failed:`, error);
             return null;

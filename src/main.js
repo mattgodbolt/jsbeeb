@@ -343,8 +343,8 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
 if (parsedQuery.loadBasic) needsAutoboot = "";
 
-// The boot disc's catalogue is fetched while the machine starts, so a link that boots a disc
-// without naming a model can be switched to the machine the disc needs before the boot.
+// The boot disc is described while the machine starts, so a link that boots a disc without
+// naming a model can be switched to the machine the disc needs before the boot.
 const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? media.describe(discImage) : null;
 /** @returns {Promise<boolean>} whether the page is on its way to the machine its boot disc needs */
 const switchForBootDisc = async (d) =>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
     MachineRequirements,
@@ -21,10 +21,7 @@ import { Provenance } from "../../src/bbcdiscs.js";
 import { findModel } from "../../src/models.js";
 
 describe("the media catalogue", () => {
-    afterEach(() => {
-        window.localStorage.clear();
-        vi.restoreAllMocks();
-    });
+    afterEach(() => window.localStorage.clear());
 
     describe("STH", () => {
         it("reads the publisher and title out of the path", () => {

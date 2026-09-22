@@ -23,8 +23,8 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
-- `requires`, when present, is the machine the entry runs on, which any source whose entries
-  name one may set: `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine
+- `requires`, when present, is the machine a disc runs on, which any source whose entries name
+  one may set (tapes are not checked): `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine
   name to `{ model, coProcessor, name }` (`model` as the URL spells it, a synonym in
   `src/models.js`; `coProcessor` for a Tube; `name` for the dialog and the toast) through the
   table `MachineRequirements`, and a name outside the table gives no requirement. The names are
@@ -33,8 +33,10 @@ Every listed entry is one descriptor, whichever source it came from:
   requirement only when it is that model with that fitting (`satisfiesRequirement`); otherwise
   `MachineSwitch` in `src/web/machine-switch.js` reloads the page as exactly that machine, without
   asking when the disc is to boot and after asking otherwise, looking at nothing but `requires`.
-  `MediaLoader.describe(ref)` finds the descriptor a reference's own source lists for it, which is
-  how a link that boots a disc gets its requirement at startup.
+  `MediaLoader.describe(ref)` asks the source's describer, registered with
+  `media.addDescriber(source, (path) => descriptor)`, for one entry, which is how a link that
+  boots a disc gets its requirement at startup without the whole catalogue; a source whose
+  descriptors say no more than the path does registers none, and its links boot as before.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,

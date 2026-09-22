@@ -4,7 +4,7 @@ import { BitshiftersSource } from "../../src/web/bitshifters-source.js";
 
 describe("BitshiftersSource", () => {
     const make = () => {
-        const media = { addSource: vi.fn(), addLister: vi.fn() };
+        const media = { addSource: vi.fn(), addLister: vi.fn(), addDescriber: vi.fn() };
         const source = new BitshiftersSource({ media });
         return { media, source };
     };
@@ -42,5 +42,11 @@ describe("BitshiftersSource", () => {
                 url: "https://bitshifters.github.io/posts/prods/bs-paradroid.html",
             }),
         ]);
+        const [, describer] = media.addDescriber.mock.calls[0];
+        expect(await describer("bs-paradroid.ssd")).toMatchObject({
+            title: "Paradroid",
+            requires: { model: "Master" },
+        });
+        expect(await describer("nope.ssd")).toBeUndefined();
     });
 });
