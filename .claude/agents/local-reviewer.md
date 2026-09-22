@@ -47,10 +47,12 @@ skipped question is not.
 6. **When, not only what.** If the change alters when something happens, which test pins the
    timing: the order, the count per event, and what happens when the event is late, coalesced or
    never arrives?
-7. **Tests pin the claims.** For every claim in the PR body, name the test. Does it assert the
-   value or a range? Does a fake hide an API the real thing rejects (an extension's method, a GL
-   enum)? Is the negative case there (nothing happens when nothing should)? Would it fail without
-   the fix?
+7. **Tests pin the claims.** For every claim in the PR body about what the code does or what the
+   user sees, name the test. Does it assert the value or a range? Does a fake hide an API the real
+   thing rejects (an extension's method, a GL enum)? Is the negative case there (nothing happens
+   when nothing should)? Would it fail without the fix? A claim about history, process or a
+   measurement is pinned by its evidence instead (the source it cites, the capture, the numbers),
+   and a claim with neither is a finding.
 8. **Numbers.** For each numeric constant: its unit, the clock it assumes (2 MHz cycles, 50 Hz
    fields, the Atom's 60 Hz and 1 MHz, milliseconds), how it was derived, and whether it is a
    named PascalCase module constant rather than a literal.
