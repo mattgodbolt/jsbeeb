@@ -197,12 +197,6 @@ const ParamAccept = Object.freeze({
 });
 
 /**
- * Index pulse state machine.
- *
- * @readonly
- * @enum {Number}
- */
-/**
  * The Model B does not wire the drives' Ready lines to the 8271. Its own logic (ICs 83 to 86)
  * makes a selected drive ready on the second index pulse after selection and drops it as soon
  * as 8192 counts of a 31.25 kHz clock pass without one: 262 ms, a disc below about 230 rpm.
@@ -210,6 +204,12 @@ const ParamAccept = Object.freeze({
 const ReadyTimeoutTicks = 8192 * 64;
 const ReadyIndexPulses = 2;
 
+/**
+ * Index pulse state machine.
+ *
+ * @readonly
+ * @enum {Number}
+ */
 const IndexPulse = Object.freeze({
     none: 1,
     timeout: 2,
