@@ -150,6 +150,28 @@ describe("GlCanvas", () => {
         expect(canvas.fb32).toBe(fb32);
     });
 
+    it("hands the filter the plain context, checking its setup once", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        expect(canvas.filter.gl).toBe(gl);
+    });
+
+    it("refuses a filter whose setup raised a GL error, and frees what it made", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        const before = new Set(gl.live);
+        const invalidOperation = 0x0502;
+        gl.texImage2D = () => {
+            gl.getError = () => {
+                gl.getError = () => 0;
+                return invalidOperation;
+            };
+        };
+        expect(() => canvas.setFilter(XbrFilter)).toThrow(/failed to set up/);
+        expect(canvas.filterClass).toBe(PassthroughFilter);
+        expect(gl.live).toEqual(before);
+    });
+
     it("goes on drawing with the filter it has when a new one will not build", () => {
         const gl = recordingGl();
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);

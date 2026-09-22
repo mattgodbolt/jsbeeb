@@ -268,8 +268,18 @@ export class GlCanvas {
      * will not build leaves the canvas drawing as it was.
      */
     setFilter(filterClass) {
-        const gl = this.checkedGl;
+        // The filter draws through the plain context every frame, so its setup
+        // is checked once here rather than call by call.
+        const gl = this.gl;
+        while (gl.getError() !== gl.NO_ERROR);
         const filter = new filterClass(gl);
+        const error = gl.getError();
+        if (error !== gl.NO_ERROR) {
+            filter.dispose();
+            throw new Error(
+                `${filterClass.getDisplayConfig().name} failed to set up: ${webglDebug.glEnumToString(error)}`,
+            );
+        }
         this.filter?.dispose();
         this.filter = filter;
 
