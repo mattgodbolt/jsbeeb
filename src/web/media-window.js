@@ -64,7 +64,7 @@ function webPage(url) {
 }
 
 export class MediaWindow {
-    constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource }) {
+    constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource, machineSwitch }) {
         this.media = media;
         this.slots = media.slots;
         this.drives = drives;
@@ -73,6 +73,7 @@ export class MediaWindow {
         this.visualiser = visualiser;
         this.autoboot = autoboot;
         this.driveSource = driveSource;
+        this.machineSwitch = machineSwitch;
 
         this.panel = document.getElementById("media-panel");
         this.floating = new FloatingPanel({
@@ -744,9 +745,13 @@ export class MediaWindow {
         this.unfold(driveIndex);
         // Only drive 0 boots, so only a boot into drive 0 means anything for the URL.
         boot = boot && driveIndex === 0;
-        if ((await this.slots.load(this.slots.drive(driveIndex), d)) !== "loaded") return;
+        const slot = this.slots.drive(driveIndex);
+        const bootsOnLoad = () => boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
+        if (!this.machineSwitch.satisfies(d) && (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() })))
+            return;
+        if ((await this.slots.load(slot, d)) !== "loaded") return;
         // The tick is read now, not before the wait, in case it was changed meanwhile.
-        if (boot || (driveIndex === 0 && this.media.params.autoboot !== undefined)) {
+        if (bootsOnLoad()) {
             this.processor.reset(true);
             this.autoboot(d.title);
         }

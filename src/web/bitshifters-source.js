@@ -7,5 +7,9 @@ export class BitshiftersSource {
         this.archive = new BitshiftersArchive();
         media.addSource("bitshifters", (path) => this.archive.fetch(path));
         media.addLister("bitshifters", async () => (await this.archive.catalogue()).map(describeBitshiftersEntry));
+        media.addDescriber("bitshifters", async (path) => {
+            const entry = (await this.archive.catalogue()).find((file) => file.path === path);
+            return entry && describeBitshiftersEntry(entry);
+        });
     }
 }

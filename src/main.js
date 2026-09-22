@@ -38,6 +38,7 @@ import { Printer } from "./printer.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
+import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
@@ -243,6 +244,7 @@ new SthSource({ media });
 new HfeSource({ media });
 new BitshiftersSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
+const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -289,6 +291,7 @@ const mediaWindow = new MediaWindow({
     visualiser: discVisualiser,
     autoboot: (image) => autoBoot.boot(image),
     driveSource: googleDriveSource,
+    machineSwitch,
 });
 
 const layout = new Layout({
@@ -339,6 +342,15 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
 if (parsedQuery.loadBasic) needsAutoboot = "";
+
+// The boot disc is described while the machine starts, so a link that boots a disc without
+// naming a model can be switched to the machine the disc needs before the boot.
+const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? media.describe(discImage) : null;
+/** @returns {Promise<boolean>} whether the page is on its way to the machine its boot disc needs */
+const switchForBootDisc = async (d) =>
+    !!d &&
+    !machineSwitch.satisfies(d) &&
+    machineSwitch.switchFor(d, media.slots.drive(0), { boot: true, replace: true });
 const startPromise = machine.start({
     media,
     autoBoot,
@@ -354,7 +366,9 @@ const startPromise = machine.start({
 
 (async () => {
     try {
+        machineSwitch.announce();
         await startPromise;
+        if (await switchForBootDisc(await bootDisc)) return;
 
         switch (needsAutoboot) {
             case "boot":

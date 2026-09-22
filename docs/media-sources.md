@@ -10,7 +10,7 @@ session and the MCP server all go through the same two.
 Every listed entry is one descriptor, whichever source it came from:
 
 ```js
-{ ref, kind, title, publisher, detail, source, savesChanges, url? }
+{ ref, kind, title, publisher, detail, source, savesChanges, url?, requires? }
 ```
 
 - `ref` is what `loadDiscImage` or `loadTapeImage` takes and what goes in the URL, schema
@@ -23,6 +23,11 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
+- `requires`, when present, is the machine a disc needs, as `{ model, coProcessor, name }`:
+  `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `name` what the
+  user is told. `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine name
+  to one through the table `MachineRequirements`, and a name outside the table gives no
+  requirement.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,
@@ -60,6 +65,10 @@ The disc itself is at `https://bitshifters.github.io/content/<path>`. `authors` 
 stripped. Both the manifest and the discs are served with `Access-Control-Allow-Origin: *`,
 which any remote source needs, since the browser fetches them cross-origin.
 
+`machine` is the machine the disc needs: `Master` is the Master 128 with DFS and no Tube,
+`MasterTurbo` the same with the 65C102 co-processor. Any other field we come to read, or need
+the manifest to gain, is documented here in the same change that starts reading it.
+
 ## Adding a source
 
 1. An archive class in `src/`, headless and free of DOM: it fetches and caches the catalogue and
@@ -70,7 +79,9 @@ which any remote source needs, since the browser fetches them cross-origin.
 3. In `src/media-resolver.js`: the schema in `Schemas`, and a `case` in `resolve` if an existing
    route does not fit.
 4. A source class in `src/web/` that constructs the archive and registers both halves:
-   `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`.
+   `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`. A source whose
+   entries can carry `requires` also registers `media.addDescriber(source, (path) => descriptor)`,
+   so a link that boots one of its discs can find the requirement without listing the catalogue.
 5. Wiring: construct the source in `src/main.js` beside the others, and register the fetcher in
    `src/machine-session.js` so the headless session and the MCP server can load its references.
 6. The README's list of `disc=` forms, and a mention in the media window paragraph.

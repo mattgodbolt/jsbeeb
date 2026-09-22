@@ -4,7 +4,7 @@ import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
-import { MediaResolver, openIfZip, routeOf, splitImage } from "../media-resolver.js";
+import { MediaResolver, Schemas, openIfZip, routeOf, splitImage } from "../media-resolver.js";
 import { MediaSlots } from "./media-slots.js";
 import { stringToUint8Array } from "../binary.js";
 import { noteEvent } from "./analytics.js";
@@ -69,6 +69,7 @@ export class MediaLoader extends EventTarget {
         this.loadSnapshot = loadSnapshot;
         this.slots = new MediaSlots({ loader: this, drives, processor, urlState });
         this.listers = new Map();
+        this.describers = new Map();
         /** Files opened this session, by name: the only media the URL cannot name. */
         this.sessionFiles = new Map();
         this.resolver.addSource("session", (name) => {
@@ -111,6 +112,28 @@ export class MediaLoader extends EventTarget {
      */
     addLister(source, lister) {
         this.listers.set(source, lister);
+    }
+
+    /** How a source describes one entry by path; only a source whose descriptors carry a requirement needs one. */
+    addDescriber(source, describer) {
+        this.describers.set(source, describer);
+    }
+
+    /**
+     * The descriptor a reference's own source gives for it, whichever way the reference spells
+     * the schema, or null: for a source with no describer, a reference it does not know, or a
+     * source that cannot answer.
+     */
+    async describe(ref) {
+        const { schema, image } = splitImage(ref);
+        const describer = this.describers.get(Schemas[schema]?.source);
+        if (!describer) return null;
+        try {
+            return (await describer(image)) ?? null;
+        } catch (error) {
+            console.error(`Describing ${ref} failed:`, error);
+            return null;
+        }
     }
 
     /**

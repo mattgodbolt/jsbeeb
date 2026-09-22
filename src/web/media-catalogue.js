@@ -1,14 +1,16 @@
 import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
 import { Schemas, splitImage } from "../media-resolver.js";
+import { findModel } from "../models.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
  * came from:
  *
- *   { ref, kind, title, publisher, detail, source, savesChanges, url? }
+ *   { ref, kind, title, publisher, detail, source, savesChanges, url?, requires? }
  *
  * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL; `url` is a
- * page about the entry, when its source has one.
+ * page about the entry, when its source has one; `requires` is the machine the entry runs on,
+ * from `machineRequirement`, when its source says.
  */
 
 // `name` heads a chip; `phrase` sits mid-sentence in a slot's status line.
@@ -98,6 +100,25 @@ export function describeHfeEntry(file) {
     };
 }
 
+/** The machines a manifest may name as what a disc needs: model as the URL spells it, co-processor, user-facing name. */
+export const MachineRequirements = Object.freeze({
+    Master: Object.freeze({ model: "Master", coProcessor: false, name: "BBC Master 128" }),
+    MasterTurbo: Object.freeze({
+        model: "Master",
+        coProcessor: true,
+        name: "BBC Master 128 with a 65C102 co-processor",
+    }),
+});
+
+/** A descriptor's `requires` for a manifest's machine name, or undefined for a name outside the table. */
+export const machineRequirement = (machine) =>
+    Object.hasOwn(MachineRequirements, machine) ? MachineRequirements[machine] : undefined;
+
+/** Whether a machine is the one a requirement names: that model, with a Tube if and only if it says so. */
+export function satisfiesRequirement(requires, { model, hasTube }) {
+    return model === findModel(requires.model) && hasTube === requires.coProcessor;
+}
+
 // The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
 const stripTags = (text) => text.replace(/<[^>]*>/g, "");
 
@@ -112,6 +133,7 @@ export function describeBitshiftersEntry(file) {
         source: "bitshifters",
         savesChanges: false,
         url: file.url,
+        requires: machineRequirement(file.machine),
     };
 }
 

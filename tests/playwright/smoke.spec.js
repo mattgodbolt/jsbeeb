@@ -285,3 +285,36 @@ test("a drive bay shows one thing at a time: the note when empty, the jacket whe
     await page.evaluate(() => (document.querySelector('.bay[data-drive="0"]').dataset.state = "loaded"));
     expect(await shown()).toEqual({ note: false, jacket: true });
 });
+
+// A Bitshifters catalogue of one disc, served in place of the site so the test needs no network.
+const BitshiftersContent = "https://bitshifters.github.io/content/";
+const catalogueOfOne = (page) =>
+    Promise.all([
+        page.route(`${BitshiftersContent}manifest.json`, (route) =>
+            route.fulfill({
+                json: {
+                    schemaVersion: 1,
+                    files: [{ path: "bs-paradroid.ssd", title: "Paradroid", type: "Game", machine: "Master" }],
+                },
+            }),
+        ),
+        page.route(`${BitshiftersContent}bs-paradroid.ssd`, (route) =>
+            route.fulfill({ path: "public/discs/elite.ssd", contentType: "application/octet-stream" }),
+        ),
+    ]);
+
+test("a link that boots a Bitshifters disc without naming a model comes up on the machine it needs", async ({
+    beeb,
+    page,
+}) => {
+    await catalogueOfOne(page);
+    await beeb.open("?disc=bitshifters:bs-paradroid.ssd&autoboot");
+    await expect(page).toHaveURL(/model=Master/);
+    await expect(page).toHaveURL(/autoboot/);
+    await expect(page.locator(".toast")).toContainText("Switched to a BBC Master 128 for Paradroid");
+    expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
+    await beeb.expectDrive0("bs-paradroid.ssd");
+    await beeb.expectNotOnScreen("BASIC");
+    await page.goBack();
+    await expect(page).not.toHaveURL(/bitshifters/);
+});

@@ -30,7 +30,11 @@ class Slot {
 
     /** The URL parameters that name this slot's media, cleared when it is unnamed or empty. */
     urlParams() {
-        const ref = this.inUrl ? this.ref : undefined;
+        return this.urlParamsFor(this.inUrl ? this.ref : undefined);
+    }
+
+    /** The URL parameters that would name `ref` as this slot's media. */
+    urlParamsFor(ref) {
         if (this.isDeck) return { tape: ref };
         // The URL has always called the drives disc1 and disc2, and a bare disc means disc1.
         return this.index === 0 ? { disc: undefined, disc1: ref } : { disc2: ref };

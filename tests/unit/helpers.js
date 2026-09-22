@@ -42,6 +42,20 @@ export function fakeFdc() {
 export const fakeUrlState = (search = "") =>
     new UrlState({ origin: "https://bbc.example", pathname: "/", search, hash: "" }, { pushState: vi.fn() });
 
+/**
+ * Makes a UrlState's urlWith record the URL it builds as `navigatedTo` and hand back a hash change
+ * instead, which is the one navigation jsdom can follow.
+ */
+export function stubNavigation(urlState) {
+    const build = urlState.urlWith.bind(urlState);
+    urlState.navigatedTo = null;
+    vi.spyOn(urlState, "urlWith").mockImplementation((overrides) => {
+        urlState.navigatedTo = build(overrides);
+        return `${window.location.href}#navigated`;
+    });
+    return urlState;
+}
+
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
