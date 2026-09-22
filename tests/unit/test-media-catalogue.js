@@ -14,6 +14,7 @@ import {
     describeSthTape,
     compareForQuery,
     matchesQuery,
+    modelSatisfies,
     satisfiesRequirement,
     scoreQuery,
 } from "../../src/web/media-catalogue.js";
@@ -111,9 +112,11 @@ describe("the media catalogue", () => {
             expect(requiredBy(undefined)).toBeUndefined();
         });
 
-        it("requires nothing for a machine the table has no entry for, and says so on the console", () => {
+        it("requires nothing for a machine the table has no entry for, and says so on the console once", () => {
             const log = vi.spyOn(console, "log").mockImplementation(() => {});
             expect(describeBitshiftersEntry({ path: "x.ssd", machine: "Electron" }).requires).toBeUndefined();
+            expect(describeBitshiftersEntry({ path: "y.ssd", machine: "Electron" }).requires).toBeUndefined();
+            expect(log).toHaveBeenCalledTimes(1);
             expect(log).toHaveBeenCalledWith(expect.stringContaining("Electron"));
         });
 
@@ -141,10 +144,14 @@ describe("the media catalogue", () => {
         const { Master, MasterTurbo } = BitshiftersMachines;
 
         it("takes any Master for a Master, whichever filing system it boots", () => {
-            for (const name of ["Master", "MasterADFS", "MasterANFS"])
+            for (const name of ["Master", "MasterADFS", "MasterANFS"]) {
+                expect(modelSatisfies(Master, findModel(name))).toBe(true);
                 expect(satisfiesRequirement(Master, machine(name))).toBe(true);
-            for (const name of ["B-DFS1.2", "B", "B1770", "B1770A"])
+            }
+            for (const name of ["B-DFS1.2", "B", "B1770", "B1770A"]) {
+                expect(modelSatisfies(Master, findModel(name))).toBe(false);
                 expect(satisfiesRequirement(Master, machine(name))).toBe(false);
+            }
         });
 
         it("needs the co-processor as well for a Master Turbo, and a Master under it", () => {

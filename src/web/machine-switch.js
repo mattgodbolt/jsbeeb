@@ -1,8 +1,11 @@
-import { satisfiesRequirement } from "./media-catalogue.js";
+import { modelSatisfies, satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
+
+// What the page did at startup is not done again on the page switched to; the boot is its own.
+const NoStartupActions = { autoboot: undefined, autochain: undefined, autorun: undefined, autotype: undefined };
 
 /**
  * Moving to the machine a disc needs, which is a page reload: the model and its fitting go in
@@ -40,10 +43,11 @@ export class MachineSwitch {
         }
         noteEvent("media", "switchMachine", d.ref);
         if (boot) sessionStorage.setItem(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
-        // The requirement is a floor: a co-processor the page already has stays fitted.
+        // The requirement is a floor: a model of the right kind and a co-processor already fitted stay.
         window.location.href = this.urlState.urlWith({
             ...slot.urlParamsFor(d.ref),
-            model: requires.model,
+            ...NoStartupActions,
+            ...(modelSatisfies(requires, this.model) ? {} : { model: requires.model }),
             ...(requires.coProcessor ? { coProcessor: true } : {}),
             ...(boot ? { autoboot: true } : {}),
         });

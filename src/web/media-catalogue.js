@@ -1,5 +1,6 @@
 import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
 import { Schemas, splitImage } from "../media-resolver.js";
+import { findModel } from "../models.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
@@ -112,16 +113,25 @@ export const BitshiftersMachines = Object.freeze({
     }),
 });
 
+// The catalogue is described afresh on every listing; a machine outside the table is worth one line.
+const unknownMachines = new Set();
+
 function bitshiftersRequirement(machine) {
     if (machine === undefined) return undefined;
     const requires = BitshiftersMachines[machine];
-    if (!requires) console.log(`Bitshifters names a machine this emulator has no table entry for: ${machine}`);
+    if (!requires && !unknownMachines.has(machine)) {
+        unknownMachines.add(machine);
+        console.log(`Bitshifters names a machine this emulator has no table entry for: ${machine}`);
+    }
     return requires;
 }
 
-/** Whether a machine meets a requirement: any Master, with a Tube where the requirement has one. */
+/** Whether a model is of the kind a requirement names: any Master 128 for a Master, whichever filing system. */
+export const modelSatisfies = (requires, model) => model.isMaster === findModel(requires.model).isMaster;
+
+/** Whether a machine meets a requirement: the model's kind, with a Tube where the requirement has one. */
 export function satisfiesRequirement(requires, { model, hasTube }) {
-    return model.isMaster && (hasTube || !requires.coProcessor);
+    return modelSatisfies(requires, model) && (hasTube || !requires.coProcessor);
 }
 
 export function describeBitshiftersEntry(file) {
