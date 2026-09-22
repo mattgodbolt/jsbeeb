@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.3.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.2.0...v2.3.0) (2026-09-22)
+
+
+### Features
+
+* a disc that names the machine it needs switches the emulator to that machine ([#1168](https://github.com/mattgodbolt/jsbeeb/issues/1168)) ([7b91801](https://github.com/mattgodbolt/jsbeeb/commit/7b91801e19f4e90a2cd5e9cd6ba06a24a8c5acde))
+* Bitshifters discs in the media window ([#1161](https://github.com/mattgodbolt/jsbeeb/issues/1161)) ([3c9b678](https://github.com/mattgodbolt/jsbeeb/commit/3c9b6780d85308624baf22985da131b67f3e1c06))
+* the disc drive spins up, and the Model B's ready comes from its index pulses ([#1162](https://github.com/mattgodbolt/jsbeeb/issues/1162)) ([aeee3ba](https://github.com/mattgodbolt/jsbeeb/commit/aeee3ba309195264970d920dbc9a5deb534ed22f))
+* the drive noise follows the controller's seek timing ([#1166](https://github.com/mattgodbolt/jsbeeb/issues/1166)) ([7ee3866](https://github.com/mattgodbolt/jsbeeb/commit/7ee3866d6e95538e470e179492ff8f4b84118942))
+
+
+### Bug Fixes
+
+* a head movement takes over the drive noise from the last, so steps after a long seek are heard ([#1158](https://github.com/mattgodbolt/jsbeeb/issues/1158)) ([dd2a8af](https://github.com/mattgodbolt/jsbeeb/commit/dd2a8af376d8e281ca756534f1621f2d8a2751dd))
+* a save state for another machine reloads without the page's own boot, the way a disc switch does ([#1169](https://github.com/mattgodbolt/jsbeeb/issues/1169)) ([f3f267e](https://github.com/mattgodbolt/jsbeeb/commit/f3f267e4c58ebfa3dc6495785f88df4be722ee3f))
+* phosphor persistence decays and blends off screen, so the screen never shows the dimmed picture ([#1157](https://github.com/mattgodbolt/jsbeeb/issues/1157)) ([0c45496](https://github.com/mattgodbolt/jsbeeb/commit/0c45496ead48b81e28f1bab82810a73186de1288))
+
 ## [2.2.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.1.0...v2.2.0) (2026-09-16)
 
 
