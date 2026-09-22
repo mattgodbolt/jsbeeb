@@ -4,14 +4,26 @@ const Idle = 0;
 const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
+/**
+ * seek3.wav is a drive stepping at the DFS's 24 ms a step. Where its first click begins and
+ * how far apart they come were fitted across the file's clicks, so a grain cut on that grid
+ * holds one click; a run is such grains at the controller's own step rate.
+ */
+const RunFirstClickSeconds = 0.0085;
+const RunClickSeconds = 0.024209;
+const RunClicks = 73;
+const GrainLeadSeconds = 0.002;
+const GrainFadeSeconds = 0.002;
+/** Where step.wav's burst gives way to its ring: what a run's last click leaves behind. */
+const SettleOffsetSeconds = 0.024;
 
 export class DdNoise extends SamplePlayer {
     constructor(context, destination) {
         super(context, destination, Volume);
         this.state = Idle;
         this.motor = null;
+        this.run = null;
         this.clickEnds = 0;
-        this.runEnds = 0;
     }
 
     async initialise() {
@@ -20,8 +32,6 @@ export class DdNoise extends SamplePlayer {
             motorOff: "sounds/disc525/motoroff.wav",
             motor: "sounds/disc525/motor.wav",
             step: "sounds/disc525/step.wav",
-            seek: "sounds/disc525/seek.wav",
-            seek2: "sounds/disc525/seek2.wav",
             seek3: "sounds/disc525/seek3.wav",
         });
     }
@@ -54,36 +64,66 @@ export class DdNoise extends SamplePlayer {
     }
 
     /**
-     * The noise of the head crossing `diff` tracks: a click for a step, a
-     * recorded run for anything longer. A sound plays whole and holds off the
-     * next, except that a click is heard over the tail of a run, which sounds
-     * on after the head has come to rest.
+     * The head is about to take `steps` steps, one every `stepMs`: a click for one step, held
+     * off while the last click still sounds, otherwise a run of clicks scheduled on the audio
+     * clock at that rate, with the click's ring as the settle after the last.
      */
-    seek(diff) {
-        if (diff < 0) diff = -diff;
-        if (diff === 0) return 0;
-        const sound = this.seekSoundFor(diff);
+    seekStart(steps, stepMs) {
+        if (steps < 0) steps = -steps;
+        if (steps === 0) return;
+        this.cancelRun();
         const now = this.context.currentTime;
-        const isClick = sound === this.sounds.step;
-        if (now < this.clickEnds || (!isClick && now < this.runEnds)) return 0;
-        const ends = now + this.oneShot(sound);
-        if (isClick) this.clickEnds = ends;
-        else this.runEnds = ends;
-        return sound.duration;
+        if (steps === 1) {
+            if (now >= this.clickEnds) this.clickEnds = now + this.oneShot(this.sounds.step);
+            return;
+        }
+        const stepSeconds = stepMs / 1000;
+        const grains = [];
+        for (let step = 0; step < steps; ++step) {
+            const at = now + step * stepSeconds;
+            const click = Math.floor(Math.random() * RunClicks);
+            const source = this.startSound(this.sounds.seek3, {
+                when: at,
+                offset: RunFirstClickSeconds + click * RunClickSeconds - GrainLeadSeconds,
+                duration: RunClickSeconds,
+                fadeSeconds: GrainFadeSeconds,
+            });
+            grains.push({ source, at });
+        }
+        this.run = { grains, settle: this.scheduleSettle(now + steps * stepSeconds), start: now, stepSeconds };
     }
 
-    seekSoundFor(tracks) {
-        if (tracks <= 2) return this.sounds.step;
-        if (tracks <= 20) return this.sounds.seek;
-        if (tracks <= 40) return this.sounds.seek2;
-        return this.sounds.seek3;
+    scheduleSettle(at) {
+        const source = this.startSound(this.sounds.step, { when: at, offset: SettleOffsetSeconds });
+        return { source, at };
+    }
+
+    /**
+     * The head has stopped after `steps` steps. Fewer than announced drops the clicks past
+     * that and brings the ring forward to where the last of them was to sound. The run stays
+     * until a new movement, so that a settle still to come can give way to it.
+     */
+    seekEnd(steps) {
+        const run = this.run;
+        if (!run || steps >= run.grains.length) return;
+        const now = this.context.currentTime;
+        for (const grain of [...run.grains.splice(steps), run.settle]) if (grain.at > now) grain.source?.stop();
+        run.settle = this.scheduleSettle(run.start + steps * run.stepSeconds);
+    }
+
+    /** Stops the parts of a run that have not yet sounded. */
+    cancelRun() {
+        if (!this.run) return;
+        const { grains, settle } = this.run;
+        this.run = null;
+        const now = this.context.currentTime;
+        for (const grain of [...grains, settle]) if (grain.at > now) grain.source?.stop();
     }
 }
 
 export class FakeDdNoise {
-    seek() {
-        return 0;
-    }
+    seekStart() {}
+    seekEnd() {}
     initialise() {
         return Promise.resolve();
     }

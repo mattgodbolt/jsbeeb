@@ -37,14 +37,25 @@ export function attachDriveNoise(drives, ddNoise) {
             numSpinning--;
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
-        drive.addEventListener("step", (evt) => ddNoise.seek(evt.stepAmount));
+        drive.addEventListener("seekStart", (evt) => ddNoise.seekStart(evt.steps, evt.stepMs));
+        drive.addEventListener("seekEnd", (evt) => ddNoise.seekEnd(evt.steps));
     }
 }
 
-class StepEvent extends Event {
-    constructor(stepAmount) {
-        super("step");
-        this.stepAmount = stepAmount;
+/** The head is about to take `steps` steps, one every `stepMs`. */
+class SeekEvent extends Event {
+    constructor(steps, stepMs) {
+        super("seekStart");
+        this.steps = steps;
+        this.stepMs = stepMs;
+    }
+}
+
+/** The head has stopped after `steps` of the steps it was about to take. */
+class SeekEndEvent extends Event {
+    constructor(steps) {
+        super("seekEnd");
+        this.steps = steps;
     }
 }
 
@@ -150,17 +161,14 @@ export class BaseDiscDrive extends EventTarget {
     }
 
     /**
-     * @param {number} _newTrack
-     */
-    notifySeek(_newTrack) {
-        throw new Error("Not implemented: notifySeek");
-    }
-
-    /**
      * @param {number} _delta
      */
-    notifySeekAmount(_delta) {
+    notifySeekAmount(_delta, _stepMs) {
         throw new Error("Not implemented: notifySeekAmount");
+    }
+
+    notifySeekEnd() {
+        throw new Error("Not implemented: notifySeekEnd");
     }
 
     /**
@@ -221,6 +229,7 @@ export class DiscDrive extends BaseDiscDrive {
 
         this._timer = this._scheduler.newTask(this._onTimer.bind(this));
         this._spinning = false;
+        this._seekSteps = null;
         // Speed as a fraction of 300 rpm when the motor last started or stopped, and when.
         this._speedThen = 0;
         this._speedEpoch = 0;
@@ -421,26 +430,32 @@ export class DiscDrive extends BaseDiscDrive {
      * @param {Number} delta track step delta, either 1 or -1
      */
     seekOneTrack(delta) {
+        const from = this._track;
         this._selectTrack(this._track + delta * this._tracksPerStep);
+        if (this._seekSteps !== null && this._track !== from) ++this._seekSteps;
     }
 
     /**
-     * Notify that an overall seek is happening to a particular track. Purely informational.
+     * The controller is about to seek `delta` of its tracks, a step every `stepMs`. Purely
+     * informational: the noise follows it.
      */
-    notifySeek(newTrack) {
-        this.notifySeekAmount(newTrack - this.logicalTrack);
-    }
-
-    /**
-     * Notify that an overall seek is happening by some delta amount. Purely informational.
-     */
-    notifySeekAmount(delta) {
-        // The step drives the seek noise, so it counts the tracks the head crosses: none past
-        // either end of the surface, whatever the controller asked for.
+    notifySeekAmount(delta, stepMs) {
+        // The noise counts the steps the head takes: none past either end of the surface,
+        // whatever the controller asked for, and a last one onto the edge though it falls short.
         const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
         const target = Math.min(lastTrack, Math.max(0, this._track + delta * this._tracksPerStep));
-        const crossed = target - this._track;
-        if (crossed) this.dispatchEvent(new StepEvent(crossed));
+        const steps = Math.sign(delta) * Math.ceil(Math.abs(target - this._track) / this._tracksPerStep);
+        this._seekSteps = steps ? 0 : null;
+        if (!steps) return;
+        this.dispatchEvent(new SeekEvent(steps, stepMs));
+    }
+
+    /** The controller has finished stepping, whether or not it got as far as it said. */
+    notifySeekEnd() {
+        if (this._seekSteps === null) return;
+        const steps = this._seekSteps;
+        this._seekSteps = null;
+        this.dispatchEvent(new SeekEndEvent(steps));
     }
 
     /**
@@ -485,6 +500,7 @@ export class DiscDrive extends BaseDiscDrive {
     }
 
     restoreState(state) {
+        this._seekSteps = null;
         this._track = state.track;
         this._isSideUpper = state.isSideUpper;
         this._headPosition = state.headPosition;

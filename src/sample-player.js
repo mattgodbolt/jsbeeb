@@ -46,17 +46,40 @@ export class SamplePlayer {
      * Fire-and-forget: play a buffer once, return its duration.
      */
     oneShot(sound) {
-        const duration = sound.duration;
-        if (this.context.state !== "running") return duration;
+        this.startSound(sound);
+        return sound.duration;
+    }
+
+    /**
+     * Start `sound` at `when` on the audio clock (now if 0), `offset` seconds in, for
+     * `duration` seconds (the rest of it if undefined), with `fadeSeconds` of fade at each
+     * end so a cut into the middle of it does not click. Returns the source, or null when
+     * the context is not running.
+     */
+    startSound(sound, { when = 0, offset = 0, duration, fadeSeconds = 0 } = {}) {
+        if (this.context.state !== "running") return null;
         const source = this.context.createBufferSource();
         source.buffer = sound;
-        source.connect(this.gain);
+        let into = this.gain;
+        if (fadeSeconds > 0 && duration !== undefined) {
+            const fade = this.context.createGain();
+            const start = when || this.context.currentTime;
+            fade.gain.setValueAtTime(0, start);
+            fade.gain.linearRampToValueAtTime(1, start + fadeSeconds);
+            fade.gain.setValueAtTime(1, start + duration - fadeSeconds);
+            fade.gain.linearRampToValueAtTime(0, start + duration);
+            fade.connect(this.gain);
+            into = fade;
+        }
+        source.connect(into);
         source.onended = () => {
             this.playing = this.playing.filter((s) => s !== source);
+            if (into !== this.gain) into.disconnect();
         };
-        source.start();
+        if (duration === undefined) source.start(when, offset);
+        else source.start(when, offset, duration);
         this.playing.push(source);
-        return duration;
+        return source;
     }
 
     /**

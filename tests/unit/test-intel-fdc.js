@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { DiscDrive } from "../../src/disc-drive.js";
 
 class FakeDrive {
     constructor() {
@@ -11,6 +12,7 @@ class FakeDrive {
         this.pulsesCallback = null;
         this.upperSide = false;
         this.track = 0;
+        this.seeks = [];
     }
     selectSide(side) {
         this.upperSide = side;
@@ -27,7 +29,12 @@ class FakeDrive {
     seekOneTrack(dir) {
         this.track = this.track + dir;
     }
-    notifySeek() {}
+    notifySeekAmount(delta, stepMs) {
+        this.seeks.push([delta, stepMs]);
+    }
+    notifySeekEnd() {
+        this.seeks.push("end");
+    }
     snapshotState() {
         return {};
     }
@@ -99,6 +106,66 @@ describe("Intel 8271 tests", function () {
         // We should reach and stop at track 4.
         scheduler.polltime(6000 * 10);
         expect(fakeDrive.track).toBe(4);
+    });
+
+    describe("seek noise", () => {
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        const badTracksDrive0 = 0x10;
+
+        it("announces the seek's tracks at the drive's own 3 ms when no rate was specified, and its end", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 2);
+            expect(fakeDrive.seeks).toEqual([[4, 3]]);
+            scheduler.polltime(6000 * 10);
+            expect(fakeDrive.seeks).toEqual([[4, 3], "end"]);
+        });
+
+        it("announces the rate the DFS specified, doubled for a 5.25 inch drive", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 2);
+            expect(fakeDrive.seeks).toEqual([[4, 24]]);
+        });
+
+        it("announces the steps its track register calls for, which the head takes wherever it is", () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler);
+            const events = [];
+            drive.addEventListener("seekStart", (event) => events.push([event.steps, event.stepMs]));
+            drive.addEventListener("seekEnd", (event) => events.push(`end after ${event.steps}`));
+            const fdc = new IntelFdc(fake6502(), scheduler, [drive]);
+            sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 13);
+            scheduler.polltime(6000 * 20);
+            expect(drive.track).toBe(13);
+            for (let track = 13; track < 20; ++track) drive.seekOneTrack(1);
+            events.length = 0;
+            sendCommand(fdc, seekCmd, 10);
+            scheduler.polltime(6000 * 10);
+            expect(events).toEqual([[-3, 3], "end after 3"]);
+            expect(drive.track).toBe(17);
+        });
+
+        it("announces nothing for a seek to the track the head is on", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 2);
+            scheduler.polltime(6000 * 10);
+            fakeDrive.seeks.length = 0;
+            sendCommand(fdc, seekCmd, 2);
+            scheduler.polltime(6000 * 10);
+            expect(fakeDrive.seeks).toEqual([]);
+        });
     });
 
     describe("head load", () => {
