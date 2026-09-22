@@ -19,14 +19,15 @@ PR. What the reviewer checks, how it reports and what it needs to be told are it
 - Commit everything first, so the diff and the files the reviewer reads agree. Never amend or
   rebase a branch that has been pushed.
 - For a push to an open PR, seed the taken and declined lists with what is already settled, so
-  the reviewer does not re-raise it. Taken: every answered thread whose reply names the commit
-  that took it. Declined: the "Declined from local review" section of the body
+  the reviewer does not re-raise it. Taken: every thread whose reply names the commit that took
+  it. Declined: every thread whose reply declines the finding, with the reason it gives, and the
+  "Declined from local review" section of the body
   (`gh pr view --json body`), and every review thread the maintainer or the session has answered
   (`gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments` for the inline threads and their
   replies, `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews` for the review bodies, and
   `gh api --paginate repos/<owner>/<repo>/issues/<n>/comments` for the conversation; without
-  `--paginate` a busy PR's older threads are missed). A finding the
-  maintainer declined there is declined here, with his reason.
+  `--paginate` a busy PR's older threads are missed). A thread whose reply asks for a fix, or
+  that has no reply, seeds neither list; it is open work.
 - `git diff origin/<base>...HEAD --stat` to see what is in it.
 
 ## 2. Assemble the PR text
