@@ -11,7 +11,7 @@ import {
 } from "../snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "../bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "../uef-snapshot.js";
-import { leaveForNextPage, reloadAsMachine, takeFromLastPage } from "./machine-reload.js";
+import { leaveForNextPage, reloadAsMachine, takeFromLastPage } from "./machine-switch.js";
 
 const PendingStateKey = "jsbeeb-pending-state";
 

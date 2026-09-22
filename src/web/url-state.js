@@ -4,8 +4,23 @@ import { debounce } from "../debounce.js";
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
 const UrlSettleMs = 300;
 
+/** The parameters that have the page do something once it is up, rather than describe it. */
+const StartupActionTypes = {
+    autoboot: ParamTypes.BOOL,
+    autochain: ParamTypes.BOOL,
+    autorun: ParamTypes.BOOL,
+    autotype: ParamTypes.STRING,
+    loadBasic: ParamTypes.STRING,
+    embedBasic: ParamTypes.STRING,
+    patch: ParamTypes.STRING,
+};
+
+export const StartupActionParams = Object.keys(StartupActionTypes);
+
 /** How each parameter the page understands is parsed and written back. */
 export const UrlParamTypes = {
+    ...StartupActionTypes,
+
     // Array parameters
     rom: ParamTypes.ARRAY,
 
@@ -13,9 +28,6 @@ export const UrlParamTypes = {
     embed: ParamTypes.BOOL,
     fasttape: ParamTypes.BOOL,
     noseek: ParamTypes.BOOL,
-    autoboot: ParamTypes.BOOL,
-    autochain: ParamTypes.BOOL,
-    autorun: ParamTypes.BOOL,
     hasMusic5000: ParamTypes.BOOL,
     hasTeletextAdaptor: ParamTypes.BOOL,
     hasEconet: ParamTypes.BOOL,
@@ -51,14 +63,10 @@ export const UrlParamTypes = {
     tape: ParamTypes.STRING,
     mmc: ParamTypes.STRING,
     keyLayout: ParamTypes.STRING,
-    autotype: ParamTypes.STRING,
     displayMode: ParamTypes.STRING,
     audioOutput: ParamTypes.STRING,
     drive0Tracks: ParamTypes.STRING,
     drive1Tracks: ParamTypes.STRING,
-    loadBasic: ParamTypes.STRING,
-    embedBasic: ParamTypes.STRING,
-    patch: ParamTypes.STRING,
     sbLeft: ParamTypes.STRING,
     sbRight: ParamTypes.STRING,
     sbBottom: ParamTypes.STRING,
