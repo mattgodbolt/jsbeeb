@@ -17,9 +17,13 @@ PR. Copilot and the maintainer are the second review, not the first.
   `git fetch origin <base>` and review against `origin/<base>`.
 - Commit everything first, so the diff and the files the reviewer reads agree. Never amend or
   rebase a branch that has been pushed.
-- For a push to an open PR, the "Declined from local review" section of its body
-  (`gh pr view --json body`) and the review threads already answered there seed the declined list,
-  so the reviewer does not re-raise what an earlier loop or the second review has settled.
+- For a push to an open PR, seed the declined list with what is already settled, so the reviewer
+  does not re-raise it: the "Declined from local review" section of the body
+  (`gh pr view --json body`), and every review thread the maintainer or the session has answered
+  (`gh api repos/<owner>/<repo>/pulls/<n>/comments` for the inline threads and their replies,
+  `gh api repos/<owner>/<repo>/pulls/<n>/reviews` for the review bodies, and
+  `gh api repos/<owner>/<repo>/issues/<n>/comments` for the conversation). A finding the
+  maintainer declined there is declined here, with his reason.
 - `git diff origin/<base>...HEAD --stat` to see what is in it.
 
 ## 2. Assemble the PR text
@@ -41,14 +45,18 @@ The brief carries:
 
 ## 4. Act on the report
 
-For each finding:
+For each blocking or should-fix finding:
 
-- **Agree:** fix it, and add the test that would have caught it. Run `npm run lint`,
-  `npm run format` and `npx vitest run` on the test files the diff touches, then commit the fix as
-  a new commit.
+- **Agree:** fix it. When the fix changes behaviour, add the test that would have caught it; a
+  comment, doc or convention fix needs none. Run `npm run lint`, `npm run format` and
+  `npx vitest run` on the test files the diff touches, then commit the fix as a new commit.
 - **Disagree:** write the reason into a running list of declined findings, as a sentence somebody
   else could evaluate. "Out of scope" has to say where the work goes instead (an issue, a follow-up
   PR).
+
+A note is a judgement call the reviewer has left to the session: decide it, and record the
+decision in the PR body where it bears on what the reader should know (a trade-off taken, a thing
+left undone). A note needs no fix and no reason to be declined.
 
 ## 5. Repeat
 

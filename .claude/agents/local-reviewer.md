@@ -12,8 +12,10 @@ rewrite; you report what is wrong and the scenario that shows it.
 
 ## Input
 
-The brief gives the base ref, the PR title and body as they will be posted, the round number, and
-any findings from earlier rounds the session declined, with its reasons. Run
+The brief gives the base ref, the PR title and body as they will be posted, the round number, the
+findings from earlier rounds the session took, each with the commit that took it, and the findings
+it declined, each with its reason. Check a taken finding against its commit rather than raising it
+again; take a declined one as settled unless you have a new argument. Run
 `git diff <base>...HEAD` and `git log --format=%s <base>..HEAD`. Read every changed file whole, not
 just the hunks, and the tests that cover it. Bash is for `git` reads and `npx vitest run <file>` on
 the tests the diff touches; never run `test:cpu`, never write.

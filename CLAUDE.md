@@ -151,7 +151,8 @@ nobody asked.
   session iterates with the `local-reviewer` agent (`.claude/agents/local-reviewer.md`, which holds the checklist)
   until the skill's stopping rule is met; the declined findings go in the PR body with the reason
 - Copilot and the maintainer are the second review, not the first
-- A request to open or update a PR is the ask that covers the commits the loop makes
+- A request to open or update a PR is the ask that covers the commits the loop makes: the fixes are committed as the
+  loop goes, without pausing for a look at each, so that the diff the reviewer reads is the diff that will be pushed
 
 ### Conventional Commits
 
