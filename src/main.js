@@ -13,6 +13,7 @@ import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
 import { SthSource } from "./web/sth-source.js";
 import { HfeSource } from "./web/hfe-source.js";
+import { BitshiftersSource } from "./web/bitshifters-source.js";
 import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
@@ -240,6 +241,7 @@ const autoBoot = new Autoboot({
 });
 new SthSource({ media });
 new HfeSource({ media });
+new BitshiftersSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
 const snapshots = new SnapshotUI({
     processor,

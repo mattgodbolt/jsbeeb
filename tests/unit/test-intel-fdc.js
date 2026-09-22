@@ -7,6 +7,7 @@ import { fake6502 } from "../../src/fake6502.js";
 class FakeDrive {
     constructor() {
         this.spinning = false;
+        this.indexPulse = false;
         this.pulsesCallback = null;
         this.upperSide = false;
         this.track = 0;
@@ -26,6 +27,10 @@ class FakeDrive {
     seekOneTrack(dir) {
         this.track = this.track + dir;
     }
+    snapshotState() {
+        return {};
+    }
+    restoreState() {}
 }
 
 /**
@@ -111,6 +116,156 @@ describe("Intel 8271 tests", function () {
             expect(fakeDrive.track).toBe(3);
             // The head, unloaded until now, takes 8 units of 8 ms to load.
             expect(scheduler.headroom()).toBe(8 * 8 * 2000);
+        });
+    });
+
+    describe("ready", () => {
+        const ms = (n) => n * 2000;
+
+        function readyFdc() {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            // As the DFS specifies: the head stays loaded for 12 revolutions after a command,
+            // so reading the status does not deselect the drive.
+            sendCommand(fdc, 0x35, 0x0d, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            const indexPulse = () => {
+                fakeDrive.indexPulse = true;
+                fakeDrive.pulsesCallback(0, 32);
+                fakeDrive.indexPulse = false;
+                fakeDrive.pulsesCallback(0, 32);
+            };
+            // The status is latched, so it takes two reads to see a change; the drive the
+            // command byte's 0x40 selects reports as RDY0.
+            const ready0 = 0x04;
+            const ready = () => {
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                return (fdc.read(1) & ready0) === ready0;
+            };
+            return { fdc, scheduler, indexPulse, ready };
+        }
+
+        it("comes on the second index pulse after selection, when they are coming in time", () => {
+            const { scheduler, indexPulse, ready } = readyFdc();
+            expect(ready()).toBe(false);
+            indexPulse();
+            expect(ready()).toBe(false);
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+        });
+
+        it("waits for pulses to come in time, and drops once they stop", () => {
+            const { scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(300));
+            indexPulse();
+            expect(ready()).toBe(false);
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+            scheduler.polltime(ms(300));
+            indexPulse();
+            expect(ready()).toBe(false);
+        });
+
+        it("counts edges from the level the newly selected drive already shows", () => {
+            const fakeDrive = new FakeDrive();
+            fakeDrive.indexPulse = true;
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, 0x35, 0x0d, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            const ready0 = 0x04;
+            const ready = () => {
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                return (fdc.read(1) & ready0) === ready0;
+            };
+            // Still high from before selection: not an edge.
+            fakeDrive.pulsesCallback(0, 32);
+            fakeDrive.indexPulse = false;
+            fakeDrive.pulsesCallback(0, 32);
+            for (const expected of [false, true]) {
+                scheduler.polltime(ms(200));
+                fakeDrive.indexPulse = true;
+                fakeDrive.pulsesCallback(0, 32);
+                fakeDrive.indexPulse = false;
+                fakeDrive.pulsesCallback(0, 32);
+                expect(ready()).toBe(expected);
+            }
+        });
+
+        it("carries the latch through a snapshot, along with how stale its last pulse is", () => {
+            const { fdc, scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+
+            const fresh = fdc.snapshotState();
+            const { fdc: restoredFresh, ready: readyFresh } = readyFdc();
+            restoredFresh.restoreState(fresh);
+            expect(readyFresh()).toBe(true);
+
+            // A pulse that comes after a long gap since the snapshot's last one drops the latch.
+            const {
+                fdc: restoredStale,
+                scheduler: staleScheduler,
+                indexPulse: stalePulse,
+                ready: readyStale,
+            } = readyFdc();
+            restoredStale.restoreState(fresh);
+            staleScheduler.polltime(ms(300));
+            stalePulse();
+            expect(readyStale()).toBe(false);
+        });
+
+        it("comes up ready from a snapshot made before the latch existed", () => {
+            const { fdc, ready } = readyFdc();
+            const state = fdc.snapshotState();
+            delete state.ready;
+            delete state.readyPulses;
+            delete state.sinceIndexPulse;
+            const { fdc: restored, ready: readyRestored } = readyFdc();
+            restored.restoreState(state);
+            expect(readyRestored()).toBe(true);
+            expect(ready()).toBe(false);
+        });
+
+        it("goes once the pulses stop, before any pulse comes to say so", () => {
+            const { scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+            scheduler.polltime(ms(300));
+            expect(ready()).toBe(false);
+        });
+
+        it("outlives a stop and restart of the motor shorter than the timeout", () => {
+            const { fdc, scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            // The command byte keeps the drive selected; only the motor stops.
+            sendCommand(fdc, writeRegCmd | driveSelect1, mmioWrite, driveSelect1);
+            scheduler.polltime(ms(100));
+            sendCommand(fdc, writeRegCmd | driveSelect1, mmioWrite, loadHead | driveSelect1);
+            expect(ready()).toBe(true);
+        });
+
+        it("goes when the drive is deselected", () => {
+            const { fdc, scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+            sendCommand(fdc, writeRegCmd, mmioWrite, 0);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            expect(ready()).toBe(false);
         });
     });
 

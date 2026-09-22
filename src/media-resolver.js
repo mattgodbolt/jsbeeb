@@ -18,6 +18,7 @@ export const Schemas = Object.freeze({
     sth: { route: "sth", source: "sth" },
     "|": { route: "sth", source: "sth" },
     hfe: { route: "hfe", source: "hfe" },
+    bitshifters: { route: "bitshifters", source: "bitshifters" },
     gd: { route: "drive", source: "gdrive" },
     local: { route: "browser", source: "browser" },
     "!": { route: "browser", source: "browser" },
@@ -64,11 +65,13 @@ export class MediaResolver {
     async resolve(kind, ref) {
         const { image } = splitImage(ref);
         const { folder, sth } = Kinds[kind];
-        switch (routeOf(ref)) {
+        const route = routeOf(ref);
+        switch (route) {
             case "sth":
                 return this.source(sth)(image);
             case "hfe":
-                return { name: image, data: await this.source("hfe")(image), ignored: [] };
+            case "bitshifters":
+                return { name: image, data: await this.source(route)(image), ignored: [] };
             case "session":
                 return this.source("session")(image);
             case "inline":

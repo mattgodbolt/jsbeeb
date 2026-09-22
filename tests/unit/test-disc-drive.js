@@ -45,6 +45,8 @@ describe("Disc drive tests", function () {
         });
         scheduler.polltime(1000000);
         drive.startSpinning();
+        drive.setPulsesCallback(() => {});
+        scheduler.polltime(3 * 2000000);
         let numPulses = 0;
         drive.setPulsesCallback(() => numPulses++);
         scheduler.polltime(500);
@@ -104,9 +106,10 @@ describe("Disc drive tests", function () {
         const drive = new DiscDrive(0, scheduler);
         drive.setDisc(Disc.createBlank());
         drive.startSpinning();
+        const cyclesPerSecond = 2 * 1000 * 1000;
+        scheduler.polltime(3 * cyclesPerSecond);
         let previousIndex = drive.indexPulse;
         let risingEdges = 0;
-        const cyclesPerSecond = 2 * 1000 * 1000;
         const cyclesPerIter = cyclesPerSecond / 60;
         const rpm = 300;
         const testSeconds = 5;
@@ -213,6 +216,81 @@ describe("40 track discs", () => {
         expect(steps).toBe(3);
         expect(drive.track).toBe(2);
     });
+});
+
+describe("spindle motor", () => {
+    const ms = (n) => n * 2000;
+
+    it("comes up to speed over about half a second and stays there", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        expect(drive.speed).toBeLessThan(0.05);
+        scheduler.polltime(ms(150));
+        expect(drive.speed).toBeCloseTo(0.63, 1);
+        scheduler.polltime(ms(350));
+        expect(drive.speed).toBeGreaterThan(0.95);
+        scheduler.polltime(ms(2000));
+        expect(drive.speed).toBeCloseTo(1, 3);
+    });
+
+    it("turns the disc slowly at first, so the index comes round late", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        const started = scheduler.epoch;
+        untilIndexRises(drive, scheduler);
+        const firstIndex = scheduler.epoch - started;
+        scheduler.polltime(ms(3000));
+        const atSpeed = revolutionFrom(drive, scheduler);
+        expect(firstIndex).toBeGreaterThan(DiscDrive.TicksPerRevolution * 1.2);
+        expect(atSpeed).toBeCloseTo(DiscDrive.TicksPerRevolution, -3);
+    });
+
+    it("keeps its speed through a stop and start at the same instant, and coasts through a longer one", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        scheduler.polltime(ms(3000));
+        drive.stopSpinning();
+        drive.startSpinning();
+        expect(drive.speed).toBeCloseTo(1, 3);
+        drive.stopSpinning();
+        scheduler.polltime(ms(1000));
+        expect(drive.speed).toBeCloseTo(0.37, 1);
+        drive.startSpinning();
+        expect(drive.speed).toBeCloseTo(0.37, 1);
+    });
+
+    it("carries its speed through a snapshot", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        scheduler.polltime(ms(150));
+        const state = drive.snapshotState();
+        expect(state.speed).toBeCloseTo(0.63, 1);
+        const restored = new DiscDrive(0, scheduler);
+        restored.setDisc(fortyTrackDisc());
+        restored.restoreState(state);
+        expect(restored.speed).toBeCloseTo(0.63, 1);
+    });
+
+    function untilIndexRises(drive, scheduler) {
+        while (drive.indexPulse) scheduler.polltime(500);
+        while (!drive.indexPulse) scheduler.polltime(500);
+    }
+
+    /** Cycles from the next rise of the index pulse to the one after, running the drive to find them. */
+    function revolutionFrom(drive, scheduler) {
+        untilIndexRises(drive, scheduler);
+        const start = scheduler.epoch;
+        untilIndexRises(drive, scheduler);
+        return scheduler.epoch - start;
+    }
 });
 
 describe("drive noise", () => {

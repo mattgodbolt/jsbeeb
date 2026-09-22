@@ -5,9 +5,10 @@ import { Schemas, splitImage } from "../media-resolver.js";
  * One shape for everything the media window can list, whichever source it
  * came from:
  *
- *   { ref, kind, title, publisher, detail, source, savesChanges }
+ *   { ref, kind, title, publisher, detail, source, savesChanges, url? }
  *
- * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL.
+ * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL; `url` is a
+ * page about the entry, when its source has one.
  */
 
 // `name` heads a chip; `phrase` sits mid-sentence in a slot's status line.
@@ -23,6 +24,11 @@ export const Sources = Object.freeze({
         name: "HFE rebuilt",
         phrase: "HFE archive",
         title: "Discs rebuilt from a sector dump: the data is right, the surface around it is inferred",
+    },
+    bitshifters: {
+        name: "Bitshifters",
+        phrase: "Bitshifters",
+        title: "Demos and games released at bitshifters.github.io, each with the page that presents it",
     },
     gdrive: { name: "Google Drive", phrase: "Google Drive", title: "Your Google Drive; changes are kept there" },
     browser: {
@@ -89,6 +95,23 @@ export function describeHfeEntry(file) {
         detail,
         source: file.provenance === Provenance.Reconstructed ? "hfeRebuilt" : "hfe",
         savesChanges: false,
+    };
+}
+
+// The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
+const stripTags = (text) => text.replace(/<[^>]*>/g, "");
+
+export function describeBitshiftersEntry(file) {
+    const detail = [file.type, file.machine, file.year, file.authors && stripTags(file.authors)];
+    return {
+        ref: `bitshifters:${file.path}`,
+        kind: "disc",
+        title: file.title || file.path,
+        publisher: stripTags(file.publisher ?? ""),
+        detail: detail.filter(Boolean).join(" · "),
+        source: "bitshifters",
+        savesChanges: false,
+        url: file.url,
     };
 }
 
@@ -186,9 +209,9 @@ export function scoreQuery(descriptor, query) {
 /** Whether a descriptor is what the typed query is looking for. */
 export const matchesQuery = (descriptor, query) => scoreQuery(descriptor, query) > 0;
 
-// Among equal matches with one title: the user's own discs, then the archive with metadata
-// before the one without.
-const SourceRank = { browser: 1, gdrive: 1, session: 1, hfe: 2, hfeRebuilt: 3, sth: 4 };
+// Among equal matches with one title: the user's own discs, then the sources with metadata
+// (the authors' own releases, the flux captures) before the one without.
+const SourceRank = { browser: 1, gdrive: 1, session: 1, bitshifters: 2, hfe: 2, hfeRebuilt: 3, sth: 4 };
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 

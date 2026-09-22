@@ -7,6 +7,15 @@ import { Disc } from "./disc.js";
 import { IbmDiscFormat } from "./disc.js";
 
 const SpinDebounceMs = 2;
+/**
+ * The spindle motor of a 5.25" drive reaches speed about half a second after it starts (drive
+ * sheets give 400 to 500 ms) and coasts to a stop over a second or so: time constants of the
+ * exponentials below, in cycles. The disc never quite stands still here, or the pulses would.
+ */
+const SpinUpTicks = 150 * 2000;
+const SpinDownTicks = 1000 * 2000;
+const LeastSpeed = 0.02;
+const AtSpeed = 0.9999;
 
 /**
  * Plays the spin and seek noises for a set of drives.
@@ -191,6 +200,9 @@ export class DiscDrive extends BaseDiscDrive {
 
         this._timer = this._scheduler.newTask(this._onTimer.bind(this));
         this._spinning = false;
+        // Speed as a fraction of 300 rpm when the motor last started or stopped, and when.
+        this._speedThen = 0;
+        this._speedEpoch = 0;
     }
 
     /**
@@ -251,7 +263,21 @@ export class DiscDrive extends BaseDiscDrive {
             this._headPosition = 0;
             this._checkTrackNeedsWrite();
         }
-        if (this._spinning) this._timer.reschedule(nextTicks - thisTicks);
+        if (this._spinning) this._timer.reschedule(Math.round((nextTicks - thisTicks) / this.speed));
+    }
+
+    /** How fast the disc is turning, as a fraction of its rated speed. */
+    get speed() {
+        const elapsed = this._scheduler.epoch - this._speedEpoch;
+        const speed = this._spinning
+            ? 1 - (1 - this._speedThen) * Math.exp(-elapsed / SpinUpTicks)
+            : this._speedThen * Math.exp(-elapsed / SpinDownTicks);
+        return speed > AtSpeed ? 1 : Math.max(LeastSpeed, speed);
+    }
+
+    _noteSpeed() {
+        this._speedThen = this.speed;
+        this._speedEpoch = this._scheduler.epoch;
     }
 
     get headPosition() {
@@ -294,18 +320,20 @@ export class DiscDrive extends BaseDiscDrive {
 
     startSpinning() {
         if (!this._spinning) {
+            this._noteSpeed();
+            this._spinning = true;
             this.dispatchEvent(new Event("startSpinning"));
             this._timer.schedule(1);
         }
-        this._spinning = true;
     }
 
     stopSpinning() {
         if (this._spinning) {
+            this._noteSpeed();
+            this._spinning = false;
             this.dispatchEvent(new Event("stopSpinning"));
         }
         this._timer.cancel();
-        this._spinning = false;
     }
 
     selectSide(isSideUpper) {
@@ -410,6 +438,7 @@ export class DiscDrive extends BaseDiscDrive {
             pulsePosition: this._pulsePosition,
             in32usMode: this._in32usMode,
             spinning: this._spinning,
+            speed: this.speed,
             is40Track: this._tracksPerStep === 2,
             timerTaskOffset: this._timer.scheduled() ? this._timer.expireEpoch - this._scheduler.epoch : null,
             disc: this._disc ? this._disc.snapshotState() : null,
@@ -427,6 +456,8 @@ export class DiscDrive extends BaseDiscDrive {
         // Restore spinning state and timer
         this._timer.cancel();
         this._spinning = state.spinning;
+        this._speedThen = state.speed ?? 1;
+        this._speedEpoch = this._scheduler.epoch;
         if (state.timerTaskOffset !== null) this._timer.schedule(state.timerTaskOffset);
 
         // Restore disc data if present

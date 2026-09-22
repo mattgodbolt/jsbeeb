@@ -40,7 +40,8 @@ async function setupCeefaxTestMachine(video) {
     await testMachine.runUntilInput();
     await testMachine.loadDisc("discs/eng_test.ssd");
     await testMachine.type("*EXEC !BOOT");
-    await testMachine.runFor(3 * 1000 * 1000);
+    // The drive has to spin up before the page can load, and the load takes a second or so.
+    await testMachine.runFor(4 * 1000 * 1000);
     return testMachine;
 }
 
