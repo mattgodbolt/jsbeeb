@@ -18,6 +18,22 @@ void main() {
     gl_FragColor = vec4(vec3(1.0 / 255.0), 1.0);
 }`;
 
+// The decayed picture lives in a texture of its own and reaches the screen in one draw, so the
+// screen never shows it part way through: a low-latency canvas can be the buffer on the glass.
+const CopyVertexShader = `attribute vec2 pos;
+varying vec2 vTexCoord;
+void main() {
+    vTexCoord = pos;
+    gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);
+}`;
+const CopyFragmentShader = `precision mediump float;
+uniform sampler2D uPhosphor;
+varying vec2 vTexCoord;
+void main() {
+    gl_FragColor = texture2D(uPhosphor, vTexCoord);
+}`;
+const PhosphorTextureUnit = 1;
+
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
     rgb: PassthroughFilter,
@@ -77,6 +93,8 @@ export class Canvas {
         this.backBuffer.height = 625;
         this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
+        this.phosphor = window.document.createElement("canvas");
+        this.phosphorCtx = this.phosphor.getContext("2d", { alpha: false });
         this.canvas = canvas;
         this.persistence = 0;
 
@@ -92,6 +110,8 @@ export class Canvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
+        // As GlCanvas.setPersistence: what the phosphor held with none on is stale.
+        if (this.persistence <= 0 && persistence > 0) this.phosphor.width = 0;
         this.persistence = persistence;
     }
 
@@ -104,23 +124,33 @@ export class Canvas {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        // Set on every paint: a resize resets the context's state. The decay is
-        // a black wash over the old picture; "lighten" then keeps the brighter
-        // of that and the new frame, per channel. The wash rounds a value of a
-        // few levels back to itself, so a trail here ends a shade above black;
-        // the 2D canvas has no subtract that would not also flicker black.
-        const ctx = this.ctx;
-        if (this.persistence > 0) {
-            ctx.globalCompositeOperation = "source-over";
-            ctx.globalAlpha = 1 - this.persistence ** (frame.fields ?? 1);
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            ctx.globalCompositeOperation = "lighten";
-        } else {
-            ctx.globalCompositeOperation = "source-over";
+        const { width: screenWidth, height: screenHeight } = this.canvas;
+        if (this.persistence <= 0) {
+            this.ctx.globalCompositeOperation = "source-over";
+            this.ctx.globalAlpha = 1;
+            this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, screenWidth, screenHeight);
+            return;
         }
+        // The decay is a black wash over the old picture; "lighten" then keeps
+        // the brighter of that and the new frame, per channel. The wash rounds a
+        // value of a few levels back to itself, so a trail here ends a shade
+        // above black; the 2D canvas has no subtract that would not also
+        // flicker black. All of it happens off screen, which is then shown whole.
+        if (this.phosphor.width !== screenWidth || this.phosphor.height !== screenHeight) {
+            this.phosphor.width = screenWidth;
+            this.phosphor.height = screenHeight;
+        }
+        const ctx = this.phosphorCtx;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1 - this.persistence ** (frame.fields ?? 1);
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, screenWidth, screenHeight);
+        ctx.globalCompositeOperation = "lighten";
         ctx.globalAlpha = 1;
-        ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
+        ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, screenWidth, screenHeight);
+        this.ctx.globalCompositeOperation = "source-over";
+        this.ctx.globalAlpha = 1;
+        this.ctx.drawImage(this.phosphor, 0, 0);
     }
 }
 
@@ -140,8 +170,7 @@ export class GlCanvas {
             alpha: false,
             antialias: false,
             depth: false,
-            // Phosphor persistence blends each frame over the one before it, which has to still be
-            // there; a desynchronized context also flickers without it.
+            // A desynchronized context flickers without it.
             preserveDrawingBuffer: true,
             stencil: false,
             failIfMajorPerformanceCaveat: true,
@@ -157,47 +186,77 @@ export class GlCanvas {
             throw new Error("Problem creating GL context: " + webglDebug.glEnumToString(err) + " in " + funcName);
         });
 
-        checkedGl.depthMask(false);
-        // Keeping the brighter of two colours is a blend equation WebGL 1 only
-        // has through this extension; without it there is no persistence.
-        this.blendMinMax = gl.getExtension("EXT_blend_minmax");
-        this.decayProgram = compileProgram(checkedGl, DecayVertexShader, DecayFragmentShader, "phosphor decay");
-        this.decayPosLocation = checkedGl.getAttribLocation(this.decayProgram, "pos");
-
-        this.fb8 = new Uint8Array(width * height * 4);
-        this.fb32 = new Uint32Array(this.fb8.buffer);
-        this.texture = checkedGl.createTexture();
-        checkedGl.activeTexture(checkedGl.TEXTURE0);
-        checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.texture);
-        checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texImage2D(
-            checkedGl.TEXTURE_2D,
-            0,
-            checkedGl.RGBA,
-            width,
-            height,
-            0,
-            checkedGl.RGBA,
-            checkedGl.UNSIGNED_BYTE,
-            this.fb8,
-        );
-
-        this.vertexPositionBuffer = checkedGl.createBuffer();
-        checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.vertexPositionBuffer);
-        checkedGl.bufferData(checkedGl.ARRAY_BUFFER, new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]), checkedGl.STATIC_DRAW);
-        this.uvBuffer = checkedGl.createBuffer();
-
         this.checkedGl = checkedGl;
         this.filter = null;
+        this.decayProgram = this.copyProgram = null;
+        this.phosphorFramebuffer = this.phosphorTexture = null;
+        this.texture = this.vertexPositionBuffer = this.uvBuffer = null;
         this.attribLocations = [];
         this.viewportWidth = this.viewportHeight = 0;
+        this.phosphorWidth = this.phosphorHeight = 0;
         this.persistence = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
         try {
+            checkedGl.depthMask(false);
+            // Keeping the brighter of two colours is a blend equation WebGL 1 only
+            // has through this extension; without it there is no persistence.
+            this.blendMinMax = gl.getExtension("EXT_blend_minmax");
+            this.decayProgram = compileProgram(checkedGl, DecayVertexShader, DecayFragmentShader, "phosphor decay");
+            this.decayPosLocation = checkedGl.getAttribLocation(this.decayProgram, "pos");
+            this.copyProgram = compileProgram(checkedGl, CopyVertexShader, CopyFragmentShader, "phosphor copy");
+            this.copyPosLocation = checkedGl.getAttribLocation(this.copyProgram, "pos");
+            this.copyPhosphorLocation = checkedGl.getUniformLocation(this.copyProgram, "uPhosphor");
+            this.phosphorTexture = checkedGl.createTexture();
+            checkedGl.activeTexture(checkedGl.TEXTURE0 + PhosphorTextureUnit);
+            checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.phosphorTexture);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
+            // Copied at one to one, where linear sampling reads each texel exactly and turns a
+            // rounding error at an edge into a blend rather than a skipped row.
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
+            this.phosphorFramebuffer = checkedGl.createFramebuffer();
+            checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, this.phosphorFramebuffer);
+            checkedGl.framebufferTexture2D(
+                checkedGl.FRAMEBUFFER,
+                checkedGl.COLOR_ATTACHMENT0,
+                checkedGl.TEXTURE_2D,
+                this.phosphorTexture,
+                0,
+            );
+            checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, null);
+
+            this.fb8 = new Uint8Array(width * height * 4);
+            this.fb32 = new Uint32Array(this.fb8.buffer);
+            this.texture = checkedGl.createTexture();
+            checkedGl.activeTexture(checkedGl.TEXTURE0);
+            checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.texture);
+            checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
+            checkedGl.texImage2D(
+                checkedGl.TEXTURE_2D,
+                0,
+                checkedGl.RGBA,
+                width,
+                height,
+                0,
+                checkedGl.RGBA,
+                checkedGl.UNSIGNED_BYTE,
+                this.fb8,
+            );
+
+            this.vertexPositionBuffer = checkedGl.createBuffer();
+            checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.vertexPositionBuffer);
+            checkedGl.bufferData(
+                checkedGl.ARRAY_BUFFER,
+                new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]),
+                checkedGl.STATIC_DRAW,
+            );
+            this.uvBuffer = checkedGl.createBuffer();
+
             this.setFilter(filterClass);
         } catch (e) {
             this.dispose();
@@ -216,8 +275,27 @@ export class GlCanvas {
      * will not build leaves the canvas drawing as it was.
      */
     setFilter(filterClass) {
-        const gl = this.checkedGl;
+        // The filter draws through the plain context every frame, so its setup
+        // is checked once here rather than call by call.
+        const gl = this.gl;
+        const drainErrors = () => {
+            let first = gl.NO_ERROR;
+            for (let error = gl.getError(); error !== gl.NO_ERROR; error = gl.getError()) {
+                if (first === gl.NO_ERROR) first = error;
+            }
+            return first;
+        };
+        drainErrors();
         const filter = new filterClass(gl);
+        const error = drainErrors();
+        if (error !== gl.NO_ERROR) {
+            filter.dispose();
+            // The refused filter may have made its own program current as it was built.
+            if (this.filter) this.useFilterProgram();
+            throw new Error(
+                `${filterClass.getDisplayConfig().name} failed to set up: ${webglDebug.glEnumToString(error)}`,
+            );
+        }
         this.filter?.dispose();
         this.filter = filter;
 
@@ -233,7 +311,7 @@ export class GlCanvas {
 
     /** Makes the filter's program current with its attributes pointed at our buffers. */
     useFilterProgram() {
-        const gl = this.checkedGl;
+        const gl = this.gl;
         const program = this.filter.program;
         gl.useProgram(program);
         const bindAttribute = (name, buffer) => {
@@ -247,28 +325,66 @@ export class GlCanvas {
         this.attribLocations = [bindAttribute("pos", this.vertexPositionBuffer), bindAttribute("uvIn", this.uvBuffer)];
     }
 
+    /** Makes a full-screen quad program current, with only its position attribute bound. */
+    useQuadProgram(program, posLocation) {
+        const gl = this.gl;
+        gl.useProgram(program);
+        for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
+        gl.enableVertexAttribArray(posLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexPositionBuffer);
+        gl.vertexAttribPointer(posLocation, 2, gl.FLOAT, false, 0, 0);
+        this.attribLocations = [posLocation];
+    }
+
     /**
      * Scales the old picture down by the persistence and takes a level off it:
      * the destination factor does the scaling and the quad's colour is what is
-     * subtracted. The frame that follows keeps the brighter of itself and what
-     * is left, which is a blend equation the factors do not apply to.
+     * subtracted.
      */
     decayOldPicture(fields) {
-        const gl = this.checkedGl;
-        gl.blendColor(0, 0, 0, this.persistence ** fields);
-        gl.useProgram(this.decayProgram);
-        for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
-        gl.enableVertexAttribArray(this.decayPosLocation);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexPositionBuffer);
-        gl.vertexAttribPointer(this.decayPosLocation, 2, gl.FLOAT, false, 0, 0);
+        const gl = this.gl;
+        this.useQuadProgram(this.decayProgram, this.decayPosLocation);
+        gl.enable(gl.BLEND);
         gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
         gl.blendFunc(gl.ONE, gl.CONSTANT_ALPHA);
+        gl.blendColor(0, 0, 0, this.persistence ** fields);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.disableVertexAttribArray(this.decayPosLocation);
-        this.attribLocations = [];
-        this.useFilterProgram();
-        gl.blendEquation(this.blendMinMax.MAX_EXT);
-        gl.blendFunc(gl.ONE, gl.ONE);
+    }
+
+    /** The phosphor texture follows the drawing buffer's size; a resize starts it black. */
+    fitPhosphorToViewport() {
+        const gl = this.gl;
+        if (this.phosphorWidth === this.viewportWidth && this.phosphorHeight === this.viewportHeight) return;
+        this.phosphorWidth = this.viewportWidth;
+        this.phosphorHeight = this.viewportHeight;
+        gl.activeTexture(gl.TEXTURE0 + PhosphorTextureUnit);
+        gl.bindTexture(gl.TEXTURE_2D, this.phosphorTexture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            this.phosphorWidth,
+            this.phosphorHeight,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            null,
+        );
+        gl.activeTexture(gl.TEXTURE0);
+    }
+
+    /** Puts the phosphor's picture on the screen as it stands. */
+    copyPhosphorToScreen() {
+        const gl = this.gl;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        this.useQuadProgram(this.copyProgram, this.copyPosLocation);
+        // A filter may have put its own texture on this unit while it drew.
+        gl.activeTexture(gl.TEXTURE0 + PhosphorTextureUnit);
+        gl.bindTexture(gl.TEXTURE_2D, this.phosphorTexture);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.uniform1i(this.copyPhosphorLocation, PhosphorTextureUnit);
+        gl.disable(gl.BLEND);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
     /** Whether the driver can keep the brighter of two colours, without which there is no persistence. */
@@ -278,17 +394,10 @@ export class GlCanvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
-        const gl = this.checkedGl;
-        this.persistence = this.canPersist ? persistence : 0;
-        if (this.persistence <= 0) {
-            gl.disable(gl.BLEND);
-            return;
-        }
-        gl.enable(gl.BLEND);
-        // The frame's own blend, set here as well as after each decay pass so a
-        // repaint with no decay to do finds it in place.
-        gl.blendEquation(this.blendMinMax.MAX_EXT);
-        gl.blendFunc(gl.ONE, gl.ONE);
+        persistence = this.canPersist ? persistence : 0;
+        // With none, frames go straight to the screen and the phosphor keeps a stale picture.
+        if (this.persistence <= 0 && persistence > 0) this.phosphorWidth = this.phosphorHeight = 0;
+        this.persistence = persistence;
     }
 
     /**
@@ -301,7 +410,11 @@ export class GlCanvas {
         this.filter?.dispose();
         this.filter = null;
         gl.deleteProgram(this.decayProgram);
-        this.decayProgram = null;
+        gl.deleteProgram(this.copyProgram);
+        this.decayProgram = this.copyProgram = null;
+        gl.deleteFramebuffer(this.phosphorFramebuffer);
+        gl.deleteTexture(this.phosphorTexture);
+        this.phosphorFramebuffer = this.phosphorTexture = null;
         gl.deleteTexture(this.texture);
         gl.deleteBuffer(this.vertexPositionBuffer);
         gl.deleteBuffer(this.uvBuffer);
@@ -311,7 +424,6 @@ export class GlCanvas {
     paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
         const fields = frame.fields ?? 1;
-        if (this.persistence > 0 && fields > 0) this.decayOldPicture(fields);
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
         // follow it.
@@ -319,6 +431,13 @@ export class GlCanvas {
             this.viewportWidth = gl.drawingBufferWidth;
             this.viewportHeight = gl.drawingBufferHeight;
             gl.viewport(0, 0, this.viewportWidth, this.viewportHeight);
+        }
+        const persisting = this.persistence > 0;
+        if (persisting) {
+            this.fitPhosphorToViewport();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.phosphorFramebuffer);
+            if (fields > 0) this.decayOldPicture(fields);
+            this.useFilterProgram();
         }
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -373,7 +492,19 @@ export class GlCanvas {
             texelsPerOutputPixel: (extent.maxx - extent.minx) / gl.drawingBufferWidth,
         });
 
+        if (!persisting) {
+            gl.disable(gl.BLEND);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            return;
+        }
+        // The frame keeps the brighter of itself and what is left of the old picture, which
+        // is a blend equation the factors do not apply to.
+        gl.enable(gl.BLEND);
+        gl.blendEquation(this.blendMinMax.MAX_EXT);
+        gl.blendFunc(gl.ONE, gl.ONE);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        this.copyPhosphorToScreen();
+        this.useFilterProgram();
     }
 }
 
