@@ -1,4 +1,4 @@
-const StartupActions = {
+const NoStartupActions = {
     autoboot: undefined,
     autochain: undefined,
     autorun: undefined,
@@ -13,7 +13,7 @@ const StartupActions = {
  * `params` say and the page's own startup actions dropped. `replace` leaves no history entry.
  */
 export function reloadAsMachine(urlState, params, { replace = false } = {}) {
-    const url = urlState.urlWith({ ...StartupActions, ...params });
+    const url = urlState.urlWith({ ...NoStartupActions, ...params });
     if (replace) window.location.replace(url);
     else window.location.href = url;
 }

@@ -117,9 +117,9 @@ describe("SnapshotUI", () => {
         });
 
         it("treats a co-processor mismatch as a machine change too", async () => {
-            deps.urlState.urlWith.mockReturnValue(`${window.location.href}#stashed`);
+            deps.urlState = stubNavigation(fakeUrlState());
             await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: true }));
-            expect(deps.urlState.urlWith).toHaveBeenCalledWith({ model: "B-DFS1.2", coProcessor: true });
+            expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?model=B-DFS1.2&coProcessor");
             expect(sessionStorage.getItem("jsbeeb-pending-state")).not.toBeNull();
             window.location.hash = "";
         });
