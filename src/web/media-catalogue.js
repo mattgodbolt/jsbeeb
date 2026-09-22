@@ -100,11 +100,7 @@ export function describeHfeEntry(file) {
     };
 }
 
-/**
- * The machines a manifest may name as what a disc needs, each as the URL spells the model and
- * its fitting, and in words for the dialog and the toast. The names are ours to define: a disc
- * that needs a machine this table cannot say is a change to the table and the manifest both.
- */
+/** The machines a manifest may name as what a disc needs: the model as the URL spells it, its fitting, and its name for the user. */
 export const MachineRequirements = Object.freeze({
     Master: Object.freeze({ model: "Master", coProcessor: false, name: "BBC Master 128" }),
     MasterTurbo: Object.freeze({

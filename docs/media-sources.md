@@ -27,8 +27,7 @@ Every listed entry is one descriptor, whichever source it came from:
   `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `name` what the
   user is told. `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine name
   to one through the table `MachineRequirements`, and a name outside the table gives no
-  requirement. The names are ours to define, so a disc that needs a machine the table lacks is a
-  change to the table and the manifest, not a looser match.
+  requirement.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,
