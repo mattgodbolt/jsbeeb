@@ -11,6 +11,7 @@ class FakeDrive {
         this.pulsesCallback = null;
         this.upperSide = false;
         this.track = 0;
+        this.seeks = [];
     }
     selectSide(side) {
         this.upperSide = side;
@@ -27,7 +28,12 @@ class FakeDrive {
     seekOneTrack(dir) {
         this.track = this.track + dir;
     }
-    notifySeek() {}
+    notifySeek(newTrack, stepMs) {
+        this.seeks.push([newTrack - this.track, stepMs]);
+    }
+    notifySeekEnd() {
+        this.seeks.push("end");
+    }
     snapshotState() {
         return {};
     }
@@ -99,6 +105,45 @@ describe("Intel 8271 tests", function () {
         // We should reach and stop at track 4.
         scheduler.polltime(6000 * 10);
         expect(fakeDrive.track).toBe(4);
+    });
+
+    describe("seek noise", () => {
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+
+        it("announces the seek's tracks at the drive's own 3 ms when no rate was specified, and its end", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 2);
+            expect(fakeDrive.seeks).toEqual([[4, 3]]);
+            scheduler.polltime(6000 * 10);
+            expect(fakeDrive.seeks).toEqual([[4, 3], "end"]);
+        });
+
+        it("announces the rate the DFS specified, doubled for a 5.25 inch drive", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 2);
+            expect(fakeDrive.seeks).toEqual([[4, 24]]);
+        });
+
+        it("announces nothing for a seek to the track the head is on", () => {
+            const fakeDrive = new FakeDrive();
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 2);
+            scheduler.polltime(6000 * 10);
+            fakeDrive.seeks.length = 0;
+            sendCommand(fdc, seekCmd, 2);
+            scheduler.polltime(6000 * 10);
+            expect(fakeDrive.seeks).toEqual([]);
+        });
     });
 
     describe("head load", () => {

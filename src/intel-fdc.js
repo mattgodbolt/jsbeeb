@@ -1296,7 +1296,7 @@ export class IntelFdc {
             this._regs[Registers.internalSeekCount] = curTrack - newTrack;
             this._driveOut &= ~DriveOut.direction;
         }
-        if (this._currentDrive) this._currentDrive.notifySeek(newTrack);
+        if (this._currentDrive) this._currentDrive.notifySeek(newTrack, this._stepRateMs());
 
         // Seek pulses on the 8271 are about 10us, so let's just lower the output bit and make them unobservable
         // as we suspect they are on a real machine.
@@ -1324,20 +1324,20 @@ export class IntelFdc {
         this._regs[Registers.internalSeekCount]--;
 
         if (this._currentDrive) this._currentDrive.seekOneTrack(this._driveOut & DriveOut.direction ? 1 : -1);
+        this._setTimerMs(TimerState.seekStep, this._stepRateMs());
+    }
 
-        let stepRate = this._regs[Registers.headStepRate];
-        if (stepRate === 0) {
-            // Step rate is up to the drive. Let's say 3ms.
-            stepRate = 3;
-        } else {
-            // The datasheet is ambiguous about whether the units are 1ms or 2ms for 5.25" drives. 1ms might
-            // be your best guess from the datasheet, but timing on a real machine, it appears to be 2ms.
-            stepRate *= 2;
-        }
-        this._setTimerMs(TimerState.seekStep, stepRate);
+    _stepRateMs() {
+        const stepRate = this._regs[Registers.headStepRate];
+        // Zero leaves the rate to the drive. Let's say 3ms.
+        if (stepRate === 0) return 3;
+        // The datasheet is ambiguous about whether the units are 1ms or 2ms for 5.25" drives. 1ms might
+        // be your best guess from the datasheet, but timing on a real machine, it appears to be 2ms.
+        return stepRate * 2;
     }
 
     _doLoadHead() {
+        if (this._didSeekStep && this._currentDrive) this._currentDrive.notifySeekEnd();
         let postSeekTimeMs = 0;
         // The head load time replaces the settle time if there is both.
         if (!(this._driveOut & DriveOut.loadHead)) {

@@ -4,10 +4,12 @@ import { SamplePlayer } from "../../src/sample-player.js";
 function createStubContext(state = "running") {
     return {
         state,
+        currentTime: 0,
         createGain() {
             return {
-                gain: { value: 1 },
+                gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
                 connect: vi.fn(),
+                disconnect: vi.fn(),
             };
         },
         createBufferSource() {
@@ -76,6 +78,50 @@ describe("SamplePlayer", () => {
             const source = player.playing[0];
             source.onended();
             expect(player.playing).toHaveLength(0);
+        });
+    });
+
+    describe("startSound", () => {
+        it("starts at the time, offset and length asked for, straight into the player's gain", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = player.startSound({ duration: 2 }, { when: 1.5, offset: 0.1, duration: 0.5 });
+            expect(source.start).toHaveBeenCalledWith(1.5, 0.1, 0.5);
+            expect(source.connect).toHaveBeenCalledWith(player.gain);
+            expect(player.playing).toEqual([source]);
+        });
+
+        it("plays the rest of the sound when no length is given", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = player.startSound({ duration: 2 }, { offset: 0.3 });
+            expect(source.start).toHaveBeenCalledWith(0, 0.3);
+        });
+
+        it("fades a cut sound in and out through a gain of its own, freed when it ends", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = player.startSound(
+                { duration: 2 },
+                { when: 4, offset: 0, duration: 0.024, fadeSeconds: 0.002 },
+            );
+            const fade = source.connect.mock.calls[0][0];
+            expect(fade).not.toBe(player.gain);
+            expect(fade.connect).toHaveBeenCalledWith(player.gain);
+            expect(fade.gain.setValueAtTime.mock.calls).toEqual([
+                [0, 4],
+                [1, 4.022],
+            ]);
+            expect(fade.gain.linearRampToValueAtTime.mock.calls).toEqual([
+                [1, 4.002],
+                [0, 4.024],
+            ]);
+            source.onended();
+            expect(fade.disconnect).toHaveBeenCalled();
+            expect(player.playing).toEqual([]);
+        });
+
+        it("plays nothing when the context is not running", () => {
+            context.state = "suspended";
+            const player = new SamplePlayer(context, destination, 0.4);
+            expect(player.startSound({ duration: 2 })).toBeNull();
         });
     });
 

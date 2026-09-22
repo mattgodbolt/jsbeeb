@@ -660,7 +660,7 @@ export class WdFdc {
     }
 
     _makeSeekNoise(delta) {
-        if (this._currentDrive) this._currentDrive.notifySeekAmount(delta);
+        if (this._currentDrive) this._currentDrive.notifySeekAmount(delta, this._commandStepRateMs);
     }
 
     _dispatchCommand() {
@@ -1139,6 +1139,7 @@ export class WdFdc {
     }
 
     _checkVerify() {
+        if (this._currentDrive) this._currentDrive.notifySeekEnd();
         if (this._isCommandVerify) {
             this._indexPulseCount = 0;
             this._setState(State.searchId);
