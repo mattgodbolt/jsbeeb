@@ -348,6 +348,10 @@ export class GlCanvas {
         const gl = this.gl;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this.useQuadProgram(this.copyProgram, this.copyPosLocation);
+        // A filter may have put its own texture on this unit while it drew
+        gl.activeTexture(gl.TEXTURE0 + PhosphorTextureUnit);
+        gl.bindTexture(gl.TEXTURE_2D, this.phosphorTexture);
+        gl.activeTexture(gl.TEXTURE0);
         gl.uniform1i(this.copyPhosphorLocation, PhosphorTextureUnit);
         gl.disable(gl.BLEND);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

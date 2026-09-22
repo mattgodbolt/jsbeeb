@@ -288,6 +288,24 @@ describe("phosphor persistence", () => {
         ]);
     });
 
+    it("binds the phosphor to its unit before the copy, whatever a filter left there", () => {
+        const gl = recordingGl();
+        const calls = [];
+        for (const name of ["activeTexture", "bindTexture", "drawArrays"])
+            gl[name] = (...args) => calls.push([name, ...args]);
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        calls.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        const copyDraw = calls.length - 1;
+        expect(calls[copyDraw]).toEqual(["drawArrays", gl.TRIANGLE_STRIP, 0, 4]);
+        expect(calls.slice(copyDraw - 3, copyDraw)).toEqual([
+            ["activeTexture", gl.TEXTURE1],
+            ["bindTexture", gl.TEXTURE_2D, canvas.phosphorTexture],
+            ["activeTexture", gl.TEXTURE0],
+        ]);
+    });
+
     it("sizes the phosphor to the drawing buffer, again when that changes", () => {
         const gl = recordingGl();
         const sizes = [];
