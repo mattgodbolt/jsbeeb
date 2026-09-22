@@ -139,6 +139,33 @@ describe("DdNoise seeks", () => {
         expect(starts(ddNoise).at(-1).sound).toBe(Sounds.step);
     });
 
+    it("drops the settle of a run the head finished if a new movement comes before it sounds", () => {
+        ddNoise.seekStart(5, 24);
+        const settle = ddNoise.playing.at(-1);
+        context.currentTime = 5 * 0.024 - 0.005;
+        ddNoise.seekEnd(5);
+        ddNoise.seekStart(30, 24);
+        expect(settle.stop).toHaveBeenCalled();
+    });
+
+    it("lets a settle that has begun ring on under a new movement", () => {
+        ddNoise.seekStart(5, 24);
+        const settle = ddNoise.playing.at(-1);
+        context.currentTime = 5 * 0.024 + 0.005;
+        ddNoise.seekEnd(5);
+        ddNoise.seekStart(30, 24);
+        expect(settle.stop).not.toHaveBeenCalled();
+    });
+
+    it("drops a moved settle too if a new movement comes before it sounds", () => {
+        ddNoise.seekStart(30, 24);
+        context.currentTime = 10 * 0.024;
+        ddNoise.seekEnd(11);
+        const moved = ddNoise.playing.at(-1);
+        ddNoise.seekStart(1, 24);
+        expect(moved.stop).toHaveBeenCalled();
+    });
+
     it("does nothing at all when the context is not running", () => {
         context.state = "suspended";
         ddNoise.seekStart(30, 24);

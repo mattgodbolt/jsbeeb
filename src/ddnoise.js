@@ -92,37 +92,34 @@ export class DdNoise extends SamplePlayer {
             });
             grains.push({ source, at });
         }
-        const settle = this.startSound(this.sounds.step, {
-            when: now + steps * stepSeconds,
-            offset: SettleOffsetSeconds,
-        });
-        this.run = { grains, settle, start: now, stepSeconds };
+        this.run = { grains, settle: this.scheduleSettle(now + steps * stepSeconds), start: now, stepSeconds };
+    }
+
+    scheduleSettle(at) {
+        const source = this.startSound(this.sounds.step, { when: at, offset: SettleOffsetSeconds });
+        return { source, at };
     }
 
     /**
      * The head has stopped after `steps` steps. Fewer than announced drops the clicks past
-     * that and brings the ring forward to where the last of them was to sound.
+     * that and brings the ring forward to where the last of them was to sound. The run stays
+     * until a new movement, so that a settle still to come can give way to it.
      */
     seekEnd(steps) {
         const run = this.run;
-        this.run = null;
         if (!run || steps >= run.grains.length) return;
-        for (const grain of run.grains.slice(steps)) grain.source?.stop();
-        run.settle?.stop();
-        this.startSound(this.sounds.step, {
-            when: run.start + steps * run.stepSeconds,
-            offset: SettleOffsetSeconds,
-        });
+        for (const grain of run.grains.splice(steps)) grain.source?.stop();
+        run.settle.source?.stop();
+        run.settle = this.scheduleSettle(run.start + steps * run.stepSeconds);
     }
 
-    /** Stops the grains of a run that have not yet sounded. */
+    /** Stops the parts of a run that have not yet sounded. */
     cancelRun() {
         if (!this.run) return;
         const { grains, settle } = this.run;
         this.run = null;
         const now = this.context.currentTime;
-        for (const grain of grains) if (grain.at > now) grain.source?.stop();
-        settle?.stop();
+        for (const grain of [...grains, settle]) if (grain.at > now) grain.source?.stop();
     }
 }
 
