@@ -460,8 +460,8 @@ export class DiscDrive extends BaseDiscDrive {
         const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
         const target = Math.min(lastTrack, Math.max(0, this._track + delta * this._tracksPerStep));
         const steps = Math.sign(delta) * Math.ceil(Math.abs(target - this._track) / this._tracksPerStep);
+        this._seekSteps = steps ? 0 : null;
         if (!steps) return;
-        this._seekSteps = 0;
         this.dispatchEvent(new SeekEvent(steps, stepMs));
     }
 
@@ -515,6 +515,7 @@ export class DiscDrive extends BaseDiscDrive {
     }
 
     restoreState(state) {
+        this._seekSteps = null;
         this._track = state.track;
         this._isSideUpper = state.isSideUpper;
         this._headPosition = state.headPosition;

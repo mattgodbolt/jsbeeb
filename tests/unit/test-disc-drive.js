@@ -264,6 +264,19 @@ describe("40 track discs", () => {
         expect(drive.track).toBe(0);
     });
 
+    it("forgets the steps of a seek that never ended once a seek with none to take is announced", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), 2);
+        const ends = [];
+        drive.addEventListener("seekEnd", (event) => ends.push(event.steps));
+
+        drive.notifySeekAmount(5, 24);
+        drive.seekOneTrack(1);
+        drive.notifySeekAmount(0, 24);
+        drive.notifySeekEnd();
+
+        expect(ends).toEqual([]);
+    });
+
     it("counts from where the head is, between the pitches of a switch made mid-surface", () => {
         const drive = new DiscDrive(0, new Scheduler());
         drive.setDisc(fortyTrackDisc());

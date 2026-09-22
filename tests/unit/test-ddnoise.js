@@ -63,8 +63,19 @@ describe("DdNoise seeks", () => {
         ddNoise.seekStart(0, 24);
         expect(starts(ddNoise)).toEqual([]);
         ddNoise.seekStart(1, 24);
+        context.currentTime = 0.1;
         ddNoise.seekStart(-2, 24);
         expect(starts(ddNoise).map((s) => s.sound)).toEqual([Sounds.step, Sounds.step]);
+    });
+
+    it("holds a click off while the last one still sounds", () => {
+        ddNoise.seekStart(1, 6);
+        context.currentTime = 0.006;
+        ddNoise.seekStart(1, 6);
+        expect(starts(ddNoise)).toHaveLength(1);
+        context.currentTime = 0.1;
+        ddNoise.seekStart(1, 6);
+        expect(starts(ddNoise)).toHaveLength(2);
     });
 
     it("runs a click per step at the controller's own rate, then lets the last one ring", () => {
@@ -123,6 +134,7 @@ describe("DdNoise seeks", () => {
         const old = ddNoise.playing.slice();
         context.currentTime = 0.05;
         ddNoise.seekStart(1, 24);
+        old.slice(0, 3).forEach((source) => expect(source.stop).not.toHaveBeenCalled());
         old.slice(3).forEach((source) => expect(source.stop).toHaveBeenCalled());
         expect(starts(ddNoise).at(-1).sound).toBe(Sounds.step);
     });

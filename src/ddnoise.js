@@ -25,6 +25,7 @@ export class DdNoise extends SamplePlayer {
         this.state = Idle;
         this.motor = null;
         this.run = null;
+        this.clickEnds = 0;
     }
 
     async initialise() {
@@ -66,18 +67,18 @@ export class DdNoise extends SamplePlayer {
 
     /**
      * The head is about to take `steps` steps, one every `stepMs`: a click for a step or two,
-     * otherwise a run of clicks scheduled on the audio clock at that rate, with the click's
-     * ring as the settle after the last.
+     * held off while the last click still sounds, otherwise a run of clicks scheduled on the
+     * audio clock at that rate, with the click's ring as the settle after the last.
      */
     seekStart(steps, stepMs) {
         if (steps < 0) steps = -steps;
         if (steps === 0) return;
         this.cancelRun();
+        const now = this.context.currentTime;
         if (steps <= ClickSteps) {
-            this.oneShot(this.sounds.step);
+            if (now >= this.clickEnds) this.clickEnds = now + this.oneShot(this.sounds.step);
             return;
         }
-        const now = this.context.currentTime;
         const stepSeconds = stepMs / 1000;
         const grains = [];
         for (let step = 0; step < steps; ++step) {
@@ -99,9 +100,9 @@ export class DdNoise extends SamplePlayer {
     }
 
     /**
-     * The head has stopped after `steps` steps, fewer than announced if the controller found
-     * track 0 or the surface's end first: the clicks past that are dropped and the ring
-     * brought forward to where the last of them was to sound.
+     * The head has stopped after `steps` steps, fewer than announced when the controller's
+     * track register had it further from its target than it was: the clicks past that are
+     * dropped and the ring brought forward to where the last of them was to sound.
      */
     seekEnd(steps) {
         const run = this.run;

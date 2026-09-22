@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { DiscDrive } from "../../src/disc-drive.js";
 
 class FakeDrive {
     constructor() {
@@ -110,6 +111,7 @@ describe("Intel 8271 tests", function () {
     describe("seek noise", () => {
         const specifyCmd = 0x35;
         const initialisation = 0x0d;
+        const badTracksDrive0 = 0x10;
 
         it("announces the seek's tracks at the drive's own 3 ms when no rate was specified, and its end", () => {
             const fakeDrive = new FakeDrive();
@@ -130,6 +132,26 @@ describe("Intel 8271 tests", function () {
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             sendCommand(fdc, seekCmd, 2);
             expect(fakeDrive.seeks).toEqual([[4, 24]]);
+        });
+
+        it("ends short when its track register had the head further from the target than it was", () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler);
+            const events = [];
+            drive.addEventListener("seekStart", (event) => events.push([event.steps, event.stepMs]));
+            drive.addEventListener("seekEnd", (event) => events.push(`end after ${event.steps}`));
+            const fdc = new IntelFdc(fake6502(), scheduler, [drive]);
+            sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            sendCommand(fdc, seekCmd, 13);
+            scheduler.polltime(6000 * 20);
+            expect(drive.track).toBe(13);
+            for (let track = 13; track < 20; ++track) drive.seekOneTrack(1);
+            events.length = 0;
+            sendCommand(fdc, seekCmd, 10);
+            scheduler.polltime(6000 * 10);
+            expect(events).toEqual([[-10, 3], "end after 3"]);
+            expect(drive.track).toBe(17);
         });
 
         it("announces nothing for a seek to the track the head is on", () => {
