@@ -197,6 +197,14 @@ const ParamAccept = Object.freeze({
 });
 
 /**
+ * The Model B does not wire the drives' Ready lines to the 8271. Its own logic (ICs 83 to 86)
+ * makes a selected drive ready on the second index pulse after selection and drops it as soon
+ * as 8192 counts of a 31.25 kHz clock pass without one: 262 ms, a disc below about 230 rpm.
+ */
+const ReadyTimeoutTicks = 8192 * 64;
+const ReadyIndexPulses = 2;
+
+/**
  * Index pulse state machine.
  *
  * @readonly
@@ -295,6 +303,10 @@ export class IntelFdc {
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
         /** @type {BaseDiscDrive} */
         this._currentDrive = null;
+        this._scheduler = scheduler;
+        this._ready = false;
+        this._readyPulses = 0;
+        this._lastIndexEpoch = -Infinity;
 
         this._paramCallback = ParamAccept.none;
         this._indexPulseCallback = IndexPulse.none;
@@ -452,6 +464,7 @@ export class IntelFdc {
         // Looking for pulse going high
         if (!this._stateIsIndexPulse || wasIndexPulse) return;
 
+        this._noteIndexPulse();
         switch (this._indexPulseCallback) {
             case IndexPulse.none:
                 break;
@@ -500,6 +513,24 @@ export class IntelFdc {
             default:
                 throw new Error(`Unexpected index pulse callback ${this._indexPulseCallback}`);
         }
+    }
+
+    _noteIndexPulse() {
+        if (this._indexPulsesStopped) {
+            this._ready = false;
+            this._readyPulses = 0;
+        }
+        this._lastIndexEpoch = this._scheduler.epoch;
+        if (++this._readyPulses >= ReadyIndexPulses) this._ready = true;
+    }
+
+    get _indexPulsesStopped() {
+        return this._scheduler.epoch - this._lastIndexEpoch >= ReadyTimeoutTicks;
+    }
+
+    /** The Beeb's ready latch as it stands, which the timeout clears without waiting for a pulse. */
+    get _driveReady() {
+        return this._ready && !this._indexPulsesStopped;
     }
 
     _pulsesCallback(pulses, count) {
@@ -1195,6 +1226,13 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
         else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
 
+        if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
+            this._ready = false;
+            this._readyPulses = 0;
+            this._lastIndexEpoch = -Infinity;
+            // Edges are counted from the new drive's level, not the old one's
+            this._stateIsIndexPulse = this._index;
+        }
         if (this._currentDrive) {
             if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
             this._currentDrive.selectSide(!!(driveOut & DriveOut.side));
@@ -1456,13 +1494,14 @@ export class IntelFdc {
     get _driveIn() {
         // Note: on @scarybeasts machine, bit 7 and bit 0 appear to be always set.
         let driveIn = 0x81;
+        // RDY0 and RDY1 are the Beeb's latch, which outlives a brief stop of the motor
+        if (this._driveReady) {
+            if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
+            if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
+        }
         if (this._currentDiscIsSpinning) {
             // TRK0
             if (this._trk0) driveIn |= 0x02;
-            // RDY0
-            if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
-            // RDY1
-            if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
             // WR PROT
             if (this._wrProt) driveIn |= 0x08;
             // INDEX
@@ -1675,6 +1714,9 @@ export class IntelFdc {
             timerState: this._timerState,
             callContext: this._callContext,
             didSeekStep: this._didSeekStep,
+            ready: this._ready,
+            readyPulses: this._readyPulses,
+            sinceIndexPulse: Number.isFinite(this._lastIndexEpoch) ? scheduler.epoch - this._lastIndexEpoch : null,
             timerTaskOffset: this._timerTask.scheduled() ? this._timerTask.expireEpoch - scheduler.epoch : null,
             drives: this._drives.map((d) => d.snapshotState()),
         };
@@ -1687,6 +1729,15 @@ export class IntelFdc {
         this._mmioData = state.mmioData;
         this._mmioClocks = state.mmioClocks;
         this._driveOut = state.driveOut;
+        // A snapshot from before the latch existed comes up ready, with a pulse as good as now.
+        this._ready = state.ready ?? true;
+        this._readyPulses = state.readyPulses ?? ReadyIndexPulses;
+        this._lastIndexEpoch =
+            state.sinceIndexPulse === undefined
+                ? this._scheduler.epoch
+                : state.sinceIndexPulse === null
+                  ? -Infinity
+                  : this._scheduler.epoch - state.sinceIndexPulse;
         this._shiftRegister = state.shiftRegister;
         this._numShifts = state.numShifts;
         this._state = state.state;
