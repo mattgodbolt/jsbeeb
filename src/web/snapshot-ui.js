@@ -11,6 +11,7 @@ import {
 } from "../snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "../bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "../uef-snapshot.js";
+import { leaveForNextPage, reloadAsMachine, takeFromLastPage } from "./machine-switch.js";
 
 const PendingStateKey = "jsbeeb-pending-state";
 
@@ -127,12 +128,8 @@ export class SnapshotUI {
             const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
             const snapshot = await readSnapshot(arrayBuffer);
             if (!isSameModel(snapshot.model, this.model.name) || hasCoProcessor(snapshot) !== this.processor.hasTube) {
-                // Model or co-processor mismatch: stash state and reload with a matching machine
-                sessionStorage.setItem(PendingStateKey, snapshotToJSON(snapshot));
-                window.location.href = this.urlState.urlWith({
-                    model: snapshot.model,
-                    coProcessor: hasCoProcessor(snapshot),
-                });
+                leaveForNextPage(PendingStateKey, snapshotToJSON(snapshot));
+                reloadAsMachine(this.urlState, { model: snapshot.model, coProcessor: hasCoProcessor(snapshot) });
                 return true;
             }
             await this.restore(snapshot);
@@ -149,9 +146,8 @@ export class SnapshotUI {
 
     /** Picks up the state a cross-model reload stashed, once the matching machine is up. */
     async restorePendingState() {
-        const pendingState = sessionStorage.getItem(PendingStateKey);
-        if (!pendingState) return;
-        sessionStorage.removeItem(PendingStateKey);
+        const pendingState = takeFromLastPage(PendingStateKey);
+        if (pendingState === null) return;
         try {
             await this.restore(snapshotFromJSON(pendingState));
             this.processor.execute(PostRestoreCycles);

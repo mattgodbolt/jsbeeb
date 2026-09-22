@@ -1,18 +1,33 @@
 import { satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
+import { StartupActionParams } from "./url-state.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
-const NoStartupActions = {
-    autoboot: undefined,
-    autochain: undefined,
-    autorun: undefined,
-    autotype: undefined,
-    loadBasic: undefined,
-    embedBasic: undefined,
-    patch: undefined,
-};
+const NoStartupActions = Object.fromEntries(StartupActionParams.map((name) => [name, undefined]));
+
+/**
+ * Reloads the page as the machine `params` name (`model`, `coProcessor`), the rest of the URL as
+ * `params` say and the page's own startup actions dropped. `replace` leaves no history entry.
+ */
+export function reloadAsMachine(urlState, params, { replace = false } = {}) {
+    const url = urlState.urlWith({ ...NoStartupActions, ...params });
+    if (replace) window.location.replace(url);
+    else window.location.href = url;
+}
+
+/** Leaves `value` under `key` for the page a reload brings up. */
+export function leaveForNextPage(key, value) {
+    sessionStorage.setItem(key, value);
+}
+
+/** Takes what the last page left under `key`, once; null when it left nothing. */
+export function takeFromLastPage(key) {
+    const value = sessionStorage.getItem(key);
+    if (value !== null) sessionStorage.removeItem(key);
+    return value;
+}
 
 /**
  * Switches to the machine a disc needs by reloading with the model, its co-processor and the
@@ -48,24 +63,24 @@ export class MachineSwitch {
             if (!wanted) return false;
         }
         noteEvent("media", "switchMachine", d.ref);
-        if (boot) sessionStorage.setItem(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
-        const url = this.urlState.urlWith({
-            ...slot.urlParamsFor(d.ref),
-            ...NoStartupActions,
-            model: requires.model,
-            coProcessor: requires.coProcessor,
-            ...(boot ? { autoboot: true } : {}),
-        });
-        if (replace) window.location.replace(url);
-        else window.location.href = url;
+        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
+        reloadAsMachine(
+            this.urlState,
+            {
+                ...slot.urlParamsFor(d.ref),
+                model: requires.model,
+                coProcessor: requires.coProcessor,
+                ...(boot ? { autoboot: true } : {}),
+            },
+            { replace },
+        );
         return true;
     }
 
     /** Toasts the switch the last reload made, once. */
     announce() {
-        const notice = sessionStorage.getItem(PendingSwitchKey);
-        if (!notice) return;
-        sessionStorage.removeItem(PendingSwitchKey);
+        const notice = takeFromLastPage(PendingSwitchKey);
+        if (notice === null) return;
         toast(notice, { title: "Machine" });
     }
 }

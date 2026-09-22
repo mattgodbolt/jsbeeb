@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SnapshotUI, isSnapshotFile, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { Modals } from "../../src/web/modals.js";
 import { DiscLayout } from "../../src/disc.js";
-import { domFromIndexHtml, ssdImage, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, ssdImage, stubNavigation, teardownDom, toasts } from "./helpers.js";
 
 describe("snapshot media manifest", () => {
     const urlDisc = { originalImageCrc32: 0x1234, is40Track: false, originalImageData: null };
@@ -105,11 +105,11 @@ describe("SnapshotUI", () => {
             new TextEncoder().encode(JSON.stringify({ format: "jsbeeb-snapshot", version: 3, state: {}, ...snapshot }))
                 .buffer;
 
-        it("stashes a state for another model and navigates to a matching machine", async () => {
-            deps.urlState.urlWith.mockReturnValue(`${window.location.href}#stashed`);
+        it("stashes a state for another model and reloads as that machine, without the page's own boot", async () => {
+            deps.urlState = stubNavigation(fakeUrlState("?disc1=elite.ssd&autoboot"));
             await make().loadStateFromFile(null, snapshotBuffer({ model: "Master", coProcessor: false }));
-            expect(deps.urlState.urlWith).toHaveBeenCalledWith({ model: "Master", coProcessor: false });
-            expect(window.location.hash).toBe("#stashed");
+            expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?disc1=elite.ssd&model=Master");
+            expect(window.location.hash).toBe("#navigated");
             expect(JSON.parse(sessionStorage.getItem("jsbeeb-pending-state")).model).toBe("Master");
             expect(deps.video.paint).not.toHaveBeenCalled();
             expect(resume).toHaveBeenCalledTimes(1);
@@ -117,9 +117,9 @@ describe("SnapshotUI", () => {
         });
 
         it("treats a co-processor mismatch as a machine change too", async () => {
-            deps.urlState.urlWith.mockReturnValue(`${window.location.href}#stashed`);
+            deps.urlState = stubNavigation(fakeUrlState());
             await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: true }));
-            expect(deps.urlState.urlWith).toHaveBeenCalledWith({ model: "B-DFS1.2", coProcessor: true });
+            expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?model=B-DFS1.2&coProcessor");
             expect(sessionStorage.getItem("jsbeeb-pending-state")).not.toBeNull();
             window.location.hash = "";
         });

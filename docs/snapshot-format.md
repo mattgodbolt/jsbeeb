@@ -74,7 +74,7 @@ When loading, the snapshot's model must match the current one. Names are resolve
 
 The co-processor is emulation config rather than part of the model, so the model name cannot tell a Master Turbo from a plain Master. The `coProcessor` flag is therefore compared separately, and a mismatch is an error.
 
-If the models or co-processor settings differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model and co-processor setting in the query string, picking the state back up on the way in.
+If the models or co-processor settings differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model and co-processor setting in the query string and the page's own startup actions (`autoboot`, `autochain`, `autorun`, `autotype`, `loadBasic`, `embedBasic` and `patch`) left out, picking the state back up on the way in.
 
 Loading a pre-v3 snapshot while a co-processor is fitted therefore restarts the machine without one, since such a snapshot describes a host-only machine.
 

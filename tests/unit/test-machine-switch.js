@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MachineSwitch } from "../../src/web/machine-switch.js";
+import { MachineSwitch, leaveForNextPage, reloadAsMachine, takeFromLastPage } from "../../src/web/machine-switch.js";
 import { MachineRequirements } from "../../src/web/media-catalogue.js";
 import { findModel } from "../../src/models.js";
 import { fakeUrlState, stubNavigation, teardownDom, toasts } from "./helpers.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
+
+afterEach(() => {
+    window.history.replaceState(null, "", window.location.pathname);
+    sessionStorage.clear();
+    return teardownDom();
+});
 
 describe("MachineSwitch", () => {
     let deps;
@@ -18,12 +24,6 @@ describe("MachineSwitch", () => {
             urlState: stubNavigation(fakeUrlState("?disc1=elite.ssd&autoboot&autotype=RUN&loadBasic=a.bas&patch=@1")),
             modals: { confirm: vi.fn() },
         };
-    });
-
-    afterEach(() => {
-        window.history.replaceState(null, "", window.location.pathname);
-        sessionStorage.clear();
-        return teardownDom();
     });
 
     const make = () => new MachineSwitch(deps);
@@ -81,5 +81,38 @@ describe("MachineSwitch", () => {
         expect(window.history.length).toBe(entries);
         await make().switchFor(paradroid, drive0, { boot: true });
         expect(window.history.length).toBe(entries + 1);
+    });
+});
+
+describe("reloading as another machine", () => {
+    const pageThatDidThings = () =>
+        stubNavigation(
+            fakeUrlState(
+                "?disc1=elite.ssd&autoboot&autochain&autorun&autotype=RUN&loadBasic=a.bas&embedBasic=1&patch=@1",
+            ),
+        );
+
+    it("keeps the page's media and drops what it did at startup, unless the caller asks again", () => {
+        const urlState = pageThatDidThings();
+        reloadAsMachine(urlState, { model: "Master", coProcessor: true });
+        expect(urlState.navigatedTo).toBe("https://bbc.example/?disc1=elite.ssd&model=Master&coProcessor");
+        reloadAsMachine(urlState, { model: "Master", coProcessor: false, autoboot: true });
+        expect(urlState.navigatedTo).toBe("https://bbc.example/?disc1=elite.ssd&autoboot&model=Master");
+    });
+
+    it("pushes a history entry unless told to replace the page", () => {
+        const urlState = pageThatDidThings();
+        const entries = window.history.length;
+        reloadAsMachine(urlState, { model: "Master" }, { replace: true });
+        expect(window.history.length).toBe(entries);
+        reloadAsMachine(urlState, { model: "Master" });
+        expect(window.history.length).toBe(entries + 1);
+    });
+
+    it("hands a value to the next page exactly once", () => {
+        expect(takeFromLastPage("jsbeeb-test")).toBeNull();
+        leaveForNextPage("jsbeeb-test", "");
+        expect(takeFromLastPage("jsbeeb-test")).toBe("");
+        expect(takeFromLastPage("jsbeeb-test")).toBeNull();
     });
 });
