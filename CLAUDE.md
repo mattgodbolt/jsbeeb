@@ -145,6 +145,13 @@ nobody asked.
 
 - When creating branches with Claude, use the `claude/` prefix (e.g., `claude/fix-esm-import-error`)
 
+### Local Review
+
+- Every PR is reviewed locally with the `local-review` skill before it is opened and before every push to it. The
+  session iterates with the `local-reviewer` agent (`.claude/agents/local-reviewer.md`, which holds the checklist)
+  until neither has a blocking finding left; findings the session declined go in the PR body with the reason
+- Copilot and the maintainer are the second review, not the first
+
 ### Conventional Commits
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning and changelog generation via release-please.
