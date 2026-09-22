@@ -215,7 +215,7 @@ describe("40 track discs", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), 10);
         const starts = seekStarts(drive);
 
-        drive.notifySeek(20, 24);
+        drive.notifySeekAmount(10, 24);
 
         expect(starts).toEqual([[10, 24]]);
     });
@@ -272,6 +272,19 @@ describe("40 track discs", () => {
         drive.notifySeekAmount(5, 24);
         drive.seekOneTrack(1);
         drive.notifySeekAmount(0, 24);
+        drive.notifySeekEnd();
+
+        expect(ends).toEqual([]);
+    });
+
+    it("forgets the steps of a seek that never ended on a restore", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), 2);
+        const ends = [];
+        drive.addEventListener("seekEnd", (event) => ends.push(event.steps));
+
+        drive.notifySeekAmount(5, 24);
+        drive.seekOneTrack(1);
+        drive.restoreState(drive.snapshotState());
         drive.notifySeekEnd();
 
         expect(ends).toEqual([]);

@@ -29,8 +29,8 @@ class FakeDrive {
     seekOneTrack(dir) {
         this.track = this.track + dir;
     }
-    notifySeek(newTrack, stepMs) {
-        this.seeks.push([newTrack - this.track, stepMs]);
+    notifySeekAmount(delta, stepMs) {
+        this.seeks.push([delta, stepMs]);
     }
     notifySeekEnd() {
         this.seeks.push("end");
@@ -134,7 +134,7 @@ describe("Intel 8271 tests", function () {
             expect(fakeDrive.seeks).toEqual([[4, 24]]);
         });
 
-        it("ends short when its track register had the head further from the target than it was", () => {
+        it("announces the steps its track register calls for, which the head takes wherever it is", () => {
             const scheduler = new Scheduler();
             const drive = new DiscDrive(0, scheduler);
             const events = [];
@@ -150,7 +150,7 @@ describe("Intel 8271 tests", function () {
             events.length = 0;
             sendCommand(fdc, seekCmd, 10);
             scheduler.polltime(6000 * 10);
-            expect(events).toEqual([[-10, 3], "end after 3"]);
+            expect(events).toEqual([[-3, 3], "end after 3"]);
             expect(drive.track).toBe(17);
         });
 

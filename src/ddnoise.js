@@ -100,9 +100,8 @@ export class DdNoise extends SamplePlayer {
     }
 
     /**
-     * The head has stopped after `steps` steps, fewer than announced when the controller's
-     * track register had it further from its target than it was: the clicks past that are
-     * dropped and the ring brought forward to where the last of them was to sound.
+     * The head has stopped after `steps` steps. Fewer than announced drops the clicks past
+     * that and brings the ring forward to where the last of them was to sound.
      */
     seekEnd(steps) {
         const run = this.run;

@@ -1289,14 +1289,11 @@ export class IntelFdc {
             return;
         }
 
-        if (newTrack > curTrack) {
-            this._regs[Registers.internalSeekCount] = newTrack - curTrack;
-            this._driveOut |= DriveOut.direction;
-        } else {
-            this._regs[Registers.internalSeekCount] = curTrack - newTrack;
-            this._driveOut &= ~DriveOut.direction;
-        }
-        if (this._currentDrive) this._currentDrive.notifySeek(newTrack, this._stepRateMs());
+        const steps = newTrack - curTrack;
+        this._regs[Registers.internalSeekCount] = Math.abs(steps);
+        if (steps > 0) this._driveOut |= DriveOut.direction;
+        else this._driveOut &= ~DriveOut.direction;
+        if (this._currentDrive) this._currentDrive.notifySeekAmount(steps, this._stepRateMs());
 
         // Seek pulses on the 8271 are about 10us, so let's just lower the output bit and make them unobservable
         // as we suspect they are on a real machine.

@@ -161,13 +161,6 @@ export class BaseDiscDrive extends EventTarget {
     }
 
     /**
-     * @param {number} _newTrack
-     */
-    notifySeek(_newTrack, _stepMs) {
-        throw new Error("Not implemented: notifySeek");
-    }
-
-    /**
      * @param {number} _delta
      */
     notifySeekAmount(_delta, _stepMs) {
@@ -440,14 +433,6 @@ export class DiscDrive extends BaseDiscDrive {
         const from = this._track;
         this._selectTrack(this._track + delta * this._tracksPerStep);
         if (this._seekSteps !== null && this._track !== from) ++this._seekSteps;
-    }
-
-    /**
-     * The controller is about to seek to `newTrack`, a step every `stepMs`. Purely
-     * informational: the noise follows it.
-     */
-    notifySeek(newTrack, stepMs) {
-        this.notifySeekAmount(newTrack - this.logicalTrack, stepMs);
     }
 
     /**
