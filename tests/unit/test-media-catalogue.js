@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
     browserDiscNames,
+    describeBitshiftersEntry,
     describeBrowserDisc,
     describeBuiltIn,
     describeDriveFile,
@@ -68,6 +69,49 @@ describe("the media catalogue", () => {
         });
     });
 
+    describe("Bitshifters", () => {
+        it("carries the site's metadata through, with the page that presents the release", () => {
+            const entry = {
+                path: "bs-paradroid.ssd",
+                title: "Paradroid",
+                publisher: "Bitshifters",
+                authors: "Kieran, Hexwab",
+                year: 2026,
+                type: "Game",
+                machine: "Master",
+                url: "https://bitshifters.github.io/posts/prods/bs-paradroid.html",
+            };
+            expect(describeBitshiftersEntry(entry)).toEqual({
+                ref: "bitshifters:bs-paradroid.ssd",
+                kind: "disc",
+                title: "Paradroid",
+                publisher: "Bitshifters",
+                detail: "Game · Master · 2026 · Kieran, Hexwab",
+                source: "bitshifters",
+                savesChanges: false,
+                url: "https://bitshifters.github.io/posts/prods/bs-paradroid.html",
+            });
+        });
+
+        it("strips the markup the manifest carries, and leaves out what an entry does not have", () => {
+            const described = describeBitshiftersEntry({
+                path: "0xc0de-elementum.ssd",
+                title: "Elementum",
+                publisher: "<span>0xC0DE</span>",
+                authors: '<a href="https://example.com/0xC0DE">0xC0DE</a>',
+                year: 2020,
+                type: "Game",
+                machine: "Master",
+            });
+            expect(described.publisher).toBe("0xC0DE");
+            expect(described.detail).toBe("Game · Master · 2020 · 0xC0DE");
+            expect(described.url).toBeUndefined();
+            expect(describeBitshiftersEntry({ path: "nj-beeb3d.ssd", title: "Beeb 3D", year: 1994 }).detail).toBe(
+                "1994",
+            );
+        });
+    });
+
     it("describes the built-in discs, Google Drive files, browser discs and session files", () => {
         expect(describeBuiltIn({ name: "Elite", desc: "A classic", file: "elite.ssd" })).toMatchObject({
             ref: "elite.ssd",
@@ -97,6 +141,8 @@ describe("the media catalogue", () => {
     describe("ordering the list", () => {
         const sth = (path) => describeSthDisc(path);
         const hfe = (title, publisher = "Acornsoft") => describeHfeEntry({ path: `${title}.hfe`, title, publisher });
+        const bitshifters = (title) =>
+            describeBitshiftersEntry({ path: `${title}.ssd`, title, publisher: "Bitshifters" });
         const builtIn = describeBuiltIn({ name: "Welcome", desc: "The disc supplied", file: "Welcome.ssd" });
 
         it("puts the built-in discs first, then everything by title with the richer source first", () => {
@@ -106,9 +152,19 @@ describe("the media catalogue", () => {
                 sth("Acornsoft/Elite.zip"),
                 hfe("Arcadians"),
                 builtIn,
+                sth("Bitshifters/Paradroid.zip"),
+                bitshifters("Paradroid"),
             ];
             const ordered = rows.sort(compareForQuery("")).map((d) => `${d.source}:${d.title}`);
-            expect(ordered).toEqual(["builtin:Welcome", "hfe:Arcadians", "hfe:Elite", "sth:Elite", "sth:Exile"]);
+            expect(ordered).toEqual([
+                "builtin:Welcome",
+                "hfe:Arcadians",
+                "hfe:Elite",
+                "sth:Elite",
+                "sth:Exile",
+                "bitshifters:Paradroid",
+                "sth:Paradroid",
+            ]);
         });
 
         it("puts the best matches first when there is a query", () => {

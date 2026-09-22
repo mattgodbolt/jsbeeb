@@ -1304,8 +1304,8 @@ export class IntelFdc {
         // The head load time replaces the settle time if there is both.
         if (!(this._driveOut & DriveOut.loadHead)) {
             this._driveOutRaise(DriveOut.loadHead);
-            // Head load units are 4ms.
-            postSeekTimeMs = 4 * (this._regs[Registers.headLoadUnload] & 0xf);
+            // Head load units are 4ms, doubled for 5.25" drives like the step and settle times.
+            postSeekTimeMs = 8 * (this._regs[Registers.headLoadUnload] & 0xf);
         } else if (this._didSeekStep) {
             // All references state the units are 2ms for 5.25" drives.
             postSeekTimeMs = 2 * this._regs[Registers.headSettleTime];

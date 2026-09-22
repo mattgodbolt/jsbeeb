@@ -211,20 +211,46 @@ describe("40 track discs", () => {
         // Ten of the tracks the controller counts in, which is twenty of the surface's.
         expect(steps).toEqual([20]);
     });
+
+    it("makes the noise of the tracks the head can cross, none past either end of the surface", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), 2);
+        const steps = [];
+        drive.addEventListener("step", (event) => steps.push(event.stepAmount));
+
+        drive.notifySeekAmount(-5);
+        drive.notifySeekAmount(100);
+        drive.notifySeekAmount(0);
+
+        // Two tracks in, so two out to the edge; the rest of the surface inwards, double stepped.
+        const surfaceTracksLeft = IbmDiscFormat.tracksPerDisc - 2 - drive.track;
+        expect(steps).toEqual([-4, surfaceTracksLeft]);
+    });
+
+    it("counts from where the head is, between the pitches of a switch made mid-surface", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(fortyTrackDisc());
+        drive.seekOneTrack(1);
+        drive.tracksPerStep = 2;
+        const steps = [];
+        drive.addEventListener("step", (event) => steps.push(event.stepAmount));
+
+        drive.notifySeekAmount(-1);
+        drive.notifySeekAmount(2);
+
+        // From physical track 1: one track out to the edge, and four in for two double steps.
+        expect(steps).toEqual([-1, 4]);
+    });
 });
 
 describe("drive noise", () => {
     afterEach(() => vi.useRealTimers());
 
-    function noisyDrives(seekSeconds = 0) {
+    function noisyDrives() {
         const calls = [];
         const ddNoise = {
             spinUp: () => calls.push("spinUp"),
             spinDown: () => calls.push("spinDown"),
-            seek: (amount) => {
-                calls.push(`seek ${amount}`);
-                return seekSeconds;
-            },
+            seek: (amount) => calls.push(`seek ${amount}`),
         };
         const scheduler = new Scheduler();
         const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
@@ -251,28 +277,13 @@ describe("drive noise", () => {
         expect(calls.filter((call) => call === "spinDown")).toHaveLength(1);
     });
 
-    it("seeks by the tracks the head crosses", () => {
-        vi.useFakeTimers();
-        const { drives, calls } = noisyDrives(0.5);
+    it("passes every seek on, by the tracks the head crosses", () => {
+        const { drives, calls } = noisyDrives();
 
         drives[0].notifySeekAmount(5);
-        vi.advanceTimersByTime(600);
-        drives[1].notifySeekAmount(-3);
-
-        expect(calls).toEqual(["seek 5", "seek -3"]);
-    });
-
-    it("lets one seek noise finish before starting another", () => {
-        vi.useFakeTimers();
-        const { drives, calls } = noisyDrives(0.5);
-
+        drives[1].notifySeekAmount(3);
         drives[0].notifySeekAmount(1);
-        vi.advanceTimersByTime(400);
-        drives[0].notifySeekAmount(1);
-        expect(calls).toEqual(["seek 1"]);
 
-        vi.advanceTimersByTime(200);
-        drives[0].notifySeekAmount(1);
-        expect(calls).toEqual(["seek 1", "seek 1"]);
+        expect(calls).toEqual(["seek 5", "seek 3", "seek 1"]);
     });
 });
