@@ -315,6 +315,9 @@ test("a link that boots a Bitshifters disc without naming a model comes up on th
     expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
     await beeb.expectDrive0("bs-paradroid.ssd");
     await beeb.expectNotOnScreen("BASIC");
+    // The page the link named was replaced, not left behind to switch again.
+    await page.goBack();
+    await expect(page).not.toHaveURL(/bitshifters/);
 });
 
 test("picking a Bitshifters disc for another machine asks, and Switch machine comes up there with the disc", async ({

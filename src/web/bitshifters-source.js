@@ -1,7 +1,6 @@
 import { BitshiftersArchive } from "../bitshifters.js";
+import { splitImage } from "../media-resolver.js";
 import { describeBitshiftersEntry } from "./media-catalogue.js";
-
-const Schema = "bitshifters:";
 
 /** Bitshifters' releases as a media source: their catalogue with the prod pages it names, and its fetcher. */
 export class BitshiftersSource {
@@ -17,8 +16,8 @@ export class BitshiftersSource {
      *     a reference of another source, a path the catalogue does not list or a catalogue out of reach
      */
     async describe(ref) {
-        if (!ref.startsWith(Schema)) return null;
-        const path = ref.slice(Schema.length);
+        const { schema, image: path } = splitImage(ref);
+        if (schema !== "bitshifters") return null;
         try {
             const entry = (await this.archive.catalogue()).find((file) => file.path === path);
             return entry ? describeBitshiftersEntry(entry) : null;

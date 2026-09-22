@@ -92,6 +92,17 @@ describe("MachineSwitch", () => {
         });
     });
 
+    describe("a switch made at startup", () => {
+        it("replaces the page in the history, so Back does not land on a page that switches again", async () => {
+            const entries = window.history.length;
+            await make().switchFor(paradroid, drive0, { boot: true, replace: true });
+            expect(navigated()).toBe(true);
+            expect(window.history.length).toBe(entries);
+            await make().switchFor(paradroid, drive0, { boot: true });
+            expect(window.history.length).toBe(entries + 1);
+        });
+    });
+
     describe("switching for a disc that is only to be loaded", () => {
         it("asks first, and reloads with the disc but no boot on a yes", async () => {
             deps.modals.confirm.mockResolvedValue(true);
@@ -108,9 +119,13 @@ describe("MachineSwitch", () => {
             expect(sessionStorage.getItem(PendingSwitchKey)).toBeNull();
         });
 
-        it("names the drive the disc was picked for, and takes the page's boot and typing out of the URL", async () => {
+        it("names the drive the disc was picked for, and takes what the page did at startup out of the URL", async () => {
             deps.modals.confirm.mockResolvedValue(true);
-            deps.urlState = stubNavigation(fakeUrlState("?disc1=elite.ssd&autoboot&autotype=RUN&autochain&autorun"));
+            deps.urlState = stubNavigation(
+                fakeUrlState(
+                    "?disc1=elite.ssd&autoboot&autotype=RUN&autochain&autorun&loadBasic=a.bas&embedBasic=10P.1&patch=@1234:00",
+                ),
+            );
             await make().switchFor(paradroid, drive1, { boot: false });
             expect(deps.urlState.navigatedTo).toBe(
                 "https://bbc.example/?disc1=elite.ssd&disc2=bitshifters:bs-paradroid.ssd&model=Master",

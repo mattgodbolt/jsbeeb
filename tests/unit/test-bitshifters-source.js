@@ -49,14 +49,15 @@ describe("BitshiftersSource", () => {
     describe("describing a reference", () => {
         const catalogue = [{ path: "bs-paradroid.ssd", title: "Paradroid", machine: "Master" }];
 
-        it("finds the release a reference names in the catalogue", async () => {
+        it("finds the release a reference names in the catalogue, however the URL spells the schema", async () => {
             const { source } = make();
             vi.spyOn(source.archive, "catalogue").mockResolvedValue(catalogue);
-            await expect(source.describe("bitshifters:bs-paradroid.ssd")).resolves.toMatchObject({
-                ref: "bitshifters:bs-paradroid.ssd",
-                title: "Paradroid",
-                requires: { model: "Master" },
-            });
+            for (const ref of ["bitshifters:bs-paradroid.ssd", "bitshifters://bs-paradroid.ssd"])
+                await expect(source.describe(ref)).resolves.toMatchObject({
+                    ref: "bitshifters:bs-paradroid.ssd",
+                    title: "Paradroid",
+                    requires: { model: "Master" },
+                });
         });
 
         it("has nothing for a path the catalogue does not list", async () => {
@@ -69,6 +70,7 @@ describe("BitshiftersSource", () => {
             const { source } = make();
             const fetched = vi.spyOn(source.archive, "catalogue");
             await expect(source.describe("sth:Elite.zip")).resolves.toBeNull();
+            await expect(source.describe("elite.ssd")).resolves.toBeNull();
             expect(fetched).not.toHaveBeenCalled();
         });
 

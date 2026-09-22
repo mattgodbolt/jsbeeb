@@ -345,13 +345,12 @@ if (parsedQuery.loadBasic) needsAutoboot = "";
 
 // The Bitshifters catalogue is fetched while the machine starts, so a link that boots one of its
 // discs without naming a model can be switched to the machine the disc needs before the boot.
-async function switchForBootDisc() {
-    if (needsAutoboot !== "boot" || parsedQuery.model) return false;
-    const d = await bitshiftersSource.describe(discImage);
-    if (!d || machineSwitch.satisfies(d)) return false;
-    return machineSwitch.switchFor(d, media.slots.drive(0), { boot: true });
-}
-const switching = switchForBootDisc();
+const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? bitshiftersSource.describe(discImage) : null;
+/** @returns {Promise<boolean>} whether the page is on its way to the machine its boot disc needs */
+const switchForBootDisc = async (d) =>
+    !!d &&
+    !machineSwitch.satisfies(d) &&
+    machineSwitch.switchFor(d, media.slots.drive(0), { boot: true, replace: true });
 const startPromise = machine.start({
     media,
     autoBoot,
@@ -367,8 +366,9 @@ const startPromise = machine.start({
 
 (async () => {
     try {
+        machineSwitch.announce();
         await startPromise;
-        if (await switching) return;
+        if (await switchForBootDisc(await bootDisc)) return;
 
         switch (needsAutoboot) {
             case "boot":
@@ -393,7 +393,6 @@ const startPromise = machine.start({
 
         // Restore the state a cross-model reload stashed, if there is one.
         await snapshots.restorePendingState();
-        machineSwitch.announce();
 
         loop.go();
     } catch (error) {

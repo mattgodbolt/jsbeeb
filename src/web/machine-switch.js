@@ -5,7 +5,15 @@ import { noteEvent } from "./analytics.js";
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
 // What the page did at startup is not done again on the page switched to; the boot is its own.
-const NoStartupActions = { autoboot: undefined, autochain: undefined, autorun: undefined, autotype: undefined };
+const NoStartupActions = {
+    autoboot: undefined,
+    autochain: undefined,
+    autorun: undefined,
+    autotype: undefined,
+    loadBasic: undefined,
+    embedBasic: undefined,
+    patch: undefined,
+};
 
 /**
  * Moving to the machine a disc needs, which is a page reload: the model and its fitting go in
@@ -28,10 +36,11 @@ export class MachineSwitch {
      * Reloads as the machine `d` needs, with `d` in `slot`: without asking when the disc is to
      * boot, since a boot on the wrong machine is no use to anyone, and after a yes otherwise,
      * since the reload throws away whatever the machine was doing.
-     * @param {object} options `boot`: the disc is to boot on arrival, so Autoboot goes in the URL
+     * @param {object} options `boot`: the disc is to boot on arrival, so Autoboot goes in the URL;
+     *   `replace`: the page switched from was never one to come back to, so it leaves no history
      * @returns {Promise<boolean>} true once the page is on its way; false to load the disc here after all
      */
-    async switchFor(d, slot, { boot }) {
+    async switchFor(d, slot, { boot, replace = false }) {
         const { requires } = d;
         if (!boot) {
             const wanted = await this.modals.confirm(
@@ -44,13 +53,15 @@ export class MachineSwitch {
         noteEvent("media", "switchMachine", d.ref);
         if (boot) sessionStorage.setItem(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
         // The requirement is a floor: a model of the right kind and a co-processor already fitted stay.
-        window.location.href = this.urlState.urlWith({
+        const url = this.urlState.urlWith({
             ...slot.urlParamsFor(d.ref),
             ...NoStartupActions,
             ...(modelSatisfies(requires, this.model) ? {} : { model: requires.model }),
             ...(requires.coProcessor ? { coProcessor: true } : {}),
             ...(boot ? { autoboot: true } : {}),
         });
+        if (replace) window.location.replace(url);
+        else window.location.href = url;
         return true;
     }
 
