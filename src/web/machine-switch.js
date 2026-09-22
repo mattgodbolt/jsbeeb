@@ -1,18 +1,9 @@
 import { satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
+import { leaveForNextPage, reloadAsMachine, takeFromLastPage } from "./machine-reload.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
-
-const NoStartupActions = {
-    autoboot: undefined,
-    autochain: undefined,
-    autorun: undefined,
-    autotype: undefined,
-    loadBasic: undefined,
-    embedBasic: undefined,
-    patch: undefined,
-};
 
 /**
  * Switches to the machine a disc needs by reloading with the model, its co-processor and the
@@ -48,24 +39,24 @@ export class MachineSwitch {
             if (!wanted) return false;
         }
         noteEvent("media", "switchMachine", d.ref);
-        if (boot) sessionStorage.setItem(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
-        const url = this.urlState.urlWith({
-            ...slot.urlParamsFor(d.ref),
-            ...NoStartupActions,
-            model: requires.model,
-            coProcessor: requires.coProcessor,
-            ...(boot ? { autoboot: true } : {}),
-        });
-        if (replace) window.location.replace(url);
-        else window.location.href = url;
+        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
+        reloadAsMachine(
+            this.urlState,
+            {
+                ...slot.urlParamsFor(d.ref),
+                model: requires.model,
+                coProcessor: requires.coProcessor,
+                ...(boot ? { autoboot: true } : {}),
+            },
+            { replace },
+        );
         return true;
     }
 
     /** Toasts the switch the last reload made, once. */
     announce() {
-        const notice = sessionStorage.getItem(PendingSwitchKey);
-        if (!notice) return;
-        sessionStorage.removeItem(PendingSwitchKey);
+        const notice = takeFromLastPage(PendingSwitchKey);
+        if (notice === null) return;
         toast(notice, { title: "Machine" });
     }
 }
