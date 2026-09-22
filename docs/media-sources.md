@@ -66,9 +66,9 @@ The disc itself is at `https://bitshifters.github.io/content/<path>`. `authors` 
 stripped. Both the manifest and the discs are served with `Access-Control-Allow-Origin: *`,
 which any remote source needs, since the browser fetches them cross-origin.
 
-`machine` is a requirement, and is trusted as one: `Master` is the Master 128 with DFS and no
-Tube, `MasterTurbo` the same with the 65C102 co-processor. Any other field we come to read, or
-need the manifest to gain, is documented here in the same change that starts reading it.
+`machine` is the machine the disc needs: `Master` is the Master 128 with DFS and no Tube,
+`MasterTurbo` the same with the 65C102 co-processor. Any other field we come to read, or need
+the manifest to gain, is documented here in the same change that starts reading it.
 
 ## Adding a source
 
