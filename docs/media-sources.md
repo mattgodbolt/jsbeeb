@@ -23,20 +23,12 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
-- `requires`, when present, is the machine a disc runs on, which any source whose entries name
-  one may set (tapes are not checked): `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine
-  name to `{ model, coProcessor, name }` (`model` as the URL spells it, a synonym in
-  `src/models.js`; `coProcessor` for a Tube; `name` for the dialog and the toast) through the
-  table `MachineRequirements`, and a name outside the table gives no requirement. The names are
-  ours to define, so a disc that needs a machine the table lacks is a change to the table and to
-  the manifest (Kieran's, for Bitshifters), not a looser test. The running machine satisfies a
-  requirement only when it is that model with that fitting (`satisfiesRequirement`); otherwise
-  `MachineSwitch` in `src/web/machine-switch.js` reloads the page as exactly that machine, without
-  asking when the disc is to boot and after asking otherwise, looking at nothing but `requires`.
-  `MediaLoader.describe(ref)` asks the source's describer, registered with
-  `media.addDescriber(source, (path) => descriptor)`, for one entry, which is how a link that
-  boots a disc gets its requirement at startup without the whole catalogue; a source whose
-  descriptors say no more than the path does registers none, and its links boot as before.
+- `requires`, when present, is the machine a disc needs, as `{ model, coProcessor, name }`:
+  `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `name` what the
+  user is told. `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine name
+  to one through the table `MachineRequirements`, and a name outside the table gives no
+  requirement. The names are ours to define, so a disc that needs a machine the table lacks is a
+  change to the table and the manifest, not a looser match.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,
@@ -74,14 +66,9 @@ The disc itself is at `https://bitshifters.github.io/content/<path>`. `authors` 
 stripped. Both the manifest and the discs are served with `Access-Control-Allow-Origin: *`,
 which any remote source needs, since the browser fetches them cross-origin.
 
-`machine` is a requirement, and is trusted as one: it goes through `machineRequirement` to the
-descriptor's `requires` (`Master` is the Master 128 with DFS and no Tube; `MasterTurbo` the same
-with the 65C102 co-processor), and picking a disc whose machine is not the running one switches
-to exactly that machine. `MachineRequirements` is the list of values the manifest may use, since
-the format is shared between jsbeeb and Bitshifters: a value outside it requires nothing (the row
-shows the manifest's text in its detail, which is where a stray value would be noticed). Any
-other field we come to read, or need the manifest to gain, is documented here in the same change
-that starts reading it.
+`machine` is a requirement, and is trusted as one: `Master` is the Master 128 with DFS and no
+Tube, `MasterTurbo` the same with the 65C102 co-processor. Any other field we come to read, or
+need the manifest to gain, is documented here in the same change that starts reading it.
 
 ## Adding a source
 
@@ -93,7 +80,9 @@ that starts reading it.
 3. In `src/media-resolver.js`: the schema in `Schemas`, and a `case` in `resolve` if an existing
    route does not fit.
 4. A source class in `src/web/` that constructs the archive and registers both halves:
-   `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`.
+   `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`. A source whose
+   entries can carry `requires` also registers `media.addDescriber(source, (path) => descriptor)`,
+   so a link that boots one of its discs can find the requirement without listing the catalogue.
 5. Wiring: construct the source in `src/main.js` beside the others, and register the fetcher in
    `src/machine-session.js` so the headless session and the MCP server can load its references.
 6. The README's list of `disc=` forms, and a mention in the media window paragraph.
