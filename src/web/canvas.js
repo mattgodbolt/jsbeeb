@@ -186,70 +186,78 @@ export class GlCanvas {
             throw new Error("Problem creating GL context: " + webglDebug.glEnumToString(err) + " in " + funcName);
         });
 
-        checkedGl.depthMask(false);
-        // Keeping the brighter of two colours is a blend equation WebGL 1 only
-        // has through this extension; without it there is no persistence.
-        this.blendMinMax = gl.getExtension("EXT_blend_minmax");
-        this.decayProgram = compileProgram(checkedGl, DecayVertexShader, DecayFragmentShader, "phosphor decay");
-        this.decayPosLocation = checkedGl.getAttribLocation(this.decayProgram, "pos");
-        this.copyProgram = compileProgram(checkedGl, CopyVertexShader, CopyFragmentShader, "phosphor copy");
-        this.copyPosLocation = checkedGl.getAttribLocation(this.copyProgram, "pos");
-        this.copyPhosphorLocation = checkedGl.getUniformLocation(this.copyProgram, "uPhosphor");
-        this.phosphorTexture = checkedGl.createTexture();
-        checkedGl.activeTexture(checkedGl.TEXTURE0 + PhosphorTextureUnit);
-        checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.phosphorTexture);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        // Copied at one to one, where linear sampling reads each texel exactly and turns a
-        // rounding error at an edge into a blend rather than a skipped row.
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
-        this.phosphorFramebuffer = checkedGl.createFramebuffer();
-        checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, this.phosphorFramebuffer);
-        checkedGl.framebufferTexture2D(
-            checkedGl.FRAMEBUFFER,
-            checkedGl.COLOR_ATTACHMENT0,
-            checkedGl.TEXTURE_2D,
-            this.phosphorTexture,
-            0,
-        );
-        checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, null);
-        this.phosphorWidth = this.phosphorHeight = 0;
-
-        this.fb8 = new Uint8Array(width * height * 4);
-        this.fb32 = new Uint32Array(this.fb8.buffer);
-        this.texture = checkedGl.createTexture();
-        checkedGl.activeTexture(checkedGl.TEXTURE0);
-        checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.texture);
-        checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texImage2D(
-            checkedGl.TEXTURE_2D,
-            0,
-            checkedGl.RGBA,
-            width,
-            height,
-            0,
-            checkedGl.RGBA,
-            checkedGl.UNSIGNED_BYTE,
-            this.fb8,
-        );
-
-        this.vertexPositionBuffer = checkedGl.createBuffer();
-        checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.vertexPositionBuffer);
-        checkedGl.bufferData(checkedGl.ARRAY_BUFFER, new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]), checkedGl.STATIC_DRAW);
-        this.uvBuffer = checkedGl.createBuffer();
-
         this.checkedGl = checkedGl;
         this.filter = null;
+        this.decayProgram = this.copyProgram = null;
+        this.phosphorFramebuffer = this.phosphorTexture = null;
+        this.texture = this.vertexPositionBuffer = this.uvBuffer = null;
         this.attribLocations = [];
         this.viewportWidth = this.viewportHeight = 0;
         this.persistence = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
+        // Anything made before a failure is freed, so a fallback canvas starts clean
         try {
+            checkedGl.depthMask(false);
+            // Keeping the brighter of two colours is a blend equation WebGL 1 only
+            // has through this extension; without it there is no persistence.
+            this.blendMinMax = gl.getExtension("EXT_blend_minmax");
+            this.decayProgram = compileProgram(checkedGl, DecayVertexShader, DecayFragmentShader, "phosphor decay");
+            this.decayPosLocation = checkedGl.getAttribLocation(this.decayProgram, "pos");
+            this.copyProgram = compileProgram(checkedGl, CopyVertexShader, CopyFragmentShader, "phosphor copy");
+            this.copyPosLocation = checkedGl.getAttribLocation(this.copyProgram, "pos");
+            this.copyPhosphorLocation = checkedGl.getUniformLocation(this.copyProgram, "uPhosphor");
+            this.phosphorTexture = checkedGl.createTexture();
+            checkedGl.activeTexture(checkedGl.TEXTURE0 + PhosphorTextureUnit);
+            checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.phosphorTexture);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
+            // Copied at one to one, where linear sampling reads each texel exactly and turns a
+            // rounding error at an edge into a blend rather than a skipped row.
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
+            this.phosphorFramebuffer = checkedGl.createFramebuffer();
+            checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, this.phosphorFramebuffer);
+            checkedGl.framebufferTexture2D(
+                checkedGl.FRAMEBUFFER,
+                checkedGl.COLOR_ATTACHMENT0,
+                checkedGl.TEXTURE_2D,
+                this.phosphorTexture,
+                0,
+            );
+            checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, null);
+            this.phosphorWidth = this.phosphorHeight = 0;
+
+            this.fb8 = new Uint8Array(width * height * 4);
+            this.fb32 = new Uint32Array(this.fb8.buffer);
+            this.texture = checkedGl.createTexture();
+            checkedGl.activeTexture(checkedGl.TEXTURE0);
+            checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.texture);
+            checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
+            checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
+            checkedGl.texImage2D(
+                checkedGl.TEXTURE_2D,
+                0,
+                checkedGl.RGBA,
+                width,
+                height,
+                0,
+                checkedGl.RGBA,
+                checkedGl.UNSIGNED_BYTE,
+                this.fb8,
+            );
+
+            this.vertexPositionBuffer = checkedGl.createBuffer();
+            checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.vertexPositionBuffer);
+            checkedGl.bufferData(
+                checkedGl.ARRAY_BUFFER,
+                new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]),
+                checkedGl.STATIC_DRAW,
+            );
+            this.uvBuffer = checkedGl.createBuffer();
+
             this.setFilter(filterClass);
         } catch (e) {
             this.dispose();

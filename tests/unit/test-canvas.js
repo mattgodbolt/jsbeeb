@@ -150,6 +150,15 @@ describe("GlCanvas", () => {
         expect(canvas.fb32).toBe(fb32);
     });
 
+    it("frees everything it made when one of its own programs will not build", () => {
+        const gl = recordingGl();
+        const sources = new Map();
+        gl.shaderSource = (shader, source) => sources.set(shader, source);
+        gl.getShaderParameter = (shader) => !sources.get(shader)?.includes("uPhosphor");
+        expect(() => new GlCanvas(fakeCanvasElement(gl), PassthroughFilter)).toThrow(/phosphor copy/);
+        expect(gl.live.size).toBe(0);
+    });
+
     it("hands the filter the plain context", () => {
         const gl = recordingGl();
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
