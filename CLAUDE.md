@@ -152,6 +152,7 @@ nobody asked.
   until the reviewer has no blocking finding the session has not declined with a reason; the declined findings
   go in the PR body with the reason
 - Copilot and the maintainer are the second review, not the first
+- A request to open or update a PR is the ask that covers the commits the loop makes
 
 ### Conventional Commits
 

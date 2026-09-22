@@ -6,8 +6,9 @@ description: The review loop that runs before `gh pr create` and before every pu
 # Local review
 
 Run this before `gh pr create` and before every `git push` to a branch with an open PR. Never skip
-it because the change is small; the small ones are where the whitespace goes missing. Copilot and
-the maintainer are the second review, not the first.
+it because the change is small; the small ones are where the whitespace goes missing. A push to a
+branch with no PR yet, for someone to pull and try, needs no review; the review comes before the
+PR. Copilot and the maintainer are the second review, not the first.
 
 ## 1. Establish the diff
 
@@ -32,6 +33,7 @@ The brief carries:
 - the base ref
 - the PR title and body from step 2
 - the round number
+- every finding from earlier rounds that was taken, with the commit that took it
 - every finding from earlier rounds that was declined, with the reason
 
 ## 4. Act on the report
@@ -39,8 +41,8 @@ The brief carries:
 For each finding:
 
 - **Agree:** fix it, and add the test that would have caught it. Run `npm run lint`,
-  `npm run format:check` and `npx vitest run` on the test files the diff touches, then commit the
-  fix as a new commit.
+  `npm run format` and `npx vitest run` on the test files the diff touches, then commit the fix as
+  a new commit.
 - **Disagree:** write the reason into a running list of declined findings, as a sentence somebody
   else could evaluate. "Out of scope" has to say where the work goes instead (an issue, a follow-up
   PR).
@@ -53,9 +55,10 @@ remaining blocking finding has been declined with a reason and the reviewer, hav
 reason, has nothing new to add. A should-fix finding taken in the final round is not re-reviewed;
 that is the trade against an endless loop.
 
-Four rounds at most. If the fourth still has a blocking finding the session will not fix, stop,
-do not push, and put the finding and both positions in front of the user: a change that has not
-converged in four rounds is saying something about its design.
+Four rounds at most. A blocking finding still open after the fourth report, whether the session
+would fix it or decline it, goes to the user with both positions rather than to GitHub: a fix made
+after the last round would be pushed unreviewed, and a change that has not converged in four rounds
+is saying something about its design.
 
 ## 6. Push, then open or update
 
