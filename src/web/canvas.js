@@ -193,11 +193,11 @@ export class GlCanvas {
         this.texture = this.vertexPositionBuffer = this.uvBuffer = null;
         this.attribLocations = [];
         this.viewportWidth = this.viewportHeight = 0;
+        this.phosphorWidth = this.phosphorHeight = 0;
         this.persistence = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
-        // Anything made before a failure is freed, so a fallback canvas starts clean
         try {
             checkedGl.depthMask(false);
             // Keeping the brighter of two colours is a blend equation WebGL 1 only
@@ -227,7 +227,6 @@ export class GlCanvas {
                 0,
             );
             checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, null);
-            this.phosphorWidth = this.phosphorHeight = 0;
 
             this.fb8 = new Uint8Array(width * height * 4);
             this.fb32 = new Uint32Array(this.fb8.buffer);
