@@ -236,6 +236,16 @@ describe("Intel 8271 tests", function () {
             expect(ready()).toBe(false);
         });
 
+        it("goes once the pulses stop, before any pulse comes to say so", () => {
+            const { scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+            scheduler.polltime(ms(300));
+            expect(ready()).toBe(false);
+        });
+
         it("goes when the drive is deselected", () => {
             const { fdc, scheduler, indexPulse, ready } = readyFdc();
             indexPulse();

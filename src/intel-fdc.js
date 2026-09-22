@@ -516,13 +516,21 @@ export class IntelFdc {
     }
 
     _noteIndexPulse() {
-        const epoch = this._scheduler.epoch;
-        if (epoch - this._lastIndexEpoch >= ReadyTimeoutTicks) {
+        if (this._indexPulsesStopped) {
             this._ready = false;
             this._readyPulses = 0;
         }
-        this._lastIndexEpoch = epoch;
+        this._lastIndexEpoch = this._scheduler.epoch;
         if (++this._readyPulses >= ReadyIndexPulses) this._ready = true;
+    }
+
+    get _indexPulsesStopped() {
+        return this._scheduler.epoch - this._lastIndexEpoch >= ReadyTimeoutTicks;
+    }
+
+    /** The Beeb's ready latch as it stands, which the timeout clears without waiting for a pulse. */
+    get _driveReady() {
+        return this._ready && !this._indexPulsesStopped;
     }
 
     _pulsesCallback(pulses, count) {
@@ -1490,7 +1498,7 @@ export class IntelFdc {
             // TRK0
             if (this._trk0) driveIn |= 0x02;
             // RDY0 and RDY1
-            if (this._ready) {
+            if (this._driveReady) {
                 if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
                 if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
             }
@@ -1721,12 +1729,15 @@ export class IntelFdc {
         this._mmioData = state.mmioData;
         this._mmioClocks = state.mmioClocks;
         this._driveOut = state.driveOut;
+        // A snapshot from before the latch existed comes up ready, with a pulse as good as now.
         this._ready = state.ready ?? true;
         this._readyPulses = state.readyPulses ?? ReadyIndexPulses;
         this._lastIndexEpoch =
-            state.sinceIndexPulse === null || state.sinceIndexPulse === undefined
-                ? -Infinity
-                : this._scheduler.epoch - state.sinceIndexPulse;
+            state.sinceIndexPulse === undefined
+                ? this._scheduler.epoch
+                : state.sinceIndexPulse === null
+                  ? -Infinity
+                  : this._scheduler.epoch - state.sinceIndexPulse;
         this._shiftRegister = state.shiftRegister;
         this._numShifts = state.numShifts;
         this._state = state.state;
