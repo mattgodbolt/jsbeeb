@@ -90,7 +90,6 @@ describe("the media window against a real machine", () => {
             machineSwitch: new MachineSwitch({
                 model: machine.model,
                 processor: machine.processor,
-                settings: { model: machine.model },
                 urlState,
                 modals: { confirm: async () => false },
             }),

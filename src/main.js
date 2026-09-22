@@ -242,9 +242,9 @@ const autoBoot = new Autoboot({
 });
 new SthSource({ media });
 new HfeSource({ media });
-const bitshiftersSource = new BitshiftersSource({ media });
+new BitshiftersSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
-const machineSwitch = new MachineSwitch({ model, processor, settings, urlState, modals });
+const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -343,9 +343,9 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
 if (parsedQuery.loadBasic) needsAutoboot = "";
 
-// The Bitshifters catalogue is fetched while the machine starts, so a link that boots one of its
-// discs without naming a model can be switched to the machine the disc needs before the boot.
-const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? bitshiftersSource.describe(discImage) : null;
+// The boot disc's catalogue is fetched while the machine starts, so a link that boots a disc
+// without naming a model can be switched to the machine the disc needs before the boot.
+const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? media.describe(discImage) : null;
 /** @returns {Promise<boolean>} whether the page is on its way to the machine its boot disc needs */
 const switchForBootDisc = async (d) =>
     !!d &&

@@ -10,7 +10,7 @@ import { findModel } from "../models.js";
  *
  * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL; `url` is a
  * page about the entry, when its source has one; `requires` is the machine the entry runs on,
- * as `{ model, coProcessor, name }`, when its source says.
+ * from `machineRequirement`, when its source says.
  */
 
 // `name` heads a chip; `phrase` sits mid-sentence in a slot's status line.
@@ -100,11 +100,12 @@ export function describeHfeEntry(file) {
     };
 }
 
-// The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
-const stripTags = (text) => text.replace(/<[^>]*>/g, "");
-
-/** What each `machine` the Bitshifters manifest names asks for, as the URL spells the model and its fitting. */
-export const BitshiftersMachines = Object.freeze({
+/**
+ * The machines a manifest may name as what a disc needs, each as the URL spells the model and
+ * its fitting, and in words for the dialog and the toast. The names are ours to define: a disc
+ * that needs a machine this table cannot say is a change to the table and the manifest both.
+ */
+export const MachineRequirements = Object.freeze({
     Master: Object.freeze({ model: "Master", coProcessor: false, name: "BBC Master 128" }),
     MasterTurbo: Object.freeze({
         model: "Master",
@@ -113,26 +114,17 @@ export const BitshiftersMachines = Object.freeze({
     }),
 });
 
-// The catalogue is described afresh on every listing; a machine outside the table is worth one line.
-const unknownMachines = new Set();
+/** A descriptor's `requires` for a manifest's machine name, or undefined for a name outside the table. */
+export const machineRequirement = (machine) =>
+    Object.hasOwn(MachineRequirements, machine) ? MachineRequirements[machine] : undefined;
 
-function bitshiftersRequirement(machine) {
-    if (machine === undefined) return undefined;
-    const requires = Object.hasOwn(BitshiftersMachines, machine) ? BitshiftersMachines[machine] : undefined;
-    if (!requires && !unknownMachines.has(machine)) {
-        unknownMachines.add(machine);
-        console.log(`Bitshifters names a machine this emulator has no table entry for: ${machine}`);
-    }
-    return requires;
-}
-
-/** Whether a model is of the kind a requirement names: any Master 128 for a Master, whichever filing system. */
-export const modelSatisfies = (requires, model) => model.isMaster === findModel(requires.model).isMaster;
-
-/** Whether a machine meets a requirement: the model's kind, with a Tube where the requirement has one. */
+/** Whether a machine is the one a requirement names: that model, with a Tube if and only if it says so. */
 export function satisfiesRequirement(requires, { model, hasTube }) {
-    return modelSatisfies(requires, model) && (hasTube || !requires.coProcessor);
+    return model === findModel(requires.model) && hasTube === requires.coProcessor;
 }
+
+// The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
+const stripTags = (text) => text.replace(/<[^>]*>/g, "");
 
 export function describeBitshiftersEntry(file) {
     const detail = [file.type, file.machine, file.year, file.authors && stripTags(file.authors)];
@@ -145,7 +137,7 @@ export function describeBitshiftersEntry(file) {
         source: "bitshifters",
         savesChanges: false,
         url: file.url,
-        requires: bitshiftersRequirement(file.machine),
+        requires: machineRequirement(file.machine),
     };
 }
 

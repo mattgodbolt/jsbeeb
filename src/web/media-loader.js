@@ -4,7 +4,7 @@ import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
-import { MediaResolver, openIfZip, routeOf, splitImage } from "../media-resolver.js";
+import { MediaResolver, Schemas, openIfZip, routeOf, splitImage } from "../media-resolver.js";
 import { MediaSlots } from "./media-slots.js";
 import { stringToUint8Array } from "../binary.js";
 import { noteEvent } from "./analytics.js";
@@ -111,6 +111,24 @@ export class MediaLoader extends EventTarget {
      */
     addLister(source, lister) {
         this.listers.set(source, lister);
+    }
+
+    /**
+     * The descriptor a reference's own source lists for it, whichever way the reference spells
+     * the schema, or null: for a schema no lister owns, a reference the source does not list, or
+     * a source that cannot be listed.
+     */
+    async describe(ref) {
+        const { schema, image } = splitImage(ref);
+        const lister = this.listers.get(Schemas[schema]?.source);
+        if (!lister) return null;
+        try {
+            const descriptors = await lister();
+            return descriptors.find((d) => splitImage(d.ref).image === image) ?? null;
+        } catch (error) {
+            console.error(`Describing ${ref} failed:`, error);
+            return null;
+        }
     }
 
     /**

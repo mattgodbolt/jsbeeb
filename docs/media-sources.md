@@ -23,11 +23,18 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
-- `requires`, when present, is the machine the entry runs on: `{ model, coProcessor, name }`, with
-  `model` as the URL spells it (a synonym in `src/models.js`), `coProcessor` for a Tube and `name`
-  for the dialog and the toast. `satisfiesRequirement` in `media-catalogue.js` holds it against the
-  running machine, and `MachineSwitch` in `src/web/machine-switch.js` reloads the page as that
-  machine when it does not: without asking when the disc is to boot, after asking otherwise.
+- `requires`, when present, is the machine the entry runs on, which any source whose entries
+  name one may set: `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine
+  name to `{ model, coProcessor, name }` (`model` as the URL spells it, a synonym in
+  `src/models.js`; `coProcessor` for a Tube; `name` for the dialog and the toast) through the
+  table `MachineRequirements`, and a name outside the table gives no requirement. The names are
+  ours to define, so a disc that needs a machine the table lacks is a change to the table and to
+  the manifest (Kieran's, for Bitshifters), not a looser test. The running machine satisfies a
+  requirement only when it is that model with that fitting (`satisfiesRequirement`); otherwise
+  `MachineSwitch` in `src/web/machine-switch.js` reloads the page as exactly that machine, without
+  asking when the disc is to boot and after asking otherwise, looking at nothing but `requires`.
+  `MediaLoader.describe(ref)` finds the descriptor a reference's own source lists for it, which is
+  how a link that boots a disc gets its requirement at startup.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,
@@ -65,12 +72,14 @@ The disc itself is at `https://bitshifters.github.io/content/<path>`. `authors` 
 stripped. Both the manifest and the discs are served with `Access-Control-Allow-Origin: *`,
 which any remote source needs, since the browser fetches them cross-origin.
 
-`machine` is a requirement, and is trusted as one: `BitshiftersMachines` in `media-catalogue.js`
-maps each value to the descriptor's `requires` (`Master` is any Master 128; `MasterTurbo` is a
-Master 128 with the 65C102 co-processor), and picking a disc whose machine is not the running one
-switches to it. A value the table does not know is logged to the console and requires nothing,
-so a new value upstream cannot stop a disc loading. Any other field we come to read, or need the
-manifest to gain, is documented here in the same change that starts reading it.
+`machine` is a requirement, and is trusted as one: it goes through `machineRequirement` to the
+descriptor's `requires` (`Master` is the Master 128 with DFS and no Tube; `MasterTurbo` the same
+with the 65C102 co-processor), and picking a disc whose machine is not the running one switches
+to exactly that machine. `MachineRequirements` is the list of values the manifest may use, since
+the format is shared between jsbeeb and Bitshifters: a value outside it requires nothing (the row
+shows the manifest's text in its detail, which is where a stray value would be noticed). Any
+other field we come to read, or need the manifest to gain, is documented here in the same change
+that starts reading it.
 
 ## Adding a source
 

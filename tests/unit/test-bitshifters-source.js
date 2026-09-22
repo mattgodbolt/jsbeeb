@@ -1,10 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { BitshiftersSource } from "../../src/web/bitshifters-source.js";
 
 describe("BitshiftersSource", () => {
-    afterEach(() => vi.restoreAllMocks());
-
     const make = () => {
         const media = { addSource: vi.fn(), addLister: vi.fn() };
         const source = new BitshiftersSource({ media });
@@ -44,42 +42,5 @@ describe("BitshiftersSource", () => {
                 url: "https://bitshifters.github.io/posts/prods/bs-paradroid.html",
             }),
         ]);
-    });
-
-    describe("describing a reference", () => {
-        const catalogue = [{ path: "bs-paradroid.ssd", title: "Paradroid", machine: "Master" }];
-
-        it("finds the release a reference names in the catalogue, however the URL spells the schema", async () => {
-            const { source } = make();
-            vi.spyOn(source.archive, "catalogue").mockResolvedValue(catalogue);
-            for (const ref of ["bitshifters:bs-paradroid.ssd", "bitshifters://bs-paradroid.ssd"])
-                await expect(source.describe(ref)).resolves.toMatchObject({
-                    ref: "bitshifters:bs-paradroid.ssd",
-                    title: "Paradroid",
-                    requires: { model: "Master" },
-                });
-        });
-
-        it("has nothing for a path the catalogue does not list", async () => {
-            const { source } = make();
-            vi.spyOn(source.archive, "catalogue").mockResolvedValue(catalogue);
-            await expect(source.describe("bitshifters:nope.ssd")).resolves.toBeNull();
-        });
-
-        it("has nothing for another source's reference, without fetching the catalogue", async () => {
-            const { source } = make();
-            const fetched = vi.spyOn(source.archive, "catalogue");
-            await expect(source.describe("sth:Elite.zip")).resolves.toBeNull();
-            await expect(source.describe("elite.ssd")).resolves.toBeNull();
-            expect(fetched).not.toHaveBeenCalled();
-        });
-
-        it("has nothing when the catalogue is out of reach, and says so on the console", async () => {
-            const { source } = make();
-            vi.spyOn(source.archive, "catalogue").mockRejectedValue(new Error("offline"));
-            const log = vi.spyOn(console, "log").mockImplementation(() => {});
-            await expect(source.describe("bitshifters:bs-paradroid.ssd")).resolves.toBeNull();
-            expect(log).toHaveBeenCalledWith(expect.stringContaining("offline"));
-        });
     });
 });

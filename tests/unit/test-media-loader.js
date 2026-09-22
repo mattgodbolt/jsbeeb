@@ -238,6 +238,19 @@ describe("MediaLoader", () => {
             ]);
         });
 
+        it("describes one reference through its own source, and nothing for one it cannot", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const media = make();
+            media.addLister("sth", async () => [{ ref: "sth:Games/Elite.zip", title: "Elite" }]);
+            media.addLister("hfe", async () => {
+                throw new Error("offline");
+            });
+            for (const ref of ["sth:Games/Elite.zip", "|Games/Elite.zip"])
+                await expect(media.describe(ref)).resolves.toEqual({ ref: "sth:Games/Elite.zip", title: "Elite" });
+            for (const ref of ["sth:Games/Exile.zip", "hfe:a.hfe", "gd:1/a.ssd"])
+                await expect(media.describe(ref)).resolves.toBeNull();
+        });
+
         it("keeps listing when one source fails, and says which", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             const media = make();

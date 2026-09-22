@@ -1,4 +1,4 @@
-import { modelSatisfies, satisfiesRequirement } from "./media-catalogue.js";
+import { satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
 
@@ -20,11 +20,9 @@ const NoStartupActions = {
  * the URL with the disc, and word of the change is stashed for the page that comes up.
  */
 export class MachineSwitch {
-    /** @param {object} deps `model` and `processor` are the running machine; `settings` is what a reload builds */
-    constructor({ model, processor, settings, urlState, modals }) {
+    constructor({ model, processor, urlState, modals }) {
         this.model = model;
         this.processor = processor;
-        this.settings = settings;
         this.urlState = urlState;
         this.modals = modals;
     }
@@ -36,10 +34,9 @@ export class MachineSwitch {
 
     /**
      * Reloads as the machine `d` needs, with `d` in `slot`: without asking when the disc is to
-     * boot, since a boot on the wrong machine is no use to anyone, and after a yes otherwise,
-     * since the reload throws away whatever the machine was doing.
-     * @param {object} options `boot`: the disc is to boot on arrival, so Autoboot goes in the URL;
-     *   `replace`: the page switched from was never one to come back to, so it leaves no history
+     * boot, after a yes otherwise, since the reload throws away whatever the machine was doing.
+     * @param {object} options `boot`: Autoboot goes in the URL; `replace`: the page switched from
+     *   was never one to come back to, so it leaves no history
      * @returns {Promise<boolean>} true once the page is on its way; false to load the disc here after all
      */
     async switchFor(d, slot, { boot, replace = false }) {
@@ -54,13 +51,11 @@ export class MachineSwitch {
         }
         noteEvent("media", "switchMachine", d.ref);
         if (boot) sessionStorage.setItem(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
-        // The requirement is a floor: a model of the right kind and a co-processor already fitted stay.
-        // The model held to it is the one a reload builds, which a change saved for later has moved on.
         const url = this.urlState.urlWith({
             ...slot.urlParamsFor(d.ref),
             ...NoStartupActions,
-            ...(modelSatisfies(requires, this.settings.model) ? {} : { model: requires.model }),
-            ...(requires.coProcessor ? { coProcessor: true } : {}),
+            model: requires.model,
+            coProcessor: requires.coProcessor,
             ...(boot ? { autoboot: true } : {}),
         });
         if (replace) window.location.replace(url);

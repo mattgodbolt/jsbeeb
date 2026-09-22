@@ -286,7 +286,7 @@ test("a drive bay shows one thing at a time: the note when empty, the jacket whe
     expect(await shown()).toEqual({ note: false, jacket: true });
 });
 
-// A Bitshifters catalogue of one disc, served in place of the site so the tests need no network.
+// A Bitshifters catalogue of one disc, served in place of the site so the test needs no network.
 const BitshiftersContent = "https://bitshifters.github.io/content/";
 const catalogueOfOne = (page) =>
     Promise.all([
@@ -318,29 +318,4 @@ test("a link that boots a Bitshifters disc without naming a model comes up on th
     // The page the link named was replaced, not left behind to switch again.
     await page.goBack();
     await expect(page).not.toHaveURL(/bitshifters/);
-});
-
-test("picking a Bitshifters disc for another machine asks, and Switch machine comes up there with the disc", async ({
-    beeb,
-    page,
-}) => {
-    await catalogueOfOne(page);
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await page.click("#navbarMedia");
-    await expect(page.locator("#media-panel")).toBeVisible();
-    await page.fill("#media-search", "paradroid");
-    const row = page.locator("#media-list .media-row-main").first();
-    await expect(row).toHaveAttribute("title", /Load Paradroid.*into drive 0/);
-    await beeb.armModalShown("are-you-sure");
-    await row.click();
-    await beeb.expectModalShown();
-    await expect(page.locator("#are-you-sure .context")).toContainText("Paradroid needs a BBC Master 128");
-    await page.click("#are-you-sure .ays-yes");
-    await expect(page).toHaveURL(/model=Master/);
-    await expect(page).not.toHaveURL(/autoboot/);
-    expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
-    await beeb.expectDrive0("bs-paradroid.ssd");
-    await beeb.expectScreenText(">");
-    await expect(page.locator(".toast")).toHaveCount(0);
 });

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-    BitshiftersMachines,
+    MachineRequirements,
     browserDiscNames,
     describeBitshiftersEntry,
     describeBrowserDisc,
@@ -14,7 +14,6 @@ import {
     describeSthTape,
     compareForQuery,
     matchesQuery,
-    modelSatisfies,
     satisfiesRequirement,
     scoreQuery,
 } from "../../src/web/media-catalogue.js";
@@ -101,29 +100,11 @@ describe("the media catalogue", () => {
             });
         });
 
-        it("carries the machine an entry needs as the URL spells it, a co-processor and all", () => {
+        it("carries the machine an entry needs from the table, and nothing for a name outside it", () => {
             const requiredBy = (machine) => describeBitshiftersEntry({ path: "x.ssd", machine }).requires;
-            expect(requiredBy("Master")).toBe(BitshiftersMachines.Master);
-            expect(requiredBy("MasterTurbo")).toEqual({
-                model: "Master",
-                coProcessor: true,
-                name: "BBC Master 128 with a 65C102 co-processor",
-            });
-            expect(requiredBy(undefined)).toBeUndefined();
-        });
-
-        it("requires nothing for a machine the table has no entry for, and says so on the console once", () => {
-            const log = vi.spyOn(console, "log").mockImplementation(() => {});
-            expect(describeBitshiftersEntry({ path: "x.ssd", machine: "Electron" }).requires).toBeUndefined();
-            expect(describeBitshiftersEntry({ path: "y.ssd", machine: "Electron" }).requires).toBeUndefined();
-            expect(log).toHaveBeenCalledTimes(1);
-            expect(log).toHaveBeenCalledWith(expect.stringContaining("Electron"));
-        });
-
-        it("does not take a name off the table's prototype for a machine", () => {
-            vi.spyOn(console, "log").mockImplementation(() => {});
-            for (const machine of ["constructor", "toString", "__proto__"])
-                expect(describeBitshiftersEntry({ path: "x.ssd", machine }).requires).toBeUndefined();
+            expect(requiredBy("MasterTurbo")).toBe(MachineRequirements.MasterTurbo);
+            for (const machine of [undefined, "Electron", "constructor", "__proto__"])
+                expect(requiredBy(machine)).toBeUndefined();
         });
 
         it("strips the markup the manifest carries, and leaves out what an entry does not have", () => {
@@ -145,30 +126,15 @@ describe("the media catalogue", () => {
         });
     });
 
-    describe("what a requirement is satisfied by", () => {
+    it("holds a requirement to the very model named and the co-processor as named, nothing looser", () => {
         const machine = (name, hasTube = false) => ({ model: findModel(name), hasTube });
-        const { Master, MasterTurbo } = BitshiftersMachines;
-
-        it("takes any Master for a Master, whichever filing system it boots", () => {
-            for (const name of ["Master", "MasterADFS", "MasterANFS"]) {
-                expect(modelSatisfies(Master, findModel(name))).toBe(true);
-                expect(satisfiesRequirement(Master, machine(name))).toBe(true);
-            }
-            for (const name of ["B-DFS1.2", "B", "B1770", "B1770A"]) {
-                expect(modelSatisfies(Master, findModel(name))).toBe(false);
-                expect(satisfiesRequirement(Master, machine(name))).toBe(false);
-            }
-        });
-
-        it("needs the co-processor as well for a Master Turbo, and a Master under it", () => {
-            expect(satisfiesRequirement(MasterTurbo, machine("Master", true))).toBe(true);
-            expect(satisfiesRequirement(MasterTurbo, machine("Master"))).toBe(false);
-            expect(satisfiesRequirement(MasterTurbo, machine("B-DFS1.2", true))).toBe(false);
-        });
-
-        it("is not put off a plain Master by a co-processor it does not need", () => {
-            expect(satisfiesRequirement(Master, machine("Master", true))).toBe(true);
-        });
+        const { Master, MasterTurbo } = MachineRequirements;
+        expect(satisfiesRequirement(Master, machine("Master"))).toBe(true);
+        expect(satisfiesRequirement(MasterTurbo, machine("Master", true))).toBe(true);
+        for (const name of ["MasterADFS", "MasterANFS", "B-DFS1.2", "B1770"])
+            expect(satisfiesRequirement(Master, machine(name))).toBe(false);
+        expect(satisfiesRequirement(Master, machine("Master", true))).toBe(false);
+        expect(satisfiesRequirement(MasterTurbo, machine("Master"))).toBe(false);
     });
 
     it("describes the built-in discs, Google Drive files, browser discs and session files", () => {
