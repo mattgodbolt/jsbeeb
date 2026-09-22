@@ -110,6 +110,8 @@ export class Canvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
+        // With none, frames go straight to the screen and the phosphor keeps a stale picture
+        if (this.persistence <= 0 && persistence > 0) this.phosphor.width = 0;
         this.persistence = persistence;
     }
 
@@ -198,8 +200,10 @@ export class GlCanvas {
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.phosphorTexture);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.NEAREST);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.NEAREST);
+        // Copied at one to one, where linear sampling reads each texel exactly and turns a
+        // rounding error at an edge into a blend rather than a skipped row
+        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
+        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
         this.phosphorFramebuffer = checkedGl.createFramebuffer();
         checkedGl.bindFramebuffer(checkedGl.FRAMEBUFFER, this.phosphorFramebuffer);
         checkedGl.framebufferTexture2D(
@@ -348,7 +352,7 @@ export class GlCanvas {
         const gl = this.gl;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this.useQuadProgram(this.copyProgram, this.copyPosLocation);
-        // A filter may have put its own texture on this unit while it drew
+        // A filter may have put its own texture on this unit while it drew.
         gl.activeTexture(gl.TEXTURE0 + PhosphorTextureUnit);
         gl.bindTexture(gl.TEXTURE_2D, this.phosphorTexture);
         gl.activeTexture(gl.TEXTURE0);
@@ -364,7 +368,10 @@ export class GlCanvas {
 
     /** How much of the previous frame each new one is blended over, 0 for none. */
     setPersistence(persistence) {
-        this.persistence = this.canPersist ? persistence : 0;
+        persistence = this.canPersist ? persistence : 0;
+        // With none, frames go straight to the screen and the phosphor keeps a stale picture
+        if (this.persistence <= 0 && persistence > 0) this.phosphorWidth = this.phosphorHeight = 0;
+        this.persistence = persistence;
     }
 
     /**

@@ -211,7 +211,7 @@ describe("low latency canvas", () => {
         expect(element.asked[0].preserveDrawingBuffer).toBe(true);
     });
 
-    it("does not when turned off, but still keeps the drawing buffer for persistence", () => {
+    it("does not when turned off, but still keeps the drawing buffer, which a desynchronized context needs", () => {
         const element = attributeRecordingElement(recordingGl());
 
         new GlCanvas(element, PassthroughFilter, false);
@@ -293,7 +293,8 @@ describe("phosphor persistence", () => {
         const calls = [];
         for (const name of ["activeTexture", "bindTexture", "drawArrays"])
             gl[name] = (...args) => calls.push([name, ...args]);
-        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        // xBR puts its line grid on that unit as it draws.
+        const canvas = new GlCanvas(fakeCanvasElement(gl), XbrFilter);
         canvas.setPersistence(0.6);
         calls.length = 0;
         canvas.paint(0, 0, 1024, 625, frame);
@@ -303,6 +304,27 @@ describe("phosphor persistence", () => {
             ["activeTexture", gl.TEXTURE1],
             ["bindTexture", gl.TEXTURE_2D, canvas.phosphorTexture],
             ["activeTexture", gl.TEXTURE0],
+        ]);
+    });
+
+    it("starts the phosphor black again when afterglow is turned back on, not from what it last held", () => {
+        const gl = recordingGl();
+        const sizes = [];
+        gl.texImage2D = (target, level, format, width, height) => sizes.push([width, height]);
+        gl.drawingBufferWidth = 896;
+        gl.drawingBufferHeight = 600;
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        canvas.setPersistence(0.6);
+        sizes.length = 0;
+        canvas.paint(0, 0, 1024, 625, frame);
+        canvas.setPersistence(0);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(sizes).toEqual([[896, 600]]);
+        canvas.setPersistence(0.6);
+        canvas.paint(0, 0, 1024, 625, frame);
+        expect(sizes).toEqual([
+            [896, 600],
+            [896, 600],
         ]);
     });
 
@@ -476,6 +498,11 @@ describe("Canvas", () => {
             canvas.setPersistence(0);
             canvas.paint(0, 0, 1024, 625, {});
             expect(calls).toEqual([["screen", "drawImage", "source-over", 1, backBuffer]]);
+            // Turned back on, the phosphor starts again rather than showing what it last held.
+            canvas.setPersistence(0.6);
+            expect(phosphor.width).toBe(0);
+            canvas.paint(0, 0, 1024, 625, {});
+            expect([phosphor.width, phosphor.height]).toEqual([896, 600]);
         } finally {
             createElement.mockRestore();
         }
