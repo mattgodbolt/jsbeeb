@@ -659,10 +659,6 @@ export class WdFdc {
         }
     }
 
-    _makeSeekNoise(delta) {
-        if (this._currentDrive) this._currentDrive.notifySeekAmount(delta);
-    }
-
     _dispatchCommand() {
         if (!this._currentDrive) throw new Error("Unexpectedly dispatching a command with no drive set");
         if (this._isCommandWrite && this._currentDrive.writeProtect) {
@@ -676,29 +672,21 @@ export class WdFdc {
                 this._trackRegister = 0xff;
                 this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
-                // The head steps out from wherever it is, whatever the track register says
-                this._makeSeekNoise(-this._currentDrive.logicalTrack);
-                this._doSeekStepOrVerify();
-                break;
+            // Falls through...
             case Command.seek:
-                this._makeSeekNoise(this._dataRegister - this._trackRegister);
                 this._doSeekStepOrVerify();
                 break;
             case Command.stepInNoUpdate:
                 this._doSeekStep(1, false);
-                this._makeSeekNoise(1);
                 break;
             case Command.stepInWithUpdate:
                 this._doSeekStep(1, true);
-                this._makeSeekNoise(1);
                 break;
             case Command.stepOutNoUpdate:
                 this._doSeekStep(-1, false);
-                this._makeSeekNoise(-1);
                 break;
             case Command.stepOutWithUpdate:
                 this._doSeekStep(-1, true);
-                this._makeSeekNoise(-1);
                 break;
             case Command.readSector:
             case Command.readSectorMulti:

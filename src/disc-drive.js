@@ -28,14 +28,7 @@ export function attachDriveNoise(drives, ddNoise) {
             numSpinning--;
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
-        drive.addEventListener("step", (evt) => ddNoise.seek(evt.stepAmount));
-    }
-}
-
-class StepEvent extends Event {
-    constructor(stepAmount) {
-        super("step");
-        this.stepAmount = stepAmount;
+        drive.addEventListener("step", () => ddNoise.step());
     }
 }
 
@@ -138,20 +131,6 @@ export class BaseDiscDrive extends EventTarget {
      */
     seekOneTrack(_delta) {
         throw new Error("Not implemented: seekOneTrack");
-    }
-
-    /**
-     * @param {number} _newTrack
-     */
-    notifySeek(_newTrack) {
-        throw new Error("Not implemented: notifySeek");
-    }
-
-    /**
-     * @param {number} _delta
-     */
-    notifySeekAmount(_delta) {
-        throw new Error("Not implemented: notifySeekAmount");
     }
 
     /**
@@ -394,25 +373,7 @@ export class DiscDrive extends BaseDiscDrive {
      */
     seekOneTrack(delta) {
         this._selectTrack(this._track + delta * this._tracksPerStep);
-    }
-
-    /**
-     * Notify that an overall seek is happening to a particular track. Purely informational.
-     */
-    notifySeek(newTrack) {
-        this.notifySeekAmount(newTrack - this.logicalTrack);
-    }
-
-    /**
-     * Notify that an overall seek is happening by some delta amount. Purely informational.
-     */
-    notifySeekAmount(delta) {
-        // The step drives the seek noise, so it counts the tracks the head crosses: none past
-        // either end of the surface, whatever the controller asked for.
-        const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
-        const target = Math.min(lastTrack, Math.max(0, this._track + delta * this._tracksPerStep));
-        const crossed = target - this._track;
-        if (crossed) this.dispatchEvent(new StepEvent(crossed));
+        this.dispatchEvent(new Event("step"));
     }
 
     /**

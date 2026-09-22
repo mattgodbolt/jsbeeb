@@ -1258,8 +1258,6 @@ export class IntelFdc {
             this._regs[Registers.internalSeekCount] = curTrack - newTrack;
             this._driveOut &= ~DriveOut.direction;
         }
-        if (this._currentDrive) this._currentDrive.notifySeek(newTrack);
-
         // Seek pulses on the 8271 are about 10us, so let's just lower the output bit and make them unobservable
         // as we suspect they are on a real machine.
         this._driveOut &= ~DriveOut.step;

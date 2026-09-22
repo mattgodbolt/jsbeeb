@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DdNoise } from "../../src/ddnoise.js";
 
 const Sounds = {
@@ -34,80 +34,87 @@ function loadedDdNoise(context) {
     return ddNoise;
 }
 
-describe("DdNoise seeks", () => {
+/** Steps `count` times, `intervalMs` apart on both the audio clock and the timers. */
+function stepAt(ddNoise, context, count, intervalMs) {
+    for (let i = 0; i < count; ++i) {
+        if (i > 0) {
+            context.currentTime += intervalMs / 1000;
+            vi.advanceTimersByTime(intervalMs);
+        }
+        ddNoise.step();
+    }
+}
+
+describe("DdNoise steps", () => {
     let context;
     let ddNoise;
     beforeEach(() => {
+        vi.useFakeTimers();
         context = stubContext();
         ddNoise = loadedDdNoise(context);
     });
+    afterEach(() => vi.useRealTimers());
 
     const started = () => ddNoise.playing.map((source) => source.buffer);
 
-    it("clicks for a step or two, and plays a longer run the further the head goes", () => {
-        expect(ddNoise.seek(0)).toBe(0);
-        expect(started()).toEqual([]);
-        for (const [tracks, sound] of [
-            [1, Sounds.step],
-            [-2, Sounds.step],
-            [3, Sounds.seek],
-            [20, Sounds.seek],
-            [21, Sounds.seek2],
-            [-40, Sounds.seek2],
-            [41, Sounds.seek3],
-            [79, Sounds.seek3],
-        ]) {
-            context.currentTime += 5;
-            expect(ddNoise.seek(tracks)).toBe(sound.duration);
-            expect(started().at(-1)).toBe(sound);
-        }
+    it("clicks for a single step, and again for another after the head has rested", () => {
+        ddNoise.step();
+        expect(started()).toEqual([Sounds.step]);
+        expect(ddNoise.playing[0].loop).toBe(false);
+        context.currentTime = 0.4;
+        vi.advanceTimersByTime(400);
+        ddNoise.step();
+        expect(started()).toEqual([Sounds.step, Sounds.step]);
+        expect(ddNoise.playing[0].stop).not.toHaveBeenCalled();
     });
 
-    it("lets a sound finish before starting another of any length", () => {
-        ddNoise.seek(1);
-        context.currentTime = 0.05;
-        expect(ddNoise.seek(1)).toBe(0);
-        expect(ddNoise.seek(30)).toBe(0);
-        context.currentTime = 0.1;
-        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
-        context.currentTime = 0.6;
-        expect(ddNoise.seek(30)).toBe(0);
-        expect(ddNoise.seek(5)).toBe(0);
-        expect(started()).toEqual([Sounds.step, Sounds.seek2]);
+    it("hands a second step in the same movement over to the looped run, and keeps it running while the steps come", () => {
+        stepAt(ddNoise, context, 30, 24);
+        const [click, run] = ddNoise.playing;
+        expect(started()).toEqual([Sounds.step, Sounds.seek3]);
+        expect(click.stop).toHaveBeenCalled();
+        expect(run.loop).toBe(true);
+        expect(run.loopStart).toBeCloseTo(0.0055, 4);
+        expect(run.loopEnd).toBeCloseTo(0.0055 + 73 * 0.024209, 4);
+        expect(run.start).toHaveBeenCalledWith(0, run.loopStart);
+        expect(run.stop).not.toHaveBeenCalled();
     });
 
-    it("sounds a click over the tail of a run, and never cuts anything short", () => {
-        ddNoise.seek(30);
-        context.currentTime = 0.6;
-        expect(ddNoise.seek(1)).toBe(Sounds.step.duration);
-        context.currentTime = 0.65;
-        expect(ddNoise.seek(1)).toBe(0);
-        context.currentTime = 1.0;
-        expect(ddNoise.seek(1)).toBe(Sounds.step.duration);
-        expect(started()).toEqual([Sounds.seek2, Sounds.step, Sounds.step]);
-        for (const source of ddNoise.playing) expect(source.stop).not.toHaveBeenCalled();
+    it("ends the run on a click boundary once the steps stop, with the click's ring as the settle", () => {
+        stepAt(ddNoise, context, 30, 24);
+        const run = ddNoise.playing[1];
+        const lastStep = context.currentTime;
+        context.currentTime += 0.1;
+        vi.advanceTimersByTime(100);
+        expect(run.stop).toHaveBeenCalledTimes(1);
+        const [boundary] = run.stop.mock.calls[0];
+        const sinceRunStarted = boundary - 0.024;
+        expect(boundary).toBeGreaterThan(context.currentTime);
+        expect(boundary - context.currentTime).toBeLessThanOrEqual(0.024209);
+        expect(sinceRunStarted % 0.024209).toBeCloseTo(0, 3);
+        const settle = ddNoise.playing[2];
+        expect(settle.buffer).toBe(Sounds.step);
+        expect(settle.start).toHaveBeenCalledWith(boundary, 0.024);
+        expect(lastStep).toBeLessThan(boundary);
     });
 
-    it("still holds a run off until the last run has finished, clicks over it or not", () => {
-        ddNoise.seek(30);
-        context.currentTime = 0.6;
-        ddNoise.seek(1);
-        context.currentTime = 1.0;
-        expect(ddNoise.seek(30)).toBe(0);
-        context.currentTime = 1.1;
-        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
-        expect(started()).toEqual([Sounds.seek2, Sounds.step, Sounds.seek2]);
+    it("starts a fresh click for a step after a run has ended", () => {
+        stepAt(ddNoise, context, 5, 24);
+        context.currentTime += 0.5;
+        vi.advanceTimersByTime(500);
+        ddNoise.step();
+        expect(started().at(-1)).toBe(Sounds.step);
+        expect(ddNoise.playing.at(-1).loop).toBe(false);
     });
 
-    it("holds the next sound off for the full length even when the context could not play it", () => {
+    it("keeps its footing when the context is not running", () => {
         context.state = "suspended";
-        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
+        expect(() => stepAt(ddNoise, context, 5, 24)).not.toThrow();
         expect(started()).toEqual([]);
+        context.currentTime += 0.5;
+        vi.advanceTimersByTime(500);
         context.state = "running";
-        context.currentTime = 0.5;
-        expect(ddNoise.seek(30)).toBe(0);
-        context.currentTime = 1.1;
-        expect(ddNoise.seek(30)).toBe(Sounds.seek2.duration);
-        expect(started()).toEqual([Sounds.seek2]);
+        ddNoise.step();
+        expect(started()).toEqual([Sounds.step]);
     });
 });

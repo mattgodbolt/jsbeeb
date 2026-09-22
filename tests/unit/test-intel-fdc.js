@@ -26,7 +26,6 @@ class FakeDrive {
     seekOneTrack(dir) {
         this.track = this.track + dir;
     }
-    notifySeek() {}
 }
 
 /**

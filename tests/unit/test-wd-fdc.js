@@ -269,39 +269,39 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
-    describe("seek noise", () => {
-        const seekNoises = (drive) => {
-            const amounts = [];
-            drive.addEventListener("step", (event) => amounts.push(event.stepAmount));
-            return amounts;
+    describe("head steps", () => {
+        const stepsOf = (drive) => {
+            let steps = 0;
+            drive.addEventListener("step", () => ++steps);
+            return () => steps;
         };
 
-        it("is the difference between the track asked for and the track register", () => {
+        it("are one per track between the track register and the track asked for", () => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            const amounts = seekNoises(drives[0]);
+            const steps = stepsOf(drives[0]);
             fdc.write(TrackRegister, 5);
             fdc.write(DataRegister, 35);
             runCommand(fdc, scheduler, SeekCommand);
-            expect(amounts).toEqual([30]);
+            expect(steps()).toBe(30);
         });
 
-        it("is nothing for a seek outwards with the head already at track 0", () => {
+        it("are none for a seek outwards with the head already at track 0", () => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            const amounts = seekNoises(drives[0]);
+            const steps = stepsOf(drives[0]);
             fdc.write(TrackRegister, 5);
             fdc.write(DataRegister, 0);
             runCommand(fdc, scheduler, SeekCommand);
-            expect(amounts).toEqual([]);
+            expect(steps()).toBe(0);
             expect(drives[0].track).toBe(0);
         });
 
-        it("is the distance the head steps out on a restore, whatever the track register says", () => {
+        it("take the head out to track 0 on a restore, whatever the track register says", () => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
             for (let track = 0; track < 20; ++track) drives[0].seekOneTrack(1);
-            const amounts = seekNoises(drives[0]);
+            const steps = stepsOf(drives[0]);
             fdc.write(TrackRegister, 3);
             runCommand(fdc, scheduler, RestoreCommand);
-            expect(amounts).toEqual([-20]);
+            expect(steps()).toBe(20);
             expect(drives[0].track).toBe(0);
         });
     });

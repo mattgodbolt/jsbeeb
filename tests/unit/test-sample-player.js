@@ -79,6 +79,31 @@ describe("SamplePlayer", () => {
         });
     });
 
+    describe("startSound", () => {
+        it("starts at the time and offset asked for, looping between the points given", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = player.startSound({ duration: 2 }, { when: 1.5, offset: 0.1, loopStart: 0.1, loopEnd: 1.9 });
+            expect(source.loop).toBe(true);
+            expect(source.loopStart).toBe(0.1);
+            expect(source.loopEnd).toBe(1.9);
+            expect(source.start).toHaveBeenCalledWith(1.5, 0.1);
+            expect(player.playing).toEqual([source]);
+        });
+
+        it("plays once, now, from the start by default", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = player.startSound({ duration: 2 });
+            expect(source.loop).toBe(false);
+            expect(source.start).toHaveBeenCalledWith(0, 0);
+        });
+
+        it("plays nothing when the context is not running", () => {
+            context.state = "suspended";
+            const player = new SamplePlayer(context, destination, 0.4);
+            expect(player.startSound({ duration: 2 })).toBeNull();
+        });
+    });
+
     describe("play", () => {
         it("should reject when context is not running", async () => {
             context.state = "suspended";

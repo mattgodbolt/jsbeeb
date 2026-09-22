@@ -46,17 +46,31 @@ export class SamplePlayer {
      * Fire-and-forget: play a buffer once, return its duration.
      */
     oneShot(sound) {
-        const duration = sound.duration;
-        if (this.context.state !== "running") return duration;
+        this.startSound(sound);
+        return sound.duration;
+    }
+
+    /**
+     * Start a buffer at `when` on the audio clock (now if 0), from `offset`
+     * seconds into it, looping between `loopStart` and `loopEnd` if given.
+     * Returns the source, or null when the context is not running.
+     */
+    startSound(sound, { when = 0, offset = 0, loopStart, loopEnd } = {}) {
+        if (this.context.state !== "running") return null;
         const source = this.context.createBufferSource();
         source.buffer = sound;
+        if (loopEnd !== undefined) {
+            source.loop = true;
+            source.loopStart = loopStart;
+            source.loopEnd = loopEnd;
+        }
         source.connect(this.gain);
         source.onended = () => {
             this.playing = this.playing.filter((s) => s !== source);
         };
-        source.start();
+        source.start(when, offset);
         this.playing.push(source);
-        return duration;
+        return source;
     }
 
     /**
