@@ -1949,6 +1949,11 @@ div.smoothie-chart-tooltip {
   border-style: dashed;
 }
 
+.media-source.src-bitshifters {
+  color: #f0a0c8;
+  border-color: #8a3f66;
+}
+
 .media-source.src-builtin {
   color: #9ec5fe;
   border-color: #2f5a8f;
@@ -1999,7 +2004,12 @@ div.smoothie-chart-tooltip {
 .media-row .targets {
   display: flex;
   align-items: center;
+  gap: 4px;
   padding: 0 8px 0 0;
+}
+
+.media-about {
+  text-decoration: none;
 }
 
 .media-list .notice {
