@@ -4,8 +4,6 @@ const Idle = 0;
 const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
-/** Up to this many steps is one click of the head; more is a run. */
-const ClickSteps = 2;
 /**
  * seek3.wav is a drive stepping at the DFS's 24 ms a step. Where its first click begins and
  * how far apart they come were fitted across the file's clicks, so a grain cut on that grid
@@ -66,16 +64,16 @@ export class DdNoise extends SamplePlayer {
     }
 
     /**
-     * The head is about to take `steps` steps, one every `stepMs`: a click for a step or two,
-     * held off while the last click still sounds, otherwise a run of clicks scheduled on the
-     * audio clock at that rate, with the click's ring as the settle after the last.
+     * The head is about to take `steps` steps, one every `stepMs`: a click for one step, held
+     * off while the last click still sounds, otherwise a run of clicks scheduled on the audio
+     * clock at that rate, with the click's ring as the settle after the last.
      */
     seekStart(steps, stepMs) {
         if (steps < 0) steps = -steps;
         if (steps === 0) return;
         this.cancelRun();
         const now = this.context.currentTime;
-        if (steps <= ClickSteps) {
+        if (steps === 1) {
             if (now >= this.clickEnds) this.clickEnds = now + this.oneShot(this.sounds.step);
             return;
         }

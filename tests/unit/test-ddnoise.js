@@ -59,13 +59,18 @@ describe("DdNoise seeks", () => {
         ddNoise = loadedDdNoise(context);
     });
 
-    it("clicks once for a step or two, and not at all for no movement", () => {
+    it("clicks once for a single step either way, and not at all for no movement", () => {
         ddNoise.seekStart(0, 24);
         expect(starts(ddNoise)).toEqual([]);
         ddNoise.seekStart(1, 24);
         context.currentTime = 0.1;
-        ddNoise.seekStart(-2, 24);
+        ddNoise.seekStart(-1, 24);
         expect(starts(ddNoise).map((s) => s.sound)).toEqual([Sounds.step, Sounds.step]);
+    });
+
+    it("runs two grains and the settle for two steps", () => {
+        ddNoise.seekStart(2, 24);
+        expect(starts(ddNoise).map((s) => s.sound)).toEqual([Sounds.seek3, Sounds.seek3, Sounds.step]);
     });
 
     it("holds a click off while the last one still sounds", () => {
