@@ -108,8 +108,8 @@ export class DdNoise extends SamplePlayer {
     seekEnd(steps) {
         const run = this.run;
         if (!run || steps >= run.grains.length) return;
-        for (const grain of run.grains.splice(steps)) grain.source?.stop();
-        run.settle.source?.stop();
+        const now = this.context.currentTime;
+        for (const grain of [...run.grains.splice(steps), run.settle]) if (grain.at > now) grain.source?.stop();
         run.settle = this.scheduleSettle(run.start + steps * run.stepSeconds);
     }
 
