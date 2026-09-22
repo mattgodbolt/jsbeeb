@@ -271,9 +271,16 @@ export class GlCanvas {
         // The filter draws through the plain context every frame, so its setup
         // is checked once here rather than call by call.
         const gl = this.gl;
-        while (gl.getError() !== gl.NO_ERROR);
+        const drainErrors = () => {
+            let first = gl.NO_ERROR;
+            for (let error = gl.getError(); error !== gl.NO_ERROR; error = gl.getError()) {
+                if (first === gl.NO_ERROR) first = error;
+            }
+            return first;
+        };
+        drainErrors();
         const filter = new filterClass(gl);
-        const error = gl.getError();
+        const error = drainErrors();
         if (error !== gl.NO_ERROR) {
             filter.dispose();
             throw new Error(

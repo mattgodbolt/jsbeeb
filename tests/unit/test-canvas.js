@@ -150,26 +150,54 @@ describe("GlCanvas", () => {
         expect(canvas.fb32).toBe(fb32);
     });
 
-    it("hands the filter the plain context, checking its setup once", () => {
+    it("hands the filter the plain context", () => {
         const gl = recordingGl();
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         expect(canvas.filter.gl).toBe(gl);
     });
 
-    it("refuses a filter whose setup raised a GL error, and frees what it made", () => {
+    const invalidOperation = 0x0502;
+    const invalidValue = 0x0501;
+
+    /** Makes `gl.getError` hand out `codes` once each, in order, the way GL keeps one flag per code. */
+    function pendingErrors(gl, codes) {
+        const queue = [...codes];
+        gl.getError = () => queue.shift() ?? 0;
+    }
+
+    /** Only xBR asks about shader precision as it is built, so the error lands in its setup. */
+    function xbrSetupRaises(gl, codes) {
+        gl.getShaderPrecisionFormat = () => {
+            pendingErrors(gl, codes);
+            return { precision: 23 };
+        };
+    }
+
+    it("refuses a filter whose setup raised GL errors, and frees what it made, however many codes", () => {
         const gl = recordingGl();
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         const before = new Set(gl.live);
-        const invalidOperation = 0x0502;
-        gl.texImage2D = () => {
-            gl.getError = () => {
-                gl.getError = () => 0;
-                return invalidOperation;
-            };
-        };
+        xbrSetupRaises(gl, [invalidOperation, invalidValue]);
         expect(() => canvas.setFilter(XbrFilter)).toThrow(/failed to set up/);
         expect(canvas.filterClass).toBe(PassthroughFilter);
         expect(gl.live).toEqual(before);
+        // Both codes were read, so nothing is left to be blamed on the next checked call.
+        expect(gl.getError()).toBe(0);
+    });
+
+    it("does not blame a filter for an error a frame left pending before it was built", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        pendingErrors(gl, [invalidOperation]);
+        canvas.setFilter(XbrFilter);
+        expect(canvas.filterClass).toBe(XbrFilter);
+    });
+
+    it("gives up the whole canvas when the first filter's setup raises a GL error", () => {
+        const gl = recordingGl();
+        xbrSetupRaises(gl, [invalidOperation]);
+        expect(() => new GlCanvas(fakeCanvasElement(gl), XbrFilter)).toThrow(/failed to set up/);
+        expect(gl.live.size).toBe(0);
     });
 
     it("goes on drawing with the filter it has when a new one will not build", () => {
