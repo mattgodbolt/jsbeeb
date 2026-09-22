@@ -18,8 +18,9 @@ PR. What the reviewer checks, how it reports and what it needs to be told are it
   `git fetch origin <base>` and review against `origin/<base>`.
 - Commit everything first, so the diff and the files the reviewer reads agree. Never amend or
   rebase a branch that has been pushed.
-- For a push to an open PR, seed the declined list with what is already settled, so the reviewer
-  does not re-raise it: the "Declined from local review" section of the body
+- For a push to an open PR, seed the taken and declined lists with what is already settled, so
+  the reviewer does not re-raise it. Taken: every answered thread whose reply names the commit
+  that took it. Declined: the "Declined from local review" section of the body
   (`gh pr view --json body`), and every review thread the maintainer or the session has answered
   (`gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments` for the inline threads and their
   replies, `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews` for the review bodies, and
@@ -73,7 +74,7 @@ is saying something about its design.
 ## 6. Push, then open or update
 
 Only now `git push`, then `gh pr create --title <title> --body-file <file>` or
-`gh pr edit --body-file <file>`, with the text from step 2 written to that file. The body carries
-every declined
+`gh pr edit --title <title> --body-file <file>`, with the text from step 2 written to that file,
+so the title describes what landed and not the first attempt. The body carries every declined
 finding under a heading "Declined from local review", each with its reason, so the second review
 can see what the first review argued about.
