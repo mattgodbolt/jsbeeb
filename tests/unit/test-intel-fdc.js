@@ -28,6 +28,10 @@ class FakeDrive {
         this.track = this.track + dir;
     }
     notifySeek() {}
+    snapshotState() {
+        return {};
+    }
+    restoreState() {}
 }
 
 /**
@@ -165,6 +169,70 @@ describe("Intel 8271 tests", function () {
             expect(ready()).toBe(true);
             scheduler.polltime(ms(300));
             indexPulse();
+            expect(ready()).toBe(false);
+        });
+
+        it("counts edges from the level the newly selected drive already shows", () => {
+            const fakeDrive = new FakeDrive();
+            fakeDrive.indexPulse = true;
+            const scheduler = new Scheduler();
+            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            sendCommand(fdc, 0x35, 0x0d, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            const ready0 = 0x04;
+            const ready = () => {
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                return (fdc.read(1) & ready0) === ready0;
+            };
+            // Still high from before selection: not an edge.
+            fakeDrive.pulsesCallback(0, 32);
+            fakeDrive.indexPulse = false;
+            fakeDrive.pulsesCallback(0, 32);
+            for (const expected of [false, true]) {
+                scheduler.polltime(ms(200));
+                fakeDrive.indexPulse = true;
+                fakeDrive.pulsesCallback(0, 32);
+                fakeDrive.indexPulse = false;
+                fakeDrive.pulsesCallback(0, 32);
+                expect(ready()).toBe(expected);
+            }
+        });
+
+        it("carries the latch through a snapshot, along with how stale its last pulse is", () => {
+            const { fdc, scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+
+            const fresh = fdc.snapshotState();
+            const { fdc: restoredFresh, ready: readyFresh } = readyFdc();
+            restoredFresh.restoreState(fresh);
+            expect(readyFresh()).toBe(true);
+
+            // A pulse that comes after a long gap since the snapshot's last one drops the latch.
+            const {
+                fdc: restoredStale,
+                scheduler: staleScheduler,
+                indexPulse: stalePulse,
+                ready: readyStale,
+            } = readyFdc();
+            restoredStale.restoreState(fresh);
+            staleScheduler.polltime(ms(300));
+            stalePulse();
+            expect(readyStale()).toBe(false);
+        });
+
+        it("comes up ready from a snapshot made before the latch existed", () => {
+            const { fdc, ready } = readyFdc();
+            const state = fdc.snapshotState();
+            delete state.ready;
+            delete state.readyPulses;
+            delete state.sinceIndexPulse;
+            const { fdc: restored, ready: readyRestored } = readyFdc();
+            restored.restoreState(state);
+            expect(readyRestored()).toBe(true);
             expect(ready()).toBe(false);
         });
 

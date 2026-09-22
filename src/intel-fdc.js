@@ -1222,6 +1222,8 @@ export class IntelFdc {
             this._ready = false;
             this._readyPulses = 0;
             this._lastIndexEpoch = -Infinity;
+            // Edges are counted from the new drive's level, not the old one's
+            this._stateIsIndexPulse = this._index;
         }
         if (this._currentDrive) {
             if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
