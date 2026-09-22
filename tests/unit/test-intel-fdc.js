@@ -246,6 +246,18 @@ describe("Intel 8271 tests", function () {
             expect(ready()).toBe(false);
         });
 
+        it("outlives a stop and restart of the motor shorter than the timeout", () => {
+            const { fdc, scheduler, indexPulse, ready } = readyFdc();
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            // The command byte keeps the drive selected; only the motor stops.
+            sendCommand(fdc, writeRegCmd | driveSelect1, mmioWrite, driveSelect1);
+            scheduler.polltime(ms(100));
+            sendCommand(fdc, writeRegCmd | driveSelect1, mmioWrite, loadHead | driveSelect1);
+            expect(ready()).toBe(true);
+        });
+
         it("goes when the drive is deselected", () => {
             const { fdc, scheduler, indexPulse, ready } = readyFdc();
             indexPulse();

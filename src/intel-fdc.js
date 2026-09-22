@@ -1494,14 +1494,14 @@ export class IntelFdc {
     get _driveIn() {
         // Note: on @scarybeasts machine, bit 7 and bit 0 appear to be always set.
         let driveIn = 0x81;
+        // RDY0 and RDY1 are the Beeb's latch, which outlives a brief stop of the motor
+        if (this._driveReady) {
+            if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
+            if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
+        }
         if (this._currentDiscIsSpinning) {
             // TRK0
             if (this._trk0) driveIn |= 0x02;
-            // RDY0 and RDY1
-            if (this._driveReady) {
-                if (this._driveOut & DriveOut.select_0) driveIn |= 0x04;
-                if (this._driveOut & DriveOut.select_1) driveIn |= 0x40;
-            }
             // WR PROT
             if (this._wrProt) driveIn |= 0x08;
             // INDEX
