@@ -606,6 +606,26 @@ describe("MediaWindow", () => {
             expect(links[1].title).toBe("About Paradroid at bitshifters.github.io");
         });
 
+        it("links only to web pages, whatever a source's manifest says", async () => {
+            const entryWith = (title, url) => ({
+                ...elite,
+                ref: `bitshifters:${title}.ssd`,
+                title,
+                source: "bitshifters",
+                url,
+            });
+            // Rows come sorted by title.
+            await openWith([
+                entryWith("a script", "javascript:alert(1)"),
+                entryWith("b data", "data:text/html,hi"),
+                entryWith("c junk", "not a url"),
+                entryWith("d plain", "http://example.com/page"),
+            ]);
+            const links = rows().map((row) => row.querySelector(".media-about"));
+            expect(links.slice(0, 3)).toEqual([null, null, null]);
+            expect(links[3].href).toBe("http://example.com/page");
+        });
+
         it("says which sources could not be listed", async () => {
             await openWith([elite], ["sth: offline"]);
             expect(text(document.querySelector("#media-list .notice"))).toBe("Could not list sth: offline");

@@ -48,6 +48,32 @@ describe("BitshiftersArchive", () => {
         expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
+    it("fetches the manifest once for everyone asking while it is on its way", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([entry()]));
+        const subject = archive();
+        const [first, second] = await Promise.all([subject.catalogue(), subject.catalogue()]);
+        expect(first).toBe(second);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("tries the manifest again after a failure", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({ ok: false, status: 503 });
+        const subject = archive();
+        await expect(subject.catalogue()).rejects.toThrow("503");
+        fetchSpy.mockResolvedValueOnce(manifestResponse([entry()]));
+        expect((await subject.catalogue()).map((file) => file.title)).toEqual(["Paradroid"]);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the directories of a nested path while escaping its parts", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+            expect(url).toBe(`${SiteBase}/demos/2026/a%20b%23c.ssd`);
+            return bytesResponse(new Uint8Array([1]));
+        });
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        expect(await archive().fetch("demos/2026/a b#c.ssd")).toEqual(new Uint8Array([1]));
+    });
+
     it("returns the fetched image as bytes, untouched, from the path the manifest gave", async () => {
         const ssd = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {

@@ -52,6 +52,17 @@ const upperSideOf = (driveIndex) => driveIndex + 2;
  * searchable list of everything every source offers; and the one-line
  * readouts in the LED panel that open it.
  */
+/** A source's page about an entry, as a URL, if it is one a browser may be sent to; the source is not trusted. */
+function webPage(url) {
+    if (!url) return null;
+    try {
+        const page = new URL(url);
+        return page.protocol === "https:" || page.protocol === "http:" ? page : null;
+    } catch {
+        return null;
+    }
+}
+
 export class MediaWindow {
     constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource }) {
         this.media = media;
@@ -674,14 +685,15 @@ export class MediaWindow {
             button.addEventListener("click", (e) => this.loadDisc(other, d, { boot: e.shiftKey }));
             targets.append(button);
         }
-        if (d.url) {
+        const page = webPage(d.url);
+        if (page) {
             const about = document.createElement("a");
             about.className = "media-target media-about";
-            about.href = d.url;
+            about.href = page.href;
             about.target = "_blank";
             about.rel = "noopener";
             about.textContent = "↗";
-            about.title = `About ${d.title} at ${new URL(d.url).host}`;
+            about.title = `About ${d.title} at ${page.host}`;
             about.setAttribute("aria-label", about.title);
             targets.append(about);
         }

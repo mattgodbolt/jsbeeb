@@ -9,20 +9,28 @@ export class BitshiftersArchive {
     /** @param {string} [baseUrl] where the site keeps its content, to point at a test prefix */
     constructor(baseUrl = SiteBase) {
         this._baseUrl = `${baseUrl}/`;
-        this._catalogue = [];
-        this._loaded = false;
+        this._catalogue = null;
     }
 
-    /** @returns {Promise<object[]>} every manifest entry, fetched the first time it is asked for */
-    async catalogue() {
-        if (this._loaded) return this._catalogue;
+    /**
+     * @returns {Promise<object[]>} every manifest entry, fetched once however many ask at
+     *     the same time; a failed fetch is forgotten so the next asker tries again
+     */
+    catalogue() {
+        if (!this._catalogue)
+            this._catalogue = this._fetchCatalogue().catch((error) => {
+                this._catalogue = null;
+                throw error;
+            });
+        return this._catalogue;
+    }
+
+    async _fetchCatalogue() {
         const response = await fetch(`${this._baseUrl}manifest.json`);
         if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
         const data = await response.json();
         if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
-        this._catalogue = data.files;
-        this._loaded = true;
-        return this._catalogue;
+        return data.files;
     }
 
     /**
@@ -30,7 +38,7 @@ export class BitshiftersArchive {
      * @returns {Promise<Uint8Array>} the image
      */
     async fetch(path) {
-        const url = this._baseUrl + encodeURIComponent(path);
+        const url = this._baseUrl + path.split("/").map(encodeURIComponent).join("/");
         console.log("Loading disc from " + url);
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
