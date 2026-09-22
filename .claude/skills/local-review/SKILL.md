@@ -15,8 +15,11 @@ PR. Copilot and the maintainer are the second review, not the first.
 - The base is the PR's base branch (`gh pr view --json baseRefName` for an open PR; for one not
   yet opened, the branch it will be opened against, which is `main` unless the PR is stacked).
   `git fetch origin <base>` and review against `origin/<base>`.
-- Commit everything first; the reviewer reads commits, not the working tree. Never amend or rebase
-  a branch that has been pushed.
+- Commit everything first, so the diff and the files the reviewer reads agree. Never amend or
+  rebase a branch that has been pushed.
+- For a push to an open PR, the "Declined from local review" section of its body
+  (`gh pr view --json body`) and the review threads already answered there seed the declined list,
+  so the reviewer does not re-raise what an earlier loop or the second review has settled.
 - `git diff origin/<base>...HEAD --stat` to see what is in it.
 
 ## 2. Assemble the PR text

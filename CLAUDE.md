@@ -149,8 +149,7 @@ nobody asked.
 
 - Every PR is reviewed locally with the `local-review` skill before it is opened and before every push to it. The
   session iterates with the `local-reviewer` agent (`.claude/agents/local-reviewer.md`, which holds the checklist)
-  until the reviewer has no blocking finding the session has not declined with a reason; the declined findings
-  go in the PR body with the reason
+  until the skill's stopping rule is met; the declined findings go in the PR body with the reason
 - Copilot and the maintainer are the second review, not the first
 - A request to open or update a PR is the ask that covers the commits the loop makes
 
