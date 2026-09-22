@@ -589,6 +589,23 @@ describe("MediaWindow", () => {
             expect(document.querySelector("#media-chips .media-chip").getAttribute("aria-pressed")).toBe("true");
         });
 
+        it("links a row to the page about it when its source names one, and only then", async () => {
+            const paradroid = {
+                ...elite,
+                ref: "bitshifters:bs-paradroid.ssd",
+                title: "Paradroid",
+                publisher: "Bitshifters",
+                source: "bitshifters",
+                url: "https://bitshifters.github.io/posts/prods/bs-paradroid.html",
+            };
+            await openWith([elite, paradroid]);
+            const links = rows().map((row) => row.querySelector(".media-about"));
+            expect(links[0]).toBeNull();
+            expect(links[1].href).toBe(paradroid.url);
+            expect(links[1].target).toBe("_blank");
+            expect(links[1].title).toBe("About Paradroid at bitshifters.github.io");
+        });
+
         it("says which sources could not be listed", async () => {
             await openWith([elite], ["sth: offline"]);
             expect(text(document.querySelector("#media-list .notice"))).toBe("Could not list sth: offline");
@@ -1284,6 +1301,7 @@ describe("MediaWindow", () => {
             expect(sourceOf("sth:Games/ELITE.zip")).toBe("STH archive");
             expect(sourceOf("|Games/ELITE.zip")).toBe("STH archive");
             expect(sourceOf("hfe:3A1DAB83.hfe")).toBe("HFE archive");
+            expect(sourceOf("bitshifters:bs-paradroid.ssd")).toBe("Bitshifters");
             expect(sourceOf("gd:abc/mine.ssd")).toBe("Google Drive");
             expect(sourceOf("local:mine")).toBe("this browser");
             expect(sourceOf("!mine")).toBe("this browser");

@@ -8,6 +8,7 @@ describe("splitImage", () => {
         ["sth:ELITE.zip", "sth", "ELITE.zip"],
         ["|ELITE.zip", "|", "ELITE.zip"],
         ["hfe:3A1DAB83.hfe", "hfe", "3A1DAB83.hfe"],
+        ["bitshifters:bs-paradroid.ssd", "bitshifters", "bs-paradroid.ssd"],
         ["gd:abc123/name.ssd", "gd", "abc123/name.ssd"],
         ["local:mydisc", "local", "mydisc"],
         ["!mydisc", "!", "mydisc"],
@@ -82,9 +83,11 @@ describe("MediaResolver", () => {
         const sth = vi.fn(async () => ({ name: "ELITE.ssd", data: bytes("e"), ignored: [] }));
         const tapeSth = vi.fn(async () => ({ name: "ELITE.uef", data: bytes("t"), ignored: [] }));
         const hfe = vi.fn(async () => bytes("h"));
+        const bitshifters = vi.fn(async () => bytes("b"));
         resolver.addSource("sth", sth);
         resolver.addSource("tapeSth", tapeSth);
         resolver.addSource("hfe", hfe);
+        resolver.addSource("bitshifters", bitshifters);
         await resolver.resolve("disc", "sth:ELITE.zip");
         await resolver.resolve("tape", "|ELITE.zip");
         expect(sth).toHaveBeenCalledWith("ELITE.zip");
@@ -94,6 +97,12 @@ describe("MediaResolver", () => {
             data: bytes("h"),
             ignored: [],
         });
+        expect(await resolver.resolve("disc", "bitshifters:bs-paradroid.ssd")).toEqual({
+            name: "bs-paradroid.ssd",
+            data: bytes("b"),
+            ignored: [],
+        });
+        expect(bitshifters).toHaveBeenCalledWith("bs-paradroid.ssd");
     });
 
     it("hands a session: reference to the session source, whatever the kind", async () => {

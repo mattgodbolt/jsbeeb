@@ -19,6 +19,7 @@ const _jsbeebRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 import * as fdc from "./fdc.js";
 import { MediaResolver } from "./media-resolver.js";
 import { StairwayToHell } from "./sth.js";
+import { BitshiftersArchive } from "./bitshifters.js";
 import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
@@ -424,7 +425,7 @@ export class MachineSession {
 
     /**
      * Put a disc in a drive by any reference the web page's URL accepts: a bare
-     * name from the built-in discs, `sth:` or `hfe:` for the archives, or a URL.
+     * name from the built-in discs, `sth:`, `hfe:` or `bitshifters:` for the archives, or a URL.
      * Returns the name of the image loaded and any others the archive held.
      */
     async loadDiscImage(ref, drive = 0) {
@@ -438,6 +439,7 @@ export class MachineSession {
             this._mediaResolver = new MediaResolver();
             this._mediaResolver.addSource("sth", (file) => new StairwayToHell().fetch(file));
             this._mediaResolver.addSource("hfe", (path) => new BbcDiscArchive().fetch(path));
+            this._mediaResolver.addSource("bitshifters", (path) => new BitshiftersArchive().fetch(path));
         }
         return this._mediaResolver;
     }

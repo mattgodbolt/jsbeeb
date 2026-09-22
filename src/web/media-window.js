@@ -674,6 +674,17 @@ export class MediaWindow {
             button.addEventListener("click", (e) => this.loadDisc(other, d, { boot: e.shiftKey }));
             targets.append(button);
         }
+        if (d.url) {
+            const about = document.createElement("a");
+            about.className = "media-target media-about";
+            about.href = d.url;
+            about.target = "_blank";
+            about.rel = "noopener";
+            about.textContent = "↗";
+            about.title = `About ${d.title} at ${new URL(d.url).host}`;
+            about.setAttribute("aria-label", about.title);
+            targets.append(about);
+        }
         li.append(main, targets);
         return li;
     }

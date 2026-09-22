@@ -145,7 +145,7 @@ changing layout.
 
 ### Discs and Tapes
 
-**Media** on the top bar opens the media window: two disc drives and a cassette deck showing what is loaded, and one searchable list of everything you can load: the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, your Google Drive once connected, discs kept in this browser, and files opened this session. Type to search, `Enter` loads the best match into the aimed drive, `Shift+Enter` loads it, ticks **Autoboot** and boots it, and the arrows walk the rows. Aim at a drive or the deck with the **Into** control, by clicking a slot, or from its line in the LED panel under the screen. Each drive front has its eject latch, its 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser. The footer opens a file from this computer, makes a blank disc in this browser or on Google Drive, and connects Google Drive.
+**Media** on the top bar opens the media window: two disc drives and a cassette deck showing what is loaded, and one searchable list of everything you can load: the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, the demos and games Bitshifters publish (each row links to its page), your Google Drive once connected, discs kept in this browser, and files opened this session. Type to search, `Enter` loads the best match into the aimed drive, `Shift+Enter` loads it, ticks **Autoboot** and boots it, and the arrows walk the rows. Aim at a drive or the deck with the **Into** control, by clicking a slot, or from its line in the LED panel under the screen. Each drive front has its eject latch, its 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser. The footer opens a file from this computer, makes a blank disc in this browser or on Google Drive, and connects Google Drive.
 
 ### Emulator Shortcuts
 
@@ -309,6 +309,9 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `disc2=XXX` - as above, into drive 1
 - `disc1=local:YYY` - creates a local disk YYY which will be kept in browser local storage
 - `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
+- `disc1=hfe:ZZZ` - loads disc ZZZ from the HFE archive of flux captures
+- `disc1=bitshifters:ZZZ` - loads disc ZZZ from [Bitshifters](https://bitshifters.github.io/), e.g.
+  `bitshifters:bs-paradroid.ssd`
 - `drive0Tracks=40` / `drive0Tracks=80` - fixes drive 0's 40/80 track switch, as the switch on the back of a real
   drive did. `drive1Tracks` does the same for drive 1. Left alone, each drive follows whatever disc is loaded into it:
   a 40 track image is laid out the way a 40 track drive wrote it, on every other track of the surface, and the drive
