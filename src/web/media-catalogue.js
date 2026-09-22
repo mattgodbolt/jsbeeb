@@ -118,7 +118,7 @@ const unknownMachines = new Set();
 
 function bitshiftersRequirement(machine) {
     if (machine === undefined) return undefined;
-    const requires = BitshiftersMachines[machine];
+    const requires = Object.hasOwn(BitshiftersMachines, machine) ? BitshiftersMachines[machine] : undefined;
     if (!requires && !unknownMachines.has(machine)) {
         unknownMachines.add(machine);
         console.log(`Bitshifters names a machine this emulator has no table entry for: ${machine}`);

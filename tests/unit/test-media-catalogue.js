@@ -120,6 +120,12 @@ describe("the media catalogue", () => {
             expect(log).toHaveBeenCalledWith(expect.stringContaining("Electron"));
         });
 
+        it("does not take a name off the table's prototype for a machine", () => {
+            vi.spyOn(console, "log").mockImplementation(() => {});
+            for (const machine of ["constructor", "toString", "__proto__"])
+                expect(describeBitshiftersEntry({ path: "x.ssd", machine }).requires).toBeUndefined();
+        });
+
         it("strips the markup the manifest carries, and leaves out what an entry does not have", () => {
             const described = describeBitshiftersEntry({
                 path: "0xc0de-elementum.ssd",

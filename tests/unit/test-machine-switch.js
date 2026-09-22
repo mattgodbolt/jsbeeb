@@ -12,9 +12,11 @@ describe("MachineSwitch", () => {
     let deps;
 
     beforeEach(() => {
+        const model = findModel("B-DFS1.2");
         deps = {
-            model: findModel("B-DFS1.2"),
+            model,
             processor: { hasTube: false },
+            settings: { model },
             urlState: stubNavigation(fakeUrlState()),
             modals: { confirm: vi.fn() },
         };
@@ -83,11 +85,21 @@ describe("MachineSwitch", () => {
             expect(deps.urlState.navigatedTo).toBe(
                 "https://bbc.example/?model=Master&coProcessor&disc1=bitshifters:bs-paradroid.ssd&autoboot",
             );
-            deps.model = findModel("MasterADFS");
+            deps.model = deps.settings.model = findModel("MasterADFS");
             deps.urlState = stubNavigation(fakeUrlState("?model=MasterADFS"));
             await make().switchFor(twinhead, drive0, { boot: true });
             expect(deps.urlState.navigatedTo).toBe(
                 "https://bbc.example/?model=MasterADFS&disc1=bitshifters:twinhead.ssd&autoboot&coProcessor",
+            );
+        });
+
+        it("holds the floor against the model a reload builds, which a change saved for later has moved on", async () => {
+            deps.model = findModel("Master");
+            deps.settings.model = findModel("B-DFS1.2");
+            deps.urlState = stubNavigation(fakeUrlState("?model=B-DFS1.2"));
+            await make().switchFor(twinhead, drive0, { boot: true });
+            expect(deps.urlState.navigatedTo).toBe(
+                "https://bbc.example/?model=Master&disc1=bitshifters:twinhead.ssd&autoboot&coProcessor",
             );
         });
     });

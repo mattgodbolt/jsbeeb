@@ -80,7 +80,7 @@ describe("MediaWindow", () => {
                 createBlank: vi.fn(),
                 createFrom: vi.fn(),
             },
-            machineSwitch: new MachineSwitch({ model, processor, urlState, modals: { confirm } }),
+            machineSwitch: new MachineSwitch({ model, processor, settings: { model }, urlState, modals: { confirm } }),
         };
     });
 

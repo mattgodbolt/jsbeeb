@@ -20,9 +20,11 @@ const NoStartupActions = {
  * the URL with the disc, and word of the change is stashed for the page that comes up.
  */
 export class MachineSwitch {
-    constructor({ model, processor, urlState, modals }) {
+    /** @param {object} deps `model` and `processor` are the running machine; `settings` is what a reload builds */
+    constructor({ model, processor, settings, urlState, modals }) {
         this.model = model;
         this.processor = processor;
+        this.settings = settings;
         this.urlState = urlState;
         this.modals = modals;
     }
@@ -53,10 +55,11 @@ export class MachineSwitch {
         noteEvent("media", "switchMachine", d.ref);
         if (boot) sessionStorage.setItem(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
         // The requirement is a floor: a model of the right kind and a co-processor already fitted stay.
+        // The model held to it is the one a reload builds, which a change saved for later has moved on.
         const url = this.urlState.urlWith({
             ...slot.urlParamsFor(d.ref),
             ...NoStartupActions,
-            ...(modelSatisfies(requires, this.model) ? {} : { model: requires.model }),
+            ...(modelSatisfies(requires, this.settings.model) ? {} : { model: requires.model }),
             ...(requires.coProcessor ? { coProcessor: true } : {}),
             ...(boot ? { autoboot: true } : {}),
         });

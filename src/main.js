@@ -244,7 +244,7 @@ new SthSource({ media });
 new HfeSource({ media });
 const bitshiftersSource = new BitshiftersSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
-const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
+const machineSwitch = new MachineSwitch({ model, processor, settings, urlState, modals });
 const snapshots = new SnapshotUI({
     processor,
     model,
