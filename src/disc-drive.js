@@ -37,16 +37,16 @@ export function attachDriveNoise(drives, ddNoise) {
             numSpinning--;
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
-        drive.addEventListener("seekStart", (evt) => ddNoise.seekStart(evt.tracks, evt.stepMs));
+        drive.addEventListener("seekStart", (evt) => ddNoise.seekStart(evt.steps, evt.stepMs));
         drive.addEventListener("seekEnd", () => ddNoise.seekEnd());
     }
 }
 
-/** The head is about to cross `tracks` tracks of the surface, one every `stepMs`. */
+/** The head is about to take `steps` steps, one every `stepMs`. */
 class SeekEvent extends Event {
-    constructor(tracks, stepMs) {
+    constructor(steps, stepMs) {
         super("seekStart");
-        this.tracks = tracks;
+        this.steps = steps;
         this.stepMs = stepMs;
     }
 }
@@ -445,14 +445,14 @@ export class DiscDrive extends BaseDiscDrive {
      * informational: the noise follows it.
      */
     notifySeekAmount(delta, stepMs) {
-        // The noise counts the tracks of the surface the head crosses: none past either end of
-        // it, whatever the controller asked for.
+        // The noise counts the steps the head takes: none past either end of the surface,
+        // whatever the controller asked for, and a last one onto the edge though it falls short.
         const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
         const target = Math.min(lastTrack, Math.max(0, this._track + delta * this._tracksPerStep));
-        const crossed = target - this._track;
-        if (!crossed) return;
+        const steps = Math.sign(delta) * Math.ceil(Math.abs(target - this._track) / this._tracksPerStep);
+        if (!steps) return;
         this._seekAnnounced = true;
-        this.dispatchEvent(new SeekEvent(crossed, stepMs));
+        this.dispatchEvent(new SeekEvent(steps, stepMs));
     }
 
     /** The controller has finished stepping, whether or not it got as far as it said. */

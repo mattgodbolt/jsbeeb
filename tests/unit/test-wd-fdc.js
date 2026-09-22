@@ -273,12 +273,13 @@ describe("WD1770 FDC tests", () => {
         /** What the drive is told: each seek's tracks and rate, and "end" when the head stops. */
         const seekNoises = (drive) => {
             const events = [];
-            drive.addEventListener("seekStart", (event) => events.push([event.tracks, event.stepMs]));
+            drive.addEventListener("seekStart", (event) => events.push([event.steps, event.stepMs]));
             drive.addEventListener("seekEnd", () => events.push("end"));
             return events;
         };
         const StepRate12ms = 0x01;
         const StepInCommand = 0x48;
+        const StepOutCommand = 0x68;
 
         it("is the difference between the track asked for and the track register, at the command's rate, ending when the head stops", () => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
@@ -315,6 +316,15 @@ describe("WD1770 FDC tests", () => {
             runCommand(fdc, scheduler, StepInCommand);
             expect(events).toEqual([[1, 6], "end"]);
             expect(drives[0].track).toBe(1);
+        });
+
+        it("is the step out from track 1 onto the edge, counted before the head has moved", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            drives[0].seekOneTrack(1);
+            const events = seekNoises(drives[0]);
+            runCommand(fdc, scheduler, StepOutCommand);
+            expect(events).toEqual([[-1, 6], "end"]);
+            expect(drives[0].track).toBe(0);
         });
     });
 

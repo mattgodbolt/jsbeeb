@@ -685,20 +685,20 @@ export class WdFdc {
                 this._doSeekStepOrVerify();
                 break;
             case Command.stepInNoUpdate:
-                this._doSeekStep(1, false);
                 this._makeSeekNoise(1);
+                this._doSeekStep(1, false);
                 break;
             case Command.stepInWithUpdate:
-                this._doSeekStep(1, true);
                 this._makeSeekNoise(1);
+                this._doSeekStep(1, true);
                 break;
             case Command.stepOutNoUpdate:
-                this._doSeekStep(-1, false);
                 this._makeSeekNoise(-1);
+                this._doSeekStep(-1, false);
                 break;
             case Command.stepOutWithUpdate:
-                this._doSeekStep(-1, true);
                 this._makeSeekNoise(-1);
+                this._doSeekStep(-1, true);
                 break;
             case Command.readSector:
             case Command.readSectorMulti:

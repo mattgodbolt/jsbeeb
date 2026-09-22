@@ -4,16 +4,16 @@ const Idle = 0;
 const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
-/** Up to this many tracks of the surface is one click of the head; more is a run. */
-const ClickTracks = 2;
+/** Up to this many steps is one click of the head; more is a run. */
+const ClickSteps = 2;
 /**
- * seek3.wav is a drive stepping at the 8271's 24 ms a track. Where its first click begins and
+ * seek3.wav is a drive stepping at the DFS's 24 ms a step. Where its first click begins and
  * how far apart they come were fitted across the file's clicks, so a grain cut on that grid
  * holds one click; a run is such grains at the controller's own step rate.
  */
 const RunFirstClickSeconds = 0.0085;
 const RunClickSeconds = 0.024209;
-const RunClicks = 74;
+const RunClicks = 73;
 const GrainLeadSeconds = 0.002;
 const GrainFadeSeconds = 0.002;
 /** Where step.wav's burst gives way to its ring: what a run's last click leaves behind. */
@@ -65,23 +65,23 @@ export class DdNoise extends SamplePlayer {
     }
 
     /**
-     * The head is about to cross `tracks` tracks, one every `stepMs`: a click for a step or
-     * two, otherwise a run of clicks scheduled on the audio clock at that rate, with the
-     * click's ring as the settle after the last. Nothing here waits to see what arrives.
+     * The head is about to take `steps` steps, one every `stepMs`: a click for a step or two,
+     * otherwise a run of clicks scheduled on the audio clock at that rate, with the click's
+     * ring as the settle after the last.
      */
-    seekStart(tracks, stepMs) {
-        if (tracks < 0) tracks = -tracks;
-        if (tracks === 0) return;
+    seekStart(steps, stepMs) {
+        if (steps < 0) steps = -steps;
+        if (steps === 0) return;
         this.cancelRun();
-        if (tracks <= ClickTracks) {
+        if (steps <= ClickSteps) {
             this.oneShot(this.sounds.step);
             return;
         }
         const now = this.context.currentTime;
         const stepSeconds = stepMs / 1000;
         const grains = [];
-        for (let track = 0; track < tracks; ++track) {
-            const at = now + track * stepSeconds;
+        for (let step = 0; step < steps; ++step) {
+            const at = now + step * stepSeconds;
             const click = Math.floor(Math.random() * RunClicks);
             const source = this.startSound(this.sounds.seek3, {
                 when: at,
@@ -92,7 +92,7 @@ export class DdNoise extends SamplePlayer {
             if (source) grains.push({ source, at });
         }
         const settle = this.startSound(this.sounds.step, {
-            when: now + tracks * stepSeconds,
+            when: now + steps * stepSeconds,
             offset: SettleOffsetSeconds,
         });
         this.run = { grains, settle };

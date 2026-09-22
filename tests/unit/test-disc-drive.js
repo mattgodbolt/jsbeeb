@@ -207,21 +207,20 @@ describe("40 track discs", () => {
     /** The seek starts announced, as the noise hears them. */
     function seekStarts(drive) {
         const starts = [];
-        drive.addEventListener("seekStart", (event) => starts.push([event.tracks, event.stepMs]));
+        drive.addEventListener("seekStart", (event) => starts.push([event.steps, event.stepMs]));
         return starts;
     }
 
-    it("announces a seek as the tracks of the surface the head will cross, at the controller's rate", () => {
+    it("announces a seek as the steps the head will take, at the controller's rate", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), 10);
         const starts = seekStarts(drive);
 
         drive.notifySeek(20, 24);
 
-        // Ten of the tracks the controller counts in, which is twenty of the surface's.
-        expect(starts).toEqual([[20, 24]]);
+        expect(starts).toEqual([[10, 24]]);
     });
 
-    it("announces only the tracks the head can cross, none past either end of the surface", () => {
+    it("announces only the steps the head can take, none past either end of the surface", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), 2);
         const starts = seekStarts(drive);
 
@@ -229,11 +228,10 @@ describe("40 track discs", () => {
         drive.notifySeekAmount(100, 6);
         drive.notifySeekAmount(0, 6);
 
-        // Two tracks in, so two out to the edge; the rest of the surface inwards, double stepped.
-        const surfaceTracksLeft = IbmDiscFormat.tracksPerDisc - 2 - drive.track;
+        const stepsLeft = (IbmDiscFormat.tracksPerDisc - 2 - drive.track) / 2;
         expect(starts).toEqual([
-            [-4, 6],
-            [surfaceTracksLeft, 6],
+            [-2, 6],
+            [stepsLeft, 6],
         ]);
     });
 
@@ -259,13 +257,13 @@ describe("40 track discs", () => {
         drive.seekOneTrack(1);
         drive.tracksPerStep = 2;
         const steps = [];
-        drive.addEventListener("seekStart", (event) => steps.push(event.tracks));
+        drive.addEventListener("seekStart", (event) => steps.push(event.steps));
 
         drive.notifySeekAmount(-1, 24);
         drive.notifySeekAmount(2, 24);
 
-        // From physical track 1: one track out to the edge, and four in for two double steps.
-        expect(steps).toEqual([-1, 4]);
+        // From physical track 1: a short step out onto the edge still counts, then two in.
+        expect(steps).toEqual([-1, 2]);
     });
 });
 

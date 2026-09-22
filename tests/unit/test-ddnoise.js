@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DdNoise } from "../../src/ddnoise.js";
 
 const Sounds = {
@@ -6,7 +6,7 @@ const Sounds = {
     motorOff: { duration: 0.39 },
     motor: { duration: 0.21 },
     step: { duration: 0.096 },
-    seek3: { duration: 1.795 },
+    seek3: { duration: 1.795193 },
 };
 
 const RunFirstClick = 0.0085;
@@ -50,6 +50,10 @@ const starts = (ddNoise) =>
 describe("DdNoise seeks", () => {
     let context;
     let ddNoise;
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     beforeEach(() => {
         context = stubContext();
         ddNoise = loadedDdNoise(context);
@@ -63,7 +67,7 @@ describe("DdNoise seeks", () => {
         expect(starts(ddNoise).map((s) => s.sound)).toEqual([Sounds.step, Sounds.step]);
     });
 
-    it("runs a click per track at the controller's own rate, then lets the last one ring", () => {
+    it("runs a click per step at the controller's own rate, then lets the last one ring", () => {
         context.currentTime = 5;
         ddNoise.seekStart(30, 12);
         const made = starts(ddNoise);
@@ -77,11 +81,19 @@ describe("DdNoise seeks", () => {
             const click = (grain.offset + GrainLead - RunFirstClick) / RunClickSeconds;
             expect(click).toBeCloseTo(Math.round(click), 6);
             expect(click).toBeGreaterThanOrEqual(0);
-            expect(click).toBeLessThan(74);
+            expect(grain.offset + RunClickSeconds).toBeLessThanOrEqual(Sounds.seek3.duration);
         });
         expect(settle.sound).toBe(Sounds.step);
         expect(settle.when).toBeCloseTo(5 + 30 * 0.012, 6);
         expect(settle.offset).toBe(0.024);
+    });
+
+    it("cuts its last grain from a click that still lies wholly inside the recording", () => {
+        vi.spyOn(Math, "random").mockReturnValue(0.999999);
+        ddNoise.seekStart(3, 24);
+        const [grain] = starts(ddNoise);
+        expect(grain.offset + RunClickSeconds).toBeLessThanOrEqual(Sounds.seek3.duration);
+        expect(grain.offset + RunClickSeconds).toBeGreaterThan(Sounds.seek3.duration - 2 * RunClickSeconds);
     });
 
     it("stops the clicks still to come when the head stops early, and lets it ring from there", () => {
