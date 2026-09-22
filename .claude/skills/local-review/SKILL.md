@@ -11,8 +11,9 @@ the maintainer are the second review, not the first.
 
 ## 1. Establish the diff
 
-- The base is the PR's base branch (`gh pr view --json baseRefName` for an open PR, otherwise
-  `main`). `git fetch origin <base>` and review against `origin/<base>`.
+- The base is the PR's base branch (`gh pr view --json baseRefName` for an open PR; for one not
+  yet opened, the branch it will be opened against, which is `main` unless the PR is stacked).
+  `git fetch origin <base>` and review against `origin/<base>`.
 - Commit everything first; the reviewer reads commits, not the working tree. Never amend or rebase
   a branch that has been pushed.
 - `git diff origin/<base>...HEAD --stat` to see what is in it.
@@ -37,19 +38,20 @@ The brief carries:
 
 For each finding:
 
-- **Agree:** fix it, and add the test that would have caught it. Fixes go in as new commits.
+- **Agree:** fix it, and add the test that would have caught it. Run `npm run lint`,
+  `npm run format:check` and `npx vitest run` on the test files the diff touches, then commit the
+  fix as a new commit.
 - **Disagree:** write the reason into a running list of declined findings, as a sentence somebody
   else could evaluate. "Out of scope" has to say where the work goes instead (an issue, a follow-up
   PR).
 
-Then `npm run lint`, `npm run format:check` and `npx vitest run` on the test files the diff
-touches.
-
 ## 5. Repeat
 
-Go back to step 3 with the new diff and the declined list. Stop when the reviewer reports
-`Would block: 0`, or when every remaining blocking finding has been declined with a reason and the
-reviewer, having seen that reason, has nothing new to add.
+Go back to step 2, since a fix can change what the PR text should say, and then step 3 with the
+new diff and the declined list. Stop when the reviewer reports `Would block: 0`, or when every
+remaining blocking finding has been declined with a reason and the reviewer, having seen that
+reason, has nothing new to add. A should-fix finding taken in the final round is not re-reviewed;
+that is the trade against an endless loop.
 
 Four rounds at most. If the fourth still has a blocking finding the session will not fix, stop,
 do not push, and put the finding and both positions in front of the user: a change that has not

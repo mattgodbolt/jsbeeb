@@ -55,13 +55,14 @@ skipped question is not.
    named PascalCase module constant rather than a literal.
 9. **Comments and docs.** Does each comment sit on the declaration it describes? Does any comment
    restate the diff, give the reason for the change, or contradict the new behaviour? Do the
-   README, `docs/` and the settings UI still match? Em dashes appear nowhere.
+   README, `docs/` and the settings UI still match? No em dash anywhere in the diff.
 10. **Compatibility.** Does the diff remove or rename anything exported (`src/machine-session.js`,
     `src/test-machine.js`, URL parameters, `KEY.` names, snapshot fields)? Is the commit type right
     for what it does (`feat!` for a break, `fix` and `feat` only for user-facing change)?
 11. **The PR text.** Does the title describe what landed after every commit, not the first attempt?
     Does every claim in the body hold against the diff? Are the trade-offs, the declined findings
-    and the things left undone in it?
+    and the things left undone in it? For a change the user sees or hears, does the body say it
+    was looked at or listened to in the built app, not only tested?
 12. **Diff hygiene.** Anything the title does not explain: lost whitespace, drive-by renames, a
     default or threshold changed without being asked, a tuned value the maintainer has not chosen,
     a test or comment in a file the change did not need to touch.
