@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MachineSession } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
+import { ATOM } from "../../src/keymap-atom.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
@@ -193,6 +194,31 @@ describe("MachineSession keyboard", () => {
         await session.runUntilPrompt();
     });
 
+    it("refuses a key it does not know, pressed or released", () => {
+        for (const press of [(key) => session.keyDown(key), (key) => session.keyUp(key)]) {
+            expect(() => press("Shift_Left")).toThrow(/"Shift_Left" is not a key.*keyCodes in keymap\.js/);
+            expect(() => press(null)).toThrow(/null is not a key/);
+            expect(() => press({})).toThrow(/\{\} is not a key/);
+            expect(() => press(16n)).toThrow(/16n is not a key/);
+            const circular = {};
+            circular.self = circular;
+            expect(() => press(circular)).toThrow(/Circular.* is not a key/);
+        }
+        expect(session.heldKeys()).toEqual([]);
+    });
+
+    it("refuses a pre-2.0 numeric key code, naming what replaced it", () => {
+        expect(() => session.keyDown(16)).toThrow(/keyDown: 16 is a numeric key code; since 2\.0.*"ShiftLeft"/);
+        expect(() => session.keyUp(16)).toThrow(/keyUp: 16 is a numeric key code/);
+        expect(session.heldKeys()).toEqual([]);
+    });
+
+    it("accepts a key that no BBC key is mapped to", () => {
+        session.keyDown(keyCodes.F12);
+        expect(session.heldKeys()).toEqual([]);
+        session.keyUp(keyCodes.F12);
+    });
+
     it("releases every key held", () => {
         session.keyDownRaw(BBC.SHIFT);
         session.keyDownRaw(BBC.A);
@@ -213,6 +239,29 @@ describe("MachineSession keyboard", () => {
         expect(session.heldKeys()).toEqual([]);
         await pressRaw(BBC.RETURN);
         await session.runUntilPrompt();
+    });
+});
+
+describe("MachineSession keyboard on the Atom", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = new MachineSession("Atom");
+        await session.initialise();
+    });
+
+    afterAll(() => session.destroy());
+
+    it("refuses a key it does not know, as the BBC does", () => {
+        expect(() => session.keyDown("Shift_Left")).toThrow(/"Shift_Left" is not a key/);
+        expect(() => session.keyUp(16)).toThrow(/keyUp: 16 is a numeric key code/);
+    });
+
+    it("presses a key it knows", () => {
+        session.keyDown(keyCodes.A);
+        expect(session.heldKeys()).toEqual([ATOM.A]);
+        session.keyUp(keyCodes.A);
+        expect(session.heldKeys()).toEqual([]);
     });
 });
 

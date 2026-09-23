@@ -5,13 +5,33 @@ import { findModel } from "./models.js";
 import assert from "assert";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspect } from "node:util";
 import * as Tokeniser from "./basic-tokenise.js";
 import { VduTextCapture } from "./vdu-capture.js";
 import { setNodeBasePath } from "./loader.js";
 import { Typist } from "./typist.js";
+import { keyCodes } from "./keymap.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const HostKeyCodes = new Set(Object.values(keyCodes));
+
+function requireKnownKeyCode(method, code) {
+    if (typeof code === "number") {
+        throw new Error(
+            `${method}: ${code} is a numeric key code; since 2.0 keys are named by physical position, ` +
+                `as KeyboardEvent.code names them, e.g. "ShiftLeft". See keyCodes in keymap.js`,
+        );
+    }
+    if (!HostKeyCodes.has(code)) {
+        const shown = typeof code === "string" ? JSON.stringify(code) : inspect(code);
+        throw new Error(
+            `${method}: ${shown} is not a key jsbeeb knows; keys are named ` +
+                `by physical position, as KeyboardEvent.code names them, e.g. "ShiftLeft" or "KeyA". ` +
+                `See keyCodes in keymap.js`,
+        );
+    }
+}
 
 export class TestMachine {
     constructor(model, opts) {
@@ -238,18 +258,21 @@ export class TestMachine {
     }
 
     /**
-     * Press a key on the keyboard.
+     * Press a key on the keyboard. Throws on a code that is not in `keyCodes`.
      * @param {string} code - the host key by physical position, as `keyCodes` in keymap.js names it
+     * @param {boolean} [shiftDown] - whether the host's shift is held, which only a natural layout maps on
      */
-    keyDown(code) {
-        this._keyInterface.keyDown(code);
+    keyDown(code, shiftDown = false) {
+        requireKnownKeyCode("keyDown", code);
+        this._keyInterface.keyDown(code, shiftDown);
     }
 
     /**
-     * Release a key on the keyboard.
+     * Release a key on the keyboard. Throws on a code that is not in `keyCodes`.
      * @param {string} code - the host key by physical position
      */
     keyUp(code) {
+        requireKnownKeyCode("keyUp", code);
         this._keyInterface.keyUp(code);
     }
 
