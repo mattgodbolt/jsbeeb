@@ -24,8 +24,9 @@ function requireKnownKeyCode(method, code) {
         );
     }
     if (!HostKeyCodes.has(code)) {
+        const shown = typeof code === "string" ? JSON.stringify(code) : inspect(code);
         throw new Error(
-            `${method}: ${typeof code === "string" ? JSON.stringify(code) : inspect(code)} is not a key jsbeeb knows; keys are named ` +
+            `${method}: ${shown} is not a key jsbeeb knows; keys are named ` +
                 `by physical position, as KeyboardEvent.code names them, e.g. "ShiftLeft" or "KeyA". ` +
                 `See keyCodes in keymap.js`,
         );
