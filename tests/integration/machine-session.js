@@ -199,6 +199,10 @@ describe("MachineSession keyboard", () => {
             expect(() => press("Shift_Left")).toThrow(/"Shift_Left" is not a key.*keyCodes in keymap\.js/);
             expect(() => press(null)).toThrow(/null is not a key/);
             expect(() => press({})).toThrow(/\{\} is not a key/);
+            expect(() => press(16n)).toThrow(/16n is not a key/);
+            const circular = {};
+            circular.self = circular;
+            expect(() => press(circular)).toThrow(/Circular.* is not a key/);
         }
         expect(session.heldKeys()).toEqual([]);
     });

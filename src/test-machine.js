@@ -5,6 +5,7 @@ import { findModel } from "./models.js";
 import assert from "assert";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspect } from "node:util";
 import * as Tokeniser from "./basic-tokenise.js";
 import { VduTextCapture } from "./vdu-capture.js";
 import { setNodeBasePath } from "./loader.js";
@@ -24,7 +25,7 @@ function requireKnownKeyCode(method, code) {
     }
     if (!HostKeyCodes.has(code)) {
         throw new Error(
-            `${method}: ${JSON.stringify(code) ?? String(code)} is not a key jsbeeb knows; keys are named ` +
+            `${method}: ${typeof code === "string" ? JSON.stringify(code) : inspect(code)} is not a key jsbeeb knows; keys are named ` +
                 `by physical position, as KeyboardEvent.code names them, e.g. "ShiftLeft" or "KeyA". ` +
                 `See keyCodes in keymap.js`,
         );
