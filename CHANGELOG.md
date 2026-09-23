@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.0...v2.3.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* every CRTC frame ending on the even interlace field gets the dummy raster ([#1174](https://github.com/mattgodbolt/jsbeeb/issues/1174)) ([178854d](https://github.com/mattgodbolt/jsbeeb/commit/178854d40a43afe7ac1440f3051537d8d201a385))
+* keyDown and keyUp throw on a key they do not know ([#1175](https://github.com/mattgodbolt/jsbeeb/issues/1175)) ([0f4538d](https://github.com/mattgodbolt/jsbeeb/commit/0f4538dda1e8cb563a58a1738614a5abad73f66c))
+
 ## [2.3.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.2.0...v2.3.0) (2026-09-22)
 
 
