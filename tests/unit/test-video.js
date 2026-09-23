@@ -1061,9 +1061,11 @@ describe("Video", () => {
         });
 
         // Fills the framebuffer just after the settling flyback, and reports for each
-        // parity whether any of its rows still hold the fill after the next flyback.
+        // parity whether any of its rows still hold the fill after the next flyback,
+        // along with the parity the field after that flyback draws.
         function rowsKeptFromEarlierField(r6Gap) {
             const kept = [];
+            let nextFieldParity = null;
             runChain({
                 chainFrames: 2,
                 r6Gap,
@@ -1071,6 +1073,7 @@ describe("Video", () => {
                 onSettled: (video) => video.fb32.fill(Sentinel),
                 onVsync: (video, field) => {
                     if (field !== 1) return;
+                    nextFieldParity = video.frameCount & 1;
                     for (const parity of [0, 1]) {
                         let found = false;
                         for (let row = parity; row < 625 && !found; row += 2) {
@@ -1080,15 +1083,17 @@ describe("Video", () => {
                     }
                 },
             });
-            return kept;
+            return { kept, nextFieldParity };
         }
 
-        it("should keep the other field's rows while fields alternate", () => {
-            expect(rowsKeptFromEarlierField(2).toSorted()).toEqual([false, true]);
+        it("should clear only the next field's rows while fields alternate", () => {
+            const { kept, nextFieldParity } = rowsKeptFromEarlierField(2);
+            expect(kept[nextFieldParity]).toBe(false);
+            expect(kept[1 - nextFieldParity]).toBe(true);
         });
 
         it("should leave no rows from an earlier field when fields stop alternating", () => {
-            expect(rowsKeptFromEarlierField(1)).toEqual([false, false]);
+            expect(rowsKeptFromEarlierField(1).kept).toEqual([false, false]);
         });
     });
 
