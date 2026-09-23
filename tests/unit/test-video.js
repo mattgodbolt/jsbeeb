@@ -950,6 +950,70 @@ describe("Video", () => {
         });
     });
 
+    // tests/hardware/crtc-interlace runs this same chain on a real machine.
+    describe("Interlace sync across CRTC frame restarts", () => {
+        const ChainR4 = 3;
+        const ChainFrameLines = 32;
+        const FieldRows = 39;
+        const FirstWriteLines = 46;
+        const SettleFields = 8;
+        const MeasuredPairs = 4;
+
+        // Each field is `chainFrames` short frames, then one holding R6, R7 and the
+        // vsync, sized so the field is 312 lines. R4 is rewritten a row into windows
+        // four rows wide, timed from the vsync as a program timed from its interrupt.
+        function fieldPairLines(chainFrames, r6Gap) {
+            const v = makeVideo();
+            const qr4 = FieldRows - 1 - 4 * chainFrames;
+            programCommonTiming(v);
+            v.writeCrtc(4, qr4);
+            v.writeCrtc(6, ChainR4 + r6Gap);
+            v.writeCrtc(7, qr4 - 4);
+            v.writeCrtc(8, 1);
+            v.writeCrtc(9, 7);
+
+            let clocks = 0;
+            const run = (lines) => {
+                v.run(lines * ClocksPerScanline);
+                clocks += lines * ClocksPerScanline;
+            };
+            const vsyncs = [];
+            while (vsyncs.length < SettleFields + 2 * MeasuredPairs + 1) {
+                const paints = v.paints();
+                while (v.paints() === paints) run(1);
+                vsyncs.push(clocks);
+                if (!chainFrames) continue;
+                run(FirstWriteLines);
+                v.writeCrtc(4, ChainR4);
+                run(ChainFrameLines * chainFrames + 4);
+                v.writeCrtc(4, qr4);
+            }
+            const pairs = [];
+            for (let i = SettleFields; i + 2 < vsyncs.length; i += 2) {
+                pairs.push((vsyncs[i + 2] - vsyncs[i]) / ClocksPerScanline);
+            }
+            return pairs;
+        }
+
+        it("should give a single frame per field 625 lines a pair", () => {
+            expect(fieldPairLines(0, 2)).toEqual(Array(MeasuredPairs).fill(625));
+        });
+
+        it("should add the dummy raster to every frame that ends on the even field", () => {
+            for (const chainFrames of [1, 2, 4]) {
+                expect(fieldPairLines(chainFrames, 2)).toEqual(Array(MeasuredPairs).fill(625 + chainFrames));
+            }
+        });
+
+        // The dummy raster counts as row R4+1, so there it is an R6 hit, which counts a
+        // frame and flips the parity for the rest of the field: MODE7-75's shape.
+        it("should count an R6 hit in the dummy raster as a frame", () => {
+            for (const chainFrames of [1, 2, 4]) {
+                expect(fieldPairLines(chainFrames, 1)).toEqual(Array(MeasuredPairs).fill(628));
+            }
+        });
+    });
+
     describe("PAL line phase", () => {
         // The field parity bookkeeping takes a frame or two to settle after
         // the registers change, as it does on a mode change.

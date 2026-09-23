@@ -10,14 +10,19 @@ starts and ends half a line late, and one extra "dummy" raster follows the end o
 holds only one CRTC frame there is no doubt which frame gets it. When a field is a chain of short frames,
 each restarted by an R4/R9 hit, which of them gets the extra raster?
 
-- **jsbeeb** gives it only to a frame that saw an R6 or R7 hit. That rule came from hardware testing
-  against Kieran's MODE 7/75 in [#294](https://github.com/mattgodbolt/jsbeeb/pull/294); b2 took its CRTC
-  from jsbeeb and has the same rule. A chain then gets one extra raster per pair of fields, whatever its
-  length.
-- **beebjit** gives one to every frame that ends on the even field, so a chain of N extra frames grows
-  the even field by N lines. BeebEm's scanline model appears to do the equivalent, from a reading of its
-  `Video.cpp` (it has not been run against this disc): it lengthens the first scanline after every frame
-  restart on alternate fields.
+- **beebjit** gives one to every frame that ends on the even field, reading the frame counter at that
+  moment, so a chain of N extra frames grows the even field by N lines. It came to that in
+  [ba7491c](https://github.com/scarybeasts/beebjit/commit/ba7491c) to match MODE7-75 on hardware: it is what
+  gives that demo its one extra black scanline a third of the way down. jsbeeb follows the same rule.
+- **jsbeeb before #1173** gave it only to a frame that saw an R6 or R7 hit, the earlier rule from
+  [#294](https://github.com/mattgodbolt/jsbeeb/pull/294). b2 took its CRTC from jsbeeb and still has it.
+  A chain then got one extra raster per pair of fields, whatever its length.
+- **BeebEm**'s scanline model appears to side with beebjit, from a reading of its `Video.cpp` (it has not
+  been run against this disc): it lengthens the first scanline after every frame restart on alternate
+  fields.
+
+MODE7-75 is the only hardware evidence so far, and it is the gap 1 case below. The disc asks the question
+directly.
 
 ## The test
 
@@ -39,12 +44,14 @@ late because of the polling loop, so the averages carry a microsecond or two of 
 
 Lines per pair of fields. N is the number of short frames per field.
 
-| R8  | N         | gap | jsbeeb, B and Master | beebjit 6d51e24, B and Master    | Hardware |
-| --- | --------- | --- | -------------------- | -------------------------------- | -------- |
-| 0   | any       | any | 624                  | 624                              |          |
-| 1   | 0         | any | 625                  | 625                              |          |
-| 1   | 1 / 2 / 4 | 2   | 625                  | 626 / 627 / 629                  |          |
-| 1   | 1 / 2 / 4 | 1   | 625                  | 628 for each N (314 every field) |          |
+| R8  | N         | gap | jsbeeb and beebjit 6d51e24   | jsbeeb before #1173 | Hardware |
+| --- | --------- | --- | ---------------------------- | ------------------- | -------- |
+| 0   | any       | any | 624                          | 624                 |          |
+| 1   | 0         | any | 625                          | 625                 |          |
+| 1   | 1 / 2 / 4 | 2   | 626 / 627 / 629              | 625                 |          |
+| 1   | 1 / 2 / 4 | 1   | 628 for each N (314 a field) | 625                 |          |
+
+Each emulator gives the same figures for the Model B and the Master.
 
 Nothing has been run on hardware yet. If you run it, please record the model, the MOS version and the
 markings on the 6845, and send a photograph of the table.
