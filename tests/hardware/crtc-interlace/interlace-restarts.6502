@@ -1,0 +1,126 @@
+; Interlace sync and CRTC frame restarts. See README.md.
+;
+; Each TV field is N short CRTC frames (R4=3, 32 lines) then one frame that holds
+; R6 and R7, sized so the field is 312 lines. R6 is R4 + gap, so with gap 1 it is
+; the row after a short frame's last. The CPU only rewrites R4, each time about a
+; character row inside a window four rows wide, so no write is timing-critical.
+; User VIA T2 free-runs and timestamps each vsync (system VIA CA1). The final
+; write to &FCD0 is a marker for emulator scripts to stop on.
+
+SECTION Boot, filename="!BOOT", exec=&FFFFFFFF
+EQUS "CHAIN ""TEST""",13
+ENDSECTION
+
+SECTION Test, filename="TEST", org=&1900, load=&FFFF1900, exec=&FFFF8023
+BASIC
+   10MODE 1
+   20*LOAD CODE
+   30DIM N%(3):N%(0)=0:N%(1)=1:N%(2)=2:N%(3)=4
+   40FOR C%=0 TO 15
+   50?&70=C% DIV 8:?&71=N%(C% MOD 4):?&76=1+(C% DIV 4) MOD 2
+   60P%=&2000+C%*80:?&72=P% MOD 256:?&73=P% DIV 256
+   70CALL &900
+   80NEXT
+   90MODE 7
+  100PRINT"Interlace sync vs CRTC frame restarts"
+  110PRINT"Field lengths in us, mean of 16 pairs;"
+  120PRINT"lines is the pair of fields in lines"'
+  130PRINT"R8 N gap field A field B     lines"
+  140FOR C%=0 TO 15:P%=&2000+C%*80:A%=0:B%=0
+  150FOR K%=8 TO 39
+  160D%=((P%!(K%*2-2)) - (P%!(K%*2))) AND &FFFF
+  170IF K% MOD 2 THEN B%=B%+D% ELSE A%=A%+D%
+  180NEXT
+  190L%=((A%+B%)*100+512) DIV 1024
+  200PRINT;C% DIV 8;"  ";N%(C% MOD 4);"  ";1+(C% DIV 4) MOD 2;" ";FNr(A% DIV 16,8);FNr(B% DIV 16,8);
+  210PRINTFNr(L% DIV 100,7);".";RIGHT$("0"+STR$(L% MOD 100),2)
+  220NEXT
+  230?&FCD0=0
+  240END
+  250DEFFNr(V%,W%)=RIGHT$(STRING$(W%," ")+STR$(V%),W%)
+ENDBASIC
+ENDSECTION
+
+SECTION Code, filename="CODE", org=&900, load=&FFFF0900
+
+r8 = &70
+nchain = &71
+ptr = &72
+count = &74
+qr4 = &75
+r6gap = &76
+
+crtcAddr = &FE00
+crtcData = &FE01
+sysIfr = &FE4D
+userT1L = &FE64
+userT1H = &FE65
+userT2L = &FE68
+userT2H = &FE69
+userAcr = &FE6B
+userIfr = &FE6D
+userIer = &FE6E
+
+LineUs = 64
+Ca1Flag = &02
+T1Flag = &40
+ChainR4 = 3
+FieldRows = 39
+; The vsync edge is 5 rows (40 lines) before the Q frame ends, give or take
+; the pulse width and the interlace half line.
+FirstWriteUs = 46 * LineUs
+Fields = 40
+
+.run
+{
+    SEI
+    LDA #8 : STA crtcAddr : LDA r8 : STA crtcData
+    ; qr4 = FieldRows - 1 - 4 * nchain
+    LDA nchain : ASL A : ASL A : STA qr4
+    LDA #FieldRows - 1 : SEC : SBC qr4 : STA qr4
+    LDA #4 : STA crtcAddr : LDA qr4 : STA crtcData
+    LDA #5 : STA crtcAddr : LDA #0 : STA crtcData
+    LDA #6 : STA crtcAddr : LDA #ChainR4 : CLC : ADC r6gap : STA crtcData
+    LDA #7 : STA crtcAddr : LDA qr4 : SEC : SBC #4 : STA crtcData
+
+    LDA #&7F : STA userIer
+    LDA #0 : STA userAcr
+    LDA #&FF : STA userT2L : STA userT2H
+    LDA #Fields : STA count
+    LDA #Ca1Flag : STA sysIfr
+
+.field
+    LDA #Ca1Flag
+.waitVsync
+    BIT sysIfr : BEQ waitVsync
+    STA sysIfr
+.readT2
+    LDX userT2H : LDA userT2L : CPX userT2H : BNE readT2
+    LDY #0 : STA (ptr),Y : INY : TXA : STA (ptr),Y
+    LDA ptr : CLC : ADC #2 : STA ptr : BCC @+ : INC ptr+1
+.@
+    DEC count : BEQ done
+    LDA nchain : BEQ field
+
+    ; Into the first chain frame at about row 0, scanline 6.
+    LDA #LO(FirstWriteUs) : STA userT1L : LDA #HI(FirstWriteUs) : STA userT1H
+    LDA #T1Flag
+.waitFirst
+    BIT userIfr : BEQ waitFirst
+    LDA #4 : STA crtcAddr : LDA #ChainR4 : STA crtcData
+
+    ; (32 * nchain + 4) lines on, row 1 of the frame that becomes Q.
+    LDA #0 : STA userT1L
+    LDA nchain : ASL A : ASL A : ASL A : ORA #1 : STA userT1H
+    LDA #T1Flag
+.waitLast
+    BIT userIfr : BEQ waitLast
+    LDA #4 : STA crtcAddr : LDA qr4 : STA crtcData
+    JMP field
+
+.done
+    CLI
+    RTS
+}
+
+ENDSECTION

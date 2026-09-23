@@ -844,13 +844,13 @@ describe("Video", () => {
     // Frame-driving tests run millions of video clocks, so they use plain
     // callbacks instead of the shared vi.fn() mocks, which would record every
     // call. `onPaint` sees the video the way main.js's paint callback does.
-    function makeVideo(onPaint = () => {}) {
+    function makeVideo(onPaint = () => {}, onVBlank = () => {}) {
         let paintCount = 0;
         const v = new Video(false, new Uint32Array(1024 * 768), function () {
             paintCount++;
             onPaint(this);
         });
-        v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: () => {} });
+        v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: onVBlank });
         const self = {
             video: v,
             paints: () => paintCount,
@@ -947,6 +947,157 @@ describe("Video", () => {
 
             // The beam gives up and flies back every 384 scanlines.
             expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
+        });
+    });
+
+    // tests/hardware/crtc-interlace runs this same chain on a real machine.
+    describe("Interlace sync across CRTC frame restarts", () => {
+        const ChainR4 = 3;
+        const ChainFrameLines = 32;
+        const FieldRows = 39;
+        const FirstWriteLines = 46;
+        const SettleFields = 8;
+        const MeasuredFields = 8;
+        const Sentinel = 0x12345678;
+
+        // Each field is `chainFrames` short frames, then one holding R6, R7 and the
+        // vsync, sized so the field is 312 lines. R4 is rewritten a row into windows
+        // four rows wide, timed from the vsync as a program timed from its interrupt.
+        // Returns each measured field's length in lines, vsync rise to vsync rise.
+        function runChain({
+            chainFrames,
+            r6Gap,
+            interlaceSyncAndVideo = false,
+            onScanline = () => {},
+            onSettled = () => {},
+            onVsync = () => {},
+        }) {
+            let vsyncRose;
+            const v = makeVideo(
+                () => {},
+                (level) => {
+                    if (level) vsyncRose = true;
+                },
+            );
+            const qr4 = FieldRows - 1 - 4 * chainFrames;
+            programCommonTiming(v);
+            v.writeCrtc(4, qr4);
+            v.writeCrtc(6, ChainR4 + r6Gap);
+            v.writeCrtc(7, qr4 - 4);
+            // Interlace sync and video steps the scanline counter by two, so R9=14
+            // keeps eight lines a row.
+            v.writeCrtc(8, interlaceSyncAndVideo ? 3 : 1);
+            v.writeCrtc(9, interlaceSyncAndVideo ? 14 : 7);
+
+            let clocks = 0;
+            const tick = () => {
+                v.run(1);
+                clocks++;
+                if (clocks % ClocksPerScanline === 0) onScanline(v.video);
+            };
+            const runLines = (lines) => {
+                for (let i = 0; i < lines * ClocksPerScanline; i++) tick();
+            };
+            const vsyncs = [];
+            while (vsyncs.length <= SettleFields + MeasuredFields) {
+                vsyncRose = false;
+                for (let waited = 0; !vsyncRose; waited++) {
+                    if (waited > 2 * ClocksPerFrame)
+                        throw new Error(`No vsync within two frames of field ${vsyncs.length}`);
+                    tick();
+                }
+                vsyncs.push(clocks);
+                if (vsyncs.length === SettleFields + 1) onSettled(v.video);
+                onVsync(v.video, vsyncs.length - SettleFields - 1);
+                if (!chainFrames) continue;
+                runLines(FirstWriteLines);
+                v.writeCrtc(4, ChainR4);
+                runLines(ChainFrameLines * chainFrames + 4);
+                v.writeCrtc(4, qr4);
+            }
+            // To the nearest half line: the half-line vsync point is a character early (#1056).
+            const toHalfLines = (clocks) => Math.round((2 * clocks) / ClocksPerScanline) / 2;
+            const measured = vsyncs.slice(SettleFields);
+            return measured.slice(1).map((at, i) => toHalfLines(at - measured[i]));
+        }
+
+        const pairs = (fields) => fields.filter((_, i) => i % 2 === 0).map((field, i) => [field, fields[2 * i + 1]]);
+
+        it("should give a single frame per field half a line more than 312 in every field", () => {
+            expect(runChain({ chainFrames: 0, r6Gap: 2 })).toEqual(Array(MeasuredFields).fill(312.5));
+        });
+
+        it("should add the dummy raster to every frame that ends on the even field", () => {
+            for (const chainFrames of [1, 2, 4]) {
+                for (const pair of pairs(runChain({ chainFrames, r6Gap: 2 }))) {
+                    expect(pair.toSorted()).toEqual([312.5, 312.5 + chainFrames]);
+                }
+            }
+        });
+
+        // The dummy raster counts as row R4+1, so there it is an R6 hit, which counts a
+        // frame and flips the parity for the rest of the field: MODE7-75's shape.
+        it("should count an R6 hit in the dummy raster as a frame", () => {
+            for (const chainFrames of [1, 2, 4]) {
+                expect(runChain({ chainFrames, r6Gap: 1 })).toEqual(Array(MeasuredFields).fill(314));
+            }
+        });
+
+        function doublingThroughMeasuredFields(r6Gap) {
+            const seen = new Set();
+            let settled = false;
+            runChain({
+                chainFrames: 2,
+                r6Gap,
+                interlaceSyncAndVideo: true,
+                onSettled: () => (settled = true),
+                onScanline: (video) => settled && seen.add(video.doublesLines()),
+            });
+            return [...seen];
+        }
+
+        it("should keep interlaced rows for a whole field while fields alternate", () => {
+            expect(doublingThroughMeasuredFields(2)).toEqual([false]);
+        });
+
+        it("should double every row of a field when fields stop alternating", () => {
+            expect(doublingThroughMeasuredFields(1)).toEqual([true]);
+        });
+
+        // Fills the framebuffer just after the settling flyback, and reports for each
+        // parity whether any of its rows still hold the fill after the next flyback,
+        // along with the parity the field after that flyback draws.
+        function rowsKeptFromEarlierField(r6Gap) {
+            const kept = [];
+            let nextFieldParity = null;
+            runChain({
+                chainFrames: 2,
+                r6Gap,
+                interlaceSyncAndVideo: true,
+                onSettled: (video) => video.fb32.fill(Sentinel),
+                onVsync: (video, field) => {
+                    if (field !== 1) return;
+                    nextFieldParity = video.frameCount & 1;
+                    for (const parity of [0, 1]) {
+                        let found = false;
+                        for (let row = parity; row < 625 && !found; row += 2) {
+                            found = video.fb32.subarray(row * 1024, (row + 1) * 1024).includes(Sentinel);
+                        }
+                        kept.push(found);
+                    }
+                },
+            });
+            return { kept, nextFieldParity };
+        }
+
+        it("should clear only the next field's rows while fields alternate", () => {
+            const { kept, nextFieldParity } = rowsKeptFromEarlierField(2);
+            expect(kept[nextFieldParity]).toBe(false);
+            expect(kept[1 - nextFieldParity]).toBe(true);
+        });
+
+        it("should leave no rows from an earlier field when fields stop alternating", () => {
+            expect(rowsKeptFromEarlierField(1).kept).toEqual([false, false]);
         });
     });
 

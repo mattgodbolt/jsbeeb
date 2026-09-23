@@ -373,7 +373,7 @@ export class Video {
         this.phaseBaseEven = 0;
         this.phaseBaseOdd = 0;
         this.paintsAfresh = false;
-        this.doEvenFrameLogic = false;
+        this.doEvenFrameLogic = true;
         this.isEvenRender = true;
         this.lastRenderWasEven = false;
         this.firstScanline = true;
@@ -616,9 +616,9 @@ export class Video {
 
     clearPaintBuffer() {
         const fb32 = this.fb32;
-        // The line grid is cleared exactly where the pixels are: in interlaced
-        // modes the other field's rows survive, and so must their grid.
-        if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
+        // The line grid is cleared exactly where the next field's pixels go: when it
+        // does not double lines, the other field's rows survive, and so must their grid.
+        if (!this.doublesLines()) {
             let line = this.frameCount & 1;
             while (line < 625) {
                 const start = line * 1024;
@@ -633,10 +633,13 @@ export class Video {
     }
 
     flyback() {
-        if (this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE) {
-            this.paint();
-            this.clearPaintBuffer();
-        }
+        const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
+        if (painting) this.paint();
+        // Decided per field, before the clear: the CRTC frames of one field can
+        // alternate parity.
+        this.lastRenderWasEven = this.isEvenRender;
+        this.isEvenRender = !(this.frameCount & 1);
+        if (painting) this.clearPaintBuffer();
         this.dispEnabled &= ~FRAMESKIPENABLE;
         let enable = FRAMESKIPENABLE;
         if (this.frameSkipCount > 1) {
@@ -835,11 +838,7 @@ export class Video {
         this.dispEnableSet(VDISPENABLE);
         const cursorFlash = (this.regs[10] & 0x60) >>> 5;
         this.cursorOnThisFrame = cursorFlash === 0 || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
-        this.lastRenderWasEven = this.isEvenRender;
-        this.isEvenRender = !(this.frameCount & 1);
-        if (!this.inVSync) {
-            this.doEvenFrameLogic = false;
-        }
+        this.doEvenFrameLogic = !(this.frameCount & 1);
     }
 
     endOfCharacterLine() {
@@ -918,7 +917,10 @@ export class Video {
             // Testing indicates interlace is checked here, a clock before
             // it is entered or not.
             // Like vertical adjust, C4=R4+1.
-            if (!!(this.regs[8] & 1) && this.doEvenFrameLogic) {
+            // The frame counter itself is read here, not the parity latched
+            // at the start of the frame, so every frame ending on the even
+            // field gets one (beebjit 085ec88).
+            if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
                 this.inDummyRaster = true;
                 this.endOfFrameLatched = true;
             } else {
@@ -1247,14 +1249,6 @@ export class Video {
                 // Perhaps surprisingly, this happens here. Both cursor
                 // blink and interlace cease if R6 > R4.
                 this.frameCount++;
-            }
-
-            // Interlace quirk: an even frame appears to need to see
-            // either of an R6 hit or R7 hit in order to activate the
-            // dummy raster.
-            const r7Hit = this.vertCounter === this.regs[7];
-            if (r6Hit || r7Hit) {
-                this.doEvenFrameLogic = !!(this.frameCount & 1);
             }
         } // matches while
     }

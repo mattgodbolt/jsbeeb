@@ -73,7 +73,7 @@ export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, c
         bitmapY: 0,
         oddClock: false,
         frameCount: 0,
-        doEvenFrameLogic: false,
+        doEvenFrameLogic: true,
         isEvenRender: true,
         lastRenderWasEven: false,
         firstScanline: true,
