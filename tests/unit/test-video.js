@@ -967,9 +967,10 @@ describe("Video", () => {
         function runChain({
             chainFrames,
             r6Gap,
-            doubledScanlines = true,
+            interlaceSyncAndVideo = false,
             onScanline = () => {},
             onSettled = () => {},
+            onVsync = () => {},
         }) {
             let vsyncRose;
             const v = makeVideo(
@@ -978,14 +979,15 @@ describe("Video", () => {
                     if (level) vsyncRose = true;
                 },
             );
-            v.video.doubledScanlines = doubledScanlines;
             const qr4 = FieldRows - 1 - 4 * chainFrames;
             programCommonTiming(v);
             v.writeCrtc(4, qr4);
             v.writeCrtc(6, ChainR4 + r6Gap);
             v.writeCrtc(7, qr4 - 4);
-            v.writeCrtc(8, 1);
-            v.writeCrtc(9, 7);
+            // Interlace sync and video steps the scanline counter by two, so R9=14
+            // keeps eight lines a row.
+            v.writeCrtc(8, interlaceSyncAndVideo ? 3 : 1);
+            v.writeCrtc(9, interlaceSyncAndVideo ? 14 : 7);
 
             let clocks = 0;
             const tick = () => {
@@ -1002,6 +1004,7 @@ describe("Video", () => {
                 while (!vsyncRose) tick();
                 vsyncs.push(clocks);
                 if (vsyncs.length === SettleFields + 1) onSettled(v.video);
+                onVsync(v.video, vsyncs.length - SettleFields - 1);
                 if (!chainFrames) continue;
                 runLines(FirstWriteLines);
                 v.writeCrtc(4, ChainR4);
@@ -1042,7 +1045,7 @@ describe("Video", () => {
             runChain({
                 chainFrames: 2,
                 r6Gap,
-                doubledScanlines: false,
+                interlaceSyncAndVideo: true,
                 onSettled: () => (settled = true),
                 onScanline: (video) => settled && seen.add(video.doublesLines()),
             });
@@ -1057,18 +1060,35 @@ describe("Video", () => {
             expect(doublingThroughMeasuredFields(1)).toEqual([true]);
         });
 
-        it("should leave no rows from an earlier field when fields stop alternating", () => {
-            let fb32 = null;
+        // Fills the framebuffer just after the settling flyback, and reports for each
+        // parity whether any of its rows still hold the fill after the next flyback.
+        function rowsKeptFromEarlierField(r6Gap) {
+            const kept = [];
             runChain({
                 chainFrames: 2,
-                r6Gap: 1,
-                doubledScanlines: false,
-                onSettled: (video) => {
-                    fb32 = video.fb32;
-                    fb32.fill(Sentinel);
+                r6Gap,
+                interlaceSyncAndVideo: true,
+                onSettled: (video) => video.fb32.fill(Sentinel),
+                onVsync: (video, field) => {
+                    if (field !== 1) return;
+                    for (const parity of [0, 1]) {
+                        let found = false;
+                        for (let row = parity; row < 625 && !found; row += 2) {
+                            found = video.fb32.subarray(row * 1024, (row + 1) * 1024).includes(Sentinel);
+                        }
+                        kept.push(found);
+                    }
                 },
             });
-            expect(fb32.subarray(0, 625 * 1024).includes(Sentinel)).toBe(false);
+            return kept;
+        }
+
+        it("should keep the other field's rows while fields alternate", () => {
+            expect(rowsKeptFromEarlierField(2).toSorted()).toEqual([false, true]);
+        });
+
+        it("should leave no rows from an earlier field when fields stop alternating", () => {
+            expect(rowsKeptFromEarlierField(1)).toEqual([false, false]);
         });
     });
 
