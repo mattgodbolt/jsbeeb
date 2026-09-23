@@ -258,7 +258,7 @@ export class TestMachine {
     /**
      * Press a key on the keyboard. Throws on a code that is not in `keyCodes`.
      * @param {string} code - the host key by physical position, as `keyCodes` in keymap.js names it
-     * @param {boolean} [shiftDown] - whether the host's shift is held, for a layout that maps by character
+     * @param {boolean} [shiftDown] - whether the host's shift is held, which only a natural layout maps on
      */
     keyDown(code, shiftDown = false) {
         requireKnownKeyCode("keyDown", code);
