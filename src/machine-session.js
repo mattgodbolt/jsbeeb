@@ -139,17 +139,17 @@ export class MachineSession {
     /**
      * Press a host key by its physical position, as `KeyboardEvent.code` names it:
      * "KeyA", "Digit1", "ShiftLeft", "NumpadEnter". The `keyCodes` table in keymap.js
-     * gives jsbeeb's own name for each.
+     * gives jsbeeb's own name for each, and a code not in it throws.
      */
     keyDown(code, shiftDown = false) {
         this._requireKeyboard();
-        this._keyboard.keyDown(code, shiftDown);
+        this._machine.keyDown(code, shiftDown);
     }
 
     /** Release a host key, by the same `KeyboardEvent.code` name. */
     keyUp(code) {
         this._requireKeyboard();
-        this._keyboard.keyUp(code);
+        this._machine.keyUp(code);
     }
 
     /**
