@@ -11,9 +11,11 @@ holds only one CRTC frame there is no doubt which frame gets it. When a field is
 each restarted by an R4/R9 hit, which of them gets the extra raster?
 
 - **beebjit** gives one to every frame that ends on the even field, reading the frame counter at that
-  moment, so a chain of N extra frames grows the even field by N lines. It came to that in
-  [ba7491c](https://github.com/scarybeasts/beebjit/commit/ba7491c) to match MODE7-75 on hardware: it is what
-  gives that demo its one extra black scanline a third of the way down. jsbeeb follows the same rule.
+  moment, so a chain of N extra frames grows the even field by N lines. That is its rule since
+  [085ec88](https://github.com/scarybeasts/beebjit/commit/085ec88); the move away from the R6/R7 rule
+  below came in [ba7491c](https://github.com/scarybeasts/beebjit/commit/ba7491c), to match MODE7-75 on
+  hardware, whose one extra black scanline a third of the way down the old rule does not give. jsbeeb
+  follows the same rule.
 - **jsbeeb before #1173** gave it only to a frame that saw an R6 or R7 hit, the earlier rule from
   [#294](https://github.com/mattgodbolt/jsbeeb/pull/294). b2 took its CRTC from jsbeeb and still has it.
   A chain then got one extra raster per pair of fields, whatever its length.

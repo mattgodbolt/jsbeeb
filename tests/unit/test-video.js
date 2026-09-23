@@ -844,13 +844,13 @@ describe("Video", () => {
     // Frame-driving tests run millions of video clocks, so they use plain
     // callbacks instead of the shared vi.fn() mocks, which would record every
     // call. `onPaint` sees the video the way main.js's paint callback does.
-    function makeVideo(onPaint = () => {}) {
+    function makeVideo(onPaint = () => {}, onVBlank = () => {}) {
         let paintCount = 0;
         const v = new Video(false, new Uint32Array(1024 * 768), function () {
             paintCount++;
             onPaint(this);
         });
-        v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: () => {} });
+        v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: onVBlank });
         const self = {
             video: v,
             paints: () => paintCount,
@@ -957,13 +957,28 @@ describe("Video", () => {
         const FieldRows = 39;
         const FirstWriteLines = 46;
         const SettleFields = 8;
-        const MeasuredPairs = 4;
+        const MeasuredFields = 8;
+        const Sentinel = 0x12345678;
 
         // Each field is `chainFrames` short frames, then one holding R6, R7 and the
         // vsync, sized so the field is 312 lines. R4 is rewritten a row into windows
         // four rows wide, timed from the vsync as a program timed from its interrupt.
-        function fieldPairLines(chainFrames, r6Gap) {
-            const v = makeVideo();
+        // Returns each measured field's length in lines, vsync rise to vsync rise.
+        function runChain({
+            chainFrames,
+            r6Gap,
+            doubledScanlines = true,
+            onScanline = () => {},
+            onSettled = () => {},
+        }) {
+            let vsyncRose;
+            const v = makeVideo(
+                () => {},
+                (level) => {
+                    if (level) vsyncRose = true;
+                },
+            );
+            v.video.doubledScanlines = doubledScanlines;
             const qr4 = FieldRows - 1 - 4 * chainFrames;
             programCommonTiming(v);
             v.writeCrtc(4, qr4);
@@ -973,35 +988,43 @@ describe("Video", () => {
             v.writeCrtc(9, 7);
 
             let clocks = 0;
-            const run = (lines) => {
-                v.run(lines * ClocksPerScanline);
-                clocks += lines * ClocksPerScanline;
+            const tick = () => {
+                v.run(1);
+                clocks++;
+                if (clocks % ClocksPerScanline === 0) onScanline(v.video);
+            };
+            const runLines = (lines) => {
+                for (let i = 0; i < lines * ClocksPerScanline; i++) tick();
             };
             const vsyncs = [];
-            while (vsyncs.length < SettleFields + 2 * MeasuredPairs + 1) {
-                const paints = v.paints();
-                while (v.paints() === paints) run(1);
+            while (vsyncs.length <= SettleFields + MeasuredFields) {
+                vsyncRose = false;
+                while (!vsyncRose) tick();
                 vsyncs.push(clocks);
+                if (vsyncs.length === SettleFields + 1) onSettled(v.video);
                 if (!chainFrames) continue;
-                run(FirstWriteLines);
+                runLines(FirstWriteLines);
                 v.writeCrtc(4, ChainR4);
-                run(ChainFrameLines * chainFrames + 4);
+                runLines(ChainFrameLines * chainFrames + 4);
                 v.writeCrtc(4, qr4);
             }
-            const pairs = [];
-            for (let i = SettleFields; i + 2 < vsyncs.length; i += 2) {
-                pairs.push((vsyncs[i + 2] - vsyncs[i]) / ClocksPerScanline);
-            }
-            return pairs;
+            // To the nearest half line: the half-line vsync point is a character early (#1056).
+            const toHalfLines = (clocks) => Math.round((2 * clocks) / ClocksPerScanline) / 2;
+            const measured = vsyncs.slice(SettleFields);
+            return measured.slice(1).map((at, i) => toHalfLines(at - measured[i]));
         }
 
-        it("should give a single frame per field 625 lines a pair", () => {
-            expect(fieldPairLines(0, 2)).toEqual(Array(MeasuredPairs).fill(625));
+        const pairs = (fields) => fields.filter((_, i) => i % 2 === 0).map((field, i) => [field, fields[2 * i + 1]]);
+
+        it("should give a single frame per field half a line more than 312 in every field", () => {
+            expect(runChain({ chainFrames: 0, r6Gap: 2 })).toEqual(Array(MeasuredFields).fill(312.5));
         });
 
         it("should add the dummy raster to every frame that ends on the even field", () => {
             for (const chainFrames of [1, 2, 4]) {
-                expect(fieldPairLines(chainFrames, 2)).toEqual(Array(MeasuredPairs).fill(625 + chainFrames));
+                for (const pair of pairs(runChain({ chainFrames, r6Gap: 2 }))) {
+                    expect(pair.toSorted()).toEqual([312.5, 312.5 + chainFrames]);
+                }
             }
         });
 
@@ -1009,8 +1032,43 @@ describe("Video", () => {
         // frame and flips the parity for the rest of the field: MODE7-75's shape.
         it("should count an R6 hit in the dummy raster as a frame", () => {
             for (const chainFrames of [1, 2, 4]) {
-                expect(fieldPairLines(chainFrames, 1)).toEqual(Array(MeasuredPairs).fill(628));
+                expect(runChain({ chainFrames, r6Gap: 1 })).toEqual(Array(MeasuredFields).fill(314));
             }
+        });
+
+        function doublingThroughMeasuredFields(r6Gap) {
+            const seen = new Set();
+            let settled = false;
+            runChain({
+                chainFrames: 2,
+                r6Gap,
+                doubledScanlines: false,
+                onSettled: () => (settled = true),
+                onScanline: (video) => settled && seen.add(video.doublesLines()),
+            });
+            return [...seen];
+        }
+
+        it("should keep interlaced rows for a whole field while fields alternate", () => {
+            expect(doublingThroughMeasuredFields(2)).toEqual([false]);
+        });
+
+        it("should double every row of a field when fields stop alternating", () => {
+            expect(doublingThroughMeasuredFields(1)).toEqual([true]);
+        });
+
+        it("should leave no rows from an earlier field when fields stop alternating", () => {
+            let fb32 = null;
+            runChain({
+                chainFrames: 2,
+                r6Gap: 1,
+                doubledScanlines: false,
+                onSettled: (video) => {
+                    fb32 = video.fb32;
+                    fb32.fill(Sentinel);
+                },
+            });
+            expect(fb32.subarray(0, 625 * 1024).includes(Sentinel)).toBe(false);
         });
     });
 

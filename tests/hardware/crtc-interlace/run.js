@@ -19,6 +19,7 @@ const Mode7Cols = 40;
 const Mode7Rows = 25;
 const DoneMarker = 0xfcd0;
 const TimeoutSecs = 60;
+const CyclesPerSecond = 2 * 1000 * 1000;
 
 function screenText(bytes) {
     const rows = [];
@@ -38,7 +39,7 @@ async function runInJsbeeb(model) {
     await session.boot();
     await session.type('CHAIN "TEST"');
     session.addBreakpoint("write", DoneMarker);
-    await session.runFor(TimeoutSecs * 2 * 1000 * 1000);
+    await session.runFor(TimeoutSecs * CyclesPerSecond);
     if (!session.hitBreakpoint()) throw new Error(`the test did not finish within ${TimeoutSecs}s of emulated time`);
     return session.readMemory(Mode7Screen, Mode7Cols * Mode7Rows);
 }
