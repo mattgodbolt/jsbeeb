@@ -1001,7 +1001,11 @@ describe("Video", () => {
             const vsyncs = [];
             while (vsyncs.length <= SettleFields + MeasuredFields) {
                 vsyncRose = false;
-                while (!vsyncRose) tick();
+                for (let waited = 0; !vsyncRose; waited++) {
+                    if (waited > 2 * ClocksPerFrame)
+                        throw new Error(`No vsync within two frames of field ${vsyncs.length}`);
+                    tick();
+                }
                 vsyncs.push(clocks);
                 if (vsyncs.length === SettleFields + 1) onSettled(v.video);
                 onVsync(v.video, vsyncs.length - SettleFields - 1);
