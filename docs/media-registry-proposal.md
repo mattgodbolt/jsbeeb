@@ -1,19 +1,17 @@
 # A media registry for BBC Micro software
 
-This is a proposal, not a description of anything that exists yet. It's here to be argued with.
-
-The history is this: jsbeeb can load a disc from pretty much anywhere, but once it's loaded we know
-very little about it. Some sources tell us a title and a publisher; the Bitshifters manifest also tells
+jsbeeb can load a disc from pretty much anywhere, but once it's loaded we know very little about it. Some sources tell us a title and a publisher; the Bitshifters manifest also tells
 us which machine a demo needs. For everything else we have a pile of bytes. Issue
 [#107](https://github.com/mattgodbolt/jsbeeb/issues/107) has been open since 2016 asking to show
-annotated source in the debugger, [#748](https://github.com/mattgodbolt/jsbeeb/issues/748) wants per-game
-key mappings, and mobile support needs to know which keys a game actually uses before it can put a
+annotated source in the debugger, [#748](https://github.com/mattgodbolt/jsbeeb/issues/748) asks for key
+remapping inside the emulator (ideally remembered per disc), and mobile support needs to know which keys a game actually uses before it can put a
 joystick on the screen. All of those need the same first step: working out what software we've just
 loaded, and finding out things about it.
 
 So the idea is a registry. Compute an ID from any disc or tape image, fetch a JSON record keyed by that
 ID, and use whatever's in it. The records are static files, so hosting is a directory on S3 and nothing
-more, and the whole thing should be easy for other emulators to use too.
+more, and the whole thing should be easy for other emulators to use too. Nothing here is implemented
+yet: this is a proposal to pick holes in.
 
 ## What we want from it
 
@@ -25,8 +23,9 @@ Records should be static JSON, easy to mirror and archive, and they should be ab
 licences, links and control mappings long after a record is first written, and adding them shouldn't
 mean bumping a format version.
 
-Games come in versions, cracks, fixes and repackagings. Those should share what they have in common
-(instructions, keys) and differ where they differ (the addresses in the running code, say).
+Games come in versions, cracks, fixes and repackagings. The instructions and keys are usually the same
+across all of them, but something like the addresses in the running code can change with even a minor
+patch, so a version needs to be able to override bits of what it inherits.
 
 Licensing has to be explicit. Every bit of third-party content says where it came from and under what
 terms, and the registry never includes something it has no right to.
@@ -36,7 +35,7 @@ software. The registry links to them.
 
 ## Prior art
 
-Quite a lot of other folks have been here before, and the design leans on them.
+Plenty of other projects have solved bits of this already, and the design borrows from them freely.
 
 [MAME's software lists](https://github.com/mamedev/mame/tree/master/hash) (`bbcb_flop.xml` and
 friends, CC0) give each title a short name, list the CRC32 and SHA-1 of each image, and have parent and
@@ -57,19 +56,22 @@ joystick.
 
 Closer to home:
 
-- beebjit (Chris Evans) has a disc fingerprint: a per-side CRC32 of the decoded sectors, which ignores
-  gaps and protection noise, so a sector image and a flux capture of the same disc agree. jsbeeb's HFE
-  mirror (`tools/mirror-bbcdiscs.js`) already names its captures with it. The fingerprint below is the
-  same idea with a longer hash and a fixed sector order.
+- beebjit (Chris Evans) has a disc fingerprint. Per side, it takes a CRC32 of each track's good sectors
+  (data mark and data, in the order they sit on the track), then a CRC32 of those track CRCs. Gaps and
+  bad sectors don't count, so a sector image and a flux capture agree as long as the sectors are laid
+  out in the same order. jsbeeb's HFE mirror (`tools/mirror-bbcdiscs.js`) names the captures from the
+  catalogue by these per-side CRCs. The fingerprint below is the same idea with a longer hash, and a
+  sector order that doesn't depend on how the disc was formatted.
 - Clock Signal's Acorn analyser (Thomas Harte) guesses the machine and how to boot from the content
   alone: the catalogue's boot option, load addresses that need a second processor, which I/O addresses
   the code pokes. That's a good fallback when there's no record at all.
 - Robert Smallshire's [Beebium](https://github.com/rob-smallshire/beebium) has per-game key mapping
   files that name the action each BBC key performs (`"keyName": "Caps Lock", "action": "Rotate Left"`),
-  and Robert is interested in an emulator-agnostic way of describing game actions. The controls part of
+  and Robert has said he's keen on an emulator-agnostic way of describing game actions. The controls part of
   this should be worked out with him rather than separately.
 - Rich Talbot-Watkins' [Baron](https://github.com/waitingforvsync/baron) assembler writes every
-  resolved symbol to a JSON file with `--symbols`, which is a ready-made symbol format for the debugger.
+  resolved symbol to a JSON file with `--symbols`, which is pretty much a ready-made symbol format for
+  the debugger.
   Rich was in the original #107 discussion too, and we've been talking with him about source formats
   since.
 - [bbcmicro.co.uk](https://bbcmicro.co.uk) already launches jsbeeb from its game pages, passing a model
@@ -80,15 +82,16 @@ Closer to home:
 
 ### Keys
 
-A key is 32 lowercase hex characters: the first 128 bits of a SHA-256. All keys live in one namespace,
-whatever they were computed from. If two kinds of key could collide, the hash would be too weak to use
-anyway, so there's no need for a directory per hash type. If we ever change how a key is computed, the
+A key is 32 lowercase hex characters, the first 128 bits of a SHA-256. All keys live in one namespace,
+whatever they were computed from. I don't see why each kind of hash would need its own directory: if
+two kinds of key could collide, the hash is a bad hash. If we ever change how a key is computed, the
 new keys just become more aliases and the old ones keep working.
 
 There are two ways to get a key from an image. The fingerprint is computed from the decoded sectors
 (below), and it's the one that finds the same disc across formats. The file hash is the SHA-256 of the
 file as downloaded, which any tool can compute without decoding a disc, and which lines up with the
-hash lists other projects publish. A client works out whichever keys it can and tries each of them.
+hash lists other projects publish. A client works out whichever keys it can and tries each of them. The
+file hash names exactly one image, so if both find a record, the file hash's record wins.
 
 beebjit's CRC is only 32 bits, which is a bit short to share a namespace with thousands of other keys,
 so it's recorded as a plain field where we have it.
@@ -96,29 +99,40 @@ so it's recorded as a plain field where we have it.
 ### The disc fingerprint
 
 This is computed from the disc as it was loaded, before any writes, and it knows nothing about DFS,
-ADFS or any other filesystem:
+ADFS or any other filesystem. Each physical side is fingerprinted on its own:
 
-1. Decode every track on every side into sectors, as the disc controller would see them.
-2. Keep the sectors whose header and data CRCs are good. The rest are protection or damage, and a sector
-   image can't represent them anyway.
-3. Sort them by what their headers say: side, then track number, then sector ID, using the position on
-   the track to break ties between repeated IDs. Going by header values rather than physical position
-   means sector skew doesn't matter, and nor does whether a 40-track disc was captured in an 80-track
-   drive.
-4. Drop trailing sectors whose data is one repeated byte (zero padding, or the `&E5` a format leaves
-   behind), so a truncated SSD, a padded one and a capture of the whole disc agree. Baron, for one,
-   truncates its SSDs after the last used sector; plenty of tools pad them to 200K.
-5. For each remaining sector, in order, hash the header's side, track, head and sector ID, the size
-   code, whether the data mark was a deleted one, the length (16-bit little-endian) and the data.
+1. Decode every track of the side into sectors, as the disc controller would see them.
+2. Keep the sectors with good header and data CRCs, and whose header track number matches the track
+   they were read from (or half of it, for a 40-track disc read in an 80-track drive). The rest are
+   protection or damage. beebjit drops mismatched sectors too, noting that the 8271 can't read
+   some of them.
+3. Sort what's left by header track, then header sector ID. If a track and ID turn up twice, keep the
+   first one read. Going by header values means sector skew doesn't matter, and nor does which drive
+   captured the disc.
+4. Drop sectors from the end of the side while their data is one repeated byte (zero padding, or the
+   `&E5` a format leaves behind). Baron, for one, truncates its SSDs after the last used sector, and
+   plenty of tools pad them to 200K. Only fill is dropped; a reused disc with old data past its last
+   file keeps it, and a truncated copy of that disc won't match a full one.
+5. Hash each remaining sector in order: the header's track and sector ID, the size code, whether the
+   data mark was a deleted one, the length (16-bit little-endian) and the data. That's the side digest.
 
-The key is the first 128 bits of that SHA-256.
+The side number never goes into a digest, because jsbeeb and beebjit both write head 0 into every
+synthesised sector header. Instead, the disc key is
+the SHA-256 of the side digests in physical order, leaving out trailing sides with nothing left in
+them, cut to 128 bits. Each side digest, cut the same way, is also a key, so an SSD made from one side
+of a double-sided disc can still find it.
 
-That gets us one key for an SSD, a DSD, an ADFS image and an HFE of the same disc, and for zips of any
-of them. A protected original and its flux capture share a key. A cracked copy doesn't, which is right
-(its code is different), and it reaches the same title through an alias of its own.
+That gets us one key for an SSD, an HFE and a zip of the same single-sided disc, and for a DSD and an
+HFE of the same double-sided one. A DSD whose second side is blank has the same key as the SSD of its
+first side. A protected original and its flux capture share a key. So do two copies that differ only
+in their protection, which is what we want for looking up metadata, and is exactly why the HFE mirror
+doesn't use fingerprints to name its reconstructed captures: it needs a name per file, which is the
+file hash's job. A cracked copy, whose code has changed, gets a different key and reaches the same title
+through an alias of its own.
 
 The spec should come with a reference implementation in JavaScript and C, plus test vectors: the same
-disc as a trimmed SSD, a padded SSD, one side of a DSD and an HFE, all producing the same key.
+single-sided disc as a trimmed SSD, a padded SSD and an HFE, and the same double-sided disc as a DSD, an
+interleaved ADFS image and an HFE.
 
 Tapes need their own version, computed from the decoded blocks (file name, load and execution
 addresses, data) rather than from the UEF or audio container. ROMs can just use the file hash.
@@ -133,8 +147,8 @@ can't clash. Every record has a `kind`.
 
 Records form a chain: an alias points at a version, and a version points at a title. Any record can set
 any field, and the metadata for a particular image is the chain merged from the title down, using
-[JSON Merge Patch (RFC 7396)](https://www.rfc-editor.org/rfc/rfc7396). Objects merge, anything else
-replaces, and `null` removes. It's one rule, and a standard one with libraries everywhere.
+[JSON Merge Patch (RFC 7396)](https://www.rfc-editor.org/rfc/rfc7396), where objects merge, anything
+else replaces, and `null` removes. There are libraries for it in pretty much every language.
 
 ```
 exile                    title: instructions, controls, links
@@ -241,12 +255,12 @@ software is running:
 The debugger checks live memory against `verify` before showing any labels. That catches the things
 disc identity can't: code that's decrypted or relocated as it loads, a variant nobody has catalogued,
 a machine that loads it somewhere else. It also means a record can offer a few candidate sets and the
-emulator picks whichever one matches. Showing no labels is much better than showing wrong ones, and
-this makes wrong ones pretty hard to show.
+emulator picks whichever one matches, and if none do, the debugger shows plain addresses as it does
+today.
 
 ## Keeping records stable
 
-Records are stable rather than immutable:
+Records are sort of immutable. They can grow, but anything a client relies on stays put:
 
 - `format` is 1, and only changes for something that would break a reader of format 1.
 - Fields can be added to any record at any time, and clients ignore fields they don't know.
@@ -266,7 +280,7 @@ redirects.
 
 ## Licensing
 
-This is the bit to get right, so here are the rules, and the build step enforces them.
+The build step enforces these rules.
 
 The registry's own data is CC0: keys, hashes, computed facts (sector counts, file lists, load
 addresses), structure and relations. Those are ours to publish, and CC0 lets every emulator take them,
@@ -292,9 +306,10 @@ For other databases: MAME's software lists are CC0 and can be used directly. TOS
 are factual data, used with credit. Any database without a stated licence gets asked before we import
 anything from it, and gets linked to in the meantime.
 
-Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, recorded
-with where it came from; the text of its instructions is content, and follows the rules above. Whether
-we can host emulator screenshots of commercial games is an open question.
+Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, so the
+`controls` field records it along with where it came from, but the text of the instructions themselves
+is content and follows the rules above. Whether we can host emulator screenshots of commercial games is
+an open question.
 
 ## Filling it in
 
@@ -302,13 +317,12 @@ we can host emulator screenshots of commercial games is an open question.
 
 We can start with our own mirror of the Stairway To Hell archive (which we can hash in full), MAME's
 software lists, TOSEC's names and hashes, the Bitshifters manifest, and jsbeeb's HFE captures, which
-are already named by fingerprint. Other catalogues, and their key and platform data, come after
-asking.
+are already named by beebjit's CRCs or by file hash. Other catalogues, and their key and platform data, come after asking.
 
 ### Finding aliases automatically
 
-Most of this is mechanical. An LLM can help where it needs judgement, and a person approves everything
-before it's published.
+Most of this is mechanical, with an LLM helping on the calls that need judgement. Nothing gets
+published until a person has looked at it.
 
 1. Collect. For each image, record where it came from, both keys, and a decoded file list (DFS, ADFS
    or tape) with names, addresses, lengths and a hash per file.
@@ -340,22 +354,26 @@ The media window would show a title, instructions, screenshots and links for any
 the existing `MediaLoader.addDescriber` hook. `requires` would feed the machine switch that already acts
 on the Bitshifters `machine` field. The `controls` roles would give phones and tablets a joystick and
 buttons, and gamepads some sensible defaults. The debugger would label addresses from verified symbol
-sets, which is #107. Snapshots could use the fingerprint instead of the raw file CRC32 they use today, so
-restoring a snapshot would work with any copy of the same disc. And with no record at all, content
+sets, which is #107. Snapshots could record the fingerprint next to the raw file CRC32 they use today,
+so a snapshot can say what software it needs and help find a copy, though restoring one mid-load still
+wants the exact image. And with no record at all, content
 heuristics like Clock Signal's could still guess the machine and how to boot.
 
 ## Open questions
 
 - Title slugs: our own, with MAME's short names and other catalogues' IDs as cross-references, or just
   MAME's names.
-- Whether 128 bits is the right key length (the HFE mirror uses 64).
+- Whether 128 bits is the right key length. The HFE mirror's file-hash names use 64, which may be a bit
+  short for a registry other emulators share.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
 - Whether trailing-fill trimming should allow any repeated byte, or only zero and `&E5`.
+- Whether step 2 of the fingerprint should also drop the odd sizes and IDs that protection uses, so a
+  protected original matches a plain SSD made from it.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.
 
-None of this is set in stone, so comments are very welcome...
+Do let me know what you think, preferably as comments on the PR.
 
 ---
 
