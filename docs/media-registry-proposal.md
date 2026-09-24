@@ -121,6 +121,14 @@ or any other filesystem. Each physical side is fingerprinted on its own:
    and size code (a byte each), a byte that is 1 for a deleted data mark and 0 otherwise, the data length
    (16-bit little-endian), then the data.
 
+Steps 1 and 2 are for flux images, which have real headers to read. Sector images (SSD, DSD and the ADFS
+formats) don't have headers at all, so an implementation doesn't decode them or guess a pitch: each
+256-byte block in the image becomes a sector whose header is the logical track and the sector's position
+within that track (0 to 9 for DFS, 0 to 15 for ADFS), with size code 1 and a normal data mark, taking the
+sides in the order the format interleaves them. That's exactly what jsbeeb's loaders synthesise, before
+they place 40-track images on the even physical tracks, and it's what a flux capture of the same disc
+reads back once step 3 has matched each header to its track.
+
 The side number doesn't go into a digest, because jsbeeb and beebjit both write head 0 into every
 synthesised sector header. The disc key is the SHA-256 of the full 32-byte side digests in physical
 order, leaving out trailing sides with no sectors left, cut to 128 bits. Each side digest, cut the same
