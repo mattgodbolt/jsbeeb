@@ -78,7 +78,9 @@ function unrelatedTitleKeys(rows) {
 }
 
 async function main() {
-    const rows = await readJsonl("index.jsonl");
+    const all = await readJsonl("index.jsonl");
+    const rows = all.filter((row) => !row.error);
+    for (const row of all.filter((r) => r.error)) console.log(`skipped ${row.source}:${row.ref}: ${row.error}`);
     const hfe = rows.filter((row) => row.source === "hfe");
 
     console.log("== Corpus");
@@ -203,9 +205,9 @@ async function main() {
 
     console.log("\n== The first draft's rule against the proposal's");
     const strict = new Map((await readJsonl("hfe-first-draft.jsonl")).map((row) => [row.ref, row]));
-    const plain = hfe.filter((row) => row.flux.every((side) => side.dropped.wrongTrack === 0));
+    const plain = hfe.filter((row) => strict.get(row.ref).flux[0].dropped.wrongTrack === 0);
     print(
-        "captures with no wrong-track sectors, key unchanged",
+        "captures the first draft dropped no wrong-track sectors from, key unchanged",
         `${plain.filter((row) => strict.get(row.ref).discKey === row.discKey).length} of ${plain.length}`,
     );
     print(
@@ -240,6 +242,9 @@ async function main() {
         const titleOf = new Map(
             hfe.map((row) => [row.ref, `${row.meta?.title}${row.meta?.variant ? ` (v${row.meta.variant})` : ""}`]),
         );
+        const changed = hfe.filter((row) => headersKey.get(row.ref) !== row.discKey);
+        print("captures whose key the combined test changes", changed.length);
+        for (const row of changed) console.log(`    ${titleOf.get(row.ref)} ${row.ref}`);
         print("header-test groups the combined test splits", splitBy(headersKey, combinedKey).length);
         const merged = splitBy(combinedKey, headersKey);
         print("combined-test groups the header test splits", merged.length);

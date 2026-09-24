@@ -14,7 +14,7 @@ const MinFortyTrackEvidence = 4;
 // How many odd tracks may hold data of their own on a side judged double-stepped, as a share
 // of the even tracks that hold data.
 const GhostTolerance = 0.1;
-// The last physical track a 40-track drive can reach, with a few to spare.
+// Past this physical track, data can only be there if the capture came from an 80-track drive.
 const FortyTrackDriveLimit = 50;
 const KeyBytes = 16;
 
@@ -108,8 +108,10 @@ function headersSayFortyTrack(disc, upper) {
 }
 
 /**
- * Whether a side is a 40-track disc read in an 80-track drive. A capture with nothing past
- * physical track 50 came from a 40-track drive, so every track is real. Otherwise either
+ * Whether a side is a 40-track disc read in an 80-track drive. When nothing holds data past
+ * physical track 50, every track that does is taken as real: either the capture came from a
+ * 40-track drive, or the disc's data simply stops early, and then an odd track holding data
+ * holds data of its own. Otherwise either
  * of two signs will do: enough even tracks carry headers for half their number, or nearly
  * every odd track holds only ghosts of its even neighbours. Protected discs renumber their
  * tracks, which defeats the first; some discs legitimately repeat a track, which is why

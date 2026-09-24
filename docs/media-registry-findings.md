@@ -98,7 +98,7 @@ The fix keeps every sector with good CRCs, whatever its header claims, and order
 were read from first. Comparing the first draft with the proposal (both its track rule and its pitch
 test, below) over the whole HFE mirror:
 
-- All 1,537 captures without wrong-track sectors keep exactly the same key.
+- All 1,542 captures the first draft dropped no wrong-track sectors from keep exactly the same key.
 - Under the first draft, 9 keys were shared by captures whose titles have no word in common, two of them
   the Exile and Repton Infinity pairs. Under the proposal there are 6, and all six are the same title
   written differently: E-Type and E Type, Fire Track and Firetrack, Q-Master and Q Master, ViewStore and
@@ -130,12 +130,16 @@ reconstructed from FSD dumps.
 
 Looking for ghosts instead (odd tracks whose sectors are all copies of an even neighbour's) fixes that
 case, but a disc can legitimately repeat a track, and a ghost test alone would call a 40-track drive's
-capture of such a disc double-stepped and throw away half its tracks. So the proposal combines them. A
-capture with nothing past physical track 50 came from a 40-track drive and every track is real; otherwise
-the side is 40-track if at least four even tracks carry headers for half their number (and more of them
-than carry their own), or if at least four even tracks hold data and fewer than a tenth as many odd
-tracks hold anything but ghosts. Against the header test alone, that splits nothing and merges exactly
-two groups: the capture and the reconstruction of Exile v1, and likewise of Exile v2.
+capture of such a disc double-stepped and throw away half its tracks. So the proposal combines them. If
+nothing past physical track 50 holds data, every track that does is taken as real, which covers captures
+from 40-track drives and discs whose data stops early; otherwise the side is 40-track if at least four
+even tracks carry headers for half their number (and more of them than carry their own), or if at least
+four even tracks hold data and fewer than a tenth as many odd tracks hold anything but ghosts. Against
+the header test alone, six captures change key. Four are Superior discs captured in an 80-track drive:
+the Exile v1 and v2 captures, which now match their reconstructions, and two Repton Infinity captures.
+The other two (Replica 3 and a Genie Utilities reconstruction) are 80-track discs whose data stops before
+track 40, with leftovers of a 40-track format further in; the header test called them 40-track and threw
+away the real data on their odd tracks. No group of captures that agreed under the header test is split.
 
 ## Trailing fill
 

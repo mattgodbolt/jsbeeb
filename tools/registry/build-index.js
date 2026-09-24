@@ -25,6 +25,8 @@ const trackRule = arg("--track-rule", "physical");
 const pitchTest = arg("--pitch-test", "combined");
 const onlySources = arg("--sources", "hfe,sth,bbcmicro").split(",");
 const outName = arg("--name", "index");
+if (!["physical", "strict"].includes(trackRule)) throw new Error(`Unknown --track-rule ${trackRule}`);
+if (!["combined", "headers"].includes(pitchTest)) throw new Error(`Unknown --pitch-test ${pitchTest}`);
 
 const sha1 = (bytes) => createHash("sha1").update(bytes).digest("hex");
 

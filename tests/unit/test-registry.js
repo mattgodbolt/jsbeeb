@@ -75,7 +75,7 @@ function buildFmTrack(disc, physical, sectors) {
 const newDisc = () => new Disc(true, new DiscConfig(), "synthetic.hfe");
 const sectorOf = (seed) => sectorBytes(1, seed);
 
-// A renumbered protected track: physical track t claims to be `202 - t`, with sector IDs from 100.
+// A renumbered protected track: logical track t claims to be `202 - t`, with sector IDs from 100.
 const renumbered = (logical, seed) =>
     [0, 1].map((i) => ({ track: 202 - logical, id: 100 + i, data: sectorOf(seed + i) }));
 

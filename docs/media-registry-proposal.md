@@ -117,17 +117,19 @@ make this pretty easy for any emulator to implement.
 
 For flux images, the job is to turn the capture back into those same bytes:
 
-1. Decide whether the side is a 40-track disc read in an 80-track drive. A capture with nothing past
-   physical track 50 came from a 40-track drive, so every track is real. Otherwise it's 40-track if at
-   least four even tracks, not counting track 0, have a sector whose header gives half their physical
-   track number, and more even tracks do that than give their own number. Failing that, it's 40-track if
-   at least four even tracks hold data and the odd tracks holding any sector that isn't a copy of an even
-   neighbour's number fewer than a tenth of those even tracks. Odd tracks that read nothing at all count
-   as copies, so an 80-track capture whose odd tracks all failed to read would be taken as 40-track;
-   that's a bad dump anyway. Neither test is enough alone: protected discs renumber their tracks, and
-   some discs legitimately repeat one ([the findings](media-registry-findings.md) have the details).
-   jsbeeb's `sniffSurfaceLayout` does something like the first, but once per disc, and a flippy disc can
-   have a different pitch on each side.
+1. Decide whether the side is a 40-track disc read in an 80-track drive. If nothing past physical track
+   50 holds data, every track that does is taken as real: either the capture came from a 40-track drive,
+   or the disc's data stops early, and then an odd track holding data holds its own. Otherwise, counting
+   only sectors with good header and data CRCs, it's 40-track if at least four even tracks, not counting
+   track 0, have a sector whose header gives half their physical track number, and more even tracks do
+   that than give their own number. Failing that, it's 40-track if at least four even tracks hold data
+   and the odd tracks holding any sector that isn't a copy of an even neighbour's number fewer than a
+   tenth of those even tracks. Odd tracks that read nothing at all count as copies, so an 80-track
+   capture whose odd tracks all failed to read would be taken as 40-track; that's a bad dump anyway.
+   Neither test is enough alone: protected discs renumber their tracks, and some discs legitimately
+   repeat one ([the findings](media-registry-findings.md) have the details). jsbeeb's
+   `sniffSurfaceLayout` does something like the first, but once per disc, and a flippy disc can have a
+   different pitch on each side.
 2. Decode the side's tracks into sectors, reading physical tracks in ascending order (only the even ones
    on a 40-track side) and each track from the index.
 3. Keep the sectors with good header and data CRCs, whatever track their headers claim.
