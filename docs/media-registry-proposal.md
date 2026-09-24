@@ -9,7 +9,7 @@ remapping inside the emulator (ideally remembered per disc), and mobile support 
 a game actually uses before it can put a joystick on the screen. All of those need the same first step:
 working out what software we've just loaded, and finding out things about it.
 
-So the idea is a registry. Compute an ID from any disc or tape image, fetch a JSON record keyed by that
+So the idea is a registry: compute an ID from any disc or tape image, fetch a JSON record keyed by that
 ID, and use whatever's in it. The records are static files, so hosting is a directory on S3 and nothing
 more, and the whole thing should be easy for other emulators to use too. Nothing here is implemented yet:
 this is a proposal to pick holes in.
@@ -31,8 +31,9 @@ patch, so a version needs to be able to override bits of what it inherits.
 Licensing has to be explicit. Every bit of third-party content says where it came from and under what
 terms, and the registry never includes something it has no right to.
 
-What we don't want is to host disc images, or to replace the archives that already catalogue the
-software. The registry links to them.
+The records don't hold disc images, and the registry isn't trying to replace the archives that already
+catalogue the software. A record links to wherever an image lives, which can be one of the archives or
+one of our own mirrors on bbc.xania.org.
 
 ## Prior art
 
@@ -86,66 +87,63 @@ whatever they were computed from. I don't see why each kind of hash would need i
 kinds of key could collide, the hash is a bad hash. If we ever change how a key is computed, the new keys
 just become more aliases and the old ones keep working.
 
-There are two ways to get a key from an image. The fingerprint is computed from the decoded sectors
+There are two ways to get a key from an image. The fingerprint is computed from the disc's sectors
 (below), and it's the one that finds the same disc across formats. The file hash is the SHA-256 of the
 file as downloaded, which any tool can compute without decoding a disc, and which lines up with the hash
 lists other projects publish. A client works out whichever keys it can and tries them in the order given
 below.
 
-beebjit's CRC is only 32 bits, which is a bit short to share a namespace with thousands of other keys, so
-it's recorded as a plain field where we have it.
+beebjit's CRC is only 32 bits a side, which is a bit short to share a namespace with thousands of other
+keys, so it's recorded as a plain field where we have it. Our HFE mirror's manifest already maps those
+CRCs to discs, so anything keyed on them can be translated in bulk.
 
 ### The disc fingerprint
 
-This is computed from the disc as it was loaded, before any writes, and it knows nothing about DFS, ADFS
-or any other filesystem. Each physical side is fingerprinted on its own:
+The fingerprint's job is quite narrow: to recognise the same dump of a disc whatever container it's in.
+Recognising two discs that are functionally the same but laid out differently (one of them `*COMPACT`ed,
+say) is a job for the file-level matching described later, not for the key.
 
-1. Decide the side's track pitch first, from its sector headers: if the headers on the even physical
-   tracks give half their physical track number, it's a 40-track side read in an 80-track drive. jsbeeb's
-   `sniffSurfaceLayout` does something similar, but once per disc and only for flux images, and a flippy
-   disc can have a different pitch on each side.
-2. Decode the side's tracks into sectors, as the disc controller would see them, reading physical tracks
-   in ascending order and each track from the index.
+It's computed from the disc as it was loaded, before any writes, and it knows nothing about DFS, ADFS or
+any other filesystem. Each physical side gets a digest of its own.
+
+For sector images (SSD, DSD, and the 8-bit ADFS S, M and L formats) the side digest is simply the SHA-256
+of that side's bytes, in the order the image stores them, with two tweaks. The sides are separated
+according to the format's interleave, and trailing fill is trimmed: whole 256-byte sectors at the end of
+the side whose data is one repeated byte (zero padding, or the `&E5` a format leaves behind) are dropped,
+and a short last sector is padded with zeros first. Baron, for one, truncates its SSDs after the last
+used sector, and plenty of tools pad them to 200K, so the trimming is what lets those agree. Only fill is
+dropped, so a reused disc with old data past its last file keeps it. No disc model is needed at all,
+which should make this pretty easy for any emulator to implement.
+
+For flux images, the job is to turn the capture back into those same bytes:
+
+1. Decide the side's track pitch from its sector headers: if the headers on the even physical tracks give
+   half their physical track number, it's a 40-track side read in an 80-track drive. jsbeeb's
+   `sniffSurfaceLayout` does something similar, but once per disc, and a flippy disc can have a different
+   pitch on each side.
+2. Decode the side's tracks into sectors, reading physical tracks in ascending order and each track from
+   the index.
 3. Keep the sectors with good header and data CRCs whose header track number matches the track they were
-   read from (the physical track, or half of it for a 40-track side). The rest are protection or damage.
-   beebjit's track check is looser: it drops only sectors whose header says track `&FF`, or track 0 on
-   some other track.
+   read from (the physical track, or half of it for a 40-track side). beebjit's track check is looser: it
+   drops only sectors whose header says track `&FF`, or track 0 on some other track.
 4. Sort what's left by header track, then header sector ID, keeping the first one read if a track and ID
-   turn up twice. Going by header values means sector skew doesn't matter, and nor does which drive
-   captured the disc.
-5. Drop sectors from the end of the side while their data is one repeated byte (zero padding, or the
-   `&E5` a format leaves behind). Baron, for one, truncates its SSDs after the last used sector, and
-   plenty of tools pad them to 200K. Only fill is dropped, so a reused disc with old data past its last
-   file keeps it, and a truncated copy of that disc won't match a full one.
-6. The side digest is the SHA-256 of one record per remaining sector, in order: header track, sector ID
-   and size code (a byte each), a byte that is 1 for a deleted data mark and 0 otherwise, the data length
-   (16-bit little-endian), then the data.
+   turn up twice, so sector skew doesn't matter.
+5. Concatenate their data, trim the trailing fill in the same way, and hash it.
 
-Steps 1 and 2 are for flux images, which have real headers to read. Sector images (SSD, DSD, and the
-8-bit ADFS S, M and L formats) don't have headers at all, so an implementation doesn't decode them or
-guess a pitch: each 256-byte block in the image becomes a sector (a short last block is padded with
-zeros) whose header is the logical track and the sector's position within that track (0 to 9 for DFS, 0
-to 15 for ADFS), with size code 1 and a normal data mark, taking the sides in the order the format
-interleaves them. That's exactly what jsbeeb's loaders synthesise (before `loadSsd` places 40-track DFS
-images on the even physical tracks), and it's what a flux capture of the same disc reads back once step 3
-has matched each header to its track.
+Dropping bad sectors in step 3 isn't about merging protected and unprotected copies. Different protection
+almost always means a different loader, so those get different keys anyway. It's there because weak and
+deliberately damaged sectors read differently on every capture, and two captures of the same original
+need to agree.
 
-The side number doesn't go into a digest, because jsbeeb and beebjit both write head 0 into every
-synthesised sector header. The disc key is the SHA-256 of the full 32-byte side digests in physical
-order, leaving out trailing sides with no sectors left, cut to 128 bits. Each side digest, cut the same
-way, is a side key.
+The disc key is the SHA-256 of the full 32-byte side digests in physical order, leaving out trailing
+sides with nothing left in them, cut to 128 bits. Each side digest, cut the same way, is a side key. So
+an SSD, an HFE and a zip of the same single-sided disc share a key, and so do a DSD and an HFE of the
+same double-sided one. A DSD whose second side is unformatted or all fill has the same disc key as an SSD
+of its first side. A formatted but empty second side still has a catalogue on it, so that DSD gets a disc
+key of its own, and finds the SSD's record through the side key.
 
-That gets us one key for an SSD, an HFE and a zip of the same single-sided disc, and for a DSD and an HFE
-of the same double-sided one. A DSD whose second side is unformatted or all fill has the same disc key as
-an SSD of its first side. A formatted but empty second side still has a catalogue on it, so that DSD gets
-a disc key of its own, and finds the SSD's record through the side key.
-
-A protected original and its flux capture share a key, and so do two copies whose only difference is
-protection that step 3 drops (bad CRCs, sectors claiming the wrong track). That's what we want for
-looking up metadata, and it's exactly why the HFE mirror doesn't use fingerprints to name its
-reconstructed captures: it needs one name per file, which is the file hash's job. Protection made of
-deleted data marks, odd sector IDs or sizes, or extra good sectors still changes the key. A cracked copy,
-whose code has changed, gets a different key too, and reaches the same title through an alias of its own.
+The HFE mirror doesn't use fingerprints to name its reconstructed captures, because it needs one name per
+file, which is the file hash's job. That's fine: a mirror names files, and the registry recognises discs.
 
 A client tries the file hash first, then the disc key, then the side keys in side order, and uses the
 first record it finds. Some side digests are shared by lots of unrelated discs (every blank formatted
@@ -156,7 +154,8 @@ choice). That way the key still resolves.
 
 The spec should come with a reference implementation in JavaScript and C, plus test vectors: the same
 single-sided disc as a trimmed SSD, a padded SSD and an HFE, and the same double-sided disc as a DSD, an
-interleaved ADFS image and an HFE.
+interleaved ADFS image and an HFE. A protected original captured twice should give the same key both
+times.
 
 Tapes need their own version, computed from the decoded blocks (file name, load and execution addresses,
 data) rather than from the UEF or audio container. ROMs can just use the file hash.
@@ -201,12 +200,13 @@ A title:
   "publisher": "Superior Software",
   "year": 1988,
   "requires": { "machines": ["B", "Master"] },
-  "boot": { "method": "shift-break" },
+
   "controls": {
     "actions": {
-      "left": { "keys": ["Z"], "role": "left" },
-      "right": { "keys": ["X"], "role": "right" },
-      "fire": { "keys": ["Return"], "role": "fire" }
+      "left": { "keys": ["Q"], "role": "left" },
+      "right": { "keys": ["W"], "role": "right" },
+      "thrust-up": { "keys": ["P"], "role": "up" },
+      "thrust-down": { "keys": ["L"], "role": "down" }
     }
   },
   "links": {
@@ -218,7 +218,7 @@ A title:
 }
 ```
 
-(The values are illustrative; nobody has checked Exile's keys for this.)
+(Exile has plenty more keys than that, of course.)
 
 An alias:
 
@@ -233,7 +233,10 @@ An alias:
 }
 ```
 
-And the redirect left behind when two records are merged:
+Redirects are only ever for slugs. A hash key is already an alias with a parent, so it never needs one;
+if two title slugs are merged (say we'd ended up with both `exile-bbc` and `exile`), the losing slug's
+file becomes a redirect to the other, and a client fetching `exile-bbc.json` goes on to fetch
+`exile.json`:
 
 ```json
 { "format": 1, "kind": "redirect", "to": "exile" }
@@ -251,7 +254,8 @@ The identity fields are the obvious ones (`title`, `publisher`, `year`, `authors
 other names, `parent`, and relations such as `contains` for a compilation disc with several titles on it.
 
 `requires` covers the machine, a second processor, ROMs, 40 or 80 tracks and any other hardware. `boot`
-says how to start it: Shift+Break, `CHAIN`, `*RUN`, or some text to type.
+is optional and usually absent, meaning "do what the disc's boot option says"; it's only there for the
+rare disc that needs `CHAIN""` or some text typed.
 
 `controls` lists actions, each with the BBC keys that perform it, a label, and optionally a standard
 `role` (`left`, `right`, `up`, `down`, `fire`, `fire2` and so on). A touch joystick or a gamepad mapping
@@ -265,8 +269,17 @@ goes in the record. This is the part to design with Robert.
 
 ### Symbols and source
 
-A symbol set says which memory ranges it describes and what the bytes there should hash to while the
-software is running:
+This part is a sketch, and the one most in need of a prototype.
+
+BBC games rewrite their own memory all the time. Code is decrypted and relocated as it loads, variables
+sit in amongst the code, self-modifying code is everywhere, and the emulator has no idea when loading has
+finished. So a symbol set can't just be pinned to a disc and shown, and it can't be checked by hashing
+big ranges of memory either.
+
+Instead a symbol set is split into regions, and each region carries a few anchors: short runs of bytes at
+known addresses that should be there whenever that region's code is in memory, such as the first few
+instructions of routines that are never modified. Overlays (code that swaps in and out at the same
+addresses) are just separate regions that happen to cover the same addresses.
 
 ```json
 {
@@ -274,18 +287,31 @@ software is running:
     "exile-v1-1-labels": {
       "format": "baron-symbols",
       "url": "https://.../exile-v1-1.json",
-      "verify": [{ "start": "0x1100", "end": "0x5800", "sha256": "..." }],
+      "regions": {
+        "main": {
+          "start": "0x1100",
+          "end": "0x5800",
+          "anchors": [{ "at": "0x1a2c", "bytes": "a9008d..." }]
+        }
+      },
       "licence": "CC0-1.0"
     }
   }
 }
 ```
 
-The debugger checks live memory against `verify` before showing any labels. That catches the things disc
-identity can't: code that's decrypted or relocated as it loads, a variant nobody has catalogued, a
-machine that loads it somewhere else. It also means a record can offer a few candidate sets and the
-emulator picks whichever one matches, and if none do, the debugger shows plain addresses as it does
-today.
+The debugger checks a region's anchors whenever it's about to show that region (stopped at a breakpoint,
+or scrolling the disassembly), which is only a handful of bytes each time. Labels appear for the regions
+whose anchors match. Before the code has arrived, the anchors don't match and there are no labels, so we
+never need to know when loading is done. If nothing matches, the debugger shows plain addresses as it
+does today.
+
+Choosing anchors is the labour-intensive bit, and it's optional: a symbol set without anchors just isn't
+shown automatically. Where there's buildable source, a tool can pick them, as the assembled output and
+Baron's `--symbols` together say which bytes are code and which are data. For a disassembly without
+buildable source, running the game headless to a known point and taking bytes from memory works, as long
+as they're bytes nothing modifies, which is where an LLM reading the disassembly could help. That's a
+nice to have rather than something to build first.
 
 ## Keeping records stable
 
@@ -324,7 +350,9 @@ There are three levels of use:
   catalogue page or an inlay scan needs nobody's permission.
 - Inlining, with attribution, needs a licence that allows redistribution, or the author's permission
   recorded in the entry (a link to where it was given, or when).
-- Never: the software itself (we don't host images), and anything whose licence we don't know.
+- Never: anything whose licence we don't know. Disc and tape images are never part of a record either; a
+  record links to wherever an image lives, and whether we mirror one is a separate decision about that
+  image.
 
 Disassemblies need particular care. Several published BBC disassemblies have no licence at all, and some
 say outright that no reuse is permitted. Those are links only, unless and until their authors tell us
@@ -382,11 +410,11 @@ TOSEC. That should show how much steps 2 and 3 sort out on their own, and whethe
 The media window would show a title, instructions, screenshots and links for anything loaded, through the
 existing `MediaLoader.addDescriber` hook. `requires` would feed the machine switch that already acts on
 the Bitshifters `machine` field. The `controls` roles would give phones and tablets a joystick and
-buttons, and gamepads some sensible defaults. The debugger would label addresses from verified symbol
-sets, which is #107. Snapshots could record the fingerprint next to the raw file CRC32 they use today, so
-a snapshot can say what software it needs and help find a copy, though restoring one mid-load still wants
-the exact image. And with no record at all, content heuristics like Clock Signal's could still guess the
-machine and how to boot.
+buttons, and gamepads some sensible defaults. The debugger would label addresses from symbol sets whose
+anchors match, which is #107. Snapshots could record the fingerprint next to the raw file CRC32 they use
+today, so a snapshot can say what software it needs and help find a copy, though restoring one mid-load
+still wants the exact image. And with no record at all, content heuristics like Clock Signal's could
+still guess the machine and how to boot.
 
 ## Open questions
 
@@ -396,8 +424,8 @@ machine and how to boot.
   short for a registry other emulators share.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
 - Whether trailing-fill trimming should allow any repeated byte, or only zero and `&E5`.
-- Whether step 3 of the fingerprint should also drop the odd sizes and IDs that protection uses, so a
-  protected original matches a plain SSD made from it.
+- Whether the flux path should also drop sectors a sector image can't hold (odd sizes, or IDs past the
+  end of the track), so a protected original matches a plain SSD made from it.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.
