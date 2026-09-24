@@ -3,9 +3,10 @@
 These are the results of running a prototype of the fingerprint from the [media registry
 proposal](media-registry-proposal.md) over every disc image we could lay hands on, fetched on 24
 September 2026. The tools are in `tools/registry/` (see its README): `build-index.js` fingerprints the
-corpus, `analyse.js` prints every number quoted here, and `fill-survey.js`, `check-paths.js` and
-`diff-images.js` do the checks that need the images themselves. Our mirrors are live, so a later fetch
-may not give exactly these numbers; MAME's list is pinned to a commit.
+corpus, `analyse.js` prints the numbers that come from the indexes, and `fill-survey.js`,
+`check-paths.js`, `split-diffs.js` and `diff-images.js` do the checks that need the images themselves.
+Our mirrors are live, so a later fetch may not give exactly these numbers; MAME's list is pinned to a
+commit.
 
 ## What went in
 
@@ -48,9 +49,10 @@ rather than 39. No disc fingerprint will ever match those, and it shouldn't try:
 Even the closest cases rarely match. 14 captures have exactly the same DFS files, names and contents, as
 an archive image, 13 of them against a Stairway To Hell SSD, and still get a different key. Of those 16
 pairs, 11 have the files moved and a different title or cycle number, like Colossus Chess (the capture
-has `$.G30` at sector 122, the SSD at sector 2). Three have the same layout, title and cycle, and differ
-in what's left over: the Cheat It Again Joe captures and SSDs differ in whole sectors of free space, plus
-a byte or two of the catalogue, which looks like old data on a reused disc.
+has `$.G30` at sector 122, the SSD at sector 2), and one more has the files moved but the same title and
+cycle. The other four, all Cheat It Again Joe discs, have the files in the same place (one with a
+different cycle number) and differ in whole sectors of free space, plus a byte or two of the catalogue,
+which looks like old data on a reused disc.
 
 An exact key over the set of files (names, addresses and contents) doesn't help much either: 72
 cross-source matches rather than 64, because images that share most of their files usually differ in a
@@ -65,15 +67,15 @@ captured and also reconstructed from an FSD dump, and those agree.
 
 ## Protection, and a rule that had to go
 
-The first draft of the flux path kept only sectors whose header named the track they were read from. On
-the HFE mirror:
+The first draft of the flux path kept only sectors whose header named the track they were read from. The
+sectors it dropped from side 0 of the HFE captures:
 
 | Wrong-track sectors on side 0 | Captures |
 | ----------------------------- | -------: |
-| none                          |    1,537 |
-| 1 to 10                       |       96 |
-| 11 to 100                     |      112 |
-| over 100                      |      240 |
+| none                          |    1,542 |
+| 1 to 10                       |       98 |
+| 11 to 100                     |      114 |
+| over 100                      |      231 |
 
 The captures with hundreds are the interesting ones. Here's what jsbeeb decodes from an Exile capture,
 taken in an 80-track drive, so that physical track 4 is the disc's track 2:
@@ -88,30 +90,34 @@ physical 40: track 182, sectors 118..127
 
 Superior's protection renumbers every track after track 0, and the game lives on those tracks. The rule
 threw all of it away and kept track 0: a stub catalogue and a loader, which Exile and Repton Infinity
-share byte for byte. So four images of Exile and Repton Infinity, including ones labelled "Exile v1" and
-"Repton Infinity Game Disc Master", all got the same key. A key made of a publisher's boot track is worse
-than no key at all.
+share byte for byte. So Exile and Repton Infinity shared a key, twice over: once for the two games'
+captures, and once for the images labelled "Exile v1" and "Repton Infinity Game Disc Master". A key made
+of a publisher's boot track is worse than no key at all.
 
 The fix keeps every sector with good CRCs, whatever its header claims, and orders them by the track they
-were read from first. Comparing the two rules over the whole HFE mirror:
+were read from first. Comparing the first draft with the proposal (both its track rule and its pitch
+test, below) over the whole HFE mirror:
 
 - All 1,537 captures without wrong-track sectors keep exactly the same key.
-- Under the old rule, 8 keys were shared by captures whose titles have no word in common, one of them the
-  Exile and Repton Infinity group. Under the new rule there are 6, and all six are the same title written
-  differently: E-Type and E Type, Fire Track and Firetrack, Q-Master and Q Master, ViewStore and View
-  Store, The Dam Busters and Dambusters, and Cheat It Again Joe and its abbreviation, CIAJ Vol 1.
-- The new rule splits 17 groups the old one merged. One is the Exile collision, and some are copies the
-  mirror itself labels as different variants (Revs and Revs 4 Tracks v1 against v2, Uridium v1 against
-  v2).
+- Under the first draft, 9 keys were shared by captures whose titles have no word in common, two of them
+  the Exile and Repton Infinity pairs. Under the proposal there are 6, and all six are the same title
+  written differently: E-Type and E Type, Fire Track and Firetrack, Q-Master and Q Master, ViewStore and
+  View Store, The Dam Busters and Dambusters, and Cheat It Again Joe and its abbreviation, CIAJ Vol 1.
+- The proposal splits 17 groups the first draft merged. Most of those are copies that differ in tens to
+  hundreds of sectors, which the first draft only merged because it had thrown away the protected tracks:
+  the two Exile and Repton Infinity pairs, Arcadians, Turtle Graphics, Grand Prix Construction Set,
+  Computer Maniacs Diary, Cheat It Again Joe, Spellbinder, Uridium, Revs, Sphinx Adventure, one
+  Philosophers Quest pair and Hopper v1 against v2. Carousel's split is between the mirror's v1 and v2,
+  which differ in seven sectors, and 3D Pool's between the two sides of a dual-format disc, which differ
+  only past the end of the 40-track side.
 
-The rest have a cost. Several are repeat copies of one variant that the old rule merged only because it
-had thrown away the protected tracks: Hopper, Repton Infinity, 3D Pool, The Empire Strikes Back,
-Philosophers Quest and Arcadians among them. The two pairs we measured differ in a handful of bytes on
-those tracks: two Hopper images by one byte in each of three sectors, and two Repton Infinity images by
-six bytes in two sectors, with good CRCs throughout. In both pairs one image is a direct capture and the
-other was reconstructed from an FSD dump, so the difference may be in how the FSD recorded those sectors
-rather than on the discs. Either way, the new rule treats them as different copies, and the registry has
-to link them with an alias rather than a shared key.
+The rest are the cost. Three groups are near-identical copies that the proposal now keeps apart: Hopper
+v1 against a reconstruction of it, which differ by one byte in each of three sectors; The Empire Strikes
+Back, whose capture and reconstruction differ in one sector; and a Philosophers Quest pair that differs
+in four. All three sit on the protected tracks with good CRCs, and in each pair one image is a direct
+capture and the other was reconstructed from an FSD dump, so the difference may be in how the FSD
+recorded those sectors rather than on the discs. Either way the registry has to link them with an alias
+rather than a shared key. `split-diffs.js` prints all of this.
 
 ## Which track is which
 
@@ -123,12 +129,13 @@ which only hold ghosts of their neighbours, went into the key, and they stopped 
 reconstructed from FSD dumps.
 
 Looking for ghosts instead (odd tracks whose sectors are all copies of an even neighbour's) fixes that
-case but breaks others: some discs legitimately repeat a track, so a few captures from 40-track drives
-got judged double-stepped and lost half their tracks. What works is a combination. A capture with nothing
-past physical track 50 came from a 40-track drive and every track is real; otherwise the side is 40-track
-if at least four even tracks carry headers for half their number, or if nearly every odd track (nine in
-ten) holds only ghosts. Against the header test alone, that splits nothing and merges exactly two groups:
-the capture and the reconstruction of Exile v1, and likewise of Exile v2.
+case, but a disc can legitimately repeat a track, and a ghost test alone would call a 40-track drive's
+capture of such a disc double-stepped and throw away half its tracks. So the proposal combines them. A
+capture with nothing past physical track 50 came from a 40-track drive and every track is real; otherwise
+the side is 40-track if at least four even tracks carry headers for half their number (and more of them
+than carry their own), or if at least four even tracks hold data and fewer than a tenth as many odd
+tracks hold anything but ghosts. Against the header test alone, that splits nothing and merges exactly
+two groups: the capture and the reconstruction of Exile v1, and likewise of Exile v2.
 
 ## Trailing fill
 
@@ -140,8 +147,9 @@ limited to `&00` and `&E5`.
 ## Side keys
 
 Only 64 images are double-sided (one of them has a second side that trims to nothing), and 11 of their
-side keys also turn up on another disc. All eleven look like the same title, so the `ambiguous` record
-for shared side keys will be rare, but it isn't imaginary.
+side keys also turn up on another disc. Ten of those are the same title; the eleventh is shared by two
+unrelated discs, which is exactly what the `ambiguous` record for shared side keys is for. It'll be rare,
+but it isn't imaginary.
 
 ## MAME
 

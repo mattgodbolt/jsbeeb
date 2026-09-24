@@ -258,7 +258,10 @@ describe("Media registry fingerprint", () => {
             }
             const { data, is40Track } = fluxSideBytes(disc, false);
             expect(is40Track).toBe(true);
-            expect(data.length).toBe(40 * 2 * SectorSize);
+            const inTrackOrder = Array.from({ length: 40 }, (_, logical) =>
+                renumbered(logical, 10 * logical).map(({ data: sector }) => sector),
+            ).flat();
+            expect(Buffer.from(data).equals(Buffer.concat(inTrackOrder))).toBe(true);
         });
 
         it("should keep an 80-track disc 80-track when one odd track repeats its neighbour", () => {
@@ -269,12 +272,25 @@ describe("Media registry fingerprint", () => {
             expect(fluxSideBytes(disc, false).is40Track).toBe(false);
         });
 
-        it("should call a disc double-stepped from its headers alone", () => {
+        // Every fifth odd track holds data of its own, too much for the ghost test to pass.
+        const withOwnOddTracks = (halfHeaderTracks) => {
             const disc = newDisc();
-            for (let logical = 0; logical < 40; ++logical)
-                buildFmTrack(disc, 2 * logical, [{ track: logical, id: 0, data: sectorOf(logical) }]);
-            buildFmTrack(disc, 7, [{ track: 3, id: 5, data: sectorOf(99) }]);
-            expect(fluxSideBytes(disc, false).is40Track).toBe(true);
+            for (let logical = 0; logical < 40; ++logical) {
+                const track = logical < halfHeaderTracks ? logical : 202 - logical;
+                buildFmTrack(disc, 2 * logical, [{ track, id: 0, data: sectorOf(logical) }]);
+                if (logical % 5 === 0)
+                    buildFmTrack(disc, 2 * logical + 1, [{ track: 150, id: 0, data: sectorOf(90 + logical) }]);
+            }
+            return fluxSideBytes(disc, false).is40Track;
+        };
+
+        it("should call a disc double-stepped from its headers alone", () => {
+            expect(withOwnOddTracks(40)).toBe(true);
+        });
+
+        it("should want at least four tracks of header evidence, not counting track 0", () => {
+            expect(withOwnOddTracks(5)).toBe(true);
+            expect(withOwnOddTracks(4)).toBe(false);
         });
     });
 

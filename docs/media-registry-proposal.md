@@ -119,13 +119,15 @@ For flux images, the job is to turn the capture back into those same bytes:
 
 1. Decide whether the side is a 40-track disc read in an 80-track drive. A capture with nothing past
    physical track 50 came from a 40-track drive, so every track is real. Otherwise it's 40-track if at
-   least four even tracks have headers giving half their physical track number, or if nearly every odd
-   track (nine in ten) holds nothing but copies of its even neighbours' sectors. Odd tracks that read
-   nothing at all count as copies, so an 80-track capture whose odd tracks all failed to read would be
-   taken as 40-track; that's a bad dump anyway. Neither test is enough alone: protected discs renumber
-   their tracks, and some discs legitimately repeat one ([the findings](media-registry-findings.md) have
-   the details). jsbeeb's `sniffSurfaceLayout` does something like the first, but once per disc, and a
-   flippy disc can have a different pitch on each side.
+   least four even tracks, not counting track 0, have a sector whose header gives half their physical
+   track number, and more even tracks do that than give their own number. Failing that, it's 40-track if
+   at least four even tracks hold data and the odd tracks holding any sector that isn't a copy of an even
+   neighbour's number fewer than a tenth of those even tracks. Odd tracks that read nothing at all count
+   as copies, so an 80-track capture whose odd tracks all failed to read would be taken as 40-track;
+   that's a bad dump anyway. Neither test is enough alone: protected discs renumber their tracks, and
+   some discs legitimately repeat one ([the findings](media-registry-findings.md) have the details).
+   jsbeeb's `sniffSurfaceLayout` does something like the first, but once per disc, and a flippy disc can
+   have a different pitch on each side.
 2. Decode the side's tracks into sectors, reading physical tracks in ascending order (only the even ones
    on a 40-track side) and each track from the index.
 3. Keep the sectors with good header and data CRCs, whatever track their headers claim.
@@ -440,9 +442,10 @@ still guess the machine and how to boot.
 - Whether 128 bits is the right key length. The HFE mirror's file-hash names use 64, which may be a bit
   short for a registry other emulators share.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
-- Whether repeat captures of the same protected disc agree. Most do, but some (Hopper, Repton Infinity)
-  differ by a few bytes in single sectors on the protected tracks, with good CRCs; each pair measured is
-  a capture against an FSD reconstruction, so it may be the FSD rather than the disc.
+- Whether repeat captures of the same protected disc agree. Most do, but a few (Hopper, The Empire
+  Strikes Back, Philosophers Quest) differ by a few bytes or sectors on the protected tracks, with good
+  CRCs. Each is a capture against a reconstruction from an FSD dump, so it may be the FSD rather than the
+  disc.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.

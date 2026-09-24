@@ -1,8 +1,12 @@
 #!/usr/bin/env node
-// Computes every number in docs/media-registry-findings.md from the indexes that
-// build-index.js writes: index.jsonl (all sources, the proposal's rule) and
-// hfe-strict.jsonl (the HFE mirror under the first draft's rule), plus MAME's
-// bbcb_flop.xml from fetch-corpus.js.
+// Computes the findings' numbers that come from the indexes build-index.js writes
+// (the rest come from fill-survey.js, check-paths.js and split-diffs.js):
+//   index.jsonl            every source, under the proposal's rules
+//   hfe-first-draft.jsonl  the HFE mirror under the first draft's (--track-rule strict
+//                          --pitch-test headers)
+//   hfe-headers.jsonl      the HFE mirror with only the pitch test reverted
+//                          (--pitch-test headers)
+// plus MAME's bbcb_flop.xml from fetch-corpus.js.
 //
 //   node tools/registry/analyse.js [--corpus .registry-corpus] [--family exile]
 //
@@ -156,7 +160,7 @@ async function main() {
     );
     for (const { capture, partner } of nearMisses)
         console.log(
-            `    ${capture.meta?.title} (${capture.ref}) / ${partner.source}: ${starts(capture) === starts(partner) ? "same" : "moved"} files`,
+            `    ${capture.meta?.title} (${capture.ref}) / ${partner.source}: ${starts(capture) === starts(partner) ? "same" : "moved"} files, ${header(capture) === header(partner) ? "same" : "different"} title/cycle`,
         );
 
     // How often an archive SSD that shares most of a capture's files has put them somewhere else.
@@ -185,11 +189,12 @@ async function main() {
     }
     print("captures sharing at least half their files with an STH SSD, by where the shared files sit", layouts);
 
-    console.log("\n== Wrong-track sectors on side 0 of the HFE captures");
+    console.log("\n== Wrong-track sectors the first draft dropped from side 0 of the HFE captures");
+    const firstDraft = await readJsonl("hfe-first-draft.jsonl");
     print(
         "captures by count",
         Object.fromEntries(
-            countBy(hfe, (row) => {
+            countBy(firstDraft, (row) => {
                 const n = row.flux[0].dropped.wrongTrack;
                 return n === 0 ? "none" : n <= 10 ? "1-10" : n <= 100 ? "11-100" : "over 100";
             }),
@@ -197,7 +202,7 @@ async function main() {
     );
 
     console.log("\n== The first draft's rule against the proposal's");
-    const strict = new Map((await readJsonl("hfe-strict.jsonl")).map((row) => [row.ref, row]));
+    const strict = new Map((await readJsonl("hfe-first-draft.jsonl")).map((row) => [row.ref, row]));
     const plain = hfe.filter((row) => row.flux.every((side) => side.dropped.wrongTrack === 0));
     print(
         "captures with no wrong-track sectors, key unchanged",
@@ -223,8 +228,8 @@ async function main() {
             `    ${group.map((r) => `${r.meta?.title}${r.meta?.variant ? ` (v${r.meta.variant})` : ""}`).join(" / ")}`,
         );
 
-    const headersOnly = await readJsonl("hfe-headers.jsonl").catch(() => null);
-    if (headersOnly) {
+    const headersOnly = await readJsonl("hfe-headers.jsonl");
+    {
         console.log("\n== The proposal's pitch test against the first draft's header test");
         const combinedKey = new Map(hfe.map((row) => [row.ref, row.discKey]));
         const headersKey = new Map(headersOnly.map((row) => [row.ref, row.discKey]));
@@ -253,6 +258,23 @@ async function main() {
         twoSided.flatMap((row) => row.sideKeys).filter((key) => discsBySideKey.get(key).size > 1),
     );
     print("side keys of two-sided images also found on another disc", sharedSideKeys.size);
+    // Archive images have no title but their file name, which is CamelCased or hyphenated.
+    const discTitle = (row) =>
+        row.meta?.title ??
+        row.ref
+            .split("#")[0]
+            .replace(/^.*\//, "")
+            .replace(/\.[a-z]+$/i, "")
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .replace(/[-_]/g, " ");
+    for (const key of sharedSideKeys) {
+        const owners = rows.filter((row) => row.sideKeys.includes(key));
+        const titles = [...new Set(owners.map(discTitle))];
+        const related = titles.every((a) => titles.every((b) => a === b || shareAWord(a, b)));
+        console.log(
+            `    ${related ? "same title" : "UNRELATED"}: ${owners.map((row) => `${row.source}:${row.ref}`).join(" / ")}`,
+        );
+    }
 
     console.log("\n== MAME");
     const mameXml = await readFile(path.join(corpus, "bbcb_flop.xml"), "utf8");

@@ -11,7 +11,8 @@ const MaxPhysicalTracks = IbmDiscFormat.tracksPerDisc;
 // Even tracks needed as evidence before either test calls a side 40-track (jsbeeb's own
 // sniffing asks the same of its header test).
 const MinFortyTrackEvidence = 4;
-// The share of odd tracks allowed data of their own on a side judged double-stepped.
+// How many odd tracks may hold data of their own on a side judged double-stepped, as a share
+// of the even tracks that hold data.
 const GhostTolerance = 0.1;
 // The last physical track a 40-track drive can reach, with a few to spare.
 const FortyTrackDriveLimit = 50;
