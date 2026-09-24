@@ -100,13 +100,15 @@ it's recorded as a plain field where we have it.
 This is computed from the disc as it was loaded, before any writes, and it knows nothing about DFS, ADFS
 or any other filesystem. Each physical side is fingerprinted on its own:
 
-1. Decide the side's track pitch first: a 40-track disc read in an 80-track drive has its data on the
-   even physical tracks, which jsbeeb already detects (`sniffSurfaceLayout`).
+1. Decide the side's track pitch first, from its sector headers: if the headers on the even physical
+   tracks give half their physical track number, it's a 40-track side read in an 80-track drive. jsbeeb's
+   `sniffSurfaceLayout` does something similar, but once per disc and only for flux images, and a flippy
+   disc can have a different pitch on each side.
 2. Decode the side's tracks into sectors, as the disc controller would see them, reading physical tracks
    in ascending order and each track from the index.
 3. Keep the sectors with good header and data CRCs whose header track number matches the track they were
    read from (the physical track, or half of it for a 40-track side). The rest are protection or damage.
-   This is stricter than beebjit, which drops only sectors whose header says track `&FF`, or track 0 on
+   beebjit's track check is looser: it drops only sectors whose header says track `&FF`, or track 0 on
    some other track.
 4. Sort what's left by header track, then header sector ID, keeping the first one read if a track and ID
    turn up twice. Going by header values means sector skew doesn't matter, and nor does which drive
@@ -138,8 +140,10 @@ whose code has changed, gets a different key too, and reaches the same title thr
 
 A client tries the file hash first, then the disc key, then the side keys in side order, and uses the
 first record it finds. Some side digests are shared by lots of unrelated discs (every blank formatted
-side looks the same), so the build only publishes a side key when every image with that side belongs to
-the same title.
+side looks the same), so a side key is only published when every image known to have that side belongs to
+one title. If a later image shows a published side key is shared after all, its record becomes an
+`ambiguous` one listing the candidate titles, and a client treats that as no match (or offers the
+choice). That way the key still resolves.
 
 The spec should come with a reference implementation in JavaScript and C, plus test vectors: the same
 single-sided disc as a trimmed SSD, a padded SSD and an HFE, and the same double-sided disc as a DSD, an
@@ -224,6 +228,12 @@ And the redirect left behind when two records are merged:
 
 ```json
 { "format": 1, "kind": "redirect", "to": "exile" }
+```
+
+And the record a side key becomes if it turns out to be shared:
+
+```json
+{ "format": 1, "kind": "ambiguous", "candidates": ["exile", "citadel"] }
 ```
 
 ### A first set of fields
@@ -335,8 +345,8 @@ after asking.
 Most of this is mechanical, with an LLM helping on the calls that need judgement. Nothing gets published
 until a person has looked at it.
 
-1. Collect. For each image, record where it came from, both keys, and a decoded file list (DFS, ADFS or
-   tape) with names, addresses, lengths and a hash per file.
+1. Collect. For each image, record where it came from, its file hash, disc key and side keys, and a
+   decoded file list (DFS, ADFS or tape) with names, addresses, lengths and a hash per file.
 2. Group exact matches. Equal fingerprints are aliases, no judgement required.
 3. Find candidates. Images that share files, or that are near-duplicates by a fuzzy hash (ssdeep or TLSH,
    over files and over the sector stream), go into clusters. A crack differs by a few bytes in a loader;
@@ -377,7 +387,7 @@ machine and how to boot.
   short for a registry other emulators share.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
 - Whether trailing-fill trimming should allow any repeated byte, or only zero and `&E5`.
-- Whether step 2 of the fingerprint should also drop the odd sizes and IDs that protection uses, so a
+- Whether step 3 of the fingerprint should also drop the odd sizes and IDs that protection uses, so a
   protected original matches a plain SSD made from it.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
