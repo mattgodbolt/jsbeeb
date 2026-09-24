@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.1...v2.3.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* start the even field's half-line vsync at (R0+1)/2, not R0/2 ([#1177](https://github.com/mattgodbolt/jsbeeb/issues/1177)) ([8d7d4e1](https://github.com/mattgodbolt/jsbeeb/commit/8d7d4e1badc85a17664f84ec1876dfab03fd7f4a))
+
 ## [2.3.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.0...v2.3.1) (2026-09-23)
 
 
