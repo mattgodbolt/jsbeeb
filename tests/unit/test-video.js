@@ -1015,10 +1015,8 @@ describe("Video", () => {
                 runLines(ChainFrameLines * chainFrames + 4);
                 v.writeCrtc(4, qr4);
             }
-            // To the nearest half line: the half-line vsync point is a character early (#1056).
-            const toHalfLines = (clocks) => Math.round((2 * clocks) / ClocksPerScanline) / 2;
             const measured = vsyncs.slice(SettleFields);
-            return measured.slice(1).map((at, i) => toHalfLines(at - measured[i]));
+            return measured.slice(1).map((at, i) => (at - measured[i]) / ClocksPerScanline);
         }
 
         const pairs = (fields) => fields.filter((_, i) => i % 2 === 0).map((field, i) => [field, fields[2 * i + 1]]);
