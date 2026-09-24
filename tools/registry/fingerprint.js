@@ -8,8 +8,11 @@ import { discFor } from "../../src/fdc.js";
 
 export const SectorSize = 256;
 const MaxPhysicalTracks = IbmDiscFormat.tracksPerDisc;
-// Tracks with data needed before a side can be judged 40-track, as in jsbeeb's own sniffing.
+// Even tracks needed as evidence before either test calls a side 40-track (jsbeeb's own
+// sniffing asks the same of its header test).
 const MinFortyTrackEvidence = 4;
+// The share of odd tracks allowed data of their own on a side judged double-stepped.
+const GhostTolerance = 0.1;
 // The last physical track a 40-track drive can reach, with a few to spare.
 const FortyTrackDriveLimit = 50;
 const KeyBytes = 16;
@@ -87,10 +90,27 @@ const sectorIdentity = (sector) =>
     }`;
 
 /**
+ * The first draft's test: the headers on the even tracks give half their number. Kept so
+ * the findings can compare against it.
+ */
+function headersSayFortyTrack(disc, upper) {
+    let half = 0;
+    let own = 0;
+    for (let physical = 2; physical < MaxPhysicalTracks; physical += 2) {
+        for (const sector of disc.getTrack(upper, physical).findSectorIds(() => {})) {
+            if (sector.hasHeaderCrcError) continue;
+            if (sector.trackNumber === physical / 2) half++;
+            else if (sector.trackNumber === physical) own++;
+        }
+    }
+    return half > own;
+}
+
+/**
  * Whether a side is a 40-track disc read in an 80-track drive. A capture with nothing past
  * physical track 50 came from a 40-track drive, so every track is real. Otherwise either
- * of two signs will do: the headers on the even tracks give half their number, or the odd
- * tracks hold nothing but ghosts of their even neighbours. Protected discs renumber their
+ * of two signs will do: enough even tracks carry headers for half their number, or nearly
+ * every odd track holds only ghosts of its even neighbours. Protected discs renumber their
  * tracks, which defeats the first; some discs legitimately repeat a track, which is why
  * the second isn't enough on its own.
  */
@@ -107,18 +127,16 @@ function sideIs40Track(disc, upper) {
     if (lastWithData <= FortyTrackDriveLimit) return false;
 
     let evenTracks = 0;
-    let headersSayHalf = 0;
-    let headersSayOwn = 0;
+    let tracksSayingHalf = 0;
+    let tracksSayingOwn = 0;
     let oddTracksOfTheirOwn = 0;
     tracks.forEach((sectors, physical) => {
         if (sectors.length === 0) return;
         if (!(physical & 1)) {
             evenTracks++;
             if (physical === 0) return;
-            for (const sector of sectors) {
-                if (sector.trackNumber === physical / 2) headersSayHalf++;
-                else if (sector.trackNumber === physical) headersSayOwn++;
-            }
+            if (sectors.some((sector) => sector.trackNumber === physical / 2)) tracksSayingHalf++;
+            else if (sectors.some((sector) => sector.trackNumber === physical)) tracksSayingOwn++;
             return;
         }
         const neighbours = new Set(
@@ -126,8 +144,8 @@ function sideIs40Track(disc, upper) {
         );
         if (sectors.some((sector) => !neighbours.has(sectorIdentity(sector)))) oddTracksOfTheirOwn++;
     });
-    if (headersSayHalf > headersSayOwn) return true;
-    return evenTracks >= MinFortyTrackEvidence && oddTracksOfTheirOwn * 10 < evenTracks;
+    if (tracksSayingHalf >= MinFortyTrackEvidence && tracksSayingHalf > tracksSayingOwn) return true;
+    return evenTracks >= MinFortyTrackEvidence && oddTracksOfTheirOwn < evenTracks * GhostTolerance;
 }
 
 /**
@@ -137,11 +155,13 @@ function sideIs40Track(disc, upper) {
  * from the one they were read on: "strict" drops them (the first draft of the
  * proposal), "physical" keeps them and orders sectors by where they were found,
  * which is what protected discs with renumbered tracks need.
- * @param {{trackRule?: "strict"|"physical"}} [options]
+ * `pitchTest` picks how a side is judged 40-track: "combined" (the proposal's) or "headers"
+ * (the first draft's).
+ * @param {{trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers"}} [options]
  * @returns {{data: Buffer, is40Track: boolean, dropped: {crc: number, wrongTrack: number, duplicate: number}, sizes: Map<number, number>}}
  */
-export function fluxSideBytes(disc, upper, { trackRule = "physical" } = {}) {
-    const is40Track = sideIs40Track(disc, upper);
+export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest = "combined" } = {}) {
+    const is40Track = pitchTest === "headers" ? headersSayFortyTrack(disc, upper) : sideIs40Track(disc, upper);
     const dropped = { crc: 0, wrongTrack: 0, duplicate: 0 };
     const sizes = new Map();
     const kept = new Map();
@@ -189,7 +209,8 @@ export function imageSides(name, bytes, options) {
 
 /**
  * Every key the registry would compute for an image, and the untrimmed sides they came from.
- * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical"}} [options] for trimFill and fluxSideBytes
+ * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers"}} [options]
+ *     for trimFill and fluxSideBytes
  */
 export function fingerprint(name, bytes, options) {
     const { sides, flux } = imageSides(name, bytes, options);

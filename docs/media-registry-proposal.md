@@ -118,9 +118,11 @@ make this pretty easy for any emulator to implement.
 For flux images, the job is to turn the capture back into those same bytes:
 
 1. Decide whether the side is a 40-track disc read in an 80-track drive. A capture with nothing past
-   physical track 50 came from a 40-track drive, so every track is real. Otherwise it's 40-track if the
-   headers on the even tracks give half their physical track number, or if the odd tracks hold nothing
-   but copies of their even neighbours' sectors. Neither test is enough alone: protected discs renumber
+   physical track 50 came from a 40-track drive, so every track is real. Otherwise it's 40-track if at
+   least four even tracks have headers giving half their physical track number, or if nearly every odd
+   track (nine in ten) holds nothing but copies of its even neighbours' sectors. Odd tracks that read
+   nothing at all count as copies, so an 80-track capture whose odd tracks all failed to read would be
+   taken as 40-track; that's a bad dump anyway. Neither test is enough alone: protected discs renumber
    their tracks, and some discs legitimately repeat one ([the findings](media-registry-findings.md) have
    the details). jsbeeb's `sniffSurfaceLayout` does something like the first, but once per disc, and a
    flippy disc can have a different pitch on each side.
@@ -140,8 +142,9 @@ only the boot track. Exile and Repton Infinity share that boot track byte for by
 same key. The numbers are in [the findings](media-registry-findings.md). For an unprotected disc the
 headers match anyway, so the order is the same as an SSD's and so are the bytes. The price is that a
 capture of a protected disc no longer matches an SSD made from it, because the SSD can't hold the
-renumbered sectors. The findings suggest that hardly ever happened anyway: archive SSDs are mostly
-re-mastered, not dumped.
+renumbered sectors. The findings suggest that hardly ever happened anyway: of the captures that share
+most of their files with a Stairway To Hell SSD, nearly nine in ten have those files at different
+sectors, so the SSDs are mostly re-mastered, not dumped.
 
 This only works for a complete side. The data is concatenated without positions, so if a sector is
 missing or unreadable part way through (a damaged track, say), everything after it shifts, and the
@@ -437,9 +440,9 @@ still guess the machine and how to boot.
 - Whether 128 bits is the right key length. The HFE mirror's file-hash names use 64, which may be a bit
   short for a registry other emulators share.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
-- Whether repeat captures of the same protected disc agree. Most do, but a handful (Arcadians, Hopper)
-  decode to different amounts of data with the same drop counts, which is either a real difference on the
-  protected tracks or noise in the capture.
+- Whether repeat captures of the same protected disc agree. Most do, but some (Hopper, Repton Infinity)
+  differ by a few bytes in single sectors on the protected tracks, with good CRCs; each pair measured is
+  a capture against an FSD reconstruction, so it may be the FSD rather than the disc.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.

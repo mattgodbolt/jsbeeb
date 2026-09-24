@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Compares two images sector by sector, after each has been turned into its
 // sides' bytes the way the fingerprint does, and says where the differences sit
-// in DFS terms: the catalogue, a file (by name), or free space.
+// in DFS terms: the catalogue, a file (by name), or free space, with how many bytes
+// of each differing sector differ.
 //
 //   node tools/registry/diff-images.js <ref> <ref> [--corpus .registry-corpus]
 //
@@ -54,7 +55,8 @@ export async function diffImages(corpus, refA, refB) {
             const sb = bytesB.subarray(sector * SectorSize, (sector + 1) * SectorSize);
             if (Buffer.compare(sa, sb) === 0) continue;
             const key = owner(catalogue, sector);
-            where.set(key, [...(where.get(key) ?? []), sector]);
+            const bytes = sa.length === sb.length ? sa.filter((byte, i) => byte !== sb[i]).length : SectorSize;
+            where.set(key, [...(where.get(key) ?? []), `${sector} (${bytes} bytes)`]);
         }
         report.push({ side, lengths: [bytesA.length, bytesB.length], differences: Object.fromEntries(where) });
     }

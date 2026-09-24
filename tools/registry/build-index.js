@@ -4,7 +4,7 @@
 // dropped, and the DFS catalogue with a hash per file where there is one.
 //
 //   node tools/registry/build-index.js [--corpus .registry-corpus] [--shard 0/4] [--sources hfe,sth]
-//       [--track-rule physical|strict] [--name index]
+//       [--track-rule physical|strict] [--pitch-test combined|headers] [--name index]
 //
 // Shards let several processes share the work; each writes <name>-<shard>.jsonl.
 
@@ -22,6 +22,7 @@ const arg = (flag, fallback) => {
 const corpus = arg("--corpus", ".registry-corpus");
 const [shard, shards] = arg("--shard", "0/1").split("/").map(Number);
 const trackRule = arg("--track-rule", "physical");
+const pitchTest = arg("--pitch-test", "combined");
 const onlySources = arg("--sources", "hfe,sth,bbcmicro").split(",");
 const outName = arg("--name", "index");
 
@@ -57,7 +58,7 @@ async function* images() {
 }
 
 function describe(name, bytes) {
-    const fp = fingerprint(name, bytes, { trackRule });
+    const fp = fingerprint(name, bytes, { trackRule, pitchTest });
     const { sides } = fp;
     const isDfs = [".ssd", ".dsd", ".hfe"].includes(extensionOf(name));
     return {

@@ -111,29 +111,79 @@ async function main() {
     print("file-set keys in more than one source", sourcesOf(fileSetKey).length);
 
     // Near misses: an HFE capture with exactly the same DFS files (names and contents) as
-    // an archive image, but a different disc key.
+    // an archive image, but a different disc key. Each is classed by whether the files sit
+    // at the same sectors in both, and whether the disc title and cycle number agree.
+    const nameAndHash = (row) =>
+        JSON.stringify(
+            catalogueFiles(row)
+                .map((f) => [f.name, f.hash])
+                .sort(),
+        );
     const archiveByFiles = groupBy(
         rows.filter((row) => row.source !== "hfe" && catalogueFiles(row).length),
-        (row) =>
-            JSON.stringify(
-                catalogueFiles(row)
-                    .map((f) => [f.name, f.hash])
-                    .sort(),
-            ),
+        nameAndHash,
     );
     const nearMisses = [];
     for (const capture of hfe) {
-        const files = catalogueFiles(capture);
-        if (!files.length) continue;
-        const partners = archiveByFiles.get(JSON.stringify(files.map((f) => [f.name, f.hash]).sort())) ?? [];
-        const differentKey = partners.filter((p) => p.discKey !== capture.discKey);
-        if (differentKey.length) nearMisses.push({ capture, partners: differentKey });
+        if (!catalogueFiles(capture).length) continue;
+        for (const partner of archiveByFiles.get(nameAndHash(capture)) ?? [])
+            if (partner.discKey !== capture.discKey) nearMisses.push({ capture, partner });
     }
-    print("HFE captures with an archive image's exact files but another key", nearMisses.length);
+    const starts = (row) =>
+        JSON.stringify(
+            catalogueFiles(row)
+                .map((f) => [f.name, f.start])
+                .sort(),
+        );
+    const header = (row) => `${row.catalogues[0]?.title}/${row.catalogues[0]?.cycle}`;
+    print(
+        "HFE captures with an archive image's exact files but another key",
+        new Set(nearMisses.map((m) => m.capture.ref)).size,
+    );
     print(
         "  of which have a Stairway To Hell partner",
-        nearMisses.filter(({ partners }) => partners.some((p) => p.source === "sth")).length,
+        new Set(nearMisses.filter((m) => m.partner.source === "sth").map((m) => m.capture.ref)).size,
     );
+    print(
+        "  pairs by layout and catalogue header",
+        Object.fromEntries(
+            countBy(
+                nearMisses,
+                ({ capture, partner }) =>
+                    `${starts(capture) === starts(partner) ? "same" : "moved"} files, ${header(capture) === header(partner) ? "same" : "different"} title/cycle`,
+            ),
+        ),
+    );
+    for (const { capture, partner } of nearMisses)
+        console.log(
+            `    ${capture.meta?.title} (${capture.ref}) / ${partner.source}: ${starts(capture) === starts(partner) ? "same" : "moved"} files`,
+        );
+
+    // How often an archive SSD that shares most of a capture's files has put them somewhere else.
+    const bigFiles = (row) =>
+        new Map(
+            catalogueFiles(row)
+                .filter((f) => f.length >= 512)
+                .map((f) => [f.hash, f.start]),
+        );
+    const sthRows = rows.filter((row) => row.source === "sth");
+    const sthByFile = new Map();
+    for (const row of sthRows)
+        for (const hash of bigFiles(row).keys()) sthByFile.set(hash, [...(sthByFile.get(hash) ?? []), row]);
+    const layouts = { moved: 0, same: 0 };
+    for (const capture of hfe) {
+        const mine = bigFiles(capture);
+        if (mine.size < 2) continue;
+        const counts = new Map();
+        for (const hash of mine.keys())
+            for (const row of sthByFile.get(hash) ?? []) counts.set(row, (counts.get(row) ?? 0) + 1);
+        const [best, shared] = [...counts].sort((a, b) => b[1] - a[1])[0] ?? [];
+        if (!best || shared * 2 < mine.size) continue;
+        const theirs = bigFiles(best);
+        const moved = [...mine].some(([hash, start]) => theirs.has(hash) && theirs.get(hash) !== start);
+        layouts[moved ? "moved" : "same"]++;
+    }
+    print("captures sharing at least half their files with an STH SSD, by where the shared files sit", layouts);
 
     console.log("\n== Wrong-track sectors on side 0 of the HFE captures");
     print(
@@ -172,6 +222,24 @@ async function main() {
         console.log(
             `    ${group.map((r) => `${r.meta?.title}${r.meta?.variant ? ` (v${r.meta.variant})` : ""}`).join(" / ")}`,
         );
+
+    const headersOnly = await readJsonl("hfe-headers.jsonl").catch(() => null);
+    if (headersOnly) {
+        console.log("\n== The proposal's pitch test against the first draft's header test");
+        const combinedKey = new Map(hfe.map((row) => [row.ref, row.discKey]));
+        const headersKey = new Map(headersOnly.map((row) => [row.ref, row.discKey]));
+        const splitBy = (from, to) =>
+            [...groupBy([...from.keys()], (ref) => from.get(ref)).values()].filter(
+                (refs) => new Set(refs.map((ref) => to.get(ref))).size > 1,
+            );
+        const titleOf = new Map(
+            hfe.map((row) => [row.ref, `${row.meta?.title}${row.meta?.variant ? ` (v${row.meta.variant})` : ""}`]),
+        );
+        print("header-test groups the combined test splits", splitBy(headersKey, combinedKey).length);
+        const merged = splitBy(combinedKey, headersKey);
+        print("combined-test groups the header test splits", merged.length);
+        for (const refs of merged) console.log(`    ${refs.map((ref) => `${titleOf.get(ref)} ${ref}`).join(" / ")}`);
+    }
 
     console.log("\n== Side keys");
     const twoSided = rows.filter((row) => row.sideKeys.length > 1);

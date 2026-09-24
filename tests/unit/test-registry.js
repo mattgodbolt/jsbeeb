@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Disc, DiscConfig, IbmDiscFormat } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { dfsCatalogue } from "../../tools/registry/dfs.js";
 import {
@@ -25,28 +26,58 @@ const withFill = (bytes, sectors, fill) => {
     return out;
 };
 
+const CatalogueCycle = SectorSize + 4;
+const CatalogueEntryBytes = SectorSize + 5;
+const CatalogueBootAndSizeHigh = SectorSize + 6;
+const CatalogueSizeLow = SectorSize + 7;
+const FirstEntryAddresses = SectorSize + 8;
+const FirstEntryDirectory = 15;
+const ExecBoot = 0x30;
+
 // A DFS catalogue for one file: `name` loaded at &1900, `length` bytes from sector 2.
 function dfsDisc(name, length, totalSectors = 400) {
     const disc = new Uint8Array(totalSectors * SectorSize);
     disc.set(new TextEncoder().encode("TESTDISC"), 0);
     disc.set(new TextEncoder().encode(name.padEnd(7)), 8);
-    disc[15] = "$".charCodeAt(0);
-    const s1 = SectorSize;
-    disc[s1 + 4] = 0x12; // cycle
-    disc[s1 + 5] = 8; // one entry
-    disc[s1 + 6] = 0x30 | (totalSectors >> 8); // *EXEC !BOOT
-    disc[s1 + 7] = totalSectors & 0xff;
-    disc[s1 + 8] = 0x00; // load &1900
-    disc[s1 + 9] = 0x19;
-    disc[s1 + 10] = 0x23; // exec &8023
-    disc[s1 + 11] = 0x80;
-    disc[s1 + 12] = length & 0xff;
-    disc[s1 + 13] = length >> 8;
-    disc[s1 + 14] = 0;
-    disc[s1 + 15] = 2; // start sector
+    disc[FirstEntryDirectory] = "$".charCodeAt(0);
+    disc[CatalogueCycle] = 0x12;
+    disc[CatalogueEntryBytes] = 8;
+    disc[CatalogueBootAndSizeHigh] = ExecBoot | (totalSectors >> 8);
+    disc[CatalogueSizeLow] = totalSectors & 0xff;
+    // load, exec and length, little-endian, then the start sector
+    disc.set([0x00, 0x19, 0x23, 0x80, length & 0xff, length >> 8, 0, 2], FirstEntryAddresses);
     disc.set(sectorBytes(Math.ceil(length / SectorSize)).subarray(0, length), 2 * SectorSize);
     return disc;
 }
+
+// Lays FM sectors onto a physical track, each with whatever header it's given.
+function buildFmTrack(disc, physical, sectors) {
+    const builder = disc.buildTrack(false, physical).appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs);
+    for (const { track, id, data, badCrc = false } of sectors) {
+        builder
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmChunk([track, 0, id, 1])
+            .appendCrc()
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmChunk(data);
+        if (badCrc) builder.appendFmChunk([0xde, 0xad]);
+        else builder.appendCrc();
+        builder.appendRepeatFmByte(0xff, 16);
+    }
+    builder.fillFmByte(0xff);
+}
+
+const newDisc = () => new Disc(true, new DiscConfig(), "synthetic.hfe");
+const sectorOf = (seed) => sectorBytes(1, seed);
+
+// A renumbered protected track: physical track t claims to be `202 - t`, with sector IDs from 100.
+const renumbered = (logical, seed) =>
+    [0, 1].map((i) => ({ track: 202 - logical, id: 100 + i, data: sectorOf(seed + i) }));
 
 const quietly = (fn) => {
     const log = console.log;
@@ -174,6 +205,76 @@ describe("Media registry fingerprint", () => {
                 true,
             );
             expect(Buffer.from(trimFill(decode("x.dsd", image, true).data).data).equals(Buffer.from(side1))).toBe(true);
+        });
+    });
+
+    describe("flux sectors", () => {
+        it("should keep sectors whose header claims another track, ordered by where they were read", () => {
+            const disc = newDisc();
+            buildFmTrack(disc, 0, [{ track: 0, id: 0, data: sectorOf(1) }]);
+            buildFmTrack(disc, 1, [
+                { track: 201, id: 101, data: sectorOf(3) },
+                { track: 201, id: 100, data: sectorOf(2) },
+            ]);
+            const { data, dropped } = fluxSideBytes(disc, false);
+            expect(dropped.wrongTrack).toBe(2);
+            expect(Buffer.from(data).equals(Buffer.concat([sectorOf(1), sectorOf(2), sectorOf(3)]))).toBe(true);
+        });
+
+        it("should drop sectors whose header claims another track under the first draft's rule", () => {
+            const disc = newDisc();
+            buildFmTrack(disc, 0, [{ track: 0, id: 0, data: sectorOf(1) }]);
+            buildFmTrack(disc, 1, [{ track: 201, id: 100, data: sectorOf(2) }]);
+            const { data } = fluxSideBytes(disc, false, { trackRule: "strict" });
+            expect(Buffer.from(data).equals(Buffer.from(sectorOf(1)))).toBe(true);
+        });
+
+        it("should drop sectors with bad CRCs and repeated IDs", () => {
+            const disc = newDisc();
+            buildFmTrack(disc, 0, [
+                { track: 0, id: 0, data: sectorOf(1) },
+                { track: 0, id: 1, data: sectorOf(2), badCrc: true },
+                { track: 0, id: 0, data: sectorOf(3) },
+            ]);
+            const { data, dropped } = fluxSideBytes(disc, false);
+            expect(dropped).toEqual({ crc: 1, wrongTrack: 0, duplicate: 1 });
+            expect(Buffer.from(data).equals(Buffer.from(sectorOf(1)))).toBe(true);
+        });
+    });
+
+    describe("track pitch", () => {
+        it("should never call a capture with nothing past track 50 double-stepped", () => {
+            const disc = newDisc();
+            for (let physical = 0; physical <= 40; physical += 2)
+                buildFmTrack(disc, physical, [{ track: physical / 2, id: 0, data: sectorOf(physical) }]);
+            expect(fluxSideBytes(disc, false).is40Track).toBe(false);
+        });
+
+        it("should call a renumbered disc double-stepped when its odd tracks only hold ghosts", () => {
+            const disc = newDisc();
+            for (let logical = 0; logical < 40; ++logical) {
+                buildFmTrack(disc, 2 * logical, renumbered(logical, 10 * logical));
+                if (logical < 39) buildFmTrack(disc, 2 * logical + 1, renumbered(logical, 10 * logical));
+            }
+            const { data, is40Track } = fluxSideBytes(disc, false);
+            expect(is40Track).toBe(true);
+            expect(data.length).toBe(40 * 2 * SectorSize);
+        });
+
+        it("should keep an 80-track disc 80-track when one odd track repeats its neighbour", () => {
+            const disc = newDisc();
+            for (let physical = 0; physical < 80; ++physical)
+                buildFmTrack(disc, physical, renumbered(physical, physical));
+            buildFmTrack(disc, 11, renumbered(10, 10));
+            expect(fluxSideBytes(disc, false).is40Track).toBe(false);
+        });
+
+        it("should call a disc double-stepped from its headers alone", () => {
+            const disc = newDisc();
+            for (let logical = 0; logical < 40; ++logical)
+                buildFmTrack(disc, 2 * logical, [{ track: logical, id: 0, data: sectorOf(logical) }]);
+            buildFmTrack(disc, 7, [{ track: 3, id: 5, data: sectorOf(99) }]);
+            expect(fluxSideBytes(disc, false).is40Track).toBe(true);
         });
     });
 

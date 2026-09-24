@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Downloads the images the registry experiments work from into .registry-corpus/:
-// our Stairway To Hell mirror (discs and tapes) and our HFE capture mirror, each
-// as published, plus their manifests, and MAME's BBC disc software list (CC0). Files already present are skipped, so a
-// rerun only fetches what is new.
+// our Stairway To Hell mirror (discs and tapes) and our HFE capture mirror, each as
+// published, plus their manifests, and MAME's BBC disc software list (CC0). Files
+// already present are skipped, so a rerun only fetches what is new. The mirrors are
+// live, so numbers computed from a later fetch can drift from the findings'.
 //
 //   node tools/registry/fetch-corpus.js [--out .registry-corpus]
 
@@ -16,7 +17,9 @@ const Sources = [
     { name: "hfe", base: "https://bbc.xania.org/archive/bbcdiscs/hfe/" },
 ];
 const Concurrency = 8;
-const MameBbcFloppyList = "https://raw.githubusercontent.com/mamedev/mame/master/hash/bbcb_flop.xml";
+// Pinned so the findings stay reproducible; the list's last change as of 2026-09-24.
+const MameBbcFloppyList =
+    "https://raw.githubusercontent.com/mamedev/mame/878a16dda136d6e234ded19527fe914da4488cb3/hash/bbcb_flop.xml";
 
 const outIndex = process.argv.indexOf("--out");
 const outDir = outIndex > 0 ? process.argv[outIndex + 1] : ".registry-corpus";
