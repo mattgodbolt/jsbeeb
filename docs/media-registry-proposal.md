@@ -128,12 +128,19 @@ For flux images, the job is to turn the capture back into those same bytes:
    drops only sectors whose header says track `&FF`, or track 0 on some other track.
 4. Sort what's left by header track, then header sector ID, keeping the first one read if a track and ID
    turn up twice, so sector skew doesn't matter.
-5. Concatenate their data, trim the trailing fill in the same way, and hash it.
+5. Concatenate their data, then trim and hash it exactly as for a sector image, treating the
+   concatenation as 256-byte blocks whatever sizes the sectors were.
 
-Dropping bad sectors in step 3 isn't about merging protected and unprotected copies. Different protection
-almost always means a different loader, so those get different keys anyway. It's there because weak and
-deliberately damaged sectors read differently on every capture, and two captures of the same original
-need to agree.
+Step 3 drops what a sector image can't hold. An SSD imaged from a protected disc doesn't contain its
+bad-CRC or wrong-track sectors, so dropping them lets a capture and an SSD of the same disc agree, as
+long as the protection didn't hide anything else. It also deals with weak sectors, which read differently
+on every capture, so two captures of the same original agree. It isn't meant to merge copies with
+different protection: those almost always have different loaders, so different keys anyway.
+
+This only works for a complete side. The data is concatenated without positions, so if a sector is
+missing or unreadable part way through (a damaged track, say), everything after it shifts, and the
+capture gets a key of its own. That's a bad dump, which the registry handles as an alias like any other
+variant.
 
 The disc key is the SHA-256 of the full 32-byte side digests in physical order, leaving out trailing
 sides with nothing left in them, cut to 128 bits. Each side digest, cut the same way, is a side key. So
@@ -153,9 +160,9 @@ one title. If a later image shows a published side key is shared after all, its 
 choice). That way the key still resolves.
 
 The spec should come with a reference implementation in JavaScript and C, plus test vectors: the same
-single-sided disc as a trimmed SSD, a padded SSD and an HFE, and the same double-sided disc as a DSD, an
-interleaved ADFS image and an HFE. A protected original captured twice should give the same key both
-times.
+single-sided disc as a trimmed SSD, a padded SSD and an HFE, a double-sided DFS disc as a DSD and an HFE,
+and an ADFS L disc as an interleaved image and an HFE. A protected original captured twice should give
+the same key both times.
 
 Tapes need their own version, computed from the decoded blocks (file name, load and execution addresses,
 data) rather than from the UEF or audio container. ROMs can just use the file hash.
@@ -200,7 +207,6 @@ A title:
   "publisher": "Superior Software",
   "year": 1988,
   "requires": { "machines": ["B", "Master"] },
-
   "controls": {
     "actions": {
       "left": { "keys": ["Q"], "role": "left" },
@@ -306,12 +312,13 @@ whose anchors match. Before the code has arrived, the anchors don't match and th
 never need to know when loading is done. If nothing matches, the debugger shows plain addresses as it
 does today.
 
-Choosing anchors is the labour-intensive bit, and it's optional: a symbol set without anchors just isn't
-shown automatically. Where there's buildable source, a tool can pick them, as the assembled output and
-Baron's `--symbols` together say which bytes are code and which are data. For a disassembly without
-buildable source, running the game headless to a known point and taking bytes from memory works, as long
-as they're bytes nothing modifies, which is where an LLM reading the disassembly could help. That's a
-nice to have rather than something to build first.
+Choosing anchors is the labour-intensive bit, and it's optional: a symbol set without anchors isn't shown
+automatically, but can still be picked by hand in the debugger. Where there's buildable source, a tool
+can make a start from the assembled output and the source's labels, but it still has to leave out
+anything the code writes to, which includes self-modified operands sitting in the middle of instructions.
+For a disassembly without buildable source, running the game headless to a known point and taking bytes
+from memory works, with the same caveat, which is where an LLM reading the disassembly could help. That's
+a nice to have rather than something to build first.
 
 ## Keeping records stable
 
@@ -320,7 +327,8 @@ Records are sort of immutable. They can grow, but anything a client relies on st
 - `format` is 1, and only changes for something that would break a reader of format 1.
 - Fields can be added to any record at any time, and clients ignore fields they don't know.
 - A field never changes meaning; removing one is a format change.
-- A published key always resolves. If records are merged, the old one becomes a `redirect`.
+- A published key always resolves. If two title slugs are merged, the old one becomes a `redirect`; a
+  hash key just gets a new parent.
 - Files are served with a short cache lifetime and ETags, not as immutable.
 
 ## Storage and serving
@@ -425,7 +433,8 @@ still guess the machine and how to boot.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
 - Whether trailing-fill trimming should allow any repeated byte, or only zero and `&E5`.
 - Whether the flux path should also drop sectors a sector image can't hold (odd sizes, or IDs past the
-  end of the track), so a protected original matches a plain SSD made from it.
+  end of the track), so more protected originals match a plain SSD made from them. That would mean
+  knowing each format's sectors per track, which brings back a little of the disc model.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.
