@@ -1,8 +1,10 @@
 # Media registry: first findings from the archive
 
-These are the results of running a prototype of the fingerprint from the
-[media registry proposal](media-registry-proposal.md) over every disc image we could lay hands on. The
-tools are in `tools/registry/` (see its README), and everything here can be rerun from them.
+These are the results of running a prototype of the fingerprint from the [media registry
+proposal](media-registry-proposal.md) over every disc image we could lay hands on. The tools are in
+`tools/registry/` (see its README): `build-index.js` fingerprints the corpus, `analyse.js` prints every
+number quoted here, and `fill-survey.js` and `check-paths.js` do the two checks that need the images
+themselves.
 
 ## What went in
 
@@ -31,12 +33,13 @@ jsbeeb, decoded through the flux path and trimmed. All 5,775 gave exactly the sa
 | bbcmicro.co.uk, HFE and STH |     2 |
 | HFE and STH                 |     1 |
 
-Out of 7,367 distinct disc keys, only 64 turn up in more than one source. We'd expected a lot more, so
-we looked at the near misses: captures whose files are byte for byte the same as an archive SSD's, but
-whose keys differ. There are 88 of those, and the three we looked at closely were all the same story. The Return of
-the Jedi capture and the Stairway To Hell SSD have identical files, but the SSD's files sit at different
-sectors (the capture has `$.!BOOT` at sector 143, the SSD at sector 2), its disc title has been set to
-`RETURNOFJEDI`, and its cycle number is 6 rather than 39. Nevryon and Colossus Chess are the same.
+Out of 7,365 distinct disc keys, only 64 turn up in more than one source. We'd expected a lot more, so we
+looked at the near misses: 14 captures have exactly the same DFS files (names and contents) as an archive
+image but a different key, 13 of them against a Stairway To Hell SSD. The three we looked at closely were
+all the same story. The Return of the Jedi capture and the Stairway To Hell SSD have identical files, but
+the SSD's files sit at different sectors (the capture has `$.!BOOT` at sector 143, the SSD at sector 2),
+its disc title has been set to `RETURNOFJEDI`, and its cycle number is 6 rather than 39. The Stairway To
+Hell Nevryon and Colossus Chess SSDs are the same.
 
 So the archive images are mostly re-mastered copies, with the files written out again by some tool,
 rather than dumps of the original discs. No disc fingerprint will ever match those, and it shouldn't try:
@@ -48,9 +51,10 @@ cross-source matches rather than 64, because the near misses usually differ in a
 
 ## What the fingerprint does buy
 
-The 7,696 distinct files collapse to 7,367 disc keys. Most of that is repeat captures: the HFE mirror's
-1,985 files are 1,663 distinct discs, because the same disc has often been captured more than once, and
-separate reads of the same disc agree. That's the fingerprint doing precisely its job.
+The 7,696 distinct files collapse to 7,365 disc keys. Most of that is repeat captures: the HFE mirror's
+1,985 files are 1,661 distinct discs, because the same disc has often been captured more than once, and
+separate reads of the same disc agree, including reads of one disc taken in a 40-track drive and an
+80-track drive.
 
 ## Protection, and a rule that had to go
 
@@ -59,10 +63,10 @@ the HFE mirror:
 
 | Wrong-track sectors on side 0 | Captures |
 | ----------------------------- | -------: |
-| none                          |    1,542 |
-| 1 to 10                       |       98 |
-| 11 to 100                     |      114 |
-| over 100                      |      231 |
+| none                          |    1,537 |
+| 1 to 10                       |       96 |
+| 11 to 100                     |      112 |
+| over 100                      |      240 |
 
 The captures with hundreds are the interesting ones. Here's what jsbeeb decodes from an Exile capture:
 
@@ -76,24 +80,39 @@ physical 40: track 182, sectors 118..127
 
 Superior's protection renumbers every track after track 0, and the game lives on those tracks. The rule
 threw all of it away and kept track 0: a stub catalogue and a loader, which Exile and Repton Infinity
-share byte for byte. So Exile and Repton Infinity got the same key, twice over (the two games' captures,
-and the "Exile v1" and "Repton Infinity Game Disc Master" pair). A key made of a publisher's boot track
-is worse than no key at all.
+share byte for byte. So captures of Exile and Repton Infinity (four of them, including ones labelled
+"Exile v1" and "Repton Infinity Game Disc Master") all got the same key. A key made of a publisher's boot
+track is worse than no key at all.
 
 The fix keeps every sector with good CRCs, whatever its header claims, and orders them by the track they
 were read from first. Comparing the two rules over the whole HFE mirror:
 
-- All 1,542 captures without wrong-track sectors kept exactly the same key.
-- Under the old rule, 9 keys were shared by captures with unrelated-looking titles, including both
-  Exile and Repton Infinity pairs. Under the new rule there are 6, and all six are spellings of one title
-  ("Firetrack" and "Fire Track", "Mr. Ee" and "Mr Ee", "ViewStore" and "View Store").
-- The new rule splits 17 groups the old one merged. Some are the Exile collisions; some the mirror
-  itself already labels as different variants (Revs against Revs 4 Tracks, Uridium variants 1 and 2).
-  A few, such as two Arcadians and three Hopper captures, decode to different amounts of data with the
-  same drop counts, and we haven't worked out yet whether that's a real difference on the protected
-  tracks or noise in the capture.
+- All 1,537 captures without wrong-track sectors keep exactly the same key.
+- Under the old rule, 8 keys were shared by captures whose titles have no word in common, one of them the
+  Exile and Repton Infinity group. Under the new rule there are 6, and all six are the same title written
+  differently: E-Type and E Type, Fire Track and Firetrack, Q-Master and Q Master, ViewStore and View
+  Store, The Dam Busters and Dambusters, and Cheat It Again Joe and its abbreviation, CIAJ Vol 1.
+- The new rule splits 17 groups the old one merged. One is the Exile collision; some the mirror itself
+  already labels as different variants (Revs against Revs 4 Tracks, Uridium variants 1 and 2). A few,
+  such as the Arcadians and Hopper captures, decode to different data with the same drop counts, and we
+  haven't worked out yet whether that's a real difference on the protected tracks or noise in the
+  capture.
 
-The proposal now uses the new rule.
+## Which track is which
+
+Keeping renumbered sectors raised a second problem. To know which physical tracks to read, the
+fingerprint has to decide whether a side is a 40-track disc read in an 80-track drive, and the obvious
+test (do the headers on the even tracks give half their track number?) can't see through renumbering
+either. A 40-track Exile captured in an 80-track drive was judged 80-track, so its odd tracks, which only
+hold ghosts of their neighbours, went into the key, and it stopped matching the same disc captured in a
+40-track drive.
+
+Looking for ghosts instead (odd tracks whose sectors are all copies of an even neighbour's) fixes that
+case but breaks others: some discs legitimately repeat a track, so a few 40-track drive captures got
+judged double-stepped and lost half their tracks. What works is a combination. A capture with nothing
+past physical track 50 came from a 40-track drive and every track is real; otherwise the side is 40-track
+if either the headers say so or the odd tracks are only ghosts. Against the header test alone, that
+splits nothing and merges exactly two groups: the two captures of Exile v1 and the two of Exile v2.
 
 ## Trailing fill
 
@@ -104,27 +123,29 @@ limited to `&00` and `&E5`.
 
 ## Side keys
 
-Only 64 images are double-sided, and only 3 side keys from them are shared by more than one disc. So the
-`ambiguous` record for shared side keys will be rare, but it isn't imaginary.
+Only 64 images are double-sided (one of them has a second side that trims to nothing), and 11 of their
+side keys also turn up on another disc. All eleven look like the same title, so the `ambiguous` record
+for shared side keys will be rare, but it isn't imaginary.
 
 ## MAME
 
-32 of the 326 images in MAME's BBC disc list match a corpus image by whole-file SHA-1: 23 from Stairway
-To Hell and 10 from bbcmicro.co.uk. MAME's list is mostly its own selection of dumps, so its value to the
-registry is its short names and parent/clone structure rather than its hashes.
+32 of the 326 images in MAME's BBC disc list match a corpus image by whole-file SHA-1 (23 Stairway To
+Hell images and 10 bbcmicro.co.uk ones, one of them in both). MAME's list says it was compiled from the
+Stairway To Hell archive and that none of its images are protected, and most of them no longer match what
+the archive holds today. Its value to the registry is its short names and parent/clone structure rather
+than its hashes.
 
 ## A look at Exile
 
-Fourteen images across the three sources are some form of Exile, and they fall into families quite
-naturally:
+Across our own two mirrors, Exile falls into families quite naturally:
 
-- The original protected discs: captures labelled v1, v2 and a review copy, among others. Under the new
-  rule each gets a key covering the whole disc.
-- A plain DFS version (one capture is labelled v3), captured three times. Two of the three captures agree; the third has identical files
-  and a different key, which we haven't looked into yet.
-- The Stairway To Hell `Superior/Exile.ssd` and bbcmicro.co.uk's 64K version share three files byte for
-  byte, but have different load addresses (`&31200` against `&1200`) and a different `ExileMC`, so one
-  of them has been modified.
+- The original protected discs, captured as v1 and v2, a review copy and others. Each now gets a key
+  covering the whole disc, and the two captures of v1 agree, as do the two of v2.
+- A plain DFS version (the mirror calls it v3), with three copies. Two are captures of the same disc, one
+  in a 40-track drive and one in an 80-track drive, and they agree. The third, reconstructed from an FSD
+  dump, differs only in the catalogue's cycle number (49 against 17): that disc had been written to at
+  some point.
+- The Stairway To Hell `Superior/Exile.ssd`, a deprotected copy with a loader file of its own.
 - Several cheat and editor discs from Stairway To Hell's `Cheats` folder, which share `EXILEL`, `EXEDIT`
   and `MAPPER` with each other and not with the game discs.
 

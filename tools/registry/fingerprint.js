@@ -3,10 +3,15 @@
 // with jsbeeb's own disc code and turned back into the same bytes first.
 
 import { createHash } from "node:crypto";
+import { IbmDiscFormat } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 
 export const SectorSize = 256;
-const MaxPhysicalTracks = 84;
+const MaxPhysicalTracks = IbmDiscFormat.tracksPerDisc;
+// Tracks with data needed before a side can be judged 40-track, as in jsbeeb's own sniffing.
+const MinFortyTrackEvidence = 4;
+// The last physical track a 40-track drive can reach, with a few to spare.
+const FortyTrackDriveLimit = 50;
 const KeyBytes = 16;
 
 // How each sector image stores its sides: bytes per track on one side, and
@@ -76,18 +81,53 @@ function quietly(fn) {
     }
 }
 
-/** Whether a side's even physical tracks carry headers for half their number. */
+const sectorIdentity = (sector) =>
+    `${Buffer.from(sector.header.subarray(0, 4)).toString("hex")}:${
+        sector.sectorData ? createHash("sha256").update(sector.sectorData).digest("hex") : "-"
+    }`;
+
+/**
+ * Whether a side is a 40-track disc read in an 80-track drive. A capture with nothing past
+ * physical track 50 came from a 40-track drive, so every track is real. Otherwise either
+ * of two signs will do: the headers on the even tracks give half their number, or the odd
+ * tracks hold nothing but ghosts of their even neighbours. Protected discs renumber their
+ * tracks, which defeats the first; some discs legitimately repeat a track, which is why
+ * the second isn't enough on its own.
+ */
 function sideIs40Track(disc, upper) {
-    let doubled = 0;
-    let own = 0;
-    for (let physical = 2; physical < MaxPhysicalTracks; physical += 2) {
-        for (const sector of disc.getTrack(upper, physical).findSectorIds(() => {})) {
-            if (sector.hasHeaderCrcError) continue;
-            if (sector.trackNumber === physical / 2) doubled++;
-            else if (sector.trackNumber === physical) own++;
+    const goodSectors = (physical) =>
+        physical < 0 || physical >= MaxPhysicalTracks
+            ? []
+            : disc
+                  .getTrack(upper, physical)
+                  .findSectors(() => {})
+                  .filter((sector) => !sector.hasHeaderCrcError && !sector.hasDataCrcError && sector.sectorData);
+    const tracks = Array.from({ length: MaxPhysicalTracks }, (_, physical) => goodSectors(physical));
+    const lastWithData = tracks.findLastIndex((sectors) => sectors.length > 0);
+    if (lastWithData <= FortyTrackDriveLimit) return false;
+
+    let evenTracks = 0;
+    let headersSayHalf = 0;
+    let headersSayOwn = 0;
+    let oddTracksOfTheirOwn = 0;
+    tracks.forEach((sectors, physical) => {
+        if (sectors.length === 0) return;
+        if (!(physical & 1)) {
+            evenTracks++;
+            if (physical === 0) return;
+            for (const sector of sectors) {
+                if (sector.trackNumber === physical / 2) headersSayHalf++;
+                else if (sector.trackNumber === physical) headersSayOwn++;
+            }
+            return;
         }
-    }
-    return doubled > own;
+        const neighbours = new Set(
+            [...(tracks[physical - 1] ?? []), ...(tracks[physical + 1] ?? [])].map(sectorIdentity),
+        );
+        if (sectors.some((sector) => !neighbours.has(sectorIdentity(sector)))) oddTracksOfTheirOwn++;
+    });
+    if (headersSayHalf > headersSayOwn) return true;
+    return evenTracks >= MinFortyTrackEvidence && oddTracksOfTheirOwn * 10 < evenTracks;
 }
 
 /**
@@ -148,8 +188,8 @@ export function imageSides(name, bytes, options) {
 }
 
 /**
- * Every key the registry would compute for an image.
- * @param {{fillBytes?: number[]|null}} [options] passed to trimFill
+ * Every key the registry would compute for an image, and the untrimmed sides they came from.
+ * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical"}} [options] for trimFill and fluxSideBytes
  */
 export function fingerprint(name, bytes, options) {
     const { sides, flux } = imageSides(name, bytes, options);
@@ -162,6 +202,7 @@ export function fingerprint(name, bytes, options) {
         fileKey: toKey(sha256(bytes)),
         discKey,
         sideKeys: sideDigests.map(toKey),
+        sides,
         sideLengths: trimmed.map(({ data }) => data.length),
         trimmedFill: trimmed.map(({ trimmedFill }) => trimmedFill),
         flux,

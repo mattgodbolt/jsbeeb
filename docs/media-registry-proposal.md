@@ -117,10 +117,13 @@ make this pretty easy for any emulator to implement.
 
 For flux images, the job is to turn the capture back into those same bytes:
 
-1. Decide the side's track pitch from its sector headers: if the headers on the even physical tracks give
-   half their physical track number, it's a 40-track side read in an 80-track drive. jsbeeb's
-   `sniffSurfaceLayout` does something similar, but once per disc, and a flippy disc can have a different
-   pitch on each side.
+1. Decide whether the side is a 40-track disc read in an 80-track drive. A capture with nothing past
+   physical track 50 came from a 40-track drive, so every track is real. Otherwise it's 40-track if the
+   headers on the even tracks give half their physical track number, or if the odd tracks hold nothing
+   but copies of their even neighbours' sectors. Neither test is enough alone: protected discs renumber
+   their tracks, and some discs legitimately repeat one ([the findings](media-registry-findings.md) have
+   the details). jsbeeb's `sniffSurfaceLayout` does something like the first, but once per disc, and a
+   flippy disc can have a different pitch on each side.
 2. Decode the side's tracks into sectors, reading physical tracks in ascending order (only the even ones
    on a 40-track side) and each track from the index.
 3. Keep the sectors with good header and data CRCs, whatever track their headers claim.
@@ -135,7 +138,10 @@ draft that dropped them got this badly wrong: Superior's protection renumbers ev
 (physical track 4 says it's track 200, and so on down), so the rule threw away the whole game and kept
 only the boot track. Exile and Repton Infinity share that boot track byte for byte, and ended up with the
 same key. The numbers are in [the findings](media-registry-findings.md). For an unprotected disc the
-headers match anyway, so the order is the same as an SSD's and so are the bytes.
+headers match anyway, so the order is the same as an SSD's and so are the bytes. The price is that a
+capture of a protected disc no longer matches an SSD made from it, because the SSD can't hold the
+renumbered sectors. The findings suggest that hardly ever happened anyway: archive SSDs are mostly
+re-mastered, not dumped.
 
 This only works for a complete side. The data is concatenated without positions, so if a sector is
 missing or unreadable part way through (a damaged track, say), everything after it shifts, and the

@@ -13,7 +13,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { unzip } from "../../src/archive.js";
 import { dfsCatalogue } from "./dfs.js";
-import { fingerprint, imageSides, isDiscImage, extensionOf } from "./fingerprint.js";
+import { fingerprint, isDiscImage, extensionOf } from "./fingerprint.js";
 
 const arg = (flag, fallback) => {
     const index = process.argv.indexOf(flag);
@@ -58,7 +58,7 @@ async function* images() {
 
 function describe(name, bytes) {
     const fp = fingerprint(name, bytes, { trackRule });
-    const { sides } = imageSides(name, bytes, { trackRule });
+    const { sides } = fp;
     const isDfs = [".ssd", ".dsd", ".hfe"].includes(extensionOf(name));
     return {
         ext: extensionOf(name),

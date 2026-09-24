@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Downloads the images the registry experiments work from into .registry-corpus/:
 // our Stairway To Hell mirror (discs and tapes) and our HFE capture mirror, each
-// as published, plus their manifests. Files already present are skipped, so a
+// as published, plus their manifests, and MAME's BBC disc software list (CC0). Files already present are skipped, so a
 // rerun only fetches what is new.
 //
 //   node tools/registry/fetch-corpus.js [--out .registry-corpus]
@@ -16,6 +16,7 @@ const Sources = [
     { name: "hfe", base: "https://bbc.xania.org/archive/bbcdiscs/hfe/" },
 ];
 const Concurrency = 8;
+const MameBbcFloppyList = "https://raw.githubusercontent.com/mamedev/mame/master/hash/bbcb_flop.xml";
 
 const outIndex = process.argv.indexOf("--out");
 const outDir = outIndex > 0 ? process.argv[outIndex + 1] : ".registry-corpus";
@@ -48,6 +49,8 @@ async function mirror({ name, base }) {
     const worker = async () => {
         for (let entry = queue.shift(); entry; entry = queue.shift()) {
             const file = path.join(dir, entry.path);
+            if (path.relative(dir, file).startsWith(".."))
+                throw new Error(`${name}: manifest path escapes the corpus: ${entry.path}`);
             if (await exists(file)) continue;
             let bytes = await fetchBytes(base + encodePath(entry.path));
             // fetch() decodes a Content-Encoding it's told about, but the HFE blobs
@@ -64,6 +67,7 @@ async function mirror({ name, base }) {
 
 async function main() {
     for (const source of Sources) await mirror(source);
+    await writeFile(path.join(outDir, "bbcb_flop.xml"), await fetchBytes(MameBbcFloppyList));
 }
 
 main().catch((error) => {
