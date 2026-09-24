@@ -109,11 +109,11 @@ any other filesystem. Each physical side gets a digest of its own.
 For sector images (SSD, DSD, and the 8-bit ADFS S, M and L formats) the side digest is simply the SHA-256
 of that side's bytes, in the order the image stores them, with two tweaks. The sides are separated
 according to the format's interleave, and trailing fill is trimmed: whole 256-byte sectors at the end of
-the side whose data is one repeated byte (zero padding, or the `&E5` a format leaves behind) are dropped,
-and a short last sector is padded with zeros first. Baron, for one, truncates its SSDs after the last
-used sector, and plenty of tools pad them to 200K, so the trimming is what lets those agree. Only fill is
-dropped, so a reused disc with old data past its last file keeps it. No disc model is needed at all,
-which should make this pretty easy for any emulator to implement.
+the side that are all `&00` (padding) or all `&E5` (what a format leaves behind) are dropped, and a short
+last sector is padded with zeros first. Baron, for one, truncates its SSDs after the last used sector,
+and plenty of tools pad them to 200K, so the trimming is what lets those agree. Only fill is dropped, so
+a reused disc with old data past its last file keeps it. No disc model is needed at all, which should
+make this pretty easy for any emulator to implement.
 
 For flux images, the job is to turn the capture back into those same bytes:
 
@@ -121,21 +121,21 @@ For flux images, the job is to turn the capture back into those same bytes:
    half their physical track number, it's a 40-track side read in an 80-track drive. jsbeeb's
    `sniffSurfaceLayout` does something similar, but once per disc, and a flippy disc can have a different
    pitch on each side.
-2. Decode the side's tracks into sectors, reading physical tracks in ascending order and each track from
-   the index.
-3. Keep the sectors with good header and data CRCs whose header track number matches the track they were
-   read from (the physical track, or half of it for a 40-track side). beebjit's track check is looser: it
-   drops only sectors whose header says track `&FF`, or track 0 on some other track.
-4. Sort what's left by header track, then header sector ID, keeping the first one read if a track and ID
-   turn up twice, so sector skew doesn't matter.
+2. Decode the side's tracks into sectors, reading physical tracks in ascending order (only the even ones
+   on a 40-track side) and each track from the index.
+3. Keep the sectors with good header and data CRCs, whatever track their headers claim.
+4. Sort them by the track they were read from, then header track, then header sector ID, keeping the
+   first one read if all three turn up twice, so sector skew doesn't matter.
 5. Concatenate their data, then trim and hash it exactly as for a sector image, treating the
    concatenation as 256-byte blocks whatever sizes the sectors were.
 
-Step 3 drops what a sector image can't hold. An SSD imaged from a protected disc doesn't contain its
-bad-CRC or wrong-track sectors, so dropping them lets a capture and an SSD of the same disc agree, as
-long as the protection didn't hide anything else. It also deals with weak sectors, which read differently
-on every capture, so two captures of the same original agree. It isn't meant to merge copies with
-different protection: those almost always have different loaders, so different keys anyway.
+Step 3 drops bad-CRC sectors because weak sectors read differently on every capture, and two captures of
+the same original need to agree. It keeps sectors whose headers claim some other track, and an earlier
+draft that dropped them got this badly wrong: Superior's protection renumbers every track after track 0
+(physical track 4 says it's track 200, and so on down), so the rule threw away the whole game and kept
+only the boot track. Exile and Repton Infinity share that boot track byte for byte, and ended up with the
+same key. The numbers are in [the findings](media-registry-findings.md). For an unprotected disc the
+headers match anyway, so the order is the same as an SSD's and so are the bytes.
 
 This only works for a complete side. The data is concatenated without positions, so if a sector is
 missing or unreadable part way through (a damaged track, say), everything after it shifts, and the
@@ -431,10 +431,9 @@ still guess the machine and how to boot.
 - Whether 128 bits is the right key length. The HFE mirror's file-hash names use 64, which may be a bit
   short for a registry other emulators share.
 - The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
-- Whether trailing-fill trimming should allow any repeated byte, or only zero and `&E5`.
-- Whether the flux path should also drop sectors a sector image can't hold (odd sizes, or IDs past the
-  end of the track), so more protected originals match a plain SSD made from them. That would mean
-  knowing each format's sectors per track, which brings back a little of the disc model.
+- Whether repeat captures of the same protected disc agree. Most do, but a handful (Arcadians, Hopper)
+  decode to different amounts of data with the same drop counts, which is either a real difference on the
+  protected tracks or noise in the capture.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.
