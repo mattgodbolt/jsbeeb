@@ -1,0 +1,282 @@
+// The media registry's disc fingerprint (docs/media-registry-proposal.md), as a
+// prototype: sector images are hashed from their bytes, flux images are decoded
+// with jsbeeb's own disc code and turned back into the same bytes first.
+
+import { createHash } from "node:crypto";
+import { IbmDiscFormat } from "../../src/disc.js";
+import { discFor } from "../../src/fdc.js";
+
+export const SectorSize = 256;
+const MaxPhysicalTracks = IbmDiscFormat.tracksPerDisc;
+// Even tracks needed as evidence before either test calls a side 40-track (jsbeeb's own
+// sniffing asks the same of its header test).
+const MinFortyTrackEvidence = 4;
+// How many odd tracks may hold data of their own on a side judged double-stepped, as a share
+// of the even tracks that hold data.
+const GhostTolerance = 0.1;
+// Past this physical track, data can only be there if the capture came from an 80-track drive.
+const FortyTrackDriveLimit = 50;
+const KeyBytes = 16;
+
+// How each sector image stores its sides: bytes per track on one side, and
+// whether the sides alternate track by track.
+const SectorImages = {
+    ".ssd": { trackBytes: 10 * SectorSize, interleaved: false },
+    ".dsd": { trackBytes: 10 * SectorSize, interleaved: true },
+    ".adf": { trackBytes: 16 * SectorSize, interleaved: false },
+    ".adm": { trackBytes: 16 * SectorSize, interleaved: false },
+    ".adl": { trackBytes: 16 * SectorSize, interleaved: true },
+};
+const FluxImages = [".hfe"];
+const AdfsTrackBytes = 16 * SectorSize;
+const AdfsMediumBytes = 80 * AdfsTrackBytes;
+const DfsSectorsPerTrack = 10;
+
+export const extensionOf = (name) => name.slice(name.lastIndexOf(".")).toLowerCase();
+export const isSectorImage = (name) => extensionOf(name) in SectorImages;
+export const isFluxImage = (name) => FluxImages.includes(extensionOf(name));
+export const isDiscImage = (name) => isSectorImage(name) || isFluxImage(name);
+
+const sha256 = (...parts) => {
+    const hash = createHash("sha256");
+    for (const part of parts) hash.update(part);
+    return hash.digest();
+};
+const toKey = (digest) => digest.subarray(0, KeyBytes).toString("hex");
+
+/** The bytes of each side of a sector image, untrimmed. */
+export function sectorImageSides(name, bytes) {
+    const { trackBytes, interleaved: byName } = SectorImages[extensionOf(name)];
+    // `.adf` is used for every size of ADFS disc, and only an L disc (bigger than an M) has two
+    // interleaved sides.
+    const interleaved = byName || (trackBytes === AdfsTrackBytes && bytes.length > AdfsMediumBytes);
+    if (!interleaved) return [bytes];
+    const sides = [[], []];
+    for (let offset = 0, side = 0; offset < bytes.length; offset += trackBytes, side ^= 1)
+        sides[side].push(bytes.subarray(offset, offset + trackBytes));
+    return sides.map((parts) => Buffer.concat(parts));
+}
+
+function isFill(block) {
+    return block.every((byte) => byte === block[0]);
+}
+
+/**
+ * Pads to whole sectors, then drops trailing sectors that are one repeated byte.
+ * @param {Uint8Array} bytes
+ * @param {{fillBytes?: number[]|null}} [options] which repeated bytes count as fill; null for any
+ * @returns {{data: Buffer, trimmedFill: Map<number, number>}} the trimmed bytes, and how many sectors of each fill byte went
+ */
+export function trimFill(bytes, { fillBytes = [0x00, 0xe5] } = {}) {
+    const padded = Buffer.alloc(Math.ceil(bytes.length / SectorSize) * SectorSize);
+    padded.set(bytes);
+    let end = padded.length;
+    const trimmedFill = new Map();
+    while (end > 0) {
+        const block = padded.subarray(end - SectorSize, end);
+        if (!isFill(block) || (fillBytes && !fillBytes.includes(block[0]))) break;
+        trimmedFill.set(block[0], (trimmedFill.get(block[0]) ?? 0) + 1);
+        end -= SectorSize;
+    }
+    return { data: padded.subarray(0, end), trimmedFill };
+}
+
+function quietly(fn) {
+    const log = console.log;
+    console.log = () => {};
+    try {
+        return fn();
+    } finally {
+        console.log = log;
+    }
+}
+
+const sectorIdentity = (sector) =>
+    `${Buffer.from(sector.header.subarray(0, 4)).toString("hex")}:${
+        sector.sectorData ? createHash("sha256").update(sector.sectorData).digest("hex") : "-"
+    }`;
+
+/**
+ * The first draft's test: the headers on the even tracks give half their number. Kept so
+ * the findings can compare against it.
+ */
+function headersSayFortyTrack(disc, upper) {
+    let half = 0;
+    let own = 0;
+    for (let physical = 2; physical < MaxPhysicalTracks; physical += 2) {
+        for (const sector of disc.getTrack(upper, physical).findSectorIds(() => {})) {
+            if (sector.hasHeaderCrcError) continue;
+            if (sector.trackNumber === physical / 2) half++;
+            else if (sector.trackNumber === physical) own++;
+        }
+    }
+    return half > own;
+}
+
+/**
+ * Whether a side is a 40-track disc read in an 80-track drive. When nothing holds data past
+ * physical track 50, every track that does is taken as real: either the capture came from a
+ * 40-track drive, or the disc's data simply stops early, and then an odd track holding data
+ * holds data of its own. Otherwise either
+ * of two signs will do: enough even tracks carry headers for half their number, or nearly
+ * every odd track holds only ghosts of its even neighbours. Protected discs renumber their
+ * tracks, which defeats the first; some discs legitimately repeat a track, which is why
+ * the second isn't enough on its own.
+ */
+function sideIs40Track(disc, upper) {
+    const goodSectors = (physical) =>
+        physical < 0 || physical >= MaxPhysicalTracks
+            ? []
+            : disc
+                  .getTrack(upper, physical)
+                  .findSectors(() => {})
+                  .filter((sector) => !sector.hasHeaderCrcError && !sector.hasDataCrcError && sector.sectorData);
+    const tracks = Array.from({ length: MaxPhysicalTracks }, (_, physical) => goodSectors(physical));
+    const lastWithData = tracks.findLastIndex((sectors) => sectors.length > 0);
+    if (lastWithData <= FortyTrackDriveLimit) return false;
+
+    let evenTracks = 0;
+    let tracksSayingHalf = 0;
+    let tracksSayingOwn = 0;
+    let oddTracksOfTheirOwn = 0;
+    tracks.forEach((sectors, physical) => {
+        if (sectors.length === 0) return;
+        if (!(physical & 1)) {
+            evenTracks++;
+            if (physical === 0) return;
+            if (sectors.some((sector) => sector.trackNumber === physical / 2)) tracksSayingHalf++;
+            else if (sectors.some((sector) => sector.trackNumber === physical)) tracksSayingOwn++;
+            return;
+        }
+        const neighbours = new Set(
+            [...(tracks[physical - 1] ?? []), ...(tracks[physical + 1] ?? [])].map(sectorIdentity),
+        );
+        if (sectors.some((sector) => !neighbours.has(sectorIdentity(sector)))) oddTracksOfTheirOwn++;
+    });
+    if (tracksSayingHalf >= MinFortyTrackEvidence && tracksSayingHalf > tracksSayingOwn) return true;
+    return evenTracks >= MinFortyTrackEvidence && oddTracksOfTheirOwn < evenTracks * GhostTolerance;
+}
+
+/**
+ * Decodes one side of a flux image back into the bytes a sector image would hold.
+ *
+ * `trackRule` picks what happens to sectors whose header names a different track
+ * from the one they were read on: "strict" drops them (the first draft of the
+ * proposal), "physical" keeps them and orders sectors by where they were found,
+ * which is what protected discs with renumbered tracks need.
+ * `pitchTest` picks how a side is judged 40-track: "combined" (the proposal's) or "headers"
+ * (the first draft's).
+ * @param {{trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers"}} [options]
+ * @returns {{data: Buffer, is40Track: boolean, dropped: {crc: number, wrongTrack: number, duplicate: number}, sizes: Map<number, number>}}
+ */
+export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest = "combined" } = {}) {
+    const is40Track = pitchTest === "headers" ? headersSayFortyTrack(disc, upper) : sideIs40Track(disc, upper);
+    const dropped = { crc: 0, wrongTrack: 0, duplicate: 0 };
+    const sizes = new Map();
+    const kept = new Map();
+    const step = is40Track ? 2 : 1;
+    for (let physical = 0; physical < MaxPhysicalTracks; physical += step) {
+        const logical = physical / step;
+        for (const sector of disc.getTrack(upper, physical).findSectors(() => {})) {
+            if (sector.hasHeaderCrcError || sector.hasDataCrcError || !sector.sectorData) {
+                dropped.crc++;
+                continue;
+            }
+            if (sector.trackNumber !== logical) {
+                dropped.wrongTrack++;
+                if (trackRule === "strict") continue;
+            }
+            const id = (logical << 16) | (sector.trackNumber << 8) | sector.sectorNumber;
+            if (kept.has(id)) {
+                dropped.duplicate++;
+                continue;
+            }
+            kept.set(id, sector.sectorData);
+            sizes.set(sector.sectorData.length, (sizes.get(sector.sectorData.length) ?? 0) + 1);
+        }
+    }
+    const ordered = [...kept.entries()].sort(([a], [b]) => a - b).map(([, data]) => data);
+    return { data: Buffer.concat(ordered), is40Track, dropped, sizes };
+}
+
+/**
+ * The side as a filesystem would address it: each 256-byte sector with a good CRC whose header
+ * names the track it sits on, placed by its logical track and sector ID. Catalogues and files are
+ * read from this, not from the fingerprint's byte stream, which on a protected disc also holds
+ * the protection's sectors and would shift everything after them. Sectors that weren't read are
+ * zeros; `present` on the result lists the ones that were.
+ */
+export function addressedSideBytes(disc, upper) {
+    const step = sideIs40Track(disc, upper) ? 2 : 1;
+    const sectors = new Map();
+    let firstTrackIsMfm = null;
+    for (let physical = 0; physical < MaxPhysicalTracks; physical += step) {
+        const logical = physical / step;
+        for (const sector of disc.getTrack(upper, physical).findSectors(() => {})) {
+            if (sector.hasHeaderCrcError || sector.hasDataCrcError || sector.sectorData?.length !== SectorSize)
+                continue;
+            if (sector.trackNumber !== logical) continue;
+            if (firstTrackIsMfm === null) firstTrackIsMfm = sector.isMfm;
+            const key = `${logical}:${sector.sectorNumber}`;
+            if (!sectors.has(key)) sectors.set(key, sector.sectorData);
+        }
+    }
+    // A filesystem numbers sectors across the whole side at its own density, which the first
+    // track that holds any sectors (the catalogue's) gives.
+    const sectorsPerTrack = firstTrackIsMfm ? AdfsTrackBytes / SectorSize : DfsSectorsPerTrack;
+    let lastTrack = -1;
+    for (const key of sectors.keys()) lastTrack = Math.max(lastTrack, Number(key.split(":")[0]));
+    const out = Buffer.alloc((lastTrack + 1) * sectorsPerTrack * SectorSize);
+    out.present = new Set();
+    for (const [key, data] of sectors) {
+        const [track, id] = key.split(":").map(Number);
+        if (id >= sectorsPerTrack) continue;
+        out.set(data, (track * sectorsPerTrack + id) * SectorSize);
+        out.present.add(track * sectorsPerTrack + id);
+    }
+    return out;
+}
+
+export function loadFlux(name, bytes) {
+    return quietly(() => discFor(name, new Uint8Array(bytes)));
+}
+
+/**
+ * The untrimmed bytes of every side of an image, whichever kind it is.
+ * @returns {{sides: Buffer[], flux?: object[]}}
+ */
+export function imageSides(name, bytes, options) {
+    if (isSectorImage(name)) return { sides: sectorImageSides(name, bytes) };
+    const disc = loadFlux(name, bytes);
+    const uppers = [false, true].filter((upper) => !upper || disc.isDoubleSided);
+    const flux = uppers.map((upper) => fluxSideBytes(disc, upper, options));
+    return {
+        sides: flux.map((side) => side.data),
+        addressed: uppers.map((upper) => addressedSideBytes(disc, upper)),
+        flux,
+    };
+}
+
+/**
+ * Every key the registry would compute for an image, and the untrimmed sides they came from.
+ * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers"}} [options]
+ *     for trimFill and fluxSideBytes
+ */
+export function fingerprint(name, bytes, options) {
+    const { sides, addressed, flux } = imageSides(name, bytes, options);
+    const trimmed = sides.map((side) => trimFill(side, options));
+    const sideDigests = trimmed.map(({ data }) => sha256(data));
+    let lastNonEmpty = trimmed.length - 1;
+    while (lastNonEmpty > 0 && trimmed[lastNonEmpty].data.length === 0) lastNonEmpty--;
+    const discKey = toKey(sha256(...sideDigests.slice(0, lastNonEmpty + 1)));
+    return {
+        fileKey: toKey(sha256(bytes)),
+        discKey,
+        sideKeys: sideDigests.map(toKey),
+        sides,
+        addressed: addressed ?? sides,
+        sideLengths: trimmed.map(({ data }) => data.length),
+        trimmedFill: trimmed.map(({ trimmedFill }) => trimmedFill),
+        flux,
+    };
+}

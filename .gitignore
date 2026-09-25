@@ -18,3 +18,4 @@ coverage
 **/.claude/worktrees/
 /test-results
 /playwright-report
+/.registry-corpus
