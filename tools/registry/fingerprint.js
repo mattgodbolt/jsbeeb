@@ -28,6 +28,8 @@ const SectorImages = {
     ".adl": { trackBytes: 16 * SectorSize, interleaved: true },
 };
 const FluxImages = [".hfe"];
+const AdfsTrackBytes = 16 * SectorSize;
+const AdfsMediumBytes = 80 * AdfsTrackBytes;
 
 export const extensionOf = (name) => name.slice(name.lastIndexOf(".")).toLowerCase();
 export const isSectorImage = (name) => extensionOf(name) in SectorImages;
@@ -43,7 +45,10 @@ const toKey = (digest) => digest.subarray(0, KeyBytes).toString("hex");
 
 /** The bytes of each side of a sector image, untrimmed. */
 export function sectorImageSides(name, bytes) {
-    const { trackBytes, interleaved } = SectorImages[extensionOf(name)];
+    const { trackBytes, interleaved: byName } = SectorImages[extensionOf(name)];
+    // `.adf` is used for every size of ADFS disc, and only an L disc (bigger than an M) has two
+    // interleaved sides.
+    const interleaved = byName || (trackBytes === AdfsTrackBytes && bytes.length > AdfsMediumBytes);
     if (!interleaved) return [bytes];
     const sides = [[], []];
     for (let offset = 0, side = 0; offset < bytes.length; offset += trackBytes, side ^= 1)
@@ -193,6 +198,41 @@ export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest =
     return { data: Buffer.concat(ordered), is40Track, dropped, sizes };
 }
 
+/**
+ * The side as a filesystem would address it: each 256-byte sector with a good CRC whose header
+ * names the track it sits on, placed by its logical track and sector ID. Catalogues and files are
+ * read from this, not from the fingerprint's byte stream, which on a protected disc also holds
+ * the protection's sectors and would shift everything after them. Sectors that weren't read are
+ * zeros; `present` on the result lists the ones that were.
+ */
+export function addressedSideBytes(disc, upper) {
+    const step = sideIs40Track(disc, upper) ? 2 : 1;
+    const sectors = new Map();
+    let sectorsPerTrack = 0;
+    for (let physical = 0; physical < MaxPhysicalTracks; physical += step) {
+        const logical = physical / step;
+        for (const sector of disc.getTrack(upper, physical).findSectors(() => {})) {
+            if (sector.hasHeaderCrcError || sector.hasDataCrcError || sector.sectorData?.length !== SectorSize)
+                continue;
+            if (sector.trackNumber !== logical) continue;
+            sectorsPerTrack = Math.max(sectorsPerTrack, sector.isMfm ? 16 : 10);
+            const key = `${logical}:${sector.sectorNumber}`;
+            if (!sectors.has(key)) sectors.set(key, sector.sectorData);
+        }
+    }
+    let lastTrack = -1;
+    for (const key of sectors.keys()) lastTrack = Math.max(lastTrack, Number(key.split(":")[0]));
+    const out = Buffer.alloc((lastTrack + 1) * sectorsPerTrack * SectorSize);
+    out.present = new Set();
+    for (const [key, data] of sectors) {
+        const [track, id] = key.split(":").map(Number);
+        if (id >= sectorsPerTrack) continue;
+        out.set(data, (track * sectorsPerTrack + id) * SectorSize);
+        out.present.add(track * sectorsPerTrack + id);
+    }
+    return out;
+}
+
 export function loadFlux(name, bytes) {
     return quietly(() => discFor(name, new Uint8Array(bytes)));
 }
@@ -204,10 +244,13 @@ export function loadFlux(name, bytes) {
 export function imageSides(name, bytes, options) {
     if (isSectorImage(name)) return { sides: sectorImageSides(name, bytes) };
     const disc = loadFlux(name, bytes);
-    const flux = [false, true]
-        .filter((upper) => !upper || disc.isDoubleSided)
-        .map((upper) => fluxSideBytes(disc, upper, options));
-    return { sides: flux.map((side) => side.data), flux };
+    const uppers = [false, true].filter((upper) => !upper || disc.isDoubleSided);
+    const flux = uppers.map((upper) => fluxSideBytes(disc, upper, options));
+    return {
+        sides: flux.map((side) => side.data),
+        addressed: uppers.map((upper) => addressedSideBytes(disc, upper)),
+        flux,
+    };
 }
 
 /**
@@ -216,7 +259,7 @@ export function imageSides(name, bytes, options) {
  *     for trimFill and fluxSideBytes
  */
 export function fingerprint(name, bytes, options) {
-    const { sides, flux } = imageSides(name, bytes, options);
+    const { sides, addressed, flux } = imageSides(name, bytes, options);
     const trimmed = sides.map((side) => trimFill(side, options));
     const sideDigests = trimmed.map(({ data }) => sha256(data));
     let lastNonEmpty = trimmed.length - 1;
@@ -227,6 +270,7 @@ export function fingerprint(name, bytes, options) {
         discKey,
         sideKeys: sideDigests.map(toKey),
         sides,
+        addressed: addressed ?? sides,
         sideLengths: trimmed.map(({ data }) => data.length),
         trimmedFill: trimmed.map(({ trimmedFill }) => trimmedFill),
         flux,

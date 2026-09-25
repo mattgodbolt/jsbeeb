@@ -108,12 +108,13 @@ any other filesystem. Each physical side gets a digest of its own.
 
 For sector images (SSD, DSD, and the 8-bit ADFS S, M and L formats) the side digest is simply the SHA-256
 of that side's bytes, in the order the image stores them, with two tweaks. The sides are separated
-according to the format's interleave, and trailing fill is trimmed: whole 256-byte sectors at the end of
-the side that are all `&00` (padding) or all `&E5` (what a format leaves behind) are dropped, and a short
-last sector is padded with zeros first. Baron, for one, truncates its SSDs after the last used sector,
-and plenty of tools pad them to 200K, so the trimming is what lets those agree. Only fill is dropped, so
-a reused disc with old data past its last file keeps it. No disc model is needed at all, which should
-make this pretty easy for any emulator to implement.
+according to the format's interleave (an `.adf` file bigger than an ADFS M disc is an L disc, whose sides
+alternate track by track, whatever its name says), and trailing fill is trimmed: whole 256-byte sectors
+at the end of the side that are all `&00` (padding) or all `&E5` (what a format leaves behind) are
+dropped, and a short last sector is padded with zeros first. Baron, for one, truncates its SSDs after the
+last used sector, and plenty of tools pad them to 200K, so the trimming is what lets those agree. Only
+fill is dropped, so a reused disc with old data past its last file keeps it. No disc model is needed at
+all, which should make this pretty easy for any emulator to implement.
 
 For flux images, the job is to turn the capture back into those same bytes:
 
@@ -155,6 +156,13 @@ missing or unreadable part way through (a damaged track, say), everything after 
 capture gets a key of its own. That's a bad dump, which the registry handles as an alias like any other
 variant.
 
+FSD sector dumps can be fingerprinted directly too, since they record each sector's header, data and read
+status. A sector counts when the dump read it cleanly, or when its data had a CRC error but the bytes it
+overran hold a good CRC after a shorter power-of-two length (and then only that length counts). The order
+is the same as for flux images. A track the dump could only read headers from has no data to hash, so a
+dump with such tracks gives a provisional key, recorded as such and never used to merge it with other
+images.
+
 The disc key is the SHA-256 of the full 32-byte side digests in physical order, leaving out trailing
 sides with nothing left in them, cut to 128 bits. Each side digest, cut the same way, is a side key. So
 an SSD, an HFE and a zip of the same single-sided disc share a key, and so do a DSD and an HFE of the
@@ -177,8 +185,24 @@ single-sided disc as a trimmed SSD, a padded SSD and an HFE, a double-sided DFS 
 and an ADFS L disc as an interleaved image and an HFE. A protected original captured twice should give
 the same key both times.
 
-Tapes need their own version, computed from the decoded blocks (file name, load and execution addresses,
-data) rather than from the UEF or audio container. ROMs can just use the file hash.
+### The tape fingerprint
+
+A tape is decoded to the bytes it carries, whatever the container: UEF data chunks (&0100 and &0104), or
+CSW pulses at 1200 baud. That stream is searched for the blocks the MOS writes: &2A, a name of up to ten
+characters and a zero, load and execution addresses, block number, length, flags and four spare bytes, a
+CRC-16 of those, then the data and its CRC. Blocks with a bad CRC are dropped. Consecutive blocks with
+the same name, numbered up from 0 to one with bit 7 of its flags set, make a complete file, and a block
+that repeats the one before it is skipped.
+
+The tape key is the SHA-256, cut to 128 bits, of a sequence of records in tape order. Each complete file
+gives `&46`, its name and a zero, its load, execution address and length (32-bit little-endian), then its
+data. Each good block that isn't part of a complete file gives `&42`, its name and a zero, its load and
+execution addresses, its block number (16-bit) and flags, its length (32-bit), then its data; that's how
+protected tapes whose loaders number blocks the MOS wouldn't accept still get their whole content into
+the key. A record identical to the one before it is left out. Carrier, gaps, baud rate, how the container
+chunks things, and bytes outside MOS blocks don't count.
+
+ROMs can just use the file hash.
 
 ## Records
 
@@ -288,7 +312,8 @@ goes in the record. This is the part to design with Robert.
 
 ### Symbols and source
 
-This part is a sketch, and the one most in need of a prototype.
+This part has been tried on one game, Repton 2 (the findings have the details), but it's still the least
+settled.
 
 BBC games rewrite their own memory all the time. Code is decrypted and relocated as it loads, variables
 sit in amongst the code, self-modifying code is everywhere, and the emulator has no idea when loading has
@@ -296,9 +321,13 @@ finished. So a symbol set can't just be pinned to a disc and shown, and it can't
 big ranges of memory either.
 
 Instead a symbol set is split into regions, and each region carries a few anchors: short runs of bytes at
-known addresses that should be there whenever that region's code is in memory, such as the first few
-instructions of routines that are never modified. Overlays (code that swaps in and out at the same
-addresses) are just separate regions that happen to cover the same addresses.
+known addresses that should be there whenever that region's code is in memory. An anchor is a run of
+whole instructions, four to eight bytes, starting at a routine's entry point; no store in the program may
+be able to reach any of its bytes (counting the full reach of indexed stores); it mustn't be a run of
+`NOP`s, which is exactly what cheats poke; and its bytes must appear only once in the region. Overlays
+(code that swaps in and out at the same addresses) are just separate regions that happen to cover the
+same addresses. Symbols that aren't in any region (zero page, OS entry points) go in a `globals` block,
+shown whenever any region matches.
 
 ```json
 {
@@ -306,10 +335,12 @@ addresses) are just separate regions that happen to cover the same addresses.
     "exile-v1-1-labels": {
       "format": "baron-symbols",
       "url": "https://.../exile-v1-1.json",
+      "globals": ["zp", "os"],
       "regions": {
         "main": {
           "start": "0x1100",
           "end": "0x5800",
+          "minAnchors": 2,
           "anchors": [{ "at": "0x1a2c", "bytes": "a9008d..." }]
         }
       },
@@ -325,13 +356,13 @@ whose anchors match. Before the code has arrived, the anchors don't match and th
 never need to know when loading is done. If nothing matches, the debugger shows plain addresses as it
 does today.
 
-Choosing anchors is the labour-intensive bit, and it's optional: a symbol set without anchors isn't shown
-automatically, but can still be picked by hand in the debugger. Where there's buildable source, a tool
-can make a start from the assembled output and the source's labels, but it still has to leave out
-anything the code writes to, which includes self-modified operands sitting in the middle of instructions.
-For a disassembly without buildable source, running the game headless to a known point and taking bytes
-from memory works, with the same caveat, which is where an LLM reading the disassembly could help. That's
-a nice to have rather than something to build first.
+Choosing anchors turned out to be mostly automatic: given a disassembly listing, a tool can work out
+every address a store can reach, list the candidate runs and pick about one per 2K of code. What stayed
+manual was naming the regions and noticing which parts of the listing weren't the game (a disassembler's
+own loader, say). Anchors are still optional: a symbol set without them isn't shown automatically, but
+can be picked by hand in the debugger. A big file makes a poor single region, since one build difference
+is only caught if an anchor happens to sit on it; smaller code regions, each with `minAnchors`, are
+better.
 
 ## Keeping records stable
 
@@ -406,15 +437,20 @@ until a person has looked at it.
 1. Collect. For each image, record where it came from, its file hash, disc key and side keys, and a
    decoded file list (DFS, ADFS or tape) with names, addresses, lengths and a hash per file.
 2. Group exact matches. Equal fingerprints are aliases, no judgement required.
-3. Find candidates. Images that share files, or that are near-duplicates by a fuzzy hash (ssdeep or TLSH,
-   over files and over the sector stream), go into clusters. A crack differs by a few bytes in a loader;
-   a menu disc is the game's files plus some extras; 40- and 80-track copies share every file; a tape and
-   a disc of the same game share the main code.
+3. Find candidates. Images whose shared files (by content) make up at least half of each go into one
+   family; when they make up half of only the smaller one, the bigger contains the smaller, which is how
+   compilations and menu discs show up. Files are read the way the filesystem addresses them (by each
+   sector's header), not from the fingerprint's byte stream, which on a protected disc holds extra
+   sectors. A crack differs by a few bytes in a loader; a menu disc is the game's files plus some extras;
+   40- and 80-track copies share every file; a tape and a disc of the same game share the main code.
 4. Judge each cluster. An LLM works through tools (a byte diff, the disassembler, a BASIC detokeniser,
    and headless jsbeeb to boot the disc and read the title screen) and puts each difference into a fixed
-   set of categories: format conversion, bad dump, protection removed, trainer, menu or instructions
-   added, compatibility fix, publisher revision, port, or different game. Every claim has to be something
-   a tool can check ("differs only in `$.LOADER`, at these bytes"), and the pipeline checks it again.
+   set of categories: same dump, bad dump, remastered (the same files written out again by a tool), disc
+   written to (a later write, a changed cycle number, leftover data), protection removed, trainer or
+   cheat, menu or extras added, compilation (with which one contains which), another disc of the same
+   set, the same release packaged for 40 or 80 tracks, compatibility fix, publisher revision, port, or
+   different software. Every claim has to be something a tool can check ("differs only in `$.LOADER`, at
+   these bytes"), and the pipeline checks it again.
 5. Review. Each cluster becomes a pull request of alias records with its evidence and a confidence level.
    A person approves it, and the records' provenance says they were proposed by automated analysis and
    then reviewed.
@@ -422,9 +458,8 @@ until a person has looked at it.
 The same pass can read keys off instruction screens (noting where it found them), work out which machines
 each variant gets to a title screen on, and list the images that don't work in jsbeeb at all.
 
-A sensible first step is a pilot: one game with lots of versions, done by hand across our own mirror and
-TOSEC. That should show how much steps 2 and 3 sort out on their own, and whether the judgements in step
-4 are any good.
+The findings include a first pilot of steps 3 and 4: clustering over the whole corpus, and two
+independent LLM judges on a sample of pairs.
 
 ## Uses in jsbeeb
 
@@ -443,11 +478,15 @@ still guess the machine and how to boot.
   MAME's names.
 - Whether 128 bits is the right key length. The HFE mirror's file-hash names use 64, which may be a bit
   short for a registry other emulators share.
-- The tape fingerprint in detail, and whether a tape should also match a disc with the same files on.
-- Whether repeat captures of the same protected disc agree. Most do, but a few (Hopper, The Empire
-  Strikes Back, Philosophers Quest) differ by a few bytes or sectors on the protected tracks, with good
-  CRCs. Each is a capture against a reconstruction from an FSD dump, so it may be the FSD rather than the
-  disc.
+- Whether custom-format tape data (bytes outside MOS blocks, which the tape key ignores) can be decoded
+  consistently enough to include.
+- What to keep when a track repeats a sector ID with different contents. "The first one read" depends on
+  where reading starts, which is how one pair of Empire Strikes Back images got different keys; keeping
+  each distinct content once, in byte order, wouldn't. Only three tracks in 427 FSD dumps do this, but it
+  should be settled before the spec is.
+- Whether a few bytes of duplicator leftovers on a protected track (Philosophers Quest, and perhaps
+  Hopper) should split two copies. The key says they're different copies, which is true, so it may be
+  fine as long as an alias joins them.
 - Where the repository lives and what it's called, so other emulators feel it's theirs as well.
 - The `controls` schema, with Robert and Beebium.
 - Whether, and how, we can host screenshots.

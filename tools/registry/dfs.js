@@ -7,7 +7,11 @@ const shortHash = (bytes) => createHash("sha256").update(bytes).digest("hex").sl
 
 const printable = (bytes) => String.fromCharCode(...bytes.map((b) => b & 0x7f)).replace(/[\0 ]+$/, "");
 
-/** Reads a DFS catalogue from a side's bytes, or null if it doesn't look like one. */
+/**
+ * Reads a DFS catalogue from a side's bytes, or null if it doesn't look like one. A file is
+ * complete only if all of it lies within the side and, where the side says which sectors were
+ * actually read (`present`), within those; `uniform` marks a file that's one repeated byte.
+ */
 export function dfsCatalogue(side) {
     if (side.length < 2 * SectorSize) return null;
     const s0 = side.subarray(0, SectorSize);
@@ -27,13 +31,16 @@ export function dfsCatalogue(side) {
         const start = s1[offset + 7] | ((mixed & 3) << 8);
         if (start < 2 || start > totalSectors) return null;
         const data = side.subarray(start * SectorSize, start * SectorSize + length);
+        const sectors = Array.from({ length: Math.ceil(length / SectorSize) }, (_, i) => start + i);
+        const allRead = !side.present || sectors.every((sector) => side.present.has(sector));
         files.push({
             name: `${String.fromCharCode(s0[offset + 7] & 0x7f)}.${printable(nameBytes)}`,
             load,
             exec,
             length,
             start,
-            complete: data.length === length,
+            complete: data.length === length && allRead,
+            uniform: data.length > 0 && data.every((byte) => byte === data[0]),
             hash: shortHash(data),
         });
     }

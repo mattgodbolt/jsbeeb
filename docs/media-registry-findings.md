@@ -38,21 +38,23 @@ jsbeeb, decoded through the flux path and trimmed. All 5,775 gave exactly the sa
 Out of 7,365 distinct disc keys, only 64 turn up in more than one source. We'd expected a lot more.
 
 The main reason is that the archive images are mostly re-mastered copies, with the files written out
-again by some tool, rather than dumps of the original discs. Of the 423 captures that share at least half
-their files (counting files of 512 bytes or more) with a Stairway To Hell SSD, 371 have those files at
+again by some tool, rather than dumps of the original discs. Of the 450 captures that share at least half
+their files (counting files of 512 bytes or more) with a Stairway To Hell SSD, 398 have those files at
 different sectors on the SSD. Return of the Jedi is typical: the capture has 11 files and the SSD 12,
 with an extra `$.LOAD` and a different `$.!BOOT`, the files sit elsewhere (the capture's `$.!BOOT` is at
 sector 143, the SSD's at sector 2), the disc title has become `RETURNOFJEDI`, and the cycle number is 6
 rather than 39. No disc fingerprint will ever match those, and it shouldn't try: that's exactly the
 `*COMPACT` case, and it belongs to the file-level matching, not the key.
 
-Even the closest cases rarely match. 14 captures have exactly the same DFS files, names and contents, as
-an archive image, 13 of them against a Stairway To Hell SSD, and still get a different key. Of those 16
+Even the closest cases rarely match. 17 captures have exactly the same DFS files, names and contents, as
+an archive image, 16 of them against a Stairway To Hell SSD, and still get a different key. Of those 19
 pairs, 11 have the files moved and a different title or cycle number, like Colossus Chess (the capture
 has `$.G30` at sector 122, the SSD at sector 2), and one more has the files moved but the same title and
-cycle. The other four, all Cheat It Again Joe discs, have the files in the same place (one with a
-different cycle number) and differ in whole sectors of free space, plus a byte or two of the catalogue,
-which looks like old data on a reused disc.
+cycle. The other seven have the files in the same place and differ in what's left over. Four Cheat It
+Again Joe pairs differ in whole sectors of free space, plus a byte or two of the catalogue, which looks
+like old data on a reused disc. Three captures of The Hobbit differ from the archive's SSD in the
+catalogue (for one of them, the SSD's cycle number is 0 and the capture's 151) and in a few sectors of
+leftovers.
 
 An exact key over the set of files (names, addresses and contents) doesn't help much either: 72
 cross-source matches rather than 64, because images that share most of their files usually differ in a
@@ -162,6 +164,153 @@ Hell images and 10 bbcmicro.co.uk ones, one of them in both). MAME's list says i
 Stairway To Hell archive and that none of its images are protected, and most of them no longer match what
 the archive holds today. Its value to the registry is its short names and parent/clone structure rather
 than its hashes.
+
+## Families from shared files
+
+Since the keys can't join re-mastered copies, the next thing to try is what the proposal calls step 3:
+grouping images by the files they share. `cluster.js` puts two discs in one family when the files they
+share, by content, make up at least half of each by size. When they make up half of only the smaller one,
+the bigger one contains the smaller, which is how compilations and menu discs show up.
+
+Two things had to be learned the hard way. Many protected discs catalogue nothing but a shared boot
+loader and keep the software off the catalogue, so seven or eight unrelated educational titles all
+"shared" one 1,280-byte `!BOOT`; discs that catalogue less than 8K now take no part. And on a protected
+disc, the fingerprint's byte stream holds the protection's sectors too, so reading the catalogue from it
+put every file in the wrong place (the judges below caught this on Elite). Files are now read the way DFS
+addresses them, by each sector's header, and a file lying over sectors that couldn't be read doesn't
+count.
+
+With that, 5,341 of the 7,365 disc keys catalogue enough to take part. They form 515 families of more
+than one disc, and 384 of those span more than one source, joining 1,052 discs where the keys alone
+joined 64 groups. There are 690 `contains` relations, and the ones we looked at really are compilations:
+a Blue Ribbon games disc containing Bananaman, the Superior Collection containing Airlift, Smash 7
+containing Attack On Alpha Centauri.
+
+Checked against the HFE mirror's own labels (the same title, and the same disc and side where the
+manifest says which), the families are quite precise. Of 429 pairs of labelled captures in one family,
+423 have titles with a word in common. Of the other six, four are one title written differently or
+abbreviated (Death Star and Deathstar, and Cheat It Again Joe as CIAJ), and two look like genuine false
+links. Recall is the weak side: of 288 pairs with the same label, 135 end up in one family. Of the 153
+that don't, 88 share no file at all, which means a different build of the same title, and no file-level
+matching will ever join those; 10 more are joined by a `contains` relation instead.
+
+The threshold trades one against the other:
+
+| Share needed | Discs in cross-source families | Same-label pairs together | Pairs with unrelated titles |
+| -----------: | -----------------------------: | ------------------------: | --------------------------: |
+|          0.3 |                          1,292 |                       151 |                          27 |
+|          0.4 |                          1,176 |                       147 |                           8 |
+|          0.5 |                          1,052 |                       135 |                           6 |
+|          0.6 |                            922 |                       124 |                           4 |
+
+So shared files find families well, but they can't tell versions of a title apart from different
+software, or join builds that share nothing. That's the judging step's job.
+
+## Judging the differences
+
+To see whether an LLM can do the judging, `judge-sample.js` drew 18 pairs from our own two mirrors: six
+pairs from within families, six `contains` relations and six pairs of captures with the same title that
+share some files but weren't put in one family. Two LLM agents judged each pair independently, with
+`inspect.js` (catalogues, hex dumps, byte diffs, a disassembler and a BASIC lister) and `diff-images.js`,
+picking one category from the proposal's list and quoting the command output behind every claim. Each
+judge took about eight minutes and 48 tool calls for all 18. The sample and both sets of verdicts are in
+`tools/registry/pilot/`.
+
+The two agreed on the category for 15 of the 18. The three they didn't agree on were the hard ones, and
+in the first two, one judge's secondary tags included the other's category: a menu rewritten for BASIC I
+(compatibility fix, or publisher revision?), a PIAS re-release whose only change to the game is one byte
+in one screen (re-mastered, or a revision?), and a game whose loader had been reworked, which both marked
+as low confidence. The evidence was checkable: for example, both cited the Plan B cheat disc poking
+`NOP`s over the two `DEC` instructions at &3F74 and &3F82 that count down ammo and energy, and the
+disassembler agrees.
+
+The judges also found things the rest of the pipeline had missed. One pair the sampler called a
+compilation wasn't one. The category list had nothing for another disc of the same set, or for one
+release packaged as 40-track and 80-track discs, or for which way a `contains` relation runs; the
+proposal now has all three. And one judge found every mission file on the protected Elite disc shifted by
+one, which is how the catalogue-reading bug above came to light.
+
+Eighteen pairs is a small sample, and neither judge booted anything. But it suggests the judging step is
+workable: the agents agree with each other where a person would, disagree where a person would hesitate,
+and their evidence can be rerun.
+
+## Sector dumps
+
+Most of the HFE mirror's reconstructions were rebuilt from FSD sector dumps, and 427 of those dumps are
+on Matt's NAS, 425 of which parse. `fsd.js` reads them and computes the fingerprint straight from the
+dump. Read directly, 350 of the 398 dumps that pair with a reconstruction give exactly its key, and 34
+more differ only because the reconstruction fills tracks the dump could read no data from with `&E5`
+sectors. Of the rest, 12 match a different dump of the same number instead, and two differ over one
+overlong read.
+
+Of the three near-identical pairs above, only The Empire Strikes Back is an artefact. Its track 10
+carries three sectors numbered 3 with different contents, the dump lists that track in a different order
+from the disc, and keeping the first copy picks different data. Only three tracks in all 427 dumps have
+repeated IDs with different contents, but it means "keep the first one read" should become something that
+doesn't depend on order. The Philosophers Quest pair really differs on the disc: the dump's sectors on
+track 33 are a shifted copy of the game's own data, while the capture's hold something found nowhere
+else, which looks like duplicator leftovers that vary from copy to copy. The Hopper pair differs by three
+bytes that the dump reads cleanly, so the reconstruction is faithful to it, and we can't yet say which
+copy is unusual.
+
+Against captures of the same title, 139 of 201 reconstructions share a key. Most of the near misses
+differ in the catalogue, which looks like discs that had been written to. Tracks the dump couldn't read
+are the weak spot: four captures hold `&E5` there, but nothing in the dump says so, so a key computed
+from a dump with unreadable tracks should be recorded as provisional.
+
+## Tapes
+
+`tape.js` decodes UEF and CSW images, and `tape-index.js` fingerprints 2,101 of them: 1,627 UEFs from our
+Stairway To Hell mirror, and 209 UEFs and 265 CSWs from Matt's NAS. jsbeeb has no CSW support, so the
+decoder is new. The key is computed from the files and blocks the MOS would read, not from the container,
+and it has to be: of the 132 titles we have as both UEF and CSW, the raw decoded bytes agree for one,
+because of leader and dummy bytes, while the key agrees for 128. In the other four, one of the two images
+has a bad or missing block.
+
+2,100 images get a key, and they make 1,737 distinct tapes. All 186 keys shared between images join
+images that aren't byte-identical, so a file hash alone would have found none of those matches, and no
+two different titles share a key. Most tapes are plain MOS files, but 94 images use protection that
+numbers blocks the MOS wouldn't accept as a file, so those blocks go into the key one by one; a key over
+complete files alone would have been just the loader, which is the Exile lesson again. 151 images carry
+over 1K in formats of their own that the key can't see, and we couldn't make those bytes agree between
+copies of one tape, so they stay out.
+
+2,296 of the 8,130 distinct tape files of 512 bytes or more also turn up byte for byte on a disc, and 279
+tapes have all their files on one disc image. So a tape can find a disc's record through the file-level
+matching, not through the key.
+
+## ADFS
+
+The corpus has hardly any ADFS: two ADLs from bbcmicro.co.uk, and no HFE capture in the mirror has an
+ADFS root directory. Matt's NAS has 29 ADFS images, mostly copies of the same few discs kept in old
+emulator trees (Master Welcome discs, the ARM Evaluation System, the Master 512 boot disc), and they make
+10 distinct keys. Copies of one disc agree, and two versions of the Welcome disc don't, which is right,
+though with byte-identical copies that's not much of a test. All nine of the distinct images jsbeeb will
+load give the same bytes through the flux path.
+
+Two small lessons came out of it. One image is an ADFS L disc named `.ADF`, so the fingerprint now
+decides how an ADFS image's sides are laid out by its size, not its name. And ARM Evaluation System discs
+4 and 5 share a second side: a formatted but empty ADFS side keeps its free space map and root directory,
+so it never trims away, and its side key is exactly the `ambiguous` case.
+
+## Symbols on a real game
+
+We tried anchors on Repton 2, using George Foot's public-domain disassembly (the Unlicense). `anchors.js`
+reads the listing, works out every address a store could reach (including the full reach of indexed
+stores), and picks anchors automatically: runs of whole instructions, four to eight bytes, starting at a
+routine's entry point, that no store can touch and that appear only once in the region. It chose seven
+for the main code and one each for two small regions. `anchors-run.js` then booted the game headless from
+twelve disc images and checked the anchors every 20 ms for five minutes of emulated time, playing with
+random keys.
+
+On every copy of the same build, the labels appeared within 20 ms of the loader finishing its copy, never
+before, and stayed through play, even though over 8,000 bytes of the main region changed. Repton 1 and
+Repton 3 never matched a single anchor. An earlier build, which lacks a few routines, was rejected, but
+only because one of the seven anchors happened to sit on one of them. A cheat disc was rejected too,
+because a poke landed on an anchor that was a run of `NOP`s, although its labels would have been right.
+
+So anchors are practical and cheap: nine short compares, chosen almost entirely by a tool. The proposal
+now leaves `NOP` runs out, and suggests smaller code regions with a minimum number of anchors each.
 
 ## A look at Exile
 

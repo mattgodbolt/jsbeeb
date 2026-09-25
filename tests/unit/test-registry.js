@@ -3,6 +3,7 @@ import { Disc, DiscConfig, IbmDiscFormat } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { dfsCatalogue } from "../../tools/registry/dfs.js";
 import {
+    addressedSideBytes,
     fingerprint,
     fluxSideBytes,
     SectorSize,
@@ -118,6 +119,18 @@ describe("Media registry fingerprint", () => {
                     Buffer.from(adl.subarray(AdfsTrackBytes, 2 * AdfsTrackBytes)),
                 ),
             ).toBe(true);
+        });
+
+        it("should read an ADF the size of an L disc as two interleaved sides", () => {
+            const large = sectorBytes(2 * 80 * 16);
+            const sides = sectorImageSides("x.adf", large);
+            expect(sides).toHaveLength(2);
+            expect(
+                Buffer.from(sides[1].subarray(0, AdfsTrackBytes)).equals(
+                    Buffer.from(large.subarray(AdfsTrackBytes, 2 * AdfsTrackBytes)),
+                ),
+            ).toBe(true);
+            expect(sectorImageSides("x.adf", sectorBytes(80 * 16))).toHaveLength(1);
         });
 
         it("should keep a single-sided image as one side", () => {
@@ -316,6 +329,26 @@ describe("Media registry fingerprint", () => {
             moved[SectorSize + 15] = 5;
             moved.set(disc.subarray(2 * SectorSize, 14 * SectorSize), 5 * SectorSize);
             expect(dfsCatalogue(moved).files[0].hash).toBe(dfsCatalogue(disc).files[0].hash);
+        });
+
+        it("should count a file lying over sectors that weren't read as incomplete", () => {
+            const image = dfsDisc("GAME", 3000, 20);
+            const disc = newDisc();
+            const track0 = Array.from({ length: 10 }, (_, id) => ({
+                track: 0,
+                id,
+                data: image.subarray(id * SectorSize, (id + 1) * SectorSize),
+            }));
+            buildFmTrack(disc, 0, track0);
+            buildFmTrack(disc, 1, [{ track: 1, id: 0, data: image.subarray(10 * SectorSize, 11 * SectorSize) }]);
+            const [file] = dfsCatalogue(addressedSideBytes(disc, false)).files;
+            expect(file.complete).toBe(false);
+        });
+
+        it("should flag a file that is one repeated byte", () => {
+            const image = dfsDisc("GAME", 3000);
+            image.fill(0xe5, 2 * SectorSize, 2 * SectorSize + 3000);
+            expect(dfsCatalogue(image).files[0].uniform).toBe(true);
         });
 
         it("should refuse bytes that aren't a catalogue", () => {

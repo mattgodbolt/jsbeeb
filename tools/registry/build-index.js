@@ -61,7 +61,6 @@ async function* images() {
 
 function describe(name, bytes) {
     const fp = fingerprint(name, bytes, { trackRule, pitchTest });
-    const { sides } = fp;
     const isDfs = [".ssd", ".dsd", ".hfe"].includes(extensionOf(name));
     return {
         ext: extensionOf(name),
@@ -77,7 +76,7 @@ function describe(name, bytes) {
             dropped,
             sizes: Object.fromEntries(sizes),
         })),
-        catalogues: isDfs ? sides.map((side) => dfsCatalogue(side)) : null,
+        catalogues: isDfs ? fp.addressed.map((side) => dfsCatalogue(side)) : null,
     };
 }
 
