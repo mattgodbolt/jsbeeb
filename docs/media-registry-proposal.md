@@ -190,9 +190,11 @@ the same key both times.
 A tape is decoded to the bytes it carries, whatever the container: UEF data chunks (&0100 and &0104), or
 CSW pulses at 1200 baud. That stream is searched for the blocks the MOS writes: &2A, a name of up to ten
 characters and a zero, load and execution addresses, block number, length, flags and four spare bytes, a
-CRC-16 of those, then the data and its CRC. Blocks with a bad CRC are dropped. Consecutive blocks with
-the same name, numbered up from 0 to one with bit 7 of its flags set, make a complete file, and a block
-that repeats the one before it is skipped.
+CRC-16 of those, then the data and its CRC. Consecutive blocks with the same name, numbered up from 0 to
+one with bit 7 of its flags set, make a complete file, as long as none of them has a bad CRC. A block
+with the same name and header as the one a file received last may be a retry, even after the last block
+has closed the file: if the held copy is bad, a good copy replaces it; if the held copy is good, a bad or
+identical copy is skipped, and a good one with different data is a different block.
 
 The tape key is the SHA-256, cut to 128 bits, of a sequence of records in tape order. Each complete file
 gives `&46`, its name and a zero, its load, execution address and length (32-bit little-endian), then its

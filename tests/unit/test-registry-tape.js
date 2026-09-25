@@ -161,6 +161,21 @@ describe("tape decoding", () => {
         expect(file).toMatchObject({ complete: true, badBlocks: 0 });
     });
 
+    it("keeps two good blocks with the same header but different data", () => {
+        const level = (seed) => block({ name: "LEVEL", number: 0, flags: LastBlock, data: content(3, seed) });
+        const { files } = decodeTape(plainUef([level(1), level(2)]));
+        expect(files.map((f) => [...f.data])).toEqual([content(3, 1), content(3, 2)]);
+    });
+
+    it("keeps a file recorded twice as two files with one key", () => {
+        const once = fileBlocks("GAME", content(600, 3));
+        const oneBlock = fileBlocks("TINY", content(40, 5));
+        expect(decodeTape(plainUef([...once, ...once])).files).toHaveLength(2);
+        const key = (blocks) => tapeKey(decodeTape(plainUef(blocks)).files);
+        expect(key([...once, ...once])).toBe(key(once));
+        expect(key([...oneBlock, ...oneBlock])).toBe(key(oneBlock));
+    });
+
     it("takes a name of ten characters but not eleven", () => {
         const named = (name) => block({ name, number: 0, flags: LastBlock, data: content(10, 4) });
         expect(decodeTape(plainUef([named("TENCHARSXX")])).files.map((f) => f.name)).toEqual(["TENCHARSXX"]);
