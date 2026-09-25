@@ -8,7 +8,7 @@
 //                          (--pitch-test headers)
 // plus MAME's bbcb_flop.xml from fetch-corpus.js.
 //
-//   node tools/registry/analyse.js [--corpus .registry-corpus] [--family exile]
+//   node tools/registry/analyse.js [--corpus .registry-corpus] [--family exile] [--private]
 //
 // --family lists every image whose title, path or disc title matches, with its
 // files, for looking at one game's versions by hand.

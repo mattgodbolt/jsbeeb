@@ -31,10 +31,11 @@ The fingerprint and its index:
   dropped, and its catalogue. `--track-rule strict` and `--pitch-test headers` select the first draft's
   rules.
 - `analyse.js`: prints the findings' numbers that come from the three indexes; `--family exile` lists one
-  game's images and their files.
+  game's images and their files. bbcmicro.co.uk images are shown as `(private)` unless `--private` is
+  given.
 - `check-paths.js`: loads every sector image through jsbeeb and checks the flux path gives back the same
-  bytes.
-- `fill-survey.js`: which repeated bytes pad the ends of sector images.
+  bytes (`--with-adfs` includes `.registry-corpus/adfs/`).
+- `fill-survey.js`: which repeated bytes pad the ends of DFS images (`--adfs` for ADFS images instead).
 - `split-diffs.js`: diffs every group of captures the first draft gave one key and the proposal splits.
 
 Looking at images:
@@ -60,8 +61,7 @@ The studies:
 - `boot-survey.js`, `boot-survey-analyse.js`, `boot-survey-screen.js`: boots every distinct disc on a
   Model B and a Master and records how far it gets. It takes a couple of hours:
 
-  ```sh
-  for i in $(seq 0 31); do nice -n 19 node tools/registry/boot-survey.js --shard $i/32 & done; wait
-  cat .registry-corpus/boot-survey-{0..31}.jsonl > .registry-corpus/boot-survey.jsonl
-  node tools/registry/boot-survey-analyse.js
-  ```
+````sh for i in $(seq 0 31); do nice -n 19 node tools/registry/boot-survey.js --shard $i/32 & done; wait
+cat .registry-corpus/boot-survey-{0..31}.jsonl > .registry-corpus/boot-survey.jsonl node
+tools/registry/boot-survey-analyse.js ```
+````

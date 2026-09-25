@@ -16,13 +16,13 @@ commit.
 | Our Stairway To Hell mirror  |  1,625 | SSDs and DSDs, from 1,608 zips                              |
 | The bbcmicro.co.uk image zip |  4,150 | SSDs, DSDs and a couple of ADLs, analysed privately         |
 | MAME's `bbcb_flop.xml`       |    326 | hashes only, compared against the others' whole-file SHA-1s |
-| My NAS: FSD dumps            |    427 | the sector dumps many of the HFE reconstructions came from  |
-| My NAS: tapes                |    474 | 209 UEFs and 265 CSWs                                       |
-| My NAS: ADFS images          |     29 | mostly copies of a few discs from old emulator trees        |
+| Matt's NAS: FSD dumps        |    427 | the sector dumps many of the HFE reconstructions came from  |
+| Matt's NAS: tapes            |    474 | 209 UEFs and 265 CSWs                                       |
+| Matt's NAS: ADFS images      |     29 | mostly copies of a few discs from old emulator trees        |
 
-That's 7,760 disc images in the main corpus, plus the dumps, tapes and ADFS images from my NAS, each of
-which gets a study of its own. Only aggregate numbers from the bbcmicro.co.uk images appear here; nothing
-about individual entries is published.
+That's 7,760 disc images in the main corpus, plus the dumps, tapes and ADFS images from Matt's NAS, each
+of which gets a study of its own. Only aggregate numbers from the bbcmicro.co.uk images appear here;
+nothing about individual entries is published.
 
 ## Sector and flux paths
 
@@ -150,15 +150,15 @@ under the header test is split.
 
 ## Trailing fill
 
-Across 5,823 sides of sector images, the sectors trimmed off the end were `&E5` on 3,978 sides and `&00`
-on 167. Any other repeated byte turned up on 7 sides in total (`&30`, `&29`, `&F0`, `&20`, `&6C`, `&0F`),
-and a run of spaces or zeros at the end of a file could just as easily be real data. So for DFS discs,
+Across 5,819 sides of DFS images, the sectors trimmed off the end were `&E5` on 3,978 sides and `&00` on
+165 sides. Any other repeated byte turned up on 6 sides in total (`&30`, `&29`, `&F0`, `&20`, `&0F`), and
+a run of spaces or zeros at the end of a file could just as easily be real data. So for DFS discs,
 trimming stays limited to `&00` and `&E5`.
 
-ADFS is different. Of the 58 sides of the ADFS images from my NAS (surveyed with `fill-survey.js
---with-adfs`), 30 end in runs of `&5A`, `&47` or `&6C`, and the second sides of the Master Welcome disc
-and of a blank L image are nothing but `&47`. Those aren't trimmed, so the two blank sides share a side
-key. Whether fill should depend on the format, or be any repeated byte after all, is still open; these
+ADFS is different. Of the 62 sides of ADFS images in the corpus and on Matt's NAS (`fill-survey.js
+--adfs`), 31 end in runs of `&5A`, `&47` or `&6C`, and the second sides of the Master Welcome disc and of
+a blank L image are nothing but `&47`. Those aren't trimmed, so the two blank sides share a side key.
+Whether fill should depend on the format, or be any repeated byte after all, is still open; most of these
 images come from emulator trees, and may not say much about what real formatters left behind.
 
 ## Side keys
@@ -247,11 +247,11 @@ same pairs to compare against.
 ## Sector dumps
 
 Most of the HFE mirror's reconstructions were rebuilt from FSD sector dumps, and 427 of those dumps are
-on my NAS, 425 of which parse. `fsd.js` reads them and computes the fingerprint straight from the dump,
-and `fsd-study.js summary` prints the numbers here. Read directly, 350 of the 398 dumps that pair with a
-reconstruction give exactly its key, and 34 more differ only because the reconstruction fills tracks the
-dump could read no data from with `&E5` sectors. Of the rest, 12 match a different dump of the same
-number instead, and two differ over one overlong read.
+on Matt's NAS, 425 of which parse. `fsd.js` reads them and computes the fingerprint straight from the
+dump, and `fsd-study.js summary` prints the numbers here. Read directly, 350 of the 398 dumps that pair
+with a reconstruction give exactly its key, and 34 more differ only because the reconstruction fills
+tracks the dump could read no data from with `&E5` sectors. Of the rest, 12 match a different dump of the
+same number instead, and two differ over one overlong read.
 
 Of the three near-identical pairs above, only The Empire Strikes Back is an artefact. Its track 10
 carries three sectors numbered 3 with different contents, the dump lists that track in a different order
@@ -271,20 +271,23 @@ from a dump with unreadable tracks should be recorded as provisional.
 ## Tapes
 
 `tape.js` decodes UEF and CSW images, and `tape-index.js` fingerprints 2,101 of them: 1,627 UEFs from our
-Stairway To Hell mirror, and 209 UEFs and 265 CSWs from my NAS. jsbeeb has no CSW support, so the decoder
-is new. The key is computed from the files and blocks the MOS would read, not from the container, and it
-has to be: of the 132 titles we have as both UEF and CSW, the raw decoded bytes agree for one, because of
-leader and dummy bytes, while the key agrees for 128. In the other four, one of the two images has a bad
-or missing block.
+Stairway To Hell mirror, and 209 UEFs and 265 CSWs from Matt's NAS. jsbeeb has no CSW support, so the
+decoder is new. The key is computed from the files and blocks the MOS would read, not from the container,
+and it has to be: of the 132 titles we have as both UEF and CSW, the raw decoded bytes agree for one,
+because of leader and dummy bytes, while the key agrees for 128. In the other four, the two copies
+decoded different sets of blocks.
 
 2,100 images get a key, and they make 1,737 distinct tapes. All 186 keys shared between images join
-images that aren't byte-identical, so a file hash alone would have found none of those matches, and no
-two different titles share a key. Most tapes are plain MOS files, but the keys of 103 images include
-blocks that aren't part of a complete file. In 93 of them that's protection numbering blocks in a way the
-MOS wouldn't accept as a file, and the other ten have a file with a bad block or no last block. Those
-blocks go into the key one by one; a key over complete files alone would have been just the loader. 151
-images carry over 1K in formats of their own that the key can't see, and we couldn't make those bytes
-agree between copies of one tape, so they stay out.
+images that aren't byte-identical, so a file hash alone would have found none of those matches, and the
+three keys shared by titles with no word in common are two spellings of one title (FreeFall, JCB Digger)
+and Jetpac, which is also the unlabelled side of a Cosmic Battlezones tape. Most tapes are plain MOS
+files, but the keys of 103 images include blocks that aren't part of a complete file. In 93 of them a
+file doesn't start at block 0, and the other ten have a file with a bad block or no last block. The 93
+look like protection numbering blocks in a way the MOS wouldn't accept, rather than damage: the 103
+images make only 44 distinct keys, so repeat copies agree. Those blocks go into the key one by one; a key
+over complete files alone would have been just the loader. 151 images carry over 1K in formats of their
+own that the key can't see, and we couldn't make those bytes agree between copies of one tape, so they
+stay out.
 
 2,296 of the 8,130 distinct tape files of 512 bytes or more also turn up byte for byte on a disc, and 279
 tapes have all their files on one disc image. So a tape can find a disc's record through the file-level
@@ -293,15 +296,15 @@ matching, not through the key.
 ## ADFS
 
 The corpus has hardly any ADFS: two ADLs from bbcmicro.co.uk, and no HFE capture in the mirror has an
-ADFS root directory. my NAS has 29 ADFS images, mostly copies of the same few discs kept in old emulator
-trees (Master Welcome discs, the ARM Evaluation System, the Master 512 boot disc), and they make 10
-distinct keys. Copies of one disc agree, and two versions of the Welcome disc don't, which is right,
+ADFS root directory. Matt's NAS has 29 ADFS images, mostly copies of the same few discs kept in old
+emulator trees (Master Welcome discs, the ARM Evaluation System, the Master 512 boot disc), and they make
+10 distinct keys. Copies of one disc agree, and two versions of the Welcome disc don't, which is right,
 though with byte-identical copies that's not much of a test. All nine of the distinct images jsbeeb will
 load give the same bytes through the flux path.
 
 One image is an ADFS L disc named `.ADF`, so the fingerprint now decides how an ADFS image's sides are
 laid out by its size, not its name. And ARM Evaluation System discs 4 and 5 have the same second side,
-753 sectors of real data followed by fill, so that side key belongs to two discs, which is the
+754 sectors of real data followed by fill, so that side key belongs to two discs, which is the
 `ambiguous` case again.
 
 ## Symbols on a real game
@@ -317,11 +320,12 @@ checked the anchors every 20 ms for five minutes of emulated time, playing with 
 
 On our reference capture the main region's anchors matched at 22.00 s, 20 ms before the code was
 completely in place, never earlier, and stayed matched through play although over 8,000 bytes of the
-region changed. In an earlier run, with slightly different rules for choosing anchors, five other copies
-of the same build behaved the same. Repton 1 and Repton 3 never matched a single anchor. An earlier
-build, which lacks a few routines, was rejected, but only because one of the seven anchors happened to
-sit on one of them. A cheat disc, whose pokes had landed on runs of `NOP`s when those were allowed as
-anchors, now keeps its labels.
+region changed; on the Stairway To Hell copy they matched 0.28 s early, while the loader was still
+copying. Repton 1 and Repton 3 never matched a single anchor. An earlier build, which lacks a few
+routines, had its main region rejected, but only because one of the seven anchors happened to sit on one
+of them, and one of its small regions was accepted with two anchors even though its bytes differ from the
+listing's. Two anchors is too few for a region to prove much. A cheat disc, whose pokes had landed on
+runs of `NOP`s when those were allowed as anchors, now keeps its labels.
 
 So on Repton 2, at least, anchors are cheap and chosen almost entirely by a tool. What stayed manual was
 naming the regions and leaving out the part of the listing that's the disassembler's own loader. To rerun
@@ -358,9 +362,11 @@ that error deliberately and recover.
 answer. A quarter of the Master-only discs are Electron releases, and some of the B-only ones look like
 gaps in jsbeeb's Master disc emulation rather than real incompatibilities (Holed Out sits at its own
 "Master version loading" message). Our capture notes name a machine for ten discs; the survey agrees on
-five, can't tell on four, and disagrees on one (Tank Attack). 323 discs boot on neither model, but most
-have boot option 0, so SHIFT+BREAK has nothing to run. The 113 that should autoboot and don't are the
-place to start a jsbeeb compatibility list.
+five, can't tell on four, and disagrees on one (Tank Attack). Going by titles and file names instead
+("BBC Master" and the like) does worse: three agree, two can't be told, and two disagree, both Electra
+Pen discs that fail on the Master. 323 discs boot on neither model, but most have boot option 0, so
+SHIFT+BREAK has nothing to run. The 113 that should autoboot and don't are the place to start a jsbeeb
+compatibility list.
 
 The screen is a good way to recognise a disc. On 69% of the discs that booted, a word from the disc's
 known title appears on screen, against 3% for a different disc's title. Where the catalogue title is

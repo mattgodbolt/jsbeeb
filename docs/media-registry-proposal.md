@@ -441,13 +441,13 @@ until a person has looked at it.
    decoded file list (DFS, ADFS or tape) with names, addresses, lengths and a hash per file.
 2. Group exact matches. Equal fingerprints are aliases, no judgement required.
 3. Find candidates. Images whose shared files (by content) make up at least half of each go into one
-   family, leaving out files that are one repeated byte and discs that catalogue less than 8K (many
-   protected discs catalogue only a loader); when they make up half of only the smaller one, the bigger
-   contains the smaller, which is how compilations and menu discs show up. Files are read the way the
-   filesystem addresses them (by each sector's header), not from the fingerprint's byte stream, which on
-   a protected disc holds extra sectors. A crack differs by a few bytes in a loader; a menu disc is the
-   game's files plus some extras; 40- and 80-track copies share every file; a tape and a disc of the same
-   game share the main code.
+   family, leaving out files under 512 bytes or that are one repeated byte, and discs that catalogue less
+   than 8K in the rest (many protected discs catalogue only a loader); when they make up half of only the
+   smaller one, the bigger contains the smaller, which is how compilations and menu discs show up. Files
+   are read the way the filesystem addresses them (by each sector's header), not from the fingerprint's
+   byte stream, which on a protected disc holds extra sectors. A crack differs by a few bytes in a
+   loader; a menu disc is the game's files plus some extras; 40- and 80-track copies share every file; a
+   tape and a disc of the same game share the main code.
 4. Judge each cluster. An LLM works through tools (a byte diff, the disassembler, a BASIC detokeniser,
    and headless jsbeeb to boot the disc and read the title screen) and puts each difference into a fixed
    set of categories: same dump, bad dump, remastered (the same files written out again by a tool), disc

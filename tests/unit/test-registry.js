@@ -347,6 +347,37 @@ describe("Media registry fingerprint", () => {
             expect(file).toMatchObject({ complete: true, hash: dfsCatalogue(image).files[0].hash });
         });
 
+        it("should address sectors at the first track's density even if a later track is MFM", () => {
+            const image = dfsDisc("GAME", 3000, 20);
+            const disc = newDisc();
+            const trackOf = (track) =>
+                Array.from({ length: 10 }, (_, id) => ({
+                    track,
+                    id,
+                    data: image.subarray((track * 10 + id) * SectorSize, (track * 10 + id + 1) * SectorSize),
+                }));
+            buildFmTrack(disc, 0, trackOf(0));
+            buildFmTrack(disc, 1, trackOf(1));
+            disc.buildTrack(false, 2)
+                .appendRepeatMfmByte(0x4e, 60)
+                .appendRepeatMfmByte(0x00, 12)
+                .resetCrc()
+                .appendMfm3xA1Sync()
+                .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
+                .appendMfmChunk([2, 0, 15, 1])
+                .appendCrc()
+                .appendRepeatMfmByte(0x4e, 22)
+                .appendRepeatMfmByte(0x00, 12)
+                .resetCrc()
+                .appendMfm3xA1Sync()
+                .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
+                .appendMfmChunk(sectorOf(33))
+                .appendCrc()
+                .fillMfmByte(0x4e);
+            const [file] = dfsCatalogue(addressedSideBytes(disc, false)).files;
+            expect(file).toMatchObject({ complete: true, hash: dfsCatalogue(image).files[0].hash });
+        });
+
         it("should count a file lying over sectors that weren't read as incomplete", () => {
             const image = dfsDisc("GAME", 3000, 20);
             const disc = newDisc();

@@ -1,25 +1,26 @@
 #!/usr/bin/env node
 // Counts which repeated bytes pad the ends of the corpus's sector images, to
 // settle whether trimming should accept any repeated byte or only &00 and &E5.
+// DFS images only by default; --adfs surveys the ADFS images instead.
 //
-//   node tools/registry/fill-survey.js [--corpus .registry-corpus]
+//   node tools/registry/fill-survey.js [--corpus .registry-corpus] [--adfs]
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { unzip } from "../../src/archive.js";
-import { isSectorImage, sectorImageSides, trimFill } from "./fingerprint.js";
+import { extensionOf, isSectorImage, sectorImageSides, trimFill } from "./fingerprint.js";
 
 const index = process.argv.indexOf("--corpus");
 const corpus = index > 0 ? process.argv[index + 1] : ".registry-corpus";
 
-// The ADFS images are a separate study (adfs-survey.js); --with-adfs includes them.
-const skipped = process.argv.includes("--with-adfs") ? [] : [path.join(corpus, "adfs")];
+const DfsExtensions = [".ssd", ".dsd"];
+const wantAdfs = process.argv.includes("--adfs");
+const surveyed = (name) => isSectorImage(name) && DfsExtensions.includes(extensionOf(name)) !== wantAdfs;
 
 async function walk(dir) {
     const out = [];
     for (const entry of await readdir(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
-        if (skipped.includes(full)) continue;
         out.push(...(entry.isDirectory() ? await walk(full) : [full]));
     }
     return out;
@@ -35,7 +36,7 @@ async function main() {
               ? await unzip(await readFile(file))
               : {};
         for (const [name, bytes] of Object.entries(members)) {
-            if (!isSectorImage(name)) continue;
+            if (!surveyed(name)) continue;
             for (const side of sectorImageSides(name, bytes)) {
                 sides++;
                 const { trimmedFill } = trimFill(side, { fillBytes: null });

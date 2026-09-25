@@ -3,7 +3,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { bootOne } from "../../tools/registry/boot-survey.js";
-import { junkDfsTitle, knownTitle, titleWords } from "../../tools/registry/boot-survey-analyse.js";
+import {
+    junkDfsTitle,
+    knownTitle,
+    machineClaims,
+    titleWords,
+    verdict,
+} from "../../tools/registry/boot-survey-analyse.js";
 
 const SectorSize = 256;
 const BootOptionExec = 3;
@@ -77,5 +83,33 @@ describe("boot survey titles", () => {
         expect(junkDfsTitle("023BA/1.0")).toBe(true);
         expect(junkDfsTitle("E L I T E")).toBe(true);
         expect(junkDfsTitle("REPTON3")).toBe(false);
+    });
+});
+
+describe("boot survey machine claims", () => {
+    const runs = (b, master) => ({ "B-DFS1.2": { state: b }, Master: { state: master } });
+    const tankAttack = machineClaims("Fails on model B. Ok on Master.", "");
+
+    it("agrees when the B fails and the Master boots as the note says", () => {
+        expect(verdict(tankAttack, runs("prompt", "input"))).toBe("agree");
+    });
+
+    it("disagrees when the outcomes are the other way round", () => {
+        expect(verdict(tankAttack, runs("input", "prompt"))).toBe("disagree");
+    });
+
+    it("can't settle a claim when both runs ended mostly in the MOS", () => {
+        expect(verdict(tankAttack, runs("running-os", "running-os"))).toBe("unclear");
+    });
+
+    it("reads a Master requirement from a file name, and says nothing of the B", () => {
+        const claims = machineClaims("", "Micropower/DoctorWhoAndTheMinesOfTerror-BPlusMaster.ssd");
+        expect(claims).toEqual({ "B-DFS1.2": undefined, Master: true });
+        expect(verdict(claims, runs("input", "disc-busy"))).toBe("disagree");
+        expect(verdict(claims, runs("prompt", "running-ram"))).toBe("agree");
+    });
+
+    it("takes 'not Master compatible' as a claim the Master fails", () => {
+        expect(machineClaims("Not Master compatible.", "").Master).toBe(false);
     });
 });

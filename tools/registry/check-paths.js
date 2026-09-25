@@ -4,7 +4,7 @@
 // bytes, trimmed. A mismatch means the spec (or jsbeeb's loader) is wrong before
 // real captures come into it.
 //
-//   node tools/registry/check-paths.js [--corpus .registry-corpus]
+//   node tools/registry/check-paths.js [--corpus .registry-corpus] [--with-adfs]
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";

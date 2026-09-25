@@ -5,6 +5,7 @@
 // screen names discs whose catalogue title doesn't.
 //
 //   node tools/registry/boot-survey-analyse.js [--survey .registry-corpus/boot-survey.jsonl] [--examples]
+//       [--index .registry-corpus/index.jsonl]
 //
 // Examples are only ever printed for our own mirrors' images, never bbcmicro.co.uk's.
 

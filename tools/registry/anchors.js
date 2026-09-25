@@ -214,8 +214,8 @@ const inNopRun = (byAddr, at) => isNop(byAddr.get(at)) && (isNop(byAddr.get(at -
 /**
  * Every labelled instruction in a region that could anchor it: the whole instructions from the label
  * on, up to MaxAnchorBytes, stopping before any byte a store can reach and after an unconditional
- * transfer, and before a run of NOPs (padding that patches and cheats reuse). `pinned` says the run holds an absolute address inside one of the regions, so code moving
- * behind the anchor changes it too.
+ * transfer, and before a run of NOPs (padding that patches and cheats reuse). `pinned` says the run
+ * holds an absolute address inside one of the regions, so code moving behind the anchor changes it too.
  */
 export function anchorCandidates(listing, region, written, { regions = [region], respectWrites = true } = {}) {
     const byAddr = new Map(listing.instructions.map((i) => [i.addr, i]));
@@ -305,6 +305,10 @@ export function buildSymbolSet(
         const count = Math.min(maxAnchors, Math.max(minAnchors, byLength));
         const candidates = anchorCandidates(listing, section, written, { regions: kept });
         const anchors = chooseAnchors(candidates, count, minAnchors);
+        if (anchors.length < minAnchors)
+            console.error(
+                `Region ${regionName} has only ${anchors.length} anchors of the ${minAnchors} it needs, so it can never match`,
+            );
         regions[regionName] = {
             start: hex(section.start),
             end: hex(section.end),

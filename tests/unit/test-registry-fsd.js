@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IbmDiscFormat } from "../../src/disc.js";
-import { fsdSideBytes, FsdError, parseFsd, recoverableLength } from "../../tools/registry/fsd.js";
+import { declaredLength, fsdSideBytes, FsdError, parseFsd, recoverableLength } from "../../tools/registry/fsd.js";
 
 const Header = [..."FSD"].map((c) => c.charCodeAt(0)).concat([0x10, 0xdc, 0x11, 0x02, 0x00]);
 const DataMark = 0xfb;
@@ -103,5 +103,24 @@ describe("FSD side bytes", () => {
         const fsd = parseFsd(makeFsd([{ sectors: [sector] }]));
         expect(fsdSideBytes(fsd).data).toHaveLength(512);
         expect(fsdSideBytes(fsd, { dataSize: "declared" }).data).toHaveLength(256);
+    });
+});
+
+describe("declared sector length", () => {
+    it.each([
+        [0, 128],
+        [1, 256],
+        [2, 512],
+        [3, 1024],
+    ])("size code %i declares %i bytes", (sizeCode, length) => {
+        expect(declaredLength({ sizeCode })).toBe(length);
+    });
+
+    it.each([
+        [4, 128],
+        [0xfe, 512],
+        [0xff, 1024],
+    ])("protected size code %i uses only its low two bits, as the 1770 does: %i bytes", (sizeCode, length) => {
+        expect(declaredLength({ sizeCode })).toBe(length);
     });
 });
