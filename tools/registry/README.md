@@ -58,4 +58,10 @@ The studies:
 - `anchors.js`, `anchors-run.js`: symbol-set anchors chosen from a py8dis listing, and checked against a
   game running headless.
 - `boot-survey.js`, `boot-survey-analyse.js`, `boot-survey-screen.js`: boots every distinct disc on a
-  Model B and a Master and records how far it gets.
+  Model B and a Master and records how far it gets. It takes a couple of hours:
+
+  ```sh
+  for i in $(seq 0 31); do nice -n 19 node tools/registry/boot-survey.js --shard $i/32 & done; wait
+  cat .registry-corpus/boot-survey-{0..31}.jsonl > .registry-corpus/boot-survey.jsonl
+  node tools/registry/boot-survey-analyse.js
+  ```

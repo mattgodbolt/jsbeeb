@@ -312,6 +312,34 @@ because a poke landed on an anchor that was a run of `NOP`s, although its labels
 So anchors are practical and cheap: nine short compares, chosen almost entirely by a tool. The proposal
 now leaves `NOP` runs out, and suggests smaller code regions with a minimum number of anchors each.
 
+## Booting the discs
+
+Every distinct disc key was booted headless in jsbeeb, once as a Model B with DFS 1.2 and once as a
+Master, holding SHIFT through power-on as the web page does, and left for 30 emulated seconds. That's
+long enough: between 20 and 30 seconds, fewer than 20 of the 7,363 discs on either model change between
+booted and not. `boot-survey.js` records where the CPU is running, what the VDU printed and what's on the
+screen (reading bitmap modes by matching the MOS font), and `boot-survey-analyse.js` prints the numbers.
+The whole run took about two and a half hours on a busy machine.
+
+A disc counts as booted when it ends waiting for a key somewhere other than a BASIC prompt, or running
+code from RAM or BASIC. On that measure 87.6% boot on the B and 83.8% on the Master. Another 7% on each
+end up running mostly in the MOS, which on the screens we looked at meant a title page polling for a key,
+but we can't be sure of all of them. Our HFE captures boot least often (74.4% on the B and 64.8% on the
+Master), which is what you'd expect of protected originals. An error message isn't a failure on its own:
+231 boots on the B printed one and carried on, from loaders that error deliberately and recover.
+
+307 discs boot only on the B and 62 only on the Master. Those are candidates for `requires`, but not the
+answer. A quarter of the Master-only discs are Electron releases, and some of the B-only ones look like
+gaps in jsbeeb's Master disc emulation rather than real incompatibilities (Holed Out sits at its own
+"Master version loading" message). Where our capture notes say which machine a disc needs, the survey
+agrees on seven discs and disagrees on one (Tank Attack). 323 discs boot on neither model, but most have
+boot option 0, so SHIFT+BREAK has nothing to run. The 113 that should autoboot and don't are the place to
+start a jsbeeb compatibility list.
+
+The screen is a good way to recognise a disc. On 69% of the discs that booted, a word from the disc's
+known title appears on screen, against 3% for a different disc's title. Where the catalogue title is
+blank or junk, the screen still names the disc 63% of the time.
+
 ## A look at Exile
 
 Across our own two mirrors, Exile falls into families quite naturally:
@@ -330,6 +358,21 @@ Across our own two mirrors, Exile falls into families quite naturally:
 Shared files find those families without any help, which is encouraging for the clustering step. Saying
 which one is the original, which is a crack and which is a modified version is the part that needs
 judgement: it means reading loaders and diffs, not just comparing hashes.
+
+## What this changes in the proposal
+
+- The flux path keeps sectors whose headers claim another track, orders by the track they were read from,
+  and decides 40 or 80 tracks from three signs, not one.
+- Trailing fill is only `&00` and `&E5`, and ADFS images are laid out by size, not by name.
+- FSD sector dumps are a fingerprint input, with provisional keys where a track couldn't be read.
+- Tapes have a key of their own, from the blocks the MOS would read.
+- File-level matching reads catalogues by sector address and ignores discs that catalogue only a loader;
+  it's what links archives, and it finds compilations as `contains` relations.
+- The judging categories gained another disc of the same set, 40- or 80-track packaging, and a direction
+  for `contains`.
+- Anchors avoid `NOP` runs and come in smaller regions with a minimum count.
+- Open: what to keep when a track repeats a sector ID with different contents, and whether duplicator
+  leftovers should split copies.
 
 ---
 

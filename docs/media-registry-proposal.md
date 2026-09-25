@@ -456,7 +456,10 @@ until a person has looked at it.
    then reviewed.
 
 The same pass can read keys off instruction screens (noting where it found them), work out which machines
-each variant gets to a title screen on, and list the images that don't work in jsbeeb at all.
+each variant gets to a title screen on, and list the images that don't work in jsbeeb at all. The
+findings' boot survey does the last two for the whole corpus; what it gives for `requires` are candidates
+for a person to confirm, not answers, because an Electron release or a gap in jsbeeb looks just like a
+machine requirement.
 
 The findings include a first pilot of steps 3 and 4: clustering over the whole corpus, and two
 independent LLM judges on a sample of pairs.
