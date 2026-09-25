@@ -315,39 +315,33 @@ export function tapeBlocks(runs) {
 
 /**
  * Assembles blocks into files. A file starts at block 0 and takes each following block of the same name
- * with the next number, until the last-block flag. A repeated block (the same header and data again) is
- * skipped. Anything else that doesn't fit ends the file, which is then incomplete.
+ * with the next number, until the last-block flag. Another copy of the block a file received last, with
+ * the same name, number and header, is a retry: a good copy replaces a bad one (even after the last
+ * block has closed the file), and any other copy is skipped. Anything else that doesn't fit ends the
+ * file, which is then incomplete.
  */
 export function tapeFiles(blocks) {
     const files = [];
     let file = null;
+    let latest = null;
     const finish = () => {
         if (file) files.push(file);
         file = null;
     };
+    const isComplete = (f) => f.closed && f.firstNumber === 0 && f.bad === 0;
     for (const block of blocks) {
         const good = block.complete && block.dataCrcGood;
-        const retriesLast = file && block.name === file.name && block.number === file.nextNumber - 1;
-        if (retriesLast && good && !file.lastGood) {
-            // A good copy of a block that failed its CRC: it replaces the bad one.
-            file.chunks[file.chunks.length - 1] = block.data;
-            file.goodBlocks.push(block);
-            file.bad--;
-            file.lastBlock = block;
-            file.lastGood = true;
-            if (block.flags & LastBlockFlag) {
-                file.complete = file.firstNumber === 0 && file.bad === 0;
-                finish();
+        if (latest && block.name === latest.name && sameHeader(block, latest.lastBlock)) {
+            if (good && !latest.lastGood) {
+                latest.chunks[latest.chunks.length - 1] = block.data;
+                latest.goodBlocks.push(block);
+                latest.bad--;
+                latest.lastBlock = block;
+                latest.lastGood = true;
+                latest.complete = isComplete(latest);
             }
             continue;
         }
-        if (
-            file &&
-            block.name === file.name &&
-            block.number === file.nextNumber - 1 &&
-            sameBlock(block, file.lastBlock)
-        )
-            continue;
         if (!file || block.name !== file.name || block.number !== file.nextNumber) {
             finish();
             file = {
@@ -360,9 +354,11 @@ export function tapeFiles(blocks) {
                 firstNumber: block.number,
                 bad: 0,
                 locked: false,
+                closed: false,
                 complete: false,
             };
         }
+        latest = file;
         file.chunks.push(block.data);
         file.lastBlock = block;
         file.lastGood = good;
@@ -371,7 +367,8 @@ export function tapeFiles(blocks) {
         else file.bad++;
         if (block.flags & 1) file.locked = true;
         if (block.flags & LastBlockFlag) {
-            file.complete = file.firstNumber === 0 && file.bad === 0;
+            file.closed = true;
+            file.complete = isComplete(file);
             finish();
         }
     }
@@ -394,13 +391,13 @@ export function tapeFiles(blocks) {
     });
 }
 
-function sameBlock(a, b) {
+function sameHeader(a, b) {
     return (
+        a.number === b.number &&
         a.load === b.load &&
         a.exec === b.exec &&
         a.flags === b.flags &&
-        a.data.length === b.data.length &&
-        a.data.every((byte, i) => byte === b.data[i])
+        a.data.length === b.data.length
     );
 }
 

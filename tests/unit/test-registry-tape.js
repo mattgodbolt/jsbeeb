@@ -126,9 +126,45 @@ describe("tape decoding", () => {
         expect([...file.data]).toEqual(content(600, 3));
     });
 
-    it("doesn't take a name longer than ten characters as a block", () => {
-        const long = block({ name: "ELEVENCHARS", number: 0, flags: LastBlock, data: content(10, 4) });
-        expect(decodeTape(plainUef([long])).files).toEqual([]);
+    it("takes a good retry of a last block that failed its CRC", () => {
+        const good = fileBlocks("GAME", content(600, 3));
+        const bad = block({
+            name: "GAME",
+            number: 2,
+            flags: LastBlock,
+            data: content(600, 3).slice(512),
+            badDataCrc: true,
+        });
+        const { files } = decodeTape(plainUef([good[0], good[1], bad, good[2]]));
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatchObject({ complete: true, badBlocks: 0 });
+        const one = fileBlocks("TINY", content(40, 5));
+        const badOne = block({ name: "TINY", number: 0, flags: LastBlock, data: content(40, 5), badDataCrc: true });
+        expect(decodeTape(plainUef([badOne, one[0]])).files).toEqual([
+            expect.objectContaining({ name: "TINY", complete: true, badBlocks: 0 }),
+        ]);
+    });
+
+    it("skips a bad copy of a block it already has", () => {
+        const good = fileBlocks("GAME", content(600, 3));
+        const worse = block({ name: "GAME", number: 1, data: content(256, 9), badDataCrc: true });
+        const { files } = decodeTape(plainUef([good[0], good[1], worse, good[2]]));
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatchObject({ complete: true, badBlocks: 0 });
+        expect([...files[0].data]).toEqual(content(600, 3));
+    });
+
+    it("takes the good copy after two bad ones", () => {
+        const good = fileBlocks("GAME", content(600, 3));
+        const bad = (seed) => block({ name: "GAME", number: 1, data: content(256, seed), badDataCrc: true });
+        const [file] = decodeTape(plainUef([good[0], bad(7), bad(8), good[1], good[2]])).files;
+        expect(file).toMatchObject({ complete: true, badBlocks: 0 });
+    });
+
+    it("takes a name of ten characters but not eleven", () => {
+        const named = (name) => block({ name, number: 0, flags: LastBlock, data: content(10, 4) });
+        expect(decodeTape(plainUef([named("TENCHARSXX")])).files.map((f) => f.name)).toEqual(["TENCHARSXX"]);
+        expect(decodeTape(plainUef([named("ELEVENCHARS")])).files).toEqual([]);
     });
 
     it("keeps bytes outside blocks as stray runs", () => {
