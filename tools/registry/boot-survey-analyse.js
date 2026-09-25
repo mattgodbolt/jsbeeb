@@ -9,24 +9,48 @@
 // Examples are only ever printed for our own mirrors' images, never bbcmicro.co.uk's.
 
 import { readFileSync } from "node:fs";
-import { classify } from "./boot-survey.js";
+import { BootableExtensions, classify } from "./boot-survey.js";
 
 const Models = ["B-DFS1.2", "Master"];
 const Booted = new Set(["input", "running-ram", "running-basic"]);
 // Mostly in the MOS: a program waiting on the OS, or a loader stuck in it; the survey can't tell.
 const Unclear = new Set(["running-os"]);
-// The checkpoints at 10 and 20 s were recorded with one label for every run mostly in ROM.
-const CheckpointBooted = new Set(["input", "running-ram", "running-basic", "running-rom", "running-os"]);
 const MinWordLength = 4;
-// What our mirrors' notes and names say about which machine a disc needs.
-const MachineClaim =
-    /master compat|not master|fails.{0,15}model b|ok on (the )?master|model b compat|not model b|b\+ ?\/ ?master|master version|\bmaster\)|bbc master/i;
-const MachineName = /CHT-MASTER_|BPlusMaster|MasterAndTube/;
+// What our mirrors say about which machine a disc needs: HFE capture notes, and titles or file names.
+const NoteMasterFails = /not master compat/i;
+const NoteMasterBoots = /master compat|ok on (the )?master|fine on (the )?master|b\+ ?\/ ?master/i;
+const NoteBFails = /fails.{0,15}model b|(not|isn't) model b compat/i;
+const NameMasterBoots = /BPlusMaster|MasterAndTube|\bBBC Master\b|\(Master\)/;
+// Markers our mirrors and bbcmicro.co.uk put on Electron releases.
+const ElectronName = /-E00\b|electron/i;
+// Pairs each disc with another a fixed stride away through the list, for the chance baseline.
+const ChanceStride = 7919;
+const ChanceOffset = 13;
 // Words that turn up on title screens and in titles alike and so prove nothing.
 const CommonWords = new Set(["disc", "disk", "side", "game", "games", "part", "demo", "master", "program", "version"]);
 
 export const booted = (run) => Booted.has(run.state);
 export const failed = (run) => !Booted.has(run.state) && !Unclear.has(run.state);
+
+// What a note or name claims of each model: true if it should boot, false if not, undefined if it doesn't say.
+export function machineClaims(note, name) {
+    const master = NoteMasterFails.test(note)
+        ? false
+        : NoteMasterBoots.test(note) || NameMasterBoots.test(name) || undefined;
+    const b = NoteBFails.test(note) ? false : undefined;
+    return { "B-DFS1.2": b, Master: master };
+}
+
+// agree, disagree or unclear, from each claimed model's outcome; an unclear run can't settle a claim.
+export function verdict(claims, outcomes) {
+    const results = Models.filter((m) => claims[m] !== undefined).map((m) => {
+        const run = outcomes[m];
+        if (!booted(run) && !failed(run)) return "unclear";
+        return booted(run) === claims[m] ? "agree" : "disagree";
+    });
+    if (results.includes("disagree")) return "disagree";
+    return results.includes("agree") ? "agree" : "unclear";
+}
 
 export function titleWords(title) {
     return (title ?? "")
@@ -84,7 +108,16 @@ function main() {
         discs.get(run.discKey)[run.model] = run;
     }
     const pairs = [...discs.values()].filter((d) => Models.every((m) => d[m]));
+    const indexPath = args.includes("--index") ? args[args.indexOf("--index") + 1] : ".registry-corpus/index.jsonl";
+    const index = readFileSync(indexPath, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
     console.log(`${runs.length} runs, ${pairs.length} discs run on both models`);
+    console.log(
+        `distinct disc keys in the index: ${new Set(index.map((e) => e.discKey)).size}, surveyed: ${discs.size}, ` +
+            `skipped as not bootable here: ${[...new Set(index.filter((e) => !BootableExtensions.has(e.ext)).map((e) => e.discKey))].filter((k) => !discs.has(k)).length}`,
+    );
 
     console.log("\n## How each boot ended");
     for (const model of Models) {
@@ -107,17 +140,28 @@ function main() {
         for (const [error, n] of tally(errors, (r) => r.error.trim()).slice(0, 8)) console.log(`    ${error}: ${n}`);
     }
 
-    console.log("\n## Settling: the state at 20 s against 30 s");
+    // The checkpoints kept only the state's name, recorded before running-rom was split into
+    // running-os, disc-busy and tape; none of those count as booted, so the names still decide it.
+    console.log("\n## Settling: booted (as in the headline) at 10 and 20 s against the end at 30 s");
     for (const model of Models) {
         const mine = pairs.map((d) => d[model]);
-        const final = (r) => r.checkpoints?.[r.seconds];
-        const at = (r, t) => CheckpointBooted.has(r.checkpoints?.[t]);
-        const changed10 = mine.filter((r) => at(r, "10") !== at(r, r.seconds)).length;
-        const changed20 = mine.filter((r) => at(r, "20") !== at(r, r.seconds)).length;
-        const stateChanged20 = mine.filter((r) => r.checkpoints?.["20"] !== final(r)).length;
+        const bootedAt = (r, t) => Booted.has(r.checkpoints?.[t]);
+        const changed10 = mine.filter((r) => bootedAt(r, "10") !== booted(r)).length;
+        const changed20 = mine.filter((r) => bootedAt(r, "20") !== booted(r)).length;
+        const recordedEnd = mine.filter((r) => bootedAt(r, String(r.seconds)) !== booted(r)).length;
+        // At 20 s only prompt and halted are sure failures; running-rom there may be either.
+        const failedAt20 = (r) => ["prompt", "halted"].includes(r.checkpoints?.["20"]);
+        const flipped = mine.filter((r) => (bootedAt(r, "20") && failed(r)) || (failedAt20(r) && booted(r))).length;
+        const viaRom = mine.filter(
+            (r) =>
+                bootedAt(r, "20") !== booted(r) &&
+                (r.checkpoints?.["20"] === "running-rom" || r.state === "running-os"),
+        ).length;
         console.log(
-            `${model}: booted-or-not differs from the end at 10 s for ${changed10}, at 20 s for ${changed20}; ` +
-                `exact state differs at 20 s for ${stateChanged20}`,
+            `${model}: booted or not differs from the end at 10 s for ${changed10}, at 20 s for ${changed20} ` +
+                `(the label recorded at the end disagrees with the headline for ${recordedEnd}); ` +
+                `of the changes at 20 s, ${viaRom} involve a run mostly in ROM, and ${flipped} go between booted ` +
+                `and a sure failure`,
         );
     }
 
@@ -144,6 +188,9 @@ function main() {
         );
         console.log(`  how the other model ended:`);
         const other = label === "B only" ? "Master" : "B-DFS1.2";
+        console.log(
+            `  with an Electron marker in the name: ${percent(group.filter((d) => ElectronName.test(d.Master.ref)).length, group.length)}`,
+        );
         for (const [state, n] of tally(
             group,
             (d) => `${d[other].state}${d[other].error ? ` (${d[other].error.trim()})` : ""}`,
@@ -216,26 +263,36 @@ function main() {
 
     const bootedCandidates = candidates.filter((d) => booted(d["B-DFS1.2"]) || booted(d.Master));
     const chance = bootedCandidates.filter((d, i) => {
-        const other = bootedCandidates[(i * 7919 + 13) % bootedCandidates.length];
+        const other = bootedCandidates[(i * ChanceStride + ChanceOffset) % bootedCandidates.length];
         return other !== d && namedOnScreen(d, other);
     }).length;
     console.log(`by chance: another disc's known title on screen ${percent(chance, bootedCandidates.length)}`);
 
     console.log("\n## Against what the mirrors say about machines");
-    const indexPath = args.includes("--index") ? args[args.indexOf("--index") + 1] : ".registry-corpus/index.jsonl";
-    const claims = new Map();
-    for (const line of readFileSync(indexPath, "utf8").trim().split("\n")) {
-        const entry = JSON.parse(line);
-        if (entry.source === "bbcmicro") continue;
-        const said = `${entry.meta?.title ?? entry.ref} ${entry.meta?.notes ?? ""}`;
-        if (MachineClaim.test(said) || MachineName.test(entry.ref))
-            claims.set(entry.discKey, said.replace(/\s+/g, " ").slice(0, 110));
-    }
     const shown = (run) => `${run.state}${run.error ? `/${run.error.trim()}` : ""}`;
-    for (const [discKey, said] of claims) {
-        const d = discs.get(discKey);
-        if (!d || !Models.every((m) => d[m])) continue;
-        console.log(`  B ${shown(d["B-DFS1.2"]).padEnd(22)} Master ${shown(d.Master).padEnd(22)} ${said}`);
+    for (const [label, claimOf] of [
+        ["HFE capture notes", (e) => (e.source === "hfe" && e.meta?.notes ? machineClaims(e.meta.notes, "") : null)],
+        [
+            "titles and file names",
+            (e) => (e.source === "bbcmicro" ? null : machineClaims("", `${e.meta?.title ?? ""} ${e.ref}`)),
+        ],
+    ]) {
+        const seen = new Map();
+        for (const entry of index) {
+            const claims = claimOf(entry);
+            const d = discs.get(entry.discKey);
+            if (!claims || !d || !Models.some((m) => claims[m] !== undefined) || seen.has(entry.discKey)) continue;
+            seen.set(entry.discKey, verdict(claims, d));
+            const said = `${entry.meta?.title ?? entry.ref}: ${(entry.meta?.notes ?? "").replace(/\s+/g, " ").slice(0, 90)}`;
+            console.log(
+                `  ${seen.get(entry.discKey).padEnd(9)} B ${shown(d["B-DFS1.2"]).padEnd(20)} Master ${shown(d.Master).padEnd(20)} ${said}`,
+            );
+        }
+        console.log(
+            `${label}: ${tally([...seen.values()], (v) => v)
+                .map(([v, n]) => `${v} ${n}`)
+                .join(", ")}`,
+        );
     }
 
     console.log("\n## Screen modes at the end (Master runs that booted)");

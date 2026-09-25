@@ -30,6 +30,7 @@ const SectorImages = {
 const FluxImages = [".hfe"];
 const AdfsTrackBytes = 16 * SectorSize;
 const AdfsMediumBytes = 80 * AdfsTrackBytes;
+const DfsSectorsPerTrack = 10;
 
 export const extensionOf = (name) => name.slice(name.lastIndexOf(".")).toLowerCase();
 export const isSectorImage = (name) => extensionOf(name) in SectorImages;
@@ -208,18 +209,21 @@ export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest =
 export function addressedSideBytes(disc, upper) {
     const step = sideIs40Track(disc, upper) ? 2 : 1;
     const sectors = new Map();
-    let sectorsPerTrack = 0;
+    let firstTrackIsMfm = null;
     for (let physical = 0; physical < MaxPhysicalTracks; physical += step) {
         const logical = physical / step;
         for (const sector of disc.getTrack(upper, physical).findSectors(() => {})) {
             if (sector.hasHeaderCrcError || sector.hasDataCrcError || sector.sectorData?.length !== SectorSize)
                 continue;
             if (sector.trackNumber !== logical) continue;
-            sectorsPerTrack = Math.max(sectorsPerTrack, sector.isMfm ? 16 : 10);
+            if (firstTrackIsMfm === null) firstTrackIsMfm = sector.isMfm;
             const key = `${logical}:${sector.sectorNumber}`;
             if (!sectors.has(key)) sectors.set(key, sector.sectorData);
         }
     }
+    // A filesystem numbers sectors across the whole side at its own density, which the first
+    // track that holds any sectors (the catalogue's) gives.
+    const sectorsPerTrack = firstTrackIsMfm ? AdfsTrackBytes / SectorSize : DfsSectorsPerTrack;
     let lastTrack = -1;
     for (const key of sectors.keys()) lastTrack = Math.max(lastTrack, Number(key.split(":")[0]));
     const out = Buffer.alloc((lastTrack + 1) * sectorsPerTrack * SectorSize);

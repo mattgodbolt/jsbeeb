@@ -10,6 +10,9 @@ const TeletextGraphicsOn = 0x11;
 const TeletextGraphicsOff = 0x01;
 const MaxRows = 40;
 const MaxColumns = 100;
+// Stands in for a cell that matches no MOS glyph.
+const UnknownCell = "\u00b7";
+const UnknownRun = new RegExp(`${UnknownCell}+`, "g");
 
 let fontLookup = null;
 
@@ -90,7 +93,7 @@ function bitmapText(read, start, columns, rows, ulaControl, screenSubtract, font
                 }
                 glyph.push(bits);
             }
-            line += font.get(Buffer.from(glyph).toString("hex")) ?? "·";
+            line += font.get(Buffer.from(glyph).toString("hex")) ?? UnknownCell;
         }
         lines.push(line);
     }
@@ -126,7 +129,7 @@ export function screenState(session, osRom) {
         ? teletextText(read, start, columns, rows, cpu.model.isMaster)
         : bitmapText(read, start, columns, rows, video.ulactrl, video.screenSubtract, fontFrom(osRom));
     const screenText = lines
-        .map((line) => line.replace(/·+/g, (run) => (run.length > 2 ? " " : run)).trimEnd())
+        .map((line) => line.replace(UnknownRun, (run) => (run.length > 2 ? " " : run)).trimEnd())
         .join("\n")
         .replace(/\n+$/, "");
     return {

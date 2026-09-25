@@ -152,6 +152,30 @@ function keys(tapes) {
         "images whose key includes blocks outside complete files:",
         countBy(keyed, (t) => `${kind(t)} ${t.files.some((f) => f.goodBlocks) ? "yes" : "no"}`),
     );
+    const reasonOf = (f) =>
+        f.firstBlock !== 0 ? "a file not starting at block 0" : f.badBlocks ? "a bad block" : "no last block";
+    const withBlockRecords = keyed.filter((t) => t.files.some((f) => f.goodBlocks));
+    console.log(
+        `FINDINGS: images whose key includes blocks that aren't part of a complete file: ${withBlockRecords.length}` +
+            ` (${new Set(withBlockRecords.map((t) => t.tapeKey)).size} distinct keys)`,
+    );
+    const reasons = ["a file not starting at block 0", "a bad block", "no last block"];
+    console.log(
+        "FINDINGS: of those, by the first reason that applies (in this order):",
+        countBy(withBlockRecords, (t) => {
+            const found = new Set(t.files.filter((f) => f.goodBlocks).map(reasonOf));
+            return reasons.find((r) => found.has(r));
+        }),
+    );
+    console.log(
+        "FINDINGS: of those, with at least one such file for each reason:",
+        Object.fromEntries(
+            reasons.map((r) => [
+                r,
+                withBlockRecords.filter((t) => t.files.some((f) => f.goodBlocks && reasonOf(f) === r)).length,
+            ]),
+        ),
+    );
     const blind = keyed.filter((t) => t.strayLong > 1024);
     console.log(
         `images with over 1K of bytes outside MOS blocks, which the key can't see: ${blind.length}, ` +

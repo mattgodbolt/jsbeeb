@@ -77,10 +77,15 @@ function unrelatedTitleKeys(rows) {
     return out;
 }
 
+// bbcmicro.co.uk's images were analysed privately, so their names stay out of the output unless
+// --private is given.
+const showPrivate = process.argv.includes("--private");
+const refOf = (row) => (row.source === "bbcmicro" && !showPrivate ? "(private)" : row.ref);
+
 async function main() {
     const all = await readJsonl("index.jsonl");
     const rows = all.filter((row) => !row.error);
-    for (const row of all.filter((r) => r.error)) console.log(`skipped ${row.source}:${row.ref}: ${row.error}`);
+    for (const row of all.filter((r) => r.error)) console.log(`skipped ${row.source}:${refOf(row)}: ${row.error}`);
     const hfe = rows.filter((row) => row.source === "hfe");
 
     console.log("== Corpus");
@@ -295,7 +300,7 @@ async function main() {
         for (const row of rows) {
             const dfsTitle = row.catalogues?.[0]?.title ?? "";
             if (![row.meta?.title, row.ref, dfsTitle].some((text) => pattern.test(text ?? ""))) continue;
-            console.log(`${row.source} ${row.ref} | ${row.meta?.title ?? ""} | ${row.discKey.slice(0, 8)}`);
+            console.log(`${row.source} ${refOf(row)} | ${row.meta?.title ?? ""} | ${row.discKey.slice(0, 8)}`);
             for (const file of catalogueFiles(row))
                 console.log(
                     `    ${file.name.padEnd(10)} load ${file.load.toString(16)} exec ${file.exec.toString(16)} ${file.length} ${file.hash.slice(0, 8)}`,

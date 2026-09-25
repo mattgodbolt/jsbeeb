@@ -15,10 +15,14 @@ import { fluxSideBytes, isSectorImage, sectorImageSides, trimFill } from "./fing
 const index = process.argv.indexOf("--corpus");
 const corpus = index > 0 ? process.argv[index + 1] : ".registry-corpus";
 
+// The ADFS images are a separate study (adfs-survey.js); --with-adfs includes them.
+const skipped = process.argv.includes("--with-adfs") ? [] : [path.join(corpus, "adfs")];
+
 async function walk(dir) {
     const out = [];
     for (const entry of await readdir(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+        if (skipped.includes(full)) continue;
         out.push(...(entry.isDirectory() ? await walk(full) : [full]));
     }
     return out;

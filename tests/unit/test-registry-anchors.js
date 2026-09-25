@@ -80,6 +80,28 @@ describe("registry anchors", () => {
         expect(chooseAnchors(candidates, 2).map((c) => c.at)).toEqual([0x2000, 0x200d]);
     });
 
+    it("tops up to the minimum when slices come up empty", () => {
+        const candidates = anchorCandidates(listing, region, written);
+        expect(chooseAnchors(candidates, 1, 2).map((c) => c.at)).toEqual([0x2000, 0x200d]);
+    });
+
+    it("leaves runs of NOPs out of anchors but keeps a lone NOP", () => {
+        const padded = parsePy8disListing(`    * = $3000
+start:
+    lda #$01                                                // 3000: a9 01
+    nop                                                     // 3002: ea
+    ldx #$02                                                // 3003: a2 02
+    rts                                                     // 3005: 60
+padded:
+    ldy #$03                                                // 3006: a0 03
+    nop                                                     // 3008: ea
+    nop                                                     // 3009: ea
+    jmp start                                               // 300a: 4c 00 30
+`);
+        const candidates = anchorCandidates(padded, { start: 0x3000, end: 0x300d }, new Set());
+        expect(candidates.map((c) => [c.at, bytesToHex(c.bytes)])).toEqual([[0x3000, "a901eaa20260"]]);
+    });
+
     describe("checking a region against memory", () => {
         const { set } = buildSymbolSet(listing, { name: "test", perKb: 100, maxAnchors: 2 });
         const built = set.test.regions.r2000;
@@ -96,6 +118,12 @@ describe("registry anchors", () => {
             memory.copyWithin(0x2001, 0x2000, 0x201a);
             memory[0x2000] = 0xea;
             expect(checkRegion(built, (a) => memory[a])).toEqual({ matched: false, results: [false, false] });
+        });
+
+        it("records the minimum and withholds labels from a region with fewer anchors", () => {
+            const memory = memoryOf(listing);
+            expect(built.minAnchors).toBe(2);
+            expect(checkRegion({ ...built, anchors: built.anchors.slice(0, 1) }, (a) => memory[a]).matched).toBe(false);
         });
 
         it("withholds labels before anything has loaded", () => {

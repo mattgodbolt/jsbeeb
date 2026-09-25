@@ -1,19 +1,29 @@
 #!/usr/bin/env node
 // Experiments with FSD sector dumps against the HFE mirror's reconstructions of them.
+// Results go to <corpus>/fsd-<command>.jsonl. Run in this order, since each step reads the
+// one before: match, explain, titles, then summary (and fsd-unreadable.js after titles).
 //
-//   node tools/registry/fsd-study.js pairs    the findings' three capture/reconstruction pairs,
-//                                             sector by sector, with the FSD's view of each
-//   node tools/registry/fsd-study.js match    fingerprints every FSD under --fsd-dir, and each
-//                                             mirror reconstruction with the same FSD number
-//   node tools/registry/fsd-study.js titles   for titles with both a capture and a
-//                                             reconstruction, whether their keys agree
+//   node tools/registry/fsd-study.js match      fingerprints every FSD under --fsd-dir, and each
+//                                               mirror reconstruction with the same FSD number
+//   node tools/registry/fsd-study.js explain    for pairs from match whose titles agree, why
+//                                               the keys differ when they do
+//   node tools/registry/fsd-study.js titles     for reconstructions sharing a title with a
+//                                               capture, whether the keys agree (and the FSD's)
+//   node tools/registry/fsd-study.js summary    prints the numbers the findings quote
 //
-// Options: --corpus .registry-corpus, --fsd-dir /nas/BackedUp/BBC/FSDs. Results go to
-// <corpus>/fsd-<command>.jsonl.
+// Standalone:
+//   node tools/registry/fsd-study.js pairs                      the findings' three pairs, sector
+//                                                               by sector, with the FSD's view
+//   node tools/registry/fsd-study.js reads <hfe> <logical> <track> <sector>
+//                                                               every read of one sector
+//   node tools/registry/fsd-study.js track <hfe|fsd> <track>    every sector ID on one track
+//
+// Options: --corpus .registry-corpus, --fsd-dir /nas/BackedUp/BBC/FSDs.
 
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { IbmDiscFormat } from "../../src/disc.js";
 import { fingerprint, fluxSideBytes, loadFlux, trimFill } from "./fingerprint.js";
 import { describeFsdError, fsdSideBytes, parseFsd } from "./fsd.js";
 
@@ -23,7 +33,6 @@ const option = (name, fallback) => {
 };
 const corpus = option("--corpus", ".registry-corpus");
 const fsdDir = option("--fsd-dir", "/nas/BackedUp/BBC/FSDs");
-const MaxPhysicalTracks = 84;
 const KeyBytes = 16;
 
 const sha256 = (...parts) => {
@@ -40,7 +49,7 @@ function fluxSectors(disc, upper) {
     const step = is40Track ? 2 : 1;
     const kept = new Map();
     const bad = [];
-    for (let physical = 0; physical < MaxPhysicalTracks; physical += step) {
+    for (let physical = 0; physical < IbmDiscFormat.tracksPerDisc; physical += step) {
         const logical = physical / step;
         for (const sector of disc.getTrack(upper, physical).findSectors(() => {})) {
             const where = { physical, logical, track: sector.trackNumber, sector: sector.sectorNumber };
@@ -202,7 +211,7 @@ async function pairs() {
 async function allReads(file, logicalTrack, idTrack, idSector) {
     const { disc } = await hfeSides(file);
     const reads = [];
-    for (let physical = 0; physical < MaxPhysicalTracks; ++physical)
+    for (let physical = 0; physical < IbmDiscFormat.tracksPerDisc; ++physical)
         for (const sector of disc.getTrack(false, physical).findSectors(() => {}))
             if (sector.trackNumber === idTrack && sector.sectorNumber === idSector)
                 reads.push({
@@ -249,6 +258,7 @@ async function match() {
             declaredKey: declared.discKey,
             dropped: real.dropped,
             errors: countErrors(fsd),
+            duplicateIdsDiffer: duplicateIdsDiffer(fsd),
         });
         const candidates = byNumber.get(row.number) ?? [];
         row.candidates = [];
@@ -271,6 +281,23 @@ async function match() {
         console.log(JSON.stringify(row));
     }
     await writeFile(path.join(corpus, "fsd-match.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+}
+
+/** Tracks carrying two sectors with the same ID but different data. */
+function duplicateIdsDiffer(fsd) {
+    const tracks = [];
+    for (const { track, sectors } of fsd.tracks) {
+        const seen = new Map();
+        let differs = false;
+        for (const s of sectors) {
+            if (!s.data) continue;
+            const id = `${s.track}/${s.sector}`;
+            if (seen.has(id) && !Buffer.from(seen.get(id)).equals(Buffer.from(s.data))) differs = true;
+            else if (!seen.has(id)) seen.set(id, s.data);
+        }
+        if (differs) tracks.push(track);
+    }
+    return tracks;
 }
 
 function countErrors(fsd) {
@@ -323,7 +350,7 @@ function compareSides(hfeSide, fsdSide, name, bytes) {
 const normaliseTitle = (title) =>
     (title ?? "")
         .toLowerCase()
-        .replace(/['’]/g, "")
+        .replace(/['\u2019]/g, "")
         .replace(/[^a-z0-9]+/g, " ")
         .replace(/\b(the|disc|disk|side|v\d+|version \d+)\b/g, " ")
         .replace(/\s+/g, " ")
@@ -548,7 +575,59 @@ async function explain() {
     await writeFile(path.join(corpus, "fsd-explain.jsonl"), out.map((r) => JSON.stringify(r)).join("\n") + "\n");
 }
 
-const commands = { pairs, match, titles, reads, track, explain };
+async function readResults(name) {
+    return (await readFile(path.join(corpus, name), "utf8"))
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+}
+
+async function summary() {
+    const match = await readResults("fsd-match.jsonl");
+    const explain = await readResults("fsd-explain.jsonl");
+    const titleRows = await readResults("fsd-titles.jsonl");
+    const parsed = match.filter((row) => !row.error);
+    console.log(`FSDs parsed: ${parsed.length} of ${match.length}`);
+    for (const row of match.filter((r) => r.error)) console.log(`  unparsed: ${row.fsd} (${row.error})`);
+
+    const rank = ["match", "match without CRC recovery", "match once invented sectors are removed", "differs"];
+    const best = new Map();
+    for (const row of explain) {
+        const current = best.get(row.fsd);
+        if (!current || rank.indexOf(row.verdict) < rank.indexOf(current.verdict)) best.set(row.fsd, row);
+    }
+    const reproduced = new Set(explain.filter((r) => r.verdict !== "differs").map((r) => r.path));
+    const byVerdict = (verdict) => [...best.values()].filter((r) => r.verdict === verdict);
+    const differing = byVerdict("differs");
+    // Judge a differing FSD by its closest reconstruction, not by any it happens to share a number with.
+    const distance = (r) => r.diff.onlyHfeCount + r.diff.onlyFsdCount + r.diff.differCount;
+    const closest = (fsd) =>
+        explain
+            .filter((e) => e.fsd === fsd && e.verdict === "differs")
+            .reduce((a, b) => (distance(b) < distance(a) ? b : a));
+    const otherDump = differing.filter((r) => reproduced.has(closest(r.fsd).path));
+    const remaining = differing.filter((r) => !otherDump.includes(r));
+    console.log(`FSDs pairing with a reconstruction: ${best.size}`);
+    console.log(`  exact key match: ${byVerdict("match").length}`);
+    console.log(`  exact without CRC recovery only: ${byVerdict("match without CRC recovery").length}`);
+    console.log(`  differ only by &E5-filled unreadable tracks: ${byVerdict(rank[2]).length}`);
+    console.log(`  their reconstruction is reproduced by a different dump of the same number: ${otherDump.length}`);
+    console.log(`  remaining disagreements: ${remaining.length}`);
+    for (const row of remaining) console.log(`    ${row.fsd} against ${closest(row.fsd).path}`);
+
+    const duplicates = parsed.flatMap((row) => row.duplicateIdsDiffer.map((track) => `${row.fsd} track ${track}`));
+    console.log(`Tracks with repeated sector IDs and differing data: ${duplicates.length}`);
+    for (const entry of duplicates) console.log(`  ${entry}`);
+
+    const withFsd = titleRows.filter((r) => r.nasFsd);
+    console.log(`Reconstructions sharing a title with a capture: ${titleRows.length}`);
+    console.log(`  sharing a key with a capture: ${titleRows.filter((r) => r.matchesCapture).length}`);
+    console.log(`  with a NAS FSD: ${withFsd.length}`);
+    console.log(`    reconstruction matches a capture: ${withFsd.filter((r) => r.matchesCapture).length}`);
+    console.log(`    FSD read directly matches a capture: ${withFsd.filter((r) => r.fsdMatchesCapture).length}`);
+}
+
+const commands = { pairs, match, titles, reads, track, explain, summary };
 const command = commands[process.argv[2]];
 if (!command) {
     console.error(`Usage: fsd-study.js ${Object.keys(commands).join("|")} [--corpus dir] [--fsd-dir dir]`);

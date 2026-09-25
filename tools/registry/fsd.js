@@ -43,6 +43,9 @@ export function describeFsdError(error) {
 }
 
 const FormatByte = 0xe5;
+// The 1770 reads only the low two bits of an ID's size code; protected discs put anything
+// up to &FF there.
+export const declaredLength = (sector) => 128 << (sector.sizeCode & 3);
 const DeletedDataMark = 0xf8;
 const DataMark = 0xfb;
 const isDeleted = (error) => (error & FsdError.deleted) !== 0 && !isOverreadCrcError(error);
@@ -156,7 +159,7 @@ export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unread
                     continue;
                 }
                 const length =
-                    unreadable === "fill-declared" ? 128 << (sector.sizeCode & 3) : sectors.length > 10 ? 128 : 256;
+                    unreadable === "fill-declared" ? declaredLength(sector) : sectors.length > 10 ? 128 : 256;
                 data = new Uint8Array(length).fill(FormatByte);
                 const id = (logical << 16) | (sector.track << 8) | sector.sector;
                 if (!kept.has(id)) kept.set(id, { logical, sector, data });
@@ -176,7 +179,7 @@ export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unread
                 dropped.duplicate++;
                 continue;
             }
-            const declared = 128 << (sector.sizeCode & 7);
+            const declared = declaredLength(sector);
             if (dataSize === "declared" && declared < data.length) data = data.subarray(0, declared);
             kept.set(id, { logical, sector, data });
         }

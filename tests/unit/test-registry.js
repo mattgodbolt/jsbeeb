@@ -331,6 +331,22 @@ describe("Media registry fingerprint", () => {
             expect(dfsCatalogue(moved).files[0].hash).toBe(dfsCatalogue(disc).files[0].hash);
         });
 
+        it("should read a file where DFS addresses it even with a protection sector on its track", () => {
+            const image = dfsDisc("GAME", 3000, 20);
+            const disc = newDisc();
+            const trackOf = (track) =>
+                Array.from({ length: 10 }, (_, id) => ({
+                    track,
+                    id,
+                    data: image.subarray((track * 10 + id) * SectorSize, (track * 10 + id + 1) * SectorSize),
+                }));
+            buildFmTrack(disc, 0, trackOf(0));
+            // It claims the same sector number as one of the file's, and comes first.
+            buildFmTrack(disc, 1, [{ track: 201, id: 2, data: sectorOf(77) }, ...trackOf(1)]);
+            const [file] = dfsCatalogue(addressedSideBytes(disc, false)).files;
+            expect(file).toMatchObject({ complete: true, hash: dfsCatalogue(image).files[0].hash });
+        });
+
         it("should count a file lying over sectors that weren't read as incomplete", () => {
             const image = dfsDisc("GAME", 3000, 20);
             const disc = newDisc();

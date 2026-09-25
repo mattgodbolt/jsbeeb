@@ -3,7 +3,8 @@
 // bytes at routine entry points that nothing in the listing writes to.
 //
 //   node tools/registry/anchors.js <listing.s> [--exclude-section 0x70a0] [--name <set>]
-//       [--region 0x0d00=main ...] [--per-kb 0.5] [--max-anchors 8] [--out <file.json>]
+//       [--region 0x0d00=main ...] [--per-kb 0.5] [--min-anchors 2] [--max-anchors 8]
+//       [--out <file.json>]
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -171,10 +172,10 @@ function codeOf(line) {
 }
 
 /**
- * Every address a store in the listing can write, found from the operands alone. A plain absolute store
- * writes its operand (py8dis names self-modified operands as `label+1`, so those land here too); an
- * indexed one may write anywhere up to IndexReach bytes on. Stores through a zero-page pointer can't be
- * resolved statically and are only counted.
+ * Every address a store in the listing can write, for every store whose target can be worked out from its
+ * operand: a plain absolute store writes its operand (py8dis names self-modified operands as `label+1`, so
+ * those land here too), an indexed one anywhere up to IndexReach bytes on. A store through a zero-page
+ * pointer has no target that can be worked out, so it is counted and excludes nothing.
  */
 export function storeTargets(listing, { excludeSections = [] } = {}) {
     const symbols = new Map([...listing.constants, ...listing.labels]);
@@ -207,10 +208,13 @@ function occurrences(image, pattern) {
     return count;
 }
 
+const isNop = (instruction) => instruction?.mnemonic === "nop";
+const inNopRun = (byAddr, at) => isNop(byAddr.get(at)) && (isNop(byAddr.get(at - 1)) || isNop(byAddr.get(at + 1)));
+
 /**
  * Every labelled instruction in a region that could anchor it: the whole instructions from the label
  * on, up to MaxAnchorBytes, stopping before any byte a store can reach and after an unconditional
- * transfer. `pinned` says the run holds an absolute address inside one of the regions, so code moving
+ * transfer, and before a run of NOPs (padding that patches and cheats reuse). `pinned` says the run holds an absolute address inside one of the regions, so code moving
  * behind the anchor changes it too.
  */
 export function anchorCandidates(listing, region, written, { regions = [region], respectWrites = true } = {}) {
@@ -227,6 +231,7 @@ export function anchorCandidates(listing, region, written, { regions = [region],
         for (let at = start; byAddr.has(at) && at < region.end;) {
             const instruction = byAddr.get(at);
             if (run.length + instruction.bytes.length > MaxAnchorBytes) break;
+            if (inNopRun(byAddr, at)) break;
             if (respectWrites && instruction.bytes.some((_, i) => written.has(at + i))) break;
             run.push(...instruction.bytes);
             if (instruction.bytes.length === 3 && inRegions(instruction.bytes[1] | (instruction.bytes[2] << 8)))
@@ -245,9 +250,10 @@ const score = (c) => (c.pinned ? 1e6 : 0) + c.references * 100 + c.bytes.length;
 
 /**
  * Picks up to `count` anchors spread over the region's code: the best-scoring candidate in each equal
- * slice of the span from the first candidate to the last.
+ * slice of the span from the first candidate to the last, topped up with the best of the rest when empty
+ * slices leave fewer than `minimum`.
  */
-export function chooseAnchors(candidates, count) {
+export function chooseAnchors(candidates, count, minimum = 0) {
     if (!candidates.length) return [];
     const first = candidates[0].at;
     const chosen = [];
@@ -258,20 +264,26 @@ export function chooseAnchors(candidates, count) {
         const inSlice = candidates.filter((c) => c.at >= from && c.at < to);
         if (inSlice.length) chosen.push(inSlice.reduce((best, c) => (score(c) > score(best) ? c : best)));
     }
-    return chosen;
+    const rest = candidates.filter((c) => !chosen.includes(c)).sort((a, b) => score(b) - score(a));
+    while (chosen.length < minimum && rest.length) chosen.push(rest.shift());
+    return chosen.sort((a, b) => a.at - b.at);
 }
 
 export const bytesToHex = (bytes) => bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 export const hexToBytes = (text) => text.match(/../g).map((pair) => parseInt(pair, 16));
 export const parseAddress = (text) => (typeof text === "number" ? text : parseInt(text, 16));
 
-/** Whether each of a region's anchors is in memory, read through `readByte`. */
+/**
+ * Whether each of a region's anchors is in memory, read through `readByte`. The region matches when all
+ * of them do and there are at least `minAnchors`.
+ */
 export function checkRegion(region, readByte) {
     const results = region.anchors.map(({ at, bytes }) => {
         const address = parseAddress(at);
         return hexToBytes(bytes).every((b, i) => readByte(address + i) === b);
     });
-    return { matched: results.length > 0 && results.every(Boolean), results };
+    const needed = Math.max(1, region.minAnchors ?? 1);
+    return { matched: results.length >= needed && results.every(Boolean), results };
 }
 
 /**
@@ -279,19 +291,24 @@ export function checkRegion(region, readByte) {
  * Baron's `--symbols` shape (one object of name to value), split into those inside a region and the
  * rest (zero page, OS entry points), which apply whenever any region does.
  */
-export function buildSymbolSet(listing, { name, regionNames = {}, excludeSections = [], perKb = 0.5, maxAnchors = 8 }) {
+export function buildSymbolSet(
+    listing,
+    { name, regionNames = {}, excludeSections = [], perKb = 0.5, minAnchors = 2, maxAnchors = 8 },
+) {
     const { written, indirect, indexed } = storeTargets(listing, { excludeSections });
     const kept = listing.sections.filter((s) => !excludeSections.includes(s.start));
     const regions = {};
     const stats = { storesThroughPointers: indirect, indexedStores: indexed, writtenAddresses: written.size };
     for (const section of kept) {
         const regionName = regionNames[section.start] ?? `r${section.start.toString(16).padStart(4, "0")}`;
-        const count = Math.min(maxAnchors, Math.max(1, Math.round(((section.end - section.start) / 1024) * perKb)));
+        const byLength = Math.round(((section.end - section.start) / 1024) * perKb);
+        const count = Math.min(maxAnchors, Math.max(minAnchors, byLength));
         const candidates = anchorCandidates(listing, section, written, { regions: kept });
-        const anchors = chooseAnchors(candidates, count);
+        const anchors = chooseAnchors(candidates, count, minAnchors);
         regions[regionName] = {
             start: hex(section.start),
             end: hex(section.end),
+            minAnchors,
             anchors: anchors.map((a) => ({ at: hex(a.at), bytes: bytesToHex(a.bytes) })),
         };
         stats[regionName] = { candidates: candidates.length, pinned: candidates.filter((c) => c.pinned).length };
@@ -312,6 +329,7 @@ function main() {
             region: { type: "string", multiple: true, default: [] },
             name: { type: "string", default: "symbols" },
             "per-kb": { type: "string", default: "0.5" },
+            "min-anchors": { type: "string", default: "2" },
             "max-anchors": { type: "string", default: "8" },
             out: { type: "string" },
         },
@@ -328,6 +346,7 @@ function main() {
         regionNames,
         excludeSections: values["exclude-section"].map(parseAddress),
         perKb: Number(values["per-kb"]),
+        minAnchors: Number(values["min-anchors"]),
         maxAnchors: Number(values["max-anchors"]),
     });
     const json = `${JSON.stringify(result, null, 2)}\n`;

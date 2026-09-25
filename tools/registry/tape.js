@@ -26,6 +26,15 @@ const CswRle = 1;
 const CswZRle = 2;
 const CswV1DataStart = 0x20;
 const CswV2HeaderLength = 0x34;
+const ShortHalfCycleHz = 4800;
+const LongHalfCycleHz = 2400;
+// A cycle within a third of the short-to-long difference of either length is that length; a pair straddling
+// a change of frequency lands halfway between, so it's rejected.
+const CycleToleranceDivisor = 3;
+const GapCycleRatio = 1.5;
+const RunBreakIdleBits = 20;
+const HalvesPerCycle = 2;
+const TwoMeansIterations = 10;
 
 export const shortHash = (bytes) => createHash("sha256").update(bytes).digest("hex").slice(0, 32);
 
@@ -143,8 +152,8 @@ function cswPulses(b) {
  */
 export function pulsesToRuns(pulses, rate) {
     const { short, long } = cycleLengths(pulses, rate);
-    const tolerance = (long - short) / 3;
-    const gapAbove = long * 1.5;
+    const tolerance = (long - short) / CycleToleranceDivisor;
+    const gapAbove = long * GapCycleRatio;
     const isShort = (c) => Math.abs(c - short) < tolerance;
     const isLong = (c) => Math.abs(c - long) < tolerance;
 
@@ -170,7 +179,7 @@ export function pulsesToRuns(pulses, rate) {
     let idle = 0;
     for (let i = 0; i < bits.length;) {
         if (bits[i] !== 0) {
-            if (bits[i] === null || ++idle > 20) current = null;
+            if (bits[i] === null || ++idle > RunBreakIdleBits) current = null;
             i++;
             continue;
         }
@@ -204,10 +213,10 @@ export function pulsesToRuns(pulses, rate) {
  * unlike pairs of pulses can't include a pair that straddles a change of frequency.
  */
 function cycleLengths(pulses, rate) {
-    let short = rate / 4800;
-    let long = rate / 2400;
-    const halves = pulses.filter((p) => p < long * 2);
-    for (let iteration = 0; iteration < 10; ++iteration) {
+    let short = rate / ShortHalfCycleHz;
+    let long = rate / LongHalfCycleHz;
+    const halves = pulses.filter((p) => p < long * HalvesPerCycle);
+    for (let iteration = 0; iteration < TwoMeansIterations; ++iteration) {
         let sumShort = 0;
         let nShort = 0;
         let sumLong = 0;
@@ -226,7 +235,7 @@ function cycleLengths(pulses, rate) {
         short = sumShort / nShort;
         long = sumLong / nLong;
     }
-    return { short: short * 2, long: long * 2 };
+    return { short: short * HalvesPerCycle, long: long * HalvesPerCycle };
 }
 
 function cswRuns(b) {

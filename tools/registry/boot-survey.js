@@ -22,7 +22,7 @@ const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const OsRom = readFileSync(path.join(RepoRoot, "public/roms/os.rom"));
 const DefaultModels = ["B-DFS1.2", "Master"];
 const SourcePreference = { sth: 0, hfe: 1, bbcmicro: 2 };
-const BootableExtensions = new Set([".ssd", ".dsd", ".hfe"]);
+export const BootableExtensions = new Set([".ssd", ".dsd", ".hfe"]);
 const ShiftHeldSeconds = 1;
 const CheckpointSeconds = [10, 20];
 // Sampling once a frame's worth of cycles gives 50 samples an emulated second.
