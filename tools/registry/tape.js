@@ -315,11 +315,11 @@ export function tapeBlocks(runs) {
 
 /**
  * Assembles blocks into files. A file starts at block 0 and takes each following block of the same name
- * with the next number, until the last-block flag. A block with the same name and header as the one a
- * file received last may be a retry, even after the last block has closed the file: if the held copy is
- * bad, a good copy replaces it and another bad one is skipped; if the held copy is good, a bad copy or an
- * identical one is skipped, and a good one with different data is a different block. Anything else that
- * doesn't fit ends the file, which is then incomplete.
+ * with the next number, until the last-block flag. A block with the same name and header as the last
+ * block of the most recent file may be a retry, even after the last block has closed the file: if the
+ * held copy is bad, a good copy replaces it and another bad one is skipped; if the held copy is good, a
+ * bad copy or an identical one is skipped, and a good one with different data is a different block.
+ * Anything else that doesn't fit ends the file, which is then incomplete.
  */
 export function tapeFiles(blocks) {
     const files = [];

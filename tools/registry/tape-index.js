@@ -95,7 +95,7 @@ function alternativeKeys(decoded) {
                   ),
               )
             : null,
-        // Complete files in order, repeats kept.
+        // Complete files in order, repeats kept (a one-block file repeated back to back decodes as one).
         filesAll: complete.length ? hashParts(complete.map(record)) : null,
         // The distinct complete files, sorted.
         fileSet: complete.length

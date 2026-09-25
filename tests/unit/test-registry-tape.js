@@ -167,13 +167,24 @@ describe("tape decoding", () => {
         expect(files.map((f) => [...f.data])).toEqual([content(3, 1), content(3, 2)]);
     });
 
-    it("keeps a file recorded twice as two files with one key", () => {
+    it("keeps a file recorded twice with one key, reading a one-block file twice as one", () => {
         const once = fileBlocks("GAME", content(600, 3));
         const oneBlock = fileBlocks("TINY", content(40, 5));
-        expect(decodeTape(plainUef([...once, ...once])).files).toHaveLength(2);
         const key = (blocks) => tapeKey(decodeTape(plainUef(blocks)).files);
+        expect(decodeTape(plainUef([...once, ...once])).files).toHaveLength(2);
         expect(key([...once, ...once])).toBe(key(once));
+        expect(decodeTape(plainUef([...oneBlock, ...oneBlock])).files).toHaveLength(1);
         expect(key([...oneBlock, ...oneBlock])).toBe(key(oneBlock));
+    });
+
+    it("starts a new file when a good block is followed by a different good one with its header", () => {
+        const blocks = fileBlocks("GAME", content(600, 3));
+        const other = block({ name: "GAME", number: 1, data: content(256, 6) });
+        const files = decodeTape(plainUef([blocks[0], blocks[1], other, blocks[2]])).files;
+        expect(files.map((f) => [f.firstBlock, f.complete])).toEqual([
+            [0, false],
+            [1, false],
+        ]);
     });
 
     it("takes a name of ten characters but not eleven", () => {
