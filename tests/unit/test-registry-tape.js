@@ -118,6 +118,19 @@ describe("tape decoding", () => {
         expect(decodeTape(plainUef([good[0], good[2]])).files.map((f) => f.complete)).toEqual([false, false]);
     });
 
+    it("takes a good retry of a block that failed its CRC", () => {
+        const good = fileBlocks("GAME", content(600, 3));
+        const bad = block({ name: "GAME", number: 1, data: content(600, 3).slice(256, 512), badDataCrc: true });
+        const [file] = decodeTape(plainUef([good[0], bad, good[1], good[2]])).files;
+        expect(file).toMatchObject({ complete: true, badBlocks: 0 });
+        expect([...file.data]).toEqual(content(600, 3));
+    });
+
+    it("doesn't take a name longer than ten characters as a block", () => {
+        const long = block({ name: "ELEVENCHARS", number: 0, flags: LastBlock, data: content(10, 4) });
+        expect(decodeTape(plainUef([long])).files).toEqual([]);
+    });
+
     it("keeps bytes outside blocks as stray runs", () => {
         const { stray, blocks } = tapeBlocks(
             tapeRuns(uef([data([1, 2, 3, 4]), carrier(10), data(twoFiles()[0])])).runs,

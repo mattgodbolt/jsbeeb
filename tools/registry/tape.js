@@ -247,7 +247,7 @@ function cswRuns(b) {
 function parseHeader(stream, pos) {
     if (stream[pos] !== SyncByte) return null;
     let end = pos + 1;
-    while (end < stream.length && end - pos - 1 <= MaxNameLength && stream[end] !== 0) end++;
+    while (end < stream.length && end - pos - 1 < MaxNameLength && stream[end] !== 0) end++;
     if (end >= stream.length || stream[end] !== 0) return null;
     const nameBytes = stream.subarray(pos + 1, end);
     const h = end + 1;
@@ -327,6 +327,20 @@ export function tapeFiles(blocks) {
     };
     for (const block of blocks) {
         const good = block.complete && block.dataCrcGood;
+        const retriesLast = file && block.name === file.name && block.number === file.nextNumber - 1;
+        if (retriesLast && good && !file.lastGood) {
+            // A good copy of a block that failed its CRC: it replaces the bad one.
+            file.chunks[file.chunks.length - 1] = block.data;
+            file.goodBlocks.push(block);
+            file.bad--;
+            file.lastBlock = block;
+            file.lastGood = true;
+            if (block.flags & LastBlockFlag) {
+                file.complete = file.firstNumber === 0 && file.bad === 0;
+                finish();
+            }
+            continue;
+        }
         if (
             file &&
             block.name === file.name &&
@@ -351,6 +365,7 @@ export function tapeFiles(blocks) {
         }
         file.chunks.push(block.data);
         file.lastBlock = block;
+        file.lastGood = good;
         file.nextNumber = block.number + 1;
         if (good) file.goodBlocks.push(block);
         else file.bad++;
