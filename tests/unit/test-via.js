@@ -637,6 +637,14 @@ describe("Via T2 clocking the shift register", () => {
         expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
     });
 
+    it("should keep T2 running as the shift clock when the PB6 counting bit is also set", () => {
+        via.write(ACR, AcrShiftOutFreeRunningT2 | AcrT2CountsPb6);
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(3 * 6);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
     it("should not count PB6 pulses into T2 while it clocks the shift register", () => {
         via.write(ACR, AcrShiftOutFreeRunningT2 | AcrT2CountsPb6);
         start(7, 100);
