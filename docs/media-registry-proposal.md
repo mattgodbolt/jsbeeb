@@ -1,9 +1,10 @@
 # A media registry for BBC Micro software
 
 A registry lets an emulator work out what software it has just loaded and find out things about it: a
-title, instructions, which keys it uses, which machine it needs, symbols for the debugger (#107). A
-client computes a key from any disc or tape image, fetches a static JSON record for it, and uses
-whatever's in it. Nothing here is implemented yet; this is a proposal to pick holes in.
+title, instructions, which keys it uses, which machine it needs, symbols for the debugger
+([#107](https://github.com/mattgodbolt/jsbeeb/issues/107)). A client computes a key from any disc or tape
+image, fetches a static JSON record for it, and uses whatever's in it. Nothing here is implemented yet;
+this is a proposal to pick holes in.
 
 This document says what to build. Why it's built that way, and the projects it borrows from, are in [the
 design notes](media-registry-design-notes.md); the evidence is in [the
@@ -31,7 +32,7 @@ the bytes are trimmed and hashed the same way whatever the image was.
 
 The side's bytes are the image's bytes in the order it stores them. SSD and ADFS S and M images are one
 side. DSD (10 sectors of 256 bytes a track) and ADFS L (16 a track) images alternate the two sides track
-by track; an `.adf` bigger than 80 × 16 × 256 bytes is an L disc whatever its name says.
+by track; an `.adf` or `.adm` bigger than 80 × 16 × 256 bytes is an L disc whatever its name says.
 
 ### Sides from a flux image
 
@@ -54,25 +55,26 @@ notes](media-registry-design-notes.md#reading-flux-captures).
 
 ### Sides from an FSD dump
 
-The same as a flux image, with the track each sector was dumped from in place of the track it was read
-from. A sector counts when the dump read it cleanly, or when its data had a CRC error but the bytes it
-overran hold a good CRC after a shorter power-of-two length, and then only that length counts. A track
-the dump could only read headers from contributes nothing, and the key is recorded as provisional: never
-used to merge the dump with other images ([why](media-registry-design-notes.md#fsd-dumps)).
+No pitch test: every track in the dump is read, and sectors are ordered as in step 4 above, with the
+track each sector was dumped from in place of the track it was read from. A sector counts when the dump
+read it cleanly, or when its data had a CRC error but the bytes it overran hold a good CRC after a
+shorter power-of-two length, and then only that length counts. A track the dump could only read headers
+from contributes nothing, and the key is recorded as provisional: never used to merge the dump with other
+images ([why](media-registry-design-notes.md#fsd-dumps)).
 
 ### Trimming
 
-Pad a short last sector with zeros, then drop whole 256-byte sectors from the end of the side while they
-are one repeated byte and that byte is fill. On a DFS disc, fill is `&00` or `&E5`. On an ADFS disc,
-where the first side has "Hugo" or "Nick" at `&201` (the root directory's mark), fill is any byte
-([why](media-registry-design-notes.md#trimming)).
+Treat the side's bytes as 256-byte blocks, whatever sizes its sectors were: pad a short last block with
+zeros, then drop whole blocks from the end while each is one repeated byte and that byte is fill. On an
+ADFS disc, where the first side has "Hugo" or "Nick" at `&201` (the root directory's mark), fill is any
+byte; on every other disc it's `&00` or `&E5` ([why](media-registry-design-notes.md#trimming)).
 
 ### Keys from sides
 
 - A side's digest is the SHA-256 of its trimmed bytes, and its side key is the digest cut to 128 bits.
 - The disc key is the SHA-256 of the 32-byte side digests in physical order, leaving out trailing sides
-  that trimmed to nothing, cut to 128 bits. So a DSD whose second side is blank has the same disc key as
-  an SSD of its first side.
+  that trimmed to nothing (but always keeping the first), cut to 128 bits. So a DSD whose second side is
+  blank has the same disc key as an SSD of its first side.
 - A side key is only published when every image known to have that side belongs to one title. If a later
   image shows a published side key is shared, its record becomes an `ambiguous` one
   ([why](media-registry-design-notes.md#side-keys)).
@@ -111,28 +113,30 @@ Every record is a JSON file named `<key>.json`, where the key is a hash or a tit
 lowercase and hyphenated (`exile`, `exile-v1-1`) and never 32 hex characters. Every record has `format`
 (1) and a `kind`:
 
-| `kind`      | What it is                                          | Key          |
-| ----------- | --------------------------------------------------- | ------------ |
-| `title`     | a piece of software                                 | slug         |
-| `version`   | one release of it, with `parent` set to the title   | slug         |
-| `alias`     | one image or copy, with `parent` set to its version | any hash key |
-| `redirect`  | a slug merged into another, with `to` set to it     | slug         |
-| `ambiguous` | a side key shared by several titles (`candidates`)  | side key     |
+| `kind`      | What it is                                         | Key          |
+| ----------- | -------------------------------------------------- | ------------ |
+| `title`     | a piece of software                                | slug         |
+| `version`   | one release of it, with a `parent`                 | slug         |
+| `alias`     | one image or copy, with a `parent`                 | any hash key |
+| `redirect`  | a slug merged into another, with `to` set to it    | slug         |
+| `ambiguous` | a side key shared by several titles (`candidates`) | side key     |
 
 ### Chains
 
-A record's metadata is its chain merged from the title down (alias, then version, then title), using
-[JSON Merge Patch (RFC 7396)](https://www.rfc-editor.org/rfc/rfc7396): objects merge, anything else
-replaces, and `null` removes. Any record can set any field. Collections are objects keyed by a stable
-name, never arrays, so one entry can be changed or added without repeating the rest
-([why](media-registry-design-notes.md#record-chains)).
+Each record's `parent` points one step up, and a chain can be as deep as it needs to be; title, version,
+alias is the convention, but an alias can hang straight off a title. A record's metadata is its chain
+merged with [JSON Merge Patch (RFC 7396)](https://www.rfc-editor.org/rfc/rfc7396), starting from the
+title and applying each record below it in turn, so the record nearest the image wins: objects merge,
+anything else replaces, and `null` removes. Any record can set any field. Collections that a record lower
+down might change one entry of (`controls.actions`, `links`, `content`, `source`) are objects keyed by a
+stable name, not arrays ([why](media-registry-design-notes.md#record-chains)).
 
 ```
 exile                    title: instructions, controls, links
 +-- exile-v1-1           version: its symbols (and nothing else)
     +-- <fingerprint A>  alias: "original, protected"
     +-- <fingerprint B>  alias: "protection removed"
-    +-- <file hash C>    alias: "the archive's zip of B"
+    +-- <file key C>     alias: "the archive's zip of B"
 ```
 
 ### Fields
@@ -230,9 +234,10 @@ regions covering the same addresses. Symbols outside any region (zero page, OS e
 }
 ```
 
-The debugger checks a region's anchors whenever it's about to show that region, and shows its labels when
-at least `minAnchors` (default 2) match; `globals` show whenever any region matches. A symbol set without
-anchors is never shown automatically, but can be picked by hand.
+The debugger checks a region's anchors whenever it's about to show that region, and shows its labels only
+when every anchor matches and there are at least `minAnchors` of them (default 1); `globals` show
+whenever any region matches. A symbol set without anchors is never shown automatically, but can be picked
+by hand.
 
 ## Stability
 
@@ -278,8 +283,9 @@ The build step enforces these ([why](media-registry-design-notes.md#licensing)):
 Sources to start with: our Stairway To Hell mirror, MAME's software lists, TOSEC's names and hashes, the
 Bitshifters manifest, and jsbeeb's HFE captures. Other catalogues come after asking.
 
-Aliases are found mechanically, with an LLM on the calls that need judgement ([how and
-why](media-registry-design-notes.md#finding-aliases)):
+Aliases are found mechanically, with an LLM on the calls that need judgement, and nothing an automated
+pass produces (aliases, keys read off instruction screens, `requires` from boot tests) is published until
+a person has approved it ([how and why](media-registry-design-notes.md#finding-aliases)):
 
 1. **Collect** each image's source, keys and decoded file list (DFS, ADFS or tape: names, addresses,
    lengths, a hash per file), reading files by sector address.
@@ -302,7 +308,8 @@ why](media-registry-design-notes.md#finding-aliases)):
 - `requires` feeds the machine switch that already acts on the Bitshifters `machine` field.
 - `controls` roles give phones and tablets a joystick and buttons, and gamepads sensible defaults.
 - The debugger labels addresses from symbol sets whose anchors match (#107).
-- Snapshots record the fingerprint next to the file CRC32 they use today.
+- Snapshots could record the fingerprint next to the file CRC32 they use today, to say what software they
+  need, though restoring one mid-load still wants the exact image.
 - With no record at all, content heuristics like Clock Signal's can still guess the machine and how to
   boot.
 

@@ -162,8 +162,8 @@ ADFS is different. Of the 62 sides of ADFS images in the corpus and on Matt's NA
 --adfs`), 31 end in runs of `&5A`, `&47` or `&6C`, and the second sides of the Master Welcome disc and of
 a blank L image are nothing but `&47`. Those come from emulator trees, though, so on their own they
 didn't say much about what real formatters left behind. The Master Compact captures settle it: of their
-48 sides, 25 end in `&5A`, 8 in `&47` and 8 in `&E5`, one each in `&1A` and `&F6`, and two more have a
-stray last sector of `&00` after one of those. Seven second sides are nothing but `&5A` or `&F6`: blank,
+48 sides, 25 end in `&5A`, 8 in `&47` and 8 in `&E5`, one each in `&1A` and `&F6`, and on two of those a few
+sectors of `&00` come just before the fill. Seven second sides are nothing but `&5A` or `&F6`: blank,
 but under the DFS rule they'd stop a capture from ever matching an image of its first side. So on an ADFS
 disc, which the first side's root directory marks with "Hugo" or "Nick" at `&201`, any repeated byte
 counts as fill, and DFS keeps `&00` and `&E5`.

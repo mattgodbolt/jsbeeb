@@ -102,13 +102,14 @@ Baron, for one, truncates its SSDs after the last used sector, and plenty of too
 the trimming is what lets those agree. Only fill is dropped, so a reused disc with old data past its last
 file keeps it.
 
-On DFS discs, `&E5` (what a format leaves behind) and `&00` (padding) are the only trailing bytes the
-corpus shows; any other repeated byte could just as easily be the end of a file. ADFS formatters and
-duplicators left `&5A`, `&47`, `&F6` and others behind, and a blank second side of one of those would
-otherwise stop a capture ever matching an image of its first side, so on ADFS any repeated byte counts.
-Looking for the root directory's "Hugo" or "Nick" is the one bit of filesystem knowledge the fingerprint
-needs. The [findings](media-registry-findings.md#trailing-fill) have the counts, including scarybeasts'
-Master Compact captures.
+On DFS discs, `&E5` (what a format leaves behind) and `&00` (padding) are almost all the corpus shows; the
+handful of other runs could just as easily be the end of a file. ADFS formatters and duplicators left `&5A`,
+`&47`, `&F6` and others behind, and a blank second side of one of those would otherwise stop a capture ever
+matching an image of its first side, so on ADFS any repeated byte counts. Looking for the root directory's
+"Hugo" or "Nick" is the one bit of filesystem knowledge the fingerprint needs. A DFS disc with those bytes at
+`&201`, or a reused ADFS disc re-catalogued as DFS, would be trimmed harder than it should, which only costs a
+key that differs from other copies. The [findings](media-registry-findings.md#trailing-fill) have the counts,
+including scarybeasts' Master Compact captures.
 
 ## Reading flux captures
 
@@ -118,7 +119,8 @@ renumber their tracks, so the headers don't always give half the physical track,
 legitimately repeat a track, so an odd track holding a copy isn't proof either. Captures whose data stops
 before track 50 are taken as they are, which covers 40-track drives and discs whose data stops early.
 jsbeeb's `sniffSurfaceLayout` does something like the header test, but once per disc, and a flippy disc
-can have a different pitch on each side. The findings list the captures each part of the rule changes.
+can have a different pitch on each side. The findings list the captures the combined rule changes
+against the header test alone.
 
 **Bad CRCs.** Weak sectors read differently on every capture, and two captures of the same original need
 to agree, so sectors with bad CRCs are dropped.
@@ -133,12 +135,13 @@ That hardly ever happened anyway: of the captures that share most of their files
 SSD, nearly nine in ten have those files at different sectors, so the SSDs are mostly re-mastered, not
 dumped.
 
-**Repeated sector IDs.** Keeping the first copy read made the key depend on where reading started, which
-is how one pair of Empire Strikes Back images got different keys. On some protected discs the copies are
+**Repeated sector IDs.** Keeping the first copy read made the key depend on the order the copies came in,
+which is how a capture of The Empire Strikes Back and the FSD dump behind its reconstruction got different
+keys: the dump lists the track in a different order from the disc. On some protected discs the copies are
 the protection, so keeping one, or none, would let discs that differ only there share a key. Keeping every
 different copy in byte order costs at worst an alias when two captures read different copies, and a
-wrong match is worse than a missed one. Counting copies wouldn't work, because two captures of the same
-disc can read them different numbers of times.
+wrong match is worse than a missed one. Counting copies wouldn't work either: that capture and
+that dump hold the copies different numbers of times.
 
 **Incomplete sides.** The data is concatenated without positions, so if a sector is missing or unreadable
 part way through (a damaged track, say), everything after it shifts, and the capture gets a key of its
@@ -151,9 +154,9 @@ discs.
 ## FSD dumps
 
 An FSD records each sector's header, data and read status, so it can be fingerprinted without rebuilding a
-flux image first. A dump that marks a sector as a CRC error often overran it, and a good CRC after a
-shorter length says the shorter read was right. A track the dump could only read headers from is the weak
-spot: some captures hold `&E5` there, but nothing in the dump says so, which is why those keys are
+flux image first. A dump can mark a sector as a CRC error because it read past the sector's real end, and a
+good CRC after a shorter length says the shorter read was right. A track the dump could only read headers from
+is the weak spot: some captures hold `&E5` there, but nothing in the dump says so, which is why those keys are
 provisional.
 
 ## Side keys

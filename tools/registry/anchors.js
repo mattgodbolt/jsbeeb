@@ -1,4 +1,4 @@
-// Symbol-set anchors for the media registry proposal ("Symbols and source"), as a prototype:
+// Symbol-set anchors for the media registry proposal ("Symbol sets"), as a prototype:
 // reads a py8dis disassembly listing, splits it into regions, and picks anchors, short runs of
 // bytes at routine entry points that nothing in the listing writes to.
 //
