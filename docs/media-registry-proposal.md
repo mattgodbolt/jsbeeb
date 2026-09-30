@@ -132,10 +132,12 @@ For flux images, the job is to turn the capture back into those same bytes:
    `sniffSurfaceLayout` does something like the first, but once per disc, and a flippy disc can have a
    different pitch on each side.
 2. Decode the side's tracks into sectors, reading physical tracks in ascending order (only the even ones
-   on a 40-track side) and each track from the index.
+   on a 40-track side).
 3. Keep the sectors with good header and data CRCs, whatever track their headers claim.
-4. Sort them by the track they were read from, then header track, then header sector ID, keeping the
-   first one read if all three turn up twice, so sector skew doesn't matter.
+4. Sort them by the track they were read from, then header track, then header sector ID. When all three
+   turn up more than once, keep each different content once, in ascending byte order (a sector sorts
+   before a longer one it is the start of). Neither sector skew nor where reading starts on a track
+   matters then.
 5. Concatenate their data, then trim and hash it exactly as for a sector image, treating the
    concatenation as 256-byte blocks whatever sizes the sectors were.
 
@@ -144,7 +146,10 @@ the same original need to agree. It keeps sectors whose headers claim some other
 draft that dropped them got this badly wrong: Superior's protection renumbers every track after track 0
 (physical track 4 says it's track 200, and so on down), so the rule threw away the whole game and kept
 only the boot track. Exile and Repton Infinity share that boot track byte for byte, and ended up with the
-same key. The numbers are in [the findings](media-registry-findings.md). For an unprotected disc the
+same key. The numbers are in [the findings](media-registry-findings.md). Step 4 keeps every different
+copy of a repeated ID for the same reason: on some protected discs the copies are the protection, and
+keeping one, or none, would let discs that differ only there share a key. Two captures that read
+different copies cost at worst an alias. For an unprotected disc the
 headers match anyway, so the order is the same as an SSD's and so are the bytes. The price is that a
 capture of a protected disc no longer matches an SSD made from it, because the SSD can't hold the
 renumbered sectors. The findings suggest that hardly ever happened anyway: of the captures that share
@@ -492,10 +497,6 @@ still guess the machine and how to boot.
   as not, but they come from emulator trees, so a few real ADFS captures would settle it.
 - Whether custom-format tape data (bytes outside MOS blocks, which the tape key ignores) can be decoded
   consistently enough to include.
-- What to keep when a track repeats a sector ID with different contents. "The first one read" depends on
-  where reading starts, which is how one pair of Empire Strikes Back images got different keys; keeping
-  each distinct content once, in byte order, wouldn't. Only three tracks in 427 FSD dumps do this, but it
-  should be settled before the spec is.
 - Whether a few bytes of duplicator leftovers on a protected track (Philosophers Quest, and perhaps
   Hopper) should split two copies. The key says they're different copies, which is true, so it may be
   fine as long as an alias joins them.

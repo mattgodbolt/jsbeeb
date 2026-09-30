@@ -242,16 +242,30 @@ describe("Media registry fingerprint", () => {
             expect(Buffer.from(data).equals(Buffer.from(sectorOf(1)))).toBe(true);
         });
 
-        it("should drop sectors with bad CRCs and repeated IDs", () => {
+        it("should drop sectors with bad CRCs and identical repeats of an ID", () => {
             const disc = newDisc();
             buildFmTrack(disc, 0, [
                 { track: 0, id: 0, data: sectorOf(1) },
                 { track: 0, id: 1, data: sectorOf(2), badCrc: true },
-                { track: 0, id: 0, data: sectorOf(3) },
+                { track: 0, id: 0, data: sectorOf(1) },
             ]);
             const { data, dropped } = fluxSideBytes(disc, false);
             expect(dropped).toEqual({ crc: 1, wrongTrack: 0, duplicate: 1 });
             expect(Buffer.from(data).equals(Buffer.from(sectorOf(1)))).toBe(true);
+        });
+
+        it("should keep each different copy of a repeated ID in byte order, whatever order they were read", () => {
+            const sideBytes = (copies) => {
+                const disc = newDisc();
+                buildFmTrack(disc, 0, [
+                    ...copies.map((fill) => ({ track: 0, id: 3, data: sectorOf(fill) })),
+                    { track: 0, id: 0, data: sectorOf(9) },
+                ]);
+                return Buffer.from(fluxSideBytes(disc, false).data);
+            };
+            const expected = Buffer.concat([sectorOf(9), sectorOf(2), sectorOf(5)]);
+            expect(sideBytes([5, 2, 5]).equals(expected)).toBe(true);
+            expect(sideBytes([2, 5, 2]).equals(expected)).toBe(true);
         });
     });
 

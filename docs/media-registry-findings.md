@@ -39,7 +39,7 @@ jsbeeb, decoded through the flux path and trimmed. All 5,775 gave exactly the sa
 | bbcmicro.co.uk, HFE and STH |     2 |
 | HFE and STH                 |     1 |
 
-Out of 7,365 distinct disc keys, only 64 turn up in more than one source.
+Out of 7,364 distinct disc keys, only 64 turn up in more than one source.
 
 For the captures that share files with an archive SSD, the reason is that the archive images are mostly
 re-mastered copies, with the files written out again by some tool, rather than dumps of the original
@@ -68,8 +68,8 @@ job.
 
 ## What the fingerprint does buy
 
-The 7,696 distinct files collapse to 7,365 disc keys. Most of that is repeat copies: the HFE mirror's
-1,985 files are 1,661 distinct discs, because the same disc has often been captured more than once, or
+The 7,696 distinct files collapse to 7,364 disc keys. Most of that is repeat copies: the HFE mirror's
+1,985 files are 1,660 distinct discs, because the same disc has often been captured more than once, or
 captured and also reconstructed from an FSD dump, and those agree.
 
 ## Protection, and a rule that had to go
@@ -109,7 +109,7 @@ test, below) over the whole HFE mirror:
   the Exile and Repton Infinity pairs. Under the proposal there are 6, and all six are the same title
   written differently: E-Type and E Type, Fire Track and Firetrack, Q-Master and Q Master, ViewStore and
   View Store, The Dam Busters and Dambusters, and Cheat It Again Joe and its abbreviation, CIAJ Vol 1.
-- The proposal splits 17 groups the first draft merged. Most of those are copies that differ in tens to
+- The proposal splits 16 groups the first draft merged. Most of those are copies that differ in tens to
   hundreds of sectors, which the first draft only merged because it had thrown away the protected tracks:
   the two Exile and Repton Infinity pairs, Arcadians, Turtle Graphics, Grand Prix Construction Set,
   Computer Maniacs Diary, Cheat It Again Joe, Spellbinder, Uridium, Revs, Sphinx Adventure, one
@@ -117,13 +117,13 @@ test, below) over the whole HFE mirror:
   which differ in seven sectors, and 3D Pool's between the two sides of a dual-format disc, which differ
   only past the end of the 40-track side.
 
-The rest cost us something. Three groups are near-identical copies that the proposal now keeps apart:
-Hopper v1 against a reconstruction of it, which differ by one byte in each of three sectors; The Empire
-Strikes Back, whose capture and reconstruction differ in one sector; and a Philosophers Quest pair that
-differs in four. All three sit on the protected tracks with good CRCs, and in each pair one image is a
-direct capture and the other was reconstructed from an FSD dump, so the difference may be in how the FSD
-recorded those sectors rather than on the discs. Either way the registry has to link them with an alias
-rather than a shared key. `split-diffs.js` prints all of this.
+The rest cost us something. Two groups are near-identical copies that the proposal keeps apart: Hopper v1
+against a reconstruction of it, which differ by one byte in each of three sectors, and a Philosophers
+Quest pair that differs in four. Both sit on the protected tracks with good CRCs, and in each pair one
+image is a direct capture and the other was reconstructed from an FSD dump, so the difference may be in
+how the FSD recorded those sectors rather than on the discs. Either way the registry has to link them
+with an alias rather than a shared key. A third, The Empire Strikes Back, was the fingerprint's own
+fault, and is fixed ([below](#sector-dumps)). `split-diffs.js` prints all of this.
 
 ## Which track is which
 
@@ -189,7 +189,7 @@ fingerprint's byte stream holds the protection's sectors too, so reading the cat
 file in the wrong place (the judges below caught this on Elite). Files are now read the way DFS addresses
 them, by each sector's header, and a file lying over sectors that couldn't be read doesn't count.
 
-With that, 5,341 of the 7,365 disc keys catalogue enough to take part. They form 515 families of more
+With that, 5,341 of the 7,364 disc keys catalogue enough to take part. They form 515 families of more
 than one disc, and 384 of those span more than one source, joining 1,052 discs where the keys alone
 joined 64 groups. There are 690 `contains` relations, and the ones we looked at really are compilations:
 a Blue Ribbon games disc containing Bananaman, the Superior Collection containing Airlift, Smash 7
@@ -253,17 +253,23 @@ with a reconstruction give exactly its key, and 34 more differ only because the 
 tracks the dump could read no data from with `&E5` sectors. Of the rest, 12 match a different dump of the
 same number instead, and two differ over one overlong read.
 
-Of the three near-identical pairs above, only The Empire Strikes Back is an artefact. Its track 10
-carries three sectors numbered 3 with different contents, the dump lists that track in a different order
-from the disc, and keeping the first copy picks different data. Only three tracks in the 425 dumps that
-parse have repeated IDs with different contents, but it means "keep the first one read" should become
-something that doesn't depend on order. The Philosophers Quest pair really differs on the disc: the
-dump's sectors on track 33 are a shifted copy of the game's own data, while the capture's hold something
-found nowhere else, which looks like duplicator leftovers that vary from copy to copy. The Hopper pair
-differs by three bytes that the dump reads cleanly, so the reconstruction is faithful to it, and we can't
-yet say which copy is unusual.
+Of the three near-identical pairs above, The Empire Strikes Back was an artefact. Its track 10 carries
+three sectors numbered 3 with different contents, the dump lists that track in a different order from the
+disc, and keeping the first copy picked different data. The fingerprint now keeps each different content
+of a repeated ID once, in byte order, and the capture, the dump and the reconstruction share a key.
+Across the 1,985 HFE images and the 425 dumps that parse, 11 images repeat an ID with different contents
+(The Empire Strikes Back, Mini Office and Mini Office 2, Clone, and Micro Mike Olympics, whose track 1
+has ten different sectors all numbered 0), and the change moved only their keys and joined nothing but
+the Empire Strikes Back images. Keeping just one copy, the smallest, say, would have joined those too,
+but it would let two discs that differ only in the copy it drops share a key, and a wrong match is worse
+than a missed one, which costs an alias. Counting the copies wouldn't work either: the capture reads the
+protection's pattern once and `&E5` twice, and the dump has it the other way round. The Philosophers
+Quest pair really differs on the disc: the dump's sectors on track 33 are a shifted copy of the game's
+own data, while the capture's hold something found nowhere else, which looks like duplicator leftovers
+that vary from copy to copy. The Hopper pair differs by three bytes that the dump reads cleanly, so the
+reconstruction is faithful to it, and we can't yet say which copy is unusual.
 
-Against captures of the same title, 139 of 201 reconstructions share a key. Most of the near misses
+Against captures of the same title, 140 of 201 reconstructions share a key. Most of the near misses
 differ in the catalogue, which looks like discs that had been written to. Tracks the dump couldn't read
 are the weak spot: four captures hold `&E5` there, but nothing in the dump says so, so a key computed
 from a dump with unreadable tracks should be recorded as provisional.
@@ -341,12 +347,13 @@ node tools/registry/anchors-run.js r2set.json .registry-corpus/hfe/64D80D49.hfe 
 
 ## Booting the discs
 
-All but two of the 7,365 distinct disc keys (the two ADLs) were booted headless in jsbeeb, once as a
-Model B with DFS 1.2 and once as a Master, holding SHIFT through power-on as the web page does, and left
-for 30 emulated seconds. That's long enough for most: between 20 and 30 seconds, 264 discs on the B and
-246 on the Master change between booted and not, but most of those spend their time in the MOS, and only
-39 and 34 go between booted and a clear failure. `boot-survey.js` records where the CPU is running, what
-the VDU printed and what's on the screen (reading bitmap modes by matching the MOS font), and
+All but two of the 7,365 distinct disc keys of the time (the two ADLs; that was before the rule for
+repeated sector IDs, which joined two keys) were booted headless in jsbeeb, once as a Model B with DFS
+1.2 and once as a Master, holding SHIFT through power-on as the web page does, and left for 30 emulated
+seconds. That's long enough for most: between 20 and 30 seconds, 264 discs on the B and 246 on the Master
+change between booted and not, but most of those spend their time in the MOS, and only 39 and 34 go
+between booted and a clear failure. `boot-survey.js` records where the CPU is running, what the VDU
+printed and what's on the screen (reading bitmap modes by matching the MOS font), and
 `boot-survey-analyse.js` prints the numbers. The whole run took about two and a half hours on a busy
 machine.
 
@@ -404,8 +411,8 @@ which is a modified version is the part that needs judgement.
 - The judging categories gained another disc of the same set, 40- or 80-track packaging, and a direction
   for `contains`.
 - Anchors avoid `NOP` runs and come in smaller regions with a minimum count.
-- Open: what to keep when a track repeats a sector ID with different contents, and whether duplicator
-  leftovers should split copies.
+- A track that repeats a sector ID with different contents keeps each content once, in byte order.
+- Open: whether duplicator leftovers should split copies.
 
 ---
 

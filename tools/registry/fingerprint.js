@@ -158,6 +158,28 @@ function sideIs40Track(disc, upper) {
 }
 
 /**
+ * Adds a sector read under `id` unless an identical copy is already there.
+ * @returns {boolean} whether it was added
+ */
+export function addCopy(copies, id, copy, dataOf = (c) => c) {
+    const list = copies.get(id) ?? [];
+    if (list.some((kept) => Buffer.compare(dataOf(kept), dataOf(copy)) === 0)) return false;
+    list.push(copy);
+    copies.set(id, list);
+    return true;
+}
+
+/**
+ * Sectors in fingerprint order: by ID, and where an ID was read with different contents, each
+ * content in byte order, so where reading started on a track never matters.
+ */
+export function inFingerprintOrder(copies, dataOf = (c) => c) {
+    return [...copies.entries()]
+        .sort(([a], [b]) => a - b)
+        .flatMap(([, list]) => [...list].sort((a, b) => Buffer.compare(dataOf(a), dataOf(b))));
+}
+
+/**
  * Decodes one side of a flux image back into the bytes a sector image would hold.
  *
  * `trackRule` picks what happens to sectors whose header names a different track
@@ -187,16 +209,14 @@ export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest =
                 if (trackRule === "strict") continue;
             }
             const id = (logical << 16) | (sector.trackNumber << 8) | sector.sectorNumber;
-            if (kept.has(id)) {
+            if (!addCopy(kept, id, sector.sectorData)) {
                 dropped.duplicate++;
                 continue;
             }
-            kept.set(id, sector.sectorData);
             sizes.set(sector.sectorData.length, (sizes.get(sector.sectorData.length) ?? 0) + 1);
         }
     }
-    const ordered = [...kept.entries()].sort(([a], [b]) => a - b).map(([, data]) => data);
-    return { data: Buffer.concat(ordered), is40Track, dropped, sizes };
+    return { data: Buffer.concat(inFingerprintOrder(kept)), is40Track, dropped, sizes };
 }
 
 /**

@@ -24,7 +24,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { IbmDiscFormat } from "../../src/disc.js";
-import { fingerprint, fluxSideBytes, loadFlux, trimFill } from "./fingerprint.js";
+import { addCopy, fingerprint, fluxSideBytes, inFingerprintOrder, loadFlux, trimFill } from "./fingerprint.js";
 import { describeFsdError, fsdSideBytes, parseFsd } from "./fsd.js";
 
 const option = (name, fallback) => {
@@ -58,10 +58,10 @@ function fluxSectors(disc, upper) {
                 continue;
             }
             const id = (logical << 16) | (sector.trackNumber << 8) | sector.sectorNumber;
-            if (!kept.has(id)) kept.set(id, { ...where, data: Buffer.from(sector.sectorData) });
+            addCopy(kept, id, { ...where, data: Buffer.from(sector.sectorData) }, (s) => s.data);
         }
     }
-    return { is40Track, bad, sectors: [...kept.entries()].sort(([a], [b]) => a - b).map(([, s]) => s) };
+    return { is40Track, bad, sectors: inFingerprintOrder(kept, (s) => s.data) };
 }
 
 /** The fingerprint's disc key from one side's untrimmed bytes. */

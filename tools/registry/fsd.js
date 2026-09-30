@@ -8,6 +8,7 @@
 // code of what was actually read, an error code, and that many bytes.
 
 import { IbmDiscFormat } from "../../src/disc.js";
+import { addCopy, inFingerprintOrder } from "./fingerprint.js";
 
 export const FsdError = {
     none: 0x00,
@@ -43,6 +44,7 @@ export function describeFsdError(error) {
 }
 
 const FormatByte = 0xe5;
+const byData = (entry) => entry.data;
 // The 1770 reads only the low two bits of an ID's size code; protected discs put anything
 // up to &FF there.
 export const declaredLength = (sector) => 128 << (sector.sizeCode & 3);
@@ -135,7 +137,7 @@ export function parseFsd(bytes) {
 /**
  * The bytes the fingerprint would take from an FSD's one side: every sector the dump read
  * with a good CRC, ordered by the track it was dumped from, then the track and sector its
- * ID names, first copy kept. `dataSize` picks how much of each sector: "real" (all the
+ * ID names, each different copy of one ID kept once in byte order. `dataSize` picks how much of each sector: "real" (all the
  * bytes the dump holds, which is what a flux image rebuilt from it decodes to) or
  * "declared" (the size its ID gives). With `recoverCrc`, a sector the dump marks as a CRC
  * error still counts when a shorter read of it carries a good CRC in the overread bytes.
@@ -162,7 +164,7 @@ export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unread
                     unreadable === "fill-declared" ? declaredLength(sector) : sectors.length > 10 ? 128 : 256;
                 data = new Uint8Array(length).fill(FormatByte);
                 const id = (logical << 16) | (sector.track << 8) | sector.sector;
-                if (!kept.has(id)) kept.set(id, { logical, sector, data });
+                if (!kept.has(id)) kept.set(id, [{ logical, sector, data }]);
                 continue;
             }
             if (!fsdSectorIsGood(sector)) {
@@ -175,15 +177,11 @@ export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unread
                 data = data.subarray(0, length);
             }
             const id = (logical << 16) | (sector.track << 8) | sector.sector;
-            if (kept.has(id)) {
-                dropped.duplicate++;
-                continue;
-            }
             const declared = declaredLength(sector);
             if (dataSize === "declared" && declared < data.length) data = data.subarray(0, declared);
-            kept.set(id, { logical, sector, data });
+            if (!addCopy(kept, id, { logical, sector, data }, byData)) dropped.duplicate++;
         }
     }
-    const ordered = [...kept.entries()].sort(([a], [b]) => a - b).map(([, entry]) => entry);
+    const ordered = inFingerprintOrder(kept, byData);
     return { data: Buffer.concat(ordered.map(({ data }) => data)), sectors: ordered, dropped };
 }

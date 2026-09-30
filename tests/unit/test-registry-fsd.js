@@ -57,13 +57,14 @@ describe("FSD reader", () => {
 });
 
 describe("FSD side bytes", () => {
-    it("orders by dumped track, then ID track and sector, keeping the first copy", () => {
+    it("orders by dumped track, then ID track and sector, then the bytes of different copies", () => {
         const fsd = parseFsd(
             makeFsd([
                 {
                     sectors: [
-                        { sector: 1, data: filled(256, 0x11) },
+                        { sector: 1, data: filled(256, 0x99) },
                         { sector: 0, data: filled(256, 0x10) },
+                        { sector: 1, data: filled(256, 0x11) },
                         { sector: 1, data: filled(256, 0x99) },
                     ],
                 },
@@ -71,7 +72,7 @@ describe("FSD side bytes", () => {
             ]),
         );
         const side = fsdSideBytes(fsd);
-        expect([...side.data].filter((_, i) => i % 256 === 0)).toEqual([0x10, 0x11, 0x20]);
+        expect([...side.data].filter((_, i) => i % 256 === 0)).toEqual([0x10, 0x11, 0x99, 0x20]);
         expect(side.dropped.duplicate).toBe(1);
     });
 
