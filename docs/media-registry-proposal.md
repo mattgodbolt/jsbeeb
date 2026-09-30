@@ -158,10 +158,9 @@ disappear, and a published key always resolves (a merged slug becomes a `redirec
 a new parent).
 
 The registry is a git repository of JSON files, published as a static tree (S3, or bbc.xania.org) with
-CORS open, short cache lifetimes and ETags, plus one compressed file of everything. Contributions are
-pull requests, and a build step checks every record against the schema. A lookup is `GET
-<root>/<key>.json`, then the same for each `parent`, following a `redirect`'s `to` (at most a handful of
-times).
+CORS open, short cache lifetimes and ETags. Contributions are pull requests, and a build step checks
+every record against the schema. A lookup is `GET <root>/<key>.json`, then the same for each `parent`,
+following a `redirect`'s `to` (at most a handful of times).
 
 ## Licensing
 
