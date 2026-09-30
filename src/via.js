@@ -77,6 +77,7 @@ class Via {
         this.t1c = this.t1l = this.t2c = this.t2l = 0x1fffe;
         this.t1hit = this.t2hit = true;
         this.acr = this.pcr = 0;
+        this.t2High = 0;
         this.t1_pb7 = 1;
         this.ca2PulseTask.cancel();
         this.cb2PulseTask.cancel();
@@ -87,10 +88,28 @@ class Via {
         return (this.acr & 0x1c) === 0x10;
     }
 
+    _t2ShiftPeriod() {
+        return (this.t2l & 0x1fe) + 4;
+    }
+
+    _splitT2ForShifting() {
+        const count = this.t2c + 1;
+        this.t2High = (count >>> 9) & 0xff;
+        this.t2c = (count & 0x1ff) - 1;
+    }
+
+    // Between an underflow and its relatch, t2High has already stepped down for it.
+    _joinT2FromShifting() {
+        this.t2c += (this.t2High + (this.t2c < -2 ? 1 : 0)) << 9;
+    }
+
     updateNextTime() {
         let nextTimer = this.t1c;
         if (this._t2ClocksShifter()) {
-            if (this.t2High === 0 && !this.t2hit) nextTimer = Math.min(this.t2c, nextTimer);
+            if (!this.t2hit) {
+                const underflowsToWrap = this.t2High + (this.t2c < -2 ? 1 : 0);
+                nextTimer = Math.min(this.t2c + underflowsToWrap * this._t2ShiftPeriod(), nextTimer);
+            }
         } else if (!(this.acr & 0x20)) nextTimer = Math.min(this.t2c, nextTimer);
         this.task.reschedule(Math.max(1, nextTimer));
     }
@@ -136,11 +155,10 @@ class Via {
         return newT1c;
     }
 
-    // Clocking the shifter, T2 low counts N..0,FF and relatches from the low latch. T2 high decrements as the low
-    // reaches FF (-3 here, as in 16-bit mode), and the one-shot IRQ fires as it wraps. The relatch lands a cycle
-    // later. See beebjit via.c via_shift_fired and make_timing_rom.c.
+    // T2 high steps down as T2 low reaches FF (-3, as in 16-bit mode), and the relatch lands a cycle later. See
+    // beebjit via.c via_shift_fired and make_timing_rom.c.
     _pollT2Shifting(cycles) {
-        const period = (this.t2l & 0x1fe) + 4;
+        const period = this._t2ShiftPeriod();
         let newT2c = this.t2c - cycles;
         if (newT2c <= -3) {
             const firstUnderflow = this.t2c > -3 ? 0 : 1;
@@ -149,7 +167,7 @@ class Via {
             if (underflows > this.t2High && !this.t2hit) {
                 this.ifr |= TIMER2INT;
                 this.updateIFR();
-                if (newT2c === -3 - lastUnderflow * period) this.justhit |= 2;
+                if (newT2c === -3 - (firstUnderflow + this.t2High) * period) this.justhit |= 2;
                 this.t2hit = true;
             }
             this.t2High = (this.t2High - underflows) & 0xff;
@@ -250,12 +268,8 @@ class Via {
                 this.acr = val;
                 if (this.justhit & 1 && !(val & 0x40)) this.t1hit = true;
                 const isShifting = this._t2ClocksShifter();
-                if (!wasShifting && isShifting) {
-                    this.t2High = ((this.t2c + 1) >>> 9) & 0xff;
-                    if (this.t2c >= 0) this.t2c -= this.t2High << 9;
-                } else if (wasShifting && !isShifting) {
-                    this.t2c += this.t2High << 9;
-                }
+                if (!wasShifting && isShifting) this._splitT2ForShifting();
+                else if (wasShifting && !isShifting) this._joinT2FromShifting();
                 this.updateNextTime();
                 break;
             }
@@ -303,6 +317,7 @@ class Via {
             case T2CL:
                 this.t2l &= 0x1fe00;
                 this.t2l |= val << 1;
+                if (this._t2ClocksShifter()) this.updateNextTime();
                 break;
 
             case T2CH:
@@ -446,7 +461,7 @@ class Via {
         this.drivePortB();
         if (prevPb6 && !(this.portbpins & 0x40)) {
             // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
-            if (this.acr & 0x20) {
+            if (this.acr & 0x20 && !this._t2ClocksShifter()) {
                 this.t2c -= 2;
                 // Not clear what happens here. Docs say:
                 // "When the T2 counter reaches a count of zero, IFR5 is set and the counter continues to decrement with
@@ -524,7 +539,9 @@ class Via {
         this.ier = state.ier;
         this.t1hit = state.t1hit;
         this.t2hit = state.t2hit;
-        this.t2High = state.t2High ?? 0;
+        if (state.t2High !== undefined) this.t2High = state.t2High;
+        else if (this._t2ClocksShifter()) this._splitT2ForShifting();
+        else this.t2High = 0;
         this.portapins = state.portapins;
         this.portbpins = state.portbpins;
         this.ca1 = state.ca1;

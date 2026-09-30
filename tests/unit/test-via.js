@@ -546,6 +546,63 @@ describe("Via T2 clocking the shift register", () => {
         expect(cpu.interrupt).toBeTruthy();
     });
 
+    it("should assert the interrupt when T2 high wraps without the VIA being read", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(3 * 6 - 1);
+        expect(cpu.interrupt).toBeFalsy();
+        runMicroseconds(1);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should raise the interrupt again after T2 high is rewritten", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 0);
+        runMicroseconds(7);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        via.write(T2CH, 1);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+        runMicroseconds(2 * 6);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+    });
+
+    it("should keep the count when leaving shift mode just after an underflow", () => {
+        start(7, 5);
+        runMicroseconds(9);
+        expect([via.read(T2CH), via.read(T2CL)]).toEqual([4, 0xff]);
+        via.write(ACR, 0);
+        expect([via.read(T2CH), via.read(T2CL)]).toEqual([4, 0xff]);
+    });
+
+    it("should carry T2 high through a snapshot", () => {
+        start(7, 100);
+        runMicroseconds(3 * 9 + 2);
+        const restored = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        restored.restoreState(via.snapshotState());
+        expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
+    });
+
+    it("should split a snapshot's 16-bit count when it has no T2 high", () => {
+        start(7, 100);
+        runMicroseconds(3 * 9 + 2);
+        const { t2High, ...older } = via.snapshotState();
+        older.t2c += t2High << 9;
+        const restored = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        restored.restoreState(older);
+        expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
+    });
+
+    it("should not count PB6 pulses into T2 while it clocks the shift register", () => {
+        via.write(ACR, AcrShiftOutFreeRunningT2 | 0x20);
+        start(7, 100);
+        const [ORB, DDRB] = [0x0, 0x2];
+        via.write(DDRB, 0x40);
+        via.write(ORB, 0x40);
+        const before = via.read(T2CL);
+        via.write(ORB, 0);
+        expect(via.read(T2CL)).toBe(before);
+    });
+
     it("should hand the counter back to 16-bit mode on leaving shift mode", () => {
         start(7, 100);
         runMicroseconds(2);
