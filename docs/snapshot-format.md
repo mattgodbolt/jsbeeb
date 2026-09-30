@@ -146,7 +146,7 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `t1l`                | number       | Timer 1 Latch (doubled 2MHz ticks)                               |
 | `t2l`                | number       | Timer 2 Latch                                                    |
 | `t1c`                | number       | Timer 1 Counter                                                  |
-| `t2c`                | number       | Timer 2 Counter                                                  |
+| `t2c`                | number       | Timer 2 Counter (just the low byte's count in shift mode 100)    |
 | `acr`                | number       | Auxiliary Control Register                                       |
 | `pcr`                | number       | Peripheral Control Register                                      |
 | `ifr`                | number       | Interrupt Flag Register                                          |

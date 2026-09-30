@@ -555,6 +555,38 @@ describe("Via T2 clocking the shift register", () => {
         expect(cpu.interrupt).toBeTruthy();
     });
 
+    it("should move the interrupt when the low latch is rewritten mid-flight", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(10, 1);
+        via.write(T2CL, 3);
+        runMicroseconds(12 + 5 - 1);
+        expect(cpu.interrupt).toBeFalsy();
+        runMicroseconds(1);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should time the interrupt from a count already running when shift mode is entered", () => {
+        via.write(ACR, 0);
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        via.write(ACR, AcrShiftOutFreeRunningT2);
+        runMicroseconds(3 * 6 - 1);
+        expect(cpu.interrupt).toBeFalsy();
+        runMicroseconds(1);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should not let an IFR write on the wrapping cycle clear the interrupt", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(3 * 6);
+        via.write(IFR, Timer2Int);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        runMicroseconds(1);
+        via.write(IFR, Timer2Int);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+    });
+
     it("should raise the interrupt again after T2 high is rewritten", () => {
         via.write(IER, 0x80 | Timer2Int);
         start(4, 0);

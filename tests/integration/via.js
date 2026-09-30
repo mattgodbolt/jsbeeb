@@ -1159,7 +1159,7 @@ describe("T2 under shift-out-at-T2-rate", function () {
     it("matches beebjit's timing ROM", async function () {
         const tm = await runViaProgram(`
 DIM MC% 200
-R% = &100
+R% = ${resultAddress}
 P% = MC%
 [
 OPT 2
