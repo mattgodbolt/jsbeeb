@@ -308,7 +308,7 @@ matching, not through the key.
 
 ## ADFS
 
-The corpus has hardly any ADFS: two ADLs from bbcmicro.co.uk, and no HFE capture in the mirror has an
+The main corpus has hardly any ADFS: two ADLs from bbcmicro.co.uk, and no HFE capture in the mirror has an
 ADFS root directory. Matt's NAS has 29 ADFS images, mostly copies of the same few discs kept in old
 emulator trees (Master Welcome discs, the ARM Evaluation System, the Master 512 boot disc), and they make
 10 distinct keys. Copies of one disc agree, and two versions of the Welcome disc don't, which is right,
@@ -319,6 +319,13 @@ One image is an ADFS L disc named `.ADF`, so the fingerprint now decides how an 
 laid out by its size, not its name. And ARM Evaluation System discs 4 and 5 have the same second side,
 754 sectors of real data followed by fill, so that side key belongs to two discs, which is the
 `ambiguous` case again.
+
+scarybeasts' 38 Master Compact captures (`adfs-survey.js` lists them) are real commercial discs, and give 38
+distinct disc keys. The two copies of Play It Again Sam 3 differ in eight sectors on track 0 and nowhere
+else, the sort of copy-to-copy difference an alias covers. Grand Prix Construction Set and Karate Combat
+share a second side, 426 sectors of real data, which is the `ambiguous` case once more. None of them is the
+same software as any ADFS image we have, so they can't yet show a capture matching a sector image; what
+they did settle is [the fill](#trailing-fill).
 
 ## Symbols on a real game
 

@@ -41,8 +41,9 @@ by track; an `.adf` or `.adm` bigger than 80 × 16 × 256 bytes is an L disc wha
    - at least four even tracks other than track 0 have a sector whose header gives half their physical
      track number, and more even tracks do that than give their own number; or
    - at least four even tracks hold data, and the odd tracks holding any sector that isn't a copy of an
-     even neighbour's number fewer than a tenth of them (an odd track that read nothing counts as a
-     copy).
+     even neighbour's number fewer than a tenth of them (an odd track that read nothing counts as a copy,
+     so an 80-track capture whose odd tracks all failed to read is taken as 40-track; that's a bad dump
+     anyway).
 2. **Decode** the tracks into sectors, physical tracks in ascending order.
 3. **Keep** sectors with good header and data CRCs, whatever track their headers claim.
 4. **Order** them by the track they were read from, then header track, then header sector ID. When all
@@ -76,15 +77,16 @@ byte; on every other disc it's `&00` or `&E5` ([why](media-registry-design-notes
   that trimmed to nothing (but always keeping the first), cut to 128 bits. So a DSD whose second side is
   blank has the same disc key as an SSD of its first side.
 - A side key is only published when every image known to have that side belongs to one title. If a later
-  image shows a published side key is shared, its record becomes an `ambiguous` one
+  image shows a published side key is shared, its record becomes an `ambiguous` one, which a client
+  treats as no match (or offers the `candidates` as a choice)
   ([why](media-registry-design-notes.md#side-keys)).
 
 ### Reference implementation
 
 The spec comes with a reference implementation in JavaScript and C, and test vectors: the same
 single-sided disc as a trimmed SSD, a padded SSD and an HFE; a double-sided DFS disc as a DSD and an HFE;
-an ADFS L disc as an interleaved image and an HFE; and a protected original captured twice, which gives
-the same key both times.
+an ADFS L disc as an interleaved image and an HFE; an ADFS M disc padded with `&5A` and unpadded; and a
+protected original captured twice, which gives the same key both times.
 
 ## Tape fingerprint
 
@@ -148,7 +150,8 @@ exile                    title: instructions, controls, links
   disc that needs `CHAIN""` or some text typed.
 - **`controls`:** `actions`, each with the BBC `keys` that perform it, a label, and optionally a `role`
   (`left`, `right`, `up`, `down`, `fire`, `fire2` and so on). Front ends build touch and gamepad layouts
-  from the roles; host keys and layouts don't go in the record.
+  from the roles, with anything without a role as a labelled button; host keys and layouts don't go in
+  the record.
 - **`links`:** pages elsewhere (catalogue entries, disassemblies, inlay scans, homepages), each with a
   `url` and a `rel`.
 - **`content`:** material shown inline (instructions, screenshots), each with a `url`, a `source` and a
@@ -234,10 +237,11 @@ regions covering the same addresses. Symbols outside any region (zero page, OS e
 }
 ```
 
-The debugger checks a region's anchors whenever it's about to show that region, and shows its labels only
-when every anchor matches and there are at least `minAnchors` of them (default 1); `globals` show
-whenever any region matches. A symbol set without anchors is never shown automatically, but can be picked
-by hand.
+The debugger checks a region's anchors whenever it's about to show that region (stopped at a breakpoint,
+or scrolling the disassembly), and shows its labels only when every anchor matches and there are at least
+`minAnchors` of them (default and minimum 1); `globals` show whenever any region matches. A symbol set
+without anchors is never shown automatically, but can be picked by hand. With nothing matching, the
+debugger shows plain addresses as it does today.
 
 ## Stability
 
@@ -269,7 +273,7 @@ The build step enforces these ([why](media-registry-design-notes.md#licensing)):
   entry without a licence fails the build.
 - Linking is always fine, whatever the licence of the thing linked to.
 - Inlining, with attribution, needs a licence that allows redistribution, or the author's permission
-  recorded in the entry.
+  recorded in the entry (a link to where it was given, or when).
 - Anything whose licence we don't know is never included. Disc and tape images are never part of a
   record; whether we mirror one is a separate decision about that image.
 - Disassemblies without a permissive licence or recorded permission are links only, never symbol sets.
@@ -294,12 +298,15 @@ a person has approved it ([how and why](media-registry-design-notes.md#finding-a
    under 512 bytes or of one repeated byte, and discs that catalogue less than 8K in the rest. When
    shared files make up half of only the smaller image, the bigger one `contains` it.
 4. **Judge** each cluster: an LLM, working through tools (a byte diff, the disassembler, a BASIC
-   detokeniser, headless jsbeeb), puts each difference into one of: same dump, bad dump, remastered, disc
-   written to, protection removed, trainer or cheat, menu or extras added, compilation, another disc of
-   the same set, 40- or 80-track packaging, compatibility fix, publisher revision, port, or different
-   software. Every claim must be checkable by a tool, and the pipeline checks it again.
+   detokeniser, headless jsbeeb), puts each difference into one of: same dump, bad dump, remastered (the
+   same files written out again by a tool), disc written to (a later write, a changed cycle number,
+   leftover data), protection removed, trainer or cheat, menu or extras added, compilation (with which
+   one contains which), another disc of the same set, 40- or 80-track packaging, compatibility fix,
+   publisher revision, port, or different software. Every claim must be checkable by a tool, and the
+   pipeline checks it again.
 5. **Review:** each cluster becomes a pull request of alias records with its evidence and a confidence
-   level. A person approves it, and the records' provenance says so.
+   level. A person approves it, and the records' provenance says they were proposed by automated analysis
+   and then reviewed.
 
 ## Uses in jsbeeb
 

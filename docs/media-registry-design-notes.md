@@ -1,7 +1,8 @@
 # Media registry: design notes
 
-The reasons behind the choices in the [media registry proposal](media-registry-proposal.md), and the other
-projects it borrows from. The numbers behind them are in [the findings](media-registry-findings.md).
+The reasons behind the choices in the [media registry proposal](media-registry-proposal.md), and the
+other projects it borrows from. The numbers behind them are in [the
+findings](media-registry-findings.md).
 
 ## Goals
 
@@ -102,25 +103,26 @@ Baron, for one, truncates its SSDs after the last used sector, and plenty of too
 the trimming is what lets those agree. Only fill is dropped, so a reused disc with old data past its last
 file keeps it.
 
-On DFS discs, `&E5` (what a format leaves behind) and `&00` (padding) are almost all the corpus shows; the
-handful of other runs could just as easily be the end of a file. ADFS formatters and duplicators left `&5A`,
-`&47`, `&F6` and others behind, and a blank second side of one of those would otherwise stop a capture ever
-matching an image of its first side, so on ADFS any repeated byte counts. Looking for the root directory's
-"Hugo" or "Nick" is the one bit of filesystem knowledge the fingerprint needs. A DFS disc with those bytes at
-`&201`, or a reused ADFS disc re-catalogued as DFS, would be trimmed harder than it should, which only costs a
-key that differs from other copies. The [findings](media-registry-findings.md#trailing-fill) have the counts,
-including scarybeasts' Master Compact captures.
+On DFS discs, `&E5` (what a format leaves behind) and `&00` (padding) are almost all the corpus shows;
+the handful of other runs could just as easily be the end of a file. ADFS formatters left `&5A`, `&47`,
+`&F6` and others behind, and a blank second side of one of those would otherwise stop a capture ever
+matching an image of its first side, so on ADFS any repeated byte counts. Looking for the root
+directory's "Hugo" or "Nick" is the one bit of filesystem knowledge the fingerprint needs. A DFS disc
+with those bytes at `&201`, or a reused ADFS disc re-catalogued as DFS, would be trimmed harder than it
+should, which only costs a key that differs from other copies. The
+[findings](media-registry-findings.md#trailing-fill) have the counts, including scarybeasts' Master
+Compact captures.
 
 ## Reading flux captures
 
 **Pitch.** A 40-track disc read in an 80-track drive has its data on the even tracks, and the odd tracks
 are either empty or ghosts of their neighbours. Neither of the two signs is enough alone: protected discs
 renumber their tracks, so the headers don't always give half the physical track, and some discs
-legitimately repeat a track, so an odd track holding a copy isn't proof either. Captures whose data stops
-before track 50 are taken as they are, which covers 40-track drives and discs whose data stops early.
+legitimately repeat a track, so an odd track holding a copy isn't proof either. Captures with nothing
+past track 50 are taken as they are, which covers 40-track drives and discs whose data stops early.
 jsbeeb's `sniffSurfaceLayout` does something like the header test, but once per disc, and a flippy disc
-can have a different pitch on each side. The findings list the captures the combined rule changes
-against the header test alone.
+can have a different pitch on each side. The findings list the captures the combined rule changes against
+the header test alone.
 
 **Bad CRCs.** Weak sectors read differently on every capture, and two captures of the same original need
 to agree, so sectors with bad CRCs are dropped.
@@ -136,36 +138,36 @@ SSD, nearly nine in ten have those files at different sectors, so the SSDs are m
 dumped.
 
 **Repeated sector IDs.** Keeping the first copy read made the key depend on the order the copies came in,
-which is how a capture of The Empire Strikes Back and the FSD dump behind its reconstruction got different
-keys: the dump lists the track in a different order from the disc. On some protected discs the copies are
-the protection, so keeping one, or none, would let discs that differ only there share a key. Keeping every
-different copy in byte order costs at worst an alias when two captures read different copies, and a
-wrong match is worse than a missed one. Counting copies wouldn't work either: that capture and
-that dump hold the copies different numbers of times.
+which is how a capture of The Empire Strikes Back and the FSD dump behind its reconstruction got
+different keys: the dump lists the track in a different order from the disc. On some protected discs the
+copies are the protection, so keeping one, or none, would let discs that differ only there share a key.
+Keeping every different copy in byte order costs at worst an alias when two captures read different
+copies, and a wrong match is worse than a missed one. Counting copies wouldn't work either: that capture
+and that dump hold the copies different numbers of times.
 
 **Incomplete sides.** The data is concatenated without positions, so if a sector is missing or unreadable
 part way through (a damaged track, say), everything after it shifts, and the capture gets a key of its
 own. That's a bad dump, which the registry handles as an alias like any other variant.
 
-**Naming mirrors.** The HFE mirror doesn't use fingerprints to name its reconstructed captures, because it
-needs one name per file, which is the file hash's job. A mirror names files, and the registry recognises
-discs.
+**Naming mirrors.** The HFE mirror doesn't use fingerprints to name its reconstructed captures, because
+it needs one name per file, which is the file hash's job. A mirror names files, and the registry
+recognises discs.
 
 ## FSD dumps
 
-An FSD records each sector's header, data and read status, so it can be fingerprinted without rebuilding a
-flux image first. A dump can mark a sector as a CRC error because it read past the sector's real end, and a
-good CRC after a shorter length says the shorter read was right. A track the dump could only read headers from
-is the weak spot: some captures hold `&E5` there, but nothing in the dump says so, which is why those keys are
-provisional.
+An FSD records each sector's header, data and read status, so it can be fingerprinted without rebuilding
+a flux image first. A dump can mark a sector as a CRC error because it read past the sector's real end,
+and a good CRC after a shorter length says the shorter read was right. A track the dump could only read
+headers from is the weak spot: some captures hold `&E5` there, but nothing in the dump says so, which is
+why those keys are provisional.
 
 ## Side keys
 
 Some side digests are shared by lots of unrelated discs (every blank formatted side looks the same), so a
 side key can't be trusted just because it matches. Publishing it only when it's unambiguous, and turning
-it into an `ambiguous` record when that changes, means a published key always resolves to something
-honest. A formatted but empty second side still has a catalogue on it, so a DSD with one gets a disc key
-of its own, and finds the SSD's record through the side key.
+it into an `ambiguous` record when that changes, means a published key always resolves, and never to the
+wrong title. A formatted but empty second side still has a catalogue on it, so a DSD with one gets a disc
+key of its own, and finds the SSD's record through the side key.
 
 ## Tapes
 
@@ -175,31 +177,31 @@ accept, and the loose-block records are how their content still gets into the ke
 
 ## Record chains
 
-Instructions and keys belong to a title, symbols to a version, and a crack that moves code around needs to
-override just the symbols. A chain merged with JSON Merge Patch does that with no special cases, and there
-are libraries for it in pretty much every language. Merge Patch replaces arrays wholesale, which is why
-collections are objects keyed by a stable name: a version can change one action, or add one link, without
-repeating everything else.
+Instructions and keys belong to a title, symbols to a version, and a crack that moves code around needs
+to override just the symbols. A chain merged with JSON Merge Patch does that with no special cases, and
+there are libraries for it in pretty much every language. Merge Patch replaces arrays wholesale, which is
+why collections are objects keyed by a stable name: a version can change one action, or add one link,
+without repeating everything else.
 
-Redirects are only for slugs, because a hash key is already an alias with a parent; if two title slugs are
-merged, the losing one becomes a redirect.
+Redirects are only for slugs, because a hash key is already an alias with a parent; if two title slugs
+are merged, the losing one becomes a redirect.
 
 ## Symbols
 
 BBC games rewrite their own memory all the time. Code is decrypted and relocated as it loads, variables
 sit in amongst the code, self-modifying code is everywhere, and the emulator has no idea when loading has
-finished. So a symbol set can't just be pinned to a disc and shown, and it can't be checked by hashing big
-ranges of memory either. Anchors are cheap to check (a handful of bytes each time the debugger shows a
-region), and before the code has arrived they simply don't match, so we never need to know when loading
+finished. So a symbol set can't just be pinned to a disc and shown, and it can't be checked by hashing
+big ranges of memory either. Anchors are cheap to check (a handful of bytes each time the debugger shows
+a region), and before the code has arrived they simply don't match, so we never need to know when loading
 is done.
 
-The anchor rules come from trying it on Repton 2 (the findings have the details). Stores that can reach an
-anchor would make it fail while the game runs; runs of `NOP`s are where cheats poke. Choosing anchors
+The anchor rules come from trying it on Repton 2 (the findings have the details). Stores that can reach
+an anchor would make it fail while the game runs; runs of `NOP`s are where cheats poke. Choosing anchors
 turned out to be mostly automatic: given a disassembly listing, a tool can work out every address a store
 can reach, list the candidate runs and pick about one per 2K of code. What stayed manual was naming the
-regions and noticing which parts of the listing weren't the game (a disassembler's own loader, say). A big
-file makes a poor single region, since one build difference is only caught if an anchor happens to sit on
-it, hence smaller regions with `minAnchors`.
+regions and noticing which parts of the listing weren't the game (a disassembler's own loader, say). A
+big file makes a poor single region, since one build difference is only caught if an anchor happens to
+sit on it, hence smaller regions with `minAnchors`.
 
 ## Licensing
 
@@ -235,5 +237,5 @@ answers, because an Electron release or a gap in jsbeeb looks just like a machin
 
 ---
 
-These notes were drafted by Claude (an LLM) with Matt, from a conversation about what's out there and what
-jsbeeb needs. The survey of other projects was done by reading their code and documentation.
+These notes were drafted by Claude (an LLM) with Matt, from a conversation about what's out there and
+what jsbeeb needs. The survey of other projects was done by reading their code and documentation.
