@@ -162,8 +162,8 @@ ADFS is different. Of the 62 sides of ADFS images in the corpus and on Matt's NA
 --adfs`), 31 end in runs of `&5A`, `&47` or `&6C`, and the second sides of the Master Welcome disc and of
 a blank L image are nothing but `&47`. Those come from emulator trees, though, so on their own they
 didn't say much about what real formatters left behind. The Master Compact captures settle it: of their
-48 sides, 25 end in `&5A`, 8 in `&47` and 8 in `&E5`, one each in `&1A` and `&F6`, and on two of those a few
-sectors of `&00` come just before the fill. Seven second sides are nothing but `&5A` or `&F6`: blank,
+48 sides, 25 end in `&5A`, 8 in `&47` and 8 in `&E5`, one each in `&1A` and `&F6`, and on two of those a
+few sectors of `&00` come just before the fill. Seven second sides are nothing but `&5A` or `&F6`: blank,
 but under the DFS rule they'd stop a capture from ever matching an image of its first side. So on an ADFS
 disc, which the first side's root directory marks with "Hugo" or "Nick" at `&201`, any repeated byte
 counts as fill, and DFS keeps `&00` and `&E5`.
@@ -184,10 +184,10 @@ than its hashes.
 
 ## Families from shared files
 
-Since the keys can't join re-mastered copies, the next thing to try is what the proposal calls step 3:
-grouping images by the files they share. `cluster.js` puts two discs in one family when the files they
-share, by content, make up at least half of each by size. When they make up half of only the smaller one,
-the bigger one contains the smaller, which is how compilations and menu discs show up.
+Since the keys can't join re-mastered copies, the next thing to try is step 3 of the pipeline in the
+design notes: grouping images by the files they share. `cluster.js` puts two discs in one family when the
+files they share, by content, make up at least half of each by size. When they make up half of only the
+smaller one, the bigger one contains the smaller, which is how compilations and menu discs show up.
 
 Getting there took two fixes. Many protected discs catalogue nothing but a shared boot loader and keep
 the software off the catalogue, so seven or eight unrelated educational titles all "shared" one
@@ -229,7 +229,7 @@ To see whether an LLM can do the judging, `judge-sample.js` drew 18 pairs from o
 pairs from within families, six `contains` relations and six pairs of captures with the same title that
 share some files but weren't put in one family. Two LLM agents judged each pair independently, with
 `inspect.js` (catalogues, hex dumps, byte diffs, a disassembler and a BASIC lister) and `diff-images.js`,
-picking one category from the proposal's list and quoting the command output behind every claim. Each
+picking one category from the design notes' list and quoting the command output behind every claim. Each
 judge took about eight minutes and 48 tool calls for all 18. The sample and both sets of verdicts are in
 `tools/registry/pilot/`.
 
@@ -243,8 +243,8 @@ disassembler agrees.
 
 The judges also found things the rest of the pipeline had missed. One pair the sampler called a
 compilation wasn't one. The category list had nothing for another disc of the same set, or for one
-release packaged as 40-track and 80-track discs, or for which way a `contains` relation runs; the
-proposal now has all three. And one judge found every mission file on the protected Elite disc shifted by
+release packaged as 40-track and 80-track discs, or for which way a `contains` relation runs; the design
+notes now have all three. And one judge found every mission file on the protected Elite disc shifted by
 one, which is how the catalogue-reading bug above came to light.
 
 Eighteen pairs is a small sample, and neither judge booted anything. But the two agreed on 15 of the 18,
@@ -308,8 +308,8 @@ matching, not through the key.
 
 ## ADFS
 
-The main corpus has hardly any ADFS: two ADLs from bbcmicro.co.uk, and no HFE capture in the mirror has an
-ADFS root directory. Matt's NAS has 29 ADFS images, mostly copies of the same few discs kept in old
+The main corpus has hardly any ADFS: two ADLs from bbcmicro.co.uk, and no HFE capture in the mirror has
+an ADFS root directory. Matt's NAS has 29 ADFS images, mostly copies of the same few discs kept in old
 emulator trees (Master Welcome discs, the ARM Evaluation System, the Master 512 boot disc), and they make
 10 distinct keys. Copies of one disc agree, and two versions of the Welcome disc don't, which is right,
 though with byte-identical copies that's not much of a test. All nine of the distinct images jsbeeb will
@@ -320,12 +320,12 @@ laid out by its size, not its name. And ARM Evaluation System discs 4 and 5 have
 754 sectors of real data followed by fill, so that side key belongs to two discs, which is the
 `ambiguous` case again.
 
-scarybeasts' 38 Master Compact captures (`adfs-survey.js` lists them) are real commercial discs, and give 38
-distinct disc keys. The two copies of Play It Again Sam 3 differ in eight sectors on track 0 and nowhere
-else, the sort of copy-to-copy difference an alias covers. Grand Prix Construction Set and Karate Combat
-share a second side, 426 sectors of real data, which is the `ambiguous` case once more. None of them is the
-same software as any ADFS image we have, so they can't yet show a capture matching a sector image; what
-they did settle is [the fill](#trailing-fill).
+scarybeasts' 38 Master Compact captures (`adfs-survey.js` lists them) are real commercial discs, and give
+38 distinct disc keys. The two copies of Play It Again Sam 3 differ in eight sectors on track 0 and
+nowhere else, the sort of copy-to-copy difference an alias covers. Grand Prix Construction Set and Karate
+Combat share a second side, 426 sectors of real data, which is the `ambiguous` case once more. None of
+them is the same software as any ADFS image we have, so they can't yet show a capture matching a sector
+image; what they did settle is [the fill](#trailing-fill).
 
 ## Symbols on a real game
 
@@ -412,7 +412,7 @@ Across our own two mirrors, Exile falls into families quite naturally:
 Shared files find those families without any help. Saying which one is the original, which is a crack and
 which is a modified version is the part that needs judgement.
 
-## What this changes in the proposal
+## What this changes in the design
 
 - The flux path keeps sectors whose headers claim another track, orders by the track they were read from,
   and decides 40 or 80 tracks from three signs, not one.

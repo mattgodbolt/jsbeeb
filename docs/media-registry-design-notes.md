@@ -177,11 +177,12 @@ and a good CRC after a shorter length says the shorter read was right. A track t
 headers from is the weak spot: some captures hold `&E5` there, but nothing in the dump says so, which is
 why those keys are provisional.
 
-The rule: tracks are taken in dump order with no pitch test, and ordered as a flux capture's are, with
-the dumped track in place of the physical one. A sector counts when it was read cleanly, or when its data
-had a CRC error but the bytes it overran hold a good CRC after a shorter power-of-two length, and then
-only that length counts. A track the dump could only read headers from contributes nothing, and the key
-is provisional: recorded, but never used to merge the dump with other images.
+The rule: every track in the dump is read, with no pitch test, and sectors are ordered as a flux
+capture's are, with the dumped track in place of the physical one. A sector counts when it was read
+cleanly, or when its data had a CRC error but the bytes it overran hold a good CRC after a shorter
+power-of-two length, and then only that length counts. A track the dump could only read headers from
+contributes nothing, and the key is provisional: recorded, but never used to merge the dump with other
+images.
 
 ## Side keys
 

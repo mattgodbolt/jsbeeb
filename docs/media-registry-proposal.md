@@ -6,9 +6,10 @@ title, instructions, which keys it uses, which machine it needs, symbols for the
 image, fetches a static JSON record for it, and uses whatever's in it. Nothing here is implemented yet;
 this is a proposal to pick holes in.
 
-This says what to build, in outline. The reference implementation and its test vectors settle the edge
-cases; `tools/registry/` has a prototype of it. Why it's built this way, the prior art, and the exact
-thresholds are in [the design notes](media-registry-design-notes.md), and the evidence is in [the
+This says what to build, in outline. The exact rules are in the design notes, until a reference
+implementation and its test vectors take over; `tools/registry/` has a prototype of one. Why it's built
+this way, the prior art, and the exact thresholds are in [the design
+notes](media-registry-design-notes.md), and the evidence is in [the
 findings](media-registry-findings.md).
 
 ## Keys
@@ -34,21 +35,22 @@ Computed from the disc as loaded, before any writes, one side at a time:
    once, in byte order. A 40-track disc read in an 80-track drive is read from the even tracks only,
    decided per side ([how](media-registry-design-notes.md#reading-flux-captures)). FSD dumps are read the
    same way, with no pitch test ([how](media-registry-design-notes.md#fsd-dumps)).
-2. **Trim** trailing whole 256-byte blocks of fill, after padding a short last block with zeros. Fill is
-   `&00` or `&E5`, or any repeated byte on an ADFS disc, which is one whose first side has "Hugo" or
-   "Nick" at `&201` ([why](media-registry-design-notes.md#trimming)).
+2. **Trim** trailing 256-byte blocks that are one repeated fill byte, after padding a short last block
+   with zeros. The fill byte is `&00` or `&E5`, or any byte on an ADFS disc, which is one whose first
+   side has "Hugo" or "Nick" at `&201` ([why](media-registry-design-notes.md#trimming)).
 3. **Hash.** A side key is the SHA-256 of the trimmed side, cut to 128 bits. The disc key is the SHA-256
-   of the full side digests in order, leaving out trailing sides that trimmed to nothing, cut the same
-   way.
+   of the full side digests in order, leaving out trailing sides that trimmed to nothing (but always
+   keeping the first), cut the same way.
 
-So the same disc gives the same key as an SSD, a padded SSD, an HFE or a zip of any of them, and a DSD
-with a blank second side matches an SSD of its first. A side key is published only while every image
-known to have that side belongs to one title; when that stops being true, its record becomes `ambiguous`
-([why](media-registry-design-notes.md#side-keys)).
+So the same dump of an unprotected disc gives the same key as an SSD, a padded SSD, an HFE or a zip of
+any of them, and a DSD with a blank second side matches an SSD of its first. A side key is published only
+while every image known to have that side belongs to one title; when that stops being true, its record
+becomes `ambiguous` ([why](media-registry-design-notes.md#side-keys)).
 
 The spec ships with a reference implementation in JavaScript and C and test vectors: one disc as a
 trimmed SSD, a padded SSD and an HFE; a double-sided disc as a DSD and an HFE; an ADFS L disc as an image
-and an HFE; an ADFS disc with and without `&5A` padding; and a protected original captured twice.
+and an HFE; an ADFS M disc with and without `&5A` padding; and a protected original captured twice,
+giving one key.
 
 ## Tape fingerprint
 
@@ -74,8 +76,9 @@ A client treats `ambiguous` as no match, or offers the candidates.
 
 Records chain through `parent`: title, version, alias is the convention, but any depth works. A record's
 metadata is its chain merged with [JSON Merge Patch](https://www.rfc-editor.org/rfc/rfc7396) from the
-title down, so the record nearest the image wins. Collections a lower record might change one entry of
-are objects keyed by a stable name, not arrays ([why](media-registry-design-notes.md#record-chains)).
+title down, so the record nearest the image wins. Any record can set any field. Collections a lower
+record might change one entry of (`controls.actions`, `links`, `content`, `source`) are objects keyed by
+a stable name, not arrays ([why](media-registry-design-notes.md#record-chains)).
 
 ```
 exile                    title: instructions, controls, links
@@ -105,9 +108,11 @@ exile                    title: instructions, controls, links
 
 The first fields:
 
-- `title`, `publisher`, `year`, `authors`, `aliases`, and relations such as `contains` for compilations.
+- `title`, `publisher`, `year`, `authors`, `aliases` (other names), and relations such as `contains` for
+  compilations.
 - `requires`: machine, second processor, ROMs, 40 or 80 tracks.
-- `boot`: usually absent, meaning use the disc's boot option; only for discs that need something typed.
+- `boot`: usually absent, meaning use the disc's boot option; only for discs that need `CHAIN""` or
+  something else typed.
 - `controls`: actions, each with its BBC keys, a label and optionally a `role` (`left`, `up`, `fire`…)
   that front ends turn into touch and gamepad controls. Host keys and layouts stay out of the record.
 - `links` to pages elsewhere, and `content` shown inline, each `content` entry with a `source` and a
@@ -148,12 +153,15 @@ anchors are chosen](media-registry-design-notes.md#symbols)).
 ## Stability and hosting
 
 Records can grow but don't break: `format` changes only for something that would break a format 1 reader,
-new fields can appear anywhere and clients ignore ones they don't know, fields never change meaning, and
-a published key always resolves (a merged slug becomes a `redirect`; a hash key just gets a new parent).
+new fields can appear anywhere and clients ignore ones they don't know, fields never change meaning or
+disappear, and a published key always resolves (a merged slug becomes a `redirect`; a hash key just gets
+a new parent).
 
 The registry is a git repository of JSON files, published as a static tree (S3, or bbc.xania.org) with
-CORS open and short cache lifetimes, plus one compressed file of everything. Contributions are pull
-requests. A lookup is `GET <root>/<key>.json`, then the same for each `parent`.
+CORS open, short cache lifetimes and ETags, plus one compressed file of everything. Contributions are
+pull requests, and a build step checks every record against the schema. A lookup is `GET
+<root>/<key>.json`, then the same for each `parent`, following a `redirect`'s `to` (at most a handful of
+times).
 
 ## Licensing
 
@@ -162,18 +170,18 @@ A build step enforces these ([why](media-registry-design-notes.md#licensing)):
 - Our own data (keys, computed facts, relations) is CC0.
 - Anything from elsewhere records its `source` and `licence`; `content` or `source` without a licence
   fails the build.
-- Linking is always fine. Inlining needs a licence that allows it, or the author's recorded permission.
-  Anything of unknown licence, and any disc or tape image, is never included.
+- Linking is always fine. Inlining, with attribution, needs a licence that allows it, or the author's
+  recorded permission. Anything of unknown licence, and any disc or tape image, is never included.
 - Which keys a game uses is a fact; the text of its instructions is content.
 
 ## Filling it in
 
 We start from our Stairway To Hell and HFE mirrors, MAME's software lists, TOSEC and the Bitshifters
 manifest; other catalogues after asking. Equal keys are aliases. Beyond that, images are clustered by the
-files they share, an LLM judges how each pair differs using tools whose output can be checked, and each
-cluster becomes a pull request that a person reviews. Nothing automated (aliases, controls read off
-screens, `requires` from boot tests) is published without that review, and its provenance says so
-([how](media-registry-design-notes.md#finding-aliases)).
+files they share, an LLM judges how the images in each cluster differ using tools whose output can be
+checked, and each cluster becomes a pull request that a person reviews. Nothing automated (aliases,
+controls read off screens, `requires` from boot tests) is published without that review, and its
+provenance says so ([how](media-registry-design-notes.md#finding-aliases)).
 
 ## Uses in jsbeeb
 
