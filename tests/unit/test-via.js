@@ -486,3 +486,72 @@ describe("SysVia natural keyboard shift override", () => {
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
     });
 });
+
+describe("Via T2 clocking the shift register", () => {
+    const T2CL = 0x8,
+        T2CH = 0x9,
+        ACR = 0xb,
+        IFR = 0xd,
+        IER = 0xe;
+    const AcrShiftOutFreeRunningT2 = 0x10;
+    const Timer2Int = 0x20;
+    const TicksPerMicrosecond = 2;
+
+    let via, scheduler, cpu;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+        via = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        via.write(ACR, AcrShiftOutFreeRunningT2);
+    });
+
+    function runMicroseconds(us) {
+        scheduler.polltime(us * TicksPerMicrosecond);
+    }
+
+    function start(lowLatch, high) {
+        via.write(T2CL, lowLatch);
+        via.write(T2CH, high);
+    }
+
+    it("should decrement T2 high once per low-latch-plus-two microseconds", () => {
+        const lowLatch = 10;
+        start(lowLatch, 200);
+        runMicroseconds(5 * (lowLatch + 2));
+        expect(via.read(T2CH)).toBe(195);
+    });
+
+    it("should change rate at the next relatch when the low latch is rewritten", () => {
+        start(10, 200);
+        runMicroseconds(12);
+        via.write(T2CL, 30);
+        runMicroseconds(3 * 32);
+        expect(via.read(T2CH)).toBe(196);
+    });
+
+    it("should not reload T2 high from the latch when the low byte relatches", () => {
+        start(3, 1);
+        runMicroseconds(3 * 5);
+        expect(via.read(T2CH)).toBe(0xfe);
+    });
+
+    it("should raise the one-shot T2 interrupt only when T2 high wraps", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(2 * 6);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+        runMicroseconds(6);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should hand the counter back to 16-bit mode on leaving shift mode", () => {
+        start(7, 100);
+        runMicroseconds(2);
+        via.write(ACR, 0);
+        expect(via.read(T2CH)).toBe(100);
+        runMicroseconds(0x100);
+        expect(via.read(T2CH)).toBe(99);
+    });
+});

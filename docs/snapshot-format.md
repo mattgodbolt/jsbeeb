@@ -153,6 +153,7 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `ier`                | number       | Interrupt Enable Register                                        |
 | `t1hit`              | boolean      | Timer 1 has expired                                              |
 | `t2hit`              | boolean      | Timer 2 has expired                                              |
+| `t2High`             | number       | Timer 2 high byte while T2 clocks the shift register (ACR 100)   |
 | `portapins`          | number       | Port A pin levels                                                |
 | `portbpins`          | number       | Port B pin levels                                                |
 | `ca1`                | boolean      | CA1 line level                                                   |

@@ -50,6 +50,7 @@ class Via {
         this.ier = 0;
         this.t1hit = false;
         this.t2hit = false;
+        this.t2High = 0;
         this.portapins = 0;
         this.portbpins = 0;
         this.ca1 = false;
@@ -82,9 +83,15 @@ class Via {
         this.updateNextTime();
     }
 
+    _t2ClocksShifter() {
+        return (this.acr & 0x1c) === 0x10;
+    }
+
     updateNextTime() {
         let nextTimer = this.t1c;
-        if (!(this.acr & 0x20)) nextTimer = Math.min(this.t2c, nextTimer);
+        if (this._t2ClocksShifter()) {
+            if (this.t2High === 0 && !this.t2hit) nextTimer = Math.min(this.t2c, nextTimer);
+        } else if (!(this.acr & 0x20)) nextTimer = Math.min(this.t2c, nextTimer);
         this.task.reschedule(Math.max(1, nextTimer));
     }
 
@@ -106,7 +113,9 @@ class Via {
         if (newT1c < -2) this.t1c = this._handleT1c(newT1c);
         else this.t1c = newT1c;
 
-        if (!(this.acr & 0x20)) {
+        if (this._t2ClocksShifter()) {
+            this._pollT2Shifting(cycles);
+        } else if (!(this.acr & 0x20)) {
             const newT2c = this.t2c - cycles;
             if (newT2c < -2) this.t2c = this._handleT2c(newT2c);
             else this.t2c = newT2c;
@@ -125,6 +134,28 @@ class Via {
         }
         while (newT1c < -3) newT1c += this.t1l + 4;
         return newT1c;
+    }
+
+    // Clocking the shifter, T2 low counts N..0,FF and relatches from the low latch. T2 high decrements as the low
+    // reaches FF (-3 here, as in 16-bit mode), and the one-shot IRQ fires as it wraps. The relatch lands a cycle
+    // later. See beebjit via.c via_shift_fired and make_timing_rom.c.
+    _pollT2Shifting(cycles) {
+        const period = (this.t2l & 0x1fe) + 4;
+        let newT2c = this.t2c - cycles;
+        if (newT2c <= -3) {
+            const firstUnderflow = this.t2c > -3 ? 0 : 1;
+            const lastUnderflow = Math.floor((-3 - newT2c) / period);
+            const underflows = lastUnderflow - firstUnderflow + 1;
+            if (underflows > this.t2High && !this.t2hit) {
+                this.ifr |= TIMER2INT;
+                this.updateIFR();
+                if (newT2c === -3 - lastUnderflow * period) this.justhit |= 2;
+                this.t2hit = true;
+            }
+            this.t2High = (this.t2High - underflows) & 0xff;
+        }
+        if (newT2c < -4) newT2c += Math.ceil((-4 - newT2c) / period) * period;
+        this.t2c = newT2c;
     }
 
     _handleT2c(newT2c) {
@@ -214,10 +245,20 @@ class Via {
                 this.recalculatePortBPins();
                 break;
 
-            case ACR:
+            case ACR: {
+                const wasShifting = this._t2ClocksShifter();
                 this.acr = val;
                 if (this.justhit & 1 && !(val & 0x40)) this.t1hit = true;
+                const isShifting = this._t2ClocksShifter();
+                if (!wasShifting && isShifting) {
+                    this.t2High = ((this.t2c + 1) >>> 9) & 0xff;
+                    if (this.t2c >= 0) this.t2c -= this.t2High << 9;
+                } else if (wasShifting && !isShifting) {
+                    this.t2c += this.t2High << 9;
+                }
+                this.updateNextTime();
                 break;
+            }
 
             case PCR:
                 this.pcr = val;
@@ -267,8 +308,13 @@ class Via {
             case T2CH:
                 this.t2l &= 0x1fe;
                 this.t2l |= val << 9;
-                this.t2c = this.t2l + 1;
-                if (this.acr & 0x20) this.t2c -= 2;
+                if (this._t2ClocksShifter()) {
+                    this.t2High = val;
+                    this.t2c = (this.t2l & 0x1fe) + 1;
+                } else {
+                    this.t2c = this.t2l + 1;
+                    if (this.acr & 0x20) this.t2c -= 2;
+                }
                 if (!(this.justhit & 2)) {
                     this.ifr &= ~TIMER2INT;
                     this.updateIFR();
@@ -355,6 +401,7 @@ class Via {
                 return ((this.t2c + 1) >>> 1) & 0xff;
 
             case T2CH:
+                if (this._t2ClocksShifter()) return this.t2High;
                 return ((this.t2c + 1) >>> 9) & 0xff;
 
             case SR:
@@ -443,6 +490,7 @@ class Via {
             ier: this.ier,
             t1hit: this.t1hit,
             t2hit: this.t2hit,
+            t2High: this.t2High,
             portapins: this.portapins,
             portbpins: this.portbpins,
             ca1: this.ca1,
@@ -476,6 +524,7 @@ class Via {
         this.ier = state.ier;
         this.t1hit = state.t1hit;
         this.t2hit = state.t2hit;
+        this.t2High = state.t2High ?? 0;
         this.portapins = state.portapins;
         this.portbpins = state.portbpins;
         this.ca1 = state.ca1;
