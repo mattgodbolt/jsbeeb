@@ -1,8 +1,8 @@
 # Media registry experiments
 
-Prototype tooling for the [media registry proposal](../../docs/media-registry-proposal.md), and the
-experiments behind [its findings](../../docs/media-registry-findings.md). None of it is used by the
-emulator.
+Prototype tooling for the [media registry proposal](../../docs/media-registry-proposal.md) (with its
+[design notes](../../docs/media-registry-design-notes.md)), and the experiments behind [its
+findings](../../docs/media-registry-findings.md). None of it is used by the emulator.
 
 Everything works on a corpus in `.registry-corpus/` (gitignored):
 

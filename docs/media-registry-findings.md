@@ -2,11 +2,11 @@
 
 These are the results of running a prototype of the fingerprint from the [media registry
 proposal](media-registry-proposal.md) over every disc image we could lay hands on, fetched on 24
-September 2026. The tools are in `tools/registry/` (see its README): `build-index.js` fingerprints the
-corpus, `analyse.js` prints the numbers that come from the indexes, and `fill-survey.js`,
-`check-paths.js`, `split-diffs.js` and `diff-images.js` do the checks that need the images themselves.
-Our mirrors are live, so a later fetch may not give exactly these numbers; MAME's list is pinned to a
-commit.
+September 2026. [The design notes](media-registry-design-notes.md) say how they shaped it. The tools are
+in `tools/registry/` (see its README): `build-index.js` fingerprints the corpus, `analyse.js` prints the
+numbers that come from the indexes, and `fill-survey.js`, `check-paths.js`, `split-diffs.js` and
+`diff-images.js` do the checks that need the images themselves. Our mirrors are live, so a later fetch
+may not give exactly these numbers; MAME's list is pinned to a commit.
 
 ## What went in
 
