@@ -146,13 +146,14 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `t1l`                | number       | Timer 1 Latch (doubled 2MHz ticks)                               |
 | `t2l`                | number       | Timer 2 Latch                                                    |
 | `t1c`                | number       | Timer 1 Counter                                                  |
-| `t2c`                | number       | Timer 2 Counter                                                  |
+| `t2c`                | number       | Timer 2 Counter (just the low byte's count in shift mode 100)    |
 | `acr`                | number       | Auxiliary Control Register                                       |
 | `pcr`                | number       | Peripheral Control Register                                      |
 | `ifr`                | number       | Interrupt Flag Register                                          |
 | `ier`                | number       | Interrupt Enable Register                                        |
 | `t1hit`              | boolean      | Timer 1 has expired                                              |
 | `t2hit`              | boolean      | Timer 2 has expired                                              |
+| `t2High`             | number       | T2 high byte in shift mode 100; split from `t2c` when absent     |
 | `portapins`          | number       | Port A pin levels                                                |
 | `portbpins`          | number       | Port B pin levels                                                |
 | `ca1`                | boolean      | CA1 line level                                                   |

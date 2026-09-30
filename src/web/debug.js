@@ -226,6 +226,7 @@ export class Debugger {
             "t1l",
             "t2c",
             "t2l",
+            "t2High",
             "portapins",
             "portbpins",
             "IC32",
