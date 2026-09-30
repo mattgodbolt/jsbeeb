@@ -103,15 +103,18 @@ The fingerprint's job is quite narrow: to recognise the same dump of a disc what
 Recognising two discs that are functionally the same but laid out differently (one of them `*COMPACT`ed,
 say) is a job for the file-level matching described later, not for the key.
 
-It's computed from the disc as it was loaded, before any writes, and it knows nothing about DFS, ADFS or
-any other filesystem. Each physical side gets a digest of its own.
+It's computed from the disc as it was loaded, before any writes, and it knows next to nothing about
+filesystems: the one thing it looks for is ADFS's root directory, to decide what counts as fill. Each
+physical side gets a digest of its own.
 
 For sector images (SSD, DSD, and the 8-bit ADFS S, M and L formats) the side digest is simply the SHA-256
 of that side's bytes, in the order the image stores them, with two tweaks. The sides are separated
 according to the format's interleave (an `.adf` file bigger than an ADFS M disc is an L disc, whose sides
 alternate track by track, whatever its name says), and trailing fill is trimmed: whole 256-byte sectors
 at the end of the side that are all `&00` (padding) or all `&E5` (what a format leaves behind) are
-dropped, and a short last sector is padded with zeros first. Baron, for one, truncates its SSDs after the
+dropped, and a short last sector is padded with zeros first. On an ADFS disc (the first side has "Hugo"
+or "Nick" at `&201`, the root directory's mark) a sector of any one repeated byte counts, because ADFS
+formatters and duplicators left `&5A`, `&47`, `&F6` and others behind. Baron, for one, truncates its SSDs after the
 last used sector, and plenty of tools pad them to 200K, so the trimming is what lets those agree. Only
 fill is dropped, so a reused disc with old data past its last file keeps it. No disc model is needed at
 all, which should make this pretty easy for any emulator to implement.
@@ -494,8 +497,6 @@ still guess the machine and how to boot.
   MAME's names.
 - Whether 128 bits is the right key length. The HFE mirror's file-hash names use 64, which may be a bit
   short for a registry other emulators share.
-- Which bytes count as fill on ADFS discs. The ADFS images we have end in `&5A`, `&47` and `&6C` as often
-  as not, but they come from emulator trees, so a few real ADFS captures would settle it.
 - Whether custom-format tape data (bytes outside MOS blocks, which the tape key ignores) can be decoded
   consistently enough to include.
 - Whether a few bytes of duplicator leftovers on a protected track (Philosophers Quest, and perhaps

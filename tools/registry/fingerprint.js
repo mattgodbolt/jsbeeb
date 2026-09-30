@@ -57,6 +57,16 @@ export function sectorImageSides(name, bytes) {
     return sides.map((parts) => Buffer.concat(parts));
 }
 
+const AdfsRootDirectory = 0x200;
+const AdfsDirectoryMarks = ["Hugo", "Nick"];
+const DfsFillBytes = [0x00, 0xe5];
+
+/** Whether a side starts an ADFS disc: the root directory's sequence number, then "Hugo" or "Nick". */
+export function isAdfsSide(side) {
+    const mark = Buffer.from(side.subarray(AdfsRootDirectory + 1, AdfsRootDirectory + 5)).toString("latin1");
+    return AdfsDirectoryMarks.includes(mark);
+}
+
 function isFill(block) {
     return block.every((byte) => byte === block[0]);
 }
@@ -67,7 +77,7 @@ function isFill(block) {
  * @param {{fillBytes?: number[]|null}} [options] which repeated bytes count as fill; null for any
  * @returns {{data: Buffer, trimmedFill: Map<number, number>}} the trimmed bytes, and how many sectors of each fill byte went
  */
-export function trimFill(bytes, { fillBytes = [0x00, 0xe5] } = {}) {
+export function trimFill(bytes, { fillBytes = DfsFillBytes } = {}) {
     const padded = Buffer.alloc(Math.ceil(bytes.length / SectorSize) * SectorSize);
     padded.set(bytes);
     let end = padded.length;
@@ -287,13 +297,16 @@ export function imageSides(name, bytes, options) {
 
 /**
  * Every key the registry would compute for an image, and the untrimmed sides they came from.
+ * An ADFS disc's formatters leave all sorts of bytes behind, so any repeated byte is fill on
+ * one unless `fillBytes` says otherwise.
  * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers",
  *     repeats?: "all"|"first"}} [options]
  *     for trimFill and fluxSideBytes
  */
-export function fingerprint(name, bytes, options) {
+export function fingerprint(name, bytes, options = {}) {
     const { sides, addressed, flux } = imageSides(name, bytes, options);
-    const trimmed = sides.map((side) => trimFill(side, options));
+    const fillBytes = "fillBytes" in options ? options.fillBytes : isAdfsSide(sides[0]) ? null : DfsFillBytes;
+    const trimmed = sides.map((side) => trimFill(side, { fillBytes }));
     const sideDigests = trimmed.map(({ data }) => sha256(data));
     let lastNonEmpty = trimmed.length - 1;
     while (lastNonEmpty > 0 && trimmed[lastNonEmpty].data.length === 0) lastNonEmpty--;

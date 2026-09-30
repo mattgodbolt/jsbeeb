@@ -19,10 +19,13 @@ commit.
 | Matt's NAS: FSD dumps        |    427 | the sector dumps many of the HFE reconstructions came from  |
 | Matt's NAS: tapes            |    474 | 209 UEFs and 265 CSWs                                       |
 | Matt's NAS: ADFS images      |     29 | mostly copies of a few discs from old emulator trees        |
+| scarybeasts' Compact archive |     38 | flux captures of commercial Master Compact ADFS discs       |
 
-That's 7,760 disc images in the main corpus, plus the dumps, tapes and ADFS images from Matt's NAS, each
-of which gets a study of its own. Only aggregate numbers from the bbcmicro.co.uk images appear here;
-nothing about individual entries is published.
+That's 7,760 disc images in the main corpus, plus the dumps, tapes and ADFS images from Matt's NAS and
+the Master Compact captures, each of which gets a study of its own. The Compact archive is a [public
+Google Drive folder](https://drive.google.com/drive/folders/1MhKFfdWMIXzxB4awgijmbESvK7Ghl9q6), fetched
+into `.registry-corpus/adfs-hfe/` on 30 September 2026. Only aggregate numbers from the bbcmicro.co.uk
+images appear here; nothing about individual entries is published.
 
 ## Sector and flux paths
 
@@ -157,9 +160,13 @@ trimming stays limited to `&00` and `&E5`.
 
 ADFS is different. Of the 62 sides of ADFS images in the corpus and on Matt's NAS (`fill-survey.js
 --adfs`), 31 end in runs of `&5A`, `&47` or `&6C`, and the second sides of the Master Welcome disc and of
-a blank L image are nothing but `&47`. Those aren't trimmed, so the two blank sides share a side key.
-Whether fill should depend on the format, or be any repeated byte after all, is still open; most of these
-images come from emulator trees, and may not say much about what real formatters left behind.
+a blank L image are nothing but `&47`. Those come from emulator trees, though, so on their own they
+didn't say much about what real formatters left behind. The Master Compact captures settle it: of their
+48 sides, 25 end in `&5A`, 8 in `&47` and 8 in `&E5`, one each in `&1A` and `&F6`, and two more have a
+stray last sector of `&00` after one of those. Seven second sides are nothing but `&5A` or `&F6`: blank,
+but under the DFS rule they'd stop a capture from ever matching an image of its first side. So on an ADFS
+disc, which the first side's root directory marks with "Hugo" or "Nick" at `&201`, any repeated byte
+counts as fill, and DFS keeps `&00` and `&E5`.
 
 ## Side keys
 
@@ -402,8 +409,8 @@ which is a modified version is the part that needs judgement.
 
 - The flux path keeps sectors whose headers claim another track, orders by the track they were read from,
   and decides 40 or 80 tracks from three signs, not one.
-- Trailing fill on DFS discs is only `&00` and `&E5` (ADFS is still open), and ADFS images are laid out
-  by size, not by name.
+- Trailing fill on DFS discs is only `&00` and `&E5`, while on ADFS discs it's any repeated byte, and
+  ADFS images are laid out by size, not by name.
 - FSD sector dumps are a fingerprint input, with provisional keys where a track couldn't be read.
 - Tapes have a key of their own, from the blocks the MOS would read.
 - File-level matching reads catalogues by sector address and ignores discs that catalogue only a loader;

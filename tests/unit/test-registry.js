@@ -181,6 +181,30 @@ describe("Media registry fingerprint", () => {
             expect(fromDsd.sideLengths).toEqual([side0.length, 0]);
         });
 
+        it("should count any repeated byte as fill on an ADFS disc, and only &00 and &E5 on others", () => {
+            const adfsSide = sectorBytes(8);
+            adfsSide.set(Buffer.from("Hugo", "latin1"), 0x201);
+            const adfsPadded = withFill(adfsSide, 12, 0x5a);
+            expect(fingerprint("a.adm", adfsPadded).discKey).toBe(fingerprint("b.adm", adfsSide).discKey);
+            const dfsPadded = withFill(sectorBytes(8), 12, 0x5a);
+            expect(fingerprint("a.ssd", dfsPadded).discKey).not.toBe(fingerprint("b.ssd", sectorBytes(8)).discKey);
+        });
+
+        it("should give an ADFS L disc with a blank second side the same disc key as an M disc of its first", () => {
+            const side0 = new Uint8Array(80 * AdfsTrackBytes).fill(0x5a);
+            side0.set(sectorBytes(40));
+            side0.set(Buffer.from("Hugo", "latin1"), 0x201);
+            const adl = new Uint8Array(2 * side0.length).fill(0x5a);
+            for (let track = 0; track < 80; ++track)
+                adl.set(
+                    side0.subarray(track * AdfsTrackBytes, (track + 1) * AdfsTrackBytes),
+                    2 * track * AdfsTrackBytes,
+                );
+            const fromAdl = fingerprint("x.adl", adl);
+            expect(fromAdl.discKey).toBe(fingerprint("x.adm", side0).discKey);
+            expect(fromAdl.sideLengths[1]).toBe(0);
+        });
+
         it("should give each side of a double-sided disc a side key of its own", () => {
             const dsd = sectorBytes(40);
             const { sideKeys, discKey } = fingerprint("x.dsd", dsd);

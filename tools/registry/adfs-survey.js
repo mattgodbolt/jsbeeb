@@ -1,20 +1,17 @@
 #!/usr/bin/env node
-// Finds the ADFS discs in the corpus (sector images under .registry-corpus/adfs/, and HFE
-// captures whose decoded first side has an ADFS root directory) and prints each one's
-// keys, so copies of the same disc from different places can be compared. An ADFS root
-// directory starts at byte &200 with a sequence number and "Hugo" (old map) or "Nick".
+// Finds the ADFS discs in the corpus (sector images under .registry-corpus/adfs/, scarybeasts'
+// Master Compact captures under .registry-corpus/adfs-hfe/, and HFE mirror captures whose
+// decoded first side has an ADFS root directory) and prints each one's keys, so copies of the
+// same disc from different places can be compared.
 //
 //   node tools/registry/adfs-survey.js [--corpus .registry-corpus]
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { fingerprint, isSectorImage } from "./fingerprint.js";
+import { fingerprint, isAdfsSide, isFluxImage, isSectorImage } from "./fingerprint.js";
 
 const index = process.argv.indexOf("--corpus");
 const corpus = index > 0 ? process.argv[index + 1] : ".registry-corpus";
-const RootDirectory = 0x200;
-const isAdfs = (side) =>
-    ["Hugo", "Nick"].includes(Buffer.from(side.subarray(RootDirectory + 1, RootDirectory + 5)).toString("latin1"));
 
 async function main() {
     const results = [];
@@ -23,13 +20,19 @@ async function main() {
         if (!isSectorImage(name)) continue;
         const bytes = await readFile(path.join(adfsDir, name));
         const fp = fingerprint(name, bytes);
-        results.push({ source: "adfs", ref: name, adfs: isAdfs(fp.sides[0]), ...fp });
+        results.push({ source: "adfs", ref: name, adfs: isAdfsSide(fp.sides[0]), ...fp });
+    }
+    const compactDir = path.join(corpus, "adfs-hfe");
+    for (const name of (await readdir(compactDir).catch(() => [])).sort()) {
+        if (!isFluxImage(name)) continue;
+        const fp = fingerprint(name, await readFile(path.join(compactDir, name)));
+        results.push({ source: "cmpt", ref: name, adfs: isAdfsSide(fp.sides[0]), ...fp });
     }
     const hfeManifest = JSON.parse(await readFile(path.join(corpus, "hfe", "manifest.json"), "utf8")).files;
     for (const entry of hfeManifest) {
         const bytes = await readFile(path.join(corpus, "hfe", entry.path));
         const fp = fingerprint(entry.path, bytes);
-        if (isAdfs(fp.sides[0]))
+        if (isAdfsSide(fp.sides[0]))
             results.push({ source: "hfe", ref: entry.path, title: entry.title, adfs: true, ...fp });
     }
     for (const r of results)

@@ -18,6 +18,13 @@ index hfe-headers --sources hfe --pitch-test headers                         # o
 node tools/registry/analyse.js
 ```
 
+scarybeasts' Master Compact captures, which the ADFS studies read from `.registry-corpus/adfs-hfe/`, come
+from a public Google Drive folder:
+
+```sh
+uvx gdown --folder https://drive.google.com/drive/folders/1MhKFfdWMIXzxB4awgijmbESvK7Ghl9q6 -O .registry-corpus/adfs-hfe
+```
+
 Other images can be dropped into `.registry-corpus/bbcmicro/` (any sector images or zips of them), which
 is where the bbcmicro.co.uk image zip was unpacked for the findings.
 
@@ -35,7 +42,8 @@ The fingerprint and its index:
   given.
 - `check-paths.js`: loads every sector image through jsbeeb and checks the flux path gives back the same
   bytes (`--with-adfs` includes `.registry-corpus/adfs/`).
-- `fill-survey.js`: which repeated bytes pad the ends of DFS images (`--adfs` for ADFS images instead).
+- `fill-survey.js`: which repeated bytes pad the ends of DFS images (`--adfs` for ADFS images and the
+  Compact captures instead).
 - `split-diffs.js`: diffs every group of captures the first draft gave one key and the proposal splits.
 
 Looking at images:
@@ -57,7 +65,7 @@ The studies:
   what keeping every copy rather than the first does to their keys.
 - `tape.js`, `tape-index.js`, `tape-analyse.js`: UEF and CSW decoding, the tape key, and tape files
   against disc files (`--nas` for the NAS's tapes).
-- `adfs-survey.js`: ADFS images, from `.registry-corpus/adfs/` and the HFE mirror.
+- `adfs-survey.js`: ADFS images, from `.registry-corpus/adfs/`, the Compact captures and the HFE mirror.
 - `anchors.js`, `anchors-run.js`: symbol-set anchors chosen from a py8dis listing, and checked against a
   game running headless.
 - `boot-survey.js`, `boot-survey-analyse.js`, `boot-survey-screen.js`: boots every distinct disc on a
