@@ -72,8 +72,8 @@ Closer to home:
   debugger. Rich was in the original #107 discussion too, and we've been talking with him about source
   formats since.
 - [bbcmicro.co.uk](https://bbcmicro.co.uk) already launches jsbeeb from its game pages, passing a model
-  and `KEY.` remaps in the URL, and its database has per-game keys and a platform. See
-  [licensing](#licensing) before reaching for any of it.
+  and `KEY.` remaps in the URL, and its database has per-game keys and a platform. See [the licensing
+  rules](media-registry-proposal.md#licensing) before reaching for any of it.
 
 ## One key namespace
 

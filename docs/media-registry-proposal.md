@@ -19,9 +19,10 @@ A key is 32 lowercase hex characters: the first 128 bits of a SHA-256. All keys 
 - a **disc key** and one **side key** per side, from the [disc fingerprint](#disc-fingerprint);
 - a **tape key**, from the [tape fingerprint](#tape-fingerprint).
 
-ROMs use the file key. A client tries the file key, then the disc or tape key, then the side keys in side
-order, and uses the first record it finds. beebjit's 32-bit per-side CRC is recorded as a field where we
-have it, not as a key.
+A zip has a file key of its own, and each disc or tape image inside it is fingerprinted as if it had arrived
+on its own. ROMs use the file key. A client tries the file key, then the disc or tape key, then the side keys
+in side order, and uses the first record it finds. beebjit's 32-bit per-side CRC is recorded as a field where
+we have it, not as a key.
 
 ## Disc fingerprint
 
@@ -65,10 +66,10 @@ images ([why](media-registry-design-notes.md#fsd-dumps)).
 
 ### Trimming
 
-Treat the side's bytes as 256-byte blocks, whatever sizes its sectors were: pad a short last block with
-zeros, then drop whole blocks from the end while each is one repeated byte and that byte is fill. On an
-ADFS disc, where the first side has "Hugo" or "Nick" at `&201` (the root directory's mark), fill is any
-byte; on every other disc it's `&00` or `&E5` ([why](media-registry-design-notes.md#trimming)).
+Treat the side's bytes as 256-byte blocks, whatever sizes its sectors were: pad a short last block with zeros,
+then drop whole blocks from the end while each is one repeated byte and that byte is fill. On an ADFS disc,
+where byte `&201` of the first side's untrimmed bytes starts "Hugo" or "Nick" (the root directory's mark),
+fill is any byte; on every other disc it's `&00` or `&E5` ([why](media-registry-design-notes.md#trimming)).
 
 ### Keys from sides
 
@@ -182,6 +183,8 @@ exile                    title: instructions, controls, links
   "provenance": { "controls": { "source": "...", "method": "read from the instructions screen" } }
 }
 ```
+
+(Exile has plenty more keys than that, of course.)
 
 ```json
 {

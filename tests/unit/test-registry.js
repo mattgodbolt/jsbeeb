@@ -190,6 +190,14 @@ describe("Media registry fingerprint", () => {
             expect(fingerprint("a.ssd", dfsPadded).discKey).not.toBe(fingerprint("b.ssd", sectorBytes(8)).discKey);
         });
 
+        it("should recognise a new-map ADFS disc, and let explicit fill bytes override the check", () => {
+            const adfsSide = sectorBytes(8);
+            adfsSide.set(Buffer.from("Nick", "latin1"), 0x201);
+            const padded = withFill(adfsSide, 12, 0x5a);
+            expect(fingerprint("a.adm", padded).discKey).toBe(fingerprint("b.adm", adfsSide).discKey);
+            expect(fingerprint("a.adm", padded, { fillBytes: [0x00, 0xe5] }).sideLengths[0]).toBe(padded.length);
+        });
+
         it("should give an ADFS L disc with a blank second side the same disc key as an M disc of its first", () => {
             const side0 = new Uint8Array(80 * AdfsTrackBytes).fill(0x5a);
             side0.set(sectorBytes(40));
