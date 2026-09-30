@@ -255,6 +255,20 @@ describe("Media registry fingerprint", () => {
             expect(Buffer.from(data).equals(Buffer.from(sectorOf(1)))).toBe(true);
         });
 
+        it("should report repeated IDs, and keep only the first read under the earlier rule", () => {
+            const disc = newDisc();
+            buildFmTrack(disc, 0, [
+                { track: 0, id: 3, data: sectorOf(5) },
+                { track: 0, id: 3, data: sectorOf(2) },
+                { track: 0, id: 3, data: sectorOf(5) },
+                { track: 0, id: 0, data: sectorOf(9) },
+            ]);
+            expect(fluxSideBytes(disc, false).repeated).toEqual([{ id: [0, 0, 3], copies: 2 }]);
+            const first = fluxSideBytes(disc, false, { repeats: "first" });
+            expect(Buffer.from(first.data).equals(Buffer.concat([sectorOf(9), sectorOf(5)]))).toBe(true);
+            expect(first.dropped.duplicate).toBe(2);
+        });
+
         it("should put a sector before a longer copy it is the start of", () => {
             const copies = new Map([[0, [Buffer.from([1, 2, 3]), Buffer.from([1, 2]), Buffer.from([1, 1, 9])]]]);
             expect(inFingerprintOrder(copies).map((copy) => [...copy])).toEqual([
