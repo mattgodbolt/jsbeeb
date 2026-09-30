@@ -555,7 +555,6 @@ class Via {
         this._restoreTask(this.task, state.taskOffset);
         this._restoreTask(this.ca2PulseTask, state.ca2PulseTaskOffset);
         this._restoreTask(this.cb2PulseTask, state.cb2PulseTaskOffset);
-        if (state.t2High === undefined && this._t2ClocksShifter()) this.updateNextTime();
     }
 
     setca1(level) {

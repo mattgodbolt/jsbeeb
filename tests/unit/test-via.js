@@ -488,12 +488,16 @@ describe("SysVia natural keyboard shift override", () => {
 });
 
 describe("Via T2 clocking the shift register", () => {
-    const T2CL = 0x8,
+    const ORB = 0x0,
+        DDRB = 0x2,
+        T2CL = 0x8,
         T2CH = 0x9,
         ACR = 0xb,
         IFR = 0xd,
         IER = 0xe;
     const AcrShiftOutFreeRunningT2 = 0x10;
+    const AcrT2CountsPb6 = 0x20;
+    const Pb6 = 0x40;
     const Timer2Int = 0x20;
     const TicksPerMicrosecond = 2;
 
@@ -587,6 +591,15 @@ describe("Via T2 clocking the shift register", () => {
         expect(via.read(IFR) & Timer2Int).toBe(0);
     });
 
+    it("should not raise the interrupt on a second wrap without a T2 high write", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 0);
+        runMicroseconds(7);
+        via.write(IFR, Timer2Int);
+        runMicroseconds(257 * 6);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+    });
+
     it("should raise the interrupt again after T2 high is rewritten", () => {
         via.write(IER, 0x80 | Timer2Int);
         start(4, 0);
@@ -625,11 +638,10 @@ describe("Via T2 clocking the shift register", () => {
     });
 
     it("should not count PB6 pulses into T2 while it clocks the shift register", () => {
-        via.write(ACR, AcrShiftOutFreeRunningT2 | 0x20);
+        via.write(ACR, AcrShiftOutFreeRunningT2 | AcrT2CountsPb6);
         start(7, 100);
-        const [ORB, DDRB] = [0x0, 0x2];
-        via.write(DDRB, 0x40);
-        via.write(ORB, 0x40);
+        via.write(DDRB, Pb6);
+        via.write(ORB, Pb6);
         const before = via.read(T2CL);
         via.write(ORB, 0);
         expect(via.read(T2CL)).toBe(before);
