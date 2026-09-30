@@ -115,6 +115,22 @@ Compact captures.
 
 ## Reading flux captures
 
+The rules as the prototype implements them:
+
+- **Pitch**, counting only sectors with good header and data CRCs. If nothing past physical track 50
+  holds data, every track is read. Otherwise the side is 40-track if at least four even tracks other than
+  track 0 have a sector whose header gives half their physical track number, and more even tracks do that
+  than give their own; or, failing that, if at least four even tracks hold data and fewer than a tenth as
+  many odd tracks hold any sector that isn't a copy of an even neighbour's. An odd track that read
+  nothing counts as a copy, so an 80-track capture whose odd tracks all failed to read is taken as
+  40-track; that's a bad dump anyway.
+- **Order**: by the track read from, then header track, then header sector ID. Where all three repeat,
+  identical copies count once and different contents are each kept once in ascending byte order, a sector
+  sorting before a longer one it is the start of.
+- **Sizes**: the concatenation is trimmed as 256-byte blocks, whatever sizes the sectors were.
+
+Why each of those:
+
 **Pitch.** A 40-track disc read in an 80-track drive has its data on the even tracks, and the odd tracks
 are either empty or ghosts of their neighbours. Neither of the two signs is enough alone: protected discs
 renumber their tracks, so the headers don't always give half the physical track, and some discs
@@ -161,6 +177,12 @@ and a good CRC after a shorter length says the shorter read was right. A track t
 headers from is the weak spot: some captures hold `&E5` there, but nothing in the dump says so, which is
 why those keys are provisional.
 
+The rule: tracks are taken in dump order with no pitch test, and ordered as a flux capture's are, with
+the dumped track in place of the physical one. A sector counts when it was read cleanly, or when its data
+had a CRC error but the bytes it overran hold a good CRC after a shorter power-of-two length, and then
+only that length counts. A track the dump could only read headers from contributes nothing, and the key
+is provisional: recorded, but never used to merge the dump with other images.
+
 ## Side keys
 
 Some side digests are shared by lots of unrelated discs (every blank formatted side looks the same), so a
@@ -174,6 +196,21 @@ key of its own, and finds the SSD's record through the side key.
 Carrier, gaps, baud rate and how a container chunks things vary between captures of the same tape, so the
 key is over the blocks the MOS would read. Protected tapes number their blocks in ways the MOS wouldn't
 accept, and the loose-block records are how their content still gets into the key.
+
+The rule, as `tools/registry/tape.js` implements it:
+
+1. Decode the tape to bytes: UEF data chunks (`&0100` and `&0104`), or CSW pulses at 1200 baud.
+2. Find MOS blocks: `&2A`, a name of up to ten characters and a zero, load and execution addresses, block
+   number, length, flags and four spare bytes, a CRC-16 of those, then the data and its CRC.
+3. Consecutive blocks with the same name, numbered up from 0 to one with bit 7 of its flags set, make a
+   complete file if none has a bad CRC. A block with the same name and header as the last block of the
+   most recent file may be a retry, even after it closed the file: a good copy replaces a bad held copy;
+   a bad or identical copy of a good one is skipped; a good one with different data is a different block.
+4. Hash records in tape order and cut to 128 bits. A complete file gives `&46`, its name and a zero, its
+   load and execution addresses and length (32-bit little-endian), then its data. A good block outside a
+   complete file gives `&42`, its name and a zero, its load and execution addresses, its block number
+   (16-bit) and flags, its length (32-bit), then its data. A record identical to the one before it is
+   left out.
 
 ## Record chains
 
@@ -203,6 +240,14 @@ regions and noticing which parts of the listing weren't the game (a disassembler
 big file makes a poor single region, since one build difference is only caught if an anchor happens to
 sit on it, hence smaller regions with `minAnchors`.
 
+The rules: an anchor is four to eight bytes of whole instructions starting at a routine's entry point; no
+store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
+stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. Overlays are
+separate regions over the same addresses. The debugger checks a region when it's about to show it
+(stopped at a breakpoint, or scrolling the disassembly), and needs every anchor to match and at least
+`minAnchors` (default and minimum 1) of them; `globals` show whenever any region matches. A symbol set
+without anchors is never shown automatically, but can be picked by hand.
+
 ## Licensing
 
 CC0 for our own data lets every emulator take it, as MAME does with its software lists.
@@ -213,6 +258,12 @@ otherwise.
 
 Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, so
 `controls` records it along with where it came from, but the text of the instructions is content.
+
+The detail behind the proposal's rules: permission to inline is recorded in the entry (a link to where it
+was given, or when); disassemblies without a permissive licence or recorded permission are links only,
+never symbol sets; MAME's software lists are CC0 and can be used directly; TOSEC's names and hashes are
+factual data, used with credit; and any database without a stated licence is asked first and linked to
+meanwhile. Whether we mirror a disc image is a separate decision about that image.
 
 ## Finding aliases
 
@@ -225,6 +276,23 @@ is why those are left out. Files are read the way the filesystem addresses them,
 fingerprint's byte stream, which on a protected disc holds extra sectors. A crack differs by a few bytes
 in a loader; a menu disc is the game's files plus some extras; 40- and 80-track copies share every file;
 a tape and a disc of the same game share the main code.
+
+The pipeline:
+
+1. **Collect** each image's source, keys and decoded file list (names, addresses, lengths, a hash per
+   file), reading files by sector address.
+2. **Group** equal keys as aliases.
+3. **Cluster** images whose shared files make up at least half of each, leaving out files under 512 bytes
+   or of one repeated byte, and discs that catalogue less than 8K in the rest. When shared files make up
+   half of only the smaller image, the bigger one `contains` it.
+4. **Judge** each cluster with an LLM working through tools (a byte diff, the disassembler, a BASIC
+   detokeniser, headless jsbeeb reading the title screen), putting each difference into one of: same
+   dump, bad dump, remastered (the same files written out again by a tool), disc written to (a later
+   write, a changed cycle number, leftover data), protection removed, trainer or cheat, menu or extras
+   added, compilation (with which one contains which), another disc of the same set, 40- or 80-track
+   packaging, compatibility fix, publisher revision, port, or different software.
+5. **Review**: each cluster becomes a pull request of alias records with its evidence and a confidence
+   level, and the records' provenance says they were proposed by automated analysis and then reviewed.
 
 A judge's claims have to be checkable by a tool ("differs only in `$.LOADER`, at these bytes") so the
 pipeline can check them again. The findings include a pilot: clustering over the whole corpus, and two
