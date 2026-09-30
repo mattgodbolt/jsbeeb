@@ -8,7 +8,7 @@
 // code of what was actually read, an error code, and that many bytes.
 
 import { IbmDiscFormat } from "../../src/disc.js";
-import { addCopy, inFingerprintOrder } from "./fingerprint.js";
+import { addCopy, inFingerprintOrder, repeatedIds } from "./fingerprint.js";
 
 export const FsdError = {
     none: 0x00,
@@ -137,21 +137,22 @@ export function parseFsd(bytes) {
 /**
  * The bytes the fingerprint would take from an FSD's one side: every sector the dump read
  * with a good CRC, ordered by the track it was dumped from, then the track and sector its
- * ID names, each different copy of one ID kept once in byte order. `dataSize` picks how
- * much of each sector: "real" (all the bytes the dump holds, which is what a flux image
- * rebuilt from it decodes to) or "declared" (the size its ID gives). With `recoverCrc`, a sector the dump marks as a CRC
- * error still counts when a shorter read of it carries a good CRC in the overread bytes.
+ * ID names, each different copy of one ID kept once in byte order (`repeats: "first"`
+ * keeps only the first listed, as the earlier draft did).
+ *
+ * `dataSize` picks how much of each sector: "real" (all the bytes the dump holds, which is
+ * what a flux image rebuilt from it decodes to) or "declared" (the size its ID gives). With
+ * `recoverCrc`, a sector the dump marks as a CRC error still counts when a shorter read of
+ * it carries a good CRC in the overread bytes. `unreadable` picks what a track the dump
+ * could only read IDs from contributes: nothing ("drop"), or format bytes (&E5) for each
+ * ID, either at the size the ID declares ("fill-declared") or at beebjit's guess of 256
+ * bytes, or 128 on tracks of more than ten sectors ("fill-beebjit").
  * @param {ReturnType<typeof parseFsd>} fsd
- * `unreadable` picks what a track the dump could only read IDs from contributes: nothing
- * ("drop"), or format bytes (&E5) for each ID, either at the size the ID declares
- * ("fill-declared") or at beebjit's guess of 256 bytes, or 128 on tracks of more than ten
- * sectors ("fill-beebjit"); an ID that some read did return keeps that instead.
  * @param {{dataSize?: "real"|"declared", recoverCrc?: boolean,
- *     unreadable?: "drop"|"fill-declared"|"fill-beebjit"}} [options]
+ *     unreadable?: "drop"|"fill-declared"|"fill-beebjit", repeats?: "all"|"first"}} [options]
  */
-export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unreadable = "drop" } = {}) {
+export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unreadable = "drop", repeats = "all" } = {}) {
     const kept = new Map();
-    const fills = new Map();
     const dropped = { error: 0, unreadable: 0, duplicate: 0, recovered: 0 };
     for (const { track: logical, sectors } of fsd.tracks) {
         for (const sector of sectors) {
@@ -165,7 +166,7 @@ export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unread
                     unreadable === "fill-declared" ? declaredLength(sector) : sectors.length > 10 ? 128 : 256;
                 data = new Uint8Array(length).fill(FormatByte);
                 const id = (logical << 16) | (sector.track << 8) | sector.sector;
-                if (!fills.has(id)) fills.set(id, { logical, sector, data });
+                if (!kept.has(id)) kept.set(id, [{ logical, sector, data }]);
                 continue;
             }
             if (!fsdSectorIsGood(sector)) {
@@ -180,10 +181,15 @@ export function fsdSideBytes(fsd, { dataSize = "real", recoverCrc = true, unread
             const id = (logical << 16) | (sector.track << 8) | sector.sector;
             const declared = declaredLength(sector);
             if (dataSize === "declared" && declared < data.length) data = data.subarray(0, declared);
-            if (!addCopy(kept, id, { logical, sector, data }, byData)) dropped.duplicate++;
+            if ((repeats === "first" && kept.has(id)) || !addCopy(kept, id, { logical, sector, data }, byData))
+                dropped.duplicate++;
         }
     }
-    for (const [id, fill] of fills) if (!kept.has(id)) kept.set(id, [fill]);
     const ordered = inFingerprintOrder(kept, byData);
-    return { data: Buffer.concat(ordered.map(({ data }) => data)), sectors: ordered, dropped };
+    return {
+        data: Buffer.concat(ordered.map(({ data }) => data)),
+        sectors: ordered,
+        dropped,
+        repeated: repeatedIds(kept),
+    };
 }

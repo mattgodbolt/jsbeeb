@@ -169,6 +169,13 @@ export function addCopy(copies, id, copy, dataOf = (c) => c) {
     return true;
 }
 
+/** The IDs read with more than one different content, as [logical track, header track, sector]. */
+export function repeatedIds(copies) {
+    return [...copies.entries()]
+        .filter(([, list]) => list.length > 1)
+        .map(([id, list]) => ({ id: [id >>> 16, (id >> 8) & 0xff, id & 0xff], copies: list.length }));
+}
+
 /**
  * Sectors in fingerprint order: by ID, and where an ID was read with different contents, each
  * content in byte order, so where reading started on a track never matters.
@@ -187,11 +194,12 @@ export function inFingerprintOrder(copies, dataOf = (c) => c) {
  * proposal), "physical" keeps them and orders sectors by where they were found,
  * which is what protected discs with renumbered tracks need.
  * `pitchTest` picks how a side is judged 40-track: "combined" (the proposal's) or "headers"
- * (the first draft's).
- * @param {{trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers"}} [options]
- * @returns {{data: Buffer, is40Track: boolean, dropped: {crc: number, wrongTrack: number, duplicate: number}, sizes: Map<number, number>}}
+ * (the first draft's). `repeats` picks what a repeated ID with different contents keeps: every
+ * copy ("all", the proposal's) or the first read ("first", the earlier draft's).
+ * @param {{trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers", repeats?: "all"|"first"}} [options]
+ * @returns {{data: Buffer, is40Track: boolean, dropped: {crc: number, wrongTrack: number, duplicate: number}, sizes: Map<number, number>, repeated: {id: number[], copies: number}[]}}
  */
-export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest = "combined" } = {}) {
+export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest = "combined", repeats = "all" } = {}) {
     const is40Track = pitchTest === "headers" ? headersSayFortyTrack(disc, upper) : sideIs40Track(disc, upper);
     const dropped = { crc: 0, wrongTrack: 0, duplicate: 0 };
     const sizes = new Map();
@@ -209,14 +217,14 @@ export function fluxSideBytes(disc, upper, { trackRule = "physical", pitchTest =
                 if (trackRule === "strict") continue;
             }
             const id = (logical << 16) | (sector.trackNumber << 8) | sector.sectorNumber;
-            if (!addCopy(kept, id, sector.sectorData)) {
+            if ((repeats === "first" && kept.has(id)) || !addCopy(kept, id, sector.sectorData)) {
                 dropped.duplicate++;
                 continue;
             }
             sizes.set(sector.sectorData.length, (sizes.get(sector.sectorData.length) ?? 0) + 1);
         }
     }
-    return { data: Buffer.concat(inFingerprintOrder(kept)), is40Track, dropped, sizes };
+    return { data: Buffer.concat(inFingerprintOrder(kept)), is40Track, dropped, sizes, repeated: repeatedIds(kept) };
 }
 
 /**
@@ -279,7 +287,8 @@ export function imageSides(name, bytes, options) {
 
 /**
  * Every key the registry would compute for an image, and the untrimmed sides they came from.
- * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers"}} [options]
+ * @param {{fillBytes?: number[]|null, trackRule?: "strict"|"physical", pitchTest?: "combined"|"headers",
+ *     repeats?: "all"|"first"}} [options]
  *     for trimFill and fluxSideBytes
  */
 export function fingerprint(name, bytes, options) {

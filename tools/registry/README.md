@@ -53,6 +53,8 @@ The studies:
   verdicts.
 - `fsd.js`, `fsd-study.js`, `fsd-unreadable.js`: FSD sector dumps (from Matt's NAS, `--fsd-dir`) against
   the mirror's reconstructions of them.
+- `repeated-ids.js`: the captures and dumps whose tracks repeat a sector ID with different contents, and
+  what keeping every copy rather than the first does to their keys.
 - `tape.js`, `tape-index.js`, `tape-analyse.js`: UEF and CSW decoding, the tape key, and tape files
   against disc files (`--nas` for the NAS's tapes).
 - `adfs-survey.js`: ADFS images, from `.registry-corpus/adfs/` and the HFE mirror.

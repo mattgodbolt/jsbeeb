@@ -146,15 +146,16 @@ the same original need to agree. It keeps sectors whose headers claim some other
 draft that dropped them got this badly wrong: Superior's protection renumbers every track after track 0
 (physical track 4 says it's track 200, and so on down), so the rule threw away the whole game and kept
 only the boot track. Exile and Repton Infinity share that boot track byte for byte, and ended up with the
-same key. The numbers are in [the findings](media-registry-findings.md). Step 4 keeps every different
-copy of a repeated ID for the same reason: on some protected discs the copies are the protection, and
-keeping one, or none, would let discs that differ only there share a key. Two captures that read
-different copies cost at worst an alias. For an unprotected disc the
+same key. The numbers are in [the findings](media-registry-findings.md). For an unprotected disc the
 headers match anyway, so the order is the same as an SSD's and so are the bytes. The price is that a
 capture of a protected disc no longer matches an SSD made from it, because the SSD can't hold the
 renumbered sectors. The findings suggest that hardly ever happened anyway: of the captures that share
 most of their files with a Stairway To Hell SSD, nearly nine in ten have those files at different
 sectors, so the SSDs are mostly re-mastered, not dumped.
+
+Step 4 keeps every different copy of a repeated ID for the same reason: on some protected discs the
+copies are the protection, and keeping one, or none, would let discs that differ only there share a key.
+Two captures that read different copies cost at worst an alias.
 
 This only works for a complete side. The data is concatenated without positions, so if a sector is
 missing or unreadable part way through (a damaged track, say), everything after it shifts, and the

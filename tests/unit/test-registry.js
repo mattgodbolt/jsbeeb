@@ -6,6 +6,7 @@ import {
     addressedSideBytes,
     fingerprint,
     fluxSideBytes,
+    inFingerprintOrder,
     SectorSize,
     sectorImageSides,
     trimFill,
@@ -252,6 +253,15 @@ describe("Media registry fingerprint", () => {
             const { data, dropped } = fluxSideBytes(disc, false);
             expect(dropped).toEqual({ crc: 1, wrongTrack: 0, duplicate: 1 });
             expect(Buffer.from(data).equals(Buffer.from(sectorOf(1)))).toBe(true);
+        });
+
+        it("should put a sector before a longer copy it is the start of", () => {
+            const copies = new Map([[0, [Buffer.from([1, 2, 3]), Buffer.from([1, 2]), Buffer.from([1, 1, 9])]]]);
+            expect(inFingerprintOrder(copies).map((copy) => [...copy])).toEqual([
+                [1, 1, 9],
+                [1, 2],
+                [1, 2, 3],
+            ]);
         });
 
         it("should keep each different copy of a repeated ID in byte order, whatever order they were read", () => {

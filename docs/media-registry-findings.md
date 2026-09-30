@@ -254,20 +254,20 @@ tracks the dump could read no data from with `&E5` sectors. Of the rest, 12 matc
 same number instead, and two differ over one overlong read.
 
 Of the three near-identical pairs above, The Empire Strikes Back was an artefact. Its track 10 carries
-three sectors numbered 3 with different contents, the dump lists that track in a different order from the
-disc, and keeping the first copy picked different data. The fingerprint now keeps each different content
-of a repeated ID once, in byte order, and the capture, the dump and the reconstruction share a key.
-Across the 1,985 HFE images and the 425 dumps that parse, 11 images repeat an ID with different contents
-(The Empire Strikes Back, Mini Office and Mini Office 2, Clone, and Micro Mike Olympics, whose track 1
-has ten different sectors all numbered 0), and the change moved only their keys and joined nothing but
-the Empire Strikes Back images. Keeping just one copy, the smallest, say, would have joined those too,
-but it would let two discs that differ only in the copy it drops share a key, and a wrong match is worse
-than a missed one, which costs an alias. Counting the copies wouldn't work either: the capture reads the
-protection's pattern once and `&E5` twice, and the dump has it the other way round. The Philosophers
-Quest pair really differs on the disc: the dump's sectors on track 33 are a shifted copy of the game's
-own data, while the capture's hold something found nowhere else, which looks like duplicator leftovers
-that vary from copy to copy. The Hopper pair differs by three bytes that the dump reads cleanly, so the
-reconstruction is faithful to it, and we can't yet say which copy is unusual.
+three sectors numbered 3 with two different contents, the dump lists that track in a different order from
+the disc, and keeping the first copy picked different data. The fingerprint now keeps each different
+content of a repeated ID once, in byte order, and the capture, the dump and the reconstruction share a
+key. `repeated-ids.js` finds 11 images among the 1,985 HFE images and the 425 dumps that parse that
+repeat an ID with different contents (The Empire Strikes Back, Mini Office and Mini Office 2, Clone, and
+Micro Mike Olympics, whose track 1 has ten different sectors all numbered 0). The change moves only their
+keys, and joins nothing but the Empire Strikes Back images. Keeping just one copy would let two discs
+that differ only in the copy it drops share a key, and a wrong match is worse than a missed one, which
+costs an alias. Counting the copies wouldn't work either: the capture reads `&E5` fill, the protection's
+`&40`s, then fill again, and the dump has `&40`s, fill, `&40`s (`fsd-study.js track` lists them). The
+Philosophers Quest pair really differs on the disc: the dump's sectors on track 33 are a shifted copy of
+the game's own data, while the capture's hold something found nowhere else, which looks like duplicator
+leftovers that vary from copy to copy. The Hopper pair differs by three bytes that the dump reads
+cleanly, so the reconstruction is faithful to it, and we can't yet say which copy is unusual.
 
 Against captures of the same title, 140 of 201 reconstructions share a key. Most of the near misses
 differ in the catalogue, which looks like discs that had been written to. Tracks the dump couldn't read
