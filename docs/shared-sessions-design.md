@@ -228,11 +228,12 @@ keyboard. Snapshot links (tier 1) can come separately.
 - **Infrastructure:** already in place, in
   [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform): the function (Node 22, arm64), its
   table, role and log group in `new/jsbeeb-rendezvous.tf`, and `/api/rendezvous/*` on the bbc.xania.org
-  distribution through `api_origins` on `module "jsbeeb"` (`new/jsbeeb.tf`, built in `new/website/main.tf`). It
-  answers 503 from a placeholder today. Terraform owns the function's shape and ignores its code. The code lives
-  in this repo under `rendezvous/` and ships with the site: `deploy-jsbeeb` may `UpdateFunctionCode` and
-  `GetFunction` on that one function, so the deploy job runs `aws lambda update-function-code` then `aws lambda
-wait function-updated-v2` before the S3 sync, as it already uploads assets before the HTML that names them.
+  distribution through `api_origins` on `module "jsbeeb"` (`new/jsbeeb.tf`, built in `new/website/main.tf`).
+  It answers 503 from a placeholder today. Terraform owns the function's shape and ignores its code. The code
+  lives in this repo under `rendezvous/` and ships with the site: `deploy-jsbeeb` may `UpdateFunctionCode` and
+  `GetFunction` on that one function, so the deploy job runs `aws lambda update-function-code` then
+  `aws lambda wait function-updated-v2` before the S3 sync, as it already uploads assets before the HTML that
+  names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
 
 In order, each a PR:
