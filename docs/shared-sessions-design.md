@@ -9,7 +9,7 @@ different browsers. Nothing here is implemented; this is a design to pick holes 
 Four tiers, each building on the one before and each worth having on its own.
 
 1. **Share a snapshot.** A link that opens jsbeeb on my machine exactly as it was when I made the link. One
-   upload, no live connection. Needs a snapshot that is complete enough to stand alone, and somewhere to keep it.
+   upload, no live connection. Needs a snapshot complete enough to stand alone, and somewhere to keep it.
 2. **Spectate.** I host; anyone with the link watches the same machine running live in their own browser. No
    video is streamed: every viewer runs their own emulator from my snapshot and replays my inputs. Needs
    determinism, an input stream, a relay and late joining. Viewers can lag a fraction of a second behind and
@@ -67,7 +67,7 @@ does not pause.
 committed frame and sends the hash to the sequencer. The host's hash is the reference, as in RetroArch: a
 peer that differs is sent a fresh snapshot from the host and rejoins as a late joiner would. If the host is
 the one that went wrong (a debugger poke, say), it is still right by definition, which is one reason the
-debugger is a host-only tool in a session. The hash covers the file form of the state (dirty disc tracks
+debugger is a host-only tool in a session. The hash covers the `state` of the file form (dirty disc tracks
 only, not the megabytes of clean ones), and leaves out the frame-skip bit in `video.dispEnabled`, which
 differs between peers for reasons of display alone.
 
@@ -90,13 +90,14 @@ Ranked by how much they would bite.
    central refactor and is useful without any networking.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`src/adc.js:164`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation. The
-   system VIA reads gamepad fire buttons live (`getJoysticks`, `src/via.js:877`). These must change so the machine only ever
-   sees values that came through the input queue.
+   system VIA reads gamepad fire buttons live (`getJoysticks`, `src/via.js:877`). These must change so the
+   machine only ever sees values that came through the input queue.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`, `src/via.js:645`), so a joiner
      arriving while a key is held sees it up;
    - sideways RAM, which lives in the ROM area and is only saved with `includeRoms` (`src/6502.js:1234`);
-   - the Master's CMOS RAM, which comes from each person's `localStorage` (`src/cmos.js:43`, persisted by `localStoragePersistence`);
+   - the Master's CMOS RAM, which comes from each person's `localStorage` (`src/cmos.js:43`, persisted by
+     `localStoragePersistence`);
    - tape position (a known limitation in `docs/snapshot-format.md`), Music 5000 and Econet state, a paste in
      progress (the typist's queue), and the mouse buttons.
 
@@ -176,18 +177,21 @@ Each of these is a PR that is useful on its own, in order.
    then runs several fresh machines from that snapshot with the same recorded input log (including a hard
    reset) in different chunk sizes, and compares state hashes and framebuffers, as the experiment above did.
    Adds a `stateHash` helper. Touches tests and one small module. Catches nondeterminism on the paths it
-   exercises; the Atom's reset will fail it until it is seeded.
-2. **One input queue.** Route keyboard, BREAK, gamepad keys, gamepad and mouse analogue values and fire
-   buttons through a cycle-stamped queue applied at quantum boundaries; the ADC and system VIA read only what
-   came through it. Touches `src/web/keyboard.js`, `src/web/gamepads.js`, `src/adc.js`, the analogue sources,
-   `src/via.js`, `src/ppia.js` (the Atom's keyboard) and `src/web/emulation-loop.js`. Inputs gain up to one quantum of latency, and a tap shorter
-   than a quantum is held for one; otherwise nothing visible changes.
+   exercises; the Atom hard reset is marked as an expected failure until step 4 seeds it.
+2. **One input queue.** Route keyboard, BREAK, gamepad keys, gamepad and mouse analogue values and fire buttons
+   through a cycle-stamped queue applied at quantum boundaries; the ADC and system VIA read only what came
+   through it. Touches `src/web/keyboard.js`, `src/web/gamepads.js`, `src/adc.js`, the analogue sources,
+   `src/via.js`, `src/ppia.js` (the Atom's keyboard) and `src/web/emulation-loop.js`. Inputs gain up to one
+   quantum of latency, and a tap shorter than a quantum is held for one (and on the Atom, whose ROM wants a key
+   seen up on two scans, released for long enough too, `pasteReleaseGapMs` in `src/models.js`); otherwise
+   nothing visible changes.
 3. **Record and replay.** Save a snapshot plus input log, and play it back exactly. Good for bug reports
    ("here is the crash, press play") and demos, and it is spectating with a file instead of a socket. The
    step 1 test grows to cover it.
-4. **Close the snapshot gaps.** Keyboard matrix, sideways RAM, CMOS contents, an RTC driven by emulated cycles
-   from a saved base time, and the configuration fields from challenge 5. Touches `src/via.js`, `src/6502.js`,
-   `src/cmos.js`, `src/snapshot.js` and `docs/snapshot-format.md` (a version bump).
+4. **Close the snapshot gaps.** Keyboard matrix and SHIFT override state, a seed for the Atom's reset, sideways
+   RAM, CMOS contents, an RTC driven by emulated cycles from a saved base time, and the configuration fields
+   from challenge 5. Touches `src/via.js`, `src/6502.js`, `src/cmos.js`, `src/snapshot.js` and
+   `docs/snapshot-format.md` (a version bump).
 5. **Shareable snapshot links** (tier 1). Upload a file snapshot and get a link that opens it; needs a decision
    on where snapshots live.
 6. **Relay and spectating** (tier 2). The Node relay, rooms with unguessable IDs, the host streaming commits,
