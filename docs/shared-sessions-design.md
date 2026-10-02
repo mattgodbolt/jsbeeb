@@ -115,7 +115,7 @@ Ranked by how much they would bite.
    Master) and CMOS will grow the first figure.
 
 4. **Wall clock leaks into the Master.** The RTC reads `Date.now()` on every access (`src/cmos.js:19`) and
-   setting it stores an offset from the host clock (`:184`) in a module-level variable (`:16`), shared by
+   setting it stores an offset from the computer's clock (`:184`) in a module-level variable (`:16`), shared by
    every machine on the page. Two Masters read different seconds. The clock needs to be derived from emulated
    cycles (the scheduler `epoch`, already in the snapshot) plus a base time carried in the session, with the
    offset per machine and saved. The Econet file server's date call (`src/filestore.js:84`) is the same
@@ -195,9 +195,9 @@ keyboard. Snapshot links (tier 1) can come separately.
   debugger are off for everyone.
 - **The Master's RTC:** in a session only, derived from emulated cycles as challenge 4 describes, with the time
   the host's Master shows at session start, less its epoch then, as the base in the session description, so
-  everyone sees the same, roughly real, time. Outside a session it keeps the computer's own clock. The `Cmos` is built
-  before the CPU that owns the scheduler (`src/6502.js:635`), so the clock is wired in afterwards; it touches
-  `src/cmos.js`, `src/6502.js` and the two places a `Cmos` is made (`src/web/machine.js:77`,
+  everyone sees the same, roughly real, time. Outside a session it keeps the computer's own clock. The `Cmos` is
+  built before the CPU that owns the scheduler (`src/6502.js:635`), so the clock is wired in afterwards; it
+  touches `src/cmos.js`, `src/6502.js` and the two places a `Cmos` is made (`src/web/machine.js:77`,
   `src/machine-spec.js:56`).
 - **Transport:** WebRTC data channels in a star. Each guest connects to the host only; the host orders inputs and
   broadcasts commits over a reliable, ordered channel (the default). A joiner's snapshot is the full in-memory
@@ -220,17 +220,19 @@ keyboard. Snapshot links (tier 1) can come separately.
   its answer, so no guest sees another's address or can answer in the host's place. The host deletes the room
   when it leaves, if it can, and TTL catches the rest; an offer to a missing or expired room is refused, so a
   stale link says the session is over. The function treats anything past its expiry as gone, since DynamoDB
-  deletes lazily, checks the shape of IDs, caps body size and pending offers per room (an offer and its answer go
-  once the guest has read it or given up), and stores nothing but SDP. Open tabs outlive a deploy, so the API
+  deletes lazily, checks the shape of IDs, caps body size and pending offers per room, and stores nothing but
+  SDP. Each offer has its own short expiry, independent of the room's, and its answer stays readable until
+  then, so a guest that closes its tab while waiting cannot fill the cap, and one whose read was lost can
+  retry. Open tabs outlive a deploy, so the API
   stays backward compatible.
-- **Infrastructure:** already in place, in `new/jsbeeb-rendezvous.tf` of
+- **Infrastructure:** already in place, in
   [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform): the function (Node 22, arm64), its
-  table, role and log group, and `/api/rendezvous/*` on the bbc.xania.org distribution, which today answers
-  503 from a placeholder. Terraform owns the function's shape and ignores its code. The code lives in this
-  repo under `rendezvous/` and ships with the site: `deploy-jsbeeb` may `UpdateFunctionCode` and `GetFunction`
-  on that one function, so the deploy job runs `aws lambda update-function-code` then
-  `aws lambda wait function-updated-v2` before the S3 sync, as it already uploads assets before the HTML that
-  names them.
+  table, role and log group in `new/jsbeeb-rendezvous.tf`, and `/api/rendezvous/*` on the bbc.xania.org
+  distribution through `api_origins` on `module "jsbeeb"` (`new/jsbeeb.tf`, built in `new/website/main.tf`). It
+  answers 503 from a placeholder today. Terraform owns the function's shape and ignores its code. The code lives
+  in this repo under `rendezvous/` and ships with the site: `deploy-jsbeeb` may `UpdateFunctionCode` and
+  `GetFunction` on that one function, so the deploy job runs `aws lambda update-function-code` then `aws lambda
+wait function-updated-v2` before the S3 sync, as it already uploads assets before the HTML that names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
 
 In order, each a PR:
@@ -250,20 +252,22 @@ In order, each a PR:
    channel; the pacing cap at the last committed frame; the session's machine and input checks, and a build ID
    (the commit and build time, which nothing records today). Tested with two or more headless machines
    talking in-process, with a late joiner and a forced desync.
-5. **Rendezvous.** The Lambda in `rendezvous/` with its tests, the Terraform in godbolt-terraform, and the
-   deploy step.
+5. **Rendezvous.** The Lambda's code in `rendezvous/` with its tests, and the deploy step.
 6. **Spectating** (tier 2). WebRTC, late joining and desync recovery, behind hidden URL switches
    (`?server=<id>` to host, `?client=<id>` to join) with no UI, so we can try it with friends before
-   designing the share UI. Guests cannot type yet.
+   designing the share UI. For now the host picks `<id>` and sends the link round itself; creating a room
+   that already exists is refused, and a guessable ID is accepted only while testing (the UI will generate
+   them). The switches stay in the URL, so a reloaded host tries to create the room again without its secret
+   and is refused until the old room expires; picking a new ID is the way out. Guests cannot type yet.
 7. **Shared keyboard** (tier 3). Guests' keys go through the host, with an input delay. The first target
    is [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth): a B, keyboard only, turn-based
    and hot-seat for two to six, so input delay barely matters and a shared keyboard is how it is meant to be
    played.
 
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
-snapshot links; the pulled inputs (ADC sources, gamepads, the mouse) through the queue, with `src/adc.js`,
-the sources and `getJoysticks` reading only what came through it; the other configuration options one at a
-time; TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs painting suppressed
+snapshot links; the pulled inputs (ADC sources, gamepads, the mouse) through the queue, with `src/adc.js`, the
+sources and `getJoysticks` reading only what came through it; the other configuration options one at a time;
+TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs painting suppressed
 during re-emulation and the sound chip's queued events unwound.
 
 ### Voice, later
@@ -272,7 +276,8 @@ WebRTC carries audio as readily as data, so voice in the session is mostly UI:
 
 - `getUserMedia` with the browser's echo cancellation and noise suppression, and the track added to the
   peer connection the session already has. Adding a track needs a renegotiation, but the offer and answer can
-  go over the data channel, so the rendezvous is not involved. The audio is Opus, and the browser handles
+  go over the data channel, so the rendezvous is not involved; the host's whitelist of guest messages grows to
+  take them. The audio is Opus, and the browser handles
   jitter.
 - Bidirectional between the host and one guest is just each adding its track. With more guests, the star
   means guests only hear the host unless the host forwards each guest's track to the others (a received
