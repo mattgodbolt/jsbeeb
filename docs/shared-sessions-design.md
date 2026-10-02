@@ -122,15 +122,15 @@ Ranked by how much they would bite.
    problem, later, with Econet.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
-   ROMs (`?rom=`) all change behaviour. With the starting scope the session description is just the model, and
-   a session refuses to start if any of these differs from the default; a joiner adopts the model the way a
-   cross-model snapshot load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`).
-   Each option joins the description as it is supported. The emulator itself must match too: every merge to
-   main is live within minutes, and a host who loaded the page this morning may be running different code
-   from a guest who opened the link just now. The description carries the build; a guest on another build is
-   refused, and the host is told its page is out of date and to reload and start again, rather than everyone
-   failing hash after hash. Media sent by reference must be fetchable by everyone: `sth:` and URLs are,
-   embedded local files are, a `gd:` Google Drive reference is not without the viewer's own authorisation.
+   ROMs (`?rom=`) all change behaviour. With the starting scope the session description is just the model, and a
+   session refuses to start if any of these differs from the default; a joiner adopts the model the way a
+   cross-model snapshot load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`). Each
+   option joins the description as it is supported. The emulator itself must match too: every merge to main is
+   live within minutes, and a host who loaded the page this morning may be running different code from a guest
+   who opened the link just now. The description carries the build (commit and build time); a guest on another
+   build is refused rather than failing hash after hash, and whichever side is older is told to reload, the host
+   choosing when to restart the session. Media sent by reference must be fetchable by everyone: `sth:` and URLs
+   are, embedded local files are, a `gd:` Google Drive reference is not without the viewer's own authorisation.
    v0 sidesteps this by sending the images themselves.
 6. **Local controls that change state.** Rewind, loading a state, the debugger, fast-as-possible and fast
    tape, hidden-tab pause (`src/web/emulation-loop.js:289`), media changes and reset all act on one peer's
@@ -199,25 +199,29 @@ keyboard. Snapshot links (tier 1) can come separately.
   before the CPU that owns the scheduler (`src/6502.js:635`), so the clock is wired in afterwards; it touches
   `src/cmos.js`, `src/6502.js` and the two places a `Cmos` is made (`src/web/machine.js:77`,
   `src/machine-spec.js:56`).
-- **Transport:** WebRTC data channels in a star. Each guest connects to the host only; the host orders
-  inputs and broadcasts commits over a reliable, ordered channel (the default). A joiner's snapshot is the
-  full in-memory form, discs included, sent chunked over the same channel, so local and `gd:` discs need no
-  fetching by the guest. Public STUN (Google's, say) and no TURN: a guest that cannot connect is told
-  "couldn't connect directly", and we count how often that happens before paying for anything. The host and
-  each guest see each other's public IP address, which the share UI says. The session ends when the host
-  leaves, and each guest's machine carries on alone from there.
+- **Transport:** WebRTC data channels in a star. Each guest connects to the host only; the host orders inputs and
+  broadcasts commits over a reliable, ordered channel (the default). A joiner's snapshot is the full in-memory
+  form, discs included, sent chunked over the same channel, so local and `gd:` discs need no fetching by the
+  guest. Public STUN (Google's, say) and no TURN: a guest that cannot connect is told "couldn't connect
+  directly", and we count how often that happens before paying for anything. The host and each guest see each
+  other's public IP address, which the share UI says. The session ends when the host leaves, and each guest's
+  machine carries on as an ordinary local one, back on the host clock. A joined guest never saves the session's
+  CMOS over its own stored settings, and checks what it receives as it would a loaded file (size, model); the
+  host drops anything from a guest that is not a key event.
 - **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. The host creates the
-  room under a random, unguessable ID, which goes in the share link and is the only capability; an offer to a
-  room that does not exist or has expired is refused, so a stale link says the session is over. A guest opening
-  the link creates an offer, waits for ICE gathering to finish (or a short timeout) so the full SDP goes in one
-  message, and POSTs it to the room under an ID of its own. The host polls the room every second or two, answers
-  each new offer and POSTs the answer under that ID; the guest polls for its answer and connects. The host keeps
-  polling slowly for the life of the session, for late joiners, and its polls extend the room's TTL; the function
-  treats anything past its expiry as gone, since DynamoDB deletes lazily. The function URL is public, so the
-  function checks the shape of room and guest IDs, caps body size and entries per room, and stores nothing but
-  SDP. Open tabs outlive a deploy, so the API stays backward compatible.
+  room under a random, unguessable ID, which goes in the share link, and gets back a host secret that never
+  leaves its tab. A guest opening the link creates an offer, waits for ICE gathering to finish (or a short
+  timeout) so the full SDP goes in one message, POSTs it under an ID of its own, and polls for its answer, giving
+  up with "the host isn't answering" after a while. The host polls the room every second or two, answers each new
+  offer under that guest's ID, and keeps polling slowly for the life of the session, for late joiners. Listing
+  offers, answering and extending the room's TTL need the host secret; a guest can only post its offer and read
+  its answer, so no guest sees another's address or can answer in the host's place. The host deletes the room
+  when it leaves, if it can, and TTL catches the rest; an offer to a missing or expired room is refused, so a
+  stale link says the session is over. The function treats anything past its expiry as gone, since DynamoDB
+  deletes lazily, checks the shape of IDs, caps body size and entries per room, and stores nothing but SDP. Open
+  tabs outlive a deploy, so the API stays backward compatible.
 - **Infrastructure:** in [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform), beside the
   existing `module "jsbeeb"` (S3 and CloudFront) in `new/jsbeeb.tf`: Terraform creates the function, the
   table, the role and the CloudFront origin. The function's code lives in this repo under `rendezvous/` and
@@ -240,8 +244,8 @@ In order, each a PR:
    The step 1 test grows to cover a mid-keypress snapshot.
 4. **The session protocol, in-process.** Commits, inputs, hashes and chunked snapshots over an abstract
    channel; the pacing cap at the last committed frame; the session's machine and input checks, and a build ID
-   (the commit at build time, which nothing records today). Tested with
-   two or more headless machines talking in-process, with a late joiner and a forced desync.
+   (the commit and build time, which nothing records today). Tested with two or more headless machines
+   talking in-process, with a late joiner and a forced desync.
 5. **Rendezvous.** The Lambda in `rendezvous/` with its tests, the Terraform in godbolt-terraform, and the
    deploy step.
 6. **Spectating** (tier 2). WebRTC, the share link and UI, late joining and desync recovery. Guests cannot
