@@ -340,13 +340,6 @@ describe("EmulationLoop", () => {
             expect(loop.isRunning()).toBe(true);
         });
 
-        it("keeps running in a shared session, which would otherwise wait on this tab", () => {
-            const loop = started();
-            loop.setSession({ execute: vi.fn(() => true) });
-            hide();
-            expect(loop.isRunning()).toBe(true);
-        });
-
         it("keeps running while a motor is on", () => {
             const loop = started();
             deps.processor.fdc.motorOn[0] = true;
@@ -370,42 +363,6 @@ describe("EmulationLoop", () => {
             expect(loop.isRunning()).toBe(false);
             resume();
             expect(loop.isRunning()).toBe(true);
-        });
-    });
-
-    describe("in a shared session", () => {
-        let session;
-        beforeEach(() => {
-            session = { execute: vi.fn(() => true) };
-        });
-        const sessionCycles = () => session.execute.mock.calls.map(([cycles]) => cycles);
-
-        it("runs the machine through the session, gamepads aside", () => {
-            const loop = started();
-            loop.setSession(session);
-            deps.gamepad.update.mockClear();
-            vi.advanceTimersByTime(10);
-            loop.setEmulationLead(50);
-            expect(sessionCycles()).toEqual([(10 * ClocksPerSecond) / 1000, (50 * ClocksPerSecond) / 1000]);
-            expect(cyclesExecuted()).toEqual([]);
-            expect(deps.gamepad.update).not.toHaveBeenCalled();
-        });
-
-        it("never goes speedy", () => {
-            const loop = started();
-            loop.setSession(session);
-            loop.toggleFastAsPossible();
-            vi.advanceTimersByTime(10);
-            expect(sessionCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
-            expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
-        });
-
-        it("runs the processor again once the session is over", () => {
-            const loop = started();
-            loop.setSession(session);
-            loop.setSession(null);
-            vi.advanceTimersByTime(10);
-            expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         });
     });
 

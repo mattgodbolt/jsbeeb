@@ -97,7 +97,6 @@ export class EmulationLoop extends EventTarget {
         this.wanted = false;
         this.holds = new Set();
         this.resumeOnVisible = null;
-        this.session = null;
 
         this.virtualSpeedUpdater = new VirtualSpeedUpdater(cpuSpeed);
         this.audioDebugLog = { start: 0, ticks: 0, cycles: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
@@ -164,24 +163,6 @@ export class EmulationLoop extends EventTarget {
         this.fastAsPossible = !this.fastAsPossible;
     }
 
-    /**
-     * Hands the running of the machine to a shared session, whose `execute(cycles)`
-     * stands in for the processor's, or back with null. While it lasts the loop runs
-     * nothing only this machine would: no speedy frame skip, no gamepad keys, and no
-     * pause in a hidden tab.
-     */
-    setSession(session) {
-        this.session = session;
-        if (session && this.resumeOnVisible) {
-            this.resumeOnVisible();
-            this.resumeOnVisible = null;
-        }
-    }
-
-    execute(cycles) {
-        return this.session ? this.session.execute(cycles) : this.processor.execute(cycles);
-    }
-
     // A user-blocking task runs ahead of rendering and ordinary timers, so a stuck
     // compositor does not hold the tick off too.
     scheduleTick(delayMs) {
@@ -221,7 +202,6 @@ export class EmulationLoop extends EventTarget {
     }
 
     isSpeedy() {
-        if (this.session) return false;
         return this.fastAsPossible || (this.fastTape && this.processor.tapeInterface.motorOn);
     }
 
@@ -241,7 +221,7 @@ export class EmulationLoop extends EventTarget {
         // now can be a vsync timestamp, before this ran; the timings use start.
         const start = performance.now();
         const { processor, display, audioHandler } = this;
-        if (!this.session) this.gamepad.update(processor.sysvia);
+        this.gamepad.update(processor.sysvia);
         this.dispatchEvent(new Event("tick"));
         if (this.emulatedTo !== 0) {
             let cycles;
@@ -254,7 +234,7 @@ export class EmulationLoop extends EventTarget {
             }
             cycles |= 0;
             try {
-                if (!this.execute(cycles)) {
+                if (!processor.execute(cycles)) {
                     this.stop(true);
                 }
                 audioHandler.flushChipEvents();
@@ -299,7 +279,7 @@ export class EmulationLoop extends EventTarget {
         const aheadMs = leadMs - this.emulationLeadMs;
         this.emulationLeadMs = leadMs;
         if (aheadMs > 0) {
-            if (!this.execute((aheadMs * this.clocksPerSecond) / 1000)) this.stop(true);
+            if (!this.processor.execute((aheadMs * this.clocksPerSecond) / 1000)) this.stop(true);
             this.audioHandler.flushChipEvents();
         } else {
             this.emulatedTo -= aheadMs;
@@ -309,7 +289,6 @@ export class EmulationLoop extends EventTarget {
     handleVisibilityChange() {
         const { processor } = this;
         if (document.visibilityState === "hidden") {
-            if (this.session) return;
             const keepRunningWhenHidden =
                 processor.tapeInterface.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
             if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.pause("the hidden tab");

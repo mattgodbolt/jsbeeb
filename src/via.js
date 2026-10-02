@@ -651,28 +651,6 @@ export class SysVia extends Via {
         };
     }
 
-    /**
-     * The keys held down, which snapshots leave out so that a rewind or a loaded state
-     * keeps the keys the person is actually holding. A shared session sends them to
-     * a joiner, which must hold what the host holds.
-     */
-    keyboardState() {
-        return {
-            keys: this.keys.map((column) => Array.from(column)),
-            physicalShiftDown: this._physicalShiftDown,
-            shiftOverrideActive: this._shiftOverrideActive,
-            shiftOverrideDesiredShift: this._shiftOverrideDesiredShift,
-        };
-    }
-
-    restoreKeyboard(state) {
-        state.keys.forEach((column, col) => this.keys[col].set(column));
-        this._physicalShiftDown = state.physicalShiftDown;
-        this._shiftOverrideActive = state.shiftOverrideActive;
-        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
-        this.updateKeys();
-    }
-
     restoreState(state) {
         super.restoreState(state);
         this.IC32 = state.IC32;
@@ -720,21 +698,9 @@ export class SysVia extends Via {
 
     set(key, val, shiftDown) {
         if (!this.keyboardEnabled) return;
-        const mapping = this.keyMapping(key, shiftDown);
-        if (mapping) this.setMapped(mapping, val);
-    }
+        const mapping = this.keycodeToRowCol[!!shiftDown][key];
+        if (!mapping) return;
 
-    /**
-     * Where a host key lands on this machine's matrix under the current layout, as
-     * `[col, row, bbcShiftOverride?]`, or undefined. Layouts are per person, so a
-     * shared session sends the mapping rather than the key.
-     */
-    keyMapping(key, shiftDown) {
-        return this.keycodeToRowCol[!!shiftDown][key];
-    }
-
-    setMapped(mapping, val) {
-        if (!this.keyboardEnabled) return;
         const [col, row, bbcShiftOverride] = mapping;
         const [shiftCol, shiftRow] = BBC.SHIFT;
 
