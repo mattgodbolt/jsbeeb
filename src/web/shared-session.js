@@ -4,7 +4,7 @@
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
 import { cycleCount, isValidInput, LockstepGuest, LockstepHost } from "../lockstep.js";
-import { snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
+import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { createRendezvousClient } from "./rendezvous-client.js";
 import { toast } from "./toast.js";
 
@@ -183,7 +183,9 @@ export class SessionHost {
         opened(channel).then(
             () => {
                 const { model, version } = this.context;
-                channel.send(JSON.stringify({ type: "welcome", model: model.name, version }));
+                // A synonym, which unlike some names has no spaces to survive the guest's URL.
+                const name = model.synonyms[0] ?? model.name;
+                channel.send(JSON.stringify({ type: "welcome", model: name, version }));
                 this.sendSnapshot(guest);
                 notify(`A guest joined (${this.connectedCount()} connected).`);
             },
@@ -204,6 +206,8 @@ export class SessionHost {
         }
         if (message.type === "input" && message.input?.kind === "key" && isValidInput(message.input)) {
             this.lockstep.input(message.input);
+        } else if (message.type === "bye") {
+            this.drop(guest);
         } else if (message.type === "resync" && guest.ready) {
             console.log(`Shared session: resyncing a guest: ${message.reason}`);
             this.sendSnapshot(guest);
@@ -278,6 +282,7 @@ export class SessionGuest {
         channel.binaryType = "arraybuffer";
         channel.addEventListener("message", ({ data }) => this.fromHost(data));
         channel.addEventListener("close", () => this.hostLeft());
+        window.addEventListener("pagehide", () => this.send({ type: "bye" }));
         await pc.setLocalDescription(await pc.createOffer());
         notify(`Joining "${this.room}"...`);
         await rendezvous.postOffer(this.room, this.id, await gatheredDescription(pc));
@@ -332,10 +337,11 @@ export class SessionGuest {
             this.leave();
             return;
         }
-        if (model !== this.context.model.name) {
+        if (!isSameModel(model, this.context.model.name)) {
             const url = new URL(window.location.href);
             url.searchParams.set("model", model);
             this.reloading = true;
+            this.send({ type: "bye" });
             window.location.replace(url);
         }
     }
