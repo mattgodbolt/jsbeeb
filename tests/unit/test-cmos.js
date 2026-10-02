@@ -229,6 +229,19 @@ describe("CMOS", () => {
             expect(sessionStore[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
 
+        it("goes back to its own settings, clock and saving after the session", () => {
+            const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
+            const sessionStore = [...defaultCmos];
+            sessionStore[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
+            cmos.joinSession(sessionStore, () => 0);
+            cmos.leaveSession();
+            expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(ownSetting);
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x34);
+            mockPersistence.save.mockClear();
+            cmos.save();
+            expect(mockPersistence.save).toHaveBeenCalled();
+        });
+
         it("keeps the offset the host's software set its clock to", () => {
             const HourMs = 60 * 60 * 1000;
             cmos.joinSession([...defaultCmos], () => new Date(1999, 11, 31, 10, 0, 0).getTime(), HourMs);

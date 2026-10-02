@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionContext, SessionGuest, SessionHost, sessionInput } from "../../src/web/shared-session.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
+import { Cmos } from "../../src/cmos.js";
 
 const CyclesPerSecond = 2000000;
 
@@ -130,6 +131,9 @@ function fakeProcessor({ cycles = 1000 } = {}) {
         targetCycles: cycles,
         model: { cyclesPerSecond: CyclesPerSecond },
         hasTube: false,
+        ...{ a: 0, x: 0, y: 0, s: 0, pc: 0, p: { asByte: () => 0 } },
+        ramRomOs: new Uint8Array(16),
+        romOffset: 16,
         execute(count) {
             this.targetCycles += count;
             this.currentCycles = Math.max(this.currentCycles, this.targetCycles);
@@ -140,20 +144,21 @@ function fakeProcessor({ cycles = 1000 } = {}) {
             processor.currentCycles = processor.targetCycles = state.cycles;
         }),
         sysvia: {
+            keys: [],
             keyMapping: layout.keyMapping,
             setMapped: vi.fn(),
             keyboardState: () => ({ keys: [] }),
             restoreKeyboard: vi.fn(),
-            cmos: { store: [0], timeOffset: 0, joinSession: vi.fn() },
+            cmos: new Cmos(null),
         },
     };
     return processor;
 }
 
-function fakeContext({ processor = fakeProcessor(), rendezvous = {} } = {}) {
+function fakeContext({ processor = fakeProcessor(), rendezvous = {}, isMaster = false } = {}) {
     return new SessionContext({
         processor,
-        model: { name: "BBC B", synonyms: ["B-DFS1.2"], isMaster: false, cyclesPerSecond: CyclesPerSecond },
+        model: { name: "BBC B", synonyms: ["B-DFS1.2"], isMaster, cyclesPerSecond: CyclesPerSecond },
         loop: { setSession: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn() },
         urlState: { urlWith: vi.fn(() => "about:blank") },
@@ -187,10 +192,10 @@ afterEach(() => {
 });
 
 describe("SessionHost", () => {
-    async function hosting(offers = [{ guest: "g1", sdp: "offer" }]) {
+    async function hosting(offers = [{ guest: "g1", sdp: "offer" }], { isMaster = false } = {}) {
         const processor = fakeProcessor();
         const listOffers = vi.fn(async () => offers.splice(0));
-        const host = new SessionHost(fakeContext({ processor, rendezvous: { listOffers } }), "room");
+        const host = new SessionHost(fakeContext({ processor, rendezvous: { listOffers }, isMaster }), "room");
         await host.start();
         await settle();
         return { host, processor };
@@ -275,6 +280,19 @@ describe("SessionHost", () => {
         host.close();
     });
 
+    it("runs a Master's clock from cycles, starting again from the real time after a jump", async () => {
+        const { host, processor } = await hosting([], { isMaster: true });
+        const { cmos } = processor.sysvia;
+        const started = Date.now();
+        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(started / 1000) * 1000);
+        host.lockstep.execute(CyclesPerSecond * 5);
+        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor((started + 5000) / 1000) * 1000);
+        processor.cycleSeconds = 20;
+        host.lockstep.execute(0);
+        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(started / 1000) * 1000);
+        host.close();
+    });
+
     it("opens only a few connections at a time, however many offers are waiting", async () => {
         const offers = Array.from({ length: 6 }, (_, i) => ({ guest: `g${i}`, sdp: "offer" }));
         const { host } = await hosting(offers);
@@ -284,8 +302,10 @@ describe("SessionHost", () => {
 });
 
 describe("SessionGuest", () => {
-    function snapshotMessages(cycles, commits = []) {
-        const bytes = gzipSync(snapshotToJSON({ state: { cycles }, keyboard: { keys: [] }, at: cycles, cmos: [0] }));
+    function snapshotMessages(cycles, commits = [], clock = {}) {
+        const bytes = gzipSync(
+            snapshotToJSON({ state: { cycles }, keyboard: { keys: [] }, at: cycles, cmos: [0], ...clock }),
+        );
         return [
             message({ type: "snapshot", bytes: bytes.length }),
             { data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) },
@@ -293,8 +313,8 @@ describe("SessionGuest", () => {
         ];
     }
 
-    async function joining(rendezvous) {
-        const context = fakeContext({ rendezvous });
+    async function joining(rendezvous, { isMaster = false } = {}) {
+        const context = fakeContext({ rendezvous, isMaster });
         await new SessionGuest(context, "room").start();
         return { context, channel: peers[0].channel };
     }
@@ -320,6 +340,18 @@ describe("SessionGuest", () => {
         expect(processor.restoreState.mock.calls.map(([state]) => state.cycles)).toEqual([100, 500]);
         const lockstep = context.loop.setSession.mock.calls.at(-1)[0];
         await vi.waitFor(() => expect(lockstep.behind()).toBe(100));
+    });
+
+    it("gives a Master the host's clock and offset, and its own back when the host goes", async () => {
+        const { context, channel } = await joining(undefined, { isMaster: true });
+        const { cmos } = context.processor.sysvia;
+        const rtcBaseMs = Date.UTC(2026, 1, 10, 12, 0, 0);
+        const rtcOffsetMs = 60 * 1000;
+        const cycles = CyclesPerSecond * 3;
+        for (const each of snapshotMessages(cycles, [], { rtcBaseMs, rtcOffsetMs })) channel.emit("message", each);
+        await vi.waitFor(() => expect(cmos.bbcDateTime().getTime()).toBe(rtcBaseMs + 3000 + rtcOffsetMs));
+        channel.emit("close");
+        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(Date.now() / 1000) * 1000);
     });
 
     it("leaves the session on a commit it cannot read", async () => {

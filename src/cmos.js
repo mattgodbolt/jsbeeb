@@ -72,6 +72,7 @@ export class Cmos {
         this.cmosAddr = 0;
         this.now = Date.now;
         this.timeOffset = 0;
+        this.beforeSession = null;
 
         if (!this.store) {
             this.store = [...defaultCmos];
@@ -102,10 +103,25 @@ export class Cmos {
      * session sees the same time.
      */
     joinSession(store, now, timeOffset = 0) {
+        if (!this.beforeSession) {
+            this.beforeSession = {
+                persistence: this.persistence,
+                store: this.store,
+                now: this.now,
+                timeOffset: this.timeOffset,
+            };
+        }
         this.persistence = null;
         this.store = [...store];
         this.now = now;
         this.timeOffset = timeOffset;
+    }
+
+    /** Back to this machine's own settings and clock, as they were before the session. */
+    leaveSession() {
+        if (!this.beforeSession) return;
+        Object.assign(this, this.beforeSession);
+        this.beforeSession = null;
     }
 
     bbcDateTime() {

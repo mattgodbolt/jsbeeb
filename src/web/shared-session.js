@@ -520,6 +520,7 @@ export class SessionGuest {
 
     leave() {
         this.left = true;
+        this.context.processor.sysvia.cmos.leaveSession();
         this.context.loop.setSession(null);
         this.context.keyboard.setInput(null);
         this.pc?.close();

@@ -274,6 +274,9 @@ Known gaps, all left for after a first play:
   system VIA reads) are not blocked either, and desync a session the same way if used.
 - A guest's BREAK is ignored, and a guest that leaves has its held keys let go on every machine.
 - A guest's own page still shows its own drives in the front panel and media window.
+- A Master host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the
+  session's; a guest gets its own settings and clock back when it leaves.
+- When a guest leaves, the keys it held are let go even if someone else is holding the same key.
 - A hidden host tab no longer pauses, but its timers are throttled by the browser, so guests stutter.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
