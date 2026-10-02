@@ -18,8 +18,8 @@ Four tiers, each building on the one before and each worth having on its own.
    upload, no live connection. Needs a snapshot complete enough to stand alone, and somewhere to keep it.
 2. **Spectate.** I host; anyone with the link watches the same machine running live in their own browser. No
    video is streamed: every viewer runs their own emulator from my snapshot and replays my inputs. Needs
-   determinism, an input stream, a relay and late joining. Viewers can lag a fraction of a second behind and
-   nobody minds.
+   determinism, an input stream, a connection between peers and late joining. Viewers can lag a fraction of a
+   second behind and nobody minds.
 3. **Shared keyboard.** As spectating, but everyone's key presses (and joysticks) go into the one machine, in
    lockstep. Needs an agreed order for inputs from different people, an input delay, and desync detection and
    recovery. Fine for typing, adventures, two people on one Elite, turn-based play.
@@ -43,8 +43,9 @@ coming". The proposal is a single sequencer per session: peers send their inputs
 sequencer stamps each with the frame it applies on (the sender's current frame plus an input delay, or the
 next frame not yet committed, whichever is later) and broadcasts `commit(N, inputs)` at a fixed rate, empty
 or not. Every peer runs up to the last committed frame and no further. Peers never need to hear from each
-other directly, and a quiet peer costs nothing because nobody waits on it. Whether the sequencer is the
-host's browser or the server is an open question below; the protocol is the same either way.
+other directly, and a quiet peer costs nothing because nobody waits on it. The sequencer is the host's
+browser, which is also the hub every guest connects to (see v0); the protocol does not depend on that, so a
+server could take the job over later.
 
 **Inputs are machine-level events.** A key is sent after the sender's own mapping (layouts, user remaps in
 `src/keymap.js`), not as a host key code, because mapping is per-person configuration. That is more than a
@@ -97,7 +98,8 @@ Ranked by how much they would bite.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`src/adc.js:164`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation. The
    system VIA reads gamepad fire buttons live (`getJoysticks`, `src/via.js:877`). These must change so the
-   machine only ever sees values that came through the input queue.
+   machine only ever sees values that came through the input queue. That refactor is after v0, which turns
+   these inputs off in a session instead.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`, `src/via.js:645`), so a joiner
      arriving while a key is held sees it up;
@@ -114,9 +116,11 @@ Ranked by how much they would bite.
    Master) and CMOS will grow the first figure.
 
 4. **Wall clock leaks into the Master.** The RTC reads `Date.now()` on every access (`src/cmos.js:19`) and
-   setting it stores an offset from the host clock (`:183`). Two Masters read different seconds. The clock
-   needs to be derived from emulated cycles plus a base time carried in the snapshot. The Econet file server's
-   date call (`src/filestore.js:84`) is the same problem, later, with Econet.
+   setting it stores an offset from the host clock (`:184`) in a module-level variable (`:16`), shared by
+   every machine on the page. Two Masters read different seconds. The clock needs to be derived from emulated
+   cycles (the scheduler `epoch`, already in the snapshot) plus a base time carried in the session, with the
+   offset per machine and saved. The Econet file server's date call (`src/filestore.js:84`) is the same
+   problem, later, with Econet.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
    ROMs (`?rom=`) all change behaviour. With the starting scope the session description is just the model, and
@@ -129,7 +133,7 @@ Ranked by how much they would bite.
    tape, hidden-tab pause (`src/web/emulation-loop.js:289`), media changes and reset all act on one peer's
    machine. In a session each either becomes a session event (reset, disc change, perhaps rewind for everyone)
    or is turned off for guests. A hidden guest tab must not stall everybody, and with a sequencer that only
-   waits on time it does not. A hidden host tab is different if the host is the sequencer: today the loop
+   waits on time it does not. A hidden host tab is different, because the host is the sequencer: today the loop
    pauses itself when hidden, and browsers throttle timers in background tabs, so commits would stall or
    bunch for everyone and no snapshot could be taken for a joiner. In a session the host keeps running when
    hidden, and how well it can under background throttling is a cost of host-as-sequencer.
@@ -155,79 +159,93 @@ re-emulate from a snapshot and put the machine back (`src/web/rewind-thumbnail.j
 
 ## Server options
 
-The site is static, synced to S3 on every merge to main (`.github/workflows/test-and-deploy.yml`). A session
-needs a relay (and somewhere to keep snapshot links); the emulator never runs on the server.
+The site is static, synced to S3 on every merge to main (`.github/workflows/test-and-deploy.yml`) and served
+through CloudFront. The emulator never runs on a server. Traffic is small: inputs are a few bytes each,
+commits at 25 a second (every other frame) to four guests are 100 messages a second out of the host, plus a
+hash per guest per second, and a snapshot is tens of KB once per join.
 
-Traffic is small. Inputs are a few bytes each. Commits at 25 a second (every other frame) to four peers are
-100 messages a second out, plus a hash per peer per second. Snapshots are tens of KB and go once per join.
+| Option                                    | Good                                                          | Bad                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| WebRTC data channels, rendezvous only     | Peer to peer, lowest latency; the server sees a few KB a join | NAT traversal: STUN, and TURN for the unlucky; more client code                                                |
+| API Gateway WebSocket + Lambda + DynamoDB | Same AWS account as the site; nothing to run; free when idle  | Every message is a Lambda invocation, a DynamoDB lookup and a post per peer; two-hour and idle connection cuts |
+| Cloudflare Durable Objects                | One object per room holds the sockets and a timer             | Another provider, account and deployment                                                                       |
+| Small always-on box running a relay       | Simplest relay; flat cost                                     | A server to keep patched and up; one region                                                                    |
 
-| Option                                       | Good                                                                                                                                                | Bad                                                                                                                                                                                                                 |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API Gateway WebSocket + Lambda + DynamoDB    | Same AWS account as the site and Compiler Explorer; nothing to run; costs nothing when idle                                                         | Per-message overhead (below); no clock of its own, so it cannot be the sequencer; 128KB message cap; connections cut at two hours and after ten idle minutes; about $1 a million messages, plus Lambda and DynamoDB |
-| Cloudflare Durable Objects with WebSockets   | One object per room holds the connections in memory, can run a timer, so can be the sequencer; fan-out is a loop over sockets; idle rooms hibernate | Another provider and account; new deployment tooling                                                                                                                                                                |
-| Small always-on box running a `ws` relay     | Simplest code (the relay the tests would use too); can be the sequencer; flat cost                                                                  | A server to keep patched and up; one region                                                                                                                                                                         |
-| WebRTC data channels, signalling server only | Lowest latency, peer to peer; server traffic tiny                                                                                                   | NAT traversal needs STUN, and TURN for the unlucky; a mesh for N peers or the host as hub; much more client code                                                                                                    |
+The recommendation is WebRTC with the host as hub and sequencer, and a small Lambda for rendezvous only (see
+v0). The protocol stays transport-agnostic: the session code talks to a channel, so the tests can run two
+or more headless machines exchanging messages in-process with no server at all, and a local stand-in for the
+rendezvous endpoint is enough to try two browsers on one machine. If too many people cannot connect
+directly, a hosted TURN service is the next step, and one of the relays above is the fallback after that.
 
-Prices and limits are as each provider lists them at the time of writing; check before relying on them.
+## v0
 
-API Gateway's model is worth spelling out, because it is not what "a Lambda with WebSockets" suggests. The
-browser's socket ends at API Gateway, which keeps it open; no function is connected to it. Each message a
-browser sends is routed to its own Lambda invocation (state between them lives in DynamoDB), and anything sent
-back is a separate API call per connection. With the host sequencing, every commit is one invocation that
-looks up the room's connections and posts to each: 25 invocations a second per room, each with N outbound
-calls, and every message pays for an invocation, a DynamoDB lookup and an HTTP call per peer on top of the
-relay hop all the options share. It works for a relay, but anything that keeps the sockets open in one process
-(an always-on box or a Durable Object) writes to its peers directly.
+The smallest session worth having, on the machines in the scope above: spectating first, then a shared
+keyboard. Snapshot links (tier 1) can come separately.
 
-The recommendation is to keep the relay dumb and the protocol transport-agnostic: the host's browser is the
-sequencer to start with, and the relay only forwards messages within a room. That works on any of the four,
-at the cost of the hidden-host-tab problem in challenge 6. Develop against a small Node relay checked into the
-repo (`ws` would be a new dependency), which the integration tests can also run. Which
-of the hosted options it goes on is an open question; API Gateway fits the existing setup, and if its latency
-shows, the same protocol moves to an always-on process or a Durable Object, which could then take over as the
-sequencer.
+- **Inputs:** the BBC keyboard and BREAK, nothing else. The ADC and everything on it (analogue joysticks,
+  gamepad analogue, mouse-as-joystick, the microphone), gamepads altogether (including buttons mapped to
+  keys, and the fire buttons the system VIA reads live) and the mouse buttons are off in a session: the
+  host cannot start one with them selected, and a guest's are disabled while it is joined.
+- **The Master's RTC:** derived from emulated cycles, as challenge 4 describes. The host's wall-clock time
+  at session start goes in the session description, so everyone sees the same, roughly real, time. It is a
+  small change confined to `src/cmos.js` and its construction in `src/web/machine.js`.
+- **Transport:** WebRTC data channels in a star. Each guest connects to the host only; the host orders
+  inputs and broadcasts commits, and a joiner's snapshot is sent chunked over the same channel. Public STUN
+  (Google's, say) and no TURN: a guest that cannot connect is told "couldn't connect directly", and we
+  count how often that happens before paying for anything. The host and each guest see each other's public
+  IP address, which the share UI says. The session ends when the host leaves.
+- **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
+  distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
+  page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. The host makes a
+  random, unguessable room ID, which goes in the share link and is the only capability. A guest opening the
+  link creates an offer, waits for ICE gathering to finish so the full SDP goes in one message, and POSTs it
+  to the room. The host polls the room every second or two, answers each new offer and POSTs the answer;
+  the guest polls for its answer and connects. The host keeps polling slowly for the life of the session,
+  for late joiners. Rooms expire by TTL.
+- **Infrastructure:** in [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform), next to the
+  existing `module "jsbeeb"` (S3 and CloudFront) in `new/jsbeeb.tf`: Terraform creates the function, the
+  table, the role and the CloudFront origin. The function's code lives in this repo under `rendezvous/` and
+  ships with the site: the `deploy-jsbeeb` IAM user gets `lambda:UpdateFunctionCode` on that one function,
+  and the deploy job updates it after the S3 sync.
 
-## First steps
+In order, each a PR:
 
-Each of these is a PR that is useful on its own, in order.
+1. **A determinism test.** An integration test that boots a B and a Master with a disc, snapshots, then runs
+   several fresh machines from that snapshot with the same recorded input log (including a hard reset) in
+   different chunk sizes, and compares state hashes and framebuffers, as the experiment above did. Adds a
+   `stateHash` helper.
+2. **One keyboard queue.** Keyboard, BREAK and the Mac caps lock tap go through a cycle-stamped queue applied
+   at quantum boundaries. Touches `src/web/keyboard.js` and `src/web/emulation-loop.js`. Keys gain up to one
+   quantum of latency, and a tap shorter than a quantum is held for one; otherwise nothing visible changes.
+3. **Close the snapshot gaps.** Keyboard matrix and SHIFT override state, sideways RAM, CMOS contents, and the
+   cycle-driven RTC. Touches `src/via.js`, `src/6502.js`, `src/cmos.js`, `src/snapshot.js` and
+   `docs/snapshot-format.md` (a version bump). The step 1 test grows to cover a mid-keypress snapshot.
+4. **The session protocol, in-process.** Commits, inputs, hashes and chunked snapshots over an abstract
+   channel; the pacing cap at the last committed frame; the session's machine and input checks. Tested with
+   two or more headless machines talking in-process, with a late joiner and a forced desync.
+5. **Rendezvous.** The Lambda in `rendezvous/` with its tests, the Terraform in godbolt-terraform, and the
+   deploy step.
+6. **Spectating** (tier 2). WebRTC, the share link and UI, late joining and desync recovery. Guests cannot
+   type yet.
+7. **Shared keyboard** (tier 3). Guests' keys go through the host, with an input delay. Disc changes stay
+   with the host until what a guest may do is settled.
 
-1. **A determinism test.** An integration test that boots a B and a Master with a disc, snapshots,
-   then runs several fresh machines from that snapshot with the same recorded input log (including a hard
-   reset) in different chunk sizes, and compares state hashes and framebuffers, as the experiment above did.
-   Adds a `stateHash` helper. Touches tests and one small module. Catches nondeterminism on the paths it
-   exercises.
-2. **One input queue.** Route keyboard, BREAK, gamepad keys, gamepad and mouse analogue values and fire buttons
-   through a cycle-stamped queue applied at quantum boundaries; the ADC and system VIA read only what came
-   through it. Touches `src/web/keyboard.js`, `src/web/gamepads.js`, `src/adc.js`, the analogue sources,
-   `src/via.js` and `src/web/emulation-loop.js` (the Atom's keyboard in `src/ppia.js` can follow later). Inputs
-   gain up to one quantum of latency, and a tap shorter than a quantum is held for one; otherwise nothing
-   visible changes.
-3. **Record and replay.** Save a snapshot plus input log, and play it back exactly. Good for bug reports
-   ("here is the crash, press play") and demos, and it is spectating with a file instead of a socket. The
-   step 1 test grows to cover it.
-4. **Close the snapshot gaps.** Keyboard matrix and SHIFT override state, sideways RAM, CMOS contents, and an
-   RTC driven by emulated cycles from a saved base time. Touches `src/via.js`, `src/6502.js`, `src/cmos.js`,
-   `src/snapshot.js` and `docs/snapshot-format.md` (a version bump).
-5. **Shareable snapshot links** (tier 1). Upload a file snapshot and get a link that opens it; needs a decision
-   on where snapshots live.
-6. **Relay and spectating** (tier 2). The Node relay, rooms with unguessable IDs, the host streaming commits,
-   late joining and desync hashes. Guests cannot type yet.
-7. **Shared keyboard** (tier 3). Guests' inputs go through the sequencer, with an input delay and a per-session
-   rule for who may reset or change discs.
-8. **Rollback** (tier 4), only if tier 3 feels too laggy in practice. It also needs painting suppressed during
-   re-emulation and the sound chip's queued events unwound.
+After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
+snapshot links; the pulled inputs (ADC sources, gamepads, the mouse) through the queue, with `src/adc.js`,
+the sources and `getJoysticks` reading only what came through it; the other configuration options one at a
+time; TURN; and rollback (tier 4), only if tier 3 feels too laggy, which also needs painting suppressed
+during re-emulation and the sound chip's queued events unwound.
 
 ## Open questions
 
-- Who sequences: the host's browser (simplest, but the host has no input delay, everyone else has a round
-  trip, and a hidden host tab may stall the session), or the server (fair, but needs a stateful server)?
 - How SHIFT is shared when two people hold keys that force it different ways.
-- Where it is hosted: API Gateway, an always-on box, Durable Objects or WebRTC.
+- How much input delay is right by default, and whether a session should choose it from measured latency.
+- What a guest may do: type only, or also press BREAK, reset, change discs, rewind for everyone.
 - Where shared snapshots live (S3 behind a small upload endpoint, a gist, the user's Google Drive), for how
   long, and whether that is acceptable given a snapshot holds whatever was in RAM.
-- How much input delay is right by default, and whether a session should choose it from measured latency.
-- What a guest may do: type only, or also reset, change discs, rewind for everyone.
 - Whether the Electron app should be able to host.
+- Whether TURN is needed, once we know how often direct connections fail, and which hosted service.
+- Whether the jsbeeb-specific Terraform should move into this repo.
 
 ---
 
