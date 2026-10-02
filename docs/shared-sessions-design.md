@@ -2,7 +2,8 @@
 
 What it would take for several people to share one jsbeeb machine: send someone a link to my machine as it is
 now, let people watch me play, or have two or more of us at the keyboard of the same emulated Beeb from
-different browsers. Nothing here is implemented; this is a design to pick holes in.
+different browsers. A first cut of v0 is implemented (see [What v0 does today](#what-v0-does-today)); the
+rest is a design to pick holes in.
 
 **Scope to start with: a Model B (`B-DFS1.2`) and a Master, each in its default configuration, with discs but
 not tapes.** A session refuses to start on anything else: tapes, the Atom, second processors, Music 5000,
@@ -236,7 +237,40 @@ keyboard. Snapshot links (tier 1) can come separately.
   names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
 
-In order, each a PR:
+### What v0 does today
+
+To try it: one person opens jsbeeb with `?server=<room>` added to whatever else they want (a disc, a model,
+`autoboot`), and everyone else opens `?client=<room>`. A guest on a different model reloads as the host's
+before it joins. Locally, `npm start` serves the rendezvous from memory, so two browser windows on one machine
+make a session with no AWS involved.
+
+- `src/lockstep.js` is the protocol, with no browser in it. The host applies queued inputs at the cycle it has
+  reached between two executes and commits `{at, inputs, upTo}`, with a state hash (registers, RAM and the
+  keyboard matrix) every emulated second. A guest replays to exactly those cycles, which are instruction
+  boundaries, so it stops where the host stopped whatever slices its own loop runs in. There is no fixed
+  quantum and no input delay: a host's key applies at its next tick, a guest's at the host's next tick after it
+  arrives, and guests trail the host by the network's latency. `tests/integration/lockstep.js` runs a host and
+  guests in-process through delays and uneven slices, with a late joiner, a Master's clock and a forced desync.
+- `src/web/shared-session.js` is the browser side: the rendezvous, WebRTC, the snapshot sent to a joiner
+  (`snapshotState({ includeRoms: true })`, gzipped and chunked, which carries discs and sideways RAM), resync on
+  a hash mismatch, and goodbyes. `tests/playwright/shared-session.spec.js` runs a host and a guest in two
+  browser contexts and types on both.
+- The loop takes a session's `execute` in place of the processor's, and the keyboard sends keys and BREAK to the
+  session, mapped to the matrix with the sender's layout. Snapshots now carry the keyboard; a session's Masters
+  share the host's CMOS settings and a clock driven by emulated cycles.
+- `rendezvous/` is deployed and answers at `bbc.xania.org/api/rendezvous`; CI updates it before the site.
+
+Known gaps, all left for after a first play:
+
+- Nothing refuses an unsupported configuration yet; the version check is the package version, not a build.
+- Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading a
+  state, the debugger, changing a disc, a gamepad's mapped keys) is not blocked. On the host it makes every
+  guest fail its next hash and be resynced from the host within a second or so; on a guest it is undone the same
+  way. Guests' BREAK is ignored.
+- A guest's own page still shows its own drives in the front panel and media window.
+- A hidden host tab no longer pauses, but its timers are throttled by the browser, so guests stutter.
+
+In order, each a PR (the first cut above does most of 1 to 7 in one go):
 
 1. **A determinism test.** An integration test that boots a B and a Master with a disc, snapshots, then runs
    several fresh machines from that snapshot with the same recorded input log (including a hard reset) in
