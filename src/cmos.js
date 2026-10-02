@@ -13,14 +13,6 @@ const defaultCmos = Object.freeze([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
-let timeOffset = 0;
-
-function getBbcDateTime() {
-    const result = new Date(Date.now() + timeOffset);
-    result.setMilliseconds(0);
-    return result;
-}
-
 function toBcd(value) {
     return parseInt(value.toString(10), 16);
 }
@@ -78,6 +70,9 @@ export class Cmos {
         this.addressSelect = false;
         this.dataSelect = false;
         this.cmosAddr = 0;
+        this.now = Date.now;
+        this.timeOffset = 0;
+        this.beforeSession = null;
 
         if (!this.store) {
             this.store = [...defaultCmos];
@@ -101,6 +96,40 @@ export class Cmos {
         }
     }
 
+    /**
+     * Joins a shared session: the session's settings replace this machine's for its
+     * duration and are never stored over them, and the clock reads `now` (milliseconds,
+     * as Date.now) plus the offset a program set it to, so that every machine in the
+     * session sees the same time.
+     */
+    joinSession(store, now, timeOffset = 0) {
+        if (!this.beforeSession) {
+            this.beforeSession = {
+                persistence: this.persistence,
+                store: this.store,
+                now: this.now,
+                timeOffset: this.timeOffset,
+            };
+        }
+        this.persistence = null;
+        this.store = [...store];
+        this.now = now;
+        this.timeOffset = timeOffset;
+    }
+
+    /** Back to this machine's own settings and clock, as they were before the session. */
+    leaveSession() {
+        if (!this.beforeSession) return;
+        Object.assign(this, this.beforeSession);
+        this.beforeSession = null;
+    }
+
+    bbcDateTime() {
+        const result = new Date(this.now() + this.timeOffset);
+        result.setMilliseconds(0);
+        return result;
+    }
+
     read() {
         if (!this.enabled) return 0xff;
         // To drive the bus we need:
@@ -112,7 +141,7 @@ export class Cmos {
         if (!this.addressSelect && this.dataSelect && this.isRead) {
             // The first 10 bytes of CMOS RAM store the RTC clock
             if (this.cmosAddr < 10) {
-                const current = getBbcDateTime();
+                const current = this.bbcDateTime();
                 switch (this.cmosAddr) {
                     case 0:
                         return toBcd(current.getSeconds());
@@ -150,7 +179,7 @@ export class Cmos {
                 this.store[this.cmosAddr] = portApins;
                 this.save();
             } else {
-                const bbcTime = getBbcDateTime();
+                const bbcTime = this.bbcDateTime();
                 switch (this.cmosAddr) {
                     case 0:
                         bbcTime.setSeconds(fromBcd(portApins));
@@ -180,8 +209,8 @@ export class Cmos {
                         break;
                     }
                 }
-                const secondsNow = Math.floor(Date.now() / 1000) * 1000;
-                timeOffset = bbcTime.getTime() - secondsNow;
+                const secondsNow = Math.floor(this.now() / 1000) * 1000;
+                this.timeOffset = bbcTime.getTime() - secondsNow;
             }
         }
     }
