@@ -648,6 +648,10 @@ export class SysVia extends Via {
             IC32: this.IC32,
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
+            keys: this.keys.map((column) => Array.from(column)),
+            physicalShiftDown: this._physicalShiftDown,
+            shiftOverrideActive: this._shiftOverrideActive,
+            shiftOverrideDesiredShift: this._shiftOverrideDesiredShift,
         };
     }
 
@@ -663,7 +667,21 @@ export class SysVia extends Via {
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;
+        this.restoreKeys(state);
         this.recalculatePortAPins();
+    }
+
+    // Older snapshots carry no keyboard, and restore with no keys down.
+    restoreKeys(state) {
+        if (!state.keys) {
+            this.clearKeys();
+            return;
+        }
+        state.keys.forEach((column, col) => this.keys[col].set(column));
+        this._physicalShiftDown = state.physicalShiftDown;
+        this._shiftOverrideActive = state.shiftOverrideActive;
+        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
+        this.updateKeys();
     }
 
     setKeyLayout(map) {
@@ -698,9 +716,21 @@ export class SysVia extends Via {
 
     set(key, val, shiftDown) {
         if (!this.keyboardEnabled) return;
-        const mapping = this.keycodeToRowCol[!!shiftDown][key];
-        if (!mapping) return;
+        const mapping = this.keyMapping(key, shiftDown);
+        if (mapping) this.setMapped(mapping, val);
+    }
 
+    /**
+     * Where a host key lands on this machine's matrix under the current layout, as
+     * `[col, row, bbcShiftOverride?]`, or undefined. Layouts are per person, so a
+     * shared session sends the mapping rather than the key.
+     */
+    keyMapping(key, shiftDown) {
+        return this.keycodeToRowCol[!!shiftDown][key];
+    }
+
+    setMapped(mapping, val) {
+        if (!this.keyboardEnabled) return;
         const [col, row, bbcShiftOverride] = mapping;
         const [shiftCol, shiftRow] = BBC.SHIFT;
 

@@ -171,11 +171,17 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 
 System VIA additionally includes:
 
-| Field            | Type    | Description                                 |
-| ---------------- | ------- | ------------------------------------------- |
-| `IC32`           | number  | IC32 latch (keyboard, sound, screen select) |
-| `capsLockLight`  | boolean | Caps lock LED state                         |
-| `shiftLockLight` | boolean | Shift lock LED state                        |
+| Field                       | Type       | Description                                                                 |
+| --------------------------- | ---------- | --------------------------------------------------------------------------- |
+| `IC32`                      | number     | IC32 latch (keyboard, sound, screen select)                                 |
+| `capsLockLight`             | boolean    | Caps lock LED state                                                         |
+| `shiftLockLight`            | boolean    | Shift lock LED state                                                        |
+| `keys`                      | number[][] | _(Optional)_ The keyboard matrix, 16 columns of 16 rows, 1 for a key down   |
+| `physicalShiftDown`         | boolean    | _(Optional)_ Whether a key mapped to SHIFT itself is down                   |
+| `shiftOverrideActive`       | boolean    | _(Optional)_ Whether a held key is forcing SHIFT, as a symbolic layout does |
+| `shiftOverrideDesiredShift` | boolean    | _(Optional)_ The SHIFT state that key forces                                |
+
+The four keyboard fields are absent from older snapshots, which restore with no keys down.
 
 ### Video (`state.video`)
 

@@ -206,6 +206,30 @@ describe("CMOS", () => {
         });
     });
 
+    describe("Joining a session", () => {
+        function readRegister(register) {
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+            return cmos.read();
+        }
+
+        it("reads the session's settings and clock and stores nothing", () => {
+            const sessionStore = [...defaultCmos];
+            sessionStore[CMOS_ADDR.FILING_SYSTEM] = 0x42;
+            mockPersistence.save.mockClear();
+            cmos.joinSession(sessionStore, () => new Date(1999, 11, 31, 23, 59, 58).getTime());
+            expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(0x42);
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x59);
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
+            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, IC32_DATA_SEL);
+            cmos.writeControl(PORT_B_ENABLE, 0x17, 0);
+            expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(0x17);
+            expect(mockPersistence.save).not.toHaveBeenCalled();
+            expect(sessionStore[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
+        });
+    });
+
     describe("Setting RTC values", () => {
         // Helper to read a specific RTC register
         function readRtcRegister(register) {
