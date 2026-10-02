@@ -4,6 +4,11 @@ What it would take for several people to share one jsbeeb machine: send someone 
 now, let people watch me play, or have two or more of us at the keyboard of the same emulated Beeb from
 different browsers. Nothing here is implemented; this is a design to pick holes in.
 
+**Scope to start with: a Model B and a Master, each in its default configuration.** A session refuses to start
+on anything else: the Atom, second processors, Music 5000, Econet, the teletext adaptor, extra ROMs, a CPU
+multiplier and the rest can come later, one at a time, each with its own determinism test. That takes a lot
+of the edges below off the critical path, and they are marked as later where they come up.
+
 ## What we mean
 
 Four tiers, each building on the one before and each worth having on its own.
@@ -27,7 +32,7 @@ emulated cycle, and so stay identical without sending any machine state.
 
 **Time is cycles, not milliseconds.** The session clock is the emulated cycle count. Inputs apply only at
 quantum boundaries; a frame's worth of the model's clock is the obvious quantum (40,000 cycles on a 2MHz,
-50Hz Beeb; the 1MHz, 60Hz Atom wants its own), and fine enough for the keyboard, which the BBC OS scans from
+50Hz Beeb), and fine enough for the keyboard, which the BBC OS scans from
 its 100Hz interrupt. The quantum is a fixed cycle count, not tied to the video's vsync, so it does not care
 what the CRTC is programmed to do. A press and release that land in one quantum are spread over two, or the
 machine would never see the key.
@@ -76,7 +81,7 @@ video and sound chip: boot Elite on a B and on a Master, snapshot, restore into 
 same key pressed and released at the same cycles, but in execute chunks of 100,000, 37,813 and 1,997 cycles.
 The machine state and framebuffer came out identical in every case. So chunking does not leak, and the CPU,
 VIAs, video and FDC are already a deterministic function of state plus inputs, at least on that path (it
-never ran speedy, and never touched the Atom). The work is in the edges.
+never ran speedy). The work is in the edges.
 
 ## The major challenges
 
@@ -98,8 +103,9 @@ Ranked by how much they would bite.
    - sideways RAM, which lives in the ROM area and is only saved with `includeRoms` (`src/6502.js:1234`);
    - the Master's CMOS RAM, which comes from each person's `localStorage` (`src/cmos.js:43`, persisted by
      `localStoragePersistence`);
-   - tape position (a known limitation in `docs/snapshot-format.md`), Music 5000 and Econet state, a paste in
-     progress (the typist's queue), and the mouse buttons.
+   - a paste in progress (the typist's queue) and the mouse buttons;
+   - later, with the peripherals that need them: tape position (a known limitation in
+     `docs/snapshot-format.md`), Music 5000 and Econet state.
 
    It also leaves out the framebuffer, which is only cosmetic: a joiner sees black until the next frame. With
    media by reference and dirty tracks only, a B with Elite running comes to about 25KB gzipped; a full
@@ -109,11 +115,13 @@ Ranked by how much they would bite.
 4. **Wall clock leaks into the Master.** The RTC reads `Date.now()` on every access (`src/cmos.js:19`) and
    setting it stores an offset from the host clock (`:183`). Two Masters read different seconds. The clock
    needs to be derived from emulated cycles plus a base time carried in the snapshot. The Econet file server's
-   date call (`src/filestore.js:84`) is the same problem in a corner nobody will hit first.
+   date call (`src/filestore.js:84`) is the same problem, later, with Econet.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
-   ROMs (`?rom=`) all change behaviour and must be part of a session description that a joiner adopts, the way
-   a cross-model snapshot load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`).
+   ROMs (`?rom=`) all change behaviour. With the starting scope the session description is just the model, and
+   a session refuses to start if any of these is set; a joiner adopts the model the way a cross-model snapshot
+   load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`). Each option joins the
+   description as it is supported.
    Media must be fetchable by everyone: `sth:` and URLs are, embedded local files are, a `gd:` Google Drive
    reference is not without the viewer's own authorisation.
 6. **Local controls that change state.** Rewind, loading a state, the debugger, fast-as-possible and fast
@@ -127,9 +135,9 @@ Ranked by how much they would bite.
 7. **Two clocks.** Each browser's audio runs on its own crystal, and in a session the emulation rate is set by
    the sequencer. Over minutes they drift, so each peer either stretches its audio slightly or skips and pads
    it. The existing emulation lead logic (`setEmulationLead`) is the place for that.
-8. **Smaller ones.** The Atom randomises some RAM on reset (`src/6502.js:1706`), so reset needs a session-wide
-   seed. The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is audio only and
-   harmless.
+8. **Smaller ones.** The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is
+   audio only and harmless. Later, the Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a
+   session-wide seed.
 
 ## Prior art
 
@@ -152,14 +160,22 @@ needs a relay (and somewhere to keep snapshot links); the emulator never runs on
 Traffic is small. Inputs are a few bytes each. Commits at 25 a second (every other frame) to four peers are
 100 messages a second out, plus a hash per peer per second. Snapshots are tens of KB and go once per join.
 
-| Option                                       | Good                                                                                                                                                | Bad                                                                                                                                                                                                                                                 |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API Gateway WebSocket + Lambda + DynamoDB    | Same AWS account as the site and Compiler Explorer; nothing to run; costs nothing when idle                                                         | Every message is a Lambda invocation and fan-out is a loop of `PostToConnection` calls; no clock of its own, so it cannot be the sequencer; 128KB message cap; connections cut at two hours and after ten idle minutes; about $1 a million messages |
-| Cloudflare Durable Objects with WebSockets   | One object per room holds the connections in memory, can run a timer, so can be the sequencer; fan-out is a loop over sockets; idle rooms hibernate | Another provider and account; new deployment tooling                                                                                                                                                                                                |
-| Small always-on box running a `ws` relay     | Simplest code (the relay the tests would use too); can be the sequencer; flat cost                                                                  | A server to keep patched and up; one region                                                                                                                                                                                                         |
-| WebRTC data channels, signalling server only | Lowest latency, peer to peer; server traffic tiny                                                                                                   | NAT traversal needs STUN, and TURN for the unlucky; a mesh for N peers or the host as hub; much more client code                                                                                                                                    |
+| Option                                       | Good                                                                                                                                                | Bad                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API Gateway WebSocket + Lambda + DynamoDB    | Same AWS account as the site and Compiler Explorer; nothing to run; costs nothing when idle                                                         | API Gateway holds the sockets, not Lambda, so every message in is its own invocation and every message out is an HTTP `PostToConnection` call per peer; no clock of its own, so it cannot be the sequencer; 128KB message cap; connections cut at two hours and after ten idle minutes; about $1 a million messages |
+| Cloudflare Durable Objects with WebSockets   | One object per room holds the connections in memory, can run a timer, so can be the sequencer; fan-out is a loop over sockets; idle rooms hibernate | Another provider and account; new deployment tooling                                                                                                                                                                                                                                                                |
+| Small always-on box running a `ws` relay     | Simplest code (the relay the tests would use too); can be the sequencer; flat cost                                                                  | A server to keep patched and up; one region                                                                                                                                                                                                                                                                         |
+| WebRTC data channels, signalling server only | Lowest latency, peer to peer; server traffic tiny                                                                                                   | NAT traversal needs STUN, and TURN for the unlucky; a mesh for N peers or the host as hub; much more client code                                                                                                                                                                                                    |
 
 Prices and limits are as each provider lists them at the time of writing; check before relying on them.
+
+API Gateway's model is worth spelling out, because it is not what "a Lambda with WebSockets" suggests. The
+browser's socket ends at API Gateway, which keeps it open; no function is connected to it. Each message a
+browser sends is routed to a fresh Lambda invocation (state between them lives in DynamoDB), and anything sent
+back is a separate API call per connection. With the host sequencing, every commit is one invocation that
+looks up the room's connections and posts to each: 25 invocations a second per room, each with N outbound
+calls and a hop of latency the other options do not have. It works for a relay, but anything that keeps the
+sockets open in one process (an always-on box, a container, a Durable Object) talks to its peers directly.
 
 The recommendation is to keep the relay dumb and the protocol transport-agnostic: the host's browser is the
 sequencer to start with, and the relay only forwards messages within a room. That works on any of the four,
@@ -173,24 +189,23 @@ sequencer.
 
 Each of these is a PR that is useful on its own, in order.
 
-1. **A determinism test.** An integration test that boots a B and a Master with a disc, and an Atom, snapshots,
+1. **A determinism test.** An integration test that boots a B and a Master with a disc, snapshots,
    then runs several fresh machines from that snapshot with the same recorded input log (including a hard
    reset) in different chunk sizes, and compares state hashes and framebuffers, as the experiment above did.
    Adds a `stateHash` helper. Touches tests and one small module. Catches nondeterminism on the paths it
-   exercises; the Atom hard reset is marked as an expected failure until step 4 seeds it.
+   exercises.
 2. **One input queue.** Route keyboard, BREAK, gamepad keys, gamepad and mouse analogue values and fire buttons
    through a cycle-stamped queue applied at quantum boundaries; the ADC and system VIA read only what came
    through it. Touches `src/web/keyboard.js`, `src/web/gamepads.js`, `src/adc.js`, the analogue sources,
-   `src/via.js`, `src/ppia.js` (the Atom's keyboard) and `src/web/emulation-loop.js`. Inputs gain up to one
-   quantum of latency, and a tap shorter than a quantum is held for one (and on the Atom, whose ROM wants a key
-   seen up on two scans, released for long enough too, `pasteReleaseGapMs` in `src/models.js`); otherwise
-   nothing visible changes.
+   `src/via.js` and `src/web/emulation-loop.js` (the Atom's keyboard in `src/ppia.js` can follow later). Inputs
+   gain up to one quantum of latency, and a tap shorter than a quantum is held for one; otherwise nothing
+   visible changes.
 3. **Record and replay.** Save a snapshot plus input log, and play it back exactly. Good for bug reports
    ("here is the crash, press play") and demos, and it is spectating with a file instead of a socket. The
    step 1 test grows to cover it.
-4. **Close the snapshot gaps.** Keyboard matrix and SHIFT override state, a seed for the Atom's reset, sideways
-   RAM, CMOS contents, an RTC driven by emulated cycles from a saved base time, and the configuration fields
-   from challenge 5. Touches `src/via.js`, `src/6502.js`, `src/cmos.js`, `src/snapshot.js` and
+4. **Close the snapshot gaps.** Keyboard matrix and SHIFT override state, sideways RAM, CMOS contents, and an
+   RTC driven by emulated cycles from a saved base time. Touches `src/via.js`, `src/6502.js`, `src/cmos.js`,
+   `src/snapshot.js` and
    `docs/snapshot-format.md` (a version bump).
 5. **Shareable snapshot links** (tier 1). Upload a file snapshot and get a link that opens it; needs a decision
    on where snapshots live.
