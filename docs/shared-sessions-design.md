@@ -129,9 +129,9 @@ Ranked by how much they would bite.
    live within minutes, and a host who loaded the page this morning may be running different code from a guest
    who opened the link just now. The description carries the build (commit and build time); a guest on another
    build is refused rather than failing hash after hash, and whichever side is older is told to reload, the host
-   choosing when to restart the session. Media sent by reference must be fetchable by everyone: `sth:` and URLs
-   are, embedded local files are, a `gd:` Google Drive reference is not without the viewer's own authorisation.
-   v0 sidesteps this by sending the images themselves.
+   choosing when to restart the session (a new room, and a new link to send round). Media sent by reference must
+   be fetchable by everyone: `sth:` and URLs are, embedded local files are, a `gd:` Google Drive reference is not
+   without the viewer's own authorisation. v0 sidesteps this by sending the images themselves.
 6. **Local controls that change state.** Rewind, loading a state, the debugger, fast-as-possible and fast
    tape, hidden-tab pause (`src/web/emulation-loop.js:289`), media changes and reset all act on one peer's
    machine. In a session each either becomes a session event (reset, disc change, perhaps rewind for everyone)
@@ -195,7 +195,7 @@ keyboard. Snapshot links (tier 1) can come separately.
   debugger are off for everyone.
 - **The Master's RTC:** in a session only, derived from emulated cycles as challenge 4 describes, with the time
   the host's Master shows at session start, less its epoch then, as the base in the session description, so
-  everyone sees the same, roughly real, time. Outside a session it keeps the host clock. The `Cmos` is built
+  everyone sees the same, roughly real, time. Outside a session it keeps the computer's own clock. The `Cmos` is built
   before the CPU that owns the scheduler (`src/6502.js:635`), so the clock is wired in afterwards; it touches
   `src/cmos.js`, `src/6502.js` and the two places a `Cmos` is made (`src/web/machine.js:77`,
   `src/machine-spec.js:56`).
@@ -205,9 +205,9 @@ keyboard. Snapshot links (tier 1) can come separately.
   guest. Public STUN (Google's, say) and no TURN: a guest that cannot connect is told "couldn't connect
   directly", and we count how often that happens before paying for anything. The host and each guest see each
   other's public IP address, which the share UI says. The session ends when the host leaves, and each guest's
-  machine carries on as an ordinary local one, back on the host clock. A joined guest never saves the session's
-  CMOS over its own stored settings, and checks what it receives as it would a loaded file (size, model); the
-  host drops anything from a guest that is not a key event.
+  machine carries on as a local one, back on its own computer's clock. A guest never saves the session's CMOS
+  over its own stored settings, during the session or after it, and checks what it receives as it would a loaded
+  file (size, model); the host accepts only key events, state hashes and resync requests from a guest.
 - **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. The host creates the
@@ -220,8 +220,9 @@ keyboard. Snapshot links (tier 1) can come separately.
   its answer, so no guest sees another's address or can answer in the host's place. The host deletes the room
   when it leaves, if it can, and TTL catches the rest; an offer to a missing or expired room is refused, so a
   stale link says the session is over. The function treats anything past its expiry as gone, since DynamoDB
-  deletes lazily, checks the shape of IDs, caps body size and entries per room, and stores nothing but SDP. Open
-  tabs outlive a deploy, so the API stays backward compatible.
+  deletes lazily, checks the shape of IDs, caps body size and pending offers per room (an offer and its answer go
+  once the guest has read it or given up), and stores nothing but SDP. Open tabs outlive a deploy, so the API
+  stays backward compatible.
 - **Infrastructure:** in [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform), beside the
   existing `module "jsbeeb"` (S3 and CloudFront) in `new/jsbeeb.tf`: Terraform creates the function, the
   table, the role and the CloudFront origin. The function's code lives in this repo under `rendezvous/` and
