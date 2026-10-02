@@ -1,5 +1,6 @@
 import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
+import { rendezvousPlugin } from "./rendezvous/vite-plugin.js";
 import { workersFor } from "./tools/test-workers.js";
 
 // Every run in a GitHub Actions job appends to one summary page, so the suites need headings of
@@ -10,7 +11,7 @@ const JobSummaryTitle = process.env.VITEST_JOB_SUMMARY_TITLE;
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
     base: "./", // Use relative paths for Electron compatibility
-    plugins: [firShaderPlugin()],
+    plugins: [firShaderPlugin(), rendezvousPlugin()],
     build: {
         sourcemap: true,
         // Prevent inlining; we don't want any worklets/audio workers to be inlined as that doesn't work.
