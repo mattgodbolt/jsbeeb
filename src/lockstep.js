@@ -154,15 +154,10 @@ export class LockstepGuest {
         this.upTo = cycleCount(this.cpu);
     }
 
-    /**
-     * Takes the host's next commit. One that starts before this machine's position
-     * was sent before the snapshot it was resynced from; one that starts after it
-     * means commits were lost.
-     */
+    /** Takes the host's next commit, which must start where the last one ended. */
     receive(commit) {
-        if (commit.at < this.upTo) return;
-        if (commit.at > this.upTo) {
-            this.desync(`missed the host's commits from ${this.upTo} to ${commit.at}`);
+        if (commit.at !== this.upTo) {
+            this.desync(`the host's commit starts at ${commit.at}, not ${this.upTo}`);
             return;
         }
         this.commits.push(commit);

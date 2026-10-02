@@ -396,7 +396,7 @@ const startPromise = machine.start({
         await snapshots.restorePendingState();
 
         loop.go();
-        startSessionFromUrl(parsedQuery, new SessionContext({ processor, model, loop, keyboard, version }));
+        startSessionFromUrl(parsedQuery, new SessionContext({ processor, model, loop, keyboard, urlState, version }));
     } catch (error) {
         console.error("Error initialising emulator:", error);
         modals.showError("initialising", error);

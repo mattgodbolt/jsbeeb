@@ -5,6 +5,7 @@
 
 import { cycleCount, isValidCommit, isValidInput, LockstepGuest, LockstepHost } from "../lockstep.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
+import { reloadAsMachine } from "./machine-switch.js";
 import { createRendezvousClient } from "./rendezvous-client.js";
 import { toast } from "./toast.js";
 
@@ -19,6 +20,7 @@ const MinResyncIntervalMs = 2000;
 // Offers anyone who knows the room's name can post; this bounds the connections they can make the host open.
 const MaxConnectingGuests = 4;
 const SnapshotChunkBytes = 16 * 1024;
+const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
 
 function notify(message) {
@@ -56,13 +58,12 @@ function opened(channel) {
 }
 
 async function gzip(text) {
-    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+    const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
     return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 async function gunzip(bytes) {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-    return new Response(stream).text();
+    return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
 }
 
 function randomId() {
@@ -105,18 +106,24 @@ export function sessionInput(sysvia, send, { allowBreak }) {
 
 /** Everything a session needs from the page, gathered once in main.js. */
 export class SessionContext {
-    constructor({ processor, model, loop, keyboard, version, rendezvous = createRendezvousClient() }) {
+    constructor({ processor, model, loop, keyboard, urlState, version, rendezvous = createRendezvousClient() }) {
         this.processor = processor;
         this.model = model;
         this.loop = loop;
         this.keyboard = keyboard;
+        this.urlState = urlState;
         this.version = version;
         this.rendezvous = rendezvous;
     }
 
-    sessionClock(baseMs) {
+    /** The real time now, less what the machine's cycles account for: the session clock's zero. */
+    clockBaseMs() {
         const { processor } = this;
-        return () => baseMs + (cycleCount(processor) * 1000) / processor.model.cyclesPerSecond;
+        return Date.now() - this.cyclesToMs(cycleCount(processor));
+    }
+
+    cyclesToMs(cycles) {
+        return (cycles * 1000) / this.processor.model.cyclesPerSecond;
     }
 }
 
@@ -133,15 +140,16 @@ export class SessionHost {
         const { processor, model, loop, keyboard, rendezvous } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
         this.secret = await rendezvous.createRoom(this.room);
-        this.rtcBaseMs = Date.now() - (cycleCount(processor) * 1000) / model.cyclesPerSecond;
+        this.rtcBaseMs = this.context.clockBaseMs();
         if (model.isMaster) {
             const { cmos } = processor.sysvia;
-            cmos.joinSession(cmos.store, this.context.sessionClock(this.rtcBaseMs), cmos.timeOffset);
+            const clock = () => this.rtcBaseMs + this.context.cyclesToMs(cycleCount(processor));
+            cmos.joinSession(cmos.store, clock, cmos.timeOffset);
         }
         this.lockstep = new LockstepHost(
             processor,
             (commit) => this.broadcast(JSON.stringify(commit)),
-            () => this.resyncEveryone(),
+            () => this.jumped(),
         );
         loop.setSession(this.lockstep);
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.lockstep.input(input), { allowBreak: true }));
@@ -179,7 +187,17 @@ export class SessionHost {
 
     async answer({ guest: id, sdp }) {
         const pc = new RTCPeerConnection({ iceServers: IceServers });
-        const guest = { id, pc, channel: null, ready: false, backlog: [], held: new Map(), lastSnapshotMs: 0 };
+        const guest = {
+            id,
+            pc,
+            channel: null,
+            ready: false,
+            backlog: [],
+            held: new Map(),
+            lastSnapshotMs: 0,
+            snapshotGeneration: 0,
+            resyncTimer: null,
+        };
         this.guests.set(id, guest);
         pc.addEventListener("datachannel", ({ channel }) => this.adopt(guest, channel));
         setTimeout(() => {
@@ -234,7 +252,7 @@ export class SessionHost {
     }
 
     // A guest asks once per desync, but a buggy or hostile one could ask without end,
-    // and each snapshot costs the host's main thread.
+    // and each snapshot costs the host's main thread. One already on its way will do.
     requestSnapshot(guest) {
         if (!guest.ready || guest.resyncTimer) return;
         const waitMs = guest.lastSnapshotMs + MinResyncIntervalMs - Date.now();
@@ -248,18 +266,25 @@ export class SessionHost {
         }, waitMs);
     }
 
-    resyncEveryone() {
+    // Nobody can replay their way across a jump, not even a guest whose snapshot is still
+    // being compressed: that one is from before it. The clock starts again from now.
+    jumped() {
+        this.rtcBaseMs = this.context.clockBaseMs();
         for (const guest of this.guests.values()) {
-            if (guest.ready) this.sendSnapshot(guest);
+            if (guest.channel) this.sendSnapshot(guest);
         }
     }
 
     // Taken between two executes, so the last commit ended exactly here, and anything
     // the guest is sent from now on carries on from it. Commits made while the snapshot
-    // is compressed wait in the guest's backlog.
+    // is compressed wait in the guest's backlog, and a newer snapshot for the same
+    // guest supersedes this one.
     async sendSnapshot(guest) {
         const { processor } = this.context;
         const { cmos } = processor.sysvia;
+        const generation = ++guest.snapshotGeneration;
+        clearTimeout(guest.resyncTimer);
+        guest.resyncTimer = null;
         guest.ready = false;
         guest.backlog = [];
         guest.lastSnapshotMs = Date.now();
@@ -272,6 +297,7 @@ export class SessionHost {
             rtcOffsetMs: cmos.timeOffset,
         });
         const bytes = await gzip(json);
+        if (generation !== guest.snapshotGeneration) return;
         if (!this.sendTo(guest, JSON.stringify({ type: "snapshot", bytes: bytes.length }))) return;
         for (let offset = 0; offset < bytes.length; offset += SnapshotChunkBytes) {
             if (!this.sendTo(guest, bytes.slice(offset, offset + SnapshotChunkBytes))) return;
@@ -379,16 +405,26 @@ export class SessionGuest {
 
     fromHost(data) {
         if (this.left) return;
-        if (data instanceof ArrayBuffer) {
+        if (typeof data !== "string") {
             this.receiveChunk(new Uint8Array(data));
             return;
         }
-        const message = JSON.parse(data);
+        let message;
+        try {
+            message = JSON.parse(data);
+        } catch {
+            this.fail("the host sent something this page cannot read");
+            return;
+        }
         switch (message.type) {
             case "welcome":
                 this.welcome(message);
                 break;
             case "snapshot":
+                if (!Number.isInteger(message.bytes) || message.bytes <= 0 || message.bytes > MaxSnapshotBytes) {
+                    this.fail("the host sent a snapshot of an impossible size");
+                    return;
+                }
                 this.incoming = { bytes: new Uint8Array(message.bytes), received: 0, commits: [] };
                 break;
             case "commit":
@@ -417,22 +453,19 @@ export class SessionGuest {
             return;
         }
         if (!isSameModel(model, this.context.model.name)) {
-            // Rebuilt by hand: URLSearchParams would write spaces as "+", which the page's own parser keeps.
-            const others = window.location.search
-                .slice(1)
-                .split("&")
-                .filter((param) => param && !param.startsWith("model="));
             this.send({ type: "bye" });
             this.left = true;
-            window.location.replace(
-                `${window.location.pathname}?${[...others, `model=${encodeURIComponent(model)}`].join("&")}`,
-            );
+            reloadAsMachine(this.context.urlState, { model }, { replace: true });
         }
     }
 
     receiveChunk(chunk) {
         const incoming = this.incoming;
         if (!incoming) return;
+        if (incoming.received + chunk.length > incoming.bytes.length) {
+            this.fail("the host sent more snapshot than it said it would");
+            return;
+        }
         incoming.bytes.set(chunk, incoming.received);
         incoming.received += chunk.length;
         if (incoming.received < incoming.bytes.length) return;
@@ -450,7 +483,10 @@ export class SessionGuest {
         processor.restoreState(state);
         processor.sysvia.restoreKeyboard(keyboard);
         if (cycleCount(processor) !== at) throw new Error(`restored to cycle ${cycleCount(processor)}, not ${at}`);
-        if (model.isMaster) processor.sysvia.cmos.joinSession(cmos, this.context.sessionClock(rtcBaseMs), rtcOffsetMs);
+        if (model.isMaster) {
+            const clock = () => rtcBaseMs + this.context.cyclesToMs(cycleCount(processor));
+            processor.sysvia.cmos.joinSession(cmos, clock, rtcOffsetMs);
+        }
         if (this.lockstep) {
             this.lockstep.resync();
         } else {

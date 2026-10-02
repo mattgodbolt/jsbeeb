@@ -53,10 +53,14 @@ export class Keyboard extends EventTarget {
         };
     }
 
-    /** Routes key presses and BREAK through `input`, or straight to the machine again with null. */
+    /**
+     * Routes key presses and BREAK through `input`, or straight to the machine again with
+     * null, which starts it with nothing held: a session's keys go with the session.
+     */
     setInput(input) {
         this.clearKeys();
         this.input = input ?? this.directInput();
+        this.input.clearKeys?.();
     }
 
     /**

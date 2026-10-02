@@ -256,8 +256,10 @@ make a session with no AWS involved.
   a hash mismatch, and goodbyes. `tests/playwright/shared-session.spec.js` runs a host and a guest in two
   browser contexts and types on both.
 - The loop takes a session's `execute` in place of the processor's, and the keyboard sends keys and BREAK to the
-  session, mapped to the matrix with the sender's layout. Snapshots now carry the keyboard; a session's Masters
-  share the host's CMOS settings and a clock driven by emulated cycles.
+  session, mapped to the matrix with the sender's layout. A joiner is sent the host's held keys beside the
+  snapshot (snapshots themselves still leave them out, so rewind keeps the keys you are holding); a session's
+  Masters share the host's CMOS settings, its clock offset, and a clock driven by emulated cycles that starts
+  again from the real time whenever the host jumps.
 - `rendezvous/` is deployed and answers at `bbc.xania.org/api/rendezvous`; CI updates it before the site.
 
 Known gaps, all left for after a first play:

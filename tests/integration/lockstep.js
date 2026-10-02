@@ -106,6 +106,7 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, rtc
             if (snapshot) {
                 restoreInto(guest.machine, snapshot, rtcBaseMs, cmos.store);
                 guest.lockstep.resync();
+                guest.awaitingResync = false;
             } else {
                 guest.lockstep.receive(JSON.parse(commit));
             }
@@ -115,8 +116,11 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, rtc
         if (joinAt.includes(step)) {
             const machine = await join(host, joinSnapshot(host), rtcBaseMs);
             const guest = { machine, inbox: [], desyncs: [] };
+            // As the browser's guest, which asks once and waits.
             guest.lockstep = new LockstepGuest(machine.processor, (reason) => {
                 guest.desyncs.push(reason);
+                if (guest.awaitingResync) return;
+                guest.awaitingResync = true;
                 resync(guest);
             });
             guests.push(guest);
@@ -217,7 +221,7 @@ describe("lockstep sessions", () => {
         guest.receive(commits[0]);
         guest.receive(commits[2]);
         expect(desyncs).toHaveLength(1);
-        expect(desyncs[0]).toMatch(/missed the host's commits/);
+        expect(desyncs[0]).toMatch(/starts at \d+, not \d+/);
     });
 
     it("accepts only well-formed inputs and commits from a peer", () => {

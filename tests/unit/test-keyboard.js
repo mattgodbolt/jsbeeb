@@ -114,8 +114,9 @@ describe("Keyboard", () => {
             expect(mockSysvia.clearKeys).not.toHaveBeenCalled();
         });
 
-        test("goes straight to the machine again once the session is over", () => {
+        test("goes straight to the machine again once the session is over, with nothing held", () => {
             keyboard.setInput(null);
+            expect(mockSysvia.clearKeys).toHaveBeenCalled();
             keyboard.keyDown(evt(keyCodes.A));
             expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
         });

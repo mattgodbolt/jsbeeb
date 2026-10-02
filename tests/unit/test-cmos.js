@@ -228,6 +228,12 @@ describe("CMOS", () => {
             expect(mockPersistence.save).not.toHaveBeenCalled();
             expect(sessionStore[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
+
+        it("keeps the offset the host's software set its clock to", () => {
+            const HourMs = 60 * 60 * 1000;
+            cmos.joinSession([...defaultCmos], () => new Date(1999, 11, 31, 10, 0, 0).getTime(), HourMs);
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x11);
+        });
     });
 
     describe("Setting RTC values", () => {
