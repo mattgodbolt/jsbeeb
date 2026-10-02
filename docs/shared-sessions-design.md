@@ -4,10 +4,11 @@ What it would take for several people to share one jsbeeb machine: send someone 
 now, let people watch me play, or have two or more of us at the keyboard of the same emulated Beeb from
 different browsers. Nothing here is implemented; this is a design to pick holes in.
 
-**Scope to start with: a Model B and a Master, each in its default configuration.** A session refuses to start
-on anything else: the Atom, second processors, Music 5000, Econet, the teletext adaptor, extra ROMs, a CPU
-multiplier and the rest can come later, one at a time, each with its own determinism test. That takes a lot
-of the edges below off the critical path, and they are marked as later where they come up.
+**Scope to start with: a Model B (`B-DFS1.2`) and a Master, each in its default configuration, with discs but
+not tapes.** A session refuses to start on anything else: tapes, the Atom, second processors, Music 5000,
+Econet, the teletext adaptor, extra ROMs, a CPU multiplier and the rest can come later, one at a time, each
+with its own determinism test. That takes a lot of the edges below off the critical path, and they are marked
+as later where they come up.
 
 ## What we mean
 
@@ -119,7 +120,7 @@ Ranked by how much they would bite.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
    ROMs (`?rom=`) all change behaviour. With the starting scope the session description is just the model, and
-   a session refuses to start if any of these is set; a joiner adopts the model the way a cross-model snapshot
+   a session refuses to start if any of these differs from the default; a joiner adopts the model the way a cross-model snapshot
    load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`). Each option joins the
    description as it is supported.
    Media must be fetchable by everyone: `sth:` and URLs are, embedded local files are, a `gd:` Google Drive
@@ -160,22 +161,23 @@ needs a relay (and somewhere to keep snapshot links); the emulator never runs on
 Traffic is small. Inputs are a few bytes each. Commits at 25 a second (every other frame) to four peers are
 100 messages a second out, plus a hash per peer per second. Snapshots are tens of KB and go once per join.
 
-| Option                                       | Good                                                                                                                                                | Bad                                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API Gateway WebSocket + Lambda + DynamoDB    | Same AWS account as the site and Compiler Explorer; nothing to run; costs nothing when idle                                                         | API Gateway holds the sockets, not Lambda, so every message in is its own invocation and every message out is an HTTP `PostToConnection` call per peer; no clock of its own, so it cannot be the sequencer; 128KB message cap; connections cut at two hours and after ten idle minutes; about $1 a million messages |
-| Cloudflare Durable Objects with WebSockets   | One object per room holds the connections in memory, can run a timer, so can be the sequencer; fan-out is a loop over sockets; idle rooms hibernate | Another provider and account; new deployment tooling                                                                                                                                                                                                                                                                |
-| Small always-on box running a `ws` relay     | Simplest code (the relay the tests would use too); can be the sequencer; flat cost                                                                  | A server to keep patched and up; one region                                                                                                                                                                                                                                                                         |
-| WebRTC data channels, signalling server only | Lowest latency, peer to peer; server traffic tiny                                                                                                   | NAT traversal needs STUN, and TURN for the unlucky; a mesh for N peers or the host as hub; much more client code                                                                                                                                                                                                    |
+| Option                                       | Good                                                                                                                                                | Bad                                                                                                                                                                                                                 |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API Gateway WebSocket + Lambda + DynamoDB    | Same AWS account as the site and Compiler Explorer; nothing to run; costs nothing when idle                                                         | Per-message overhead (below); no clock of its own, so it cannot be the sequencer; 128KB message cap; connections cut at two hours and after ten idle minutes; about $1 a million messages, plus Lambda and DynamoDB |
+| Cloudflare Durable Objects with WebSockets   | One object per room holds the connections in memory, can run a timer, so can be the sequencer; fan-out is a loop over sockets; idle rooms hibernate | Another provider and account; new deployment tooling                                                                                                                                                                |
+| Small always-on box running a `ws` relay     | Simplest code (the relay the tests would use too); can be the sequencer; flat cost                                                                  | A server to keep patched and up; one region                                                                                                                                                                         |
+| WebRTC data channels, signalling server only | Lowest latency, peer to peer; server traffic tiny                                                                                                   | NAT traversal needs STUN, and TURN for the unlucky; a mesh for N peers or the host as hub; much more client code                                                                                                    |
 
 Prices and limits are as each provider lists them at the time of writing; check before relying on them.
 
 API Gateway's model is worth spelling out, because it is not what "a Lambda with WebSockets" suggests. The
 browser's socket ends at API Gateway, which keeps it open; no function is connected to it. Each message a
-browser sends is routed to a fresh Lambda invocation (state between them lives in DynamoDB), and anything sent
+browser sends is routed to its own Lambda invocation (state between them lives in DynamoDB), and anything sent
 back is a separate API call per connection. With the host sequencing, every commit is one invocation that
 looks up the room's connections and posts to each: 25 invocations a second per room, each with N outbound
-calls and a hop of latency the other options do not have. It works for a relay, but anything that keeps the
-sockets open in one process (an always-on box, a container, a Durable Object) talks to its peers directly.
+calls, and every message pays for an invocation, a DynamoDB lookup and an HTTP call per peer on top of the
+relay hop all the options share. It works for a relay, but anything that keeps the sockets open in one process
+(an always-on box or a Durable Object) writes to its peers directly.
 
 The recommendation is to keep the relay dumb and the protocol transport-agnostic: the host's browser is the
 sequencer to start with, and the relay only forwards messages within a room. That works on any of the four,
