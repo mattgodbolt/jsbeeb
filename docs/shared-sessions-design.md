@@ -127,10 +127,11 @@ Ranked by how much they would bite.
    cross-model snapshot load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`).
    Each option joins the description as it is supported. The emulator itself must match too: every merge to
    main is live within minutes, and a host who loaded the page this morning may be running different code
-   from a guest who opened the link just now. The description carries the build, and a guest on another
-   build is refused with a prompt to reload, rather than failing hash after hash. Media must be fetchable by
-   everyone: `sth:` and URLs are, embedded local files are, a `gd:` Google Drive reference is not without the
-   viewer's own authorisation.
+   from a guest who opened the link just now. The description carries the build; a guest on another build is
+   refused, and the host is told its page is out of date and to reload and start again, rather than everyone
+   failing hash after hash. Media sent by reference must be fetchable by everyone: `sth:` and URLs are,
+   embedded local files are, a `gd:` Google Drive reference is not without the viewer's own authorisation.
+   v0 sidesteps this by sending the images themselves.
 6. **Local controls that change state.** Rewind, loading a state, the debugger, fast-as-possible and fast
    tape, hidden-tab pause (`src/web/emulation-loop.js:289`), media changes and reset all act on one peer's
    machine. In a session each either becomes a session event (reset, disc change, perhaps rewind for everyone)
@@ -190,36 +191,39 @@ keyboard. Snapshot links (tier 1) can come separately.
   keys, and the fire buttons the system VIA reads live) and the mouse buttons are off in a session: the
   host cannot start one with them selected, and a guest's are disabled while it is joined. Guests send keys
   only; BREAK, reset and disc changes are session events from the host alone until what a guest may do is
-  settled. Rewind, loading a state, fast-as-possible and the debugger are off for everyone.
-- **The Master's RTC:** in a session only, derived from emulated cycles as challenge 4 describes, with the
-  host's wall-clock time at session start in the session description, so everyone sees the same, roughly
-  real, time. Outside a session it keeps the host clock. The `Cmos` is built before the CPU that owns the
-  scheduler (`src/6502.js:635`), so the clock is wired in afterwards; it touches `src/cmos.js`, `src/6502.js`
-  and the two places a `Cmos` is made (`src/web/machine.js:77`, `src/machine-spec.js:56`).
+  settled; a disc change carries the image. Pasting, rewind, loading a state, fast-as-possible and the
+  debugger are off for everyone.
+- **The Master's RTC:** in a session only, derived from emulated cycles as challenge 4 describes, with the time
+  the host's Master shows at session start, less its epoch then, as the base in the session description, so
+  everyone sees the same, roughly real, time. Outside a session it keeps the host clock. The `Cmos` is built
+  before the CPU that owns the scheduler (`src/6502.js:635`), so the clock is wired in afterwards; it touches
+  `src/cmos.js`, `src/6502.js` and the two places a `Cmos` is made (`src/web/machine.js:77`,
+  `src/machine-spec.js:56`).
 - **Transport:** WebRTC data channels in a star. Each guest connects to the host only; the host orders
   inputs and broadcasts commits over a reliable, ordered channel (the default). A joiner's snapshot is the
   full in-memory form, discs included, sent chunked over the same channel, so local and `gd:` discs need no
   fetching by the guest. Public STUN (Google's, say) and no TURN: a guest that cannot connect is told
   "couldn't connect directly", and we count how often that happens before paying for anything. The host and
   each guest see each other's public IP address, which the share UI says. The session ends when the host
-  leaves.
+  leaves, and each guest's machine carries on alone from there.
 - **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
-  page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. The host makes a
-  random, unguessable room ID, which goes in the share link and is the only capability. A guest opening the
-  link creates an offer, waits for ICE gathering to finish (or a short timeout) so the full SDP goes in one
-  message, and POSTs it to the room under an ID of its own. The host polls the room every second or two,
-  answers each new offer and POSTs the answer under that ID; the guest polls for its answer and connects.
-  The host keeps polling slowly for the life of the session, for late joiners, and its polls extend the
-  room's TTL; the function treats anything past its expiry as gone, since DynamoDB deletes lazily. The
-  function URL is public, so the function checks the shape of room and guest IDs, caps body size and
-  entries per room, and stores nothing but SDP. Open tabs outlive a deploy, so the API stays backward
-  compatible.
+  page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. The host creates the
+  room under a random, unguessable ID, which goes in the share link and is the only capability; an offer to a
+  room that does not exist or has expired is refused, so a stale link says the session is over. A guest opening
+  the link creates an offer, waits for ICE gathering to finish (or a short timeout) so the full SDP goes in one
+  message, and POSTs it to the room under an ID of its own. The host polls the room every second or two, answers
+  each new offer and POSTs the answer under that ID; the guest polls for its answer and connects. The host keeps
+  polling slowly for the life of the session, for late joiners, and its polls extend the room's TTL; the function
+  treats anything past its expiry as gone, since DynamoDB deletes lazily. The function URL is public, so the
+  function checks the shape of room and guest IDs, caps body size and entries per room, and stores nothing but
+  SDP. Open tabs outlive a deploy, so the API stays backward compatible.
 - **Infrastructure:** in [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform), beside the
   existing `module "jsbeeb"` (S3 and CloudFront) in `new/jsbeeb.tf`: Terraform creates the function, the
   table, the role and the CloudFront origin. The function's code lives in this repo under `rendezvous/` and
   ships with the site: the `deploy-jsbeeb` IAM user gets `lambda:UpdateFunctionCode` on that one function,
-  and the deploy job updates it after the S3 sync.
+  and the deploy job updates it before the S3 sync, as it already uploads assets before the HTML that names
+  them.
 
 In order, each a PR:
 
@@ -235,7 +239,8 @@ In order, each a PR:
    `docs/snapshot-format.md` (a version bump; older snapshots restore with no keys down and the stored CMOS).
    The step 1 test grows to cover a mid-keypress snapshot.
 4. **The session protocol, in-process.** Commits, inputs, hashes and chunked snapshots over an abstract
-   channel; the pacing cap at the last committed frame; the session's machine and input checks. Tested with
+   channel; the pacing cap at the last committed frame; the session's machine and input checks, and a build ID
+   (the commit at build time, which nothing records today). Tested with
    two or more headless machines talking in-process, with a late joiner and a forced desync.
 5. **Rendezvous.** The Lambda in `rendezvous/` with its tests, the Terraform in godbolt-terraform, and the
    deploy step.
