@@ -1,0 +1,5 @@
+{
+  "//": "Ships in the Lambda's zip, where there is no root package.json to make these files ES modules.",
+  "type": "module",
+  "private": true
+}
