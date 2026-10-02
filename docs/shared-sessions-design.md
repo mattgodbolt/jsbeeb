@@ -205,8 +205,7 @@ Each of these is a PR that is useful on its own, in order.
    step 1 test grows to cover it.
 4. **Close the snapshot gaps.** Keyboard matrix and SHIFT override state, sideways RAM, CMOS contents, and an
    RTC driven by emulated cycles from a saved base time. Touches `src/via.js`, `src/6502.js`, `src/cmos.js`,
-   `src/snapshot.js` and
-   `docs/snapshot-format.md` (a version bump).
+   `src/snapshot.js` and `docs/snapshot-format.md` (a version bump).
 5. **Shareable snapshot links** (tier 1). Upload a file snapshot and get a link that opens it; needs a decision
    on where snapshots live.
 6. **Relay and spectating** (tier 2). The Node relay, rooms with unguessable IDs, the host streaming commits,
