@@ -166,11 +166,9 @@ export class EmulationLoop extends EventTarget {
 
     /**
      * Hands the running of the machine to a shared session, whose `execute(cycles)`
-     * stands in for the processor's, or back with null. Every machine in a session
-     * must run the same cycles from the same inputs, so while it lasts the loop leaves
-     * out what only one machine would do: running speedy, which skips frames and with
-     * them some video state; reading gamepads straight into the keyboard; and pausing
-     * in a hidden tab, which would hold up everyone else if this is the host.
+     * stands in for the processor's, or back with null. While it lasts the loop runs
+     * nothing only this machine would: no speedy frame skip, no gamepad keys, and no
+     * pause in a hidden tab.
      */
     setSession(session) {
         this.session = session;

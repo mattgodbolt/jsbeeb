@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cycleCount, isValidInput, LockstepGuest, LockstepHost, stateHash } from "../../src/lockstep.js";
+import { cycleCount, isValidCommit, isValidInput, LockstepGuest, LockstepHost, stateHash } from "../../src/lockstep.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { TestMachine } from "../../src/test-machine.js";
 import { keyCodes } from "../../src/keymap.js";
@@ -9,6 +9,7 @@ import { mode7Text } from "./helpers.js";
 const HostSteps = 1500;
 const MaxStepCycles = 60000;
 const MaxDelaySteps = 12;
+const EmptySliceEvery = 7;
 
 function seededRandom(seed) {
     let state = seed;
@@ -33,22 +34,25 @@ function sessionClock(cpu, baseMs) {
 function joinSnapshot(host) {
     return snapshotToJSON({
         state: host.processor.snapshotState({ includeRoms: true }),
+        keyboard: host.processor.sysvia.keyboardState(),
         at: cycleCount(host.processor),
     });
+}
+
+function restoreInto(machine, json, rtcBaseMs, store) {
+    const { state, keyboard, at } = snapshotFromJSON(json);
+    machine.processor.restoreState(state);
+    machine.processor.sysvia.restoreKeyboard(keyboard);
+    expect(cycleCount(machine.processor)).toBe(at);
+    if (rtcBaseMs !== undefined) {
+        machine.processor.sysvia.cmos.joinSession(store, sessionClock(machine.processor, rtcBaseMs));
+    }
 }
 
 async function join(host, json, rtcBaseMs) {
     const guest = new TestMachine(host.model.name);
     await guest.initialise();
-    const { state, at } = snapshotFromJSON(json);
-    guest.processor.restoreState(state);
-    expect(cycleCount(guest.processor)).toBe(at);
-    if (rtcBaseMs !== undefined) {
-        guest.processor.sysvia.cmos.joinSession(
-            host.processor.sysvia.cmos.store,
-            sessionClock(guest.processor, rtcBaseMs),
-        );
-    }
+    restoreInto(guest, json, rtcBaseMs, host.processor.sysvia.cmos.store);
     return guest;
 }
 
@@ -68,49 +72,80 @@ function mapped(machine, inputs) {
 }
 
 /**
- * Runs a session in-process: the host executes uneven slices with `inputs` fed
- * in one per step, commits reach each guest after a random delay, and each guest
- * runs uneven slices of its own. `joinAt` adds a guest at that host step.
+ * Runs a session in-process: the host executes uneven slices, some of them empty,
+ * with `inputs` fed in one per step; commits reach each guest after a random delay,
+ * in order; and each guest runs uneven slices of its own. `joinAt` adds a guest at
+ * that host step, `corruptAt` scribbles on the first guest's RAM and `resetAt` hard
+ * resets the host. A guest that desyncs, and every guest after the host jumps, is
+ * sent a fresh snapshot down the same queue, as the browser's session does.
  */
-async function runSession({ model, inputs, joinAt = [0], rtcBaseMs, seed = 1 }) {
+async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, rtcBaseMs, seed = 1 }) {
     const random = seededRandom(seed);
     const host = await booted(model);
-    if (rtcBaseMs !== undefined) {
-        const cmos = host.processor.sysvia.cmos;
-        cmos.joinSession(cmos.store, sessionClock(host.processor, rtcBaseMs));
-    }
+    const { cmos } = host.processor.sysvia;
+    if (rtcBaseMs !== undefined) cmos.joinSession(cmos.store, sessionClock(host.processor, rtcBaseMs));
     const guests = [];
-    const desyncs = [];
-    const lockstep = new LockstepHost(host.processor, (commit) => {
-        const json = JSON.stringify(commit);
-        for (const guest of guests) guest.inbox.push({ due: step + random(MaxDelaySteps), json });
-    });
-    const typed = mapped(host, inputs);
     let step = 0;
+    let jumps = 0;
+    const queue = (guest, message) => guest.inbox.push({ due: step + random(MaxDelaySteps), message });
+    const resync = (guest) => queue(guest, { snapshot: joinSnapshot(host) });
+    const lockstep = new LockstepHost(
+        host.processor,
+        (commit) => {
+            for (const guest of guests) queue(guest, { commit: JSON.stringify(commit) });
+        },
+        () => {
+            jumps++;
+            guests.forEach(resync);
+        },
+    );
+    const typed = mapped(host, inputs);
     const deliver = (guest, now) => {
-        while (guest.inbox.length > 0 && guest.inbox[0].due <= now)
-            guest.lockstep.receive(JSON.parse(guest.inbox.shift().json));
+        while (guest.inbox.length > 0 && guest.inbox[0].due <= now) {
+            const { commit, snapshot } = guest.inbox.shift().message;
+            if (snapshot) {
+                restoreInto(guest.machine, snapshot, rtcBaseMs, cmos.store);
+                guest.lockstep.resync();
+            } else {
+                guest.lockstep.receive(JSON.parse(commit));
+            }
+        }
     };
     for (; step < HostSteps; ++step) {
         if (joinAt.includes(step)) {
             const machine = await join(host, joinSnapshot(host), rtcBaseMs);
-            const guest = { machine, inbox: [] };
-            guest.lockstep = new LockstepGuest(machine.processor, (reason) => desyncs.push(reason));
+            const guest = { machine, inbox: [], desyncs: [] };
+            guest.lockstep = new LockstepGuest(machine.processor, (reason) => {
+                guest.desyncs.push(reason);
+                resync(guest);
+            });
             guests.push(guest);
         }
+        if (step === corruptAt) {
+            for (let address = 0x3000; address < 0x3100; ++address) guests[0].machine.processor.writemem(address, 0xff);
+        }
+        if (step === resetAt) host.processor.reset(true);
         const input = typed[step];
         if (input) lockstep.input(input);
-        lockstep.execute(1 + random(MaxStepCycles));
+        lockstep.execute(step % EmptySliceEvery === 0 ? 0 : random(MaxStepCycles));
         for (const guest of guests) {
             deliver(guest, step);
-            guest.lockstep.execute(1 + random(MaxStepCycles));
+            guest.lockstep.execute(random(MaxStepCycles));
         }
     }
     for (const guest of guests) {
         deliver(guest, Infinity);
         while (guest.lockstep.behind() > 0) guest.lockstep.execute(MaxStepCycles);
     }
-    return { host, guests, desyncs };
+    return { host, guests, jumps, desyncs: guests.flatMap((guest) => guest.desyncs) };
+}
+
+function expectIdentical(host, guests) {
+    for (const { machine } of guests) {
+        expect(cycleCount(machine.processor)).toBe(cycleCount(host.processor));
+        expect(stateHash(machine.processor)).toBe(stateHash(host.processor));
+        expect(mode7Text(machine)).toBe(mode7Text(host));
+    }
 }
 
 describe("lockstep sessions", () => {
@@ -120,11 +155,7 @@ describe("lockstep sessions", () => {
         const { host, guests, desyncs } = await runSession({ model: "B-DFS1.2", inputs: keys, joinAt: [0, 40] });
         expect(desyncs).toEqual([]);
         expect(mode7Text(host)).toContain("42");
-        for (const { machine } of guests) {
-            expect(cycleCount(machine.processor)).toBe(cycleCount(host.processor));
-            expect(stateHash(machine.processor)).toBe(stateHash(host.processor));
-            expect(mode7Text(machine)).toBe(mode7Text(host));
-        }
+        expectIdentical(host, guests);
     });
 
     it("gives every Master in a session the same clock", async () => {
@@ -140,28 +171,56 @@ describe("lockstep sessions", () => {
         const { host, guests, desyncs } = await runSession({ model: "Master", inputs: keys, rtcBaseMs, seed: 7 });
         expect(desyncs).toEqual([]);
         expect(mode7Text(host)).toMatch(/Feb 2026/);
-        for (const { machine } of guests) {
-            expect(stateHash(machine.processor)).toBe(stateHash(host.processor));
-            expect(mode7Text(machine)).toBe(mode7Text(host));
-        }
+        expectIdentical(host, guests);
     });
 
-    it("reports a guest that has drifted from the host", async () => {
+    it("brings back a guest that drifted, and every guest after the host is hard reset", async () => {
+        const { P, R, I, N, T, SPACE, K6, K7, MINUS, K2, K5, ENTER } = keyCodes;
+        const afterReset = 700;
+        const keys = [...Array(afterReset).fill(null), ...taps([P, R, I, N, T, SPACE, K6, K7, MINUS, K2, K5, ENTER])];
+        const { host, guests, jumps, desyncs } = await runSession({
+            model: "B-DFS1.2",
+            inputs: keys,
+            joinAt: [0, 20],
+            corruptAt: 100,
+            resetAt: 400,
+            seed: 3,
+        });
+        expect(jumps).toBe(1);
+        expect(desyncs.some((reason) => /differs from the host's/.test(reason))).toBe(true);
+        expect(mode7Text(host)).toContain("42");
+        expectIdentical(host, guests);
+    });
+
+    it("keeps a commit that ran no cycles, and its inputs", async () => {
         const host = await booted("B-DFS1.2");
         const guestMachine = await join(host, joinSnapshot(host));
         const desyncs = [];
         const guest = new LockstepGuest(guestMachine.processor, (reason) => desyncs.push(reason));
         const lockstep = new LockstepHost(host.processor, (commit) => guest.receive(commit));
-        guestMachine.processor.writemem(0x3000, 0x55);
-        for (let i = 0; i < 100 && desyncs.length === 0; ++i) {
-            lockstep.execute(50000);
-            guest.execute(50000);
-        }
-        expect(desyncs).toHaveLength(1);
-        expect(desyncs[0]).toMatch(/differs from the host's/);
+        lockstep.input({ kind: "key", mapping: host.processor.sysvia.keyMapping(keyCodes.A, false), down: true });
+        lockstep.execute(0);
+        lockstep.execute(1000);
+        guest.execute(1000);
+        expect(desyncs).toEqual([]);
+        expect(guestMachine.processor.sysvia.hasAnyKeyDown()).toBe(true);
     });
 
-    it("accepts only well-formed inputs from a guest", () => {
+    it("asks for a resync when commits go missing", async () => {
+        const host = await booted("B-DFS1.2");
+        const guestMachine = await join(host, joinSnapshot(host));
+        const desyncs = [];
+        const guest = new LockstepGuest(guestMachine.processor, (reason) => desyncs.push(reason));
+        const commits = [];
+        const lockstep = new LockstepHost(host.processor, (commit) => commits.push(commit));
+        for (let i = 0; i < 3; ++i) lockstep.execute(1000);
+        guest.receive(commits[0]);
+        guest.receive(commits[2]);
+        expect(desyncs).toHaveLength(1);
+        expect(desyncs[0]).toMatch(/missed the host's commits/);
+    });
+
+    it("accepts only well-formed inputs and commits from a peer", () => {
         expect(isValidInput({ kind: "key", mapping: [4, 1], down: true })).toBe(true);
         expect(isValidInput({ kind: "key", mapping: [4, 1, false], down: false })).toBe(true);
         expect(isValidInput({ kind: "break", down: true })).toBe(true);
@@ -170,5 +229,10 @@ describe("lockstep sessions", () => {
         expect(isValidInput({ kind: "key", mapping: "x", down: true })).toBe(false);
         expect(isValidInput({ kind: "poke", address: 0 })).toBe(false);
         expect(isValidInput(null)).toBe(false);
+        expect(isValidCommit({ at: 5, upTo: 9, inputs: [{ kind: "break", down: false }] })).toBe(true);
+        expect(isValidCommit({ at: 5, upTo: 9, inputs: [], hash: "1a" })).toBe(true);
+        expect(isValidCommit({ at: 5, upTo: 4, inputs: [] })).toBe(false);
+        expect(isValidCommit({ at: 5, upTo: 9 })).toBe(false);
+        expect(isValidCommit({ at: 5, upTo: 9, inputs: [{ kind: "poke" }] })).toBe(false);
     });
 });

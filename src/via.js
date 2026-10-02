@@ -648,11 +648,29 @@ export class SysVia extends Via {
             IC32: this.IC32,
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
+        };
+    }
+
+    /**
+     * The keys held down, which snapshots leave out so that a rewind or a loaded state
+     * keeps the keys the person is actually holding. A shared session sends them to
+     * a joiner, which must hold what the host holds.
+     */
+    keyboardState() {
+        return {
             keys: this.keys.map((column) => Array.from(column)),
             physicalShiftDown: this._physicalShiftDown,
             shiftOverrideActive: this._shiftOverrideActive,
             shiftOverrideDesiredShift: this._shiftOverrideDesiredShift,
         };
+    }
+
+    restoreKeyboard(state) {
+        state.keys.forEach((column, col) => this.keys[col].set(column));
+        this._physicalShiftDown = state.physicalShiftDown;
+        this._shiftOverrideActive = state.shiftOverrideActive;
+        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
+        this.updateKeys();
     }
 
     restoreState(state) {
@@ -667,21 +685,7 @@ export class SysVia extends Via {
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;
-        this.restoreKeys(state);
         this.recalculatePortAPins();
-    }
-
-    // Older snapshots carry no keyboard, and restore with no keys down.
-    restoreKeys(state) {
-        if (!state.keys) {
-            this.clearKeys();
-            return;
-        }
-        state.keys.forEach((column, col) => this.keys[col].set(column));
-        this._physicalShiftDown = state.physicalShiftDown;
-        this._shiftOverrideActive = state.shiftOverrideActive;
-        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
-        this.updateKeys();
     }
 
     setKeyLayout(map) {

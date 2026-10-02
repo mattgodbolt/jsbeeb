@@ -18,7 +18,7 @@ export class RendezvousError extends Error {
  * @param {typeof fetch} [options.fetch]
  */
 export function createRendezvousClient({ base = DefaultBase, fetch: fetchFn = globalThis.fetch } = {}) {
-    async function request(what, method, path, { secret, body } = {}) {
+    async function request(what, method, path, { secret, body, keepalive = false } = {}) {
         const headers = {};
         if (secret !== undefined) headers[SecretHeader] = secret;
         if (body !== undefined) headers["content-type"] = "application/json";
@@ -27,6 +27,7 @@ export function createRendezvousClient({ base = DefaultBase, fetch: fetchFn = gl
             headers,
             body: body === undefined ? undefined : JSON.stringify(body),
             cache: "no-store",
+            keepalive,
         });
         const json = await response.json().catch(() => ({}));
         if (!response.ok) {
@@ -46,8 +47,9 @@ export function createRendezvousClient({ base = DefaultBase, fetch: fetchFn = gl
         async createRoom(room) {
             return (await request("create room", "POST", roomPath(room))).json.secret;
         },
+        /** Survives the page unloading, so a host can call it as it goes. */
         async deleteRoom(room, secret) {
-            await request("delete room", "DELETE", roomPath(room), { secret });
+            await request("delete room", "DELETE", roomPath(room), { secret, keepalive: true });
         },
         async postOffer(room, guest, sdp) {
             await request("post offer", "POST", `${roomPath(room)}/offer`, { body: { guest, sdp } });

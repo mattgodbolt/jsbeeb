@@ -98,13 +98,14 @@ export class Cmos {
     /**
      * Joins a shared session: the session's settings replace this machine's for its
      * duration and are never stored over them, and the clock reads `now` (milliseconds,
-     * as Date.now) so that every machine in the session sees the same time.
+     * as Date.now) plus the offset a program set it to, so that every machine in the
+     * session sees the same time.
      */
-    joinSession(store, now) {
+    joinSession(store, now, timeOffset = 0) {
         this.persistence = null;
         this.store = [...store];
         this.now = now;
-        this.timeOffset = 0;
+        this.timeOffset = timeOffset;
     }
 
     bbcDateTime() {

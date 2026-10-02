@@ -262,13 +262,19 @@ make a session with no AWS involved.
 
 Known gaps, all left for after a first play:
 
-- Nothing refuses an unsupported configuration yet; the version check is the package version, not a build.
-- Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading a
-  state, the debugger, changing a disc, a gamepad's mapped keys) is not blocked. On the host it makes every
-  guest fail its next hash and be resynced from the host within a second or so; on a guest it is undone the same
-  way. Guests' BREAK is ignored.
+- Nothing refuses an unsupported configuration beyond the Atom and a second processor; the version check is
+  the package version, not a build.
+- Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
+  a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count (a hard
+  reset, rewind, a loaded state) resyncs every guest at once; anything else makes guests fail their next hash
+  and be resynced from the host within a second or so. On a guest it is undone the same way.
+- Inputs the machine reads for itself rather than being sent (the ADC's sources, the gamepad fire buttons the
+  system VIA reads) are not blocked either, and desync a session the same way if used.
+- A guest's BREAK is ignored, and a guest that leaves has its held keys let go on every machine.
 - A guest's own page still shows its own drives in the front panel and media window.
 - A hidden host tab no longer pauses, but its timers are throttled by the browser, so guests stutter.
+- A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
+  the reload is refused until the room expires, and a new name is the way out.
 
 In order, each a PR (the first cut above does most of 1 to 7 in one go):
 

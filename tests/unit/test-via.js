@@ -187,24 +187,26 @@ describe("Via snapshotState / restoreState", () => {
             expect(via2.shiftLockLight).toBe(true);
         });
 
-        it("carries the keyboard, including a forced SHIFT, through a snapshot", () => {
+        it("hands the held keys, including a forced and a physical SHIFT, to another machine", () => {
             const via = makeSysVia();
             via.setMapped([BBC.A[0], BBC.A[1], true], 1);
+            via.keyDown(keyCodes.SHIFT_LEFT, false);
             const via2 = makeSysVia();
-            via2.restoreState(via.snapshotState());
+            via2.restoreKeyboard(via.keyboardState());
             expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
-            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
             via2.setMapped([BBC.A[0], BBC.A[1], true], 0);
-            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(0);
+            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
+            via2.keyUp(keyCodes.SHIFT_LEFT);
+            expect(via2.hasAnyKeyDown()).toBe(false);
         });
 
-        it("restores a snapshot without a keyboard with no keys down", () => {
+        it("leaves the held keys alone when restoring a snapshot", () => {
             const via = makeSysVia();
-            const { keys: _keys, ...older } = via.snapshotState();
+            const snapshot = via.snapshotState();
             const via2 = makeSysVia();
             via2.keyDown(keyCodes.A, false);
-            via2.restoreState(older);
-            expect(via2.hasAnyKeyDown()).toBe(false);
+            via2.restoreState(snapshot);
+            expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
         });
 
         it("should include base Via fields in SysVia snapshot", () => {

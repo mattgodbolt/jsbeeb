@@ -6,8 +6,10 @@
 // docs/shared-sessions-design.md.
 
 const HashIntervalSeconds = 1;
-// A guest more than this far behind the host's commits runs faster to catch up.
+// A guest more than this far behind the host's commits runs faster to catch up,
+// by at most the second figure in any one call, so a long way behind is not one long stall.
 const MaxGuestLagSeconds = 0.25;
+const MaxCatchUpSeconds = 0.1;
 const FnvOffset = 0x811c9dc5;
 const FnvPrime = 0x01000193;
 
@@ -61,7 +63,7 @@ export function applyInput(cpu, input) {
     }
 }
 
-/** Checks an input from a guest has the shape applyInput expects, so a bad peer cannot throw in the host's loop. */
+/** Checks an input from a peer has the shape applyInput expects, so a bad one cannot throw in a machine's loop. */
 export function isValidInput(input) {
     if (input?.kind === "break") return typeof input.down === "boolean";
     if (input?.kind !== "key" || typeof input.down !== "boolean" || !Array.isArray(input.mapping)) return false;
@@ -75,18 +77,34 @@ export function isValidInput(input) {
     );
 }
 
+export function isValidCommit(commit) {
+    return (
+        Number.isInteger(commit?.at) &&
+        Number.isInteger(commit.upTo) &&
+        commit.upTo >= commit.at &&
+        Array.isArray(commit.inputs) &&
+        commit.inputs.every(isValidInput) &&
+        (commit.hash === undefined || typeof commit.hash === "string")
+    );
+}
+
 /**
  * The host's side. Wraps the machine's execute: inputs queued since the last
  * execute are applied at the cycle the machine has reached, then the machine
- * runs, and the commit describing both goes to `send`.
+ * runs, and the commit describing both goes to `send`. If the machine is found
+ * somewhere other than where the last execute left it (a hard reset zeroes the
+ * cycle count, a loaded state moves it anywhere), `onJump` is told before the
+ * next commit, since no guest can follow that by replaying.
  */
 export class LockstepHost {
-    constructor(cpu, send) {
+    constructor(cpu, send, onJump) {
         this.cpu = cpu;
         this.send = send;
+        this.onJump = onJump;
         this.pending = [];
         this.hashInterval = HashIntervalSeconds * cpu.model.cyclesPerSecond;
-        this.nextHashAt = cycleCount(cpu) + this.hashInterval;
+        this.reachedAt = cycleCount(cpu);
+        this.nextHashAt = this.reachedAt + this.hashInterval;
     }
 
     input(input) {
@@ -96,10 +114,15 @@ export class LockstepHost {
     execute(cycles) {
         const { cpu } = this;
         const at = cycleCount(cpu);
+        if (at !== this.reachedAt) {
+            this.nextHashAt = at + this.hashInterval;
+            this.onJump();
+        }
         const inputs = this.pending.splice(0);
         for (const input of inputs) applyInput(cpu, input);
         const running = cpu.execute(cycles);
         const upTo = cycleCount(cpu);
+        this.reachedAt = upTo;
         const commit = { type: "commit", at, inputs, upTo };
         if (upTo >= this.nextHashAt) {
             commit.hash = stateHash(cpu);
@@ -122,6 +145,7 @@ export class LockstepGuest {
         this.commits = [];
         this.upTo = cycleCount(cpu);
         this.maxLag = MaxGuestLagSeconds * cpu.model.cyclesPerSecond;
+        this.maxCatchUp = MaxCatchUpSeconds * cpu.model.cyclesPerSecond;
     }
 
     /** Drops anything queued and carries on from the machine as it is now, as after a resync. */
@@ -130,8 +154,17 @@ export class LockstepGuest {
         this.upTo = cycleCount(this.cpu);
     }
 
+    /**
+     * Takes the host's next commit. One that starts before this machine's position
+     * was sent before the snapshot it was resynced from; one that starts after it
+     * means commits were lost.
+     */
     receive(commit) {
-        if (commit.upTo <= this.upTo) return;
+        if (commit.at < this.upTo) return;
+        if (commit.at > this.upTo) {
+            this.desync(`missed the host's commits from ${this.upTo} to ${commit.at}`);
+            return;
+        }
         this.commits.push(commit);
         this.upTo = commit.upTo;
     }
@@ -147,7 +180,8 @@ export class LockstepGuest {
      */
     execute(cycles) {
         const { cpu } = this;
-        const limit = Math.min(this.upTo, cycleCount(cpu) + Math.max(cycles, this.behind() - this.maxLag));
+        const catchUp = Math.min(this.behind() - this.maxLag, this.maxCatchUp);
+        const limit = Math.min(this.upTo, cycleCount(cpu) + Math.max(cycles, catchUp));
         while (this.commits.length > 0) {
             const commit = this.commits[0];
             if (commit.at > limit) break;

@@ -49,6 +49,7 @@ export class Keyboard extends EventTarget {
             keyDown: (...args) => this.keyInterface.keyDown(...args),
             keyUp: (key) => this.keyInterface.keyUp(key),
             setReset: (resetting) => this.processor.setReset(resetting),
+            clearKeys: () => this.keyInterface.clearKeys(),
         };
     }
 
@@ -309,7 +310,8 @@ export class Keyboard extends EventTarget {
     clearKeys() {
         for (const release of this.releases.values()) release();
         this.releases.clear();
-        this.keyInterface.clearKeys();
+        // A session's machine is everyone's: only this person's keys are theirs to let go.
+        this.input.clearKeys?.();
     }
 
     /**

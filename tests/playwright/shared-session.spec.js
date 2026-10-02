@@ -1,13 +1,14 @@
 import { expect, test, Beeb } from "./fixtures.js";
 
 const JoinTimeoutMs = 45000;
+const SessionTestTimeoutMs = 120000;
 
 async function type(beeb, keys) {
     for (const key of keys) await beeb.pressKey(key);
 }
 
 test("a guest joins a hosted session, and what either types reaches both machines", async ({ browser, beeb }) => {
-    test.setTimeout(120000);
+    test.setTimeout(SessionTestTimeoutMs);
     const room = `e2e-${Date.now()}`;
     await beeb.open(`?server=${room}`);
     await beeb.expectScreenText("BASIC");
