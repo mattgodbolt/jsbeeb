@@ -223,12 +223,15 @@ keyboard. Snapshot links (tier 1) can come separately.
   deletes lazily, checks the shape of IDs, caps body size and pending offers per room (an offer and its answer go
   once the guest has read it or given up), and stores nothing but SDP. Open tabs outlive a deploy, so the API
   stays backward compatible.
-- **Infrastructure:** in [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform), beside the
-  existing `module "jsbeeb"` (S3 and CloudFront) in `new/jsbeeb.tf`: Terraform creates the function, the
-  table, the role and the CloudFront origin. The function's code lives in this repo under `rendezvous/` and
-  ships with the site: the `deploy-jsbeeb` IAM user gets `lambda:UpdateFunctionCode` on that one function,
-  and the deploy job updates it before the S3 sync, as it already uploads assets before the HTML that names
-  them.
+- **Infrastructure:** already in place, in `new/jsbeeb-rendezvous.tf` of
+  [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform): the function (Node 22, arm64), its
+  table, role and log group, and `/api/rendezvous/*` on the bbc.xania.org distribution, which today answers
+  503 from a placeholder. Terraform owns the function's shape and ignores its code. The code lives in this
+  repo under `rendezvous/` and ships with the site: `deploy-jsbeeb` may `UpdateFunctionCode` and `GetFunction`
+  on that one function, so the deploy job runs `aws lambda update-function-code` then
+  `aws lambda wait function-updated-v2` before the S3 sync, as it already uploads assets before the HTML that
+  names them.
+- **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
 
 In order, each a PR:
 
@@ -249,15 +252,36 @@ In order, each a PR:
    talking in-process, with a late joiner and a forced desync.
 5. **Rendezvous.** The Lambda in `rendezvous/` with its tests, the Terraform in godbolt-terraform, and the
    deploy step.
-6. **Spectating** (tier 2). WebRTC, the share link and UI, late joining and desync recovery. Guests cannot
-   type yet.
-7. **Shared keyboard** (tier 3). Guests' keys go through the host, with an input delay.
+6. **Spectating** (tier 2). WebRTC, late joining and desync recovery, behind hidden URL switches
+   (`?server=<id>` to host, `?client=<id>` to join) with no UI, so we can try it with friends before
+   designing the share UI. Guests cannot type yet.
+7. **Shared keyboard** (tier 3). Guests' keys go through the host, with an input delay. The first target
+   is [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth): a B, keyboard only, turn-based
+   and hot-seat for two to six, so input delay barely matters and a shared keyboard is how it is meant to be
+   played.
 
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
 snapshot links; the pulled inputs (ADC sources, gamepads, the mouse) through the queue, with `src/adc.js`,
 the sources and `getJoysticks` reading only what came through it; the other configuration options one at a
-time; TURN; and rollback (tier 4), only if tier 3 feels too laggy, which also needs painting suppressed
+time; TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs painting suppressed
 during re-emulation and the sound chip's queued events unwound.
+
+### Voice, later
+
+WebRTC carries audio as readily as data, so voice in the session is mostly UI:
+
+- `getUserMedia` with the browser's echo cancellation and noise suppression, and the track added to the
+  peer connection the session already has. Adding a track needs a renegotiation, but the offer and answer can
+  go over the data channel, so the rendezvous is not involved. The audio is Opus, and the browser handles
+  jitter.
+- Bidirectional between the host and one guest is just each adding its track. With more guests, the star
+  means guests only hear the host unless the host forwards each guest's track to the others (a received
+  track can be added to another connection), which is fine for a handful; a mesh of audio-only connections
+  is the alternative.
+- Microphone off by default, a mute button, and a permission prompt only when someone turns it on.
+- The browser's echo cancellation may not remove the emulator's own sound, which plays through Web Audio
+  rather than WebRTC, so headphones may be needed. Untested.
+- Without TURN, voice fails exactly when the session does, so it adds no new connection problem.
 
 ## Open questions
 
