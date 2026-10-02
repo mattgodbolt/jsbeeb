@@ -78,6 +78,50 @@ describe("Keyboard", () => {
         expect(keyboard).toBeDefined();
     });
 
+    describe("in a shared session", () => {
+        const evt = (code) => ({
+            code,
+            key: "",
+            preventDefault: vi.fn(),
+            ctrlKey: false,
+            altKey: false,
+            shiftKey: false,
+        });
+        let input;
+        beforeEach(() => {
+            input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn() };
+            keyboard.setRunning(true);
+            keyboard.setInput(input);
+            mockSysvia.clearKeys.mockClear();
+        });
+
+        test("sends keys and BREAK to the session, not the machine", () => {
+            keyboard.keyDown(evt(keyCodes.A));
+            keyboard.keyUp(evt(keyCodes.A));
+            keyboard.keyDown(evt(keyCodes.F12));
+            keyboard.keyUp(evt(keyCodes.F12));
+            expect(input.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
+            expect(input.keyUp).toHaveBeenCalledWith(keyCodes.A);
+            expect(input.setReset.mock.calls).toEqual([[true], [false]]);
+            expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+            expect(mockProcessor.setReset).not.toHaveBeenCalled();
+        });
+
+        test("lets go of only this person's keys when clearing", () => {
+            keyboard.keyDown(evt(keyCodes.A));
+            keyboard.clearKeys();
+            expect(input.keyUp).toHaveBeenCalledWith(keyCodes.A);
+            expect(mockSysvia.clearKeys).not.toHaveBeenCalled();
+        });
+
+        test("goes straight to the machine again once the session is over, with nothing held", () => {
+            keyboard.setInput(null);
+            expect(mockSysvia.clearKeys).toHaveBeenCalled();
+            keyboard.keyDown(evt(keyCodes.A));
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
+        });
+    });
+
     describe("in the natural layout", () => {
         const evt = (code, key, extra = {}) => ({
             code,
