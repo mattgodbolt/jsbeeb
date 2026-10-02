@@ -31,6 +31,7 @@ export class Keyboard extends EventTarget {
 
         this.keyInterface = processor.keyboardInterface;
         this.typist = new Typist(processor);
+        this.input = this.directInput();
 
         // State
         this.emuKeyHandlers = {};
@@ -40,6 +41,21 @@ export class Keyboard extends EventTarget {
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
         this.releases = new Map();
+    }
+
+    /** Where key presses and BREAK go: straight to the machine, unless a shared session takes them. */
+    directInput() {
+        return {
+            keyDown: (...args) => this.keyInterface.keyDown(...args),
+            keyUp: (key) => this.keyInterface.keyUp(key),
+            setReset: (resetting) => this.processor.setReset(resetting),
+        };
+    }
+
+    /** Routes key presses and BREAK through `input`, or straight to the machine again with null. */
+    setInput(input) {
+        this.clearKeys();
+        this.input = input ?? this.directInput();
     }
 
     /**
@@ -206,10 +222,10 @@ export class Keyboard extends EventTarget {
 
         if (code === keyCodes.F12 || code === keyCodes.BREAK) {
             this.dispatchEvent(new CustomEvent("break", { detail: true }));
-            this.processor.setReset(true);
+            this.input.setReset(true);
             return () => {
                 this.dispatchEvent(new CustomEvent("break", { detail: false }));
-                this.processor.setReset(false);
+                this.input.setReset(false);
             };
         }
 
@@ -224,8 +240,8 @@ export class Keyboard extends EventTarget {
         }
 
         const machineKey = this._machineKey(evt);
-        this.keyInterface.keyDown(machineKey, evt.shiftKey);
-        return () => this.keyInterface.keyUp(machineKey);
+        this.input.keyDown(machineKey, evt.shiftKey);
+        return () => this.input.keyUp(machineKey);
     }
 
     /**
@@ -253,10 +269,10 @@ export class Keyboard extends EventTarget {
 
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-        this.keyInterface.keyDown(keyCodes.CAPSLOCK);
+        this.input.keyDown(keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.keyInterface.keyUp(keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
+        setTimeout(() => this.input.keyUp(keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (this.saidCapsLockIsTapped) return;
         this.saidCapsLockIsTapped = true;
