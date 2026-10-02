@@ -229,10 +229,11 @@ describe("CMOS", () => {
             expect(sessionStore[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
 
-        it("goes back to its own settings, clock and saving after the session", () => {
+        it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
             const sessionStore = [...defaultCmos];
             sessionStore[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
+            cmos.joinSession(sessionStore, () => 0);
             cmos.joinSession(sessionStore, () => 0);
             cmos.leaveSession();
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(ownSetting);
