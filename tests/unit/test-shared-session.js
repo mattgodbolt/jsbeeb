@@ -185,7 +185,7 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} 
     return {
         processor,
         model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
-        loop: { setSession: vi.fn() },
+        loop: { setLockstep: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         urlState: { urlWith: vi.fn(() => "about:blank") },
         version: "1.0",
@@ -255,7 +255,7 @@ describe("SessionHost", () => {
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
         host.close();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
-        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
         expect(processor.sysvia.cmos.bbcDateTime()).toBeInstanceOf(Date);
     });
@@ -273,7 +273,7 @@ describe("SessionHost", () => {
         expect(listOffers.mock.calls.length).toBe(polls);
         expect(context.rendezvous.createRoom).toHaveBeenCalledTimes(3);
         host.close();
-        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
     });
 
     it("welcomes a guest with its model and version, then sends the machine", async () => {
@@ -432,7 +432,7 @@ describe("SessionGuest", () => {
         await new SessionGuest(context, "room").start();
         const channel = peers[0].channel;
         const deliver = (messages) => messages.forEach((each) => channel.emit("message", each));
-        const lockstep = () => context.loop.setSession.mock.calls.at(-1)[0];
+        const lockstep = () => context.loop.setLockstep.mock.calls.at(-1)[0];
         return { context, channel, deliver, lockstep };
     }
 
@@ -467,7 +467,7 @@ describe("SessionGuest", () => {
             rendezvous: { postOffer: vi.fn(async () => Promise.reject(new Error("No such room"))) },
         });
         await expect(new SessionGuest(context, "room").start()).rejects.toThrow("No such room");
-        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
     });
 
@@ -490,7 +490,7 @@ describe("SessionGuest", () => {
         const [header, ...chunks] = snapshotMessages(700);
         channel.emit("message", message({ ...JSON.parse(header.data), bytes: 10 }));
         deliver(chunks);
-        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
     });
 
     it("restores each snapshot in turn and replays the commits that follow it", async () => {
@@ -539,7 +539,7 @@ describe("SessionGuest", () => {
     ])("leaves the session on %s", async (_, body) => {
         const { context, channel } = await joining();
         channel.emit("message", message(body));
-        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
         expect(context.urlState.urlWith).not.toHaveBeenCalled();
     });
 
@@ -547,7 +547,7 @@ describe("SessionGuest", () => {
         const { context, channel } = await joining();
         channel.emit("message", message({ type: "welcome", model: "B-DFS1.2", version: "1.0" }));
         expect(context.urlState.urlWith).not.toHaveBeenCalled();
-        expect(context.loop.setSession).not.toHaveBeenLastCalledWith(null);
+        expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
     });
 
     it("reloads as the host's model, by the page's own URL builder", async () => {

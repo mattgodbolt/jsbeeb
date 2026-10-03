@@ -59,7 +59,7 @@ describe("EmulationLoop", () => {
     });
 
     const make = () => new EmulationLoop(deps);
-    const sessionStub = () => ({ execute: vi.fn(() => true) });
+    const lockstepStub = () => ({ execute: vi.fn(() => true) });
     const cyclesExecuted = () => deps.processor.execute.mock.calls.map(([cycles]) => cycles);
 
     const started = () => {
@@ -343,7 +343,7 @@ describe("EmulationLoop", () => {
 
         it("keeps running in a shared session, which would otherwise wait on this tab", () => {
             const loop = started();
-            loop.setSession(sessionStub());
+            loop.setLockstep(lockstepStub());
             hide();
             expect(loop.isRunning()).toBe(true);
         });
@@ -351,7 +351,7 @@ describe("EmulationLoop", () => {
         it("runs again when a session starts in a tab already hidden", () => {
             const loop = started();
             hide();
-            loop.setSession(sessionStub());
+            loop.setLockstep(lockstepStub());
             expect(loop.isRunning()).toBe(true);
         });
 
@@ -382,36 +382,36 @@ describe("EmulationLoop", () => {
     });
 
     describe("in a shared session", () => {
-        let session;
+        let lockstep;
         beforeEach(() => {
-            session = sessionStub();
+            lockstep = lockstepStub();
         });
-        const sessionCycles = () => session.execute.mock.calls.map(([cycles]) => cycles);
+        const lockstepCycles = () => lockstep.execute.mock.calls.map(([cycles]) => cycles);
 
         it("runs the machine through the session, gamepads aside", () => {
             const loop = started();
-            loop.setSession(session);
+            loop.setLockstep(lockstep);
             deps.gamepad.update.mockClear();
             vi.advanceTimersByTime(10);
             loop.setEmulationLead(50);
-            expect(sessionCycles()).toEqual([(10 * ClocksPerSecond) / 1000, (50 * ClocksPerSecond) / 1000]);
+            expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000, (50 * ClocksPerSecond) / 1000]);
             expect(cyclesExecuted()).toEqual([]);
             expect(deps.gamepad.update).not.toHaveBeenCalled();
         });
 
         it("never goes speedy", () => {
             const loop = started();
-            loop.setSession(session);
+            loop.setLockstep(lockstep);
             loop.toggleFastAsPossible();
             vi.advanceTimersByTime(10);
-            expect(sessionCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
+            expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
             expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
         });
 
         it("runs the processor again once the session is over", () => {
             const loop = started();
-            loop.setSession(session);
-            loop.setSession(null);
+            loop.setLockstep(lockstep);
+            loop.setLockstep(null);
             vi.advanceTimersByTime(10);
             expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         });

@@ -157,7 +157,7 @@ export class SessionHost {
             (commit) => this.broadcast(JSON.stringify(commit)),
             () => this.resyncEveryone(),
         );
-        loop.setSession(this.lockstep);
+        loop.setLockstep(this.lockstep);
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.lockstep.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
         window.addEventListener("pagehide", () => this.close());
@@ -362,7 +362,7 @@ export class SessionHost {
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
         this.lockstep.execute(0);
-        loop.setSession(null);
+        loop.setLockstep(null);
         for (const guest of this.guests.values()) {
             clearTimeout(guest.resyncTimer);
             guest.pc.close();
@@ -401,7 +401,7 @@ export class SessionGuest {
         // Nothing runs until the host's snapshot arrives, and a paste or autoboot of this
         // page's own would only be thrown away by it.
         keyboard.cancelPaste();
-        loop.setSession({ execute: () => true });
+        loop.setLockstep({ execute: () => true });
         holdAnalogue(processor, true);
         const pc = (this.pc = new RTCPeerConnection({ iceServers: IceServers }));
         const channel = (this.channel = pc.createDataChannel("session", { ordered: true }));
@@ -520,7 +520,7 @@ export class SessionGuest {
             this.lockstep.resync();
         } else {
             this.lockstep = new LockstepGuest(processor, (reason) => this.desynced(reason));
-            loop.setSession(this.lockstep);
+            loop.setLockstep(this.lockstep);
             notify(`Joined "${this.room}".`);
         }
         if (this.buffering === snapshot) this.buffering = null;
@@ -548,7 +548,7 @@ export class SessionGuest {
         this.left = true;
         holdAnalogue(this.context.processor, false);
         this.context.processor.sysvia.cmos.leaveSession();
-        this.context.loop.setSession(null);
+        this.context.loop.setLockstep(null);
         this.context.keyboard.setInput(null);
         this.pc?.close();
     }
