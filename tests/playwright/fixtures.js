@@ -4,6 +4,8 @@ const ScreenBase = 0x7c00;
 const ScreenBytes = 1000;
 const BootTimeoutMs = 30000;
 const KeyHoldMs = 120;
+// OSBYTE &C4's variable, which *FX11 sets; zero turns auto-repeat off.
+const AutoRepeatDelayAddress = 0x254;
 
 /** The page with jsbeeb on it, reached through the console surface main.js exposes. */
 export class Beeb {
@@ -71,6 +73,10 @@ export class Beeb {
         await this.page.keyboard.down(key);
         await this.page.waitForTimeout(KeyHoldMs);
         await this.page.keyboard.up(key);
+    }
+
+    disableAutoRepeat() {
+        return this.page.evaluate((address) => window.processor.writemem(address, 0), AutoRepeatDelayAddress);
     }
 
     drive0() {
