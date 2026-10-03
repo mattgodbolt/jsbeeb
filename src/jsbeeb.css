@@ -272,8 +272,8 @@ span.accesskey {
 
 #session-pane {
   position: fixed;
-  top: 80px;
-  right: 8px;
+  left: 8px;
+  bottom: 72px;
   width: min(460px, calc(100vw - 16px));
   max-height: calc(100vh - 104px);
   overflow-y: auto;

@@ -26,6 +26,7 @@ describe("peerState", () => {
 describe("SessionPanel", () => {
     afterEach(() => {
         document.body.innerHTML = "";
+        vi.restoreAllMocks();
     });
 
     const session = (overrides = {}) => ({
@@ -37,7 +38,7 @@ describe("SessionPanel", () => {
     });
 
     function page() {
-        domFromIndexHtml("session-panel", "session-pane");
+        domFromIndexHtml("leds", "session-pane");
         return { readout: document.getElementById("session-panel"), pane: document.getElementById("session-pane") };
     }
 
@@ -78,6 +79,20 @@ describe("SessionPanel", () => {
         button.click();
         expect(pane.hidden).toBe(true);
         expect(button.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("opens just above the lights, and stays wherever it was dragged", () => {
+        const { pane } = page();
+        const lightsTop = 700;
+        vi.spyOn(document.getElementById("leds"), "getBoundingClientRect").mockReturnValue({ top: lightsTop });
+        const panel = new SessionPanel(session());
+        panel.open();
+        expect(pane.style.bottom).toBe(`${window.innerHeight - lightsTop + 6}px`);
+        panel.floating.close();
+        pane.style.top = "10px";
+        pane.style.bottom = "auto";
+        panel.open();
+        expect(pane.style.bottom).toBe("auto");
     });
 
     it("copies the link and saves the report from the pane", () => {

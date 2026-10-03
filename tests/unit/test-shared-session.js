@@ -1013,6 +1013,16 @@ describe("SessionGuest", () => {
         ]);
     });
 
+    it("opens the session pane once it has joined", async () => {
+        showLights();
+        const { context, deliver } = await joining();
+        const pane = document.getElementById("session-pane");
+        expect(pane.hidden).toBe(true);
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        expect(pane.hidden).toBe(false);
+    });
+
     it("measures its own round trip to the host, and shows and logs it", async () => {
         showLights();
         const { guest, context, channel, deliver, lockstep } = await joining();
