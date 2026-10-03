@@ -119,7 +119,7 @@ const Unprintable = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\
 export function cleanName(name) {
     if (typeof name !== "string") return null;
     const printable = name.replace(Unprintable, "").trim();
-    // By code point, so an emoji is never cut in half.
+    // By code point, so a surrogate pair is never split.
     return [...printable].slice(0, MaxNameLength).join("") || null;
 }
 
@@ -718,7 +718,11 @@ export class SessionGuest {
             return;
         }
         this.stats.tick("commits");
-        if (commit.inputs.length > 0) this.log.record("inputs", { cycle: commit.at, inputs: commit.inputs });
+        if (commit.inputs.length > 0) {
+            // Rebuilt from the checked fields, so nothing else the host put in them is kept.
+            const inputs = commit.inputs.map(({ kind, mapping, down }) => ({ kind, mapping, down }));
+            this.log.record("inputs", { cycle: commit.at, inputs });
+        }
         const waiting = this.incoming ?? this.buffering;
         if (waiting) waiting.commits.push(commit);
         else this.lockstep?.receive(commit);

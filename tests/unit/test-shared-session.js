@@ -667,7 +667,7 @@ describe("SessionGuest", () => {
     it("logs the inputs the host applied, with their cycle, and no lag once it has left", async () => {
         const { guest, channel, deliver } = await joining();
         const input = { kind: "key", mapping: [4, 1], down: true };
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [input] }]));
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [{ ...input, junk: "x".repeat(1000) }] }]));
         expect(guest.report().events).toContainEqual(
             expect.objectContaining({ event: "inputs", cycle: 100, inputs: [input] }),
         );
