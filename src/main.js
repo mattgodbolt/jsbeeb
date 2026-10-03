@@ -42,6 +42,8 @@ import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
+import { startSessionFromUrl } from "./web/shared-session.js";
+import { createRendezvousClient } from "./web/rendezvous-client.js";
 
 installIcons();
 
@@ -395,6 +397,8 @@ const startPromise = machine.start({
         await snapshots.restorePendingState();
 
         loop.go();
+        const rendezvous = createRendezvousClient();
+        startSessionFromUrl(parsedQuery, { processor, model, loop, keyboard, urlState, version, rendezvous });
     } catch (error) {
         console.error("Error initialising emulator:", error);
         modals.showError("initialising", error);

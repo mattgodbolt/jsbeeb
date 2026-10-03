@@ -26,14 +26,16 @@ describe("Keyboard", () => {
         return await eventPromise;
     };
 
-    const breakKey = () => ({
-        code: keyCodes.F12,
-        key: "F12",
+    const keyEvent = (code, key = "", extra = {}) => ({
+        code,
+        key,
         preventDefault: vi.fn(),
-        altKey: false,
         ctrlKey: false,
+        altKey: false,
         shiftKey: false,
+        ...extra,
     });
+    const breakKey = () => keyEvent(keyCodes.F12, "F12");
 
     beforeEach(() => {
         mockSysvia = {
@@ -78,17 +80,43 @@ describe("Keyboard", () => {
         expect(keyboard).toBeDefined();
     });
 
-    describe("in the natural layout", () => {
-        const evt = (code, key, extra = {}) => ({
-            code,
-            key,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-            ...extra,
+    describe("in a shared session", () => {
+        let input;
+        beforeEach(() => {
+            input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
+            keyboard.setRunning(true);
+            keyboard.setInput(input);
+            mockSysvia.clearKeys.mockClear();
         });
 
+        test("sends keys and BREAK to the session, not the machine", () => {
+            keyboard.keyDown(keyEvent(keyCodes.A));
+            keyboard.keyUp(keyEvent(keyCodes.A));
+            keyboard.keyDown(breakKey());
+            keyboard.keyUp(breakKey());
+            expect(input.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
+            expect(input.keyUp).toHaveBeenCalledWith(keyCodes.A);
+            expect(input.setReset.mock.calls).toEqual([[true], [false]]);
+            expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+            expect(mockProcessor.setReset).not.toHaveBeenCalled();
+        });
+
+        test("lets go of only this person's keys when clearing", () => {
+            keyboard.keyDown(keyEvent(keyCodes.A));
+            keyboard.clearKeys();
+            expect(input.keyUp).toHaveBeenCalledWith(keyCodes.A);
+            expect(mockSysvia.clearKeys).not.toHaveBeenCalled();
+        });
+
+        test("goes straight to the machine again once the session is over, with nothing held", () => {
+            keyboard.setInput(null);
+            expect(mockSysvia.clearKeys).toHaveBeenCalled();
+            keyboard.keyDown(keyEvent(keyCodes.A));
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
+        });
+    });
+
+    describe("in the natural layout", () => {
         beforeEach(() => {
             keyboard.setKeyLayout("natural");
             keyboard.setRunning(true);
@@ -98,21 +126,21 @@ describe("Keyboard", () => {
 
         test("sends the character the host produced, not the key's position", () => {
             // A Dvorak keyboard types a hyphen where a QWERTY one has the apostrophe.
-            keyboard.keyDown(evt("Quote", "-"));
+            keyboard.keyDown(keyEvent("Quote", "-"));
 
             expect(mockSysvia.keyDown).toHaveBeenCalledWith("-", false);
         });
 
         test("releases what the press sent, even once the character has changed", () => {
-            keyboard.keyDown(evt("Digit2", '"', { shiftKey: true }));
+            keyboard.keyDown(keyEvent("Digit2", '"', { shiftKey: true }));
             // Shift let go first, so the release reports the unshifted character.
-            keyboard.keyUp(evt("Digit2", "2"));
+            keyboard.keyUp(keyEvent("Digit2", "2"));
 
             expect(mockSysvia.keyUp).toHaveBeenCalledWith('"');
         });
 
         test("still names keys that print nothing by where they are", () => {
-            keyboard.keyDown(evt("ArrowLeft", "ArrowLeft"));
+            keyboard.keyDown(keyEvent("ArrowLeft", "ArrowLeft"));
 
             expect(mockSysvia.keyDown).toHaveBeenCalledWith("ArrowLeft", false);
         });
@@ -121,17 +149,17 @@ describe("Keyboard", () => {
             const handler = vi.fn();
             keyboard.registerKeyHandler(keyCodes.S, handler, { alt: true, ctrl: false });
 
-            keyboard.keyDown(evt("KeyS", "s", { altKey: true }));
+            keyboard.keyDown(keyEvent("KeyS", "s", { altKey: true }));
 
             expect(handler).toHaveBeenCalledWith(true, "KeyS", false);
             expect(mockSysvia.keyDown).not.toHaveBeenCalled();
         });
 
         test("keeps the character it started with while a key auto-repeats", () => {
-            keyboard.keyDown(evt("Digit6", "^", { shiftKey: true }));
+            keyboard.keyDown(keyEvent("Digit6", "^", { shiftKey: true }));
             // Shift let go while the key stays down: the repeats report the plain character.
-            keyboard.keyDown(evt("Digit6", "6", { repeat: true }));
-            keyboard.keyUp(evt("Digit6", "6"));
+            keyboard.keyDown(keyEvent("Digit6", "6", { repeat: true }));
+            keyboard.keyUp(keyEvent("Digit6", "6"));
 
             expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
             expect(mockSysvia.keyDown).toHaveBeenCalledWith("^", true);
@@ -141,7 +169,7 @@ describe("Keyboard", () => {
         test("gives a KEY. parameter its key by position, over the character", () => {
             userKeymap.push({ native: "K1", key: "COPY" });
             try {
-                keyboard.keyDown(evt("Digit1", "1"));
+                keyboard.keyDown(keyEvent("Digit1", "1"));
 
                 expect(mockSysvia.keyDown).toHaveBeenCalledWith("Digit1", false);
             } finally {
@@ -150,7 +178,7 @@ describe("Keyboard", () => {
         });
 
         test("releases a held key by its old name when the layout changes under it", () => {
-            keyboard.keyDown(evt("Digit2", '"', { shiftKey: true }));
+            keyboard.keyDown(keyEvent("Digit2", '"', { shiftKey: true }));
             keyboard.setKeyLayout("physical");
 
             expect(mockSysvia.keyUp).toHaveBeenCalledWith('"');
