@@ -41,16 +41,21 @@ export class KeyStamper {
     constructor(cyclesPerSecond) {
         this.cyclesPerMs = cyclesPerSecond / 1000;
         this.last = null;
+        // Whether this page's keys have fallen behind when they were pressed: one was stamped ahead of where the
+        // machine was, or held back while control came to it. Until one lands where the machine is, they follow on.
+        this.catchingUp = false;
     }
 
     /** Starts afresh, the machine the stamps counted on having jumped. */
     reset() {
         this.last = null;
+        this.catchingUp = false;
     }
 
     /** Notes a key that went in at `cycle` unstamped, for the next that follows it to keep its gap from. */
     mark({ cycle, nowMs }) {
         this.last = { at: cycle, ms: nowMs };
+        this.catchingUp = false;
     }
 
     /**
@@ -58,11 +63,12 @@ export class KeyStamper {
      * than they were pressed apart (as nextInRun shortens a long gap), so a key pressed just before taking control,
      * stamped a round trip ahead or held back until control came, keeps its length when its release is pressed after.
      */
-    follow({ cycle, nowMs }) {
+    follow({ cycle, nowMs, heldBack = false }) {
         const { cyclesPerMs, last } = this;
         const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
         const stamp = nextInRun(cycle, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
         this.last = { at: stamp, ms: nowMs };
+        this.catchingUp = heldBack || stamp > cycle;
         return stamp;
     }
 
@@ -73,6 +79,7 @@ export class KeyStamper {
         const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
         const stamp = nextInRun(at, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
         this.last = { at: stamp, ms: nowMs };
+        this.catchingUp = true;
         return stamp;
     }
 }
@@ -151,11 +158,6 @@ export class Sequencer {
             for (const key of source.scheduled.splice(0)) this.input(key.input, key.fields);
             source.lastKey = null;
         }
-    }
-
-    /** Whether source `id` has keys waiting for their cycles. */
-    waiting(id) {
-        return (this.sources.get(id)?.scheduled.length ?? 0) > 0;
     }
 
     /** Starts source `id`'s next key afresh, its stamps now counting on a machine that has been replaced. */

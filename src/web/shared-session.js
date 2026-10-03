@@ -297,14 +297,13 @@ export class SessionHost {
     }
 
     // This page's own keys go in at once, as on a machine of its own, except while control is coming back to it or
-    // keys of its from before are still waiting: then they keep their gaps from those, so none is cut short.
+    // its keys are catching up after: then they keep their gaps, so none is cut short.
     stampOwn() {
         const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
-        if (this.sequencer && !this.sequencer.waiting("host")) {
-            this.stamper.mark(now);
-            return undefined;
-        }
-        return this.stamper.follow(now);
+        if (!this.sequencer) return this.stamper.follow({ ...now, heldBack: true });
+        if (this.stamper.catchingUp) return this.stamper.follow(now);
+        this.stamper.mark(now);
+        return undefined;
     }
 
     stampForController() {
@@ -972,13 +971,13 @@ export class SessionGuest {
     // Sent with this page's time, so the host's log shows how long each key was really held, and the cycle it is
     // to go in at, so it keeps its place among the others however the network bunches them.
     input(input) {
-        // At once, as on a machine of its own, unless its keys from before it had control are still waiting: then
-        // after them, keeping their gaps, so none is cut short.
+        // At once, as on a machine of its own, unless its keys are catching up after taking control: then keeping
+        // their gaps from the last, so none is cut short.
         if (this.sequencer) {
             const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
-            const waiting = this.sequencer.waiting(this.id);
-            if (!waiting) this.stamper.mark(now);
-            this.sequencer.queue(this.id, input, {}, waiting ? this.stamper.follow(now) : undefined);
+            const behind = this.stamper.catchingUp;
+            if (!behind) this.stamper.mark(now);
+            this.sequencer.queue(this.id, input, {}, behind ? this.stamper.follow(now) : undefined);
             this.send({ type: "input", input, own: true });
             return;
         }

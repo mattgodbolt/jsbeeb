@@ -759,7 +759,7 @@ describe("SessionHost", () => {
             expect(first.snapshots()[1].rtcBaseMs).not.toBe(before.rtcBaseMs);
         });
 
-        it("keeps a key it pressed to take control back held as long as it was, though the press went in late", async () => {
+        it("keeps a key it pressed to take control back down long enough for the keyboard scan, though it went in late", async () => {
             showLights();
             const { host, first, second } = await twoGuests();
             document.querySelector("#session-pane .session-take-on-key").click();
@@ -774,6 +774,24 @@ describe("SessionHost", () => {
             const keys = sentOf(second, "commit").flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
             expect(keys[0]).toEqual([true, 3000]);
             expect(keys[1]).toEqual([false, 3000 + 40 * MsCycles]);
+        });
+
+        it("keeps a key it pressed to take control back down long enough when it is let go just after control came", async () => {
+            showLights();
+            const { host, first, second } = await twoGuests();
+            document.querySelector("#session-pane .session-take-on-key").click();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            host.input(keyA);
+            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
+            vi.advanceTimersByTime(60);
+            host.execute(5000);
+            host.execute(100);
+            host.input(keyAUp);
+            host.execute(CyclesPerSecond);
+            const keys = sentOf(second, "commit").flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
+            expect(keys[0]).toEqual([true, 3000]);
+            expect(keys[1][1] - 3000).toBeGreaterThanOrEqual(40 * MsCycles);
         });
 
         it("puts BREAK in at once, ahead of keys of its own still waiting", async () => {
@@ -1564,7 +1582,7 @@ describe("SessionGuest", () => {
             expect(take.disabled).toBe(true);
         });
 
-        it("keeps a key pressed to take control held as long as it was, though the press went in late", async () => {
+        it("keeps a key pressed to take control down long enough for the keyboard scan, though it went in late", async () => {
             const MsCycles = CyclesPerSecond / 1000;
             const session = await joining();
             session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
@@ -1579,10 +1597,35 @@ describe("SessionGuest", () => {
             session.lockstep().execute(2000);
             vi.advanceTimersByTime(84);
             keyboard.keyUp("a");
+            vi.advanceTimersByTime(10);
+            keyboard.keyDown("a", false);
             session.lockstep().execute(press.at + 100 * MsCycles);
             const keys = commitsSent(session.channel).flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
             expect(keys[0]).toEqual([true, press.at]);
             expect(keys[1]).toEqual([false, press.at + 40 * MsCycles]);
+            expect(keys.at(-1)).toEqual([true, press.at + 50 * MsCycles]);
+        });
+
+        it("keeps a key pressed to take control down long enough when it is let go just after the press went in", async () => {
+            const MsCycles = CyclesPerSecond / 1000;
+            const session = await joining();
+            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            const keyboard = session.context.keyboard.setInput.mock.calls.at(-1)[0];
+            keyboard.keyDown("a", false);
+            const [press] = session.channel.messages().filter((each) => each.type === "input");
+            session.deliver([
+                message({ type: "handover", at: 1000 }),
+                message({ type: "input", input: press.input, at: press.at, source: session.guest.id }),
+            ]);
+            session.lockstep().execute(2000);
+            session.lockstep().execute(press.at - 1000 + 1000);
+            vi.advanceTimersByTime(240);
+            keyboard.keyUp("a");
+            session.lockstep().execute(100 * MsCycles);
+            const keys = commitsSent(session.channel).flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
+            expect(keys[0]).toEqual([true, press.at]);
+            expect(keys[1][1] - press.at).toBeGreaterThanOrEqual(40 * MsCycles);
         });
 
         it("commits its own key pressed just before it is asked to stop, then stops after it", async () => {
