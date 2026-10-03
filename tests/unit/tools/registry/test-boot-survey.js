@@ -2,14 +2,14 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { bootOne } from "../../../tools/registry/boot-survey.js";
+import { bootOne } from "../../../../tools/registry/boot-survey.js";
 import {
     junkDfsTitle,
     knownTitle,
     machineClaims,
     titleWords,
     verdict,
-} from "../../../tools/registry/boot-survey-analyse.js";
+} from "../../../../tools/registry/boot-survey-analyse.js";
 
 const SectorSize = 256;
 const BootOptionExec = 3;

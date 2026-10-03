@@ -8,7 +8,7 @@ import {
     evaluate,
     parsePy8disListing,
     storeTargets,
-} from "../../../tools/registry/anchors.js";
+} from "../../../../tools/registry/anchors.js";
 
 const Listing = `counter = $70
 oswrch = $ffee
