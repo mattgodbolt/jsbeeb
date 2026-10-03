@@ -322,6 +322,7 @@ export class SessionHost {
             this.taker = taker;
             return;
         }
+        this.taker = null;
         if (taker === this.controller && this.resumeAt === null) return;
         if (this.sequencer) {
             if (taker) this.handOver(taker);
@@ -754,9 +755,9 @@ export class SessionHost {
         }
         guest.backlog = [];
         guest.ready = true;
-        if (this.taker === guest && this.sequencer) {
+        if (this.taker === guest) {
             this.taker = null;
-            this.handOver(guest);
+            this.requestControl(guest);
         }
     }
 
@@ -1049,6 +1050,7 @@ export class SessionGuest {
             this.handoverAt = null;
             this.log.record("released", { at });
             this.send({ type: "released", at, waiting: this.keysForControl.splice(0) });
+            this.showStatus();
             return;
         }
         if (!this.sequencer) return;

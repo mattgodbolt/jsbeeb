@@ -685,6 +685,19 @@ describe("SessionHost", () => {
             );
         });
 
+        it("asks the guest in control to stop for one that asked while its snapshot was on its way, once it has it", async () => {
+            const { host, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            host.execute(5000);
+            second.emit("message", message({ type: "resync", reason: "test" }));
+            vi.advanceTimersByTime(MinResyncIntervalMs);
+            second.emit("message", message({ type: "take" }));
+            expect(sentOf(first, "release")).toEqual([]);
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
+            await vi.waitFor(() => expect(sentOf(first, "release")).toHaveLength(1));
+        });
+
         it("hands control to a guest that asked while the host was taking it back, once it has", async () => {
             const { host, first, second } = await twoGuests();
             first.emit("message", message({ type: "take" }));
