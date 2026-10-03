@@ -41,6 +41,14 @@ describe("rendezvous", () => {
     const advanceSeconds = (seconds) => (clockMs += seconds * 1000);
     const offer = (guest, sdp = `offer from ${guest}`, room = Room) => rendezvous.postOffer(room, guest, sdp);
 
+    /** Time passing with the host polling each second, as a live one does, so its room outlives the offers in it. */
+    async function advanceWhileHostPolls(seconds, secret) {
+        for (let i = 0; i < seconds; ++i) {
+            advanceSeconds(1);
+            await rendezvous.listOffers(Room, secret);
+        }
+    }
+
     /** A request the client would never make. */
     async function request(method, path, options) {
         const response = await handler(devServerEvent(method, `${PathPrefix}${path}`, options));
@@ -74,9 +82,9 @@ describe("rendezvous", () => {
             await offer("guest1");
             await rendezvous.postAnswer(Room, secret, "guest1", "ans");
             expect(await rendezvous.getAnswer(Room, "guest1")).toBe("ans");
-            advanceSeconds(OfferLifetimeSeconds - 1);
+            await advanceWhileHostPolls(OfferLifetimeSeconds - 1, secret);
             expect(await rendezvous.getAnswer(Room, "guest1")).toBe("ans");
-            advanceSeconds(1);
+            await advanceWhileHostPolls(1, secret);
             await refuses(rendezvous.getAnswer(Room, "guest1"), 404);
         });
 
@@ -219,7 +227,7 @@ describe("rendezvous", () => {
 
         it("expires an offer on its own clock, after which the guest may offer again", async () => {
             await offer("guest1");
-            advanceSeconds(OfferLifetimeSeconds);
+            await advanceWhileHostPolls(OfferLifetimeSeconds, secret);
             expect(await rendezvous.listOffers(Room, secret)).toEqual([]);
             await refuses(rendezvous.getAnswer(Room, "guest1"), 404);
             await offer("guest1", "second");
@@ -229,7 +237,7 @@ describe("rendezvous", () => {
         it("does not let an expired answer stand for a new offer", async () => {
             await offer("guest1");
             await rendezvous.postAnswer(Room, secret, "guest1", "old");
-            advanceSeconds(OfferLifetimeSeconds);
+            await advanceWhileHostPolls(OfferLifetimeSeconds, secret);
             await offer("guest1", "again");
             expect(await rendezvous.getAnswer(Room, "guest1")).toBeNull();
             expect(await rendezvous.listOffers(Room, secret)).toEqual([{ guest: "guest1", sdp: "again" }]);
@@ -248,7 +256,7 @@ describe("rendezvous", () => {
 
         it("frees a place under the cap when an offer expires", async () => {
             await offerMany(MaxPendingOffers);
-            advanceSeconds(OfferLifetimeSeconds);
+            await advanceWhileHostPolls(OfferLifetimeSeconds, secret);
             await offer("next");
         });
 
