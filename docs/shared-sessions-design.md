@@ -202,8 +202,9 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   connect is told "couldn't connect directly". The host and each guest see each other's public IP address. A
   guest on another model reloads as the host's before it joins, and one on another jsbeeb version is turned
   away. When the host leaves, each guest's machine carries on as a local one, with its own CMOS and clock back.
-  The host takes only keys, resync requests and goodbyes from a guest, rate-limits its resyncs, drops one whose
-  channel cannot keep up, and opens only a few connections at a time.
+  The host takes only keys, resync requests, goodbyes, one name and its summaries from a guest, rate-limits its
+  resyncs and summaries, logs only the summary's known numbers, drops one whose channel cannot keep up, and opens
+  only a few connections at a time.
 - **The clock:** every machine in a session reads its RTC as a base time the host sends plus its own emulated
   cycles, read as UTC, so everyone sees the host's wall time whatever their own time zone. It starts again from
   the wall time when the host's machine jumps.
@@ -226,6 +227,17 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   owns the function's shape and ignores its code; `deploy-jsbeeb` may update the code, and the deploy job does
   so before the S3 sync, as it already uploads assets before the HTML that names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
+- **Names:** `?name=` says what to call you; without it you get a random one. A guest says its name as it
+  connects and the host gives its own in the welcome.
+- **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the
+  host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it lags or
+  stutters, red once it falls silent or leaves, each named in its tooltip and in the readout's menu. The host
+  sends every guest its list once a second, so a guest also sees each other guest's light, its own marked. Each
+  guest sends the host a summary of how it kept up once a second. Both sides log what they saw
+  (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
+  summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots and
+  desyncs. "Save session report" in the readout's menu downloads it as JSON; nothing is sent anywhere unless the
+  person who saved it sends it. A report holds everything typed in the session.
 
 ### Known gaps
 
