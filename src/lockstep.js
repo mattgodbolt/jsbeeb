@@ -11,7 +11,7 @@ import { KeyMatrixSize } from "./via.js";
 const HashIntervalSeconds = 1;
 // A guest more than MaxGuestLagSeconds behind the host catches up by running up to MaxCatchUpSeconds per execute
 // instead of its usual slice, so a long way behind is made up over several frames rather than in one stall.
-export const MaxGuestLagSeconds = 0.25;
+export const MaxGuestLagSeconds = 0.04;
 export const MaxCatchUpSeconds = 0.1;
 const FnvOffset = 0x811c9dc5;
 const FnvPrime = 0x01000193;

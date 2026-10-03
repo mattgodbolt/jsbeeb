@@ -53,14 +53,15 @@ a rule; the simplest is that each person's held keys are tracked separately and 
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
 change, and reset, disc changes and pastes would be events too; in v0 only keys and the host's BREAK are.
 
-**Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of
-a second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
-session the host runs as before. A guest runs what its loop asks but never past the host's last commit, and
-when it is more than a quarter of a second behind it runs faster, by at most a tenth of a second at a time. A
-guest left waiting for commits does not get that time back, so on a jittery link it settles up to a quarter of
-a second behind the host, on top of the network's latency. Catching up must not use the speedy frame skip:
-`FRAMESKIPENABLE` also gates video memory reads and the SAA5050's clocking (`src/video.js:1099`), so a peer that
-skipped frames would end up with different teletext state in MODE 7. A session never runs speedy.
+**Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of a
+second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
+session the host runs as before. A guest runs what its loop asks but never past the host's last commit, and when
+it is more than 40 ms (two frames) behind it runs faster, by at most a tenth of a second at a time. A guest left
+waiting for commits does not get that time back, so on a jittery link it settles up to 40 ms behind the host, on
+top of the network's latency, and one that joined late catches up to that within a few frames. Catching up must
+not use the speedy frame skip: `FRAMESKIPENABLE` also gates video memory reads and the SAA5050's clocking
+(`src/video.js:1099`), so a peer that skipped frames would end up with different teletext state in MODE 7. A
+session never runs speedy.
 
 **Late joining.** The host takes a snapshot where its next commit will start, and sends it with what ordinary
 snapshots leave out: the ROMs and sideways RAM, the keys held down and the CMOS. Commits made
@@ -143,7 +144,7 @@ Ranked by how much they would bite.
 7. **Two clocks.** Each browser's audio runs on its own crystal, and in a session the emulation rate is set by
    the sequencer. Over minutes they drift, so each peer either stretches its audio slightly or skips and pads
    it. The existing emulation lead logic (`setEmulationLead`) is the place for that. In v0 a guest simply runs
-   no faster than the host's commits and catches up when more than a quarter of a second behind (see
+   no faster than the host's commits and catches up when more than 40 ms behind (see
    Pacing), so its audio stalls, or skips ahead after it catches up, rather than drifting.
 8. **Smaller ones.** The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is
    audio only and harmless. Later, the Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a
@@ -230,10 +231,10 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Names:** `?name=` says what to call you; without it you get a random one. A guest says its name as it
   connects and the host gives its own in the welcome.
 - **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the
-  host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it lags or
-  stutters, red once it falls silent or leaves, each named in its tooltip and in the readout's menu. The host
-  sends every guest its list once a second, so a guest also sees each other guest's light, its own marked. Each
-  guest sends the host a summary of how it kept up once a second. Both sides log what they saw
+  host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than
+  100 ms behind or stutters, red once it falls silent or leaves, each named in its tooltip and in the readout's
+  menu. The host sends every guest its list once a second, so a guest also sees each other guest's light, its own
+  marked. Each guest sends the host a summary of how it kept up once a second. Both sides log what they saw
   (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
   summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots and
   desyncs. "Save session report" in the readout's menu downloads it as JSON; nothing is sent anywhere unless the
@@ -290,14 +291,14 @@ repeated one whose release reached it late. Three steps, in this order.
 **Input delay, tuned to the link.** Each guest stamps a key with the cycle its machine has reached plus a delay,
 and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for the
 key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there. And the
-guest's lag must stay small and steady, which means pacing changes as well: today a guest settles anywhere up to a
-quarter of a second behind (see Pacing), so it would hold a target lag that follows the measured link instead.
-Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held back, and a
-release held up by less than the delay, go in where they were pressed. A key that arrives too late for its cycle
-goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one of the
-guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it. jsbeeb
-worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it, and
-the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
+guest's lag must stay small and steady, which means pacing changes as well: today a guest catches up whenever it
+is more than a fixed 40 ms behind (see Pacing), so it would hold a target lag that follows the measured link
+instead. Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held
+back, and a release held up by less than the delay, go in where they were pressed. A key that arrives too late for
+its cycle goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one
+of the guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it.
+jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it,
+and the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
 keeps retuning both. Between resyncs, a guest never stamps a key earlier than the last one it stamped, so a delay
 that shrinks takes effect only as the stamps catch up, and keys keep the order they were pressed in; keys clamped
 to one stamp share a cycle and fall to the same floor. A resync forgets the last stamp, since the machine it
