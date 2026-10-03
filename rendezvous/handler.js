@@ -4,6 +4,7 @@ export const PathPrefix = "/api/rendezvous";
 export const MaxBodyBytes = 16 * 1024;
 export const MaxPendingOffers = 8;
 export const RoomLifetimeSeconds = 10 * 60;
+// Longer than a guest waits for its answer, so an offer cannot expire under a guest still waiting.
 export const OfferLifetimeSeconds = 60;
 
 export const SecretBytes = 32;
@@ -137,7 +138,7 @@ export function createHandler({ store, now = Date.now, randomBytes = cryptoRando
 
         async listOffers(event, room) {
             const roomItem = await hostRoom(room, event);
-            // Only over the room as it still is: a delete racing this poll must not be undone.
+            // Only over a room that is still there, so a delete racing this poll is not undone.
             await store.put({ ...roomItem, expires: nowSeconds() + RoomLifetimeSeconds }, { ifPresent: true });
             return respond(200, { offers: await pendingOffers(room) });
         },

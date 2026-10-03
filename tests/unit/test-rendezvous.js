@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createViteServer } from "vite";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     createHandler,
@@ -10,7 +12,7 @@ import {
     SecretBytes,
 } from "../../rendezvous/handler.js";
 import { createMemoryStore } from "../../rendezvous/memory-store.js";
-import { toFunctionUrlEvent } from "../../rendezvous/vite-plugin.js";
+import { rendezvousPlugin, toFunctionUrlEvent } from "../../rendezvous/vite-plugin.js";
 import { createRendezvousClient, RendezvousError } from "../../src/web/rendezvous-client.js";
 
 const StartMs = 1800000000000;
@@ -18,11 +20,9 @@ const Room = "abc";
 
 const asBody = (body) => Buffer.from(body === undefined ? "" : typeof body === "string" ? body : JSON.stringify(body));
 
-/** The event the dev server makes of a request. */
 const devServerEvent = (method, url, { body, headers = {} } = {}) =>
     toFunctionUrlEvent({ method, url, headers }, asBody(body));
 
-/** A fetch that reaches `handler()` the way the dev server does. */
 function devServerFetch(handler) {
     return async (url, { method, headers, body }) => {
         const response = await handler()(devServerEvent(method, url, { body, headers }));
@@ -389,6 +389,45 @@ describe("the dev server's adapter", () => {
             body: undefined,
             isBase64Encoded: false,
         });
+    });
+});
+
+describe("the dev server", () => {
+    let vite;
+    let http;
+    let base;
+
+    beforeAll(async () => {
+        vite = await createViteServer({
+            configFile: false,
+            logLevel: "silent",
+            appType: "custom",
+            server: { middlewareMode: true, watch: null },
+            plugins: [rendezvousPlugin()],
+        });
+        http = createHttpServer(vite.middlewares);
+        await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
+        base = `http://127.0.0.1:${http.address().port}${PathPrefix}`;
+    });
+
+    afterAll(async () => {
+        await vite.close();
+        await new Promise((resolve) => http.close(resolve));
+    });
+
+    it("serves the rendezvous from memory under its prefix", async () => {
+        const rendezvous = createRendezvousClient({ base });
+        const secret = await rendezvous.createRoom("devroom");
+        await rendezvous.postOffer("devroom", "guest1", "offer sdp");
+        expect(await rendezvous.listOffers("devroom", secret)).toEqual([{ guest: "guest1", sdp: "offer sdp" }]);
+    });
+
+    it("refuses a body over the size cap", async () => {
+        const response = await fetch(`${base}/room/devroom/offer`, {
+            method: "POST",
+            body: "x".repeat(MaxBodyBytes * 2),
+        });
+        expect(response.status).toBe(413);
     });
 });
 
