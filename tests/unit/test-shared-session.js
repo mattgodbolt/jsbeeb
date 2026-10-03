@@ -19,6 +19,7 @@ import { AdcCentreValue } from "../../src/adc.js";
 import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
+import { MaxWaitingKeys } from "../../src/web/session-sequencer.js";
 import { domFromIndexHtml } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
@@ -522,11 +523,85 @@ describe("SessionHost", () => {
             expect(sentOf(second, "input")).toEqual([{ type: "input", input: keyA, at: 4000, source: "g2" }]);
             host.execute(5000);
         });
+
+        it("hands on a key due at the next execute, which no commit has carried yet", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            host.input(keyA);
+            channel.emit("message", message({ type: "take" }));
+            expect(sentOf(channel, "input")).toEqual([{ type: "input", input: keyA, at: 1000, source: "due" }]);
+        });
+
+        it("applies itself a key it sent the guest in control that no commit carried, if that guest leaves", async () => {
+            const { host, processor, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            host.input(keyA);
+            first.emit("message", commit(1000, 3000));
+            first.emit("message", message({ type: "bye" }));
+            host.execute(5000);
+            host.execute(CyclesPerSecond);
+            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
+        });
+
+        it.each([
+            ["the host presses BREAK", (host) => host.input({ kind: "break", down: true })],
+            [
+                "the host's machine jumps",
+                (host, processor) => {
+                    processor.currentCycles = processor.targetCycles = 50;
+                    host.execute(100);
+                },
+            ],
+            [
+                "the host's replay disagrees with the guest in control",
+                (host, processor, first) => {
+                    first.emit("message", message({ type: "commit", at: 1000, upTo: 3000, inputs: [], hash: "nope" }));
+                    host.execute(5000);
+                },
+            ],
+            [
+                "the guest in control goes quiet",
+                (host) => {
+                    vi.advanceTimersByTime(3001);
+                    host.execute(100);
+                    host.execute(100);
+                },
+            ],
+        ])("comes back to the host when %s", async (_, happen) => {
+            const { host, processor, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            happen(host, processor, first);
+            await vi.waitFor(() => expect(first.snapshots().length).toBeGreaterThan(1));
+            expect(
+                host
+                    .report()
+                    .events.filter((each) => each.event === "control")
+                    .at(-1),
+            ).toMatchObject({ guest: "host" });
+            const before = sentOf(second, "commit").length;
+            host.execute(100);
+            expect(sentOf(second, "commit").length).toBeGreaterThan(before);
+        });
+
+        it("resyncs another guest from its own machine and the commits it has not yet replayed", async () => {
+            const { host, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000, [keyA]));
+            first.emit("message", commit(3000, 5000));
+            host.execute(1000);
+            second.emit("message", message({ type: "resync", reason: "test" }));
+            vi.advanceTimersByTime(MinResyncIntervalMs);
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
+            const [snapshot] = second.snapshots().slice(-1);
+            const after = second.messages().slice(second.messages().findLastIndex((each) => each.type === "snapshot"));
+            const commits = after.filter((each) => each.type === "commit");
+            expect(commits[0].at).toBe(snapshot.at);
+            expect(commits.at(-1)).toMatchObject({ upTo: 5000 });
+        });
     });
 
     describe("a guest's keys", () => {
         const MsCycles = CyclesPerSecond / 1000;
-        const MaxWaitingKeys = 64;
         const A = [4, 1];
         const B = [5, 2];
         const key = (down, mapping = A) => keyMessage({ kind: "key", mapping, down });
@@ -1200,6 +1275,59 @@ describe("SessionGuest", () => {
             });
             lockstep().execute(500);
             expect(commitsSent(channel)).toHaveLength(1);
+        });
+
+        it("keeps the keys passed on before it has reached the cycle it takes control at", async () => {
+            const session = await joining();
+            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            session.deliver([
+                message({ type: "handover", at: 1000 }),
+                message({ type: "input", input: { kind: "key", mapping: A, down: true }, at: 1200, source: "g2" }),
+            ]);
+            session.lockstep().execute(2000);
+            session.lockstep().execute(500);
+            expect(commitsSent(session.channel).some(({ inputs }) => inputs.length === 1)).toBe(true);
+        });
+
+        it("asked to stop before it has taken control, gives it up at the cycle it was to take it at", async () => {
+            const session = await joining();
+            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            const key = { kind: "key", mapping: A, down: false };
+            session.deliver([
+                message({ type: "handover", at: 1000 }),
+                message({ type: "input", input: key, at: 1200, source: "g2" }),
+                message({ type: "release" }),
+            ]);
+            session.lockstep().execute(2000);
+            expect(session.channel.messages().find((each) => each.type === "released")).toEqual({
+                type: "released",
+                at: 1000,
+                waiting: [{ source: "g2", input: key, at: 1200 }],
+            });
+            expect(commitsSent(session.channel)).toEqual([]);
+        });
+
+        it("counts the commits it sends, so its light keeps up", async () => {
+            const { channel, lockstep } = await inControl();
+            lockstep().execute(500);
+            vi.advanceTimersByTime(StatsIntervalMs);
+            lockstep().execute(500);
+            const summary = channel
+                .messages()
+                .filter((each) => each.type === "stats")
+                .at(-1).stats;
+            expect(summary.commits).toBeGreaterThan(0);
+        });
+
+        it("waits quietly for the snapshot that ends its control, without asking for another", async () => {
+            const { channel, deliver, lockstep } = await inControl();
+            lockstep().execute(500);
+            const [header] = snapshotMessages(5000, [{ at: 5000, upTo: 6000, inputs: [] }]);
+            deliver([header]);
+            lockstep().execute(500);
+            expect(channel.messages().filter((each) => each.type === "resync")).toEqual([]);
         });
 
         it("gives it up when the host sends a snapshot", async () => {

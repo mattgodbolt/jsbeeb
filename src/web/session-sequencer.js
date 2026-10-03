@@ -13,14 +13,14 @@ export const MaxWaitingKeys = 64;
 // While keys are catching up, on a guest stamping later than it would or on a sequencer applying them later than
 // stamped, a gap between two keys longer than this shrinks to it: four of the OS's 10 ms keyboard scans, so each
 // key is still seen, while keys pressed closer together stay as close.
-export const CatchUpGapMs = 40;
+const CatchUpGapMs = 40;
 
 /**
  * When the next of a run of keys goes, `at` and no earlier than `earliest`, after the last went at `last.went`
  * `gap` before: as far after it as it was, but with a gap over `catchUp` shortened to it, so a run that has
  * fallen behind its own times makes the lag up a little with each key.
  */
-export function nextInRun(at, earliest, last, gap, catchUp) {
+function nextInRun(at, earliest, last, gap, catchUp) {
     const after = last ? last.went + Math.min(gap, catchUp) : -Infinity;
     return Math.max(at, earliest, after, last?.went ?? -Infinity);
 }
@@ -148,13 +148,18 @@ export class Sequencer {
         return waiting;
     }
 
-    /** Every key still waiting, as `{ source, input, at }`, which are dropped: another sequencer is to apply them. */
+    /**
+     * Every input not yet in a commit, as `{ source, input, at }`, which are dropped: another sequencer is to apply
+     * them. Those due at the next execute come first, due where the machine is now.
+     */
     releaseAll() {
+        const now = cycleCount(this.processor);
+        const due = this.lockstep.pending.splice(0).map((input) => ({ source: "due", input, at: now }));
         const waiting = [...this.sources].flatMap(([source, { scheduled }]) =>
             scheduled.map(({ input, at }) => ({ source, input, at })),
         );
         this.sources.clear();
-        return waiting;
+        return [...due, ...waiting];
     }
 
     // The machine only moves between executes by jumping (a reset, a loaded state), and the keys still

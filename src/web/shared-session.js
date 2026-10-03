@@ -1,6 +1,6 @@
-// A shared session in the browser: the host's machine runs as usual and its
-// inputs and cycles stream to guests over WebRTC data channels, which the
-// rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
+// A shared session in the browser: one machine, the host's unless someone has
+// taken control, runs as usual and its inputs and cycles stream to the others
+// over WebRTC data channels, which the rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
 import { humanId } from "human-id";
@@ -230,8 +230,12 @@ export class SessionHost {
         this.taker = null;
         // The cycle this machine takes control back at, once its replay has reached it.
         this.resumeAt = null;
-        // Keys for whoever is next in control, while nobody is.
+        // Keys for whoever is next in control, while nobody is; and those sent to the guest in control that no commit
+        // of its has carried yet, which the host applies itself if that guest goes.
         this.heldBack = [];
+        this.forwarded = [];
+        // A guest in control that went before stopping, to be resynced once the host has control again.
+        this.resyncWhenResumed = null;
         this.stamper = new KeyStamper(context.model.cyclesPerSecond);
         this.lastCommitMs = 0;
         this.panel = new SessionPanel(sessionPane(this));
@@ -283,9 +287,13 @@ export class SessionHost {
     // for them while control is changing hands.
     deliverKey(source, input, fields, at) {
         if (this.sequencer) this.sequencer.queue(source, input, fields, at);
-        else if (this.controller && !this.releasing)
-            this.sendTo(this.controller, JSON.stringify({ type: "input", input, at, source }));
+        else if (this.controller && !this.releasing) this.forward(this.controller, { source, input, fields, at });
         else this.heldBack.push({ source, input, fields, at });
+    }
+
+    forward(guest, key) {
+        this.forwarded.push(key);
+        this.sendTo(guest, JSON.stringify({ type: "input", input: key.input, at: key.at, source: key.source }));
     }
 
     stampForController() {
@@ -299,9 +307,12 @@ export class SessionHost {
         });
     }
 
-    /** Gives control to `taker`, a guest, or takes it for the host if null; the one asking last wins. */
+    /**
+     * Gives control to `taker`, a guest, or takes it for the host if null. Asked while control is changing hands, it
+     * goes to whoever asked last once it has.
+     */
     requestControl(taker) {
-        if (this.releasing) {
+        if (this.releasing || (this.resumeAt !== null && taker)) {
             this.taker = taker;
             return;
         }
@@ -330,8 +341,8 @@ export class SessionHost {
         this.stamper.reset();
         this.log.record("control", { guest: guest.id, at });
         this.sendTo(guest, JSON.stringify({ type: "handover", at }));
-        for (const { source, input, at: due } of [...waiting, ...this.heldBack.splice(0)])
-            this.sendTo(guest, JSON.stringify({ type: "input", input, at: due, source }));
+        this.forwarded = [];
+        for (const key of [...waiting, ...this.heldBack.splice(0)]) this.forward(guest, { fields: {}, ...key });
         this.showStatus();
     }
 
@@ -343,6 +354,7 @@ export class SessionHost {
             return;
         }
         const keys = Array.isArray(waiting) ? waiting.flatMap((key) => checkedKey(key) ?? []) : [];
+        this.forwarded = [];
         this.heldBack.unshift(...keys.map((key) => ({ ...key, fields: { guest: key.source } })));
         this.releasing = false;
         const taker = this.taker;
@@ -364,8 +376,8 @@ export class SessionHost {
         this.stamper.reset();
         this.log.record("control", { guest: guest.id, at });
         this.sendTo(guest, JSON.stringify({ type: "handover", at }));
-        for (const { source, input, at: due } of this.heldBack.splice(0))
-            this.sendTo(guest, JSON.stringify({ type: "input", input, at: due, source }));
+        this.forwarded = [];
+        for (const key of this.heldBack.splice(0)) this.forward(guest, key);
         this.showStatus();
     }
 
@@ -380,7 +392,7 @@ export class SessionHost {
         notify(`The host has control again: ${reason}.`);
         this.controller = null;
         this.releasing = false;
-        this.taker = null;
+        this.heldBack.unshift(...this.forwarded.splice(0));
         this.resumeAt = this.replay.upTo;
         this.resyncWhenResumed = former;
         this.showStatus();
@@ -394,6 +406,8 @@ export class SessionHost {
         this.controller = null;
         this.releasing = false;
         this.taker = null;
+        this.resyncWhenResumed = null;
+        this.heldBack.unshift(...this.forwarded.splice(0));
         this.sequence(this.rtcBaseMs);
         this.resyncEveryone();
         this.showStatus();
@@ -418,6 +432,12 @@ export class SessionHost {
             upTo: message.upTo,
             ...(message.hash !== undefined && { hash: message.hash }),
         };
+        for (const { mapping, down } of commit.inputs) {
+            const index = this.forwarded.findIndex(
+                ({ input }) => input.down === down && mappingKey(input.mapping) === mappingKey(mapping),
+            );
+            if (index >= 0) this.forwarded.splice(index, 1);
+        }
         const relayed = JSON.stringify(commit);
         this.lastCommitMs = this.log.elapsed();
         this.replay.receive(commit);
@@ -440,6 +460,9 @@ export class SessionHost {
                 this.resyncWhenResumed = null;
                 this.sequence(this.rtcBaseMs);
                 if (former && this.guests.get(former.id) === former) this.sendSnapshot(former);
+                const taker = this.taker;
+                this.taker = null;
+                if (taker && this.guests.get(taker.id) === taker) this.handOver(taker);
                 this.showStatus();
             } else if (this.controller && this.log.elapsed() - this.lastCommitMs > ControllerSilentMs) {
                 this.takeBack(`${guestName(this.controller)} went quiet`);
@@ -829,6 +852,8 @@ export class SessionGuest {
         this.sequencer = null;
         this.handoverAt = null;
         this.rtcBaseMs = undefined;
+        // Keys the host passes on between handing this machine control and its reaching the cycle to take it at.
+        this.keysForControl = [];
         this.lastCommitMs = 0;
         this.left = false;
         this.log = new SessionLog({
@@ -870,7 +895,8 @@ export class SessionGuest {
             : this.roster.map((guest) => (guest.you ? { ...guest, label: `${guest.label} (you)` } : guest));
         const summary = this.left ? "left" : this.lastStats ? `${this.lastStats.lagMs} ms behind` : "joining";
         this.panel.show("guest", summary, [host, ...guests]);
-        const controller = this.sequencer ? "you" : (this.roster.find((guest) => guest.control)?.label ?? null);
+        const inControl = this.roster.find((guest) => guest.control);
+        const controller = this.sequencer || inControl?.you ? "you" : (inControl?.label ?? null);
         this.panel.showControl(
             this.left ? null : (controller ?? this.hostName ?? "the host"),
             !this.sequencer && !this.left,
@@ -981,18 +1007,31 @@ export class SessionGuest {
         this.sequencer = new Sequencer(processor, {
             log: this.log,
             stats: () => this.stats,
-            send: (commit) => this.send(commit),
+            send: (commit) => {
+                this.stats.tick("commits");
+                this.send(commit);
+            },
             // The host sees the next commit not follow on, takes control back and starts everyone afresh.
             onJump: () => {},
             rtcBaseMs: this.rtcBaseMs,
         });
+        for (const { source, input, at } of this.keysForControl.splice(0))
+            this.sequencer.queue(source, input, { from: source }, at);
         this.log.record("control", { at: cycleCount(processor) });
         notify("You have control.");
         this.showStatus();
     }
 
-    // Stops between two executes, at the end of its last commit, and hands back the keys it had not applied yet.
+    // Stops between two executes, at the end of its last commit, and hands back the keys it had not applied yet; or,
+    // asked before it has taken control, gives it up at the cycle it was to take it at.
     release() {
+        if (this.handoverAt !== null) {
+            const at = this.handoverAt;
+            this.handoverAt = null;
+            this.log.record("released", { at });
+            this.send({ type: "released", at, waiting: this.keysForControl.splice(0) });
+            return;
+        }
         if (!this.sequencer) return;
         const at = cycleCount(this.context.processor);
         const waiting = this.sequencer.releaseAll();
@@ -1058,9 +1097,12 @@ export class SessionGuest {
                     this.fail("the host sent a snapshot of an impossible size");
                     return;
                 }
-                // A snapshot from the host makes this machine a replayer again, whatever it was doing.
+                // A snapshot from the host makes this machine a replayer again, whatever it was doing; one that was
+                // in control waits for it from where it is, with nothing to replay.
+                if (this.sequencer) this.lockstep.resync();
                 this.sequencer = null;
                 this.handoverAt = null;
+                this.keysForControl = [];
                 this.incoming = { bytes: new Uint8Array(message.bytes), received: 0, commits: [] };
                 break;
             case "commit":
@@ -1080,6 +1122,7 @@ export class SessionGuest {
                 // Someone else's key, passed on by the host for this machine to apply while it is in control.
                 const key = checkedKey(message);
                 if (key && this.sequencer) this.sequencer.queue(key.source, key.input, { from: key.source }, key.at);
+                else if (key && this.handoverAt !== null) this.keysForControl.push(key);
                 break;
             }
         }

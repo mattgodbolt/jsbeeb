@@ -1,9 +1,9 @@
 // Deterministic lockstep for a shared session: every machine starts from the
 // host's snapshot and applies the same inputs at the same emulated cycle, so
-// they stay identical without sending any machine state. The host is the
-// sequencer; its machine runs as normal, and what it executes, and the inputs it
-// applied between executes, go out as commits that guests replay exactly. See
-// docs/shared-sessions-design.md.
+// they stay identical without sending any machine state. One machine is the
+// sequencer, the host unless someone has taken control; it runs as normal, and
+// what it executes, and the inputs it applied between executes, go out as commits
+// that every other machine replays exactly. See docs/shared-sessions-design.md.
 
 import { Disc, DiscConfig } from "./disc.js";
 import { KeyMatrixSize } from "./via.js";
@@ -246,7 +246,8 @@ export class LockstepGuest {
      */
     execute(cycles) {
         const { cpu } = this;
-        if (cycleCount(cpu) !== this.reachedAt) this.desync(`this machine moved from ${this.reachedAt} by itself`);
+        if (cycleCount(cpu) !== this.reachedAt)
+            return this.desync(`this machine moved from ${this.reachedAt} by itself`);
         const running = this.replay(cycles);
         this.reachedAt = cycleCount(cpu);
         return running;

@@ -34,6 +34,7 @@ describe("SessionPanel", () => {
         link: "https://bbc.xania.org/?client=scorch",
         saveReport: () => {},
         copyLink: () => {},
+        requestControl: () => {},
         ...overrides,
     });
 
@@ -110,6 +111,34 @@ describe("SessionPanel", () => {
         pane.querySelector(".session-copy-link").click();
         expect(saveReport).toHaveBeenCalledOnce();
         expect(copyLink).toHaveBeenCalledOnce();
+    });
+
+    it("asks for control from its button without keeping the focus, and says who has it", () => {
+        const { pane } = page();
+        const requestControl = vi.fn();
+        const panel = new SessionPanel(session({ requestControl }));
+        panel.open();
+        const take = pane.querySelector(".session-take");
+        take.focus();
+        take.click();
+        expect(requestControl).toHaveBeenCalledOnce();
+        expect(document.activeElement).not.toBe(take);
+        panel.showControl("brave-monkeys-train", true);
+        expect(pane.querySelector(".session-control").textContent).toBe("In control: brave-monkeys-train");
+        expect(take.hidden).toBe(false);
+        panel.showControl("you", false);
+        expect(take.hidden).toBe(true);
+    });
+
+    it("takes control on a key press only when asked to, without keeping the focus", () => {
+        const { pane } = page();
+        const panel = new SessionPanel(session());
+        const option = pane.querySelector(".session-take-on-key");
+        expect(panel.takesOnKeypress()).toBe(false);
+        option.focus();
+        option.click();
+        expect(panel.takesOnKeypress()).toBe(true);
+        expect(document.activeElement).not.toBe(option);
     });
 
     it("does nothing on a page without the lights", () => {
