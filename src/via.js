@@ -655,8 +655,7 @@ export class SysVia extends Via {
 
     /**
      * The keys held down, which snapshots leave out so that a rewind or a loaded state
-     * keeps the keys the person is actually holding. A shared session sends them to
-     * a joiner, which must hold what the host holds.
+     * keeps the keys the person is actually holding.
      */
     keyboardState() {
         return {
@@ -726,9 +725,8 @@ export class SysVia extends Via {
     }
 
     /**
-     * Where a host key lands on this machine's matrix under the current layout, as
-     * `[col, row, bbcShiftOverride?]`, or undefined. Layouts are per person, so a
-     * shared session sends the mapping rather than the key.
+     * Where a key code lands on the BBC's key matrix under the current layout, as
+     * `[col, row, bbcShiftOverride?]`, or undefined.
      */
     keyMapping(key, shiftDown) {
         return this.keycodeToRowCol[!!shiftDown][key];
