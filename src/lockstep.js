@@ -9,8 +9,8 @@ import { Disc, DiscConfig } from "./disc.js";
 import { KeyMatrixSize } from "./via.js";
 
 const HashIntervalSeconds = 1;
-// A guest more than this far behind the host's commits runs faster to catch up,
-// by at most the second figure in any one call, so a long way behind is not one long stall.
+// A guest more than MaxGuestLagSeconds behind the host catches up by running up to MaxCatchUpSeconds per execute
+// instead of its usual slice, so a long way behind is made up over several frames rather than in one stall.
 export const MaxGuestLagSeconds = 0.25;
 export const MaxCatchUpSeconds = 0.1;
 const FnvOffset = 0x811c9dc5;
