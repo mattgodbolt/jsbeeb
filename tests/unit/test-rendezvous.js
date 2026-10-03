@@ -402,7 +402,8 @@ describe("the dev server", () => {
             configFile: false,
             logLevel: "silent",
             appType: "custom",
-            server: { middlewareMode: true, watch: null },
+            server: { middlewareMode: true, watch: null, ws: false },
+            optimizeDeps: { noDiscovery: true, entries: [] },
             plugins: [rendezvousPlugin()],
         });
         http = createHttpServer(vite.middlewares);
