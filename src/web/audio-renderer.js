@@ -66,7 +66,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
         this.excessLeadCycles = this._cycles(ExcessLeadMs);
-        this.excessSeconds = 0;
         this.commands = {
             produced: (m) => this.onProduced(m.upTo, m.events),
             setEnabled: (m) => (this.chip.enabled = m.enabled),
@@ -100,6 +99,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.targetLatencyMs = valid ? Math.min(ms, MaxTargetLatencyMs) : DefaultTargetLatencyMs;
         this.targetLeadCycles = this._cycles(this.targetLatencyMs);
         this.smoothedLeadError = 0;
+        this.excessSeconds = 0;
     }
 
     _cycles(ms) {

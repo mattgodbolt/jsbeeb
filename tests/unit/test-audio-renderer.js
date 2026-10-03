@@ -268,11 +268,6 @@ describe("SoundChipProcessor rendering", () => {
         expect(proc.skippedMs).toBeCloseTo(100 - proc.targetLatencyMs, 0);
     });
 
-    // Quanta covering `seconds` of output.
-    const quanta = (proc, seconds) => {
-        for (let i = 0; i < Math.ceil((seconds * OutputRate) / OutputQuantum); ++i) quantum(proc);
-    };
-
     it("should skip a lead kept far past the target back to it, after a while", () => {
         const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
@@ -312,8 +307,9 @@ describe("SoundChipProcessor rendering", () => {
         producer.advance(180);
         producer.flush();
         proc.setTargetLatency(20);
-        quanta(proc, 0.45);
+        simulate(proc, producer, 1, { ticking: (t) => t >= 0.34 });
         expect(proc.skippedMs).toBe(0);
+        expect(proc.stalls).toBe(0);
     });
 
     const mute = (proc) => proc.onMessage({ command: "setEnabled", enabled: false });
