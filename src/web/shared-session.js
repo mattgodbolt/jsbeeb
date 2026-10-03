@@ -182,18 +182,25 @@ export class SessionHost {
         this.poll();
     }
 
+    // Run in pieces that end where waiting keys are due, so a long execute cannot bring keys spaced
+    // apart back onto one cycle.
     execute(cycles) {
         const { processor } = this.context;
         this.followJump();
-        const now = cycleCount(processor);
-        for (const guest of this.guests.values()) {
-            while (guest.scheduled.length > 0 && guest.scheduled[0].at <= now) {
-                this.lockstep.input(guest.scheduled.shift().input);
+        const end = cycleCount(processor) + cycles;
+        for (;;) {
+            const now = cycleCount(processor);
+            let nextAt = Infinity;
+            for (const guest of this.guests.values()) {
+                while (guest.scheduled.length > 0 && guest.scheduled[0].at <= now) {
+                    this.lockstep.input(guest.scheduled.shift().input);
+                }
+                if (guest.scheduled.length > 0) nextAt = Math.min(nextAt, guest.scheduled[0].at);
             }
+            const running = this.lockstep.execute(Math.min(end, nextAt) - now);
+            this.reachedAt = cycleCount(processor);
+            if (!running || this.reachedAt >= end) return running;
         }
-        const running = this.lockstep.execute(cycles);
-        this.reachedAt = cycleCount(processor);
-        return running;
     }
 
     // The machine only moves between executes by jumping (a reset, a loaded state), and the keys still

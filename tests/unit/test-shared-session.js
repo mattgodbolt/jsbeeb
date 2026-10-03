@@ -400,6 +400,24 @@ describe("SessionHost", () => {
             ]);
         });
 
+        it("stay spaced through one long execute", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            press(channel, A);
+            release(channel, A);
+            press(channel, B);
+            release(channel, B);
+            run(host, 1, 100);
+            expect(applied(channel).map(([name, down, at]) => [name, down, (at - 1000) / MsCycles])).toEqual([
+                ["4,1", true, 0],
+                ["4,1", false, 40],
+                ["4,1", false, 40],
+                ["5,2", true, 40],
+                ["5,2", false, 80],
+                ["5,2", false, 80],
+            ]);
+        });
+
         it("are spaced by their place on the matrix, whatever shift they force", async () => {
             const { host } = await hosting();
             const channel = await joined();
