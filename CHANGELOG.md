@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.4.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.2...v2.4.0) (2026-10-03)
+
+
+### Features
+
+* a guest stamps its keys with the cycle they go in at, a round trip ahead, so the network cannot bunch them ([#1208](https://github.com/mattgodbolt/jsbeeb/issues/1208)) ([af30ae8](https://github.com/mattgodbolt/jsbeeb/commit/af30ae8c0cc501399ab9f37d42b4507be8266071))
+* a session pane with the link to join, who you are and each peer's numbers live ([#1204](https://github.com/mattgodbolt/jsbeeb/issues/1204)) ([1f1a4c2](https://github.com/mattgodbolt/jsbeeb/commit/1f1a4c22d3a436cf48d36e90a9d4966623afe3b0))
+* host or join a shared session with ?server=&lt;room&gt; and ?client=&lt;room&gt; ([#1190](https://github.com/mattgodbolt/jsbeeb/issues/1190)) ([0660562](https://github.com/mattgodbolt/jsbeeb/commit/0660562f4e0390b195e045a14d076b64643388f5))
+* log whether a session's page is visible and focused, its long tasks, and what a snapshot costs the host ([#1206](https://github.com/mattgodbolt/jsbeeb/issues/1206)) ([506c697](https://github.com/mattgodbolt/jsbeeb/commit/506c6970c6dc33802b1488dd6ef7282608991dee))
+* open the session pane for guests too, just above the lights ([#1207](https://github.com/mattgodbolt/jsbeeb/issues/1207)) ([48302b7](https://github.com/mattgodbolt/jsbeeb/commit/48302b7eb56553f697df42a17d369c55ebaf786a))
+* show who is in a shared session and how well each keeps up, and save a report of it ([#1194](https://github.com/mattgodbolt/jsbeeb/issues/1194)) ([63a67ef](https://github.com/mattgodbolt/jsbeeb/commit/63a67ef63667dd6d1183ac5518c57f400f6970c4))
+* take control of a shared session from the pane, handing the ordering of inputs to a guest and back ([#1209](https://github.com/mattgodbolt/jsbeeb/issues/1209)) ([4464898](https://github.com/mattgodbolt/jsbeeb/commit/446489852e06681c990589148a7e568ff4ee0c44))
+
+
+### Bug Fixes
+
+* keep a guest within 40 ms of the host rather than wherever it joined ([#1199](https://github.com/mattgodbolt/jsbeeb/issues/1199)) ([1a92bb0](https://github.com/mattgodbolt/jsbeeb/commit/1a92bb0586a98befef124724774b3d71522c4150))
+* skip sound that stays far ahead of the playback, as after a stall ([#1193](https://github.com/mattgodbolt/jsbeeb/issues/1193)) ([967c5b5](https://github.com/mattgodbolt/jsbeeb/commit/967c5b50e46b5618c242c0e5d795a80de9ae8144))
+* space a guest's keys that arrive in a bunch, so the keyboard scan sees each one ([#1195](https://github.com/mattgodbolt/jsbeeb/issues/1195)) ([d221e0b](https://github.com/mattgodbolt/jsbeeb/commit/d221e0b2cf5540b9d9e90755a5455c0a2a9ef3d0))
+
 ## [2.3.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.1...v2.3.2) (2026-10-02)
 
 
