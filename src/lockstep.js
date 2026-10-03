@@ -213,7 +213,7 @@ export class LockstepHost {
  * the reason, the commits it had not yet replayed (which it drops), whether it was
  * this machine that moved by itself, and the evidence: the `cycle` it was at, and
  * whichever of the commit's `at` and `upTo`, the cycle it moved `from`, and the
- * host's `expectedHash` and this machine's `hash` apply.
+ * `expectedHash` the commit carried and this machine's `hash` apply.
  */
 export class LockstepGuest {
     constructor(cpu, onDesync) {
@@ -234,7 +234,7 @@ export class LockstepGuest {
     /** Takes the host's next commit, which must start where the last one ended. */
     receive(commit) {
         if (commit.at !== this.upTo) {
-            this.desync(`the host's commit starts at ${commit.at}, not ${this.upTo}`, commitSpan(commit));
+            this.desync(`a commit starts at ${commit.at}, not ${this.upTo}`, commitSpan(commit));
             return;
         }
         this.commits.push(commit);
@@ -253,7 +253,7 @@ export class LockstepGuest {
     execute(cycles) {
         const { cpu } = this;
         if (cycleCount(cpu) !== this.reachedAt) {
-            return this.desync(`this machine moved from ${this.reachedAt} by itself`, { from: this.reachedAt }, true);
+            return this.desync(`its machine moved from ${this.reachedAt} by itself`, { from: this.reachedAt }, true);
         }
         const running = this.replay(cycles);
         this.reachedAt = cycleCount(cpu);

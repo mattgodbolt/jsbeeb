@@ -25,8 +25,8 @@ export const PeerStates = new Set([...Object.keys(Descriptions), "left"]);
 /**
  * How a peer is doing, from what it last reported (`stats`, `statsAgeMs` after it came), until which
  * it is still joining: "connecting", "ok", "lagging" (a long way behind, or stuttering to keep up),
- * "desynced" (it desynced in the interval those cover), "silent" (nothing heard, or no commits getting through) or
- * "left".
+ * "desynced" (it desynced in the interval those cover), "silent" (nothing heard, or no commits getting
+ * through) or "left".
  */
 export function peerState({ connected, left, stats, statsAgeMs }) {
     if (left) return "left";

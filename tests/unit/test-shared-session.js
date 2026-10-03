@@ -701,6 +701,23 @@ describe("SessionHost", () => {
             });
         });
 
+        it.each([
+            ["while a guest is in control", (first) => first.emit("message", message({ type: "take" }))],
+            ["while it is in control", () => {}],
+        ])("does not count its own machine jumping %s as a desync", async (_, before) => {
+            const { host, processor, first } = await twoGuests();
+            before(first);
+            processor.currentCycles = processor.targetCycles = 50;
+            host.execute(100);
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            expect(host.report().events.filter((each) => each.event === "desync")).toEqual([]);
+            expect(desyncToasts()).toEqual([]);
+            first.emit("message", message({ type: "resync", reason: "state differs" }));
+            expect(desyncToasts()).toEqual([
+                "Guest 1 desynced: state differs. Resyncing; please save a session report.",
+            ]);
+        });
+
         it("keeps the session's clock when its replay disagrees rather than its machine jumping", async () => {
             const { host, first } = await twoGuests();
             const [before] = first.snapshots();
@@ -1368,8 +1385,8 @@ describe("SessionHost", () => {
         for (let i = 0; i < 3; ++i) first.emit("message", message({ type: "resync", reason: "state differs" }));
         second.emit("message", message({ type: "resync", reason: "it moved" }));
         expect(desyncToasts()).toEqual([
-            "Guest 1 desynced from this machine: state differs. Resyncing; please save a session report.",
-            "Another desync. Guest 2 desynced from this machine: it moved. More than one in a session is a bug: " +
+            "Guest 1 desynced: state differs. Resyncing; please save a session report.",
+            "Another desync. Guest 2 desynced: it moved. More than one in a session is a bug: " +
                 "please save a session report here and on Guest 2's machine, and send both with a bug report.",
         ]);
     });
@@ -2050,9 +2067,8 @@ describe("SessionGuest", () => {
                 lockstep().execute(100);
             }
             expect(desyncToasts()).toEqual([
-                "This machine desynced from the host: state differs at cycle 150. Resyncing; please save a session " +
-                    "report.",
-                "Another desync. This machine desynced from the host: state differs at cycle 350. More than one in a " +
+                "This machine desynced: state differs at cycle 150. Resyncing; please save a session " + "report.",
+                "Another desync. This machine desynced: state differs at cycle 350. More than one in a " +
                     "session is a bug: please save a session report here and on the host, and send both with a bug " +
                     "report.",
             ]);

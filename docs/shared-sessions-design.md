@@ -68,19 +68,19 @@ snapshots leave out: the ROMs and sideways RAM, the keys held down and the CMOS.
 while it is being compressed wait for it. On my desktop, Node emulates a 50Hz frame of a B running Elite in
 about 3ms, so catching up is quick. The host does not pause.
 
-**Desync detection and recovery.** Every emulated second the host puts a hash of its registers, RAM and
-keyboard matrix in a commit, and each guest compares its own at the same cycle. A guest that differs, finds a
-gap in the commits, or finds its own machine somewhere other than where it left it, asks the host for a fresh
-snapshot and rejoins as a late joiner would. The host is the reference, as in RetroArch: if the host is the one
-that went wrong (a debugger poke, say), it is still right by definition. A host whose own cycle count jumps (a
-hard reset, rewind, a loaded state) resyncs every guest at once, since nobody can replay across that. A desync
-always means something went wrong, a determinism bug or something touching one machine outside the session, so it
-is not resynced quietly: the machine that desynced and the host each say so in a toast, with the reason, and ask
-for a session report. More than one in a session is a bug rather than a blip, and the second toast says so and
-asks for the reports from both ends; any after that are only logged. The `desync` event in the report carries the
-reason, the cycle the machine had reached, the commit's `at` and `upTo` where one was involved, the cycle a
-machine that moved by itself moved from, and for a hash mismatch both the `expectedHash` and this machine's `hash`;
-the host logs its `resync asked` with the guest's reason.
+**Desync detection and recovery.** Every emulated second the host puts a hash of its registers, RAM and keyboard
+matrix in a commit, and each guest compares its own at the same cycle. A guest that differs, finds a gap in the
+commits, or finds its own machine somewhere other than where it left it, asks the host for a fresh snapshot and
+rejoins as a late joiner would. The host is the reference, as in RetroArch: if the host is the one that went wrong
+(a debugger poke, say), it is still right by definition. A host whose own cycle count jumps (a hard reset, rewind, a
+loaded state) resyncs every guest at once, since nobody can replay across that. A desync always means something went
+wrong, a determinism bug or something touching one machine outside the session, so it is not resynced quietly: the
+machine that desynced and the host each say so in a toast, with the reason, and ask for a session report. More than
+one in a session is a bug rather than a blip, and the second toast says so and asks for the reports from both ends;
+any after that are only logged. The `desync` event in the report carries the reason, the cycle the machine had
+reached, the commit's `at` and `upTo` where one was involved, the cycle a machine that moved by itself moved from,
+and for a hash mismatch both the `expectedHash` and this machine's `hash`; the host logs its `resync asked` with the
+guest's reason, and its own `desync`, naming the `guest`, when its replay of a guest in control mismatches.
 
 **Is it deterministic today?** Mostly. A quick experiment, using the headless `MachineSession` with the real
 video and sound chip: boot Elite on a B and on a Master, snapshot, restore into fresh machines, run with the
@@ -237,19 +237,19 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
 - **Names:** `?name=` says what to call you; without it you get a random one. A guest says its name as it
   connects and the host gives its own in the welcome.
-- **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the
-  host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than
-  100 ms behind or stutters, or for the second after it desynced, red once it falls silent or leaves, each named
-  in its tooltip. Clicking the readout opens the session pane (it opens by itself when hosting starts): who you
-  are, the link to join with a button to copy it, a row per peer with its state, round trip and how far behind it
-  is, updated as the lights are. The host sends every guest its list once a second, so a guest also sees each other
-  guest's light, its own marked. Each guest sends the host a summary of how it kept up once a second, counting any
-  desyncs. Both sides log what they saw (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
-  summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots (how
-  long taking one held the host, and how long until it was ready to send) and desyncs, whether the page was
-  visible and focused, and the main thread's long tasks, since a hidden or busy tab falls behind for reasons the
-  session has no part in. "Save session report" in the pane downloads the log as JSON; nothing is sent anywhere
-  unless the person who saved it sends it. A report holds everything typed in the session.
+- **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the host
+  and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than 100 ms
+  behind or stutters, or for the second after it desynced, red once it falls silent or leaves, each named in its
+  tooltip. Clicking the readout opens the session pane (it opens by itself when hosting starts): who you are, the
+  link to join with a button to copy it, a row per peer with its state, round trip and how far behind it is, updated
+  as the lights are. The host sends every guest its list once a second, so a guest also sees each other guest's
+  light, its own marked. Each guest sends the host a summary of how it kept up once a second, counting any desyncs.
+  Both sides log what they saw (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they
+  were applied at, those summaries, the browser's round trip and route for each connection, joins, departures and
+  why, snapshots (how long taking one held the host, and how long until it was ready to send) and desyncs, whether
+  the page was visible and focused, and the main thread's long tasks, since a hidden or busy tab falls behind for
+  reasons the session has no part in. "Save session report" in the pane downloads the log as JSON; nothing is sent
+  anywhere unless the person who saved it sends it. A report holds everything typed in the session.
 
 ### Known gaps
 

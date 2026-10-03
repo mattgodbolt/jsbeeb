@@ -761,7 +761,7 @@ export class SessionHost {
         if (!guest.ready || guest.resyncTimer) return;
         this.log.record("resync asked", { guest: guest.id, reason });
         const name = guestName(guest);
-        announceDesync(++this.desyncs, `${name} desynced from this machine`, reason, `${name}'s machine`);
+        announceDesync(++this.desyncs, `${name} desynced`, reason, `${name}'s machine`);
         const waitMs = guest.lastSnapshotMs + MinResyncIntervalMs - Date.now();
         if (waitMs <= 0) {
             this.sendSnapshot(guest);
@@ -1307,7 +1307,7 @@ export class SessionGuest {
         this.log.record("desync", { reason, ...evidence });
         this.stats.count("desyncs");
         this.send({ type: "resync", reason });
-        announceDesync(++this.desyncs, "This machine desynced from the host", reason, "the host");
+        announceDesync(++this.desyncs, "This machine desynced", reason, "the host");
     }
 
     hostLeft() {
