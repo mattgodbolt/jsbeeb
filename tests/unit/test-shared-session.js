@@ -150,6 +150,10 @@ function fakeProcessor({ cycles = 1000 } = {}) {
         p: { asByte: () => 0 },
         ramRomOs: new Uint8Array(16),
         romOffset: 16,
+        resetLine: true,
+        setReset(resetOn) {
+            this.resetLine = !resetOn;
+        },
         fdc: { drives: [] },
         adconverter: { setFixedValue: vi.fn() },
         execute(count) {
