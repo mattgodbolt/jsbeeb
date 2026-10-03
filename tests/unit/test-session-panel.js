@@ -98,6 +98,7 @@ describe("SessionPanel", () => {
         pane.style.bottom = "auto";
         panel.open();
         expect(pane.style.bottom).toBe("auto");
+        expect(pane.style.maxHeight).toBe("");
     });
 
     it("copies the link and saves the report from the pane", () => {

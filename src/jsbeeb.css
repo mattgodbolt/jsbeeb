@@ -275,7 +275,7 @@ span.accesskey {
   left: 8px;
   bottom: 72px;
   width: min(460px, calc(100vw - 16px));
-  max-height: calc(100vh - 104px);
+  max-height: calc(100vh - 16px);
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid #555;

@@ -112,9 +112,13 @@ export class SessionPanel {
     }
 
     // The lights wrap onto more rows as the window narrows, so their height is measured, not assumed, and the
-    // pane is kept short enough that its header stays on screen. A pane that has been dragged stays where it was put.
+    // pane is kept short enough that its header stays on screen. A pane that has been dragged stays where it was
+    // put, as tall as the window allows, and FloatingPanel keeps it inside the window.
     sitAboveLights() {
-        if (this.pane.style.top) return;
+        if (this.pane.style.top) {
+            this.pane.style.maxHeight = "";
+            return;
+        }
         const lightsTop = this.root.closest("#leds").getBoundingClientRect().top;
         this.pane.style.bottom = `${window.innerHeight - lightsTop + PaneGapPx}px`;
         this.pane.style.maxHeight = `${Math.max(0, lightsTop - 2 * PaneGapPx)}px`;
