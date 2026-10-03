@@ -241,12 +241,12 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### Known gaps
 
-- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host
-  keeps them in the order they came and applies each press at least 40ms after the guest's last, and each
-  release 40ms after its press, so a bunch still types one key at a time that the OS sees; a key held longer
-  comes out 40ms long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of
-  them. A release can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up
-  arrives late, and one that arrives behind a bunch waits for it. Nothing but the input delay after v0 (below) would hide that.
+- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host keeps
+  them in the order they came and applies each press at least 40ms after the guest's last, and each release 40ms
+  after its press, so a bunch still types one key at a time that the OS sees; a key held longer comes out 40ms
+  long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of them. A release
+  can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up arrives late, and
+  one that arrives behind a bunch waits for it. Nothing but the input delay after v0 (below) would hide that.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -294,15 +294,16 @@ guest's lag must stay small and steady, which means pacing changes as well: toda
 quarter of a second behind (see Pacing), so it would hold a target lag that follows the measured link instead.
 Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held back, and a
 release held up by less than the delay, go in where they were pressed. A key that arrives too late for its cycle
-goes in at once, as every key does now. Two keys stamped in one of the guest's ticks still share a cycle, so the
-host's spacing of bunched keys stays as the floor under it. jsbeeb worked hard to get local input lag down to a
-frame or two, so the delay is not fixed: the session picks it, and the guests' target lag, from the measured round
-trip and jitter, small on a LAN and more across an ocean, and keeps retuning both. Between resyncs, a guest never
-stamps a key earlier than the last one it stamped, so a delay that shrinks takes effect only as the stamps catch
-up, and keys keep the order they were pressed in; keys clamped to one stamp share a cycle and fall to the same
-floor. A resync forgets the last stamp, since the machine it counted on has jumped, and each key carries the count
-of that guest's resyncs, so the host applies one stamped before the guest's latest at once rather than holding it
-for a cycle on a timeline that has gone. In this paragraph the host stands for whoever is sequencing.
+goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one of the
+guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it. jsbeeb
+worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it, and
+the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
+keeps retuning both. Between resyncs, a guest never stamps a key earlier than the last one it stamped, so a delay
+that shrinks takes effect only as the stamps catch up, and keys keep the order they were pressed in; keys clamped
+to one stamp share a cycle and fall to the same floor. A resync forgets the last stamp, since the machine it
+counted on has jumped, and each key carries the count of that guest's resyncs, so the host applies one stamped
+before the guest's latest at once rather than holding it for a cycle on a timeline that has gone. In this
+paragraph the host stands for whoever is sequencing.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
 sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
