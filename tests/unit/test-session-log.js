@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { connectionStats, IntervalStats, numbersFrom, SessionLog, StatsIntervalMs } from "../../src/web/session-log.js";
+import {
+    connectionStats,
+    IntervalStats,
+    numbersFrom,
+    SessionLog,
+    StatsIntervalMs,
+    watchPage,
+} from "../../src/web/session-log.js";
 
 function clock() {
     let ms = 1000;
@@ -48,6 +55,47 @@ describe("IntervalStats", () => {
         advance(StatsIntervalMs);
         expect(stats.take()).toEqual({ frames: 3, framesMaxGapMs: 50, starved: 1, maxLagMs: 30 });
         expect(stats.take()).toBeNull();
+    });
+});
+
+describe("watchPage", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    const pageEvents = (log) => log.events.filter((each) => each.event === "page");
+
+    it("logs whether the page is visible and focused, now and whenever that changes, until stopped", () => {
+        const log = new SessionLog({}, clock().now);
+        const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+        const stop = watchPage(log, () => new IntervalStats());
+        hidden.mockReturnValue(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("blur"));
+        stop();
+        document.dispatchEvent(new Event("visibilitychange"));
+        expect(pageEvents(log).map(({ hidden }) => hidden)).toEqual([false, true, true]);
+        expect(pageEvents(log)[0]).toHaveProperty("focused");
+    });
+
+    it("counts the main thread's long tasks into the interval being gathered", () => {
+        let report;
+        class FakeObserver {
+            constructor(callback) {
+                report = (durations) => callback({ getEntries: () => durations.map((duration) => ({ duration })) });
+            }
+            observe() {}
+            disconnect() {}
+        }
+        FakeObserver.supportedEntryTypes = ["longtask"];
+        vi.stubGlobal("PerformanceObserver", FakeObserver);
+        const time = clock();
+        const stats = new IntervalStats(time.now);
+        watchPage(new SessionLog({}, time.now), () => stats);
+        report([60, 412.34]);
+        time.advance(StatsIntervalMs);
+        expect(stats.take()).toEqual({ longTasks: 2, longTaskMaxMs: 412.3 });
     });
 });
 

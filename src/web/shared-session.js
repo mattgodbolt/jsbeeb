@@ -18,7 +18,7 @@ import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { connectionStats, IntervalStats, numbersFrom, SessionLog, StatsIntervalMs } from "./session-log.js";
+import { connectionStats, IntervalStats, numbersFrom, SessionLog, StatsIntervalMs, watchPage } from "./session-log.js";
 import { PeerStates, peerState, SessionPanel } from "./session-panel.js";
 import { downloadBlob } from "./dom-utils.js";
 import { toast } from "./toast.js";
@@ -55,6 +55,9 @@ const GuestStatsKeys = [
     "maxLagMs",
     "starved",
     "catchingUp",
+    "hiddenFrames",
+    "longTasks",
+    "longTaskMaxMs",
 ];
 // A guest sends a summary each StatsIntervalMs; more often than this, the rest are dropped.
 const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
@@ -227,6 +230,7 @@ export class SessionHost {
         notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`);
         this.panel.open();
         this.log.record("hosting");
+        this.stopWatchingPage = watchPage(this.log, () => this.stats);
         this.poll();
     }
 
@@ -261,6 +265,7 @@ export class SessionHost {
             if (!running || remaining <= 0) break;
         }
         this.stats.tick("frames");
+        if (document.hidden) this.stats.count("hiddenFrames");
         const summary = this.stats.take();
         if (summary) {
             this.log.record("stats", summary);
@@ -532,9 +537,13 @@ export class SessionHost {
         guest.backlog = [];
         guest.lastSnapshotMs = Date.now();
         const startMs = this.log.elapsed();
-        const bytes = await gzip(snapshotToJSON(this.lockstep.snapshot()));
+        const json = snapshotToJSON(this.lockstep.snapshot());
+        // Taking and encoding it holds the host's main thread; compressing it is a stream the page waits on.
+        const takeMs = this.log.elapsed() - startMs;
+        const bytes = await gzip(json);
         if (generation !== guest.snapshotGeneration) return;
-        this.log.record("snapshot", { guest: guest.id, bytes: bytes.length, tookMs: this.log.elapsed() - startMs });
+        const tookMs = this.log.elapsed() - startMs;
+        this.log.record("snapshot", { guest: guest.id, bytes: bytes.length, takeMs, tookMs });
         if (!this.sendTo(guest, JSON.stringify({ type: "snapshot", bytes: bytes.length }))) return;
         for (let offset = 0; offset < bytes.length; offset += SnapshotChunkBytes) {
             if (!this.sendTo(guest, bytes.slice(offset, offset + SnapshotChunkBytes))) return;
@@ -593,6 +602,7 @@ export class SessionHost {
         if (this.closed) return;
         this.closed = true;
         this.polling = false;
+        this.stopWatchingPage?.();
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
         for (const guest of this.guests.values()) this.releaseKeys(guest);
@@ -643,6 +653,7 @@ export class SessionGuest {
             version: context.version,
         });
         this.stats = new IntervalStats();
+        this.stopWatchingPage = watchPage(this.log, () => this.stats);
         this.lastStats = null;
         this.rttMs = undefined;
         this.leftReason = null;
@@ -726,6 +737,7 @@ export class SessionGuest {
         const ran = cycleCount(processor) - before;
         const lagMs = lockstep.behind() / cyclesPerMs;
         stats.tick("frames");
+        if (document.hidden) stats.count("hiddenFrames");
         if (catchingUp) stats.count("catchingUp");
         else if (lockstep.behind() === 0 && ran < cycles) stats.count("starved");
         stats.peak("maxLagMs", Math.round(lagMs));
@@ -896,6 +908,7 @@ export class SessionGuest {
 
     leave(reason = "couldn't join") {
         this.left = true;
+        this.stopWatchingPage();
         this.leftReason = reason;
         holdAnalogue(this.context.processor, false);
         this.context.processor.sysvia.cmos.leaveSession();

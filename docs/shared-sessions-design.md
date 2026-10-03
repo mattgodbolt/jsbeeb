@@ -238,9 +238,11 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   sends every guest its list once a second, so a guest also sees each other guest's light, its own marked. Each
   guest sends the host a summary of how it kept up once a second. Both sides log what they saw
   (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
-  summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots and
-  desyncs. "Save session report" in the pane downloads the log as JSON; nothing is sent anywhere unless the person
-  who saved it sends it. A report holds everything typed in the session.
+  summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots (how
+  long taking one held the host, and how long until it was ready to send) and desyncs, whether the page was
+  visible and focused, and the main thread's long tasks, since a hidden or busy tab falls behind for reasons the
+  session has no part in. "Save session report" in the pane downloads the log as JSON; nothing is sent anywhere
+  unless the person who saved it sends it. A report holds everything typed in the session.
 
 ### Known gaps
 

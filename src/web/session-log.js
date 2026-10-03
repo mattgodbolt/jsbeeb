@@ -93,6 +93,36 @@ export function numbersFrom(summary, keys) {
     return Object.fromEntries(keys.filter((key) => Number.isFinite(summary[key])).map((key) => [key, summary[key]]));
 }
 
+/**
+ * Logs whether the page is visible and focused, now and at each change, and counts the main thread's long
+ * tasks (Chrome reports those over 50 ms) into the interval `stats()` is gathering, until the function it
+ * returns is called. A hidden tab's timers are throttled, so its machine falls behind.
+ */
+export function watchPage(log, stats) {
+    const page = () => log.record("page", { hidden: document.hidden, focused: document.hasFocus() });
+    const listeners = [
+        [document, "visibilitychange"],
+        [window, "focus"],
+        [window, "blur"],
+    ];
+    for (const [target, event] of listeners) target.addEventListener(event, page);
+    page();
+    let observer = null;
+    if (globalThis.PerformanceObserver?.supportedEntryTypes?.includes("longtask")) {
+        observer = new PerformanceObserver((entries) => {
+            for (const entry of entries.getEntries()) {
+                stats().count("longTasks");
+                stats().peak("longTaskMaxMs", rounded(entry.duration));
+            }
+        });
+        observer.observe({ type: "longtask" });
+    }
+    return () => {
+        for (const [target, event] of listeners) target.removeEventListener(event, page);
+        observer?.disconnect();
+    };
+}
+
 const defined = (fields) => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
 
 const byId = (report) => {

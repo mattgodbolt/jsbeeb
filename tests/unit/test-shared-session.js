@@ -709,11 +709,30 @@ describe("SessionHost", () => {
         ).toEqual([1000, 1000]);
     });
 
+    it("logs how long a snapshot took to take and to send, and whether the page was visible", async () => {
+        const { host } = await hosting();
+        await joined();
+        const { events } = host.report();
+        const snapshot = events.find((each) => each.event === "snapshot");
+        expect(snapshot).toMatchObject({ takeMs: expect.any(Number), tookMs: expect.any(Number) });
+        expect(snapshot.takeMs).toBeLessThanOrEqual(snapshot.tookMs);
+        expect(events).toContainEqual(expect.objectContaining({ event: "page", hidden: expect.any(Boolean) }));
+    });
+
     it("logs only the numbers a guest's summary should hold, so it cannot rewrite the log", async () => {
         const { host } = await hosting();
         const channel = await joined();
         vi.advanceTimersByTime(5000);
-        const stats = { starved: 3, lagMs: 40, note: "<script>", junk: 1, ms: -1, guest: 7, event: 9 };
+        const stats = {
+            starved: 3,
+            lagMs: 40,
+            hiddenFrames: 12,
+            note: "<script>",
+            junk: 1,
+            ms: -1,
+            guest: 7,
+            event: 9,
+        };
         channel.emit("message", message({ type: "stats", stats }));
         const logged = host.report().events.find((each) => each.event === "guest stats");
         expect(logged).toEqual({
@@ -722,6 +741,7 @@ describe("SessionHost", () => {
             guest: "g1",
             starved: 3,
             lagMs: 40,
+            hiddenFrames: 12,
             dropped: 0,
         });
         expect(logged.ms).toBeGreaterThan(0);
