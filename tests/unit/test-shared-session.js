@@ -41,6 +41,8 @@ describe("cleanName", () => {
         ["  Kieran ", "Kieran"],
         ["a\u0007b\nc", "abc"],
         ["\u202eabc\u2066", "abc"],
+        ["a\u0085\u061cb", "ab"],
+        ["\u{1F600}".repeat(40), "\u{1F600}".repeat(32)],
         ["x".repeat(100), "x".repeat(32)],
         ["\u0000 ", null],
         [42, null],
@@ -660,6 +662,17 @@ describe("SessionGuest", () => {
             "Kieran (you): keeping up, 85 ms round trip, 60 ms behind",
             "Guest: out of touch",
         ]);
+    });
+
+    it("logs the inputs the host applied, with their cycle, and no lag once it has left", async () => {
+        const { guest, channel, deliver } = await joining();
+        const input = { kind: "key", mapping: [4, 1], down: true };
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [input] }]));
+        expect(guest.report().events).toContainEqual(
+            expect.objectContaining({ event: "inputs", cycle: 100, inputs: [input] }),
+        );
+        channel.emit("close");
+        expect(guest.report().lagMs).toBeUndefined();
     });
 
     it("sends the host its keys but never BREAK", async () => {

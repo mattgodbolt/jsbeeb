@@ -11,7 +11,7 @@ describe("peerState", () => {
         ["connecting", { connected: false }],
         ["connecting", { connected: true }],
         ["ok", { connected: true, stats: keepingUp, statsAgeMs: 0 }],
-        ["silent", { connected: true, stats: keepingUp, statsAgeMs: SilentMs + 1 }],
+        ["silent", { connected: true, stats: keepingUp, statsAgeMs: SilentMs }],
         ["silent", { connected: true, stats: { ...keepingUp, commits: 0 }, statsAgeMs: 0 }],
         ["lagging", { connected: true, stats: { ...keepingUp, lagMs: LaggingMs + 1 }, statsAgeMs: 0 }],
         ["lagging", { connected: true, stats: { ...keepingUp, catchingUp: 1 }, statsAgeMs: 0 }],

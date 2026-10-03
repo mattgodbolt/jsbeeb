@@ -20,7 +20,7 @@ export const PeerStates = new Set([...Object.keys(Descriptions), "left"]);
 export function peerState({ connected, left, stats, statsAgeMs }) {
     if (left) return "left";
     if (!connected || !stats) return "connecting";
-    if (statsAgeMs > SilentMs || stats.commits === 0) return "silent";
+    if (statsAgeMs >= SilentMs || stats.commits === 0) return "silent";
     if (stats.lagMs > LaggingMs || stats.starved > MaxStarvedPerSecond || stats.catchingUp > 0) return "lagging";
     return "ok";
 }

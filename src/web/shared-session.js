@@ -111,13 +111,16 @@ const mappingKey = (mapping) => mapping.join(",");
 
 export const randomName = () => humanId({ separator: "-", capitalize: false });
 
+// The control characters, and the bidirectional ones that could reorder a name among others.
+// eslint-disable-next-line no-control-regex
+const Unprintable = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
 /** What to call someone, from a name they or a peer gave, or null if it has nothing printable. */
 export function cleanName(name) {
     if (typeof name !== "string") return null;
-    // The control characters, and the bidirectional ones that could reorder a name among others.
-    // eslint-disable-next-line no-control-regex
-    const printable = name.replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "").trim();
-    return printable.slice(0, MaxNameLength) || null;
+    const printable = name.replace(Unprintable, "").trim();
+    // By code point, so an emoji is never cut in half.
+    return [...printable].slice(0, MaxNameLength).join("") || null;
 }
 
 /** The matrix positions, as `[col, row]`, of the keys the machine has down. */
@@ -715,6 +718,7 @@ export class SessionGuest {
             return;
         }
         this.stats.tick("commits");
+        if (commit.inputs.length > 0) this.log.record("inputs", { cycle: commit.at, inputs: commit.inputs });
         const waiting = this.incoming ?? this.buffering;
         if (waiting) waiting.commits.push(commit);
         else this.lockstep?.receive(commit);
@@ -815,7 +819,8 @@ export class SessionGuest {
 
     report() {
         const { processor } = this.context;
-        const lagMs = this.lockstep ? (this.lockstep.behind() * 1000) / processor.model.cyclesPerSecond : undefined;
+        const inSession = this.lockstep && !this.left;
+        const lagMs = inSession ? (this.lockstep.behind() * 1000) / processor.model.cyclesPerSecond : undefined;
         return this.log.report({ lagMs, keysDown: keysDown(processor.sysvia) });
     }
 }
