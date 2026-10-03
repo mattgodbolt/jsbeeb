@@ -268,7 +268,6 @@ export class SessionHost {
         });
         this.replay = null;
         this.resumeAt = null;
-        this.stamper.reset();
         for (const { source, input, fields, at } of this.heldBack.splice(0))
             this.sequencer.queue(source, input, fields, at);
     }
@@ -276,12 +275,8 @@ export class SessionHost {
     /** This page's own keys. BREAK is the host's alone, so it takes control back first. */
     input(input) {
         if (input.kind === "break" && !this.sequencer) this.takeBackNow("the host pressed BREAK");
-        if (this.sequencer) {
-            this.sequencer.input(input);
-            return;
-        }
-        if (input.down && this.panel.takesOnKeypress()) this.requestControl(null);
-        this.deliverKey("host", input, {}, this.stampForController());
+        if (input.down && !this.sequencer && this.panel.takesOnKeypress()) this.requestControl(null);
+        this.deliverKey("host", input, {}, this.stampForController() ?? this.stampOwn());
     }
 
     // A guest's key, or one of this page's while a guest is in control, goes to whoever orders the inputs, or waits
@@ -295,6 +290,11 @@ export class SessionHost {
     forward(guest, key) {
         this.forwarded.push(key);
         this.sendTo(guest, JSON.stringify({ type: "input", input: key.input, at: key.at, source: key.source }));
+    }
+
+    // Keys of this page's that it orders itself, or will once control comes back, keep their gaps from its last.
+    stampOwn() {
+        return this.stamper.follow({ cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() });
     }
 
     stampForController() {
@@ -421,6 +421,7 @@ export class SessionHost {
         this.releasing = false;
         this.taker = null;
         this.resyncWhenResumed = null;
+        if (jumped) this.stamper.reset();
         const relayed = unreplayed.flatMap(({ inputs }) => inputs);
         this.heldBack.unshift(
             ...relayed.map((input) => ({ source: "relayed", input, fields: {}, at: undefined })),
@@ -961,8 +962,10 @@ export class SessionGuest {
     // Sent with this page's time, so the host's log shows how long each key was really held, and the cycle it is
     // to go in at, so it keeps its place among the others however the network bunches them.
     input(input) {
+        // Queued with this page's keys the host passed back, sent before it had control, keeping their gaps.
         if (this.sequencer) {
-            this.sequencer.input(input);
+            const at = this.stamper.follow({ cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() });
+            this.sequencer.queue(this.id, input, {}, at);
             this.send({ type: "input", input, own: true });
             return;
         }

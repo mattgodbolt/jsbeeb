@@ -48,6 +48,19 @@ export class KeyStamper {
         this.last = null;
     }
 
+    /**
+     * Stamps a key for this machine's own sequencer at `cycle`, where it is now, but no nearer the last key stamped
+     * than they were pressed apart (as nextInRun shortens a long gap), so a key pressed just before taking control,
+     * stamped a round trip ahead, keeps its length when its release is pressed after.
+     */
+    follow({ cycle, nowMs }) {
+        const { cyclesPerMs, last } = this;
+        const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
+        const stamp = nextInRun(cycle, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
+        this.last = { at: stamp, ms: nowMs };
+        return stamp;
+    }
+
     stamp({ upTo, roundTripMs, sinceCommitMs, nowMs }) {
         const { cyclesPerMs, last } = this;
         const aheadMs = roundTripMs + Math.min(sinceCommitMs, MaxSinceCommitMs) + JitterMarginMs;

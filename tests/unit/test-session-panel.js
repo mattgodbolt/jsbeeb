@@ -125,9 +125,9 @@ describe("SessionPanel", () => {
         expect(document.activeElement).not.toBe(take);
         panel.showControl("brave-monkeys-train", true);
         expect(pane.querySelector(".session-control").textContent).toBe("In control: brave-monkeys-train");
-        expect(take.hidden).toBe(false);
+        expect(take.disabled).toBe(false);
         panel.showControl("you", false);
-        expect(take.hidden).toBe(true);
+        expect(take.disabled).toBe(true);
     });
 
     it("takes control on a key press only when asked to, without keeping the focus", () => {

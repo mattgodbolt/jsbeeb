@@ -321,6 +321,7 @@ span.accesskey {
 }
 
 .session-take-on-key-label {
+  flex-basis: 100%;
   display: flex;
   align-items: center;
   gap: 4px;

@@ -138,11 +138,14 @@ export class SessionPanel {
         return !!this.takeOnKey?.checked;
     }
 
-    /** Says who orders the session's inputs, `who` ("you" for this page), and whether this page can ask to. */
+    /**
+     * Says who orders the session's inputs, `who` ("you" for this page), and whether this page can ask to: the
+     * button greys out rather than going, so the pane keeps its shape.
+     */
     showControl(who, canTake) {
         if (!this.floating) return;
         this.pane.querySelector(".session-control").textContent = who ? `In control: ${who}` : "";
-        this.pane.querySelector(".session-take").hidden = !canTake;
+        this.pane.querySelector(".session-take").disabled = !canTake;
     }
 
     /**
