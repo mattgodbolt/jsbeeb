@@ -132,7 +132,7 @@ describe("DdNoise seeks", () => {
         expect(grain.offset + RunClickSeconds).toBeGreaterThan(Sounds.seek3.duration - 2 * RunClickSeconds);
     });
 
-    it("cuts every grain in the quiet between clicks, so neither fade takes any of a click", () => {
+    it("cuts most grains in the quiet between clicks, so neither fade takes much of a click", () => {
         const { samples, rate } = wavMagnitudes("../../public/sounds/disc525/seek3.wav");
         let next = 0;
         vi.spyOn(Math, "random").mockImplementation(() => (next++ + 0.5) / RunClicks);
