@@ -90,7 +90,10 @@ export class SessionPanel {
             header: pane.querySelector(".session-pane-header"),
             closeButton: pane.querySelector(".session-pane-close"),
         });
-        root.querySelector(".slot-readout").addEventListener("click", () => this.floating.toggle());
+        const readout = root.querySelector(".slot-readout");
+        readout.addEventListener("click", () => this.floating.toggle());
+        for (const event of ["open", "close"])
+            this.floating.addEventListener(event, () => readout.setAttribute("aria-expanded", this.floating.isOpen));
         pane.querySelector(".session-you").textContent = `You are ${name}`;
         pane.querySelector(".session-link").textContent = link;
         pane.querySelector(".session-copy-link").addEventListener("click", () => copyLink());

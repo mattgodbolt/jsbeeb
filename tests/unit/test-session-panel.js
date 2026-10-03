@@ -68,13 +68,16 @@ describe("SessionPanel", () => {
     it("opens the pane from the readout, with who you are and the link to join", () => {
         const { readout, pane } = page();
         new SessionPanel(session());
+        const button = readout.querySelector(".slot-readout");
         expect(pane.hidden).toBe(true);
-        readout.querySelector(".slot-readout").click();
+        button.click();
         expect(pane.hidden).toBe(false);
+        expect(button.getAttribute("aria-expanded")).toBe("true");
         expect(pane.querySelector(".session-you").textContent).toBe("You are neat-dolls-occur");
         expect(pane.querySelector(".session-link").textContent).toBe("https://bbc.xania.org/?client=scorch");
-        readout.querySelector(".slot-readout").click();
+        button.click();
         expect(pane.hidden).toBe(true);
+        expect(button.getAttribute("aria-expanded")).toBe("false");
     });
 
     it("copies the link and saves the report from the pane", () => {

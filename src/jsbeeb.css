@@ -289,6 +289,8 @@ span.accesskey {
 #session-pane .session-you {
   color: #999;
   flex: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .session-link-row {

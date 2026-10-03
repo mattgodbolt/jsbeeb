@@ -1187,7 +1187,7 @@ describe("startSessionFromUrl", () => {
         expect(rendezvous.postOffer).toHaveBeenCalledWith("there", expect.any(String), "local sdp");
     });
 
-    it("copies the link to join from the lights", async () => {
+    it("copies the link to join from a guest's pane", async () => {
         showLights();
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -1210,6 +1210,7 @@ describe("startSessionFromUrl", () => {
             await started({ client: "there" });
             const panel = document.getElementById("session-panel");
             expect(panel.hidden).toBe(false);
+            expect(document.getElementById("session-pane").hidden).toBe(true);
             expect(panel.querySelector(".led").dataset.state).toBe("connecting");
             expect(document.querySelector(".session-you").textContent).toMatch(/^You are [a-z]+-[a-z]+-[a-z]+$/);
             document.querySelector(".session-report").click();
