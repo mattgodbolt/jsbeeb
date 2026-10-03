@@ -194,15 +194,16 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   go.
 - **Transport:** WebRTC data channels in a star: each guest connects to the host only, over a reliable, ordered
   channel. A joiner's snapshot goes gzipped and in chunks over the same channel, discs included, so local and
-  `gd:` discs need no fetching. Public STUN and no TURN: a guest that cannot connect is told "couldn't connect
+  `gd:` discs need no fetching; each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
+  so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot connect is told "couldn't connect
   directly". The host and each guest see each other's public IP address. A guest on another model reloads as
   the host's before it joins, and one on another jsbeeb version is turned away. When the host leaves, each
   guest's machine carries on as a local one, with its own CMOS and clock back. The host takes only keys, resync
   requests and goodbyes from a guest, rate-limits its resyncs, drops one whose channel cannot keep up, and opens
   only a few connections at a time.
 - **The clock:** every machine in a session reads its RTC as a base time the host sends plus its own emulated
-  cycles, so everyone sees the same, roughly real, time. It starts again from the real time when the host's
-  machine jumps.
+  cycles, read as UTC, so everyone sees the host's wall time whatever their own time zone. It starts again from
+  the wall time when the host's machine jumps.
 - **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. Creating a room
@@ -236,7 +237,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   system VIA reads) are not blocked either, and desync a session the same way if used.
 - A guest's BREAK is ignored, and when a guest leaves, its keys are let go even if someone else is holding the
   same key.
-- A guest's own page still shows its own drives in the front panel and media window.
+- A guest's front panel and media window still name its own discs, though its drives hold the host's.
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
 - A hidden host runs the session at about a tenth of real speed (see challenge 6).
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
