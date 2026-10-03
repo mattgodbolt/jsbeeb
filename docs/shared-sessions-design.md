@@ -241,12 +241,12 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### Known gaps
 
-- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host
-  keeps them in the order they came and applies each press at least 40ms after the guest's last, and each
-  release 40ms after its press, so a bunch still types one key at a time that the OS sees; a key held longer
-  comes out 40ms long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of
-  them. A release can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up
-  arrives late, and one that arrives behind a bunch waits for it. Nothing but an input delay would hide that.
+- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host keeps
+  them in the order they came and applies each press at least 40ms after the guest's last, and each release 40ms
+  after its press, so a bunch still types one key at a time that the OS sees; a key held longer comes out 40ms
+  long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of them. A release
+  can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up arrives late, and
+  one that arrives behind a bunch waits for it. Nothing but the input delay after v0 (below) would hide that.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -262,14 +262,13 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
 - A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
-  measured), and with its ticks that far apart a guest's press and release nearly always reach it together, so
-  guests cannot type.
+  measured), and with its ticks that far apart a guest's press and release nearly always reach it together, and
+  only the host's spacing of bunched keys keeps them apart.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
 
 ### What is left for v0
 
-- An input delay, so a guest's keys apply as promptly as the host's and a late release does not lengthen a hold.
 - More of the determinism test the experiment above stands for. The integration test already runs a B and a
   Master in random, uneven slices and compares cycles, RAM with the ROMs and sideways RAM byte for byte, the
   CMOS, the keyboard and the MODE 7 screen; still to come are a disc read during the run, framebuffers and
@@ -281,8 +280,67 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
 snapshot links; the pulled inputs (ADC sources, gamepads, the mouse, the switches) through the session, with
 `src/adc.js`, the sources and `getJoysticks` reading only what came through it; the other configuration options
-one at a time; TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs
-painting suppressed during re-emulation and the sound chip's queued events unwound.
+one at a time; TURN; voice (below); and the steps in the next section.
+
+### After v0: keys on time, taking control, rollback
+
+The first real session, the host in the US and a guest in the UK, lost keys that reached the host together and
+repeated one whose release reached it late. Three steps, in this order.
+
+**Input delay, tuned to the link.** Each guest stamps a key with the cycle its machine has reached plus a delay,
+and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for the
+key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there. And the
+guest's lag must stay small and steady, which means pacing changes as well: today a guest settles anywhere up to a
+quarter of a second behind (see Pacing), so it would hold a target lag that follows the measured link instead.
+Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held back, and a
+release held up by less than the delay, go in where they were pressed. A key that arrives too late for its cycle
+goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one of the
+guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it. jsbeeb
+worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it, and
+the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
+keeps retuning both. Between resyncs, a guest never stamps a key earlier than the last one it stamped, so a delay
+that shrinks takes effect only as the stamps catch up, and keys keep the order they were pressed in; keys clamped
+to one stamp share a cycle and fall to the same floor. A resync forgets the last stamp, since the machine it
+counted on has jumped, and each key carries the count of that guest's resyncs, so the host applies one stamped
+before the guest's latest at once rather than holding it for a cycle on a timeline that has gone. In this
+paragraph the host stands for whoever is sequencing.
+
+**Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
+sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
+control" button, and an option to take control on a key press, with nothing game-specific. The handover: the new
+player asks; the current sequencer names the cycle its next commit starts at and stops there; the new player's
+machine reaches it; the new sequencer runs on from it. The old sequencer applies the key that asked for control,
+and every key it holds stamped at or after the cycle it names, which lose their spacing and fall to the same
+floor, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer, or
+back to the old one, which runs on from the named cycle, if the new player leaves before taking over. The host
+forwards a key stamped before its guest's latest resync marked as stale, so whoever sequences applies it at once.
+The star stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed,
+each starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The
+host stays the reference for desync: it replays every commit it relays, resyncs any guest from its own machine,
+keeping the relayed commits it has not yet replayed and sending those past the snapshot after it, as a late joiner
+is sent the commits made while its snapshot is compressed, and if its replay disagrees with a guest sequencer,
+takes control back and resyncs everyone, the sequencer included, so a guest cannot make an altered state
+everyone's. If a guest sequencer leaves or goes silent, during a handover or not, the host takes control back the
+same way, from the last commit it relayed: it releases the keys the sequencer had down, and sequences itself every
+key it forwarded, or kept back for the handover, that no relayed commit contained. Anything that moves a machine
+(a reset, a loaded state, rewind, the debugger) hands control back to the host first, so on a guest it is undone
+as now and on the host everyone resyncs from it. Once a guest holds control, everyone else, the host included, is
+a non-sequencer: their keys take the input delay, picked against the sequencer rather than the host. A handover
+costs about a round trip when the host is one end of it and two through the star, plus however far the new
+sequencer runs behind. Taking control on a key press suits turn-based play; two people typing at once would pass
+control back and forth.
+
+**Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
+peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle
+already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and restore are
+already cheap (see Prior art); re-emulation needs painting suppressed and the sound chip's queued events unwound,
+and a correction shows as the other player's sprite jumping. Every peer's messages carry the cycle it has reached,
+its summaries included when it is quiet, and the host passes each on, so each peer knows that nothing more will
+come from the others before the least of those cycles, which is the confirmed cycle. Whatever leaves the machine
+waits until the cycle that caused it is confirmed: a disc write, in particular, reaches local storage or Google
+Drive through the disc's track write listeners, and a restore cannot undo that. What waits is the listener call,
+not just the save, since each image's listener (SSD and HFE alike) keeps its own copy of the image outside any
+snapshot.
 
 ### Voice, later
 
@@ -304,7 +362,7 @@ WebRTC carries audio as readily as data, so voice in the session is mostly UI:
 ## Open questions
 
 - How SHIFT is shared when two people hold keys that force it different ways.
-- How much input delay is right by default, and whether a session should choose it from measured latency.
+- Whether the host's own keys take an input delay too: fair for a competitive game, needless lag for typing.
 - What a guest may do: type only, or also press BREAK, reset, change discs, rewind for everyone.
 - Where shared snapshots live (S3 behind a small upload endpoint, a gist, the user's Google Drive), for how
   long, and whether that is acceptable given a snapshot holds whatever was in RAM.
