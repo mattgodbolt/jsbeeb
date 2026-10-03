@@ -210,7 +210,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. Creating a room
-  returns a host secret that never leaves the host's tab. A guest creates an offer, waits for ICE gathering to
+  returns a host secret, which the host sends to the rendezvous with each request that needs it and never to a guest. A guest creates an offer, waits for ICE gathering to
   finish (or a short timeout) so the full SDP goes in one message, posts it under an ID of its own, and polls
   for its answer. The host polls the room every second or two, answers each new offer, and keeps polling for
   the life of the session, for late joiners. Listing offers, answering and extending the room need the host
