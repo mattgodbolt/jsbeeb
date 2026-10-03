@@ -3,6 +3,8 @@
 // rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
+import { humanId } from "human-id";
+
 import {
     cycleCount,
     isValidCommit,
@@ -12,8 +14,6 @@ import {
     MaxGuestLagSeconds,
     restoreSessionSnapshot,
 } from "../lockstep.js";
-import { humanId } from "human-id";
-
 import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
@@ -332,6 +332,8 @@ export class SessionHost {
             saidHello: false,
             stats: null,
             statsMs: -Infinity,
+            // Summaries that came too soon after the last, counted in the next one logged.
+            statsDropped: 0,
             rttMs: undefined,
             pc,
             channel: null,
@@ -398,25 +400,25 @@ export class SessionHost {
             guest.name = cleanName(message.name);
             this.log.record("hello", { guest: guest.id, name: guest.name });
             this.showStatus();
-        } else if (message.type === "stats" && this.log.elapsed() - guest.statsMs >= MinGuestStatsIntervalMs) {
+        } else if (message.type === "stats" && this.log.elapsed() - guest.statsMs < MinGuestStatsIntervalMs) {
+            ++guest.statsDropped;
+        } else if (message.type === "stats") {
             guest.stats = numbersFrom(message.stats, GuestStatsKeys);
             guest.statsMs = this.log.elapsed();
-            this.log.record("guest stats", { ...guest.stats, guest: guest.id });
+            this.log.record("guest stats", { ...guest.stats, guest: guest.id, dropped: guest.statsDropped });
+            guest.statsDropped = 0;
         } else if (message.type === "bye") {
             this.drop(guest, "it said goodbye");
         } else if (message.type === "resync") {
-            this.log.record("resync asked", {
-                guest: guest.id,
-                reason: String(message.reason).slice(0, MaxReasonLength),
-            });
-            this.requestSnapshot(guest);
+            this.requestSnapshot(guest, String(message.reason).slice(0, MaxReasonLength));
         }
     }
 
     // A guest asks once per desync, but a buggy or hostile one could ask without end,
     // and each snapshot costs the host's main thread. One already on its way will do.
-    requestSnapshot(guest) {
+    requestSnapshot(guest, reason) {
         if (!guest.ready || guest.resyncTimer) return;
+        this.log.record("resync asked", { guest: guest.id, reason });
         const waitMs = guest.lastSnapshotMs + MinResyncIntervalMs - Date.now();
         if (waitMs <= 0) {
             this.sendSnapshot(guest);

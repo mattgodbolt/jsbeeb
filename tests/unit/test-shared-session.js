@@ -14,7 +14,7 @@ import {
     startSessionFromUrl,
 } from "../../src/web/shared-session.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
-import { LockstepHost } from "../../src/lockstep.js";
+import { LockstepHost, MaxGuestLagSeconds } from "../../src/lockstep.js";
 import { AdcCentreValue } from "../../src/adc.js";
 import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
@@ -40,6 +40,7 @@ describe("cleanName", () => {
     it.each([
         ["  Kieran ", "Kieran"],
         ["a\u0007b\nc", "abc"],
+        ["\u202eabc\u2066", "abc"],
         ["x".repeat(100), "x".repeat(32)],
         ["\u0000 ", null],
         [42, null],
@@ -409,7 +410,14 @@ describe("SessionHost", () => {
         const stats = { starved: 3, lagMs: 40, note: "<script>", junk: 1, ms: -1, guest: 7, event: 9 };
         channel.emit("message", message({ type: "stats", stats }));
         const logged = host.report().events.find((each) => each.event === "guest stats");
-        expect(logged).toEqual({ ms: expect.any(Number), event: "guest stats", guest: "g1", starved: 3, lagMs: 40 });
+        expect(logged).toEqual({
+            ms: expect.any(Number),
+            event: "guest stats",
+            guest: "g1",
+            starved: 3,
+            lagMs: 40,
+            dropped: 0,
+        });
         expect(logged.ms).toBeGreaterThan(0);
     });
 
@@ -422,7 +430,11 @@ describe("SessionHost", () => {
         channel.emit("message", message({ type: "stats", stats: { lagMs: 9 } }));
         const events = host.report().events;
         expect(events.filter((each) => each.event === "hello").map((each) => each.name)).toEqual(["Kieran"]);
-        expect(events.filter((each) => each.event === "guest stats").map((each) => each.lagMs)).toEqual([0, 9]);
+        const summaries = events.filter((each) => each.event === "guest stats");
+        expect(summaries.map(({ lagMs, dropped }) => [lagMs, dropped])).toEqual([
+            [0, 0],
+            [9, 2],
+        ]);
     });
 
     it("sends each guest the lights once an interval, and logs and shows each connection's round trip", async () => {
@@ -499,6 +511,13 @@ describe("SessionHost", () => {
             ["Ana", true],
         ]);
         expect(host.connectedCount()).toBe(2);
+    });
+
+    it("logs only the resyncs it honours, so a guest asking without end cannot fill the log", async () => {
+        const { host } = await hosting();
+        const channel = await joined();
+        for (let i = 0; i < 50; ++i) channel.emit("message", message({ type: "resync", reason: "x" }));
+        expect(host.report().events.filter((each) => each.event === "resync asked")).toHaveLength(1);
     });
 
     it("reports the keys each guest is holding, and the keys the machine has down", async () => {
@@ -603,11 +622,12 @@ describe("SessionGuest", () => {
 
     async function joining(rendezvous) {
         const context = fakeContext({ rendezvous });
-        await new SessionGuest(context, "room").start();
+        const guest = new SessionGuest(context, "room");
+        await guest.start();
         const channel = peers[0].channel;
         const deliver = (messages) => messages.forEach((each) => channel.emit("message", each));
         const lockstep = () => context.loop.setLockstep.mock.calls.at(-1)[0];
-        return { context, channel, deliver, lockstep };
+        return { guest, context, channel, deliver, lockstep };
     }
 
     const resyncsAsked = (channel) => channel.messages().filter((each) => each.type === "resync").length;
@@ -672,6 +692,35 @@ describe("SessionGuest", () => {
                 stats: expect.objectContaining({ frames: 2, framesMaxGapMs: 1000, starved: 2, lagMs: 0 }),
             },
         ]);
+    });
+
+    it("measures its own round trip to the host, and shows and logs it", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const { guest, context, channel, deliver, lockstep } = await joining();
+        channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        vi.advanceTimersByTime(StatsIntervalMs);
+        lockstep().execute(100);
+        await settle();
+        lockstep().execute(100);
+        vi.advanceTimersByTime(StatsIntervalMs);
+        lockstep().execute(100);
+        expect(document.querySelector(".led").title).toMatch(/^Matt: .*, 85 ms round trip, /);
+        expect(guest.report().events).toContainEqual(expect.objectContaining({ event: "connection", rttMs: 85 }));
+    });
+
+    it("does not count a frame as catching up when its lag is within a slice of the limit", async () => {
+        const { context, channel, deliver, lockstep } = await joining();
+        const justOverTheLimit = MaxGuestLagSeconds * CyclesPerSecond + 50;
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + justOverTheLimit, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        vi.advanceTimersByTime(1000);
+        lockstep().execute(100);
+        const [{ stats }] = channel.messages().filter((each) => each.type === "stats");
+        expect(stats.catchingUp).toBeUndefined();
     });
 
     it("counts a frame as catching up only when it starts far behind the host", async () => {
