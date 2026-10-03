@@ -34,7 +34,7 @@ export default defineConfig({
                     name: "integration",
                     include: ["tests/integration/**/*.js"],
                     exclude: [...configDefaults.exclude, "tests/integration/helpers.js", "tests/integration/png.js"],
-                    // A hang detector; the dearest test costs under ten seconds uncontended.
+                    // A hang detector; the dearest test costs under thirty seconds uncontended.
                     testTimeout: 120000,
                 },
             },

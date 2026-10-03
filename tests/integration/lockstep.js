@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     cycleCount,
@@ -27,11 +27,16 @@ const ScribbleBytes = 0x100;
 const Scribble = 0xff;
 const SidewaysRamBank = 4;
 const RomBankBytes = 16384;
+const LcgMultiplier = 1664525;
+const LcgIncrement = 1013904223;
+// Room for the instruction a run to a cycle finishes past it.
+const InstructionSlackCycles = 100;
+const MsPerMinute = 60 * 1000;
 
 function seededRandom(seed) {
     let state = seed;
     return (limit) => {
-        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        state = (Math.imul(state, LcgMultiplier) + LcgIncrement) >>> 0;
         return state % limit;
     };
 }
@@ -172,11 +177,12 @@ function expectIdentical(host, guests) {
 
 describe("lockstep sessions", () => {
     it("keeps guests identical to the host while it types, through delays and uneven slices", async () => {
-        // The second guest joins with a key held down.
+        // The sixth key goes down at step 40 and up at 44.
+        const joinWithKeyHeld = 41;
         const { host, guests, desyncs } = await runSession({
             model: "B-DFS1.2",
             inputs: typing("PRINT 67-25\n"),
-            joinAt: [0, 41],
+            joinAt: [0, joinWithKeyHeld],
         });
         expect(desyncs).toEqual([]);
         expect(mode7Text(host)).toContain("42");
@@ -184,14 +190,19 @@ describe("lockstep sessions", () => {
     });
 
     it("hands a joiner the host's sideways RAM, settings and clock, read the same in any time zone", async () => {
+        const sidewaysByte = 0x5a;
+        const settingAddress = 0x30;
+        const setting = 0x77;
+        // 12:00 on the base, so TIME$ reads 13:3x.
+        const clockOffsetMs = 90 * MsPerMinute;
         const { host, guests, desyncs } = await runSession({
             model: "Master",
             inputs: typing("PRINT TIME$\n"),
             seed: 7,
             prepare: ({ processor }) => {
-                processor.ramRomOs[processor.romOffset + SidewaysRamBank * RomBankBytes] = 0x5a;
-                processor.sysvia.cmos.store[0x30] = 0x77;
-                processor.sysvia.cmos.timeOffset = 90 * 60 * 1000;
+                processor.ramRomOs[processor.romOffset + SidewaysRamBank * RomBankBytes] = sidewaysByte;
+                processor.sysvia.cmos.store[settingAddress] = setting;
+                processor.sysvia.cmos.timeOffset = clockOffsetMs;
             },
         });
         expect(desyncs).toEqual([]);
@@ -211,8 +222,11 @@ describe("lockstep sessions", () => {
             seed: 3,
         });
         expect(jumps).toBe(1);
-        expect(desyncs.some((reason) => /differs from the host's/.test(reason))).toBe(true);
-        expect(desyncs.some((reason) => /moved from \d+ by itself/.test(reason))).toBe(true);
+        // Each is put right by the one resync it asks for, and the host's reset needs none.
+        expect(desyncs).toEqual([
+            "state differs from the host's at cycle 4633603",
+            "this machine moved from 3438840 by itself",
+        ]);
         expect(mode7Text(host)).toContain("42");
         expectIdentical(host, guests);
     });
@@ -231,21 +245,71 @@ describe("lockstep sessions", () => {
         it("gives the guest the host's discs, never writing to its own", async () => {
             const image = "discs/elite.ssd";
             const data = await fdc.load(image);
-            let guestDisc;
+            const guestDiscs = [];
             const { host, guest } = await pair({
                 prepareHost: ({ processor }) => processor.fdc.loadDisc(1, fdc.discFor(image, data)),
                 prepareGuest: ({ processor }) => {
-                    guestDisc = fdc.discFor(image, data, () => {});
-                    processor.fdc.loadDisc(0, guestDisc);
+                    for (const drive of [0, 1]) {
+                        guestDiscs.push(fdc.discFor(image, data, () => {}));
+                        processor.fdc.loadDisc(drive, guestDiscs[drive]);
+                    }
                 },
             });
-            const [ownDrive, sharedDrive] = guest.machine.processor.fdc.drives;
-            expect(guestDisc.savesChanges).toBe(true);
-            expect(ownDrive.disc).toBeUndefined();
-            expect(sharedDrive.disc).not.toBe(guestDisc);
-            expect(sharedDrive.disc.savesChanges).toBe(false);
+            const [emptied, shared] = guest.machine.processor.fdc.drives;
+            expect(guestDiscs.every((disc) => disc.savesChanges)).toBe(true);
+            expect(emptied.disc).toBeUndefined();
+            expect(guestDiscs).not.toContain(shared.disc);
+            expect(shared.disc.savesChanges).toBe(false);
             const firstTrack = (drive) => drive.disc.getTrack(false, 0).pulses2Us;
-            expect(firstTrack(sharedDrive)).toEqual(firstTrack(host.processor.fdc.drives[1]));
+            expect(firstTrack(shared)).toEqual(firstTrack(host.processor.fdc.drives[1]));
+        });
+
+        it("hands over the VIAs as they are, whatever keys the joiner was holding, and a held BREAK", async () => {
+            const { host, lockstep, guest } = await pair({
+                prepareGuest: ({ processor }) => processor.sysvia.keyDown(keyCodes.A, false),
+            });
+            const devices = ({ processor }) => [processor.sysvia.snapshotState(), processor.uservia.snapshotState()];
+            expect(devices(guest.machine)).toEqual(devices(host));
+            lockstep.input({ kind: "break", down: true });
+            lockstep.execute(1000);
+            const late = await joining(lockstep, host.model.name);
+            expect(late.machine.processor.resetLine).toBe(host.processor.resetLine);
+            expect(host.processor.resetLine).toBe(false);
+        });
+
+        it("stops exactly where the host did, an hour in with a fractional target", () => {
+            const cyclesPerSecond = 2000000;
+            const instructionCycles = 3;
+            // Whole instructions until the target is reached, as the CPU runs them.
+            const cpu = {
+                model: { cyclesPerSecond },
+                cycleSeconds: 3600,
+                currentCycles: 999,
+                targetCycles: 999 + 1 / 3,
+                execute(cycles) {
+                    this.targetCycles += cycles;
+                    while (this.currentCycles < this.targetCycles) this.currentCycles += instructionCycles;
+                    return true;
+                },
+            };
+            const desyncs = [];
+            const guest = new LockstepGuest(cpu, (reason) => desyncs.push(reason));
+            const at = cycleCount(cpu);
+            const upTo = at + 100 * instructionCycles;
+            guest.receive({ at, inputs: [], upTo });
+            guest.execute(upTo - at);
+            expect(cycleCount(cpu)).toBe(upTo);
+            expect(desyncs).toEqual([]);
+        });
+
+        it("hashes the machine once each emulated second", async () => {
+            const { host, lockstep, commits } = await pair();
+            const seconds = 3;
+            const slicesPerSecond = 10;
+            for (let i = 0; i < seconds * slicesPerSecond; ++i) {
+                lockstep.execute(host.model.cyclesPerSecond / slicesPerSecond);
+            }
+            expect(commits.filter((commit) => commit.hash !== undefined)).toHaveLength(seconds);
         });
 
         it("keeps a commit that ran no cycles, and its inputs", async () => {
@@ -274,15 +338,48 @@ describe("lockstep sessions", () => {
             const { cyclesPerSecond } = host.model;
             for (let i = 0; i < 10; ++i) lockstep.execute(cyclesPerSecond / 10);
             commits.forEach((commit) => guest.lockstep.receive(commit));
+            const asked = 1000;
             const ran = () => {
                 const before = cycleCount(guest.machine.processor);
-                guest.lockstep.execute(1000);
+                guest.lockstep.execute(asked);
                 return cycleCount(guest.machine.processor) - before;
             };
             expect(ran()).toBeGreaterThanOrEqual(MaxCatchUpSeconds * cyclesPerSecond);
-            expect(ran()).toBeLessThan(MaxCatchUpSeconds * cyclesPerSecond + 100);
+            expect(ran()).toBeLessThan(MaxCatchUpSeconds * cyclesPerSecond + InstructionSlackCycles);
             while (guest.lockstep.behind() > MaxGuestLagSeconds * cyclesPerSecond) ran();
-            expect(ran()).toBeLessThan(1100);
+            expect(ran()).toBeLessThan(asked + InstructionSlackCycles);
+        });
+    });
+
+    describe("the session clock", () => {
+        afterEach(() => {
+            vi.useRealTimers();
+            vi.unstubAllEnvs();
+        });
+
+        it("shows the host's wall time, and starts again from it after the host jumps", async () => {
+            vi.stubEnv("TZ", "America/New_York");
+            vi.useFakeTimers({ toFake: ["Date"] });
+            vi.setSystemTime(Date.UTC(2026, 1, 10, 17, 0, 30));
+            const host = await booted("Master");
+            const { cyclesPerSecond } = host.model;
+            // Time on the clock before the session, which a jump must not take off it.
+            host.processor.execute(3 * cyclesPerSecond);
+            const lockstep = new LockstepHost(
+                host.processor,
+                () => {},
+                () => {},
+            );
+            const clock = () => {
+                const time = host.processor.sysvia.cmos.bbcDateTime();
+                return [time.getHours(), time.getMinutes(), time.getSeconds()];
+            };
+            expect(clock()).toEqual([12, 0, 30]);
+            lockstep.execute(5 * cyclesPerSecond);
+            expect(clock()).toEqual([12, 0, 35]);
+            host.processor.reset(true);
+            lockstep.execute(0);
+            expect(clock()).toEqual([12, 0, 30]);
         });
     });
 

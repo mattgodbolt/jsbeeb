@@ -134,8 +134,8 @@ export class Cmos {
      */
     joinSession(state, now) {
         if (!this.beforeSession) {
-            const { persistence, store, now, utc, timeOffset } = this;
-            this.beforeSession = { persistence, store, now, utc, timeOffset };
+            const { persistence, store, utc, timeOffset } = this;
+            this.beforeSession = { persistence, store, now: this.now, utc, timeOffset };
         }
         const { store, timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
         Object.assign(this, { timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr });

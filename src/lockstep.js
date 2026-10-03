@@ -26,14 +26,13 @@ export function cycleCount(cpu) {
     return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
 }
 
-function targetCount(cpu) {
-    return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.targetCycles;
-}
-
 // The CPU runs whole instructions until it reaches its target, so asking for a
-// cycle that some machine stopped at lands on it exactly.
+// cycle that some machine stopped at lands on it exactly. The target is set rather
+// than added to, since a loop asking for fractions of a cycle leaves it fractional,
+// and adding to that rounds.
 function runTo(cpu, cycle) {
-    return cpu.execute(cycle - targetCount(cpu));
+    cpu.targetCycles = cycle - cpu.cycleSeconds * cpu.model.cyclesPerSecond;
+    return cpu.execute(0);
 }
 
 const cyclesToMs = (cpu, cycles) => (cycles * 1000) / cpu.model.cyclesPerSecond;
@@ -103,16 +102,19 @@ export function isValidCommit(commit) {
  * a disc it already holds, which may be this person's own and write back to where it came
  * from, so each drive first gets a fresh disc of its own, or none if the host's is empty.
  * The CMOS joins the session before the machine is restored, so the bus accesses the
- * restore makes reach the session's CMOS and never this person's stored settings.
+ * restore makes reach the session's CMOS and never this person's stored settings. BREAK
+ * is not machine state, so it travels beside it.
  */
 export function restoreSessionSnapshot(cpu, snapshot) {
-    const { state, keyboard, at, cmos, rtcBaseMs } = snapshot;
+    const { state, keyboard, resetting, at, cmos, rtcBaseMs } = snapshot;
     cpu.fdc.drives.forEach((drive, index) => {
         drive.setDisc(state.fdc?.drives?.[index]?.disc ? new Disc(true, new DiscConfig(), "") : undefined);
     });
     joinSessionCmos(cpu, cmos, rtcBaseMs);
-    cpu.restoreState(state);
+    // The keys first, so the system VIA's restore scans the host's keyboard, not this person's.
     cpu.sysvia.restoreKeyboard(keyboard);
+    cpu.restoreState(state);
+    cpu.setReset(resetting);
     if (cycleCount(cpu) !== at) throw new Error(`restored to cycle ${cycleCount(cpu)}, not ${at}`);
 }
 
@@ -153,6 +155,7 @@ export class LockstepHost {
         return {
             state: cpu.snapshotState({ includeRoms: true }),
             keyboard: cpu.sysvia.keyboardState(),
+            resetting: !cpu.resetLine,
             at: cycleCount(cpu),
             cmos: cpu.sysvia.cmos.sessionState(),
             rtcBaseMs: this.rtcBaseMs,
