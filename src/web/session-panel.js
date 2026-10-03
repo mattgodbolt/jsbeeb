@@ -35,10 +35,11 @@ export function peerDetail({ state, rttMs, lagMs, leftReason }) {
 }
 
 export class SessionPanel {
-    constructor({ saveReport, copyLink }, root = document.getElementById("session-panel")) {
+    constructor(name, { saveReport, copyLink }, root = document.getElementById("session-panel")) {
         this.root = root;
         if (!root) return;
         root.hidden = false;
+        root.querySelector(".session-you").textContent = `You are ${name}`;
         for (const [selector, run] of [
             [".session-report", saveReport],
             [".session-copy-link", copyLink],

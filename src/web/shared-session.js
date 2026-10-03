@@ -201,7 +201,7 @@ export class SessionHost {
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
         this.departed = [];
-        this.panel = new SessionPanel(sessionMenu(this));
+        this.panel = new SessionPanel(name, sessionMenu(this));
     }
 
     async start() {
@@ -562,7 +562,7 @@ export class SessionGuest {
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
-        this.panel = new SessionPanel(sessionMenu(this));
+        this.panel = new SessionPanel(name, sessionMenu(this));
         this.showStatus();
     }
 

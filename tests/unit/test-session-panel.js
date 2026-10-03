@@ -30,20 +30,21 @@ describe("SessionPanel", () => {
     function panelPage() {
         document.body.innerHTML = `<div id="session-panel" hidden>
             <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
-            <ul class="session-menu"><li><hr></li><li><a href="#" class="session-copy-link"></a></li>
+            <ul class="session-menu"><li><hr></li><li><span class="session-you"></span></li><li><a href="#" class="session-copy-link"></a></li>
             <li><a href="#" class="session-report"></a></li></ul></div>`;
         return document.getElementById("session-panel");
     }
 
     it("shows a light and a line for each peer, replacing the last ones", () => {
         const root = panelPage();
-        const panel = new SessionPanel({ saveReport: () => {}, copyLink: () => {} });
+        const panel = new SessionPanel("neat-dolls-occur", { saveReport: () => {}, copyLink: () => {} });
         panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting" }]);
         panel.show("hosting", "2 guests", [
             { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40 },
             { label: "Guest 2", state: "left", leftReason: "it said goodbye" },
         ]);
         expect(root.hidden).toBe(false);
+        expect(root.querySelector(".session-you").textContent).toBe("You are neat-dolls-occur");
         expect(root.querySelector(".session-summary").textContent).toBe("2 guests");
         const lights = [...root.querySelectorAll(".led")];
         expect(lights.map((light) => light.dataset.state)).toEqual(["ok", "left"]);
@@ -58,7 +59,7 @@ describe("SessionPanel", () => {
         const root = panelPage();
         const saveReport = vi.fn();
         const copyLink = vi.fn();
-        new SessionPanel({ saveReport, copyLink });
+        new SessionPanel("me", { saveReport, copyLink });
         root.querySelector(".session-report").click();
         root.querySelector(".session-copy-link").click();
         expect(saveReport).toHaveBeenCalledOnce();
@@ -67,7 +68,7 @@ describe("SessionPanel", () => {
 
     it("does nothing on a page without the lights", () => {
         expect(() =>
-            new SessionPanel({ saveReport: () => {}, copyLink: () => {} }).show("guest", "joining", []),
+            new SessionPanel("me", { saveReport: () => {}, copyLink: () => {} }).show("guest", "joining", []),
         ).not.toThrow();
     });
 });

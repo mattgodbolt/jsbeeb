@@ -239,7 +239,7 @@ const settle = () => vi.advanceTimersByTimeAsync(0);
 // The lights' session readout, as index.html has it.
 const PanelMarkup = `<div id="session-panel" hidden>
     <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
-    <ul class="session-menu"><li><a href="#" class="session-copy-link"></a></li><li><a href="#" class="session-report"></a></li></ul></div>`;
+    <ul class="session-menu"><li><span class="session-you"></span></li><li><a href="#" class="session-copy-link"></a></li><li><a href="#" class="session-report"></a></li></ul></div>`;
 const message = (body) => ({ data: JSON.stringify(body) });
 // The second the session clock shows: wall time here, read as UTC.
 const wallClockSecondMs = (fromMs = Date.now()) =>
@@ -947,6 +947,7 @@ describe("startSessionFromUrl", () => {
             const panel = document.getElementById("session-panel");
             expect(panel.hidden).toBe(false);
             expect(panel.querySelector(".led").dataset.state).toBe("connecting");
+            expect(panel.querySelector(".session-you").textContent).toMatch(/^You are [a-z]+-[a-z]+-[a-z]+$/);
             panel.querySelector(".session-report").dispatchEvent(new MouseEvent("click", { cancelable: true }));
             const report = JSON.parse(await URL.createObjectURL.mock.calls[0][0].text());
             expect(report).toMatchObject({ role: "guest", room: "there", version: "1.0" });
