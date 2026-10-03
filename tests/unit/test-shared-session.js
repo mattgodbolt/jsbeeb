@@ -14,7 +14,7 @@ import {
     startSessionFromUrl,
 } from "../../src/web/shared-session.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
-import { LockstepHost, MaxGuestLagSeconds } from "../../src/lockstep.js";
+import { LockstepHost, MaxGuestLagSeconds, stateHash } from "../../src/lockstep.js";
 import { AdcCentreValue } from "../../src/adc.js";
 import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
@@ -246,6 +246,8 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} 
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
 const showLights = () => domFromIndexHtml("leds", "session-pane");
+const toastTexts = () => [...document.querySelectorAll(".toast .message")].map((each) => each.textContent);
+const desyncToasts = () => toastTexts().filter((text) => text.includes("desync"));
 const message = (body) => ({ data: JSON.stringify(body) });
 // The second the session clock shows: wall time here, read as UTC.
 const wallClockSecondMs = (fromMs = Date.now()) =>
@@ -297,8 +299,6 @@ describe("SessionHost", () => {
     const keyMessage = (input) => message({ type: "input", input });
 
     describe("the link to join", () => {
-        const toastTexts = () => [...document.querySelectorAll(".toast .message")].map((each) => each.textContent);
-
         afterEach(() => {
             delete navigator.clipboard;
             window.history.replaceState(null, "", "/");
@@ -676,6 +676,29 @@ describe("SessionHost", () => {
             happen(host, processor, first);
             host.execute(100);
             expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
+        });
+
+        it("says once that its replay desynced from the guest in control, and logs both hashes", async () => {
+            const { host, processor, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            const before = toastTexts().length;
+            first.emit("message", message({ type: "commit", at: 1000, upTo: 3000, inputs: [], hash: "nope" }));
+            host.execute(5000);
+            expect(toastTexts().slice(before)).toEqual([
+                "This machine desynced from Guest 1, which was in control, and took control back: state differs at " +
+                    "cycle 3000. Resyncing; please save a session report.",
+            ]);
+            expect(host.report().events.find((each) => each.event === "desync")).toEqual({
+                ms: expect.any(Number),
+                event: "desync",
+                guest: "g1",
+                reason: "state differs at cycle 3000",
+                cycle: 3000,
+                at: 1000,
+                upTo: 3000,
+                expectedHash: "nope",
+                hash: stateHash(processor),
+            });
         });
 
         it("keeps the session's clock when its replay disagrees rather than its machine jumping", async () => {
@@ -1334,6 +1357,39 @@ describe("SessionHost", () => {
         expect(host.connectedCount()).toBe(2);
     });
 
+    it("says when a guest desyncs and why, once however often it asks, and plainly that a second is a bug", async () => {
+        await hosting([
+            { guest: "g1", sdp: "offer" },
+            { guest: "g2", sdp: "offer" },
+        ]);
+        const first = connectTo(0);
+        const second = connectTo(1);
+        await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+        for (let i = 0; i < 3; ++i) first.emit("message", message({ type: "resync", reason: "state differs" }));
+        second.emit("message", message({ type: "resync", reason: "it moved" }));
+        expect(desyncToasts()).toEqual([
+            "Guest 1 desynced from this machine: state differs. Resyncing; please save a session report.",
+            "Another desync. Guest 2 desynced from this machine: it moved. More than one in a session is a bug: " +
+                "please save a session report here and on Guest 2's machine, and send both with a bug report.",
+        ]);
+    });
+
+    it("shows a guest that desynced as such until its next summary", async () => {
+        showLights();
+        const { host } = await hosting();
+        const channel = await joined();
+        const light = () => document.querySelectorAll("#session-panel .led")[1].dataset.state;
+        channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50, desyncs: 1 } }));
+        vi.advanceTimersByTime(StatsIntervalMs);
+        host.execute(0);
+        expect(light()).toBe("desynced");
+        expect(host.report().events.find((each) => each.event === "guest stats")).toMatchObject({ desyncs: 1 });
+        channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50 } }));
+        vi.advanceTimersByTime(StatsIntervalMs);
+        host.execute(0);
+        expect(light()).toBe("ok");
+    });
+
     it("logs only the resyncs it honours, so a guest asking without end cannot fill the log", async () => {
         const { host } = await hosting();
         const channel = await joined();
@@ -1970,6 +2026,59 @@ describe("SessionGuest", () => {
         await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
         lockstep().execute(100);
         expect(resyncsAsked(channel)).toBe(2);
+    });
+
+    describe("desyncing", () => {
+        const bogus = (at) => ({ at, upTo: at + 50, inputs: [], hash: "bogus" });
+
+        async function desyncedAt(at) {
+            const parts = await joining();
+            parts.deliver(snapshotMessages(at, [bogus(at)]));
+            await vi.waitFor(() => expect(parts.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            parts.lockstep().execute(100);
+            return parts;
+        }
+
+        it("says so and why, plainly that a second is a bug, and nothing more after", async () => {
+            const { context, deliver, lockstep } = await desyncedAt(100);
+            for (const [restores, at] of [
+                [2, 300],
+                [3, 500],
+            ]) {
+                deliver(snapshotMessages(at, [bogus(at)]));
+                await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(restores));
+                lockstep().execute(100);
+            }
+            expect(desyncToasts()).toEqual([
+                "This machine desynced from the host: state differs at cycle 150. Resyncing; please save a session " +
+                    "report.",
+                "Another desync. This machine desynced from the host: state differs at cycle 350. More than one in a " +
+                    "session is a bug: please save a session report here and on the host, and send both with a bug " +
+                    "report.",
+            ]);
+        });
+
+        it("logs where, in which commit, and both hashes", async () => {
+            const { guest, context } = await desyncedAt(100);
+            expect(guest.report().events.find((each) => each.event === "desync")).toEqual({
+                ms: expect.any(Number),
+                event: "desync",
+                reason: "state differs at cycle 150",
+                cycle: 150,
+                at: 100,
+                upTo: 150,
+                expectedHash: "bogus",
+                hash: stateHash(context.processor),
+            });
+        });
+
+        it("counts it in its summary", async () => {
+            const { channel, lockstep } = await desyncedAt(100);
+            vi.advanceTimersByTime(StatsIntervalMs);
+            lockstep().execute(100);
+            const [{ stats }] = channel.messages().filter((each) => each.type === "stats");
+            expect(stats.desyncs).toBe(1);
+        });
     });
 
     it("gives the guest the host's clock and offset, and its own back when the host goes", async () => {

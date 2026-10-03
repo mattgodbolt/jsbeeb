@@ -13,18 +13,26 @@ export const SilentMs = 3000;
 const MaxStarvedPerSecond = 2;
 const PaneGapPx = 6;
 
-const Descriptions = { connecting: "connecting", ok: "keeping up", lagging: "lagging", silent: "out of touch" };
+const Descriptions = {
+    connecting: "connecting",
+    ok: "keeping up",
+    lagging: "lagging",
+    desynced: "desynced",
+    silent: "out of touch",
+};
 export const PeerStates = new Set([...Object.keys(Descriptions), "left"]);
 
 /**
  * How a peer is doing, from what it last reported (`stats`, `statsAgeMs` after it came), until which
  * it is still joining: "connecting", "ok", "lagging" (a long way behind, or stuttering to keep up),
- * "silent" (nothing heard, or no commits getting through) or "left".
+ * "desynced" (it desynced in the interval those cover), "silent" (nothing heard, or no commits getting through) or
+ * "left".
  */
 export function peerState({ connected, left, stats, statsAgeMs }) {
     if (left) return "left";
     if (!connected || !stats) return "connecting";
     if (statsAgeMs >= SilentMs || stats.commits === 0) return "silent";
+    if (stats.desyncs > 0) return "desynced";
     if (stats.lagMs > LaggingMs || stats.starved > MaxStarvedPerSecond) return "lagging";
     return "ok";
 }

@@ -226,10 +226,7 @@ describe("lockstep sessions", () => {
         });
         expect(jumps).toBe(1);
         // Each is put right by the one resync it asks for, and the host's reset needs none.
-        expect(desyncs).toEqual([
-            "state differs from the host's at cycle 2617151",
-            "this machine moved from 1455645 by itself",
-        ]);
+        expect(desyncs).toEqual(["state differs at cycle 2617151", "this machine moved from 1455645 by itself"]);
         expect(mode7Text(host)).toContain("42");
         expectIdentical(host, guests);
     });
@@ -360,6 +357,28 @@ describe("lockstep sessions", () => {
             guest.lockstep.receive(commits[3]);
             expect(desyncs).toHaveLength(1);
             expect(desyncs[0]).toMatch(/starts at \d+, not \d+/);
+        });
+
+        it("says where its state parted from the host's, in which commit, and both hashes", async () => {
+            const { host, lockstep, commits } = await pair();
+            const desyncs = [];
+            const guest = await joining(lockstep, host.model.name, (...desync) => desyncs.push(desync));
+            for (let offset = 0; offset < ScribbleBytes; ++offset) {
+                guest.machine.processor.writemem(ScribbleAt + offset, Scribble);
+            }
+            lockstep.execute(host.model.cyclesPerSecond);
+            const [commit] = commits;
+            guest.lockstep.receive(commit);
+            guest.lockstep.execute(commit.upTo - commit.at);
+            const { at, upTo, hash } = commit;
+            expect(desyncs).toEqual([
+                [
+                    `state differs at cycle ${upTo}`,
+                    [],
+                    false,
+                    { cycle: upTo, at, upTo, expectedHash: hash, hash: stateHash(guest.machine.processor) },
+                ],
+            ]);
         });
 
         it("catches up a slice at a time when far behind, and runs no faster than asked when close", async () => {

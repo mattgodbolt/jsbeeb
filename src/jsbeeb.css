@@ -421,7 +421,8 @@ span.accesskey {
   --led: var(--led-data);
 }
 
-.led.session[data-state="lagging"] {
+.led.session[data-state="lagging"],
+.led.session[data-state="desynced"] {
   --led: var(--led-disc);
 }
 
