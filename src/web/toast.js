@@ -41,8 +41,9 @@ function remember(key, wanted) {
  * @param {object} [options]
  * @param {string} [options.title] a heading, for a notice whose message does not say where it came from
  * @param {string} [options.quietKey] offer to stop showing this kind of notice, remembering the answer here
+ * @param {{label: string, run: function(): void}} [options.action] a button for the one thing worth doing about it
  */
-export function toast(message, { title = "", quietKey = "" } = {}) {
+export function toast(message, { title = "", quietKey = "", action = null } = {}) {
     if (quietKey && remembered(quietKey)) return;
 
     const element = document.createElement("div");
@@ -58,6 +59,7 @@ export function toast(message, { title = "", quietKey = "" } = {}) {
         </div>
         <div class="toast-body">
             <div class="message"></div>
+            <button type="button" class="btn btn-sm btn-light mt-2 toast-action"></button>
             <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" id="${quietId}" />
                 <label class="form-check-label small" for="${quietId}">Stop telling me this</label>
@@ -67,6 +69,13 @@ export function toast(message, { title = "", quietKey = "" } = {}) {
     element.querySelector(".message").textContent = message;
     element.querySelector(".toast-header strong").textContent = title;
     element.querySelector(".toast-header").hidden = !title;
+
+    const actionButton = element.querySelector(".toast-action");
+    actionButton.hidden = !action;
+    if (action) {
+        actionButton.textContent = action.label;
+        actionButton.addEventListener("click", () => action.run());
+    }
 
     const quiet = element.querySelector(".form-check");
     quiet.hidden = !quietKey;

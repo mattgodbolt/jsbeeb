@@ -57,9 +57,9 @@ const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
 
-function notify(message) {
+function notify(message, options = {}) {
     console.log(`Shared session: ${message}`);
-    toast(message, { title: ToastTitle });
+    toast(message, { title: ToastTitle, ...options });
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -201,7 +201,7 @@ export class SessionHost {
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
         this.departed = [];
-        this.panel = new SessionPanel(() => saveReport(this));
+        this.panel = new SessionPanel(sessionMenu(this));
     }
 
     async start() {
@@ -217,10 +217,9 @@ export class SessionHost {
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
         window.addEventListener("pagehide", () => this.close());
-        const link = new URL(window.location.href);
-        link.search = `?client=${encodeURIComponent(this.room)}`;
-        link.hash = "";
-        notify(`Hosting "${this.room}". Guests join at ${link}`);
+        notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`, {
+            action: { label: "Copy link", run: () => copyJoinLink(this.room) },
+        });
         this.log.record("hosting");
         this.poll();
     }
@@ -563,7 +562,7 @@ export class SessionGuest {
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
-        this.panel = new SessionPanel(() => saveReport(this));
+        this.panel = new SessionPanel(sessionMenu(this));
         this.showStatus();
     }
 
@@ -843,6 +842,28 @@ function cleanRoster(guests) {
         you: guest?.you === true,
     }));
 }
+
+function joinLink(room) {
+    const link = new URL(window.location.href);
+    link.search = `?client=${encodeURIComponent(room)}`;
+    link.hash = "";
+    return link.toString();
+}
+
+// The emulator has the keyboard, so Ctrl-C cannot copy the link out of a toast.
+async function copyJoinLink(room) {
+    try {
+        await navigator.clipboard.writeText(joinLink(room));
+        toast("The link to join is on the clipboard.", { title: ToastTitle });
+    } catch (error) {
+        notify(`Couldn't copy the link (${error.message}). Guests join at ${joinLink(room)}`);
+    }
+}
+
+const sessionMenu = (session) => ({
+    saveReport: () => saveReport(session),
+    copyLink: () => copyJoinLink(session.room),
+});
 
 function saveReport(session) {
     const report = session.report();

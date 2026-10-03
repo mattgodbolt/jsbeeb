@@ -239,7 +239,7 @@ const settle = () => vi.advanceTimersByTimeAsync(0);
 // The lights' session readout, as index.html has it.
 const PanelMarkup = `<div id="session-panel" hidden>
     <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
-    <ul class="session-menu"><li><a href="#" class="session-report"></a></li></ul></div>`;
+    <ul class="session-menu"><li><a href="#" class="session-copy-link"></a></li><li><a href="#" class="session-report"></a></li></ul></div>`;
 const message = (body) => ({ data: JSON.stringify(body) });
 // The second the session clock shows: wall time here, read as UTC.
 const wallClockSecondMs = (fromMs = Date.now()) =>
@@ -289,6 +289,39 @@ describe("SessionHost", () => {
     }
 
     const keyMessage = (input) => message({ type: "input", input });
+
+    describe("the link to join", () => {
+        const toastTexts = () => [...document.querySelectorAll(".toast .message")].map((each) => each.textContent);
+
+        afterEach(() => {
+            delete navigator.clipboard;
+            window.history.replaceState(null, "", "/");
+        });
+
+        it("is copied by the button on the hosting notice, whatever the host's own URL holds", async () => {
+            const writeText = vi.fn(async () => {});
+            Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+            window.history.replaceState(null, "", "/?server=room&model=Master#frag");
+            await hosting([]);
+            document.querySelector(".toast-action").click();
+            await settle();
+            expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?client=room`);
+            expect(toastTexts()).toContain("The link to join is on the clipboard.");
+        });
+
+        it("is shown in full when the clipboard refuses it", async () => {
+            const writeText = vi.fn(async () => {
+                throw new Error("not allowed");
+            });
+            Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+            await hosting([]);
+            document.querySelector(".toast-action").click();
+            await settle();
+            expect(toastTexts().at(-1)).toBe(
+                `Couldn't copy the link (not allowed). Guests join at ${window.location.origin}/?client=room`,
+            );
+        });
+    });
 
     it("holds the analogue inputs at the centre for the session, and gives back an ordinary page when it closes", async () => {
         const { host, processor, context } = await hosting([]);

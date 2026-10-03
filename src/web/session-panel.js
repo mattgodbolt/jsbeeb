@@ -35,14 +35,19 @@ export function peerDetail({ state, rttMs, lagMs, leftReason }) {
 }
 
 export class SessionPanel {
-    constructor(onSaveReport, root = document.getElementById("session-panel")) {
+    constructor({ saveReport, copyLink }, root = document.getElementById("session-panel")) {
         this.root = root;
         if (!root) return;
         root.hidden = false;
-        root.querySelector(".session-report").addEventListener("click", (event) => {
-            event.preventDefault();
-            onSaveReport();
-        });
+        for (const [selector, run] of [
+            [".session-report", saveReport],
+            [".session-copy-link", copyLink],
+        ]) {
+            root.querySelector(selector).addEventListener("click", (event) => {
+                event.preventDefault();
+                run();
+            });
+        }
     }
 
     /**

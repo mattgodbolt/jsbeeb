@@ -30,13 +30,14 @@ describe("SessionPanel", () => {
     function panelPage() {
         document.body.innerHTML = `<div id="session-panel" hidden>
             <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
-            <ul class="session-menu"><li><hr></li><li><a href="#" class="session-report"></a></li></ul></div>`;
+            <ul class="session-menu"><li><hr></li><li><a href="#" class="session-copy-link"></a></li>
+            <li><a href="#" class="session-report"></a></li></ul></div>`;
         return document.getElementById("session-panel");
     }
 
     it("shows a light and a line for each peer, replacing the last ones", () => {
         const root = panelPage();
-        const panel = new SessionPanel(() => {});
+        const panel = new SessionPanel({ saveReport: () => {}, copyLink: () => {} });
         panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting" }]);
         panel.show("hosting", "2 guests", [
             { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40 },
@@ -53,15 +54,20 @@ describe("SessionPanel", () => {
         ]);
     });
 
-    it("saves the report from its menu", () => {
+    it("saves the report and copies the link from its menu", () => {
         const root = panelPage();
-        const save = vi.fn();
-        new SessionPanel(save);
+        const saveReport = vi.fn();
+        const copyLink = vi.fn();
+        new SessionPanel({ saveReport, copyLink });
         root.querySelector(".session-report").click();
-        expect(save).toHaveBeenCalledOnce();
+        root.querySelector(".session-copy-link").click();
+        expect(saveReport).toHaveBeenCalledOnce();
+        expect(copyLink).toHaveBeenCalledOnce();
     });
 
     it("does nothing on a page without the lights", () => {
-        expect(() => new SessionPanel(() => {}).show("guest", "joining", [])).not.toThrow();
+        expect(() =>
+            new SessionPanel({ saveReport: () => {}, copyLink: () => {} }).show("guest", "joining", []),
+        ).not.toThrow();
     });
 });

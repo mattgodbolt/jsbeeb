@@ -38,6 +38,18 @@ describe("toast", () => {
         expect(toasts()[0].querySelector(".toast-header strong").textContent).toBe("Disc drive");
     });
 
+    it("offers its one action as a button, and no button without one", () => {
+        const run = vi.fn();
+        toast("Hosting.", { action: { label: "Copy link", run } });
+        toast("A disc was swapped.");
+
+        const [withAction, without] = toasts().map((each) => each.querySelector(".toast-action"));
+        expect(withAction.textContent).toBe("Copy link");
+        withAction.click();
+        expect(run).toHaveBeenCalledOnce();
+        expect(without.hidden).toBe(true);
+    });
+
     it("keeps its head down when there is nothing to head it with", () => {
         toast("A disc was swapped.");
 
