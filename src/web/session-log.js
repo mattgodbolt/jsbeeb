@@ -87,12 +87,10 @@ export class IntervalStats {
     }
 }
 
-/** Only the numbers from a peer's summary, which goes into the log as it is. */
-export function numbersOnly(summary) {
+/** The `keys` of a peer's summary that hold numbers, and nothing else of it, since it goes into the log. */
+export function numbersFrom(summary, keys) {
     if (!summary || typeof summary !== "object") return {};
-    return Object.fromEntries(
-        Object.entries(summary).filter(([, value]) => typeof value === "number" && Number.isFinite(value)),
-    );
+    return Object.fromEntries(keys.filter((key) => Number.isFinite(summary[key])).map((key) => [key, summary[key]]));
 }
 
 const defined = (fields) => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));

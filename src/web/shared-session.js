@@ -18,7 +18,7 @@ import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { connectionStats, IntervalStats, numbersOnly, SessionLog } from "./session-log.js";
+import { connectionStats, IntervalStats, numbersFrom, SessionLog, StatsIntervalMs } from "./session-log.js";
 import { PeerStates, peerState, SessionPanel } from "./session-panel.js";
 import { downloadBlob } from "./dom-utils.js";
 import { toast } from "./toast.js";
@@ -39,6 +39,19 @@ const ToastTitle = "Shared session";
 const RoomGone = 404;
 const MaxReasonLength = 200;
 const MaxNameLength = 32;
+// What a guest's summary may hold; anything else it sends is dropped, so it cannot rewrite the host's log.
+const GuestStatsKeys = [
+    "frames",
+    "framesMaxGapMs",
+    "commits",
+    "commitsMaxGapMs",
+    "lagMs",
+    "maxLagMs",
+    "starved",
+    "catchingUp",
+];
+// A guest sends a summary each StatsIntervalMs; more often than this, the rest are dropped.
+const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
 // Far more guests than a session can hold, so a hostile host cannot flood a guest's lights.
 const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
@@ -101,8 +114,9 @@ export const randomName = () => humanId({ separator: "-", capitalize: false });
 /** What to call someone, from a name they or a peer gave, or null if it has nothing printable. */
 export function cleanName(name) {
     if (typeof name !== "string") return null;
+    // The control characters, and the bidirectional ones that could reorder a name among others.
     // eslint-disable-next-line no-control-regex
-    const printable = name.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+    const printable = name.replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "").trim();
     return printable.slice(0, MaxNameLength) || null;
 }
 
@@ -314,6 +328,11 @@ export class SessionHost {
         const guest = {
             id,
             number: ++this.guestsSeen,
+            name: null,
+            saidHello: false,
+            stats: null,
+            statsMs: -Infinity,
+            rttMs: undefined,
             pc,
             channel: null,
             ready: false,
@@ -374,14 +393,15 @@ export class SessionHost {
             else guest.held.delete(mappingKey(mapping));
             const guestMs = Number.isFinite(message.ms) ? message.ms : undefined;
             this.input({ kind: "key", mapping, down }, { guest: guest.id, guestMs });
-        } else if (message.type === "hello") {
+        } else if (message.type === "hello" && !guest.saidHello) {
+            guest.saidHello = true;
             guest.name = cleanName(message.name);
             this.log.record("hello", { guest: guest.id, name: guest.name });
             this.showStatus();
-        } else if (message.type === "stats") {
-            guest.stats = numbersOnly(message.stats);
+        } else if (message.type === "stats" && this.log.elapsed() - guest.statsMs >= MinGuestStatsIntervalMs) {
+            guest.stats = numbersFrom(message.stats, GuestStatsKeys);
             guest.statsMs = this.log.elapsed();
-            this.log.record("guest stats", { guest: guest.id, ...guest.stats });
+            this.log.record("guest stats", { ...guest.stats, guest: guest.id });
         } else if (message.type === "bye") {
             this.drop(guest, "it said goodbye");
         } else if (message.type === "resync") {
@@ -535,6 +555,7 @@ export class SessionGuest {
         });
         this.stats = new IntervalStats();
         this.lastStats = null;
+        this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
         this.panel = new SessionPanel(() => saveReport(this));
@@ -552,6 +573,7 @@ export class SessionGuest {
         const host = {
             label: this.hostName ?? "Host",
             state,
+            rttMs: this.rttMs,
             lagMs: this.lastStats?.lagMs,
             leftReason: this.leftReason,
         };
@@ -604,12 +626,12 @@ export class SessionGuest {
     }
 
     // Starved: the guest has caught the host up and waits on its next commit. Catching up: far enough behind
-    // that it runs more than its slice.
+    // that it runs more than its slice, as LockstepGuest.replay decides.
     execute(cycles) {
         const { processor } = this.context;
         const { lockstep, stats } = this;
         const cyclesPerMs = processor.model.cyclesPerSecond / 1000;
-        const catchingUp = lockstep.behind() > MaxGuestLagSeconds * 1000 * cyclesPerMs;
+        const catchingUp = lockstep.behind() - MaxGuestLagSeconds * 1000 * cyclesPerMs > cycles;
         const before = cycleCount(processor);
         const running = lockstep.execute(cycles);
         const ran = cycleCount(processor) - before;
@@ -626,6 +648,13 @@ export class SessionGuest {
             this.send({ type: "stats", stats: summary });
             this.lastStats = summary;
             this.showStatus();
+            connectionStats(this.pc).then(
+                (connection) => {
+                    this.rttMs = connection.rttMs;
+                    this.log.record("connection", connection);
+                },
+                () => {},
+            );
         }
         return running;
     }
@@ -691,7 +720,8 @@ export class SessionGuest {
 
     welcome({ model, version, name }) {
         this.hostName = cleanName(name);
-        this.log.record("welcome", { model: String(model), version: String(version), name: this.hostName });
+        const field = (value) => String(value).slice(0, MaxReasonLength);
+        this.log.record("welcome", { model: field(model), version: field(version), name: this.hostName });
         this.showStatus();
         if (typeof model !== "string" || !findModel(model)) {
             this.fail("the host did not say what machine it is");
@@ -739,6 +769,8 @@ export class SessionGuest {
             this.lockstep.resync();
         } else {
             this.lockstep = new LockstepGuest(processor, (reason) => this.desynced(reason));
+            // The first summary would otherwise cover the whole of joining.
+            this.stats = new IntervalStats();
             loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
             notify(`Joined "${this.room}".`);
             this.showStatus();

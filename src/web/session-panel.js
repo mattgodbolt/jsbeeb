@@ -9,17 +9,17 @@ export const SilentMs = 3000;
 // A guest that runs out of the host's commits now and then is barely seen; more often, it stutters.
 const MaxStarvedPerSecond = 2;
 
-const Descriptions = { connecting: "connecting", ok: "keeping up", lagging: "lagging", silent: "not heard from" };
+const Descriptions = { connecting: "connecting", ok: "keeping up", lagging: "lagging", silent: "out of touch" };
 export const PeerStates = new Set([...Object.keys(Descriptions), "left"]);
 
 /**
- * How a peer is doing, from what it last reported (`stats`, `statsAgeMs` after it came):
- * "connecting", "ok", "lagging" (a long way behind, or stuttering to keep up), "silent" or "left".
+ * How a peer is doing, from what it last reported (`stats`, `statsAgeMs` after it came), until which
+ * it is still joining: "connecting", "ok", "lagging" (a long way behind, or stuttering to keep up),
+ * "silent" (nothing heard, or no commits getting through) or "left".
  */
 export function peerState({ connected, left, stats, statsAgeMs }) {
     if (left) return "left";
-    if (!connected) return "connecting";
-    if (!stats) return "ok";
+    if (!connected || !stats) return "connecting";
     if (statsAgeMs > SilentMs || stats.commits === 0) return "silent";
     if (stats.lagMs > LaggingMs || stats.starved > MaxStarvedPerSecond || stats.catchingUp > 0) return "lagging";
     return "ok";

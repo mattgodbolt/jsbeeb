@@ -270,6 +270,10 @@ span.accesskey {
   display: none;
 }
 
+#leds .session-menu .dropdown-item-text {
+  white-space: nowrap;
+}
+
 #leds .session-peers {
   grid-row: 3;
   grid-column: 1 / -1;

@@ -9,7 +9,7 @@ describe("peerState", () => {
     it.each([
         ["left", { left: true, connected: true }],
         ["connecting", { connected: false }],
-        ["ok", { connected: true }],
+        ["connecting", { connected: true }],
         ["ok", { connected: true, stats: keepingUp, statsAgeMs: 0 }],
         ["silent", { connected: true, stats: keepingUp, statsAgeMs: SilentMs + 1 }],
         ["silent", { connected: true, stats: { ...keepingUp, commits: 0 }, statsAgeMs: 0 }],
@@ -37,19 +37,19 @@ describe("SessionPanel", () => {
     it("shows a light and a line for each peer, replacing the last ones", () => {
         const root = panelPage();
         const panel = new SessionPanel(() => {});
-        panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting", detail: "connecting" }]);
+        panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting" }]);
         panel.show("hosting", "2 guests", [
-            { label: "Guest 1", state: "ok", detail: "keeping up" },
-            { label: "Guest 2", state: "lagging", detail: "lagging" },
+            { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40 },
+            { label: "Guest 2", state: "left", leftReason: "it said goodbye" },
         ]);
         expect(root.hidden).toBe(false);
         expect(root.querySelector(".session-summary").textContent).toBe("2 guests");
         const lights = [...root.querySelectorAll(".led")];
-        expect(lights.map((light) => light.dataset.state)).toEqual(["ok", "lagging"]);
+        expect(lights.map((light) => light.dataset.state)).toEqual(["ok", "left"]);
         expect(lights.every((light) => light.classList.contains("on"))).toBe(true);
         expect([...root.querySelectorAll(".session-peer")].map((line) => line.textContent)).toEqual([
-            "Guest 1: keeping up",
-            "Guest 2: lagging",
+            "Guest 1: keeping up, 85 ms round trip, 40 ms behind",
+            "Guest 2: left: it said goodbye",
         ]);
     });
 

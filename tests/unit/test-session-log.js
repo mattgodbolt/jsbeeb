@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
-import { connectionStats, IntervalStats, numbersOnly, SessionLog, StatsIntervalMs } from "../../src/web/session-log.js";
+import { connectionStats, IntervalStats, numbersFrom, SessionLog, StatsIntervalMs } from "../../src/web/session-log.js";
 
 function clock() {
     let ms = 1000;
@@ -51,11 +51,12 @@ describe("IntervalStats", () => {
     });
 });
 
-describe("numbersOnly", () => {
-    it("keeps only the finite numbers of a peer's summary", () => {
-        expect(numbersOnly({ lagMs: 4, note: "x", bad: Infinity, nested: {} })).toEqual({ lagMs: 4 });
-        expect(numbersOnly("nonsense")).toEqual({});
-        expect(numbersOnly(null)).toEqual({});
+describe("numbersFrom", () => {
+    it("keeps only the named keys of a peer's summary that hold finite numbers", () => {
+        const summary = { lagMs: 4, frames: Infinity, note: "x", ms: 1 };
+        expect(numbersFrom(summary, ["lagMs", "frames", "note", "starved"])).toEqual({ lagMs: 4 });
+        expect(numbersFrom("nonsense", ["lagMs"])).toEqual({});
+        expect(numbersFrom(null, ["lagMs"])).toEqual({});
     });
 });
 
