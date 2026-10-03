@@ -1,7 +1,8 @@
 import * as bootstrap from "bootstrap";
 
 /**
- * Passing notices: something happened that is worth knowing and needs nothing doing about it.
+ * Passing notices: something happened that is worth knowing and needs nothing doing about it,
+ * beyond perhaps one optional action.
  * The error dialog is for the other kind.
  */
 
