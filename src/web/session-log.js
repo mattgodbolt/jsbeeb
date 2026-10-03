@@ -5,7 +5,7 @@
 const MaxEvents = 20000;
 export const StatsIntervalMs = 1000;
 
-/** Milliseconds to a tenth, as everything in the log is. */
+/** Milliseconds to a tenth, as every time the log records is. */
 export const rounded = (ms) => Math.round(ms * 10) / 10;
 
 export class SessionLog {
