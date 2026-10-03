@@ -6,7 +6,7 @@ const BootTimeoutMs = 30000;
 const KeyHoldMs = 120;
 
 /** The page with jsbeeb on it, reached through the console surface main.js exposes. */
-class Beeb {
+export class Beeb {
     constructor(page) {
         this.page = page;
         this.problems = [];

@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.1...v2.3.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* count T2 in 8 bits with relatching while it clocks the shift register ([#1181](https://github.com/mattgodbolt/jsbeeb/issues/1181)) ([5855295](https://github.com/mattgodbolt/jsbeeb/commit/585529582ad64e2c284362c00f41e657a9d024ef))
+* start the even field's half-line vsync at (R0+1)/2, not R0/2 ([#1177](https://github.com/mattgodbolt/jsbeeb/issues/1177)) ([8d7d4e1](https://github.com/mattgodbolt/jsbeeb/commit/8d7d4e1badc85a17664f84ec1876dfab03fd7f4a))
+
 ## [2.3.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.0...v2.3.1) (2026-09-23)
 
 

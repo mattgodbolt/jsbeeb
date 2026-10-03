@@ -358,6 +358,23 @@
             <span class="virtualMHz"></span>
           </div>
         </div>
+        <div class="session-readout dropup" id="session-panel" hidden>
+          <button
+            type="button"
+            class="slot-readout"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            title="Shared session: who is connected, and how well"
+          >
+            <span class="hdr session-heading">session</span>
+            <span class="name session-summary"></span>
+            <span class="session-peers"></span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-dark session-menu">
+            <li><hr class="dropdown-divider" /></li>
+            <li><a href="#" class="dropdown-item session-report">Save session report</a></li>
+          </ul>
+        </div>
       </div>
       <div id="drop-zone" class="drop-zone" hidden aria-hidden="true">
         <div class="drop-zone-card">

@@ -187,6 +187,37 @@ describe("Via snapshotState / restoreState", () => {
             expect(via2.shiftLockLight).toBe(true);
         });
 
+        it("hands the held keys, including a forced and a physical SHIFT, to another machine", () => {
+            const via = makeSysVia();
+            via.setMapped([BBC.A[0], BBC.A[1], true], 1);
+            via.keyDown(keyCodes.SHIFT_LEFT, false);
+            const via2 = makeSysVia();
+            via2.restoreKeyboard(via.keyboardState());
+            expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
+            via2.setMapped([BBC.A[0], BBC.A[1], true], 0);
+            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
+            via2.keyUp(keyCodes.SHIFT_LEFT);
+            expect(via2.hasAnyKeyDown()).toBe(false);
+        });
+
+        it("hands over which way a held key forces SHIFT", () => {
+            const via = makeSysVia();
+            via.setMapped([BBC.A[0], BBC.A[1], true], 1);
+            const via2 = makeSysVia();
+            via2.restoreKeyboard(via.keyboardState());
+            via2.setMapped(BBC.B, 1);
+            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
+        });
+
+        it("leaves the held keys alone when restoring a snapshot", () => {
+            const via = makeSysVia();
+            const snapshot = via.snapshotState();
+            const via2 = makeSysVia();
+            via2.keyDown(keyCodes.A, false);
+            via2.restoreState(snapshot);
+            expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
+        });
+
         it("should include base Via fields in SysVia snapshot", () => {
             const via = makeSysVia();
             via.ora = 0x77;
@@ -484,5 +515,183 @@ describe("SysVia natural keyboard shift override", () => {
         via.keyDown("6", false);
         expect(bbcKeyPressed(BBC.K6)).toBe(true);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+    });
+});
+
+describe("Via T2 clocking the shift register", () => {
+    const ORB = 0x0,
+        DDRB = 0x2,
+        T2CL = 0x8,
+        T2CH = 0x9,
+        ACR = 0xb,
+        IFR = 0xd,
+        IER = 0xe;
+    const AcrShiftOutFreeRunningT2 = 0x10;
+    const AcrT2CountsPb6 = 0x20;
+    const Pb6 = 0x40;
+    const Timer2Int = 0x20;
+    const TicksPerMicrosecond = 2;
+
+    let via, scheduler, cpu;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+        via = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        via.write(ACR, AcrShiftOutFreeRunningT2);
+    });
+
+    function runMicroseconds(us) {
+        scheduler.polltime(us * TicksPerMicrosecond);
+    }
+
+    function start(lowLatch, high) {
+        via.write(T2CL, lowLatch);
+        via.write(T2CH, high);
+    }
+
+    it("should decrement T2 high once per low-latch-plus-two microseconds", () => {
+        const lowLatch = 10;
+        start(lowLatch, 200);
+        runMicroseconds(5 * (lowLatch + 2));
+        expect(via.read(T2CH)).toBe(195);
+    });
+
+    it("should change rate at the next relatch when the low latch is rewritten", () => {
+        start(10, 200);
+        runMicroseconds(12);
+        via.write(T2CL, 30);
+        runMicroseconds(3 * 32);
+        expect(via.read(T2CH)).toBe(196);
+    });
+
+    it("should not reload T2 high from the latch when the low byte relatches", () => {
+        start(3, 1);
+        runMicroseconds(3 * 5);
+        expect(via.read(T2CH)).toBe(0xfe);
+    });
+
+    it("should raise the one-shot T2 interrupt only when T2 high wraps", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(2 * 6);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+        runMicroseconds(6);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should assert the interrupt when T2 high wraps without the VIA being read", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(3 * 6 - 1);
+        expect(cpu.interrupt).toBeFalsy();
+        runMicroseconds(1);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should move the interrupt when the low latch is rewritten mid-flight", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(10, 1);
+        via.write(T2CL, 3);
+        runMicroseconds(12 + 5 - 1);
+        expect(cpu.interrupt).toBeFalsy();
+        runMicroseconds(1);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should time the interrupt from a count already running when shift mode is entered", () => {
+        via.write(ACR, 0);
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        via.write(ACR, AcrShiftOutFreeRunningT2);
+        runMicroseconds(3 * 6 - 1);
+        expect(cpu.interrupt).toBeFalsy();
+        runMicroseconds(1);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should not let an IFR write on the wrapping cycle clear the interrupt", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(3 * 6);
+        via.write(IFR, Timer2Int);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        runMicroseconds(1);
+        via.write(IFR, Timer2Int);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+    });
+
+    it("should not raise the interrupt on a second wrap without a T2 high write", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 0);
+        runMicroseconds(7);
+        via.write(IFR, Timer2Int);
+        runMicroseconds(257 * 6);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+    });
+
+    it("should raise the interrupt again after T2 high is rewritten", () => {
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 0);
+        runMicroseconds(7);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        via.write(T2CH, 1);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+        runMicroseconds(2 * 6);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+    });
+
+    it("should keep the count when leaving shift mode just after an underflow", () => {
+        start(7, 5);
+        runMicroseconds(9);
+        expect([via.read(T2CH), via.read(T2CL)]).toEqual([4, 0xff]);
+        via.write(ACR, 0);
+        expect([via.read(T2CH), via.read(T2CL)]).toEqual([4, 0xff]);
+    });
+
+    it("should carry T2 high through a snapshot", () => {
+        start(7, 100);
+        runMicroseconds(3 * 9 + 2);
+        const restored = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        restored.restoreState(via.snapshotState());
+        expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
+    });
+
+    it("should split a snapshot's 16-bit count when it has no T2 high", () => {
+        start(7, 100);
+        runMicroseconds(3 * 9 + 2);
+        const { t2High, ...older } = via.snapshotState();
+        older.t2c += t2High << 9;
+        const restored = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        restored.restoreState(older);
+        expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
+    });
+
+    it("should keep T2 running as the shift clock when the PB6 counting bit is also set", () => {
+        via.write(ACR, AcrShiftOutFreeRunningT2 | AcrT2CountsPb6);
+        via.write(IER, 0x80 | Timer2Int);
+        start(4, 2);
+        runMicroseconds(3 * 6);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it("should not count PB6 pulses into T2 while it clocks the shift register", () => {
+        via.write(ACR, AcrShiftOutFreeRunningT2 | AcrT2CountsPb6);
+        start(7, 100);
+        via.write(DDRB, Pb6);
+        via.write(ORB, Pb6);
+        const before = via.read(T2CL);
+        via.write(ORB, 0);
+        expect(via.read(T2CL)).toBe(before);
+    });
+
+    it("should hand the counter back to 16-bit mode on leaving shift mode", () => {
+        start(7, 100);
+        runMicroseconds(2);
+        via.write(ACR, 0);
+        expect(via.read(T2CH)).toBe(100);
+        runMicroseconds(0x100);
+        expect(via.read(T2CH)).toBe(99);
     });
 });

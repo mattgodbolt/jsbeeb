@@ -1,5 +1,7 @@
 import { BBC, getKeyMap } from "./keymap.js";
 
+export const KeyMatrixSize = 16;
+
 const ORB = 0x0,
     ORA = 0x1,
     DDRB = 0x2,
@@ -50,6 +52,7 @@ class Via {
         this.ier = 0;
         this.t1hit = false;
         this.t2hit = false;
+        this.t2High = 0;
         this.portapins = 0;
         this.portbpins = 0;
         this.ca1 = false;
@@ -76,15 +79,40 @@ class Via {
         this.t1c = this.t1l = this.t2c = this.t2l = 0x1fffe;
         this.t1hit = this.t2hit = true;
         this.acr = this.pcr = 0;
+        this.t2High = 0;
         this.t1_pb7 = 1;
         this.ca2PulseTask.cancel();
         this.cb2PulseTask.cancel();
         this.updateNextTime();
     }
 
+    _t2ClocksShifter() {
+        return (this.acr & 0x1c) === 0x10;
+    }
+
+    _t2ShiftPeriod() {
+        return (this.t2l & 0x1fe) + 4;
+    }
+
+    _splitT2ForShifting() {
+        const count = this.t2c + 1;
+        this.t2High = (count >>> 9) & 0xff;
+        this.t2c = (count & 0x1ff) - 1;
+    }
+
+    // Between an underflow and its relatch, t2High has already stepped down for it.
+    _joinT2FromShifting() {
+        this.t2c += (this.t2High + (this.t2c < -2 ? 1 : 0)) << 9;
+    }
+
     updateNextTime() {
         let nextTimer = this.t1c;
-        if (!(this.acr & 0x20)) nextTimer = Math.min(this.t2c, nextTimer);
+        if (this._t2ClocksShifter()) {
+            if (!this.t2hit) {
+                const underflowsToWrap = this.t2High + (this.t2c < -2 ? 1 : 0);
+                nextTimer = Math.min(this.t2c + underflowsToWrap * this._t2ShiftPeriod(), nextTimer);
+            }
+        } else if (!(this.acr & 0x20)) nextTimer = Math.min(this.t2c, nextTimer);
         this.task.reschedule(Math.max(1, nextTimer));
     }
 
@@ -106,7 +134,9 @@ class Via {
         if (newT1c < -2) this.t1c = this._handleT1c(newT1c);
         else this.t1c = newT1c;
 
-        if (!(this.acr & 0x20)) {
+        if (this._t2ClocksShifter()) {
+            this._pollT2Shifting(cycles);
+        } else if (!(this.acr & 0x20)) {
             const newT2c = this.t2c - cycles;
             if (newT2c < -2) this.t2c = this._handleT2c(newT2c);
             else this.t2c = newT2c;
@@ -125,6 +155,27 @@ class Via {
         }
         while (newT1c < -3) newT1c += this.t1l + 4;
         return newT1c;
+    }
+
+    // T2 high steps down as T2 low reaches FF (-3, as in 16-bit mode), and the relatch lands a cycle later. See
+    // beebjit via.c via_shift_fired and make_timing_rom.c.
+    _pollT2Shifting(cycles) {
+        const period = this._t2ShiftPeriod();
+        let newT2c = this.t2c - cycles;
+        if (newT2c <= -3) {
+            const firstUnderflow = this.t2c > -3 ? 0 : 1;
+            const lastUnderflow = Math.floor((-3 - newT2c) / period);
+            const underflows = lastUnderflow - firstUnderflow + 1;
+            if (underflows > this.t2High && !this.t2hit) {
+                this.ifr |= TIMER2INT;
+                this.updateIFR();
+                if (newT2c === -3 - (firstUnderflow + this.t2High) * period) this.justhit |= 2;
+                this.t2hit = true;
+            }
+            this.t2High = (this.t2High - underflows) & 0xff;
+        }
+        if (newT2c < -4) newT2c += Math.ceil((-4 - newT2c) / period) * period;
+        this.t2c = newT2c;
     }
 
     _handleT2c(newT2c) {
@@ -214,10 +265,16 @@ class Via {
                 this.recalculatePortBPins();
                 break;
 
-            case ACR:
+            case ACR: {
+                const wasShifting = this._t2ClocksShifter();
                 this.acr = val;
                 if (this.justhit & 1 && !(val & 0x40)) this.t1hit = true;
+                const isShifting = this._t2ClocksShifter();
+                if (!wasShifting && isShifting) this._splitT2ForShifting();
+                else if (wasShifting && !isShifting) this._joinT2FromShifting();
+                this.updateNextTime();
                 break;
+            }
 
             case PCR:
                 this.pcr = val;
@@ -262,13 +319,19 @@ class Via {
             case T2CL:
                 this.t2l &= 0x1fe00;
                 this.t2l |= val << 1;
+                if (this._t2ClocksShifter()) this.updateNextTime();
                 break;
 
             case T2CH:
                 this.t2l &= 0x1fe;
                 this.t2l |= val << 9;
-                this.t2c = this.t2l + 1;
-                if (this.acr & 0x20) this.t2c -= 2;
+                if (this._t2ClocksShifter()) {
+                    this.t2High = val;
+                    this.t2c = (this.t2l & 0x1fe) + 1;
+                } else {
+                    this.t2c = this.t2l + 1;
+                    if (this.acr & 0x20) this.t2c -= 2;
+                }
                 if (!(this.justhit & 2)) {
                     this.ifr &= ~TIMER2INT;
                     this.updateIFR();
@@ -355,6 +418,7 @@ class Via {
                 return ((this.t2c + 1) >>> 1) & 0xff;
 
             case T2CH:
+                if (this._t2ClocksShifter()) return this.t2High;
                 return ((this.t2c + 1) >>> 9) & 0xff;
 
             case SR:
@@ -399,7 +463,7 @@ class Via {
         this.drivePortB();
         if (prevPb6 && !(this.portbpins & 0x40)) {
             // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
-            if (this.acr & 0x20) {
+            if (this.acr & 0x20 && !this._t2ClocksShifter()) {
                 this.t2c -= 2;
                 // Not clear what happens here. Docs say:
                 // "When the T2 counter reaches a count of zero, IFR5 is set and the counter continues to decrement with
@@ -443,6 +507,7 @@ class Via {
             ier: this.ier,
             t1hit: this.t1hit,
             t2hit: this.t2hit,
+            t2High: this.t2High,
             portapins: this.portapins,
             portbpins: this.portbpins,
             ca1: this.ca1,
@@ -476,6 +541,9 @@ class Via {
         this.ier = state.ier;
         this.t1hit = state.t1hit;
         this.t2hit = state.t2hit;
+        if (state.t2High !== undefined) this.t2High = state.t2High;
+        else if (this._t2ClocksShifter()) this._splitT2ForShifting();
+        else this.t2High = 0;
         this.portapins = state.portapins;
         this.portbpins = state.portbpins;
         this.ca1 = state.ca1;
@@ -556,8 +624,8 @@ export class SysVia extends Via {
         this.capsLockLight = false;
         this.shiftLockLight = false;
         this.keys = [];
-        for (let i = 0; i < 16; ++i) {
-            this.keys[i] = new Uint8Array(16);
+        for (let i = 0; i < KeyMatrixSize; ++i) {
+            this.keys[i] = new Uint8Array(KeyMatrixSize);
         }
         // Mouse joystick button state
         this.mouseButton1 = false;
@@ -583,6 +651,27 @@ export class SysVia extends Via {
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
         };
+    }
+
+    /**
+     * The keys held down, which snapshots leave out so that a rewind or a loaded state
+     * keeps the keys the person is actually holding.
+     */
+    keyboardState() {
+        return {
+            keys: this.keys.map((column) => Array.from(column)),
+            physicalShiftDown: this._physicalShiftDown,
+            shiftOverrideActive: this._shiftOverrideActive,
+            shiftOverrideDesiredShift: this._shiftOverrideDesiredShift,
+        };
+    }
+
+    restoreKeyboard(state) {
+        state.keys.forEach((column, col) => this.keys[col].set(column));
+        this._physicalShiftDown = state.physicalShiftDown;
+        this._shiftOverrideActive = state.shiftOverrideActive;
+        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
+        this.updateKeys();
     }
 
     restoreState(state) {
@@ -631,10 +720,20 @@ export class SysVia extends Via {
     }
 
     set(key, val, shiftDown) {
-        if (!this.keyboardEnabled) return;
-        const mapping = this.keycodeToRowCol[!!shiftDown][key];
-        if (!mapping) return;
+        const mapping = this.keyMapping(key, shiftDown);
+        if (mapping) this.setMapped(mapping, val);
+    }
 
+    /**
+     * Where a key code lands on the BBC's key matrix under the current layout, as
+     * `[col, row, bbcShiftOverride?]`, or undefined.
+     */
+    keyMapping(key, shiftDown) {
+        return this.keycodeToRowCol[!!shiftDown][key];
+    }
+
+    setMapped(mapping, val) {
+        if (!this.keyboardEnabled) return;
         const [col, row, bbcShiftOverride] = mapping;
         const [shiftCol, shiftRow] = BBC.SHIFT;
 

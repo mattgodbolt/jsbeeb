@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchWithRetry, HttpError, isTransient, parseZipLinks } from "../../tools/mirror-sth.js";
+import { fetchWithRetry, HttpError, isTransient, parseZipLinks } from "../../../tools/mirror-sth.js";
 
 const DiskIndex = "https://www.stairwaytohell.com/bbc/archive/diskimages/reclist.php?sort=name&filter=.zip";
 const DiskFiles = "https://www.stairwaytohell.com/bbc/archive/diskimages/";

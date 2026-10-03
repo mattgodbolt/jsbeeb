@@ -11,8 +11,8 @@ import {
     PalPhasePerLine,
 } from "../../src/video.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
-import { decodeLineGrid } from "../line-grid.js";
-import { shortestRun } from "../pixel-runs.js";
+import { decodeLineGrid } from "../helpers/line-grid.js";
+import { shortestRun } from "../helpers/pixel-runs.js";
 import * as binary from "../../src/binary.js";
 
 // Setup with focus on testing behavior rather than implementation details
