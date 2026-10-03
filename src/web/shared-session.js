@@ -45,12 +45,23 @@ const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
 const RoomGone = 404;
-// A guest's press of a key is applied at least this long after its press of any other, and its release
-// this long after the press, so a bunch of taps that reaches the host at once still comes one key at a
-// time, each spanning several of the OS's 10ms keyboard scans.
-const MinGuestKeySpacingMs = 40;
-// A guest with more keys than this waiting for their spacing has them all applied at once instead.
+// A key stamped further ahead of the host than this is applied at once; an honest guest's round trip and the
+// pause since the host's last commit come nowhere near it.
+const MaxStampAheadSeconds = 2;
+// A guest with more keys than this waiting for their cycles has them all applied at once instead.
 const MaxWaitingKeys = 64;
+// A guest stamps its keys with a round trip it has not measured yet as this, and allows this much on top for
+// the trip taking longer than it did.
+const UnmeasuredRttMs = 200;
+const JitterMarginMs = 20;
+// Commits come every few milliseconds from a host running in real time; one that has gone quiet for longer is
+// running slowly (hidden, say), and counting the whole pause would stamp keys far beyond where it will be.
+const MaxSinceCommitMs = 100;
+// While keys are catching up, on a guest stamping later than it would or on a host applying them later than
+// stamped, a gap between two keys longer than this shrinks to it: four of the OS's 10 ms keyboard scans, so each
+// key is still seen, while keys pressed closer together stay as close.
+const CatchUpGapMs = 40;
+
 const MaxReasonLength = 200;
 const MaxNameLength = 32;
 // What a guest's summary may hold; anything else it sends is dropped, so it cannot rewrite the host's log.
@@ -66,6 +77,7 @@ const GuestStatsKeys = [
     "hiddenFrames",
     "longTasks",
     "longTaskMaxMs",
+    "stampAheadMs",
 ];
 // A guest sends a summary each StatsIntervalMs; more often than this, the rest are dropped.
 const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
@@ -73,6 +85,16 @@ const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
 const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
+
+/**
+ * When the next of a run of keys goes, `at` and no earlier than `earliest`, after the last went at `last.went`
+ * `gap` before: as far after it as it was, but with a gap over `catchUp` shortened to it, so a run that has
+ * fallen behind its own times makes the lag up a little with each key.
+ */
+function nextInRun(at, earliest, last, gap, catchUp) {
+    const after = last ? last.went + Math.min(gap, catchUp) : -Infinity;
+    return Math.max(at, earliest, after, last?.went ?? -Infinity);
+}
 
 function notify(message) {
     console.log(`Shared session: ${message}`);
@@ -322,48 +344,50 @@ export class SessionHost {
     }
 
     // The machine only moves between executes by jumping (a reset, a loaded state), and the keys still
-    // waiting, spaced on the old cycle count, move with it.
+    // waiting, due on the old cycle count, move with it.
     followJump() {
         const jump = cycleCount(this.context.processor) - this.reachedAt;
         if (jump === 0) return;
         this.reachedAt += jump;
-        for (const guest of this.guests.values()) {
-            for (const key of [...guest.scheduled, ...guest.lastKeys.values()]) key.at += jump;
-            guest.lastAt += jump;
-            guest.lastPressAt += jump;
-        }
+        for (const guest of this.guests.values()) for (const key of guest.scheduled) key.at += jump;
     }
 
-    // Spaced as MinGuestKeySpacingMs says, in the order they came. A key is named by its place on the
-    // matrix, whatever shift it forces, so the second release keyUp sends goes with the first.
-    scheduleKey(guest, input, fields) {
+    /**
+     * Applies a guest's key at the cycle `at` it was stamped with, if it was stamped after the guest's latest
+     * snapshot (`snapshots` is how many it had restored); otherwise at once. A key too late for its cycle goes in
+     * as soon as it can, and the ones after it keep their gaps from it, as nextInRun says, so a bunch held up past
+     * its cycles goes in as far apart as it was typed and the lag is made up over the keys that follow.
+     */
+    queueKey(guest, input, fields, { at, snapshots }) {
         this.followJump();
-        const now = cycleCount(this.context.processor);
-        const spacing = this.keySpacingCycles();
-        const [col, row] = input.mapping;
-        const name = `${col},${row}`;
-        const last = guest.lastKeys.get(name);
-        let at = Math.max(now, guest.lastAt);
-        if (last) at = Math.max(at, last.at + (last.down !== input.down ? spacing : 0));
-        if (input.down) at = Math.max(at, guest.lastPressAt + spacing);
-        guest.lastKeys.set(name, { at, down: input.down });
-        guest.lastAt = at;
-        if (input.down) guest.lastPressAt = at;
-        if (at === now && guest.scheduled.length === 0) {
+        const { processor } = this.context;
+        const now = cycleCount(processor);
+        const cyclesPerMs = processor.model.cyclesPerSecond / 1000;
+        const stamped =
+            at !== undefined &&
+            snapshots === guest.snapshotsSent &&
+            at <= now + MaxStampAheadSeconds * 1000 * cyclesPerMs;
+        let due = Math.max(now, guest.scheduled.at(-1)?.at ?? now);
+        if (stamped) {
+            if (at < now) {
+                this.stats.count("lateKeys");
+                this.stats.peak("lateKeyMaxMs", rounded((now - at) / cyclesPerMs));
+            }
+            const last = guest.lastKey;
+            due = nextInRun(at, due, last && { went: last.due }, last ? at - last.at : 0, CatchUpGapMs * cyclesPerMs);
+            guest.lastKey = { at, due };
+        } else {
+            guest.lastKey = null;
+        }
+        if (due === now && guest.scheduled.length === 0) {
             this.input(input, fields);
             return;
         }
-        guest.scheduled.push({ input, at, fields: { ...fields, arrivedMs: this.log.elapsed() } });
+        guest.scheduled.push({ input, at: due, fields: { ...fields, arrivedMs: this.log.elapsed() } });
         if (guest.scheduled.length > MaxWaitingKeys) {
             for (const key of guest.scheduled.splice(0)) this.input(key.input, key.fields);
-            guest.lastKeys.clear();
-            guest.lastAt = now;
-            guest.lastPressAt = -Infinity;
+            guest.lastKey = null;
         }
-    }
-
-    keySpacingCycles() {
-        return (MinGuestKeySpacingMs * this.context.processor.model.cyclesPerSecond) / 1000;
     }
 
     async poll() {
@@ -428,12 +452,13 @@ export class SessionHost {
             ready: false,
             backlog: [],
             held: new Map(),
-            // Keys waiting for the cycle scheduleKey gave them; for each place on the matrix, the cycle
-            // and state it was last given; and the cycles of the last key and the last press.
+            // Keys waiting for the cycle queueKey gave them, in the order they came.
             scheduled: [],
-            lastKeys: new Map(),
-            lastAt: -Infinity,
-            lastPressAt: -Infinity,
+            // Snapshots sent in full, which the guest counts as it restores them; a key stamped before the
+            // latest belongs to a machine that has since been replaced.
+            snapshotsSent: 0,
+            // The stamp and the cycle due of its last stamped key, which the next keeps its gap from.
+            lastKey: null,
             lastSnapshotMs: 0,
             snapshotGeneration: 0,
             resyncTimer: null,
@@ -488,7 +513,16 @@ export class SessionHost {
             if (down) guest.held.set(mappingKey(mapping), mapping);
             else guest.held.delete(mappingKey(mapping));
             const guestMs = Number.isFinite(message.ms) ? message.ms : undefined;
-            this.scheduleKey(guest, { kind: "key", mapping, down }, { guest: guest.id, guestMs });
+            const at = Number.isSafeInteger(message.at) ? message.at : undefined;
+            this.queueKey(
+                guest,
+                { kind: "key", mapping, down },
+                { guest: guest.id, guestMs, stamp: at },
+                {
+                    at,
+                    snapshots: message.snapshots,
+                },
+            );
         } else if (message.type === "hello" && !guest.saidHello) {
             guest.saidHello = true;
             guest.name = cleanName(message.name);
@@ -555,6 +589,8 @@ export class SessionHost {
         for (let offset = 0; offset < bytes.length; offset += SnapshotChunkBytes) {
             if (!this.sendTo(guest, bytes.slice(offset, offset + SnapshotChunkBytes))) return;
         }
+        ++guest.snapshotsSent;
+        guest.lastKey = null;
         for (const commit of guest.backlog) {
             if (!this.sendTo(guest, commit)) return;
         }
@@ -650,6 +686,9 @@ export class SessionGuest {
         this.incoming = null;
         this.buffering = null;
         this.restored = Promise.resolve();
+        this.snapshotsRestored = 0;
+        this.lastStamp = null;
+        this.lastCommitMs = 0;
         this.left = false;
         this.log = new SessionLog({
             role: "guest",
@@ -726,10 +765,31 @@ export class SessionGuest {
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: false }));
     }
 
-    // Sent with this page's time, so the host's log shows how long each key was really held.
+    // Sent with this page's time, so the host's log shows how long each key was really held, and the cycle it is
+    // to go in at, so it keeps its place among the others however the network bunches them.
     input(input) {
-        this.log.record("input", input);
-        this.send({ type: "input", input, ms: this.log.elapsed() });
+        const at = this.stamp();
+        this.log.record("input", { ...input, at });
+        this.send({ type: "input", input, ms: this.log.elapsed(), at, snapshots: this.snapshotsRestored });
+    }
+
+    // A cycle the host will not have passed when the key reaches it. The host was at the end of the last commit
+    // when it sent it, has run on since it came, and runs on for the trip back. When the round trip shrinks, the
+    // stamps come down to it as nextInRun says, never going backwards and never squeezing keys pressed close
+    // together. Undefined before there is a machine to stamp against.
+    stamp() {
+        if (!this.lockstep) return undefined;
+        const nowMs = this.log.elapsed();
+        const sinceCommitMs = Math.min(nowMs - this.lastCommitMs, MaxSinceCommitMs);
+        const aheadMs = (this.rttMs ?? UnmeasuredRttMs) + sinceCommitMs + JitterMarginMs;
+        const cyclesPerMs = this.context.processor.model.cyclesPerSecond / 1000;
+        const at = this.lockstep.upTo + Math.round(aheadMs * cyclesPerMs);
+        const last = this.lastStamp;
+        const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
+        const stamp = nextInRun(at, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
+        this.lastStamp = { at: stamp, ms: nowMs };
+        this.stats.peak("stampAheadMs", Math.round((stamp - this.lockstep.upTo) / cyclesPerMs));
+        return stamp;
     }
 
     // Starved: the guest has caught the host up and waits on its next commit. Catching up: far enough behind
@@ -821,6 +881,7 @@ export class SessionGuest {
             return;
         }
         this.stats.tick("commits");
+        this.lastCommitMs = this.log.elapsed();
         if (commit.inputs.length > 0) {
             // Rebuilt from the checked fields, so nothing else the host put in them is kept.
             const inputs = commit.inputs.map(({ kind, mapping, down }) => ({ kind, mapping, down }));
@@ -878,6 +939,9 @@ export class SessionGuest {
         // Before the restore, which would cancel the typist's task and leave the keyboard it disabled.
         this.context.keyboard.cancelPaste();
         restoreSessionSnapshot(processor, restored);
+        ++this.snapshotsRestored;
+        this.lastStamp = null;
+        this.lastCommitMs = this.log.elapsed();
         if (this.lockstep) {
             this.lockstep.resync();
         } else {
