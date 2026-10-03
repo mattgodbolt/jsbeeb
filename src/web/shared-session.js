@@ -27,7 +27,7 @@ import {
     StatsIntervalMs,
     watchPage,
 } from "./session-log.js";
-import { PeerStates, peerState, SessionPanel } from "./session-panel.js";
+import { LaggingMs, PeerStates, peerState, SessionPanel } from "./session-panel.js";
 import { KeyStamper, Sequencer } from "./session-sequencer.js";
 import { downloadBlob } from "./dom-utils.js";
 import { toast } from "./toast.js";
@@ -531,12 +531,13 @@ export class SessionHost {
         this.departed = this.departed.filter((guest) => nowMs - guest.leftMs < LeftShownMs);
         const views = [...this.guests.values(), ...this.departed].map((guest) => [guest, this.guestView(guest, nowMs)]);
         const count = this.connectedCount();
-        // This page's own row, first, as each guest's pane has the host first; behind only a guest in control.
+        // Behind only a guest in control, whose commits this machine is replaying.
         const cyclesPerMs = this.context.processor.model.cyclesPerSecond / 1000;
+        const lagMs = this.replay ? Math.round(this.replay.behind() / cyclesPerMs) : undefined;
         const self = {
             label: `${this.name} (you)`,
-            state: "ok",
-            lagMs: this.replay ? Math.round(this.replay.behind() / cyclesPerMs) : undefined,
+            state: lagMs > LaggingMs ? "lagging" : "ok",
+            lagMs,
             control: !this.controller,
         };
         this.panel.show("hosting", `${count} ${count === 1 ? "guest" : "guests"}`, [

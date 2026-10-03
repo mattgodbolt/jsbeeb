@@ -458,12 +458,24 @@ describe("SessionHost", () => {
             showLights();
             const { host } = await hosting();
             const channel = await joined();
-            const firstRow = () =>
-                document.querySelector("#session-pane .session-people tbody tr").cells[1].textContent;
+            const MsCycles = CyclesPerSecond / 1000;
+            const cells = () =>
+                [...document.querySelector("#session-pane .session-people tbody tr").cells].map(
+                    (cell) => cell.textContent,
+                );
             host.showStatus();
-            expect(firstRow()).toBe(`${host.name} (you) (in control)`);
+            expect(cells()[1]).toBe(`${host.name} (you) (in control)`);
             channel.emit("message", message({ type: "take" }));
-            expect(firstRow()).toBe(`${host.name} (you)`);
+            channel.emit("message", message({ type: "commit", at: 1000, upTo: 1000 + 300 * MsCycles, inputs: [] }));
+            host.showStatus();
+            expect(cells().slice(1)).toEqual([`${host.name} (you)`, "lagging", "", "300 ms"]);
+            host.requestControl(null);
+            channel.emit("message", message({ type: "released", at: 1000 + 300 * MsCycles, waiting: [] }));
+            host.showStatus();
+            expect(cells()[1]).toBe(`${host.name} (you) (in control)`);
+            host.execute(400 * MsCycles);
+            host.showStatus();
+            expect(cells().slice(1)).toEqual([`${host.name} (you) (in control)`, "keeping up", "", ""]);
         });
 
         it("tells every guest whether a key press takes control, as its option is set", async () => {
