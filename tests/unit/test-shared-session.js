@@ -759,6 +759,52 @@ describe("SessionHost", () => {
             expect(first.snapshots()[1].rtcBaseMs).not.toBe(before.rtcBaseMs);
         });
 
+        it("keeps a key it pressed to take control back held as long as it was, though the press went in late", async () => {
+            showLights();
+            const { host, first, second } = await twoGuests();
+            document.querySelector("#session-pane .session-take-on-key").click();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            host.input(keyA);
+            vi.advanceTimersByTime(84);
+            host.input(keyAUp);
+            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
+            host.execute(5000);
+            host.execute(CyclesPerSecond);
+            const keys = sentOf(second, "commit").flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
+            expect(keys[0]).toEqual([true, 3000]);
+            expect(keys[1]).toEqual([false, 3000 + 40 * MsCycles]);
+        });
+
+        it("puts BREAK in at once, ahead of keys of its own still waiting", async () => {
+            showLights();
+            const { host, first, second } = await twoGuests();
+            document.querySelector("#session-pane .session-take-on-key").click();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            host.input(keyA);
+            vi.advanceTimersByTime(84);
+            host.input(keyAUp);
+            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
+            host.execute(5000);
+            host.input({ kind: "break", down: true });
+            host.execute(100);
+            const breakCommit = sentOf(second, "commit").find(({ inputs }) =>
+                inputs.some(({ kind }) => kind === "break"),
+            );
+            expect(breakCommit.at).toBe(3000);
+        });
+
+        it("puts in at once two keys this page presses together, as a machine of its own would", async () => {
+            const { host, second } = await twoGuests();
+            host.input(keyA);
+            vi.advanceTimersByTime(5);
+            host.input({ kind: "key", mapping: [0, 0], down: true });
+            host.execute(100);
+            const [commitOf] = sentOf(second, "commit").filter(({ inputs }) => inputs.length > 0);
+            expect(commitOf.inputs).toHaveLength(2);
+        });
+
         it("resyncs another guest from its own machine and the commits it has not yet replayed", async () => {
             const { host, first, second } = await twoGuests();
             first.emit("message", message({ type: "take" }));
@@ -1536,8 +1582,7 @@ describe("SessionGuest", () => {
             session.lockstep().execute(press.at + 100 * MsCycles);
             const keys = commitsSent(session.channel).flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
             expect(keys[0]).toEqual([true, press.at]);
-            expect(keys[1][0]).toBe(false);
-            expect(keys[1][1] - press.at).toBeGreaterThanOrEqual(40 * MsCycles);
+            expect(keys[1]).toEqual([false, press.at + 40 * MsCycles]);
         });
 
         it("commits its own key pressed just before it is asked to stop, then stops after it", async () => {

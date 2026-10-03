@@ -48,10 +48,15 @@ export class KeyStamper {
         this.last = null;
     }
 
+    /** Notes a key that went in at `cycle` unstamped, for the next that follows it to keep its gap from. */
+    mark({ cycle, nowMs }) {
+        this.last = { at: cycle, ms: nowMs };
+    }
+
     /**
      * Stamps a key for this machine's own sequencer at `cycle`, where it is now, but no nearer the last key stamped
      * than they were pressed apart (as nextInRun shortens a long gap), so a key pressed just before taking control,
-     * stamped a round trip ahead, keeps its length when its release is pressed after.
+     * stamped a round trip ahead or held back until control came, keeps its length when its release is pressed after.
      */
     follow({ cycle, nowMs }) {
         const { cyclesPerMs, last } = this;
@@ -146,6 +151,11 @@ export class Sequencer {
             for (const key of source.scheduled.splice(0)) this.input(key.input, key.fields);
             source.lastKey = null;
         }
+    }
+
+    /** Whether source `id` has keys waiting for their cycles. */
+    waiting(id) {
+        return (this.sources.get(id)?.scheduled.length ?? 0) > 0;
     }
 
     /** Starts source `id`'s next key afresh, its stamps now counting on a machine that has been replaced. */

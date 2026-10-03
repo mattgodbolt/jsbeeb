@@ -275,12 +275,16 @@ export class SessionHost {
     /** This page's own keys. BREAK is the host's alone, so it takes control back first. */
     input(input) {
         if (input.kind === "break" && !this.sequencer) this.takeBackNow("the host pressed BREAK");
+        if (input.kind === "break") {
+            this.sequencer.input(input);
+            return;
+        }
         if (input.down && !this.sequencer && this.panel.takesOnKeypress()) this.requestControl(null);
         this.deliverKey("host", input, {}, this.stampForController() ?? this.stampOwn());
     }
 
-    // A guest's key, or one of this page's while a guest is in control, goes to whoever orders the inputs, or waits
-    // for them while control is changing hands.
+    // A key, a guest's or this page's, goes to whoever orders the inputs, or waits for them while control is
+    // changing hands.
     deliverKey(source, input, fields, at) {
         if (this.sequencer) this.sequencer.queue(source, input, fields, at);
         else if (this.controller && !this.releasing) this.forward(this.controller, { source, input, fields, at });
@@ -292,9 +296,15 @@ export class SessionHost {
         this.sendTo(guest, JSON.stringify({ type: "input", input: key.input, at: key.at, source: key.source }));
     }
 
-    // Keys of this page's that it orders itself, or will once control comes back, keep their gaps from its last.
+    // This page's own keys go in at once, as on a machine of its own, except while control is coming back to it or
+    // keys of its from before are still waiting: then they keep their gaps from those, so none is cut short.
     stampOwn() {
-        return this.stamper.follow({ cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() });
+        const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
+        if (this.sequencer && !this.sequencer.waiting("host")) {
+            this.stamper.mark(now);
+            return undefined;
+        }
+        return this.stamper.follow(now);
     }
 
     stampForController() {
@@ -962,10 +972,13 @@ export class SessionGuest {
     // Sent with this page's time, so the host's log shows how long each key was really held, and the cycle it is
     // to go in at, so it keeps its place among the others however the network bunches them.
     input(input) {
-        // Queued with this page's keys the host passed back, sent before it had control, keeping their gaps.
+        // At once, as on a machine of its own, unless its keys from before it had control are still waiting: then
+        // after them, keeping their gaps, so none is cut short.
         if (this.sequencer) {
-            const at = this.stamper.follow({ cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() });
-            this.sequencer.queue(this.id, input, {}, at);
+            const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
+            const waiting = this.sequencer.waiting(this.id);
+            if (!waiting) this.stamper.mark(now);
+            this.sequencer.queue(this.id, input, {}, waiting ? this.stamper.follow(now) : undefined);
             this.send({ type: "input", input, own: true });
             return;
         }
