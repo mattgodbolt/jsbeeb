@@ -24,7 +24,8 @@ function fromBcd(value) {
 export { defaultCmos };
 
 // A shared session (src/lockstep.js) runs the same machine on several computers in step, one of them hosting.
-// Their clocks must agree, so the session clock holds the host's local time as if it were UTC, read via this view.
+// The session clock holds the host's local time as if it were UTC and is read and set through this view, so
+// every computer shows the host's time, whatever its own time zone.
 function utcView(date) {
     return {
         getSeconds: () => date.getUTCSeconds(),
