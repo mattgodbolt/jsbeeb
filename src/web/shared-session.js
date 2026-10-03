@@ -782,13 +782,13 @@ export class SessionGuest {
         const nowMs = this.log.elapsed();
         const sinceCommitMs = Math.min(nowMs - this.lastCommitMs, MaxSinceCommitMs);
         const aheadMs = (this.rttMs ?? UnmeasuredRttMs) + sinceCommitMs + JitterMarginMs;
-        this.stats.peak("stampAheadMs", Math.round(aheadMs));
         const cyclesPerMs = this.context.processor.model.cyclesPerSecond / 1000;
         const at = this.lockstep.upTo + Math.round(aheadMs * cyclesPerMs);
         const last = this.lastStamp;
         const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
         const stamp = nextInRun(at, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
         this.lastStamp = { at: stamp, ms: nowMs };
+        this.stats.peak("stampAheadMs", Math.round((stamp - this.lockstep.upTo) / cyclesPerMs));
         return stamp;
     }
 

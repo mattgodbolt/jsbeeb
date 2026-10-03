@@ -1092,6 +1092,13 @@ describe("SessionGuest", () => {
             const [first, second, third] = sentKeys(channel).map((each) => each.at);
             expect(second - first).toBe(40 * MsCycles);
             expect(third - second).toBe(10 * MsCycles);
+            vi.advanceTimersByTime(StatsIntervalMs);
+            lockstep().execute(100);
+            const summary = channel
+                .messages()
+                .filter((each) => each.type === "stats")
+                .at(-1).stats;
+            expect(summary.stampAheadMs).toBe(Math.round((third - 101000) / MsCycles));
         });
 
         it("and says in its summary how far ahead it stamps", async () => {
