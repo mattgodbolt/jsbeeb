@@ -62,15 +62,6 @@ const MaxSinceCommitMs = 100;
 // key is still seen, while keys pressed closer together stay as close.
 const CatchUpGapMs = 40;
 
-/**
- * When the next of a run of keys goes, `at` and no earlier than `earliest`, after the last went at `last.went`
- * `gap` before: as far after it as it was, but with a gap over `catchUp` shortened to it, so a run that has
- * fallen behind its own times makes the lag up a little with each key.
- */
-function nextInRun(at, earliest, last, gap, catchUp) {
-    const after = last ? last.went + Math.min(gap, catchUp) : -Infinity;
-    return Math.max(at, earliest, after, last?.went ?? -Infinity);
-}
 const MaxReasonLength = 200;
 const MaxNameLength = 32;
 // What a guest's summary may hold; anything else it sends is dropped, so it cannot rewrite the host's log.
@@ -94,6 +85,16 @@ const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
 const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
+
+/**
+ * When the next of a run of keys goes, `at` and no earlier than `earliest`, after the last went at `last.went`
+ * `gap` before: as far after it as it was, but with a gap over `catchUp` shortened to it, so a run that has
+ * fallen behind its own times makes the lag up a little with each key.
+ */
+function nextInRun(at, earliest, last, gap, catchUp) {
+    const after = last ? last.went + Math.min(gap, catchUp) : -Infinity;
+    return Math.max(at, earliest, after, last?.went ?? -Infinity);
+}
 
 function notify(message) {
     console.log(`Shared session: ${message}`);
@@ -348,7 +349,10 @@ export class SessionHost {
         const jump = cycleCount(this.context.processor) - this.reachedAt;
         if (jump === 0) return;
         this.reachedAt += jump;
-        for (const guest of this.guests.values()) for (const key of guest.scheduled) key.at += jump;
+        for (const guest of this.guests.values()) {
+            for (const key of guest.scheduled) key.at += jump;
+            if (guest.lastKey) guest.lastKey = { at: guest.lastKey.at + jump, due: guest.lastKey.due + jump };
+        }
     }
 
     /**
@@ -385,6 +389,7 @@ export class SessionHost {
         guest.scheduled.push({ input, at: due, fields: { ...fields, arrivedMs: this.log.elapsed() } });
         if (guest.scheduled.length > MaxWaitingKeys) {
             for (const key of guest.scheduled.splice(0)) this.input(key.input, key.fields);
+            guest.lastKey = null;
         }
     }
 
@@ -588,6 +593,7 @@ export class SessionHost {
             if (!this.sendTo(guest, bytes.slice(offset, offset + SnapshotChunkBytes))) return;
         }
         ++guest.snapshotsSent;
+        guest.lastKey = null;
         for (const commit of guest.backlog) {
             if (!this.sendTo(guest, commit)) return;
         }

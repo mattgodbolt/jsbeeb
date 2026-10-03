@@ -551,6 +551,31 @@ describe("SessionHost", () => {
             expect(appliedMs(channel).map(([, , ms]) => ms)).toEqual([300, 320, 360, 390, 500]);
         });
 
+        it("stamped after the host restarted its machine go in on their own cycles", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            run(host, 1, 300);
+            channel.emit("message", stamped(true, 290));
+            run(host, 1, 20);
+            processor.currentCycles = processor.targetCycles = 1000;
+            run(host, 1, 0);
+            await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(2));
+            channel.emit("message", stamped(false, 30, A, { snapshots: 2 }));
+            run(host, 3, 20);
+            expect(appliedMs(channel).at(-1)).toEqual(["4,1", false, 30]);
+        });
+
+        it("after one with no stamp go in on their own cycles, whatever the run before it", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            run(host, 1, 300);
+            channel.emit("message", stamped(true, 10));
+            channel.emit("message", key(false));
+            channel.emit("message", stamped(true, 330));
+            run(host, 3, 20);
+            expect(appliedMs(channel).map(([, , ms]) => ms)).toEqual([300, 300, 330]);
+        });
+
         it("stamped before a resync the host sent go in at once", async () => {
             const { host } = await hosting();
             const channel = await joined();
