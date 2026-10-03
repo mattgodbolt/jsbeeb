@@ -138,7 +138,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-2
         run: |
-          zip -j rendezvous.zip rendezvous/index.js rendezvous/handler.js rendezvous/dynamo-store.js rendezvous/package.json
+          zip -j rendezvous.zip rendezvous/*
           aws lambda update-function-code --function-name jsbeeb-rendezvous --zip-file fileb://rendezvous.zip
           aws lambda wait function-updated-v2 --function-name jsbeeb-rendezvous
       - name: Deploy to S3

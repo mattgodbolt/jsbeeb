@@ -5,7 +5,9 @@ import {
     MaxBodyBytes,
     MaxPendingOffers,
     OfferLifetimeSeconds,
+    PathPrefix,
     RoomLifetimeSeconds,
+    SecretBytes,
 } from "../../rendezvous/handler.js";
 import { createMemoryStore } from "../../rendezvous/memory-store.js";
 import { toFunctionUrlEvent } from "../../rendezvous/vite-plugin.js";
@@ -16,10 +18,14 @@ const Room = "abc";
 
 const asBody = (body) => Buffer.from(body === undefined ? "" : typeof body === "string" ? body : JSON.stringify(body));
 
+/** The event the dev server makes of a request. */
+const devServerEvent = (method, url, { body, headers = {} } = {}) =>
+    toFunctionUrlEvent({ method, url, headers }, asBody(body));
+
 /** A fetch that reaches `handler()` the way the dev server does. */
 function devServerFetch(handler) {
     return async (url, { method, headers, body }) => {
-        const response = await handler()(toFunctionUrlEvent({ method, url, headers }, asBody(body)));
+        const response = await handler()(devServerEvent(method, url, { body, headers }));
         return new Response(response.body, { status: response.statusCode, headers: response.headers });
     };
 }
@@ -36,9 +42,8 @@ describe("rendezvous", () => {
     const offer = (guest, sdp = `offer from ${guest}`, room = Room) => rendezvous.postOffer(room, guest, sdp);
 
     /** A request the client would never make. */
-    async function request(method, path, { body, headers = {} } = {}) {
-        const event = toFunctionUrlEvent({ method, url: `/api/rendezvous${path}`, headers }, asBody(body));
-        const response = await handler(event);
+    async function request(method, path, options) {
+        const response = await handler(devServerEvent(method, `${PathPrefix}${path}`, options));
         return { ...response, json: JSON.parse(response.body) };
     }
 
@@ -93,18 +98,23 @@ describe("rendezvous", () => {
     describe("rooms", () => {
         it("returns a fresh base64url secret of 32 bytes and stores only its hash", async () => {
             const secret = await rendezvous.createRoom(Room);
-            expect(Buffer.from(secret, "base64url")).toHaveLength(32);
+            expect(Buffer.from(secret, "base64url")).toHaveLength(SecretBytes);
             expect(JSON.stringify(await store.query(Room))).not.toContain(secret);
         });
 
         it("uses the injected random source", async () => {
             handler = createHandler({ store, now: () => clockMs, randomBytes: (size) => Buffer.alloc(size, 7) });
-            expect(await rendezvous.createRoom(Room)).toBe(Buffer.alloc(32, 7).toString("base64url"));
+            expect(await rendezvous.createRoom(Room)).toBe(Buffer.alloc(SecretBytes, 7).toString("base64url"));
         });
 
-        it("refuses to create a live room twice", async () => {
+        it("refuses to create a live room twice, and says why", async () => {
             await rendezvous.createRoom(Room);
-            await refuses(rendezvous.createRoom(Room), 409);
+            const error = await rendezvous.createRoom(Room).catch((e) => e);
+            expect(error).toBeInstanceOf(RendezvousError);
+            expect(error).toMatchObject({
+                status: 409,
+                message: "Rendezvous create room failed with status 409: Room already exists",
+            });
         });
 
         it("expires a room nobody polls, after which it can be created again", async () => {
@@ -133,6 +143,24 @@ describe("rendezvous", () => {
             expect(await store.query(Room)).toEqual([]);
             await refuses(rendezvous.getAnswer(Room, "guest1"), 404);
             await refuses(offer("guest2"), 404);
+        });
+
+        it("does not bring back a room deleted while a poll of it was under way", async () => {
+            const secret = await rendezvous.createRoom(Room);
+            const deletedMidPoll = {
+                ...store,
+                get: async (room, entry) => {
+                    const item = await store.get(room, entry);
+                    await rendezvous.deleteRoom(room, secret);
+                    return item;
+                },
+            };
+            const racing = createHandler({ store: deletedMidPoll, now: () => clockMs });
+            const response = await racing(
+                devServerEvent("GET", `${PathPrefix}/room/${Room}/offers`, { headers: { "x-host-secret": secret } }),
+            );
+            expect(response.statusCode).toBe(200);
+            expect(await store.query(Room)).toEqual([]);
         });
 
         it("keeps rooms apart", async () => {
@@ -234,8 +262,7 @@ describe("rendezvous", () => {
         });
 
         it("accepts a plain JSON body, as the function URL passes one", async () => {
-            const url = `/api/rendezvous/room/${Room}/offer`;
-            const event = toFunctionUrlEvent({ method: "POST", url, headers: {} }, Buffer.alloc(0));
+            const event = devServerEvent("POST", `${PathPrefix}/room/${Room}/offer`);
             const response = await handler({ ...event, body: JSON.stringify({ guest: "guest1", sdp: "plain" }) });
             expect(response.statusCode).toBe(201);
             expect(await rendezvous.listOffers(Room, secret)).toEqual([{ guest: "guest1", sdp: "plain" }]);
@@ -280,10 +307,11 @@ describe("rendezvous", () => {
         );
 
         it("has nothing outside its prefix", async () => {
-            const url = `/elsewhere/room/${Room}`;
-            expect(
-                (await handler(toFunctionUrlEvent({ method: "GET", url, headers: {} }, Buffer.alloc(0)))).statusCode,
-            ).toBe(404);
+            expect((await handler(devServerEvent("GET", `/elsewhere/room/${Room}`))).statusCode).toBe(404);
+        });
+
+        it.each(["toString", "constructor"])("treats the method %s as any other unknown one", async (method) => {
+            expect((await request(method, `/room/${Room}`)).statusCode).toBe(405);
         });
 
         it("names the allowed methods on a wrong one", async () => {
@@ -309,15 +337,6 @@ describe("rendezvous", () => {
 });
 
 describe("rendezvous client", () => {
-    it("throws with the status and the server's reason", async () => {
-        const handler = createHandler({ store: createMemoryStore() });
-        const rendezvous = createRendezvousClient({ fetch: devServerFetch(() => handler) });
-        await rendezvous.createRoom("room1");
-        const error = await rendezvous.createRoom("room1").catch((e) => e);
-        expect(error).toBeInstanceOf(RendezvousError);
-        expect(error.message).toBe("Rendezvous create room failed with status 409: Room already exists");
-    });
-
     it("uses the base it is given", async () => {
         const urls = [];
         const recording = createRendezvousClient({
@@ -329,6 +348,19 @@ describe("rendezvous client", () => {
         });
         expect(await recording.createRoom("my room")).toBe("s");
         expect(urls).toEqual(["https://example.test/api/rendezvous/room/my%20room"]);
+    });
+
+    it("asks for a delete that outlives the page, since a host deletes its room as it goes", async () => {
+        const requests = [];
+        const recording = createRendezvousClient({
+            fetch: async (url, init) => {
+                requests.push(init);
+                return new Response("{}", { status: 200 });
+            },
+        });
+        await recording.deleteRoom("room", "secret");
+        await recording.listOffers("room", "secret").catch(() => {});
+        expect(requests.map((init) => init.keepalive)).toEqual([true, false]);
     });
 
     it("copes with a response that is not JSON", async () => {
@@ -358,12 +390,6 @@ describe("the dev server's adapter", () => {
             isBase64Encoded: false,
         });
     });
-
-    it("passes the body as base64", () => {
-        const event = toFunctionUrlEvent(request(), Buffer.from('{"guest":"g"}'));
-        expect(event.isBase64Encoded).toBe(true);
-        expect(Buffer.from(event.body, "base64").toString()).toBe('{"guest":"g"}');
-    });
 });
 
 describe("memory store", () => {
@@ -373,6 +399,14 @@ describe("memory store", () => {
         expect(await store.put({ room: "r", entry: "e", expires: 200, v: 2 }, { unlessLiveAt: 99 })).toBe(false);
         expect(await store.put({ room: "r", entry: "e", expires: 200, v: 3 }, { unlessLiveAt: 100 })).toBe(true);
         expect(await store.get("r", "e")).toEqual({ room: "r", entry: "e", expires: 200, v: 3 });
+    });
+
+    it("writes with ifPresent only over an item that is there", async () => {
+        const store = createMemoryStore();
+        expect(await store.put({ room: "r", entry: "e", expires: 1 }, { ifPresent: true })).toBe(false);
+        await store.put({ room: "r", entry: "e", expires: 1 });
+        expect(await store.put({ room: "r", entry: "e", expires: 2 }, { ifPresent: true })).toBe(true);
+        expect((await store.get("r", "e")).expires).toBe(2);
     });
 
     it("keeps expired items until they are deleted", async () => {

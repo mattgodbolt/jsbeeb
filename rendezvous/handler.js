@@ -6,7 +6,7 @@ export const MaxPendingOffers = 8;
 export const RoomLifetimeSeconds = 10 * 60;
 export const OfferLifetimeSeconds = 60;
 
-const SecretBytes = 32;
+export const SecretBytes = 32;
 const IdPattern = /^[A-Za-z0-9_-]{1,64}$/;
 const RoomEntry = "room";
 const OfferPrefix = "offer#";
@@ -79,11 +79,14 @@ export function createHandler({ store, now = Date.now, randomBytes = cryptoRando
     const nowSeconds = () => Math.floor(now() / 1000);
     const isLive = (item) => item !== undefined && item.expires > nowSeconds();
 
-    async function liveRoom(room) {
-        const item = await store.get(room, RoomEntry);
-        if (!isLive(item)) throw new HttpError(404, "No such room");
+    async function liveItem(room, entry, missing) {
+        const item = await store.get(room, entry);
+        if (!isLive(item)) throw new HttpError(404, missing);
         return item;
     }
+
+    const liveRoom = (room) => liveItem(room, RoomEntry, "No such room");
+    const liveOffer = (room, guest) => liveItem(room, offerEntry(guest), "No such offer");
 
     async function hostRoom(room, event) {
         const item = await liveRoom(room);
@@ -95,7 +98,6 @@ export function createHandler({ store, now = Date.now, randomBytes = cryptoRando
         return item;
     }
 
-    /** The room's live offers that have no answer yet. */
     async function pendingOffers(room) {
         const items = (await store.query(room)).filter(isLive);
         const answered = new Set(items.map((item) => item.entry));
@@ -103,12 +105,6 @@ export function createHandler({ store, now = Date.now, randomBytes = cryptoRando
             .filter((item) => item.entry.startsWith(OfferPrefix))
             .map((item) => ({ guest: item.entry.slice(OfferPrefix.length), sdp: item.sdp }))
             .filter(({ guest }) => !answered.has(answerEntry(guest)));
-    }
-
-    async function liveOffer(room, guest) {
-        const offer = await store.get(room, offerEntry(guest));
-        if (!isLive(offer)) throw new HttpError(404, "No such offer");
-        return offer;
     }
 
     const actions = {
@@ -141,7 +137,8 @@ export function createHandler({ store, now = Date.now, randomBytes = cryptoRando
 
         async listOffers(event, room) {
             const roomItem = await hostRoom(room, event);
-            await store.put({ ...roomItem, expires: nowSeconds() + RoomLifetimeSeconds });
+            // Only over the room as it still is: a delete racing this poll must not be undone.
+            await store.put({ ...roomItem, expires: nowSeconds() + RoomLifetimeSeconds }, { ifPresent: true });
             return respond(200, { offers: await pendingOffers(room) });
         },
 
@@ -170,7 +167,7 @@ export function createHandler({ store, now = Date.now, randomBytes = cryptoRando
         for (const { pattern, methods } of Routes) {
             const match = pattern.exec(path);
             if (!match) continue;
-            const action = methods[method];
+            const action = Object.hasOwn(methods, method) ? methods[method] : undefined;
             if (!action) return fail(405, "Method not allowed", { allow: Object.keys(methods).join(", ") });
             const [, room, ...rest] = match;
             if (!IdPattern.test(room)) return fail(400, "Bad room ID");

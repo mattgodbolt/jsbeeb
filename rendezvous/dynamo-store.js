@@ -11,18 +11,25 @@ export function createDynamoStore(tableName) {
     const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
     return {
         async get(room, entry) {
-            const { Item } = await client.send(new GetCommand({ TableName: tableName, Key: { room, entry } }));
+            const { Item } = await client.send(
+                new GetCommand({ TableName: tableName, Key: { room, entry }, ConsistentRead: true }),
+            );
             return Item;
         },
-        async put(item, { unlessLiveAt } = {}) {
-            const condition =
-                unlessLiveAt === undefined
-                    ? {}
-                    : {
-                          ConditionExpression: "attribute_not_exists(#entry) OR #expires <= :now",
-                          ExpressionAttributeNames: { "#entry": "entry", "#expires": "expires" },
-                          ExpressionAttributeValues: { ":now": unlessLiveAt },
-                      };
+        async put(item, { unlessLiveAt, ifPresent = false } = {}) {
+            let condition = {};
+            if (unlessLiveAt !== undefined) {
+                condition = {
+                    ConditionExpression: "attribute_not_exists(#entry) OR #expires <= :now",
+                    ExpressionAttributeNames: { "#entry": "entry", "#expires": "expires" },
+                    ExpressionAttributeValues: { ":now": unlessLiveAt },
+                };
+            } else if (ifPresent) {
+                condition = {
+                    ConditionExpression: "attribute_exists(#entry)",
+                    ExpressionAttributeNames: { "#entry": "entry" },
+                };
+            }
             try {
                 await client.send(new PutCommand({ TableName: tableName, Item: item, ...condition }));
                 return true;
@@ -41,6 +48,7 @@ export function createDynamoStore(tableName) {
                         KeyConditionExpression: "#room = :room",
                         ExpressionAttributeNames: { "#room": "room" },
                         ExpressionAttributeValues: { ":room": room },
+                        ConsistentRead: true,
                         ExclusiveStartKey,
                     }),
                 );
