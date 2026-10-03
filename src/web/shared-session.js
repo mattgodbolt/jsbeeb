@@ -63,9 +63,9 @@ const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
 
-function notify(message, options = {}) {
+function notify(message) {
     console.log(`Shared session: ${message}`);
-    toast(message, { title: ToastTitle, ...options });
+    toast(message, { title: ToastTitle });
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -207,7 +207,7 @@ export class SessionHost {
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
         this.departed = [];
-        this.panel = new SessionPanel(name, sessionMenu(this));
+        this.panel = new SessionPanel(sessionPane(this));
     }
 
     async start() {
@@ -224,9 +224,8 @@ export class SessionHost {
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
         window.addEventListener("pagehide", () => this.close());
-        notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`, {
-            action: { label: "Copy link", run: () => copyJoinLink(this.room) },
-        });
+        notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`);
+        this.panel.open();
         this.log.record("hosting");
         this.poll();
     }
@@ -648,7 +647,7 @@ export class SessionGuest {
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
-        this.panel = new SessionPanel(name, sessionMenu(this));
+        this.panel = new SessionPanel(sessionPane(this));
         this.showStatus();
     }
 
@@ -949,7 +948,9 @@ async function copyJoinLink(room) {
     }
 }
 
-const sessionMenu = (session) => ({
+const sessionPane = (session) => ({
+    name: session.name,
+    link: joinLink(session.room),
     saveReport: () => saveReport(session),
     copyLink: () => copyJoinLink(session.room),
 });

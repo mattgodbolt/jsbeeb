@@ -295,6 +295,32 @@
         </div>
         <div class="rewind-filmstrip" id="rewind-filmstrip"></div>
       </div>
+      <div id="session-pane" hidden role="dialog" aria-labelledby="session-pane-title">
+        <div class="session-pane-header" title="Drag to move">
+          <span class="disc-title" id="session-pane-title">Shared session</span>
+          <span class="session-you"></span>
+          <button type="button" class="btn btn-sm btn-outline-light session-pane-close" title="Close (Escape)">
+            Close
+          </button>
+        </div>
+        <div class="session-link-row">
+          <span class="session-link"></span>
+          <button type="button" class="btn btn-sm btn-light session-copy-link">Copy link</button>
+        </div>
+        <table class="session-people">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Who</th>
+              <th>How it's going</th>
+              <th class="number">Round trip</th>
+              <th class="number">Behind</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button type="button" class="btn btn-sm btn-outline-light session-report">Save session report</button>
+      </div>
       <div id="disc-panel" hidden>
         <div class="disc-header">
           <span class="disc-title">Disc surface</span>
@@ -359,23 +385,17 @@
             <span class="virtualMHz"></span>
           </div>
         </div>
-        <div class="session-readout dropup" id="session-panel" hidden>
+        <div class="session-readout" id="session-panel" hidden>
           <button
             type="button"
             class="slot-readout"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
+            aria-controls="session-pane"
             title="Shared session: who is connected, and how well"
           >
             <span class="hdr session-heading">session</span>
             <span class="name session-summary"></span>
             <span class="session-peers"></span>
           </button>
-          <ul class="dropdown-menu dropdown-menu-dark session-menu">
-            <li><hr class="dropdown-divider" /></li>
-            <li><a href="#" class="dropdown-item session-copy-link">Copy the link to join</a></li>
-            <li><a href="#" class="dropdown-item session-report">Save session report</a></li>
-          </ul>
         </div>
       </div>
       <div id="drop-zone" class="drop-zone" hidden aria-hidden="true">

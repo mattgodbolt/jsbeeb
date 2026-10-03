@@ -1,6 +1,8 @@
-// The session's readout in the lights along the bottom of the page: a light for each
-// peer, so how everyone is doing can be seen at a glance, and a menu with the numbers
-// behind each and the session's report to save.
+// The session's readout in the lights along the bottom of the page, a light for each peer so how
+// everyone is doing can be seen at a glance, and the pane it opens: the link to join, each peer's
+// numbers as they come, and the session's report to save.
+
+import { FloatingPanel } from "./floating-panel.js";
 
 // A guest catches up by a large slice per execute (see MaxCatchUpSeconds), so one still this far behind after an
 // execute has fallen a long way behind, not just had a burst of commits.
@@ -35,53 +37,79 @@ export function peerDetail({ state, rttMs, lagMs, leftReason }) {
     return parts.join(", ");
 }
 
+function cell(text, className = "") {
+    const td = document.createElement("td");
+    td.className = className;
+    td.textContent = text;
+    return td;
+}
+
+function light(peer) {
+    const led = document.createElement("span");
+    led.className = "led session";
+    led.classList.toggle("on", peer.state !== "connecting");
+    led.dataset.state = peer.state;
+    led.title = `${peer.label}: ${peerDetail(peer)}`;
+    return led;
+}
+
+function peerRow(peer) {
+    const row = document.createElement("tr");
+    const lightCell = cell("");
+    lightCell.append(light(peer));
+    const left = peer.state === "left";
+    row.append(
+        lightCell,
+        cell(peer.label),
+        cell(left ? `left: ${peer.leftReason}` : Descriptions[peer.state]),
+        cell(!left && peer.rttMs !== undefined ? `${Math.round(peer.rttMs)} ms` : "", "number"),
+        cell(!left && peer.lagMs !== undefined ? `${peer.lagMs} ms` : "", "number"),
+    );
+    return row;
+}
+
 export class SessionPanel {
-    constructor(name, { saveReport, copyLink }, root = document.getElementById("session-panel")) {
+    /**
+     * @param {object} session
+     * @param {string} session.name what this person goes by
+     * @param {string} session.link the address a guest joins at
+     * @param {function(): void} session.saveReport
+     * @param {function(): void} session.copyLink
+     */
+    constructor(
+        { name, link, saveReport, copyLink },
+        root = document.getElementById("session-panel"),
+        pane = document.getElementById("session-pane"),
+    ) {
         this.root = root;
-        if (!root) return;
+        this.pane = pane;
+        if (!root || !pane) return;
         root.hidden = false;
-        root.querySelector(".session-you").textContent = `You are ${name}`;
-        for (const [selector, run] of [
-            [".session-report", saveReport],
-            [".session-copy-link", copyLink],
-        ]) {
-            root.querySelector(selector).addEventListener("click", (event) => {
-                event.preventDefault();
-                run();
-            });
-        }
+        this.floating = new FloatingPanel({
+            panel: pane,
+            header: pane.querySelector(".session-pane-header"),
+            closeButton: pane.querySelector(".session-pane-close"),
+        });
+        root.querySelector(".slot-readout").addEventListener("click", () => this.floating.toggle());
+        pane.querySelector(".session-you").textContent = `You are ${name}`;
+        pane.querySelector(".session-link").textContent = link;
+        pane.querySelector(".session-copy-link").addEventListener("click", () => copyLink());
+        pane.querySelector(".session-report").addEventListener("click", () => saveReport());
+    }
+
+    open() {
+        this.floating?.open();
     }
 
     /**
      * Shows `heading` over `summary` and a light for each of `peers` (`{ label, state }`, and what
-     * peerDetail takes), each of which also gets a line in the menu.
+     * peerDetail takes), each of which also gets a row in the pane.
      */
     show(heading, summary, peers) {
-        if (!this.root) return;
+        if (!this.floating) return;
         this.root.querySelector(".session-heading").textContent = heading;
         this.root.querySelector(".session-summary").textContent = summary;
-        this.root.querySelector(".session-peers").replaceChildren(
-            ...peers.map((peer) => {
-                const light = document.createElement("span");
-                light.className = "led session";
-                light.classList.toggle("on", peer.state !== "connecting");
-                light.dataset.state = peer.state;
-                light.title = `${peer.label}: ${peerDetail(peer)}`;
-                return light;
-            }),
-        );
-        const menu = this.root.querySelector(".session-menu");
-        for (const line of menu.querySelectorAll(".session-peer")) line.remove();
-        menu.prepend(
-            ...peers.map((peer) => {
-                const line = document.createElement("li");
-                line.className = "session-peer";
-                const text = document.createElement("span");
-                text.className = "dropdown-item-text";
-                text.textContent = `${peer.label}: ${peerDetail(peer)}`;
-                line.append(text);
-                return line;
-            }),
-        );
+        this.root.querySelector(".session-peers").replaceChildren(...peers.map(light));
+        this.pane.querySelector(".session-people tbody").replaceChildren(...peers.map(peerRow));
     }
 }
