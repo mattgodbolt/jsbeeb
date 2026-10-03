@@ -19,7 +19,7 @@ describe("FrontPanel", () => {
             atomppia: { motorOn: false, playTape: vi.fn(), stopTape: vi.fn(), rewindTape: vi.fn() },
             econet: null,
         };
-        loop = new EventTarget();
+        loop = Object.assign(new EventTarget(), { isSpeedy: () => false });
     });
 
     afterEach(teardownDom);
@@ -39,6 +39,24 @@ describe("FrontPanel", () => {
             expect(lit("capslight")).toBe(true);
             expect(lit("drive1")).toBe(true);
             expect(lit("shiftlight")).toBe(false);
+        });
+
+        it("light turbo while the machine runs speedy", () => {
+            const panel = make();
+            loop.isSpeedy = () => true;
+            panel.syncLights();
+            expect(lit("turbolight")).toBe(true);
+            loop.isSpeedy = () => false;
+            panel.syncLights();
+            expect(lit("turbolight")).toBe(false);
+        });
+
+        it("show turbo on an Atom too", () => {
+            const panel = make(true);
+            loop.isSpeedy = () => true;
+            panel.syncLights();
+            expect(lit("turbolight")).toBe(true);
+            expect(document.getElementById("turbolight").closest(".cell").style.display).toBe("");
         });
 
         it("only touch the DOM when something changed", () => {

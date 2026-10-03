@@ -14,13 +14,14 @@ class Light {
 }
 
 /**
- * The furniture around the screen: the keyboard, drive and cassette lights,
+ * The furniture around the screen: the keyboard, drive, cassette and turbo lights,
  * and the pop-up window the printer prints into.
  */
 export class FrontPanel {
     constructor({ processor, model, printer, loop }) {
         this.processor = processor;
         this.model = model;
+        this.loop = loop;
         this.printer = printer;
         this.printerWindow = null;
         this.printerTextArea = null;
@@ -39,6 +40,7 @@ export class FrontPanel {
         this.drive0 = new Light("drive0");
         this.drive1 = new Light("drive1");
         this.network = new Light("networklight");
+        this.turbo = new Light("turbolight");
 
         this.updateLedVisibility();
     }
@@ -53,6 +55,7 @@ export class FrontPanel {
     syncLights() {
         const { processor } = this;
         this.cassette.update(processor.tapeInterface.motorOn);
+        this.turbo.update(this.loop.isSpeedy());
         if (!this.model.isAtom) {
             this.caps.update(processor.sysvia.capsLockLight);
             this.shift.update(processor.sysvia.shiftLockLight);

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmulationLoop } from "../../src/web/emulation-loop.js";
-import { domFromIndexHtml } from "./helpers.js";
+import { domFromIndexHtml, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
 
@@ -179,6 +179,13 @@ describe("EmulationLoop", () => {
         vi.advanceTimersByTime(10);
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 50);
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(true);
+    });
+
+    it("says whether turbo is now on or off each time it is toggled", () => {
+        const loop = make();
+        loop.toggleFastAsPossible();
+        loop.toggleFastAsPossible();
+        expect(toasts()).toEqual([expect.stringContaining("Turbo is on"), expect.stringContaining("Turbo is off")]);
     });
 
     it("speeds up for a tape motor only when told fast tape", () => {
@@ -406,6 +413,15 @@ describe("EmulationLoop", () => {
             vi.advanceTimersByTime(10);
             expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
             expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
+        });
+
+        it("refuses turbo, saying why, rather than arming it for after the session", () => {
+            const loop = started();
+            loop.setLockstep(lockstep);
+            loop.toggleFastAsPossible();
+            loop.setLockstep(null);
+            expect(loop.isSpeedy()).toBe(false);
+            expect(toasts()).toEqual([expect.stringContaining("not available in a shared session")]);
         });
 
         it("runs the processor again once the session is over", () => {

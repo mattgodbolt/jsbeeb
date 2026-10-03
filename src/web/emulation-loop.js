@@ -1,4 +1,5 @@
 import { noteEvent } from "./analytics.js";
+import { toast } from "./toast.js";
 
 // The machine runs in short slices of real time on a timer, whatever the
 // display is doing (issue #885). Audio gains most from the fine grain: its
@@ -161,7 +162,13 @@ export class EmulationLoop extends EventTarget {
     }
 
     toggleFastAsPossible() {
+        if (this.lockstep) {
+            toast("Turbo is not available in a shared session.", { title: "Turbo" });
+            return;
+        }
         this.fastAsPossible = !this.fastAsPossible;
+        const [now, next] = this.fastAsPossible ? ["on", "off"] : ["off", "on"];
+        toast(`Turbo is ${now}. Alt-T turns it ${next}.`, { title: "Turbo" });
     }
 
     /**
