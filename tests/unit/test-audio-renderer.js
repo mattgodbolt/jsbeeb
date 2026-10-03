@@ -268,6 +268,54 @@ describe("SoundChipProcessor rendering", () => {
         expect(proc.skippedMs).toBeCloseTo(100 - proc.targetLatencyMs, 0);
     });
 
+    // Quanta covering `seconds` of output.
+    const quanta = (proc, seconds) => {
+        for (let i = 0; i < Math.ceil((seconds * OutputRate) / OutputQuantum); ++i) quantum(proc);
+    };
+
+    it("should skip a lead kept far past the target back to it, after a while", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = startedWithTone(proc);
+        producer.advance(1000);
+        producer.flush();
+        simulate(proc, producer, 0.45);
+        expect(proc.skippedMs).toBe(0);
+        simulate(proc, producer, 0.1);
+        expect(proc.skippedMs).toBeGreaterThan(900);
+        expect(proc.leadMs()).toBeLessThan(proc.targetLatencyMs + 20);
+        expect(proc.stalls).toBe(0);
+    });
+
+    it("should skip the excess a producer keeps up at real time, once it has lasted", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = startedWithTone(proc);
+        producer.advance(100);
+        producer.flush();
+        simulate(proc, producer, 2);
+        expect(proc.skippedMs).toBeGreaterThan(50);
+        expect(proc.leadMs()).toBeLessThan(proc.targetLatencyMs + 20);
+    });
+
+    it("should leave a lead just inside the margin to rate control", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = startedWithTone(proc);
+        producer.advance(40);
+        producer.flush();
+        simulate(proc, producer, 2);
+        expect(proc.skippedMs).toBe(0);
+    });
+
+    it("should drain the excess of a fall in the target while the producer waits, not skip it", () => {
+        // Focus, blur and focus again in quick succession: two blurs' worth of lead against the focused target.
+        const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "board", targetLatencyMs: 200 } });
+        const producer = startedWithTone(proc);
+        producer.advance(180);
+        producer.flush();
+        proc.setTargetLatency(20);
+        quanta(proc, 0.45);
+        expect(proc.skippedMs).toBe(0);
+    });
+
     const mute = (proc) => proc.onMessage({ command: "setEnabled", enabled: false });
 
     it("should reject a message it does not know", () => {
@@ -380,7 +428,8 @@ describe("SoundChipProcessor rate control", () => {
         const producer = startedWithTone(over);
         producer.advance(20 * over.targetLatencyMs);
         producer.flush();
-        for (let i = 0; i < 400; ++i) quantum(over);
+        for (let i = 0; i < 100; ++i) quantum(over);
+        expect(over.skippedMs).toBe(0);
         expect(over._effectiveSampleRate(0)).toBeLessThanOrEqual(over.inputSampleRate + over.inputSampleRate * 0.0005);
 
         const under = new SoundChipProcessor(BoardOutput);

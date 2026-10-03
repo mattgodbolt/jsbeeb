@@ -19,12 +19,19 @@ const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
 
+// A lead kept this far past the target for this long is skipped back to it. Rate control would take half
+// an hour to play off a second; a fall in the target drains its excess well inside the time, as the
+// producer waits for it.
+const ExcessLeadMs = 50;
+const PersistentExcessSeconds = 0.5;
+
 const ResyncKinds = new Set(["state", "reset"]);
 const isResync = (event) => ResyncKinds.has(event.kind);
 
 // Renders the chip from its timestamped state changes, so a producer that
 // falls behind leaves the chip sounding its current state (a stall) rather
-// than silent; the missed time is skipped once the producer is ahead again.
+// than silent; the missed time is skipped once the producer is ahead again,
+// as is the excess of one that stays too far ahead.
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
@@ -58,6 +65,8 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._phase = 0;
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
+        this.excessLeadCycles = this._cycles(ExcessLeadMs);
+        this.excessSeconds = 0;
         this.commands = {
             produced: (m) => this.onProduced(m.upTo, m.events),
             setEnabled: (m) => (this.chip.enabled = m.enabled),
@@ -218,11 +227,25 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         }
     }
 
-    process(inputs, outputs) {
-        if (this.stalled && this.upTo - this.clock >= this.targetLeadCycles) this._restart();
+    _skipPersistentExcess(dtSeconds) {
+        const excess = this.upTo - this.clock > this.targetLeadCycles + this.excessLeadCycles;
+        this.excessSeconds = excess ? this.excessSeconds + dtSeconds : 0;
+        if (this.excessSeconds >= PersistentExcessSeconds) {
+            this.excessSeconds = 0;
+            this._restart();
+        }
+    }
 
+    process(inputs, outputs) {
         const channel = outputs[0][0];
-        const effectiveSampleRate = this._effectiveSampleRate(channel.length / sampleRate);
+        const dtSeconds = channel.length / sampleRate;
+        if (this.stalled) {
+            if (this.upTo - this.clock >= this.targetLeadCycles) this._restart();
+        } else {
+            this._skipPersistentExcess(dtSeconds);
+        }
+
+        const effectiveSampleRate = this._effectiveSampleRate(dtSeconds);
         const sampleRatio = effectiveSampleRate / sampleRate;
 
         // The fractional read position carries across quanta, so consumption
