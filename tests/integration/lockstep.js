@@ -228,7 +228,7 @@ describe("lockstep sessions", () => {
         // Each is put right by the one resync it asks for, and the host's reset needs none.
         expect(desyncs).toEqual([
             "state differs from the host's at cycle 2617151",
-            "this machine moved from 1362398 by itself",
+            "this machine moved from 1455645 by itself",
         ]);
         expect(mode7Text(host)).toContain("42");
         expectIdentical(host, guests);

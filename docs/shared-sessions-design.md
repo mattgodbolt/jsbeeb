@@ -56,9 +56,9 @@ change, and reset, disc changes and pastes would be events too; in v0 only keys 
 **Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of
 a second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
 session the host runs as before. A guest runs what its loop asks but never past the host's last commit, and
-when it is more than a quarter of a second behind it runs faster, by at most a tenth of a second at a time. A
-guest left waiting for commits does not get that time back, so on a jittery link it settles up to a quarter of
-a second behind the host, on top of the network's latency. Catching up must not use the speedy frame skip:
+when it is more than 40 ms (two frames) behind it runs faster, by at most a tenth of a second at a time. A
+guest left waiting for commits does not get that time back, so on a jittery link it settles up to 40 ms behind
+the host, on top of the network's latency, and one that joined late catches up to that within a few frames. Catching up must not use the speedy frame skip:
 `FRAMESKIPENABLE` also gates video memory reads and the SAA5050's clocking (`src/video.js:1099`), so a peer that
 skipped frames would end up with different teletext state in MODE 7. A session never runs speedy.
 
@@ -143,7 +143,7 @@ Ranked by how much they would bite.
 7. **Two clocks.** Each browser's audio runs on its own crystal, and in a session the emulation rate is set by
    the sequencer. Over minutes they drift, so each peer either stretches its audio slightly or skips and pads
    it. The existing emulation lead logic (`setEmulationLead`) is the place for that. In v0 a guest simply runs
-   no faster than the host's commits and catches up when more than a quarter of a second behind (see
+   no faster than the host's commits and catches up when more than 40 ms behind (see
    Pacing), so its audio stalls, or skips ahead after it catches up, rather than drifting.
 8. **Smaller ones.** The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is
    audio only and harmless. Later, the Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a
