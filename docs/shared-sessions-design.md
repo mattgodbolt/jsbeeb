@@ -335,26 +335,27 @@ their keys take the input delay, picked against the sequencer rather than the ho
 trip when the host is one end of it and two through the star, plus however far the new sequencer runs behind.
 Taking control on a key press suits turn-based play; two people typing at once would pass control back and forth.
 
-**What is built of it.** The pane has a Take control button and a "Take control when I press a key" option, and
-says who is in control, marking them in its list. A guest that takes control is handed the cycle the host's
-machine had reached, once the host has committed what was due (BREAK, say) and with the keys still waiting for
-their cycles, and starts ordering inputs once its own machine reaches that cycle, keeping any keys passed on to it
-before then. The host relays its commits, checked as a guest checks the host's (well formed, each starting where
-the last ended, no BREAK) and replayed on its own machine, to every other guest. Everyone else's keys, the host's
-included, go to it through the host, stamped against its commits with the host's round trip to it added; the host
-keeps each until a commit carries it. Control moves on from one guest to another, or back to the host, by asking
-the guest in control to stop: it stops at the end of its last commit, or at the cycle it was to take control at if
-it had not yet, and hands back the keys it had not applied. The host takes control back at once, starting everyone
-afresh from its own machine and applying the keys in commits it had passed on but not yet replayed, when a commit
-does not follow on, when its replay disagrees, when its own machine jumps (a reset, say, after which the session's
-clock starts again from the wall time) or when the host presses BREAK; and from the end of the last commit it
-relayed when the guest in control leaves or sends nothing for three seconds, applying itself the keys that guest
-had not committed and resyncing it if it is still there. A request for control while control is changing hands
-goes to whoever asked last once it has; a guest whose snapshot is still on its way cannot take control until it
-has it. A guest that desyncs while another is in control is resynced from the host's machine and the commits it
-has relayed but not yet replayed. Not yet: the old sequencer applying the key that asked for control before it
-stops (with take on a key press, that key reaches the new sequencer stamped like any other), and choosing the
-input delay against the sequencer from measured jitter.
+**What is built of it.** The pane has a Take control button and a "Whoever presses a key takes control" option,
+which the host sets for everyone (a guest's pane shows it greyed out), and says who is in control, marking them in
+its list. A guest that takes control is handed the cycle the host's machine had reached, once the host has
+committed what was due (BREAK, say) and with the keys still waiting for their cycles, and starts ordering inputs
+once its own machine reaches that cycle, keeping any keys passed on to it before then. The host relays its
+commits, checked as a guest checks the host's (well formed, each starting where the last ended, no BREAK) and
+replayed on its own machine, to every other guest. Everyone else's keys, the host's included, go to it through the
+host, stamped against its commits with the host's round trip to it added; the host keeps each until a commit
+carries it. Control moves on from one guest to another, or back to the host, by asking the guest in control to
+stop: it stops at the end of its last commit, or at the cycle it was to take control at if it had not yet, and
+hands back the keys it had not applied. The host takes control back at once, starting everyone afresh from its own
+machine and applying the keys in commits it had passed on but not yet replayed, when a commit does not follow on,
+when its replay disagrees, when its own machine jumps (a reset, say, after which the session's clock starts again
+from the wall time) or when the host presses BREAK; and from the end of the last commit it relayed when the guest
+in control leaves or sends nothing for three seconds, applying itself the keys that guest had not committed and
+resyncing it if it is still there. A request for control while control is changing hands goes to whoever asked
+last once it has; a guest whose snapshot is still on its way cannot take control until it has it. A guest that
+desyncs while another is in control is resynced from the host's machine and the commits it has relayed but not yet
+replayed. Not yet: the old sequencer applying the key that asked for control before it stops (with take on a key
+press, that key reaches the new sequencer stamped like any other), and choosing the input delay against the
+sequencer from measured jitter.
 
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
 peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle

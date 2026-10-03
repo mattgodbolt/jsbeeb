@@ -454,6 +454,14 @@ describe("SessionHost", () => {
             expect(host.report().events).toContainEqual(expect.objectContaining({ event: "control", guest: "g1" }));
         });
 
+        it("tells every guest whether a key press takes control, as its option is set", async () => {
+            showLights();
+            await hosting();
+            const channel = await joined();
+            document.querySelector("#session-pane .session-take-on-key").click();
+            expect(sentOf(channel, "roster").at(-1)).toMatchObject({ takeOnKey: true });
+        });
+
         it("passes on a key pressed to take it, as well as the key", async () => {
             await hosting();
             const channel = await joined();
@@ -1460,6 +1468,20 @@ describe("SessionGuest", () => {
         vi.advanceTimersByTime(250);
         context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
         expect(channel.messages().find((each) => each.type === "input").ms).toBeGreaterThanOrEqual(250);
+    });
+
+    it("asks for control with a key press when the host has set it to, and shows the host's setting", async () => {
+        showLights();
+        const { context, channel, deliver } = await joining();
+        const keyboard = context.keyboard.setInput.mock.calls.at(-1)[0];
+        keyboard.keyDown("a", false);
+        deliver([message({ type: "roster", guests: [], takeOnKey: true })]);
+        keyboard.keyDown("a", false);
+        const sent = channel.messages().filter((each) => each.type === "input");
+        expect(sent.map(({ take }) => take)).toEqual([false, true]);
+        const option = document.querySelector("#session-pane .session-take-on-key");
+        expect(option.checked).toBe(true);
+        expect(option.disabled).toBe(true);
     });
 
     describe("in control", () => {

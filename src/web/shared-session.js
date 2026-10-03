@@ -239,7 +239,15 @@ export class SessionHost {
         this.resyncWhenResumed = null;
         this.stamper = new KeyStamper(context.model.cyclesPerSecond);
         this.lastCommitMs = 0;
-        this.panel = new SessionPanel(sessionPane(this));
+        // Whether a key press takes control, for everyone: the host's to set, and sent to every guest.
+        this.takeOnKey = false;
+        this.panel = new SessionPanel({ ...sessionPane(this), setTakeOnKey: (on) => this.setTakeOnKey(on) });
+    }
+
+    setTakeOnKey(on) {
+        this.takeOnKey = on;
+        this.log.record("take on key", { on });
+        this.showStatus();
     }
 
     async start() {
@@ -279,7 +287,7 @@ export class SessionHost {
             this.sequencer.input(input);
             return;
         }
-        if (input.down && !this.sequencer && this.panel.takesOnKeypress()) this.requestControl(null);
+        if (input.down && !this.sequencer && this.takeOnKey) this.requestControl(null);
         this.deliverKey("host", input, {}, this.stampForController() ?? this.stampOwn());
     }
 
@@ -531,7 +539,7 @@ export class SessionHost {
         for (const guest of [...this.guests.values()]) {
             if (!guest.welcomed) continue;
             const guests = views.map(([each, view]) => (each === guest ? { ...view, you: true } : view));
-            this.sendTo(guest, JSON.stringify({ type: "roster", guests }));
+            this.sendTo(guest, JSON.stringify({ type: "roster", guests, takeOnKey: this.takeOnKey }));
         }
     }
 
@@ -902,6 +910,7 @@ export class SessionGuest {
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
+        this.takeOnKey = false;
         this.panel = new SessionPanel(sessionPane(this));
         this.showStatus();
     }
@@ -983,7 +992,7 @@ export class SessionGuest {
         }
         const at = this.stamp();
         this.log.record("input", { ...input, at });
-        const take = input.down && this.panel.takesOnKeypress();
+        const take = input.down && this.takeOnKey;
         this.send({ type: "input", input, ms: this.log.elapsed(), at, snapshots: this.snapshotsRestored, take });
     }
 
@@ -1146,6 +1155,8 @@ export class SessionGuest {
                 break;
             case "roster":
                 this.roster = cleanRoster(message.guests);
+                this.takeOnKey = message.takeOnKey === true;
+                this.panel.showTakeOnKey(this.takeOnKey);
                 this.showStatus();
                 break;
             case "handover":

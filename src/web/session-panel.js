@@ -77,9 +77,11 @@ export class SessionPanel {
      * @param {function(): void} session.saveReport
      * @param {function(): void} session.copyLink
      * @param {function(): void} session.requestControl asks for this page to order the session's inputs
+     * @param {function(boolean): void} [session.setTakeOnKey] sets whether a key press takes control, for everyone;
+     * without it, the option only shows what the host has set
      */
     constructor(
-        { name, link, saveReport, copyLink, requestControl },
+        { name, link, saveReport, copyLink, requestControl, setTakeOnKey },
         root = document.getElementById("session-panel"),
         pane = document.getElementById("session-pane"),
     ) {
@@ -113,7 +115,11 @@ export class SessionPanel {
             requestControl();
         });
         this.takeOnKey = pane.querySelector(".session-take-on-key");
-        this.takeOnKey.addEventListener("change", () => this.takeOnKey.blur());
+        this.takeOnKey.disabled = !setTakeOnKey;
+        this.takeOnKey.addEventListener("change", () => {
+            this.takeOnKey.blur();
+            setTakeOnKey?.(this.takeOnKey.checked);
+        });
     }
 
     open() {
@@ -133,9 +139,9 @@ export class SessionPanel {
         this.pane.style.maxHeight = `${Math.max(0, lightsTop - 2 * PaneGapPx)}px`;
     }
 
-    /** Whether a key pressed here should take control, as the pane's option says. */
-    takesOnKeypress() {
-        return !!this.takeOnKey?.checked;
+    /** Shows whether a key press takes control, as the host has set it. */
+    showTakeOnKey(on) {
+        if (this.takeOnKey) this.takeOnKey.checked = on;
     }
 
     /**

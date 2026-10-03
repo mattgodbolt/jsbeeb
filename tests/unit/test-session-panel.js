@@ -130,15 +130,25 @@ describe("SessionPanel", () => {
         expect(take.disabled).toBe(true);
     });
 
-    it("takes control on a key press only when asked to, without keeping the focus", () => {
+    it("sets whether a key press takes control for everyone, without keeping the focus", () => {
+        const { pane } = page();
+        const setTakeOnKey = vi.fn();
+        new SessionPanel(session({ setTakeOnKey }));
+        const option = pane.querySelector(".session-take-on-key");
+        expect(option.disabled).toBe(false);
+        option.focus();
+        option.click();
+        expect(setTakeOnKey).toHaveBeenCalledWith(true);
+        expect(document.activeElement).not.toBe(option);
+    });
+
+    it("only shows whether a key press takes control when it is not this page's to set", () => {
         const { pane } = page();
         const panel = new SessionPanel(session());
         const option = pane.querySelector(".session-take-on-key");
-        expect(panel.takesOnKeypress()).toBe(false);
-        option.focus();
-        option.click();
-        expect(panel.takesOnKeypress()).toBe(true);
-        expect(document.activeElement).not.toBe(option);
+        expect(option.disabled).toBe(true);
+        panel.showTakeOnKey(true);
+        expect(option.checked).toBe(true);
     });
 
     it("does nothing on a page without the lights", () => {
