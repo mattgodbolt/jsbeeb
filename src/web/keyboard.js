@@ -43,7 +43,7 @@ export class Keyboard extends EventTarget {
         this.releases = new Map();
     }
 
-    /** Where key presses and BREAK go: straight to the machine, unless a shared session takes them. */
+    /** Key presses and BREAK straight to the machine. */
     directInput() {
         return {
             keyDown: (...args) => this.keyInterface.keyDown(...args),

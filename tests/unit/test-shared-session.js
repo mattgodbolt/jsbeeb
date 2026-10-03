@@ -2,12 +2,20 @@
 import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SessionContext, SessionGuest, SessionHost, sessionInput } from "../../src/web/shared-session.js";
+import {
+    MaxConnectingGuests,
+    MinResyncIntervalMs,
+    SessionGuest,
+    SessionHost,
+    sessionInput,
+    startSessionFromUrl,
+} from "../../src/web/shared-session.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
-import { sessionSnapshot } from "../../src/lockstep.js";
+import { LockstepHost } from "../../src/lockstep.js";
 import { Cmos } from "../../src/cmos.js";
 
 const CyclesPerSecond = 2000000;
+const MsPerMinute = 60 * 1000;
 
 // A layout in which "a" is at [4, 1], and "@" is the same key with BBC SHIFT forced up.
 const layout = {
@@ -21,7 +29,7 @@ function sent(allowBreak, act) {
 }
 
 describe("sessionInput", () => {
-    it("sends a key as its place on the matrix, with no SHIFT override when it has none", () => {
+    it("sends a key as its place on the matrix", () => {
         expect(sent(false, (input) => input.keyDown("a", false))).toEqual([
             { kind: "key", mapping: [4, 1], down: true },
         ]);
@@ -132,9 +140,15 @@ function fakeProcessor({ cycles = 1000 } = {}) {
         targetCycles: cycles,
         model: { cyclesPerSecond: CyclesPerSecond },
         hasTube: false,
-        ...{ a: 0, x: 0, y: 0, s: 0, pc: 0, p: { asByte: () => 0 } },
+        a: 0,
+        x: 0,
+        y: 0,
+        s: 0,
+        pc: 0,
+        p: { asByte: () => 0 },
         ramRomOs: new Uint8Array(16),
         romOffset: 16,
+        fdc: { drives: [] },
         execute(count) {
             this.targetCycles += count;
             this.currentCycles = Math.max(this.currentCycles, this.targetCycles);
@@ -156,10 +170,10 @@ function fakeProcessor({ cycles = 1000 } = {}) {
     return processor;
 }
 
-function fakeContext({ processor = fakeProcessor(), rendezvous = {} } = {}) {
-    return new SessionContext({
+function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} } = {}) {
+    return {
         processor,
-        model: { name: "BBC B", synonyms: ["B-DFS1.2"], cyclesPerSecond: CyclesPerSecond },
+        model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
         loop: { setSession: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn() },
         urlState: { urlWith: vi.fn(() => "about:blank") },
@@ -173,19 +187,26 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {} } = {}) {
             getAnswer: vi.fn(async () => "answer sdp"),
             ...rendezvous,
         },
-    });
+    };
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
 const message = (body) => ({ data: JSON.stringify(body) });
+// The second the session clock shows: wall time here, read as UTC.
+const wallClockSecondMs = (fromMs = Date.now()) =>
+    Math.floor((fromMs - new Date().getTimezoneOffset() * MsPerMinute) / 1000) * 1000;
+
+let hosts;
 
 beforeEach(() => {
     peers = [];
+    hosts = [];
     vi.stubGlobal("RTCPeerConnection", FakePeer);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 });
 
 afterEach(() => {
+    for (const host of hosts) host.close();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -197,6 +218,7 @@ describe("SessionHost", () => {
         const processor = fakeProcessor();
         const listOffers = vi.fn(async () => offers.splice(0));
         const host = new SessionHost(fakeContext({ processor, rendezvous: { listOffers } }), "room");
+        hosts.push(host);
         await host.start();
         await settle();
         return { host, processor };
@@ -214,18 +236,19 @@ describe("SessionHost", () => {
         return channel;
     }
 
-    it("welcomes a guest with its model by a URL-safe name, then sends the machine", async () => {
-        const { host } = await hosting();
+    const keyMessage = (input) => message({ type: "input", input });
+
+    it("welcomes a guest with its model and version, then sends the machine", async () => {
+        await hosting();
         const channel = await joined();
-        expect(channel.messages()[0]).toEqual({ type: "welcome", model: "B-DFS1.2", version: "1.0" });
+        expect(channel.messages()[0]).toEqual({ type: "welcome", model: "BBC B with 8271 (DFS 1.2)", version: "1.0" });
         expect(channel.snapshots()[0].at).toBe(1000);
-        host.close();
     });
 
     it("lets go of a departing guest's keys on every machine", async () => {
         const { host, processor } = await hosting();
         const channel = await joined();
-        channel.emit("message", message({ type: "input", input: { kind: "key", mapping: [4, 1], down: true } }));
+        channel.emit("message", keyMessage({ kind: "key", mapping: [4, 1], down: true }));
         channel.emit("message", message({ type: "bye" }));
         host.lockstep.execute(0);
         expect(processor.sysvia.setMapped.mock.calls).toEqual([
@@ -233,18 +256,18 @@ describe("SessionHost", () => {
             [[4, 1], 0],
         ]);
         expect(peers[0].closed).toBe(true);
-        host.close();
     });
 
-    it("takes only well-formed keys from a guest, never BREAK", async () => {
+    it("takes only well-formed keys from a guest, never BREAK, and passes on only what it checked", async () => {
         const { host, processor } = await hosting();
         const channel = await joined();
-        channel.emit("message", message({ type: "input", input: { kind: "break", down: true } }));
-        channel.emit("message", message({ type: "input", input: { kind: "key", mapping: [99, 1], down: true } }));
+        channel.emit("message", keyMessage({ kind: "break", down: true }));
+        channel.emit("message", keyMessage({ kind: "key", mapping: [99, 1], down: true }));
         channel.emit("message", { data: "not json" });
+        channel.emit("message", keyMessage({ kind: "key", mapping: [4, 1], down: true, padding: "x".repeat(1000) }));
         host.lockstep.execute(0);
-        expect(processor.sysvia.setMapped).not.toHaveBeenCalled();
-        host.close();
+        expect(processor.sysvia.setMapped.mock.calls).toEqual([[[4, 1], 1]]);
+        expect(channel.messages().at(-1).inputs).toEqual([{ kind: "key", mapping: [4, 1], down: true }]);
     });
 
     it("drops a guest whose channel cannot take more, rather than stopping", async () => {
@@ -253,18 +276,16 @@ describe("SessionHost", () => {
         channel.full = true;
         expect(host.lockstep.execute(100)).toBe(true);
         expect(peers[0].closed).toBe(true);
-        host.close();
     });
 
     it("sends a guest that keeps asking at most one snapshot per interval", async () => {
-        const { host } = await hosting();
+        await hosting();
         const channel = await joined();
-        for (let i = 0; i < 3; ++i) channel.emit("message", message({ type: "resync", reason: "test" }));
+        for (let i = 0; i < 3; ++i) channel.emit("message", message({ type: "resync" }));
         await settle();
         expect(channel.snapshots()).toHaveLength(1);
-        await vi.advanceTimersByTimeAsync(2000);
+        await vi.advanceTimersByTimeAsync(MinResyncIntervalMs);
         await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(2));
-        host.close();
     });
 
     it("sends a guest whose snapshot is still on its way the machine from after a jump instead", async () => {
@@ -278,35 +299,38 @@ describe("SessionHost", () => {
         await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
         await settle();
         expect(channel.snapshots().map((snapshot) => snapshot.at)).toEqual([50]);
-        host.close();
     });
 
-    it("runs the clock from cycles, starting again from the real time after a jump", async () => {
+    it("runs the clock from cycles, from the wall time here, starting again from it after a jump", async () => {
         const { host, processor } = await hosting([]);
         const { cmos } = processor.sysvia;
         const started = Date.now();
-        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(started / 1000) * 1000);
+        expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
         host.lockstep.execute(CyclesPerSecond * 5);
-        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor((started + 5000) / 1000) * 1000);
+        expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started + 5000));
         processor.cycleSeconds = 20;
         host.lockstep.execute(0);
-        expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(started / 1000) * 1000);
-        host.close();
+        expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
     });
 
     it("opens only a few connections at a time, however many offers are waiting", async () => {
-        const offers = Array.from({ length: 6 }, (_, i) => ({ guest: `g${i}`, sdp: "offer" }));
-        const { host } = await hosting(offers);
-        expect(peers).toHaveLength(4);
-        host.close();
+        const offers = Array.from({ length: MaxConnectingGuests + 2 }, (_, i) => ({ guest: `g${i}`, sdp: "offer" }));
+        await hosting(offers);
+        expect(peers).toHaveLength(MaxConnectingGuests);
     });
 });
 
 describe("SessionGuest", () => {
     function snapshotMessages(cycles, commits = [], { rtcBaseMs = 0, rtcOffsetMs = 0 } = {}) {
-        const host = fakeProcessor({ cycles });
-        host.sysvia.cmos.joinSession(host.sysvia.cmos.store, () => 0, rtcOffsetMs);
-        const bytes = gzipSync(snapshotToJSON(sessionSnapshot(host, rtcBaseMs)));
+        const processor = fakeProcessor({ cycles });
+        processor.sysvia.cmos.timeOffset = rtcOffsetMs;
+        const snapshot = new LockstepHost(
+            processor,
+            () => {},
+            () => {},
+            { rtcBaseMs },
+        ).snapshot();
+        const bytes = gzipSync(snapshotToJSON(snapshot));
         return [
             message({ type: "snapshot", bytes: bytes.length }),
             { data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) },
@@ -317,8 +341,13 @@ describe("SessionGuest", () => {
     async function joining(rendezvous) {
         const context = fakeContext({ rendezvous });
         await new SessionGuest(context, "room").start();
-        return { context, channel: peers[0].channel };
+        const channel = peers[0].channel;
+        const deliver = (messages) => messages.forEach((each) => channel.emit("message", each));
+        const lockstep = () => context.loop.setSession.mock.calls.at(-1)[0];
+        return { context, channel, deliver, lockstep };
     }
+
+    const resyncsAsked = (channel) => channel.messages().filter((each) => each.type === "resync").length;
 
     it("goes back to running on its own if it cannot join", async () => {
         const context = fakeContext({
@@ -330,47 +359,96 @@ describe("SessionGuest", () => {
     });
 
     it("restores each snapshot in turn and replays the commits that follow it", async () => {
-        const { context, channel } = await joining();
-        const messages = [
+        const { context, deliver, lockstep } = await joining();
+        deliver([
             ...snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [] }]),
             ...snapshotMessages(500, [{ at: 500, upTo: 600, inputs: [] }]),
-        ];
-        for (const each of messages) channel.emit("message", each);
+        ]);
         const { processor } = context;
         await vi.waitFor(() => expect(processor.restoreState).toHaveBeenCalledTimes(2));
         expect(processor.restoreState.mock.calls.map(([state]) => state.cycles)).toEqual([100, 500]);
-        const lockstep = context.loop.setSession.mock.calls.at(-1)[0];
-        await vi.waitFor(() => expect(lockstep.behind()).toBe(100));
+        await vi.waitFor(() => expect(lockstep().behind()).toBe(100));
+    });
+
+    it("asks for a resync once when it parts from the host, and again after the next restore", async () => {
+        const { context, channel, deliver, lockstep } = await joining();
+        const bogus = (at) => ({ at, upTo: at + 50, inputs: [], hash: "bogus" });
+        deliver(snapshotMessages(100, [bogus(100), bogus(150)]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        expect(resyncsAsked(channel)).toBe(1);
+        deliver(snapshotMessages(300, [bogus(300)]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
+        lockstep().execute(100);
+        expect(resyncsAsked(channel)).toBe(2);
     });
 
     it("gives the guest the host's clock and offset, and its own back when the host goes", async () => {
-        const { context, channel } = await joining();
+        const { context, channel, deliver } = await joining();
         const { cmos } = context.processor.sysvia;
         const rtcBaseMs = Date.UTC(2026, 1, 10, 12, 0, 0);
         const rtcOffsetMs = 60 * 1000;
-        const cycles = CyclesPerSecond * 3;
-        for (const each of snapshotMessages(cycles, [], { rtcBaseMs, rtcOffsetMs })) channel.emit("message", each);
+        deliver(snapshotMessages(CyclesPerSecond * 3, [], { rtcBaseMs, rtcOffsetMs }));
         await vi.waitFor(() => expect(cmos.bbcDateTime().getTime()).toBe(rtcBaseMs + 3000 + rtcOffsetMs));
         channel.emit("close");
         expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(Date.now() / 1000) * 1000);
     });
 
-    it("leaves the session on a commit it cannot read", async () => {
+    it.each([
+        ["a commit it cannot read", { type: "commit", at: "soon", upTo: 1, inputs: [] }],
+        ["a snapshot of an impossible size", { type: "snapshot", bytes: -1 }],
+        ["a welcome from another version", { type: "welcome", model: "BBC B with 8271 (DFS 1.2)", version: "0.9" }],
+        ["a welcome with no machine in it", { type: "welcome", model: 42, version: "1.0" }],
+    ])("leaves the session on %s", async (_, body) => {
         const { context, channel } = await joining();
-        channel.emit("message", message({ type: "commit", at: "soon", upTo: 1, inputs: [] }));
+        channel.emit("message", message(body));
         expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.urlState.urlWith).not.toHaveBeenCalled();
     });
 
-    it("leaves the session on a snapshot of an impossible size", async () => {
+    it("stays as it is when the host is the same machine", async () => {
         const { context, channel } = await joining();
-        channel.emit("message", message({ type: "snapshot", bytes: -1 }));
-        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        channel.emit("message", message({ type: "welcome", model: "B-DFS1.2", version: "1.0" }));
+        expect(context.urlState.urlWith).not.toHaveBeenCalled();
+        expect(context.loop.setSession).not.toHaveBeenLastCalledWith(null);
     });
 
     it("reloads as the host's model, by the page's own URL builder", async () => {
         const { context, channel } = await joining();
-        channel.emit("message", message({ type: "welcome", model: "Master", version: "1.0" }));
-        expect(context.urlState.urlWith).toHaveBeenCalledWith(expect.objectContaining({ model: "Master" }));
+        channel.emit("message", message({ type: "welcome", model: "BBC Master 128 (DFS)", version: "1.0" }));
+        expect(context.urlState.urlWith).toHaveBeenCalledWith(
+            expect.objectContaining({ model: "BBC Master 128 (DFS)" }),
+        );
         expect(channel.messages().at(-1)).toEqual({ type: "bye" });
+    });
+});
+
+describe("startSessionFromUrl", () => {
+    async function started(params, contextOptions) {
+        const context = fakeContext(contextOptions);
+        startSessionFromUrl(params, context);
+        await settle();
+        return context.rendezvous;
+    }
+
+    it("hosts with ?server=, which wins over ?client=", async () => {
+        const rendezvous = await started({ server: "here", client: "there" });
+        expect(rendezvous.createRoom).toHaveBeenCalledWith("here");
+        expect(rendezvous.postOffer).not.toHaveBeenCalled();
+    });
+
+    it("joins with ?client=", async () => {
+        const rendezvous = await started({ client: "there" });
+        expect(rendezvous.postOffer).toHaveBeenCalledWith("there", expect.any(String), "local sdp");
+    });
+
+    it.each([
+        ["no session asked for", {}, {}],
+        ["an Atom", { server: "here" }, { model: { isAtom: true } }],
+        ["a second processor", { server: "here" }, { processor: Object.assign(fakeProcessor(), { hasTube: true }) }],
+    ])("starts nothing for %s", async (_, params, contextOptions) => {
+        const rendezvous = await started(params, contextOptions);
+        expect(rendezvous.createRoom).not.toHaveBeenCalled();
+        expect(peers).toEqual([]);
     });
 });

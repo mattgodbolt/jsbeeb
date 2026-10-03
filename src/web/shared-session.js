@@ -3,19 +3,9 @@
 // rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
-import {
-    isValidCommit,
-    isValidInput,
-    joinSessionClock,
-    LockstepGuest,
-    LockstepHost,
-    restoreSessionSnapshot,
-    sessionClockBase,
-    sessionSnapshot,
-} from "../lockstep.js";
+import { isValidCommit, isValidInput, LockstepGuest, LockstepHost, restoreSessionSnapshot } from "../lockstep.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { createRendezvousClient } from "./rendezvous-client.js";
 import { toast } from "./toast.js";
 
 const IceServers = [{ urls: "stun:stun.l.google.com:19302" }];
@@ -25,9 +15,9 @@ const GuestPollMs = 1000;
 const PasteWaitMs = 500;
 const AnswerTimeoutMs = 30000;
 const ConnectTimeoutMs = 20000;
-const MinResyncIntervalMs = 2000;
+export const MinResyncIntervalMs = 2000;
 // Offers anyone who knows the room's name can post; this bounds the connections they can make the host open.
-const MaxConnectingGuests = 4;
+export const MaxConnectingGuests = 4;
 const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
@@ -92,7 +82,7 @@ const mappingKey = (mapping) => mapping.join(",");
 export function sessionInput(sysvia, send, { allowBreak }) {
     const keyInput = (mapping, down) => ({
         kind: "key",
-        mapping: mapping.slice(0, mapping[2] === undefined ? 2 : 3),
+        mapping: [...mapping],
         down,
     });
     return {
@@ -113,18 +103,17 @@ export function sessionInput(sysvia, send, { allowBreak }) {
     };
 }
 
-/** Everything a session needs from the page, gathered once in main.js. */
-export class SessionContext {
-    constructor({ processor, model, loop, keyboard, urlState, version, rendezvous = createRendezvousClient() }) {
-        this.processor = processor;
-        this.model = model;
-        this.loop = loop;
-        this.keyboard = keyboard;
-        this.urlState = urlState;
-        this.version = version;
-        this.rendezvous = rendezvous;
-    }
-}
+/**
+ * Everything a session needs from the page, gathered once in main.js.
+ * @typedef {object} SessionContext
+ * @property {object} processor
+ * @property {object} model
+ * @property {import("./emulation-loop.js").EmulationLoop} loop
+ * @property {import("./keyboard.js").Keyboard} keyboard
+ * @property {import("./url-state.js").UrlState} urlState
+ * @property {string} version
+ * @property {ReturnType<typeof import("./rendezvous-client.js").createRendezvousClient>} rendezvous
+ */
 
 export class SessionHost {
     constructor(context, room) {
@@ -139,11 +128,10 @@ export class SessionHost {
         const { processor, loop, keyboard, rendezvous } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
         this.secret = await rendezvous.createRoom(this.room);
-        this.startClock();
         this.lockstep = new LockstepHost(
             processor,
             (commit) => this.broadcast(JSON.stringify(commit)),
-            () => this.jumped(),
+            () => this.resyncEveryone(),
         );
         loop.setSession(this.lockstep);
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.lockstep.input(input), { allowBreak: true }));
@@ -215,9 +203,8 @@ export class SessionHost {
         opened(channel).then(
             () => {
                 const { model, version } = this.context;
-                // A synonym, which unlike some names has no spaces to survive the guest's URL.
-                const name = model.synonyms[0] ?? model.name;
-                if (!this.sendTo(guest, JSON.stringify({ type: "welcome", model: name, version }))) return;
+                if (!this.sendTo(guest, JSON.stringify({ type: "welcome", model: model.name, version }))) return;
+                guest.welcomed = true;
                 this.sendSnapshot(guest);
                 notify(`A guest joined (${this.connectedCount()} connected).`);
             },
@@ -233,14 +220,15 @@ export class SessionHost {
             return;
         }
         if (message.type === "input" && message.input?.kind === "key" && isValidInput(message.input)) {
-            const { mapping, down } = message.input;
+            // Rebuilt from the checked fields, since every other guest is sent it too.
+            const mapping = [...message.input.mapping];
+            const { down } = message.input;
             if (down) guest.held.set(mappingKey(mapping), mapping);
             else guest.held.delete(mappingKey(mapping));
-            this.lockstep.input(message.input);
+            this.lockstep.input({ kind: "key", mapping, down });
         } else if (message.type === "bye") {
             this.drop(guest);
         } else if (message.type === "resync") {
-            console.log(`Shared session: resyncing a guest: ${message.reason}`);
             this.requestSnapshot(guest);
         }
     }
@@ -260,26 +248,18 @@ export class SessionHost {
         }, waitMs);
     }
 
-    startClock() {
-        const { processor } = this.context;
-        const { cmos } = processor.sysvia;
-        this.rtcBaseMs = sessionClockBase(processor);
-        joinSessionClock(processor, cmos.store, this.rtcBaseMs, cmos.timeOffset);
-    }
-
     // Nobody can replay their way across a jump, not even a guest whose snapshot is still
-    // being compressed: that one is from before it. The clock starts again from now.
-    jumped() {
-        this.startClock();
+    // being compressed: that one is from before it.
+    resyncEveryone() {
         for (const guest of this.guests.values()) {
             if (guest.channel) this.sendSnapshot(guest);
         }
     }
 
-    // Taken between two executes, so the last commit ended exactly here, and anything
-    // the guest is sent from now on carries on from it. Commits made while the snapshot
-    // is compressed wait in the guest's backlog, and a newer snapshot for the same
-    // guest supersedes this one.
+    // Taken between two executes, or at a jump before the next one: either way the next
+    // commit starts here, so anything the guest is sent from now on carries on from it.
+    // Commits made while the snapshot is compressed wait in the guest's backlog, and a
+    // newer snapshot for the same guest supersedes this one.
     async sendSnapshot(guest) {
         const generation = ++guest.snapshotGeneration;
         clearTimeout(guest.resyncTimer);
@@ -287,7 +267,7 @@ export class SessionHost {
         guest.ready = false;
         guest.backlog = [];
         guest.lastSnapshotMs = Date.now();
-        const bytes = await gzip(snapshotToJSON(sessionSnapshot(this.context.processor, this.rtcBaseMs)));
+        const bytes = await gzip(snapshotToJSON(this.lockstep.snapshot()));
         if (generation !== guest.snapshotGeneration) return;
         if (!this.sendTo(guest, JSON.stringify({ type: "snapshot", bytes: bytes.length }))) return;
         for (let offset = 0; offset < bytes.length; offset += SnapshotChunkBytes) {
@@ -325,9 +305,9 @@ export class SessionHost {
         if (this.guests.get(guest.id) !== guest) return;
         this.guests.delete(guest.id);
         clearTimeout(guest.resyncTimer);
-        for (const mapping of guest.held.values()) this.lockstep?.input({ kind: "key", mapping, down: false });
+        for (const mapping of guest.held.values()) this.lockstep.input({ kind: "key", mapping, down: false });
         guest.pc.close();
-        if (guest.ready) notify(`A guest left (${this.connectedCount()} connected).`);
+        if (guest.welcomed) notify(`A guest left (${this.connectedCount()} connected).`);
     }
 
     close() {
@@ -343,11 +323,13 @@ export class SessionGuest {
         this.context = context;
         this.room = room;
         this.id = randomId();
+        this.pc = null;
+        this.channel = null;
         this.lockstep = null;
         this.incoming = null;
         this.buffering = null;
         this.restored = Promise.resolve();
-        this.resyncRequested = false;
+        this.left = false;
     }
 
     async start() {
@@ -437,6 +419,10 @@ export class SessionGuest {
     }
 
     welcome({ model, version }) {
+        if (typeof model !== "string") {
+            this.fail("the host did not say what machine it is");
+            return;
+        }
         if (version !== this.context.version) {
             this.fail(
                 `the host runs jsbeeb ${version} and this is ${this.context.version}; whoever is older should reload`,
@@ -479,21 +465,18 @@ export class SessionGuest {
             loop.setSession(this.lockstep);
             notify(`Joined "${this.room}".`);
         }
-        this.resyncRequested = false;
         if (this.buffering === snapshot) this.buffering = null;
         for (const commit of snapshot.commits) this.lockstep.receive(commit);
     }
 
     desynced(reason) {
-        if (this.resyncRequested) return;
-        this.resyncRequested = true;
         console.warn(`Shared session: ${reason}; asking the host to resync`);
         this.send({ type: "resync", reason });
     }
 
     hostLeft() {
         if (this.left) return;
-        notify("The host has gone; the machine carries on here on its own.");
+        notify("Lost the host; the machine carries on here on its own.");
         this.leave();
     }
 
@@ -512,18 +495,20 @@ export class SessionGuest {
     }
 }
 
-/** Starts the session the URL asks for, if any. */
+/**
+ * Starts the session the URL asks for, if any.
+ * @param {SessionContext} context
+ */
 export function startSessionFromUrl(params, context) {
-    if (!params.server && !params.client) return null;
+    if (!params.server && !params.client) return;
     const { model, processor } = context;
     if (model.isAtom || processor.hasTube) {
         notify("Shared sessions need a BBC Model B or Master, without a second processor.");
-        return null;
+        return;
     }
     const session = params.server ? new SessionHost(context, params.server) : new SessionGuest(context, params.client);
     session.start().catch((error) => {
         notify(`The session couldn't start: ${error.message}`);
         console.error(error);
     });
-    return session;
 }

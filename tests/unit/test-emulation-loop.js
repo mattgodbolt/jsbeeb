@@ -59,6 +59,7 @@ describe("EmulationLoop", () => {
     });
 
     const make = () => new EmulationLoop(deps);
+    const sessionStub = () => ({ execute: vi.fn(() => true) });
     const cyclesExecuted = () => deps.processor.execute.mock.calls.map(([cycles]) => cycles);
 
     const started = () => {
@@ -342,8 +343,15 @@ describe("EmulationLoop", () => {
 
         it("keeps running in a shared session, which would otherwise wait on this tab", () => {
             const loop = started();
-            loop.setSession({ execute: vi.fn(() => true) });
+            loop.setSession(sessionStub());
             hide();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("runs again when a session starts in a tab already hidden", () => {
+            const loop = started();
+            hide();
+            loop.setSession(sessionStub());
             expect(loop.isRunning()).toBe(true);
         });
 
@@ -376,7 +384,7 @@ describe("EmulationLoop", () => {
     describe("in a shared session", () => {
         let session;
         beforeEach(() => {
-            session = { execute: vi.fn(() => true) };
+            session = sessionStub();
         });
         const sessionCycles = () => session.execute.mock.calls.map(([cycles]) => cycles);
 
