@@ -83,7 +83,7 @@ describe("Keyboard", () => {
     describe("in a shared session", () => {
         let input;
         beforeEach(() => {
-            input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn() };
+            input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
             keyboard.setRunning(true);
             keyboard.setInput(input);
             mockSysvia.clearKeys.mockClear();

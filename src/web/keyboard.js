@@ -60,7 +60,7 @@ export class Keyboard extends EventTarget {
     setInput(input) {
         this.clearKeys();
         this.input = input ?? this.directInput();
-        this.input.clearKeys?.();
+        this.input.clearKeys();
     }
 
     /**
@@ -315,7 +315,7 @@ export class Keyboard extends EventTarget {
         for (const release of this.releases.values()) release();
         this.releases.clear();
         // A session's machine is everyone's: only this person's keys are theirs to let go.
-        this.input.clearKeys?.();
+        this.input.clearKeys();
     }
 
     /**

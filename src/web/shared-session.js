@@ -15,14 +15,15 @@ const IceGatheringTimeoutMs = 3000;
 const HostPollMs = 1500;
 const GuestPollMs = 1000;
 const PasteWaitMs = 500;
-const AnswerTimeoutMs = 30000;
+export const AnswerTimeoutMs = 30000;
 export const ConnectTimeoutMs = 20000;
 export const MinResyncIntervalMs = 2000;
-// Offers anyone who knows the room's name can post; this bounds the connections they can make the host open.
+// Offers anyone who knows the room's name can post; this bounds the connections in progress at once.
 export const MaxConnectingGuests = 4;
 const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
+const RoomGone = 404;
 
 function notify(message) {
     console.log(`Shared session: ${message}`);
@@ -102,6 +103,8 @@ export function sessionInput(sysvia, send, { allowBreak }) {
         setReset(down) {
             if (allowBreak) send({ kind: "break", down });
         },
+        // Only this person's keys are theirs to let go, and they are released one by one.
+        clearKeys() {},
     };
 }
 
@@ -168,6 +171,7 @@ export class SessionHost {
         while (!this.closed) {
             try {
                 const offers = await this.context.rendezvous.listOffers(this.room, this.secret);
+                if (this.closed) return;
                 // Each offer is answered once: one whose answer failed would otherwise be retried every poll.
                 for (const offer of offers) {
                     if (!this.offersSeen.has(offer.guest) && this.connectingCount() < MaxConnectingGuests) {
@@ -176,9 +180,25 @@ export class SessionHost {
                     }
                 }
             } catch (error) {
-                console.warn(`Shared session: polling the rendezvous failed: ${error.message}`);
+                if (error.status === RoomGone) {
+                    await this.reopenRoom();
+                } else {
+                    console.warn(`Shared session: polling the rendezvous failed: ${error.message}`);
+                }
             }
             await delay(HostPollMs);
+        }
+    }
+
+    // A host that slept, or a dev server that restarted, finds its room gone; nobody
+    // could join it again until it is made afresh.
+    async reopenRoom() {
+        try {
+            this.secret = await this.context.rendezvous.createRoom(this.room);
+            notify(`The room "${this.room}" had expired, and is open again.`);
+        } catch (error) {
+            notify(`The room "${this.room}" has gone, so nobody else can join: ${error.message}`);
+            this.closed = true;
         }
     }
 
@@ -332,15 +352,20 @@ export class SessionHost {
         if (guest.welcomed) notify(`A guest left (${this.connectedCount()} connected).`);
     }
 
-    // A page kept for the back button comes back as an ordinary one.
+    // A page kept for the back button comes back as an ordinary one. The keys let go
+    // as the keyboard leaves the session, BREAK among them, are applied before the loop does.
     close() {
         if (this.closed) return;
         this.closed = true;
-        for (const guest of this.guests.values()) guest.pc.close();
-        this.context.rendezvous.deleteRoom(this.room, this.secret).catch(() => {});
         const { processor, loop, keyboard } = this.context;
-        loop.setSession(null);
         keyboard.setInput(null);
+        this.lockstep.execute(0);
+        loop.setSession(null);
+        for (const guest of this.guests.values()) {
+            clearTimeout(guest.resyncTimer);
+            guest.pc.close();
+        }
+        this.context.rendezvous.deleteRoom(this.room, this.secret).catch(() => {});
         holdAnalogue(processor, false);
         processor.sysvia.cmos.leaveSession();
     }
@@ -371,7 +396,9 @@ export class SessionGuest {
 
     async join() {
         const { processor, loop, keyboard, rendezvous } = this.context;
-        // Nothing runs until the host's snapshot arrives.
+        // Nothing runs until the host's snapshot arrives, and a paste or autoboot of this
+        // page's own would only be thrown away by it.
+        keyboard.cancelPaste();
         loop.setSession({ execute: () => true });
         holdAnalogue(processor, true);
         const pc = (this.pc = new RTCPeerConnection({ iceServers: IceServers }));
@@ -484,6 +511,8 @@ export class SessionGuest {
         const { processor, loop } = this.context;
         const restored = snapshotFromJSON(await gunzip(snapshot.bytes));
         if (this.left) return;
+        // Before the restore, which would cancel the typist's task and leave the keyboard it disabled.
+        this.context.keyboard.cancelPaste();
         restoreSessionSnapshot(processor, restored);
         if (this.lockstep) {
             this.lockstep.resync();

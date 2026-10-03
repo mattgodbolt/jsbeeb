@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+    AnswerTimeoutMs,
     ConnectTimeoutMs,
     MaxConnectingGuests,
     MinResyncIntervalMs,
@@ -14,10 +15,13 @@ import {
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { LockstepHost } from "../../src/lockstep.js";
 import { AdcCentreValue } from "../../src/adc.js";
+import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 
 const CyclesPerSecond = 2000000;
 const MsPerMinute = 60 * 1000;
+// Enough turns of the microtask queue for a channel's open to reach the host, not for a gzip to finish.
+const OpeningTurns = 10;
 
 // A layout in which "a" is at [4, 1], and "@" is the same key with BBC SHIFT forced up.
 const layout = {
@@ -182,7 +186,7 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} 
         processor,
         model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
         loop: { setSession: vi.fn() },
-        keyboard: { isPasting: false, setInput: vi.fn() },
+        keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         urlState: { urlWith: vi.fn(() => "about:blank") },
         version: "1.0",
         rendezvous: {
@@ -224,11 +228,12 @@ describe("SessionHost", () => {
     async function hosting(offers = [{ guest: "g1", sdp: "offer" }], rendezvous = {}) {
         const processor = fakeProcessor();
         const listOffers = vi.fn(async () => offers.splice(0));
-        const host = new SessionHost(fakeContext({ processor, rendezvous: { listOffers, ...rendezvous } }), "room");
+        const context = fakeContext({ processor, rendezvous: { listOffers, ...rendezvous } });
+        const host = new SessionHost(context, "room");
         hosts.push(host);
         await host.start();
         await settle();
-        return { host, processor };
+        return { host, processor, context };
     }
 
     function connect() {
@@ -245,11 +250,28 @@ describe("SessionHost", () => {
 
     const keyMessage = (input) => message({ type: "input", input });
 
-    it("holds the analogue inputs at the centre for the session", async () => {
-        const { host, processor } = await hosting([]);
+    it("holds the analogue inputs at the centre for the session, and gives back an ordinary page when it closes", async () => {
+        const { host, processor, context } = await hosting([]);
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
         host.close();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
+        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
+        expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
+        expect(processor.sysvia.cmos.bbcDateTime()).toBeInstanceOf(Date);
+    });
+
+    it("opens its room again if it finds it gone, and says so if it cannot", async () => {
+        const gone = Object.assign(new Error("Rendezvous list offers failed with status 404"), { status: 404 });
+        const listOffers = vi.fn(async () => Promise.reject(gone));
+        const createRoom = vi.fn(async () => "secret");
+        const { context } = await hosting([], { listOffers, createRoom });
+        expect(createRoom).toHaveBeenCalledTimes(2);
+        createRoom.mockRejectedValue(new Error("Room already exists"));
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        const polls = listOffers.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        expect(listOffers.mock.calls.length).toBe(polls);
+        expect(context.rendezvous.createRoom).toHaveBeenCalledTimes(3);
     });
 
     it("welcomes a guest with its model and version, then sends the machine", async () => {
@@ -262,7 +284,7 @@ describe("SessionHost", () => {
     it("sends a joiner the commits made while its snapshot was compressed, after it", async () => {
         const { host } = await hosting();
         const channel = connect();
-        for (let i = 0; i < 10 && channel.messages().length === 0; ++i) await Promise.resolve();
+        for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
         host.lockstep.execute(100);
         host.lockstep.execute(100);
         await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
@@ -272,6 +294,11 @@ describe("SessionHost", () => {
             [1100, 1200],
         ]);
         expect(channel.snapshots()[0].at).toBe(1000);
+        const lastChunk = channel.sent.findLastIndex((data) => typeof data !== "string");
+        const firstCommit = channel.sent.findIndex(
+            (data) => typeof data === "string" && JSON.parse(data).type === "commit",
+        );
+        expect(firstCommit).toBeGreaterThan(lastChunk);
     });
 
     it("ignores a guest's second channel, which would cost another snapshot", async () => {
@@ -331,7 +358,7 @@ describe("SessionHost", () => {
         const { host, processor } = await hosting();
         const channel = connect();
         // The welcome and the snapshot start together; the jump comes while it is compressed.
-        for (let i = 0; i < 10 && channel.messages().length === 0; ++i) await Promise.resolve();
+        for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
         expect(channel.messages()).toEqual([expect.objectContaining({ type: "welcome" })]);
         processor.currentCycles = processor.targetCycles = 50;
         host.lockstep.execute(0);
@@ -409,6 +436,30 @@ describe("SessionGuest", () => {
 
     const resyncsAsked = (channel) => channel.messages().filter((each) => each.type === "resync").length;
 
+    it("waits for an offer's answer for less time than the rendezvous keeps the offer", () => {
+        expect(AnswerTimeoutMs).toBeLessThan(OfferLifetimeSeconds * 1000);
+    });
+
+    it("sends the host its keys but never BREAK", async () => {
+        const { context, channel } = await joining();
+        const input = context.keyboard.setInput.mock.calls.at(-1)[0];
+        input.keyDown("a", false);
+        input.setReset(true);
+        expect(channel.messages().map((each) => each.input?.kind)).toEqual(["key"]);
+    });
+
+    it("cancels its own paste or autoboot when it joins, and before every restore", async () => {
+        const { context, deliver } = await joining();
+        const { cancelPaste } = context.keyboard;
+        expect(cancelPaste).toHaveBeenCalledTimes(1);
+        deliver(snapshotMessages(100));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        expect(cancelPaste).toHaveBeenCalledTimes(2);
+        expect(cancelPaste.mock.invocationCallOrder[1]).toBeLessThan(
+            context.processor.restoreState.mock.invocationCallOrder[0],
+        );
+    });
+
     it("goes back to running on its own if it cannot join", async () => {
         const context = fakeContext({
             rendezvous: { postOffer: vi.fn(async () => Promise.reject(new Error("No such room"))) },
@@ -469,7 +520,7 @@ describe("SessionGuest", () => {
         const { context, channel, deliver } = await joining();
         const { cmos } = context.processor.sysvia;
         const rtcBaseMs = Date.UTC(2026, 1, 10, 12, 0, 0);
-        const rtcOffsetMs = 60 * 1000;
+        const rtcOffsetMs = MsPerMinute;
         deliver(snapshotMessages(CyclesPerSecond * 3, [], { rtcBaseMs, rtcOffsetMs }));
         await vi.waitFor(() => expect(cmos.bbcDateTime().getTime()).toBe(rtcBaseMs + 3000 + rtcOffsetMs));
         channel.emit("close");
