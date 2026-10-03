@@ -131,6 +131,16 @@ jobs:
       - name: Build distribution
         run: |
           make dist
+      - name: Deploy the rendezvous function
+        if: github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-2
+        run: |
+          zip -j rendezvous.zip rendezvous/*
+          aws lambda update-function-code --function-name jsbeeb-rendezvous --zip-file fileb://rendezvous.zip
+          aws lambda wait function-updated-v2 --function-name jsbeeb-rendezvous
       - name: Deploy to S3
         if: github.ref == 'refs/heads/main'
         env:
