@@ -33,17 +33,17 @@ Every peer runs the whole machine. They start from the same snapshot, apply the 
 emulated cycle, and so stay identical without sending any machine state.
 
 **Time is cycles, not milliseconds.** The session clock is the emulated cycle count, and every input is stamped
-with the cycle it applies at. In v0 that is wherever the host's machine had got to between two executes,
-which is always an instruction boundary, so any machine running the same code stops there exactly, whatever
-slices its own loop runs in. A fixed quantum (a frame's worth of cycles, 40,000 on a 2MHz, 50Hz Beeb) would add
-one thing: a press and release that land in one quantum could be spread over two, so a tap too short for the
-OS's 100Hz keyboard scan is never lost. v0 has no quantum yet.
+with the cycle it applies at. In v0 that is wherever the host's machine had got to between two executes, which is
+always an instruction boundary, so any machine running the same code stops there exactly, whatever slices its own
+loop runs in. The host spaces a guest's keys that arrive together (see Known gaps), so a fixed quantum is not
+needed to keep a tap from landing on one cycle.
 
 **One sequencer orders the inputs.** The host is the sequencer. Guests send it their inputs as they happen; it
-applies them at its next execute and sends every guest a commit, `{at, inputs, upTo}`: the inputs it applied at
-cycle `at`, and how far it then ran. A guest runs up to the last commit and no further. Guests never hear from
-each other, and a quiet guest costs nothing because nobody waits on it. The host is also the hub every guest
-connects to (see v0); the protocol does not depend on that, so a server could take the job over later.
+applies them at its next execute (a guest's keys spaced as Known gaps says) and sends every guest a commit, `{at,
+inputs, upTo}`: the inputs it applied at cycle `at`, and how far it then ran. A guest runs up to the last commit
+and no further. Guests never hear from each other, and a quiet guest costs nothing because nobody waits on it. The
+host is also the hub every guest connects to (see v0); the protocol does not depend on that, so a server could
+take the job over later.
 
 **Inputs are machine-level events.** A key is sent after the sender's own mapping (layouts, user remaps in
 `src/keymap.js`), not as a host key code, because mapping is per-person configuration. That is more than a
@@ -241,10 +241,12 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### Known gaps
 
-- There is no quantum yet, so a guest's press and release that reach the host within one of its ticks apply at
-  the same cycle and the OS never sees the key. A lost packet that holds back several messages makes that
-  likely. The input delay after v0 (below) keeps such keys apart when they were pressed in different ticks of
-  the guest's.
+- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host
+  keeps them in the order they came and applies each press at least 40ms after the guest's last, and each
+  release 40ms after its press, so a bunch still types one key at a time that the OS sees; a key held longer
+  comes out 40ms long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of
+  them. A release can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up
+  arrives late, and one that arrives behind a bunch waits for it. Nothing but the input delay after v0 (below) would hide that.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -260,15 +262,13 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
 - A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
-  measured), and with its ticks that far apart a guest's press and release nearly always reach it together, so
-  guests cannot type until the quantum and the input delay (below) are in.
+  measured), and with its ticks that far apart a guest's press and release nearly always reach it together, and
+  only the host's spacing of bunched keys keeps them apart.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
 
 ### What is left for v0
 
-- A fixed quantum, so a guest's press and release that reach the host together still make a tap; the input
-  delay after v0 builds on it.
 - More of the determinism test the experiment above stands for. The integration test already runs a B and a
   Master in random, uneven slices and compares cycles, RAM with the ROMs and sideways RAM byte for byte, the
   CMOS, the keyboard and the MODE 7 screen; still to come are a disc read during the run, framebuffers and
@@ -295,14 +295,14 @@ quarter of a second behind (see Pacing), so it would hold a target lag that foll
 Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held back, and a
 release held up by less than the delay, go in where they were pressed. A key that arrives too late for its cycle
 goes in at once, as every key does now. Two keys stamped in one of the guest's ticks still share a cycle, so the
-quantum (or the host's spacing of bunched keys) stays as the floor under it. jsbeeb worked hard to get local input
-lag down to a frame or two, so the delay is not fixed: the session picks it, and the guests' target lag, from the
-measured round trip and jitter, small on a LAN and more across an ocean, and keeps retuning both. Between resyncs,
-a guest never stamps a key earlier than the last one it stamped, so a delay that shrinks takes effect only as the
-stamps catch up, and keys keep the order they were pressed in; keys clamped to one stamp share a cycle and fall to
-the same floor. A resync forgets the last stamp, since the machine it counted on has jumped, and each key carries
-the count of that guest's resyncs, so the host applies one stamped before the guest's latest at once rather than
-holding it for a cycle on a timeline that has gone. In this paragraph the host stands for whoever is sequencing.
+host's spacing of bunched keys stays as the floor under it. jsbeeb worked hard to get local input lag down to a
+frame or two, so the delay is not fixed: the session picks it, and the guests' target lag, from the measured round
+trip and jitter, small on a LAN and more across an ocean, and keeps retuning both. Between resyncs, a guest never
+stamps a key earlier than the last one it stamped, so a delay that shrinks takes effect only as the stamps catch
+up, and keys keep the order they were pressed in; keys clamped to one stamp share a cycle and fall to the same
+floor. A resync forgets the last stamp, since the machine it counted on has jumped, and each key carries the count
+of that guest's resyncs, so the host applies one stamped before the guest's latest at once rather than holding it
+for a cycle on a timeline that has gone. In this paragraph the host stands for whoever is sequencing.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
 sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
