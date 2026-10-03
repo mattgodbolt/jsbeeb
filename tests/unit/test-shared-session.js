@@ -9,14 +9,16 @@ import {
     MinResyncIntervalMs,
     SessionGuest,
     SessionHost,
+    cleanName,
     sessionInput,
     startSessionFromUrl,
 } from "../../src/web/shared-session.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
-import { LockstepHost } from "../../src/lockstep.js";
+import { LockstepHost, MaxGuestLagSeconds } from "../../src/lockstep.js";
 import { AdcCentreValue } from "../../src/adc.js";
 import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
+import { StatsIntervalMs } from "../../src/web/session-log.js";
 
 const CyclesPerSecond = 2000000;
 const MsPerMinute = 60 * 1000;
@@ -33,6 +35,21 @@ function sent(allowBreak, act) {
     act(sessionInput(layout, (input) => inputs.push(input), { allowBreak }));
     return inputs;
 }
+
+describe("cleanName", () => {
+    it.each([
+        ["  Kieran ", "Kieran"],
+        ["a\u0007b\nc", "abc"],
+        ["\u202eabc\u2066", "abc"],
+        ["a\u0085\u061cb", "ab"],
+        ["\u{1F600}".repeat(40), "\u{1F600}".repeat(32)],
+        ["x".repeat(100), "x".repeat(32)],
+        ["\u0000 ", null],
+        [42, null],
+    ])("makes %j %j", (name, cleaned) => {
+        expect(cleanName(name)).toBe(cleaned);
+    });
+});
 
 describe("sessionInput", () => {
     it("sends a key as its place on the matrix", () => {
@@ -129,6 +146,23 @@ class FakePeer extends FakeEvents {
         return {};
     }
 
+    async getStats() {
+        return new Map(
+            [
+                { id: "T", type: "transport", selectedCandidatePairId: "P" },
+                {
+                    id: "P",
+                    type: "candidate-pair",
+                    localCandidateId: "L",
+                    remoteCandidateId: "R",
+                    currentRoundTripTime: 0.085,
+                },
+                { id: "L", type: "local-candidate", candidateType: "srflx", protocol: "udp" },
+                { id: "R", type: "remote-candidate", candidateType: "srflx" },
+            ].map((entry) => [entry.id, entry]),
+        );
+    }
+
     createDataChannel() {
         this.channel = new FakeChannel();
         return this.channel;
@@ -202,6 +236,10 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} 
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
+// The lights' session readout, as index.html has it.
+const PanelMarkup = `<div id="session-panel" hidden>
+    <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
+    <ul class="session-menu"><li><a href="#" class="session-report"></a></li></ul></div>`;
 const message = (body) => ({ data: JSON.stringify(body) });
 // The second the session clock shows: wall time here, read as UTC.
 const wallClockSecondMs = (fromMs = Date.now()) =>
@@ -213,7 +251,7 @@ beforeEach(() => {
     peers = [];
     hosts = [];
     vi.stubGlobal("RTCPeerConnection", FakePeer);
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
 });
 
 afterEach(() => {
@@ -236,11 +274,13 @@ describe("SessionHost", () => {
         return { host, processor, context };
     }
 
-    function connect() {
+    function connectTo(index) {
         const channel = new FakeChannel();
-        peers.at(-1).emit("datachannel", { channel });
+        peers[index].emit("datachannel", { channel });
         return channel;
     }
+
+    const connect = () => connectTo(peers.length - 1);
 
     async function joined() {
         const channel = connect();
@@ -276,10 +316,15 @@ describe("SessionHost", () => {
         expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
     });
 
-    it("welcomes a guest with its model and version, then sends the machine", async () => {
-        await hosting();
+    it("welcomes a guest with its model, version and the host's name, then sends the machine", async () => {
+        const { host } = await hosting();
         const channel = await joined();
-        expect(channel.messages()[0]).toEqual({ type: "welcome", model: "BBC B with 8271 (DFS 1.2)", version: "1.0" });
+        expect(channel.messages()[0]).toEqual({
+            type: "welcome",
+            model: "BBC B with 8271 (DFS 1.2)",
+            version: "1.0",
+            name: host.name,
+        });
         expect(channel.snapshots()[0].at).toBe(1000);
     });
 
@@ -338,6 +383,155 @@ describe("SessionHost", () => {
         expect(channel.messages().at(-1).inputs).toEqual([{ kind: "key", mapping: [4, 1], down: true }]);
     });
 
+    it("logs a guest's keys with the guest's time and the cycle they are applied at, and why it left", async () => {
+        const { host } = await hosting();
+        const channel = await joined();
+        channel.emit(
+            "message",
+            message({ type: "input", input: { kind: "key", mapping: [4, 1], down: true }, ms: 12.5 }),
+        );
+        channel.emit("message", message({ type: "bye" }));
+        expect(host.report().events).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ event: "input", guest: "g1", mapping: [4, 1], down: true, guestMs: 12.5 }),
+                expect.objectContaining({ event: "left", guest: "g1", reason: "it said goodbye" }),
+            ]),
+        );
+        expect(
+            host
+                .report()
+                .events.filter((each) => each.event === "input")
+                .map((each) => each.cycle),
+        ).toEqual([1000, 1000]);
+    });
+
+    it("logs only the numbers a guest's summary should hold, so it cannot rewrite the log", async () => {
+        const { host } = await hosting();
+        const channel = await joined();
+        vi.advanceTimersByTime(5000);
+        const stats = { starved: 3, lagMs: 40, note: "<script>", junk: 1, ms: -1, guest: 7, event: 9 };
+        channel.emit("message", message({ type: "stats", stats }));
+        const logged = host.report().events.find((each) => each.event === "guest stats");
+        expect(logged).toEqual({
+            ms: expect.any(Number),
+            event: "guest stats",
+            guest: "g1",
+            starved: 3,
+            lagMs: 40,
+            dropped: 0,
+        });
+        expect(logged.ms).toBeGreaterThan(0);
+    });
+
+    it("takes one name from a guest, and at most one summary per half interval", async () => {
+        const { host } = await hosting();
+        const channel = await joined();
+        for (const name of ["Kieran", "Matt (you)"]) channel.emit("message", message({ type: "hello", name }));
+        for (let i = 0; i < 3; ++i) channel.emit("message", message({ type: "stats", stats: { lagMs: i } }));
+        vi.advanceTimersByTime(StatsIntervalMs);
+        channel.emit("message", message({ type: "stats", stats: { lagMs: 9 } }));
+        const events = host.report().events;
+        expect(events.filter((each) => each.event === "hello").map((each) => each.name)).toEqual(["Kieran"]);
+        const summaries = events.filter((each) => each.event === "guest stats");
+        expect(summaries.map(({ lagMs, dropped }) => [lagMs, dropped])).toEqual([
+            [0, 0],
+            [9, 2],
+        ]);
+    });
+
+    it("sends each guest the lights once an interval, and logs and shows each connection's round trip", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const { host } = await hosting();
+        const channel = await joined();
+        channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50 } }));
+        const rosters = () => channel.messages().filter((each) => each.type === "roster").length;
+        const before = rosters();
+        host.execute(0);
+        expect(rosters()).toBe(before);
+        vi.advanceTimersByTime(StatsIntervalMs);
+        host.execute(0);
+        await settle();
+        expect(rosters()).toBe(before + 1);
+        expect(host.report().events).toContainEqual(
+            expect.objectContaining({ event: "connection", guest: "g1", rttMs: 85, route: "srflx/srflx" }),
+        );
+        host.execute(0);
+        vi.advanceTimersByTime(StatsIntervalMs);
+        host.execute(0);
+        expect(document.querySelector(".led").title).toBe("Guest 1: keeping up, 85 ms round trip, 30 ms behind");
+    });
+
+    it("shows each guest's light, and keeps a departed one's for a while", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const { host } = await hosting();
+        const channel = await joined();
+        const lights = () => [...document.querySelectorAll(".led")].map((light) => light.dataset.state);
+        expect(lights()).toEqual(["connecting"]);
+        channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50 } }));
+        vi.advanceTimersByTime(StatsIntervalMs);
+        host.execute(0);
+        expect(lights()).toEqual(["ok"]);
+        expect(document.querySelector(".session-summary").textContent).toBe("1 guest");
+        channel.emit("message", message({ type: "bye" }));
+        expect(lights()).toEqual(["left"]);
+        expect(document.querySelector(".session-summary").textContent).toBe("0 guests");
+        vi.advanceTimersByTime(60000);
+        host.execute(0);
+        expect(lights()).toEqual([]);
+    });
+
+    it("calls each guest by the name it gives", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const { host } = await hosting();
+        const channel = await joined();
+        channel.emit("message", message({ type: "hello", name: "Kieran" }));
+        expect(document.querySelector(".led").title).toMatch(/^Kieran: /);
+        expect(host.report().events).toContainEqual(expect.objectContaining({ event: "hello", name: "Kieran" }));
+    });
+
+    it("shows every guest the same lights, its own marked", async () => {
+        const { host } = await hosting([
+            { guest: "g1", sdp: "offer" },
+            { guest: "g2", sdp: "offer" },
+        ]);
+        const first = connectTo(0);
+        const second = connectTo(1);
+        await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+        first.emit("message", message({ type: "hello", name: "Kieran" }));
+        second.emit("message", message({ type: "hello", name: "Ana" }));
+        const lastRoster = (channel) =>
+            channel
+                .messages()
+                .filter((each) => each.type === "roster")
+                .at(-1).guests;
+        expect(lastRoster(first).map(({ label, you }) => [label, !!you])).toEqual([
+            ["Kieran", true],
+            ["Ana", false],
+        ]);
+        expect(lastRoster(second).map(({ label, you }) => [label, !!you])).toEqual([
+            ["Kieran", false],
+            ["Ana", true],
+        ]);
+        expect(host.connectedCount()).toBe(2);
+    });
+
+    it("logs only the resyncs it honours, so a guest asking without end cannot fill the log", async () => {
+        const { host } = await hosting();
+        const channel = await joined();
+        for (let i = 0; i < 50; ++i) channel.emit("message", message({ type: "resync", reason: "x" }));
+        expect(host.report().events.filter((each) => each.event === "resync asked")).toHaveLength(1);
+    });
+
+    it("reports the keys each guest is holding, and the keys the machine has down", async () => {
+        const { host, processor } = await hosting();
+        const channel = await joined();
+        channel.emit("message", keyMessage({ kind: "key", mapping: [4, 1], down: true }));
+        processor.sysvia.keys = [Uint8Array.of(0, 1), Uint8Array.of(0, 0)];
+        const report = host.report();
+        expect(report.guests).toEqual([{ id: "g1", connected: true, held: [[4, 1]] }]);
+        expect(report.keysDown).toEqual([[0, 1]]);
+    });
+
     it("drops a guest whose channel cannot take more, rather than stopping", async () => {
         const { host } = await hosting();
         const channel = await joined();
@@ -361,7 +555,8 @@ describe("SessionHost", () => {
         const channel = connect();
         // The welcome and the snapshot start together; the jump comes while it is compressed.
         for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
-        expect(channel.messages()).toEqual([expect.objectContaining({ type: "welcome" })]);
+        expect(channel.messages()[0]).toMatchObject({ type: "welcome" });
+        expect(channel.messages().some((each) => each.type === "snapshot")).toBe(false);
         processor.currentCycles = processor.targetCycles = 50;
         host.lockstep.execute(0);
         await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
@@ -429,11 +624,12 @@ describe("SessionGuest", () => {
 
     async function joining(rendezvous) {
         const context = fakeContext({ rendezvous });
-        await new SessionGuest(context, "room").start();
+        const guest = new SessionGuest(context, "room");
+        await guest.start();
         const channel = peers[0].channel;
         const deliver = (messages) => messages.forEach((each) => channel.emit("message", each));
         const lockstep = () => context.loop.setLockstep.mock.calls.at(-1)[0];
-        return { context, channel, deliver, lockstep };
+        return { guest, context, channel, deliver, lockstep };
     }
 
     const resyncsAsked = (channel) => channel.messages().filter((each) => each.type === "resync").length;
@@ -442,12 +638,115 @@ describe("SessionGuest", () => {
         expect(AnswerTimeoutMs).toBeLessThan(OfferLifetimeSeconds * 1000);
     });
 
+    it("says its name to the host, and calls the host by the one it was welcomed with", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const context = fakeContext();
+        await new SessionGuest(context, "room", "Kieran").start();
+        const { channel } = peers[0];
+        expect(channel.messages()[0]).toEqual({ type: "hello", name: "Kieran" });
+        channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
+        expect(document.querySelector(".led").title).toMatch(/^Matt: /);
+    });
+
+    it("shows the host's list of guests, its own marked, and makes the most of a bad one", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const { channel } = await joining();
+        const guests = [
+            { label: "Kieran", state: "ok", rttMs: 85, lagMs: 60, you: true },
+            { label: "\u0007", state: "on fire", rttMs: "fast" },
+        ];
+        channel.emit("message", message({ type: "roster", guests }));
+        const titles = [...document.querySelectorAll(".led")].map((light) => light.title);
+        expect(titles).toEqual([
+            "Host: connecting",
+            "Kieran (you): keeping up, 85 ms round trip, 60 ms behind",
+            "Guest: out of touch",
+        ]);
+    });
+
+    it("logs the inputs the host applied, with their cycle, and no lag once it has left", async () => {
+        const { guest, channel, deliver } = await joining();
+        const input = { kind: "key", mapping: [4, 1], down: true };
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [{ ...input, junk: "x".repeat(1000) }] }]));
+        expect(guest.report().events).toContainEqual(
+            expect.objectContaining({ event: "inputs", cycle: 100, inputs: [input] }),
+        );
+        channel.emit("close");
+        expect(guest.report().lagMs).toBeUndefined();
+    });
+
     it("sends the host its keys but never BREAK", async () => {
         const { context, channel } = await joining();
         const input = context.keyboard.setInput.mock.calls.at(-1)[0];
         input.keyDown("a", false);
         input.setReset(true);
-        expect(channel.messages().map((each) => each.input?.kind)).toEqual(["key"]);
+        const inputs = channel.messages().filter((each) => each.type === "input");
+        expect(inputs.map((each) => each.input.kind)).toEqual(["key"]);
+    });
+
+    it("sends each key with the time it was pressed here", async () => {
+        const { context, channel } = await joining();
+        vi.advanceTimersByTime(250);
+        context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
+        expect(channel.messages().find((each) => each.type === "input").ms).toBeGreaterThanOrEqual(250);
+    });
+
+    it("tells the host once a second how it kept up", async () => {
+        const { context, channel, deliver, lockstep } = await joining();
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        vi.advanceTimersByTime(1000);
+        lockstep().execute(100);
+        const stats = channel.messages().filter((each) => each.type === "stats");
+        expect(stats).toEqual([
+            {
+                type: "stats",
+                stats: expect.objectContaining({ frames: 2, framesMaxGapMs: 1000, starved: 2, lagMs: 0 }),
+            },
+        ]);
+    });
+
+    it("measures its own round trip to the host, and shows and logs it", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const { guest, context, channel, deliver, lockstep } = await joining();
+        channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        vi.advanceTimersByTime(StatsIntervalMs);
+        lockstep().execute(100);
+        await settle();
+        lockstep().execute(100);
+        vi.advanceTimersByTime(StatsIntervalMs);
+        lockstep().execute(100);
+        expect(document.querySelector(".led").title).toMatch(/^Matt: .*, 85 ms round trip, /);
+        expect(guest.report().events).toContainEqual(expect.objectContaining({ event: "connection", rttMs: 85 }));
+    });
+
+    it("does not count a frame as catching up when its lag is within a slice of the limit", async () => {
+        const { context, channel, deliver, lockstep } = await joining();
+        const justOverTheLimit = MaxGuestLagSeconds * CyclesPerSecond + 50;
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + justOverTheLimit, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        vi.advanceTimersByTime(1000);
+        lockstep().execute(100);
+        const [{ stats }] = channel.messages().filter((each) => each.type === "stats");
+        expect(stats.catchingUp).toBeUndefined();
+    });
+
+    it("counts a frame as catching up only when it starts far behind the host", async () => {
+        const { context, channel, deliver, lockstep } = await joining();
+        const farBehind = CyclesPerSecond;
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + farBehind, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        lockstep().execute(100);
+        vi.advanceTimersByTime(1000);
+        lockstep().execute(100);
+        const [{ stats }] = channel.messages().filter((each) => each.type === "stats");
+        expect(stats).toMatchObject({ catchingUp: 2 });
+        expect(stats.starved).toBeUndefined();
     });
 
     it("cancels its own paste or autoboot when it joins, and before every restore", async () => {
@@ -502,7 +801,10 @@ describe("SessionGuest", () => {
         const { processor } = context;
         await vi.waitFor(() => expect(processor.restoreState).toHaveBeenCalledTimes(2));
         expect(processor.restoreState.mock.calls.map(([state]) => state.cycles)).toEqual([100, 500]);
-        await vi.waitFor(() => expect(lockstep().behind()).toBe(100));
+        await vi.waitFor(() => {
+            lockstep().execute(1000);
+            expect(processor.currentCycles).toBe(600);
+        });
     });
 
     it("asks for a resync once when it parts from the host, and again after the next restore", async () => {
@@ -577,6 +879,25 @@ describe("startSessionFromUrl", () => {
     it("joins with ?client=", async () => {
         const rendezvous = await started({ client: "there" });
         expect(rendezvous.postOffer).toHaveBeenCalledWith("there", expect.any(String), "local sdp");
+    });
+
+    it("shows the session in the lights, with its report to save", async () => {
+        document.body.innerHTML = PanelMarkup;
+        URL.createObjectURL = vi.fn(() => "blob:report");
+        URL.revokeObjectURL = vi.fn();
+        try {
+            vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+            await started({ client: "there" });
+            const panel = document.getElementById("session-panel");
+            expect(panel.hidden).toBe(false);
+            expect(panel.querySelector(".led").dataset.state).toBe("connecting");
+            panel.querySelector(".session-report").dispatchEvent(new MouseEvent("click", { cancelable: true }));
+            const report = JSON.parse(await URL.createObjectURL.mock.calls[0][0].text());
+            expect(report).toMatchObject({ role: "guest", room: "there", version: "1.0" });
+        } finally {
+            delete URL.createObjectURL;
+            delete URL.revokeObjectURL;
+        }
     });
 
     it.each([
