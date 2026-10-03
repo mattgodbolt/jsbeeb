@@ -297,8 +297,8 @@ arrives too late for its cycle goes in at once, as every key does now. Two keys 
 ticks still share a cycle, so the quantum (or the host's spacing of bunched keys) stays as the floor under it.
 jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks
 it, and the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an
-ocean, and keeps retuning both. A guest's delay only changes while it holds no key, so a release is never stamped
-before its press.
+ocean, and keeps retuning both. A guest never stamps a key earlier than the last one it stamped, so a delay
+that shrinks takes effect only as the stamps catch up, and keys keep the order they were pressed in.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
 sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
@@ -320,7 +320,9 @@ control back and forth.
 Each peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a
 cycle already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and
 restore are already cheap (see Prior art); re-emulation needs painting suppressed and the sound chip's queued
-events unwound, and a correction shows as the other player's sprite jumping.
+events unwound, and a correction shows as the other player's sprite jumping. Whatever leaves the machine waits
+until the cycle that caused it is confirmed: a disc write, in particular, reaches local storage or Google Drive
+through the disc's change listeners, and a restore cannot undo that.
 
 ### Voice, later
 
