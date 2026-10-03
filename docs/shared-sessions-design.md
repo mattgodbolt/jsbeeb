@@ -246,11 +246,11 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### Known gaps
 
-- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. Each was
-  stamped a measured round trip and a 20 ms margin ahead, so one held up by less than that still goes in on its
-  own cycle. A bunch held up for longer goes in late, but as far apart as it was typed, so no key is lost; a
-  release held up that long still lengthens its hold, enough to start the OS's auto-repeat. The margin is a guess
-  until session reports show the jitter.
+- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. A key held up
+  by no more than the 20 ms margin still goes in on its own cycle. One held up for longer goes in as soon as it
+  can, and the keys after it keep their gaps from it, a gap over 40 ms shrinking to 40 ms until the lag is made
+  up, so no key is lost and the lag does not last; a release held up that long still lengthens its hold, enough to
+  start the OS's auto-repeat. The margin is a guess until session reports show the jitter.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -266,8 +266,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
 - A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
-  measured); a guest's keys still go in on the cycles they were stamped with, but everything a guest sees is that
-  slow.
+  measured). A guest's keys still go in on the cycles they were stamped with, but the host takes about ten times
+  as long to reach them, so a guest's keys take seconds to appear, as everything else does.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
 
@@ -293,20 +293,23 @@ repeated one whose release reached it late. Three steps, in this order.
 
 **Input delay, tuned to the link.** Each guest stamps a key with a cycle the host will not have passed when the
 key reaches it, and the host applies it at that cycle. In this first version that is the end of the host's last
-commit, plus the guest's measured round trip (200 ms until it has one), plus the time since that commit came, plus
-a 20 ms margin for jitter; it follows the link as it is measured, so a LAN pays little. It makes the guest's own
-keys no quicker to appear than before, about a round trip plus its lag, but every key keeps the timing it was
-typed with. Keys that arrive in time go in on their stamps, so a bunch that a lost packet held back for less than
-the margin, and a release held up as long, go in where they were pressed; a key that arrives too late moves the
-keys after it on by as much, so a longer hold-up delays a bunch without squeezing it, until nothing is waiting and
-keys come in time again. Two keys stamped in one of the guest's ticks share a cycle, as they would on a machine of
-its own. A guest never stamps a key earlier than the last one it stamped, so keys keep the order they were pressed
-in when the round trip shrinks. A resync forgets the last stamp, since the machine it counted on has jumped, and
-each key carries how many snapshots the guest has restored, so the host applies one stamped before the guest's
-latest at once rather than holding it for a cycle on a timeline that has gone; a key stamped implausibly far ahead
-goes in at once too. Still to come: holding the guest's lag to a target that follows the link (today it catches up
-whenever it is more than a fixed 40 ms behind, see Pacing), and a margin chosen from the measured jitter. In this
-paragraph the host stands for whoever is sequencing.
+commit, plus the guest's measured round trip (200 ms until it has one), plus the time since that commit came (at
+most 100 ms, since a host that has gone quieter is running slowly), plus a 20 ms margin for jitter; it follows the
+link as it is measured, so a LAN pays little. A guest's own keys appear about as late as before, a round trip plus
+its lag, and the margin later; in its first second, while it has no round trip of its own, up to the placeholder's
+200 ms on top. What it buys is that every key keeps the timing it was typed with. Stamps follow the guest's own
+clock, so two keys pressed together stay together. Keys that arrive in time go in on their stamps, so a bunch that
+a lost packet held back by no more than the margin goes in where it was pressed. Two rules keep keys in order
+without squeezing them: a guest never stamps a key earlier than the last, and when the round trip shrinks its
+stamps come down to it by shortening any gap between keys longer than 40 ms to 40 ms; the host applies a key too
+late for its cycle as soon as it can and makes the lag up the same way over the keys that follow. 40 ms is four of
+the OS's keyboard scans, so each key is still seen, while keys closer together keep their gaps. A resync forgets
+the last stamp, since the machine it counted on has jumped, and each key carries how many snapshots the guest has
+restored, so the host applies one stamped before the guest's latest at once rather than holding it for a cycle on
+a timeline that has gone; a key stamped implausibly far ahead goes in at once too. Still to come: holding the
+guest's lag to a target that follows the link (today it catches up whenever it is more than a fixed 40 ms behind,
+see Pacing), and a margin chosen from the measured jitter. In this paragraph the host stands for whoever is
+sequencing.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
 sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take

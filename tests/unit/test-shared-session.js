@@ -535,6 +535,32 @@ describe("SessionHost", () => {
             ]);
         });
 
+        it("held up past their cycles make the lag up over the keys that follow", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            run(host, 1, 300);
+            for (const each of [
+                stamped(true, 10),
+                stamped(false, 30),
+                stamped(true, 330, B),
+                stamped(false, 360, B),
+                stamped(true, 500),
+            ])
+                channel.emit("message", each);
+            run(host, 10, 50);
+            expect(appliedMs(channel).map(([, , ms]) => ms)).toEqual([300, 320, 360, 390, 500]);
+        });
+
+        it("stamped before a resync the host sent go in at once", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            host.resyncEveryone();
+            await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(2));
+            channel.emit("message", stamped(true, 30));
+            run(host, 1, 0);
+            expect(appliedMs(channel)).toEqual([["4,1", true, 0]]);
+        });
+
         it.each([
             ["stamped before the guest's latest snapshot", stamped(true, 30, A, { snapshots: 0 })],
             ["stamped implausibly far ahead", stamped(true, 3000)],
@@ -1017,7 +1043,7 @@ describe("SessionGuest", () => {
             expect(second.at - first.at).toBe(30 * MsCycles);
         });
 
-        it("never earlier than the last, when the round trip it measures shrinks", async () => {
+        it("coming down to a round trip that shrinks a little with each key, never squeezing a tap", async () => {
             const { context, channel, deliver, lockstep } = await joinedAt(100000);
             deliver([commit(100000, 100500)]);
             press(context);
@@ -1027,8 +1053,21 @@ describe("SessionGuest", () => {
             await settle();
             deliver([commit(100500, 101000)]);
             press(context);
-            const [first, second] = sentKeys(channel);
-            expect(second.at).toBe(first.at);
+            vi.advanceTimersByTime(10);
+            press(context);
+            const [first, second, third] = sentKeys(channel).map((each) => each.at);
+            expect(second - first).toBe(40 * MsCycles);
+            expect(third - second).toBe(10 * MsCycles);
+        });
+
+        it("and says in its summary how far ahead it stamps", async () => {
+            const { context, channel, lockstep } = await joinedAt(100000);
+            press(context);
+            lockstep().execute(100);
+            vi.advanceTimersByTime(StatsIntervalMs);
+            lockstep().execute(100);
+            const [summary] = channel.messages().filter((each) => each.type === "stats");
+            expect(summary.stats.stampAheadMs).toBeGreaterThanOrEqual(200 + 20);
         });
 
         it("afresh after a resync, counting the snapshots it has restored", async () => {
