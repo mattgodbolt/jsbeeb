@@ -1518,6 +1518,21 @@ describe("SessionGuest", () => {
             expect(take.hidden).toBe(true);
         });
 
+        it("commits its own key pressed just before it is asked to stop, then stops after it", async () => {
+            const { context, channel, deliver, lockstep } = await inControl();
+            lockstep().execute(500);
+            context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
+            deliver([message({ type: "release" })]);
+            const sent = channel.messages().filter((each) => each.type === "commit" || each.type === "released");
+            expect(sent.at(-2)).toMatchObject({
+                type: "commit",
+                at: 1500,
+                upTo: 1500,
+                inputs: [{ kind: "key", down: true }],
+            });
+            expect(sent.at(-1)).toEqual({ type: "released", at: 1500, waiting: [] });
+        });
+
         it("asks for nothing more after it stops", async () => {
             const { channel, deliver, lockstep } = await inControl();
             lockstep().execute(500);
