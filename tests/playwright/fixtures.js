@@ -75,10 +75,6 @@ export class Beeb {
         await this.page.keyboard.up(key);
     }
 
-    /**
-     * A loaded runner can deliver a key's release half a second or more after
-     * its press, long enough for the OS to start repeating it.
-     */
     disableAutoRepeat() {
         return this.page.evaluate((address) => window.processor.writemem(address, 0), AutoRepeatDelayAddress);
     }
