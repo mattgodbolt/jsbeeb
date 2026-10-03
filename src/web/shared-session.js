@@ -18,7 +18,15 @@ import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { connectionStats, IntervalStats, numbersFrom, SessionLog, StatsIntervalMs, watchPage } from "./session-log.js";
+import {
+    connectionStats,
+    IntervalStats,
+    numbersFrom,
+    rounded,
+    SessionLog,
+    StatsIntervalMs,
+    watchPage,
+} from "./session-log.js";
 import { PeerStates, peerState, SessionPanel } from "./session-panel.js";
 import { downloadBlob } from "./dom-utils.js";
 import { toast } from "./toast.js";
@@ -538,11 +546,10 @@ export class SessionHost {
         guest.lastSnapshotMs = Date.now();
         const startMs = this.log.elapsed();
         const json = snapshotToJSON(this.lockstep.snapshot());
-        // Taking and encoding it holds the host's main thread; compressing it is a stream the page waits on.
-        const takeMs = this.log.elapsed() - startMs;
+        const takeMs = rounded(this.log.elapsed() - startMs);
         const bytes = await gzip(json);
         if (generation !== guest.snapshotGeneration) return;
-        const tookMs = this.log.elapsed() - startMs;
+        const tookMs = rounded(this.log.elapsed() - startMs);
         this.log.record("snapshot", { guest: guest.id, bytes: bytes.length, takeMs, tookMs });
         if (!this.sendTo(guest, JSON.stringify({ type: "snapshot", bytes: bytes.length }))) return;
         for (let offset = 0; offset < bytes.length; offset += SnapshotChunkBytes) {

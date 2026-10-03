@@ -5,7 +5,8 @@
 const MaxEvents = 20000;
 export const StatsIntervalMs = 1000;
 
-const rounded = (ms) => Math.round(ms * 10) / 10;
+/** Milliseconds to a tenth, as everything in the log is. */
+export const rounded = (ms) => Math.round(ms * 10) / 10;
 
 export class SessionLog {
     constructor(details, now = () => performance.now()) {
