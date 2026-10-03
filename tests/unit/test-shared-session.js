@@ -2067,7 +2067,7 @@ describe("SessionGuest", () => {
                 lockstep().execute(100);
             }
             expect(desyncToasts()).toEqual([
-                "This machine desynced: state differs at cycle 150. Resyncing; please save a session " + "report.",
+                "This machine desynced: state differs at cycle 150. Resyncing; please save a session report.",
                 "Another desync. This machine desynced: state differs at cycle 350. More than one in a " +
                     "session is a bug: please save a session report here and on the host, and send both with a bug " +
                     "report.",
