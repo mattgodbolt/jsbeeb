@@ -2,8 +2,8 @@
 // peer, so how everyone is doing can be seen at a glance, and a menu with the numbers
 // behind each and the session's report to save.
 
-// A guest catches up by up to 100 ms a frame from 40 ms behind, so one still this far behind after a frame of it
-// has fallen a long way behind, not just had a burst of commits.
+// A guest catches up by a large slice per execute (see MaxCatchUpSeconds), so one still this far behind after an
+// execute has fallen a long way behind, not just had a burst of commits.
 export const LaggingMs = 100;
 // Stats arrive once a second, so a peer silent this long has stalled, or its connection has.
 export const SilentMs = 3000;
