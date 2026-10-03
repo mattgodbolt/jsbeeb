@@ -34,6 +34,22 @@ describe("CMOS", () => {
 
     let cmos;
 
+    function readRegister(register, target = cmos) {
+        target.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
+        target.writeControl(PORT_B_ENABLE, register, 0);
+        target.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+        return target.read();
+    }
+
+    function writeRegister(register, value, target = cmos) {
+        target.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
+        target.writeControl(PORT_B_ENABLE, register, 0);
+        target.writeControl(PORT_B_ENABLE, value, IC32_DATA_SEL);
+        target.writeControl(PORT_B_ENABLE, value, 0);
+    }
+
+    const toBcd = (value) => parseInt(value.toString(10), 16);
+
     beforeEach(() => {
         // Use fake timers for consistent date/time testing
         vi.useFakeTimers();
@@ -178,113 +194,95 @@ describe("CMOS", () => {
     });
 
     describe("Reading RTC values", () => {
-        // Helper function to read a specific RTC register
-        function readRtcRegister(register) {
-            // Set address
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, register, 0);
-
-            // Configure for reading
-            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-
-            return cmos.read();
-        }
-
         it("should read current time from RTC registers", () => {
-            // Helper function for BCD conversion (same as in cmos.js)
-            function toBcd(value) {
-                return parseInt(value.toString(10), 16);
-            }
-
             // Test all RTC components
-            expect(readRtcRegister(CMOS_ADDR.SECONDS)).toBe(toBcd(TEST_DATE.getSeconds()));
-            expect(readRtcRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(TEST_DATE.getMinutes()));
-            expect(readRtcRegister(CMOS_ADDR.HOURS)).toBe(toBcd(TEST_DATE.getHours()));
-            expect(readRtcRegister(CMOS_ADDR.DAY_OF_WEEK)).toBe(toBcd(TEST_DATE.getDay() + 1));
-            expect(readRtcRegister(CMOS_ADDR.DAY_OF_MONTH)).toBe(toBcd(TEST_DATE.getDate()));
-            expect(readRtcRegister(CMOS_ADDR.MONTH)).toBe(toBcd(TEST_DATE.getMonth() + 1));
+            expect(readRegister(CMOS_ADDR.SECONDS)).toBe(toBcd(TEST_DATE.getSeconds()));
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(TEST_DATE.getMinutes()));
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(TEST_DATE.getHours()));
+            expect(readRegister(CMOS_ADDR.DAY_OF_WEEK)).toBe(toBcd(TEST_DATE.getDay() + 1));
+            expect(readRegister(CMOS_ADDR.DAY_OF_MONTH)).toBe(toBcd(TEST_DATE.getDate()));
+            expect(readRegister(CMOS_ADDR.MONTH)).toBe(toBcd(TEST_DATE.getMonth() + 1));
         });
     });
 
     describe("Joining a session", () => {
-        function readRegister(register) {
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-            return cmos.read();
-        }
+        const HourMs = 60 * 60 * 1000;
+        const sessionState = (overrides = {}) => ({ ...new Cmos(null).sessionState(), ...overrides });
 
-        it("reads the session's settings and clock and stores nothing", () => {
-            const sessionStore = [...defaultCmos];
-            sessionStore[CMOS_ADDR.FILING_SYSTEM] = 0x42;
+        afterEach(() => {
+            vi.unstubAllEnvs();
+        });
+
+        it("reads and writes the session's settings and stores nothing", () => {
+            const store = [...defaultCmos];
+            store[CMOS_ADDR.FILING_SYSTEM] = 0x42;
             mockPersistence.save.mockClear();
-            cmos.joinSession(sessionStore, () => new Date(1999, 11, 31, 23, 59, 58).getTime());
+            cmos.joinSession(sessionState({ store }), () => 0);
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(0x42);
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x59);
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
-            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, IC32_DATA_SEL);
-            cmos.writeControl(PORT_B_ENABLE, 0x17, 0);
+            writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x17);
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(0x17);
             expect(mockPersistence.save).not.toHaveBeenCalled();
-            expect(sessionStore[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
+            expect(store[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
+        });
+
+        it("reads the session's clock in UTC, so every time zone shows the host's time", () => {
+            vi.stubEnv("TZ", "America/New_York");
+            cmos.joinSession(sessionState(), () => Date.UTC(1999, 11, 31, 23, 59, 58));
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(23));
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(59));
+        });
+
+        it("keeps the offset the host's software set its clock to", () => {
+            cmos.joinSession(sessionState({ timeOffset: HourMs }), () => Date.UTC(1999, 11, 31, 10, 0, 0));
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(11));
+        });
+
+        it("picks up an access the host was part way through", () => {
+            const host = new Cmos(null);
+            host.store[CMOS_ADDR.FILING_SYSTEM] = 0x42;
+            host.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
+            host.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
+            cmos.joinSession(host.sessionState(), () => 0);
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+            expect(cmos.read()).toBe(0x42);
         });
 
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
+            writeRegister(CMOS_ADDR.HOURS, toBcd(10));
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
-            const sessionStore = [...defaultCmos];
-            sessionStore[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
-            cmos.joinSession(sessionStore, () => 0);
-            cmos.joinSession(sessionStore, () => 0);
+            const store = [...defaultCmos];
+            store[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
+            cmos.joinSession(sessionState({ store }), () => 0);
+            cmos.joinSession(sessionState({ store }), () => 0);
             cmos.leaveSession();
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(ownSetting);
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x34);
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(10));
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(TEST_DATE.getMinutes()));
             mockPersistence.save.mockClear();
             cmos.save();
             expect(mockPersistence.save).toHaveBeenCalled();
         });
-
-        it("keeps the offset the host's software set its clock to", () => {
-            const HourMs = 60 * 60 * 1000;
-            cmos.joinSession([...defaultCmos], () => new Date(1999, 11, 31, 10, 0, 0).getTime(), HourMs);
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x11);
-        });
     });
 
     describe("Setting RTC values", () => {
-        // Helper to read a specific RTC register
-        function readRtcRegister(register) {
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-            return cmos.read();
-        }
-
-        // Helper to write to a specific RTC register
-        function writeRtcRegister(register, value) {
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, register, 0);
-            cmos.writeControl(PORT_B_ENABLE, value, IC32_DATA_SEL);
-            cmos.writeControl(PORT_B_ENABLE, value, 0);
-        }
-
         it("should update RTC values when written", () => {
             // Set hours to 10
-            writeRtcRegister(CMOS_ADDR.HOURS, 0x10);
+            writeRegister(CMOS_ADDR.HOURS, 0x10);
 
             // Advance time slightly to ensure changes take effect
             vi.advanceTimersByTime(100);
 
             // Read back hours
-            expect(readRtcRegister(CMOS_ADDR.HOURS)).toBe(0x10);
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x10);
 
             // Set minutes to 45
-            writeRtcRegister(CMOS_ADDR.MINUTES, 0x45);
+            writeRegister(CMOS_ADDR.MINUTES, 0x45);
 
             // Advance time slightly
             vi.advanceTimersByTime(100);
 
             // Read back minutes
-            expect(readRtcRegister(CMOS_ADDR.MINUTES)).toBe(0x45);
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x45);
         });
     });
 
@@ -302,20 +300,6 @@ describe("CMOS", () => {
     });
 
     describe("localStoragePersistence", () => {
-        function writeCmos(target, address, value) {
-            target.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, address, 0);
-            target.writeControl(PORT_B_ENABLE, address, 0);
-            target.writeControl(PORT_B_ENABLE, value, IC32_DATA_SEL);
-            target.writeControl(PORT_B_ENABLE, value, 0);
-        }
-
-        function readCmos(target, address) {
-            target.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, address, 0);
-            target.writeControl(PORT_B_ENABLE, address, 0);
-            target.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-            return target.read();
-        }
-
         const onSaveFailure = vi.fn();
 
         beforeEach(() => {
@@ -327,10 +311,10 @@ describe("CMOS", () => {
         it("keeps what was written for the next session", () => {
             const storage = {};
 
-            writeCmos(new Cmos(localStoragePersistence(() => storage, onSaveFailure)), CMOS_ADDR.CONFIG_1, 0x42);
+            writeRegister(CMOS_ADDR.CONFIG_1, 0x42, new Cmos(localStoragePersistence(() => storage, onSaveFailure)));
 
             const reloaded = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
-            expect(readCmos(reloaded, CMOS_ADDR.CONFIG_1)).toBe(0x42);
+            expect(readRegister(CMOS_ADDR.CONFIG_1, reloaded)).toBe(0x42);
             expect(onSaveFailure).not.toHaveBeenCalled();
         });
 
@@ -339,13 +323,13 @@ describe("CMOS", () => {
 
             const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
 
-            expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
+            expect(readRegister(25, cmos)).toBe(defaultCmos[25]);
         });
 
         it("starts from the defaults when the stored settings are the wrong shape", () => {
             for (const cmosRam of ['"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"]) {
                 const cmos = new Cmos(localStoragePersistence(() => ({ cmosRam }), onSaveFailure));
-                expect(readCmos(cmos, 25), cmosRam).toBe(defaultCmos[25]);
+                expect(readRegister(25, cmos), cmosRam).toBe(defaultCmos[25]);
             }
         });
 
@@ -355,9 +339,9 @@ describe("CMOS", () => {
             };
 
             const cmos = new Cmos(localStoragePersistence(refused, onSaveFailure));
-            writeCmos(cmos, CMOS_ADDR.CONFIG_1, 0x42);
+            writeRegister(CMOS_ADDR.CONFIG_1, 0x42, cmos);
 
-            expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
+            expect(readRegister(25, cmos)).toBe(defaultCmos[25]);
             expect(onSaveFailure).toHaveBeenCalledTimes(1);
         });
 
@@ -372,12 +356,12 @@ describe("CMOS", () => {
             };
 
             const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
-            writeCmos(cmos, CMOS_ADDR.CONFIG_1, 0x42);
-            writeCmos(cmos, CMOS_ADDR.CONFIG_2, 0x43);
+            writeRegister(CMOS_ADDR.CONFIG_1, 0x42, cmos);
+            writeRegister(CMOS_ADDR.CONFIG_2, 0x43, cmos);
 
             expect(onSaveFailure).toHaveBeenCalledTimes(1);
             expect(onSaveFailure.mock.calls[0][0].message).toBe("Storage is full");
-            expect(readCmos(cmos, CMOS_ADDR.CONFIG_1)).toBe(0x42);
+            expect(readRegister(CMOS_ADDR.CONFIG_1, cmos)).toBe(0x42);
         });
     });
 

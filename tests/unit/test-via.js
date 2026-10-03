@@ -200,6 +200,15 @@ describe("Via snapshotState / restoreState", () => {
             expect(via2.hasAnyKeyDown()).toBe(false);
         });
 
+        it("hands over which way a held key forces SHIFT", () => {
+            const via = makeSysVia();
+            via.setMapped([BBC.A[0], BBC.A[1], true], 1);
+            const via2 = makeSysVia();
+            via2.restoreKeyboard(via.keyboardState());
+            via2.setMapped(BBC.B, 1);
+            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
+        });
+
         it("leaves the held keys alone when restoring a snapshot", () => {
             const via = makeSysVia();
             const snapshot = via.snapshotState();

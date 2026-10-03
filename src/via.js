@@ -1,5 +1,7 @@
 import { BBC, getKeyMap } from "./keymap.js";
 
+export const KeyMatrixSize = 16;
+
 const ORB = 0x0,
     ORA = 0x1,
     DDRB = 0x2,
@@ -622,8 +624,8 @@ export class SysVia extends Via {
         this.capsLockLight = false;
         this.shiftLockLight = false;
         this.keys = [];
-        for (let i = 0; i < 16; ++i) {
-            this.keys[i] = new Uint8Array(16);
+        for (let i = 0; i < KeyMatrixSize; ++i) {
+            this.keys[i] = new Uint8Array(KeyMatrixSize);
         }
         // Mouse joystick button state
         this.mouseButton1 = false;
@@ -719,7 +721,6 @@ export class SysVia extends Via {
     }
 
     set(key, val, shiftDown) {
-        if (!this.keyboardEnabled) return;
         const mapping = this.keyMapping(key, shiftDown);
         if (mapping) this.setMapped(mapping, val);
     }

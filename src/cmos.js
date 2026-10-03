@@ -23,6 +23,27 @@ function fromBcd(value) {
 
 export { defaultCmos };
 
+// In a session the clock holds the host's wall time and is read as UTC, so the host's time zone is the only
+// one that counts.
+function utcView(date) {
+    return {
+        getSeconds: () => date.getUTCSeconds(),
+        getMinutes: () => date.getUTCMinutes(),
+        getHours: () => date.getUTCHours(),
+        getDay: () => date.getUTCDay(),
+        getDate: () => date.getUTCDate(),
+        getMonth: () => date.getUTCMonth(),
+        getFullYear: () => date.getUTCFullYear(),
+        setSeconds: (value) => date.setUTCSeconds(value),
+        setMinutes: (value) => date.setUTCMinutes(value),
+        setHours: (value) => date.setUTCHours(value),
+        setDate: (value) => date.setUTCDate(value),
+        setMonth: (value) => date.setUTCMonth(value),
+        setFullYear: (value) => date.setUTCFullYear(value),
+        getTime: () => date.getTime(),
+    };
+}
+
 /**
  * CMOS persistence backed by a browser storage object, which can be unavailable, full or holding
  * something other than what was last saved.
@@ -70,7 +91,8 @@ export class Cmos {
         this.addressSelect = false;
         this.dataSelect = false;
         this.cmosAddr = 0;
-        this.now = Date.now;
+        this.now = () => Date.now();
+        this.utc = false;
         this.timeOffset = 0;
         this.beforeSession = null;
 
@@ -97,24 +119,30 @@ export class Cmos {
     }
 
     /**
-     * Joins a shared session: the session's settings replace this machine's for its
-     * duration and are never stored over them, and the clock reads `now` (milliseconds,
-     * as Date.now) plus the offset a program set it to, so that every machine in the
-     * session sees the same time.
+     * The chip as a joiner needs it: the settings, the offset a program set the clock to, and how far
+     * through an access the bus is.
      */
-    joinSession(store, now, timeOffset = 0) {
+    sessionState() {
+        const { store, timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
+        return { store: [...store], timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr };
+    }
+
+    /**
+     * Joins a shared session: the host's `sessionState()` replaces this machine's for the session's
+     * duration and is never stored over it, and the clock reads `now`, the session's wall time in
+     * milliseconds.
+     */
+    joinSession(state, now) {
         if (!this.beforeSession) {
-            this.beforeSession = {
-                persistence: this.persistence,
-                store: this.store,
-                now: this.now,
-                timeOffset: this.timeOffset,
-            };
+            const { persistence, store, now, utc, timeOffset } = this;
+            this.beforeSession = { persistence, store, now, utc, timeOffset };
         }
-        this.persistence = null;
+        const { store, timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
+        Object.assign(this, { timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr });
         this.store = [...store];
+        this.persistence = null;
         this.now = now;
-        this.timeOffset = timeOffset;
+        this.utc = true;
     }
 
     /** Back to this machine's own settings and clock, as they were before the session. */
@@ -127,7 +155,7 @@ export class Cmos {
     bbcDateTime() {
         const result = new Date(this.now() + this.timeOffset);
         result.setMilliseconds(0);
-        return result;
+        return this.utc ? utcView(result) : result;
     }
 
     read() {
