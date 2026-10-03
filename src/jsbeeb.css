@@ -260,6 +260,23 @@ span.accesskey {
   color: #4c4;
 }
 
+#leds .session-readout {
+  display: flex;
+  border-left: 1px solid #444;
+  padding-left: 8px;
+}
+
+#leds .session-readout[hidden] {
+  display: none;
+}
+
+#leds .session-peers {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+}
+
 #audio-stats {
   bottom: 0;
   right: 0;
@@ -320,6 +337,19 @@ span.accesskey {
 
 .led.tape {
   --led: var(--led-tape);
+}
+
+.led.session {
+  --led: var(--led-data);
+}
+
+.led.session[data-state="lagging"] {
+  --led: var(--led-disc);
+}
+
+.led.session[data-state="silent"],
+.led.session[data-state="left"] {
+  --led: var(--led-keyboard);
 }
 
 #pages {
