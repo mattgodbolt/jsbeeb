@@ -19,6 +19,7 @@ import { AdcCentreValue } from "../../src/adc.js";
 import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
+import { domFromIndexHtml } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
 const MsPerMinute = 60 * 1000;
@@ -243,10 +244,7 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} 
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
-// The lights' session readout, as index.html has it.
-const PanelMarkup = `<div id="session-panel" hidden>
-    <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
-    <ul class="session-menu"><li><a href="#" class="session-report"></a></li></ul></div>`;
+const showLights = () => domFromIndexHtml("session-panel", "session-pane");
 const message = (body) => ({ data: JSON.stringify(body) });
 // The second the session clock shows: wall time here, read as UTC.
 const wallClockSecondMs = (fromMs = Date.now()) =>
@@ -296,6 +294,54 @@ describe("SessionHost", () => {
     }
 
     const keyMessage = (input) => message({ type: "input", input });
+
+    describe("the link to join", () => {
+        const toastTexts = () => [...document.querySelectorAll(".toast .message")].map((each) => each.textContent);
+
+        afterEach(() => {
+            delete navigator.clipboard;
+            window.history.replaceState(null, "", "/");
+        });
+
+        it("is shown and copied in the pane that opens as hosting starts, whatever the host's own URL holds", async () => {
+            const writeText = vi.fn(async () => {});
+            Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+            window.history.replaceState(null, "", "/?server=room&model=Master#frag");
+            showLights();
+            await hosting([]);
+            const pane = document.getElementById("session-pane");
+            expect(pane.hidden).toBe(false);
+            expect(pane.querySelector(".session-link").textContent).toBe(`${window.location.origin}/?client=room`);
+            pane.querySelector(".session-copy-link").click();
+            await settle();
+            expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?client=room`);
+            expect(toastTexts()).toContain("The link to join is on the clipboard.");
+        });
+
+        it("is shown in full where there is no clipboard to copy it to", async () => {
+            showLights();
+            await hosting([]);
+            document.querySelector(".session-copy-link").click();
+            await settle();
+            expect(toastTexts().at(-1)).toBe(
+                `Copying needs https. Guests join at ${window.location.origin}/?client=room`,
+            );
+        });
+
+        it("is shown in full when the clipboard refuses it", async () => {
+            const writeText = vi.fn(async () => {
+                throw new Error("not allowed");
+            });
+            Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+            showLights();
+            await hosting([]);
+            document.querySelector(".session-copy-link").click();
+            await settle();
+            expect(toastTexts().at(-1)).toBe(
+                `Couldn't copy the link (not allowed). Guests join at ${window.location.origin}/?client=room`,
+            );
+        });
+    });
 
     it("holds the analogue inputs at the centre for the session, and gives back an ordinary page when it closes", async () => {
         const { host, processor, context } = await hosting([]);
@@ -698,7 +744,7 @@ describe("SessionHost", () => {
     });
 
     it("sends each guest the lights once an interval, and logs and shows each connection's round trip", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         const { host } = await hosting();
         const channel = await joined();
         channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50 } }));
@@ -716,14 +762,16 @@ describe("SessionHost", () => {
         host.execute(0);
         vi.advanceTimersByTime(StatsIntervalMs);
         host.execute(0);
-        expect(document.querySelector(".led").title).toBe("Guest 1: keeping up, 85 ms round trip, 30 ms behind");
+        expect(document.querySelector("#session-panel .led").title).toBe(
+            "Guest 1: keeping up, 85 ms round trip, 30 ms behind",
+        );
     });
 
     it("shows each guest's light, and keeps a departed one's for a while", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         const { host } = await hosting();
         const channel = await joined();
-        const lights = () => [...document.querySelectorAll(".led")].map((light) => light.dataset.state);
+        const lights = () => [...document.querySelectorAll("#session-panel .led")].map((light) => light.dataset.state);
         expect(lights()).toEqual(["connecting"]);
         channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50 } }));
         vi.advanceTimersByTime(StatsIntervalMs);
@@ -739,11 +787,11 @@ describe("SessionHost", () => {
     });
 
     it("calls each guest by the name it gives", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         const { host } = await hosting();
         const channel = await joined();
         channel.emit("message", message({ type: "hello", name: "Kieran" }));
-        expect(document.querySelector(".led").title).toMatch(/^Kieran: /);
+        expect(document.querySelector("#session-panel .led").title).toMatch(/^Kieran: /);
         expect(host.report().events).toContainEqual(expect.objectContaining({ event: "hello", name: "Kieran" }));
     });
 
@@ -897,24 +945,24 @@ describe("SessionGuest", () => {
     });
 
     it("says its name to the host, and calls the host by the one it was welcomed with", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         const context = fakeContext();
         await new SessionGuest(context, "room", "Kieran").start();
         const { channel } = peers[0];
         expect(channel.messages()[0]).toEqual({ type: "hello", name: "Kieran" });
         channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
-        expect(document.querySelector(".led").title).toMatch(/^Matt: /);
+        expect(document.querySelector("#session-panel .led").title).toMatch(/^Matt: /);
     });
 
     it("shows the host's list of guests, its own marked, and makes the most of a bad one", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         const { channel } = await joining();
         const guests = [
             { label: "Kieran", state: "ok", rttMs: 85, lagMs: 60, you: true },
             { label: "\u0007", state: "on fire", rttMs: "fast" },
         ];
         channel.emit("message", message({ type: "roster", guests }));
-        const titles = [...document.querySelectorAll(".led")].map((light) => light.title);
+        const titles = [...document.querySelectorAll("#session-panel .led")].map((light) => light.title);
         expect(titles).toEqual([
             "Host: connecting",
             "Kieran (you): keeping up, 85 ms round trip, 60 ms behind",
@@ -966,7 +1014,7 @@ describe("SessionGuest", () => {
     });
 
     it("measures its own round trip to the host, and shows and logs it", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         const { guest, context, channel, deliver, lockstep } = await joining();
         channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
         deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
@@ -978,7 +1026,7 @@ describe("SessionGuest", () => {
         lockstep().execute(100);
         vi.advanceTimersByTime(StatsIntervalMs);
         lockstep().execute(100);
-        expect(document.querySelector(".led").title).toMatch(/^Matt: .*, 85 ms round trip, /);
+        expect(document.querySelector("#session-panel .led").title).toMatch(/^Matt: .*, 85 ms round trip, /);
         expect(guest.report().events).toContainEqual(expect.objectContaining({ event: "connection", rttMs: 85 }));
     });
 
@@ -1139,8 +1187,22 @@ describe("startSessionFromUrl", () => {
         expect(rendezvous.postOffer).toHaveBeenCalledWith("there", expect.any(String), "local sdp");
     });
 
+    it("copies the link to join from a guest's pane", async () => {
+        showLights();
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+        try {
+            await started({ client: "there" });
+            document.querySelector(".session-copy-link").dispatchEvent(new MouseEvent("click", { cancelable: true }));
+            await settle();
+            expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?client=there`);
+        } finally {
+            delete navigator.clipboard;
+        }
+    });
+
     it("shows the session in the lights, with its report to save", async () => {
-        document.body.innerHTML = PanelMarkup;
+        showLights();
         URL.createObjectURL = vi.fn(() => "blob:report");
         URL.revokeObjectURL = vi.fn();
         try {
@@ -1148,8 +1210,10 @@ describe("startSessionFromUrl", () => {
             await started({ client: "there" });
             const panel = document.getElementById("session-panel");
             expect(panel.hidden).toBe(false);
+            expect(document.getElementById("session-pane").hidden).toBe(true);
             expect(panel.querySelector(".led").dataset.state).toBe("connecting");
-            panel.querySelector(".session-report").dispatchEvent(new MouseEvent("click", { cancelable: true }));
+            expect(document.querySelector(".session-you").textContent).toMatch(/^You are [a-z]+-[a-z]+-[a-z]+$/);
+            document.querySelector(".session-report").click();
             const report = JSON.parse(await URL.createObjectURL.mock.calls[0][0].text());
             expect(report).toMatchObject({ role: "guest", room: "there", version: "1.0" });
         } finally {

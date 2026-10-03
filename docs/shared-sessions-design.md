@@ -232,13 +232,15 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   connects and the host gives its own in the welcome.
 - **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the
   host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than
-  100 ms behind or stutters, red once it falls silent or leaves, each named in its tooltip and in the readout's
-  menu. The host sends every guest its list once a second, so a guest also sees each other guest's light, its own
-  marked. Each guest sends the host a summary of how it kept up once a second. Both sides log what they saw
+  100 ms behind or stutters, red once it falls silent or leaves, each named in its tooltip. Clicking the readout
+  opens the session pane (it opens by itself when hosting starts): who you are, the link to join with a button to
+  copy it, a row per peer with its state, round trip and how far behind it is, updated as the lights are. The host
+  sends every guest its list once a second, so a guest also sees each other guest's light, its own marked. Each
+  guest sends the host a summary of how it kept up once a second. Both sides log what they saw
   (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
   summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots and
-  desyncs. "Save session report" in the readout's menu downloads it as JSON; nothing is sent anywhere unless the
-  person who saved it sends it. A report holds everything typed in the session.
+  desyncs. "Save session report" in the pane downloads the log as JSON; nothing is sent anywhere unless the person
+  who saved it sends it. A report holds everything typed in the session.
 
 ### Known gaps
 

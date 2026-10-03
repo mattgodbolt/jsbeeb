@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LaggingMs, peerState, SessionPanel, SilentMs } from "../../src/web/session-panel.js";
+import { domFromIndexHtml } from "./helpers.js";
 
 describe("peerState", () => {
     const keepingUp = { lagMs: 60, commits: 60 };
@@ -27,41 +28,74 @@ describe("SessionPanel", () => {
         document.body.innerHTML = "";
     });
 
-    function panelPage() {
-        document.body.innerHTML = `<div id="session-panel" hidden>
-            <span class="session-heading"></span><span class="session-summary"></span><span class="session-peers"></span>
-            <ul class="session-menu"><li><hr></li><li><a href="#" class="session-report"></a></li></ul></div>`;
-        return document.getElementById("session-panel");
+    const session = (overrides = {}) => ({
+        name: "neat-dolls-occur",
+        link: "https://bbc.xania.org/?client=scorch",
+        saveReport: () => {},
+        copyLink: () => {},
+        ...overrides,
+    });
+
+    function page() {
+        domFromIndexHtml("session-panel", "session-pane");
+        return { readout: document.getElementById("session-panel"), pane: document.getElementById("session-pane") };
     }
 
-    it("shows a light and a line for each peer, replacing the last ones", () => {
-        const root = panelPage();
-        const panel = new SessionPanel(() => {});
+    const rows = (pane) =>
+        [...pane.querySelectorAll(".session-people tbody tr")].map((row) =>
+            [...row.cells].slice(1).map((each) => each.textContent),
+        );
+
+    it("shows a light in the readout and a row in the pane for each peer, replacing the last ones", () => {
+        const { readout, pane } = page();
+        const panel = new SessionPanel(session());
         panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting" }]);
         panel.show("hosting", "2 guests", [
             { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40 },
             { label: "Guest 2", state: "left", leftReason: "it said goodbye" },
         ]);
-        expect(root.hidden).toBe(false);
-        expect(root.querySelector(".session-summary").textContent).toBe("2 guests");
-        const lights = [...root.querySelectorAll(".led")];
+        expect(readout.hidden).toBe(false);
+        expect(readout.querySelector(".session-summary").textContent).toBe("2 guests");
+        const lights = [...readout.querySelectorAll(".led")];
         expect(lights.map((light) => light.dataset.state)).toEqual(["ok", "left"]);
         expect(lights.every((light) => light.classList.contains("on"))).toBe(true);
-        expect([...root.querySelectorAll(".session-peer")].map((line) => line.textContent)).toEqual([
-            "Guest 1: keeping up, 85 ms round trip, 40 ms behind",
-            "Guest 2: left: it said goodbye",
+        expect(rows(pane)).toEqual([
+            ["Guest 1", "keeping up", "85 ms", "40 ms"],
+            ["Guest 2", "left: it said goodbye", "", ""],
         ]);
     });
 
-    it("saves the report from its menu", () => {
-        const root = panelPage();
-        const save = vi.fn();
-        new SessionPanel(save);
-        root.querySelector(".session-report").click();
-        expect(save).toHaveBeenCalledOnce();
+    it("opens the pane from the readout, with who you are and the link to join", () => {
+        const { readout, pane } = page();
+        new SessionPanel(session());
+        const button = readout.querySelector(".slot-readout");
+        expect(pane.hidden).toBe(true);
+        button.click();
+        expect(pane.hidden).toBe(false);
+        expect(button.getAttribute("aria-expanded")).toBe("true");
+        expect(pane.querySelector(".session-you").textContent).toBe("You are neat-dolls-occur");
+        expect(pane.querySelector(".session-link").textContent).toBe("https://bbc.xania.org/?client=scorch");
+        button.click();
+        expect(pane.hidden).toBe(true);
+        expect(button.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("copies the link and saves the report from the pane", () => {
+        const { pane } = page();
+        const saveReport = vi.fn();
+        const copyLink = vi.fn();
+        new SessionPanel(session({ saveReport, copyLink })).open();
+        pane.querySelector(".session-report").click();
+        pane.querySelector(".session-copy-link").click();
+        expect(saveReport).toHaveBeenCalledOnce();
+        expect(copyLink).toHaveBeenCalledOnce();
     });
 
     it("does nothing on a page without the lights", () => {
-        expect(() => new SessionPanel(() => {}).show("guest", "joining", [])).not.toThrow();
+        const panel = new SessionPanel(session());
+        expect(() => {
+            panel.open();
+            panel.show("guest", "joining", []);
+        }).not.toThrow();
     });
 });

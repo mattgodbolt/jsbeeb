@@ -207,7 +207,7 @@ export class SessionHost {
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
         this.departed = [];
-        this.panel = new SessionPanel(() => saveReport(this));
+        this.panel = new SessionPanel(sessionPane(this));
     }
 
     async start() {
@@ -224,10 +224,8 @@ export class SessionHost {
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
         window.addEventListener("pagehide", () => this.close());
-        const link = new URL(window.location.href);
-        link.search = `?client=${encodeURIComponent(this.room)}`;
-        link.hash = "";
-        notify(`Hosting "${this.room}". Guests join at ${link}`);
+        notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`);
+        this.panel.open();
         this.log.record("hosting");
         this.poll();
     }
@@ -649,7 +647,7 @@ export class SessionGuest {
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
-        this.panel = new SessionPanel(() => saveReport(this));
+        this.panel = new SessionPanel(sessionPane(this));
         this.showStatus();
     }
 
@@ -929,6 +927,33 @@ function cleanRoster(guests) {
         you: guest?.you === true,
     }));
 }
+
+function joinLink(room) {
+    const link = new URL(window.location.href);
+    link.search = `?client=${encodeURIComponent(room)}`;
+    link.hash = "";
+    return link.toString();
+}
+
+async function copyJoinLink(room) {
+    if (!navigator.clipboard) {
+        notify(`Copying needs https. Guests join at ${joinLink(room)}`);
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(joinLink(room));
+        toast("The link to join is on the clipboard.", { title: ToastTitle });
+    } catch (error) {
+        notify(`Couldn't copy the link (${error.message}). Guests join at ${joinLink(room)}`);
+    }
+}
+
+const sessionPane = (session) => ({
+    name: session.name,
+    link: joinLink(session.room),
+    saveReport: () => saveReport(session),
+    copyLink: () => copyJoinLink(session.room),
+});
 
 function saveReport(session) {
     const report = session.report();
