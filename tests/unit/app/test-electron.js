@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initialise } from "../../src/app/electron.js";
-import { teardownDom } from "./helpers.js";
+import { initialise } from "../../../src/app/electron.js";
+import { teardownDom } from "../helpers.js";
 
 describe("the Electron hooks", () => {
     let api;

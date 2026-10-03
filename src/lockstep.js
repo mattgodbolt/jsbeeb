@@ -11,7 +11,7 @@ import { KeyMatrixSize } from "./via.js";
 const HashIntervalSeconds = 1;
 // A guest more than MaxGuestLagSeconds behind the host catches up by running up to MaxCatchUpSeconds per execute
 // instead of its usual slice, so a long way behind is made up over several frames rather than in one stall.
-export const MaxGuestLagSeconds = 0.25;
+export const MaxGuestLagSeconds = 0.04;
 export const MaxCatchUpSeconds = 0.1;
 const FnvOffset = 0x811c9dc5;
 const FnvPrime = 0x01000193;
@@ -182,6 +182,9 @@ export class LockstepHost {
         const inputs = this.pending.splice(0);
         for (const input of inputs) applyInput(cpu, input);
         const running = cpu.execute(cycles);
+        // execute() adds each request to a running target, so a machine stopped early (a breakpoint) would
+        // otherwise run what it had left as well when it resumes, in a commit longer than was asked for.
+        if (!running) cpu.targetCycles = cpu.currentCycles;
         const upTo = cycleCount(cpu);
         this.reachedAt = upTo;
         const commit = { type: "commit", at, inputs, upTo };

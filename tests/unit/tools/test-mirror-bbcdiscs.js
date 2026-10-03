@@ -6,14 +6,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync } from "node:zlib";
 import Papa from "papaparse";
-import { parseFingerprints } from "../../tools/beebjit-fingerprint.js";
+import { parseFingerprints } from "../../../tools/beebjit-fingerprint.js";
 import {
     blobsAndManifestDisagree,
     compareFingerprints,
     diffManifests,
     findCollision,
     parseCatalogue,
-} from "../../tools/mirror-bbcdiscs.js";
+} from "../../../tools/mirror-bbcdiscs.js";
 
 const Headers = [
     "Publisher",
@@ -289,7 +289,7 @@ describe("findCollision", () => {
  * the reconstructed ones are read from a directory.
  */
 describe("a full run", () => {
-    const Tool = fileURLToPath(new URL("../../tools/mirror-bbcdiscs.js", import.meta.url));
+    const Tool = fileURLToPath(new URL("../../../tools/mirror-bbcdiscs.js", import.meta.url));
     const CapturedCrc = "AABBCCDD";
     const CapturedRow =
         `Somesoft,Some Game,D1DS,40,3,${CapturedCrc},,1,TEST,04,84/09/06,` +

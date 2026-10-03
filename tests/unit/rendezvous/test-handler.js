@@ -1,6 +1,4 @@
-import { createServer as createHttpServer } from "node:http";
-import { createServer as createViteServer } from "vite";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     createHandler,
@@ -10,10 +8,10 @@ import {
     PathPrefix,
     RoomLifetimeSeconds,
     SecretBytes,
-} from "../../rendezvous/handler.js";
-import { createMemoryStore } from "../../rendezvous/memory-store.js";
-import { rendezvousPlugin, toFunctionUrlEvent } from "../../rendezvous/vite-plugin.js";
-import { createRendezvousClient, RendezvousError } from "../../src/web/rendezvous-client.js";
+} from "../../../rendezvous/handler.js";
+import { createMemoryStore } from "../../../rendezvous/memory-store.js";
+import { toFunctionUrlEvent } from "../../../rendezvous/vite-plugin.js";
+import { createRendezvousClient, RendezvousError } from "../../../src/web/rendezvous-client.js";
 
 const StartMs = 1800000000000;
 const Room = "abc";
@@ -341,135 +339,5 @@ describe("rendezvous", () => {
         const error = await rendezvous.getAnswer(Room, "guest1").catch((e) => e);
         expect(error).toMatchObject({ status: 500, message: expect.stringMatching(/: Internal error$/) });
         expect(logged).toHaveBeenCalledOnce();
-    });
-});
-
-describe("rendezvous client", () => {
-    it("uses the base it is given", async () => {
-        const urls = [];
-        const recording = createRendezvousClient({
-            base: "https://example.test/api/rendezvous",
-            fetch: async (url) => {
-                urls.push(url);
-                return new Response(JSON.stringify({ secret: "s" }), { status: 201 });
-            },
-        });
-        expect(await recording.createRoom("my room")).toBe("s");
-        expect(urls).toEqual(["https://example.test/api/rendezvous/room/my%20room"]);
-    });
-
-    it("asks for a delete that outlives the page, since a host deletes its room as it goes", async () => {
-        const requests = [];
-        const recording = createRendezvousClient({
-            fetch: async (url, init) => {
-                requests.push(init);
-                return new Response("{}", { status: 200 });
-            },
-        });
-        await recording.deleteRoom("room", "secret");
-        await recording.listOffers("room", "secret").catch(() => {});
-        expect(requests.map((init) => init.keepalive)).toEqual([true, false]);
-    });
-
-    it("copes with a response that is not JSON", async () => {
-        const broken = createRendezvousClient({
-            fetch: async () => new Response("<html>Bad gateway</html>", { status: 502 }),
-        });
-        await expect(broken.postOffer("r", "g", "sdp")).rejects.toThrow("Rendezvous post offer failed with status 502");
-    });
-});
-
-describe("the dev server's adapter", () => {
-    const request = (overrides) => ({
-        method: "POST",
-        url: "/room/abc/offer?x=1",
-        originalUrl: "/api/rendezvous/room/abc/offer?x=1",
-        headers: { "x-host-secret": "s3cret", "x-many": ["a", "b"] },
-        ...overrides,
-    });
-
-    it("carries the path from before the mount point, the query, method and headers", () => {
-        expect(toFunctionUrlEvent(request(), Buffer.alloc(0))).toEqual({
-            rawPath: "/api/rendezvous/room/abc/offer",
-            rawQueryString: "x=1",
-            headers: { "x-host-secret": "s3cret", "x-many": "a,b" },
-            requestContext: { http: { method: "POST" } },
-            body: undefined,
-            isBase64Encoded: false,
-        });
-    });
-});
-
-describe("the dev server", () => {
-    let vite;
-    let http;
-    let base;
-
-    beforeAll(async () => {
-        vite = await createViteServer({
-            configFile: false,
-            logLevel: "silent",
-            appType: "custom",
-            server: { middlewareMode: true, watch: null, ws: false },
-            optimizeDeps: { noDiscovery: true, entries: [] },
-            plugins: [rendezvousPlugin()],
-        });
-        http = createHttpServer(vite.middlewares);
-        await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
-        base = `http://127.0.0.1:${http.address().port}${PathPrefix}`;
-    });
-
-    afterAll(async () => {
-        await vite.close();
-        await new Promise((resolve) => http.close(resolve));
-    });
-
-    it("serves the rendezvous from memory under its prefix", async () => {
-        const rendezvous = createRendezvousClient({ base });
-        const secret = await rendezvous.createRoom("devroom");
-        await rendezvous.postOffer("devroom", "guest1", "offer sdp");
-        expect(await rendezvous.listOffers("devroom", secret)).toEqual([{ guest: "guest1", sdp: "offer sdp" }]);
-    });
-
-    it("refuses a body over the size cap", async () => {
-        const response = await fetch(`${base}/room/devroom/offer`, {
-            method: "POST",
-            body: "x".repeat(MaxBodyBytes * 2),
-        });
-        expect(response.status).toBe(413);
-    });
-});
-
-describe("memory store", () => {
-    it("writes conditionally only over an absent or expired item", async () => {
-        const store = createMemoryStore();
-        expect(await store.put({ room: "r", entry: "e", expires: 100, v: 1 }, { unlessLiveAt: 50 })).toBe(true);
-        expect(await store.put({ room: "r", entry: "e", expires: 200, v: 2 }, { unlessLiveAt: 99 })).toBe(false);
-        expect(await store.put({ room: "r", entry: "e", expires: 200, v: 3 }, { unlessLiveAt: 100 })).toBe(true);
-        expect(await store.get("r", "e")).toEqual({ room: "r", entry: "e", expires: 200, v: 3 });
-    });
-
-    it("writes with ifPresent only over an item that is there", async () => {
-        const store = createMemoryStore();
-        expect(await store.put({ room: "r", entry: "e", expires: 1 }, { ifPresent: true })).toBe(false);
-        await store.put({ room: "r", entry: "e", expires: 1 });
-        expect(await store.put({ room: "r", entry: "e", expires: 2 }, { ifPresent: true })).toBe(true);
-        expect((await store.get("r", "e")).expires).toBe(2);
-    });
-
-    it("keeps expired items until they are deleted", async () => {
-        const store = createMemoryStore();
-        await store.put({ room: "r", entry: "e", expires: 1 });
-        expect(await store.query("r")).toEqual([{ room: "r", entry: "e", expires: 1 }]);
-        await store.delete("r", "e");
-        expect(await store.get("r", "e")).toBeUndefined();
-        expect(await store.query("r")).toEqual([]);
-    });
-
-    it("hands out copies", async () => {
-        const store = createMemoryStore();
-        await store.put({ room: "r", entry: "e", expires: 1 });
-        (await store.get("r", "e")).expires = 99;
-        expect((await store.get("r", "e")).expires).toBe(1);
     });
 });

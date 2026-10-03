@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateLumaCoefficients, generateLumaKernel, LumaTaps } from "../../tools/luma-fir-generator.js";
+import { generateLumaCoefficients, generateLumaKernel, LumaTaps } from "../../../tools/luma-fir-generator.js";
 
 const SampleRateMhz = 16;
 const SubcarrierMhz = 4.43361875;
