@@ -231,7 +231,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 - There is no quantum yet, so a guest's press and release that reach the host within one of its ticks apply at
   the same cycle and the OS never sees the key. A lost packet that holds back several messages makes that
-  likely.
+  likely. The input delay after v0 (below) keeps such keys apart.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -248,12 +248,14 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
 - A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
   measured), and with its ticks that far apart a guest's press and release nearly always reach it together, so
-  guests cannot type.
+  guests cannot type until the quantum and the input delay (below) are in.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
 
 ### What is left for v0
 
+- A fixed quantum, so a guest's press and release that reach the host together still make a tap; the input
+  delay after v0 builds on it.
 - More of the determinism test the experiment above stands for. The integration test already runs a B and a
   Master in random, uneven slices and compares cycles, RAM with the ROMs and sideways RAM byte for byte, the
   CMOS, the keyboard and the MODE 7 screen; still to come are a disc read during the run, framebuffers and
@@ -269,32 +271,41 @@ one at a time; TURN; voice (below); and the steps in the next section.
 
 ### After v0: keys on time, taking control, rollback
 
-The first real session, the host in the US and a guest in the UK, showed what applying a guest's keys
-wherever the host has got to costs: keys that arrive together land on one cycle, and a release that arrives
-late holds a key down long enough to auto-repeat. Three steps, in this order.
+The first real session, the host in the US and a guest in the UK, lost keys that reached the host together and
+repeated one whose release reached it late. Three steps, in this order.
 
-**Input delay, tuned to the link.** Each peer stamps a key with the cycle its machine has reached plus a delay,
-and the host applies it at exactly that cycle. A guest's machine runs behind the host's, so the delay must cover
-how far behind it is and the trip to the host; then the key reaches the host before the host reaches its cycle.
-Keys land as far apart as they were pressed, in emulated cycles, so a tap is never lost and a release held up by
-less than the delay still lands on time; only a key that arrives too late for its cycle falls back to going in at
-once, as every key does now. jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not
-fixed: the session picks it from the measured round trip and jitter (the telemetry's figures) and keeps retuning
-it, a frame or two on a LAN and more across an ocean. Nobody gets it without guests.
+**Input delay, tuned to the link.** Each guest stamps a key with the cycle its machine has reached plus a delay,
+and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for
+the key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there.
+And the guest's lag must stay small and steady, which means pacing changes as well: today a guest settles
+anywhere up to a quarter of a second behind (see Pacing), so it would hold a target lag that follows the
+measured link instead. Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost
+packet held back, and a release held up by less than the delay, go in where they were pressed. A key that
+arrives too late for its cycle goes in at once, as every key does now. Two keys stamped in one of the guest's
+ticks still share a cycle, so the quantum (or the host's spacing of bunched keys) stays as the floor under it.
+jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks
+it, and the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an
+ocean, and keeps retuning both. A guest's delay only changes while it holds no key, so a release is never stamped
+before its press.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone:
 the sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A
 "Take control" button, and an option to take control on a key press, with nothing game-specific. The handover:
-the new player asks; the current sequencer names the cycle its next commit starts at and stops there; every
-machine reaches it; the new sequencer runs on from it. Its commits still go through the host, which keeps the
-star and relays them. Each handover pauses everyone for about a round trip. Taking control on a key press
+the new player asks; the current sequencer names the cycle its next commit starts at and stops there; the new
+player's machine reaches it; the new sequencer runs on from it. The key that asked for control, and any pressed
+during the handover, go in through the old sequencer as now. The star stays: the host relays the sequencer's
+commits, checking them as a guest checks the host's (well formed, each starting where the last ended, no
+BREAK), and sends the sequencer everyone else's keys, its own included. The sequencer is the reference for
+desync, so the host resyncs from it like any guest. Anything the host does that moves its machine (a reset, a
+loaded state, rewind) takes control back first. A handover costs about a round trip when the host is one end
+of it and two through the star, plus however far the new sequencer runs behind. Taking control on a key press
 suits turn-based play; two people typing at once would pass control back and forth.
 
-**Rollback (tier 4).** For simultaneous real-time play (two players in Joust), if the input delay over a long
-link feels too laggy. Each peer applies its own keys at once and assumes everyone else's are unchanged; when a
-key arrives for a cycle already passed, it restores the last snapshot before it and re-emulates to the present.
-Snapshot and restore are already cheap (see Prior art); re-emulation needs painting suppressed and the sound
-chip's queued events unwound, and a correction shows as the other player's sprite jumping.
+**Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy.
+Each peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a
+cycle already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and
+restore are already cheap (see Prior art); re-emulation needs painting suppressed and the sound chip's queued
+events unwound, and a correction shows as the other player's sprite jumping.
 
 ### Voice, later
 
@@ -316,8 +327,7 @@ WebRTC carries audio as readily as data, so voice in the session is mostly UI:
 ## Open questions
 
 - How SHIFT is shared when two people hold keys that force it different ways.
-- Whether the host's own keys take the input delay too: fair for a competitive game, a needless frame or two for
-  typing.
+- Whether the host's own keys take an input delay too: fair for a competitive game, needless lag for typing.
 - What a guest may do: type only, or also press BREAK, reset, change discs, rewind for everyone.
 - Where shared snapshots live (S3 behind a small upload endpoint, a gist, the user's Google Drive), for how
   long, and whether that is acceptable given a snapshot holds whatever was in RAM.
