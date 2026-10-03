@@ -337,8 +337,8 @@ Taking control on a key press suits turn-based play; two people typing at once w
 
 **What is built of it.** The pane has a Take control button and a "Take control when I press a key" option, and
 says who is in control, marking them in its list. A guest that takes control is handed the cycle the host's
-machine had reached, with every key not yet in a commit (those waiting for their cycles, and those due at the next
-execute), and starts ordering inputs once its own machine reaches that cycle, keeping any keys passed on to it
+machine had reached, once the host has committed what was due (BREAK, say) and with the keys still waiting for
+their cycles, and starts ordering inputs once its own machine reaches that cycle, keeping any keys passed on to it
 before then. The host relays its commits, checked as a guest checks the host's (well formed, each starting where
 the last ended, no BREAK) and replayed on its own machine, to every other guest. Everyone else's keys, the host's
 included, go to it through the host, stamped against its commits with the host's round trip to it added; the host

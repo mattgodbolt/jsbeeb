@@ -524,12 +524,19 @@ describe("SessionHost", () => {
             host.execute(5000);
         });
 
-        it("hands on a key due at the next execute, which no commit has carried yet", async () => {
+        it.each([
+            ["a key", keyA],
+            ["BREAK", { kind: "break", down: true }],
+        ])("commits %s due at the next execute before handing over", async (_, input) => {
             const { host } = await hosting();
             const channel = await joined();
-            host.input(keyA);
+            host.input(input);
             channel.emit("message", message({ type: "take" }));
-            expect(sentOf(channel, "input")).toEqual([{ type: "input", input: keyA, at: 1000, source: "due" }]);
+            const sent = channel.messages();
+            const committed = sent.findIndex((each) => each.type === "commit" && each.inputs.length > 0);
+            expect(sent[committed]).toMatchObject({ at: 1000, upTo: 1000, inputs: [input] });
+            expect(committed).toBeLessThan(sent.findIndex((each) => each.type === "handover"));
+            expect(sentOf(channel, "input")).toEqual([]);
         });
 
         it("applies itself a key it sent the guest in control that no commit carried, if that guest leaves", async () => {

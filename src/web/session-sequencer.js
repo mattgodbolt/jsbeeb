@@ -149,17 +149,16 @@ export class Sequencer {
     }
 
     /**
-     * Every input not yet in a commit, as `{ source, input, at }`, which are dropped: another sequencer is to apply
-     * them. Those due at the next execute come first, due where the machine is now.
+     * Commits what is due where the machine is now (BREAK, say), and gives up every key still waiting for its cycle,
+     * as `{ source, input, at }`, for another sequencer to apply.
      */
     releaseAll() {
-        const now = cycleCount(this.processor);
-        const due = this.lockstep.pending.splice(0).map((input) => ({ source: "due", input, at: now }));
+        if (this.lockstep.pending.length > 0) this.lockstep.execute(0);
         const waiting = [...this.sources].flatMap(([source, { scheduled }]) =>
             scheduled.map(({ input, at }) => ({ source, input, at })),
         );
         this.sources.clear();
-        return [...due, ...waiting];
+        return waiting;
     }
 
     // The machine only moves between executes by jumping (a reset, a loaded state), and the keys still
