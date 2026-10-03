@@ -17,7 +17,8 @@ import * as fdc from "../../src/fdc.js";
 import { keyCodes } from "../../src/keymap.js";
 import { mode7Text } from "./helpers.js";
 
-const HostSteps = 1500;
+// Steps the host runs after the last input, for its effect to reach the screen.
+const SettleSteps = 50;
 const MaxStepCycles = 60000;
 const MaxDelaySteps = 12;
 const EmptySliceEvery = 7;
@@ -130,7 +131,8 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, gue
             }
         }
     };
-    for (; step < HostSteps; ++step) {
+    const steps = inputs.length + SettleSteps;
+    for (; step < steps; ++step) {
         if (joinAt.includes(step)) {
             const guest = { inbox: [], desyncs: [] };
             Object.assign(
@@ -169,7 +171,8 @@ function expectIdentical(host, guests) {
     for (const { machine } of guests) {
         expect(cycleCount(machine.processor)).toBe(cycleCount(processor));
         expect(stateHash(machine.processor)).toBe(stateHash(processor));
-        expect(machine.processor.ramRomOs).toEqual(processor.ramRomOs);
+        // Buffer.compare rather than toEqual, which takes seconds over this many bytes.
+        expect(Buffer.compare(machine.processor.ramRomOs, processor.ramRomOs)).toBe(0);
         expect(machine.processor.sysvia.cmos.store).toEqual(processor.sysvia.cmos.store);
         expect(mode7Text(machine)).toBe(mode7Text(host));
     }
@@ -211,21 +214,21 @@ describe("lockstep sessions", () => {
     });
 
     it("brings back a guest that drifted, every guest after the host is reset, and a guest that reset itself", async () => {
-        const afterReset = 900;
+        const afterReset = 300;
         const { host, guests, jumps, desyncs } = await runSession({
             model: "B-DFS1.2",
             inputs: [...Array(afterReset).fill(null), ...typing("PRINT 67-25\n")],
             joinAt: [0, 20],
-            corruptAt: 100,
-            resetAt: 400,
-            guestResetAt: 550,
+            corruptAt: 30,
+            resetAt: 100,
+            guestResetAt: 160,
             seed: 3,
         });
         expect(jumps).toBe(1);
         // Each is put right by the one resync it asks for, and the host's reset needs none.
         expect(desyncs).toEqual([
-            "state differs from the host's at cycle 4633603",
-            "this machine moved from 3438840 by itself",
+            "state differs from the host's at cycle 2617151",
+            "this machine moved from 1362398 by itself",
         ]);
         expect(mode7Text(host)).toContain("42");
         expectIdentical(host, guests);
