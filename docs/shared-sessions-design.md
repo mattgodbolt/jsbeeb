@@ -92,10 +92,11 @@ Ranked by how much they would bite.
    In v0, keys, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which stamps
    each with a cycle, and gamepad keys are not polled while a session runs.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
-   (`src/adc.js:164`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation. The
-   system VIA reads gamepad fire buttons live (`SysVia.getJoysticks`). These must change so the machine only
-   ever sees values that came through the session. That refactor is after v0, which does not yet block these
-   inputs in a session (see the gaps).
+   (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
+   OS converts continuously into RAM whether a program reads them or not. The system VIA reads gamepad fire
+   buttons live (`SysVia.getJoysticks`). These must change so the machine only ever sees values that came
+   through the session. That refactor is after v0, which holds every ADC channel at its centre in a session and
+   does not yet block the fire buttons (see the gaps).
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
@@ -193,7 +194,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 - **Inputs:** the BBC keyboard, and BREAK from the host only. Each person's keys are mapped to the matrix with
   their own layout, and a guest's go to the host to be sequenced. When a guest leaves, the keys it held are let
-  go.
+  go. Every machine's ADC reads its centre for the session's duration.
 - **Transport:** WebRTC data channels in a star: each guest connects to the host only, over a reliable, ordered
   channel. A joiner's snapshot goes gzipped and in chunks over the same channel, discs included, so local and
   `gd:` discs need no fetching; each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
@@ -238,8 +239,9 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   it. On a guest it is undone the same way.
 - Anything that pauses the host pauses the session: a dialog, the rewind panel, saving or loading a state, the
   pause button. Guests wait, and catch up afterwards.
-- Inputs the machine reads for itself rather than being sent (the ADC's sources, the gamepad fire buttons the
-  system VIA reads) are not blocked either, and desync a session the same way if used.
+- Inputs the machine reads for itself rather than being sent (the gamepad fire buttons the system VIA reads,
+  the accessibility switches on the user port) are not blocked either, and desync a session the same way if
+  used.
 - A guest's BREAK is ignored, and when a guest leaves, its keys are let go even if someone else is holding the
   same key.
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
@@ -262,10 +264,10 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A share UI that generates the room's name.
 
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
-snapshot links; the pulled inputs (ADC sources, gamepads, the mouse) through the session, with `src/adc.js`, the
-sources and `getJoysticks` reading only what came through it; the other configuration options one at a time;
-TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs painting suppressed
-during re-emulation and the sound chip's queued events unwound.
+snapshot links; the pulled inputs (ADC sources, gamepads, the mouse, the switches) through the session, with
+`src/adc.js`, the sources and `getJoysticks` reading only what came through it; the other configuration options
+one at a time; TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs
+painting suppressed during re-emulation and the sound chip's queued events unwound.
 
 ### Voice, later
 
