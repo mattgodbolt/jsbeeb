@@ -236,8 +236,9 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   guest sends the host a summary of how it kept up once a second. Both sides log what they saw
   (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
   summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots and
-  desyncs. "Save session report" in the readout's menu downloads it as JSON; nothing is sent anywhere unless the
-  person who saved it sends it. A report holds everything typed in the session.
+  desyncs. The readout's menu also copies the link to join. "Save session report" in it downloads the log as
+  JSON; nothing is sent anywhere unless the person who saved it sends it. A report holds everything typed in the
+  session.
 
 ### Known gaps
 

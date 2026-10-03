@@ -309,6 +309,15 @@ describe("SessionHost", () => {
             expect(toastTexts()).toContain("The link to join is on the clipboard.");
         });
 
+        it("is shown in full where there is no clipboard to copy it to", async () => {
+            await hosting([]);
+            document.querySelector(".toast-action").click();
+            await settle();
+            expect(toastTexts().at(-1)).toBe(
+                `Copying needs https. Guests join at ${window.location.origin}/?client=room`,
+            );
+        });
+
         it("is shown in full when the clipboard refuses it", async () => {
             const writeText = vi.fn(async () => {
                 throw new Error("not allowed");
@@ -912,6 +921,20 @@ describe("startSessionFromUrl", () => {
     it("joins with ?client=", async () => {
         const rendezvous = await started({ client: "there" });
         expect(rendezvous.postOffer).toHaveBeenCalledWith("there", expect.any(String), "local sdp");
+    });
+
+    it("copies the link to join from the lights", async () => {
+        document.body.innerHTML = PanelMarkup;
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+        try {
+            await started({ client: "there" });
+            document.querySelector(".session-copy-link").dispatchEvent(new MouseEvent("click", { cancelable: true }));
+            await settle();
+            expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?client=there`);
+        } finally {
+            delete navigator.clipboard;
+        }
     });
 
     it("shows the session in the lights, with its report to save", async () => {

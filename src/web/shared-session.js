@@ -850,8 +850,11 @@ function joinLink(room) {
     return link.toString();
 }
 
-// The emulator has the keyboard, so Ctrl-C cannot copy the link out of a toast.
 async function copyJoinLink(room) {
+    if (!navigator.clipboard) {
+        notify(`Copying needs https. Guests join at ${joinLink(room)}`);
+        return;
+    }
     try {
         await navigator.clipboard.writeText(joinLink(room));
         toast("The link to join is on the clipboard.", { title: ToastTitle });
