@@ -288,18 +288,21 @@ it, and the guests' target lag, from the measured round trip and jitter, small o
 ocean, and keeps retuning both. A guest's delay only changes while it holds no key, so a release is never stamped
 before its press.
 
-**Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone:
-the sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A
-"Take control" button, and an option to take control on a key press, with nothing game-specific. The handover:
-the new player asks; the current sequencer names the cycle its next commit starts at and stops there; the new
-player's machine reaches it; the new sequencer runs on from it. The key that asked for control, and any pressed
-during the handover, go in through the old sequencer as now. The star stays: the host relays the sequencer's
-commits, checking them as a guest checks the host's (well formed, each starting where the last ended, no
-BREAK), and sends the sequencer everyone else's keys, its own included. The sequencer is the reference for
-desync, so the host resyncs from it like any guest. Anything the host does that moves its machine (a reset, a
-loaded state, rewind) takes control back first. A handover costs about a round trip when the host is one end
-of it and two through the star, plus however far the new sequencer runs behind. Taking control on a key press
-suits turn-based play; two people typing at once would pass control back and forth.
+**Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
+sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
+control" button, and an option to take control on a key press, with nothing game-specific. The handover: the new
+player asks; the current sequencer names the cycle its next commit starts at and stops there; the new player's
+machine reaches it; the new sequencer runs on from it. The old sequencer applies the key that asked for control
+before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer. The star
+stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed, each
+starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The
+sequencer is the reference for desync, so the host resyncs from it like any guest. Anything that moves a machine
+(a reset, a loaded state, rewind, the debugger) hands control back to the host first, so on a guest it is undone
+as now and on the host everyone resyncs from it. Once a guest holds control, everyone else, the host included, is
+a non-sequencer: their keys take the input delay, picked against the sequencer rather than the host. A handover
+costs about a round trip when the host is one end of it and two through the star, plus however far the new
+sequencer runs behind. Taking control on a key press suits turn-based play; two people typing at once would pass
+control back and forth.
 
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy.
 Each peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a
