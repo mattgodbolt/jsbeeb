@@ -301,7 +301,7 @@ export class SessionHost {
     stampOwn() {
         const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
         if (!this.sequencer) return this.stamper.follow({ ...now, heldBack: true });
-        if (this.stamper.catchingUp) return this.stamper.follow(now);
+        if (this.stamper.catchingUp || this.sequencer.waiting("host")) return this.stamper.follow(now);
         this.stamper.mark(now);
         return undefined;
     }
@@ -975,7 +975,7 @@ export class SessionGuest {
         // their gaps from the last, so none is cut short.
         if (this.sequencer) {
             const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
-            const behind = this.stamper.catchingUp;
+            const behind = this.stamper.catchingUp || this.sequencer.waiting(this.id);
             if (!behind) this.stamper.mark(now);
             this.sequencer.queue(this.id, input, {}, behind ? this.stamper.follow(now) : undefined);
             this.send({ type: "input", input, own: true });

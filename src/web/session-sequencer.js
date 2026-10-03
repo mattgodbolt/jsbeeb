@@ -42,7 +42,8 @@ export class KeyStamper {
         this.cyclesPerMs = cyclesPerSecond / 1000;
         this.last = null;
         // Whether this page's keys have fallen behind when they were pressed: one was stamped ahead of where the
-        // machine was, or held back while control came to it. Until one lands where the machine is, they follow on.
+        // machine was, or held back while control came to it. Until one is stamped where the machine is (and the
+        // sequencer has none of them waiting, which it may still hold later), they follow on.
         this.catchingUp = false;
     }
 
@@ -158,6 +159,11 @@ export class Sequencer {
             for (const key of source.scheduled.splice(0)) this.input(key.input, key.fields);
             source.lastKey = null;
         }
+    }
+
+    /** Whether source `id` has keys waiting for their cycles. */
+    waiting(id) {
+        return (this.sources.get(id)?.scheduled.length ?? 0) > 0;
     }
 
     /** Starts source `id`'s next key afresh, its stamps now counting on a machine that has been replaced. */

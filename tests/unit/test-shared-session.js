@@ -1606,6 +1606,35 @@ describe("SessionGuest", () => {
             expect(keys.at(-1)).toEqual([true, press.at + 50 * MsCycles]);
         });
 
+        it("does not let a quick re-tap land with the release of a key that took control late", async () => {
+            const MsCycles = CyclesPerSecond / 1000;
+            const session = await joining();
+            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            const keyboard = session.context.keyboard.setInput.mock.calls.at(-1)[0];
+            keyboard.keyDown("a", false);
+            const [press] = session.channel.messages().filter((each) => each.type === "input");
+            const handoverAt = press.at + 30 * MsCycles;
+            session.deliver([
+                message({ type: "commit", at: 1000, upTo: handoverAt, inputs: [] }),
+                message({ type: "handover", at: handoverAt }),
+                message({ type: "input", input: press.input, at: press.at, source: session.guest.id }),
+            ]);
+            session.lockstep().execute(handoverAt);
+            session.lockstep().execute(15 * MsCycles);
+            vi.advanceTimersByTime(15);
+            keyboard.keyUp("a");
+            session.lockstep().execute(5 * MsCycles);
+            vi.advanceTimersByTime(5);
+            keyboard.keyDown("a", false);
+            session.lockstep().execute(100 * MsCycles);
+            const keys = commitsSent(session.channel).flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
+            expect(keys[0]).toEqual([true, handoverAt]);
+            const release = keys.find(([down]) => !down);
+            const retap = keys.findLast(([down]) => down);
+            expect(retap[1]).toBeGreaterThan(release[1]);
+        });
+
         it("keeps a key pressed to take control down long enough when it is let go just after the press went in", async () => {
             const MsCycles = CyclesPerSecond / 1000;
             const session = await joining();
@@ -1619,7 +1648,7 @@ describe("SessionGuest", () => {
                 message({ type: "input", input: press.input, at: press.at, source: session.guest.id }),
             ]);
             session.lockstep().execute(2000);
-            session.lockstep().execute(press.at - 1000 + 1000);
+            session.lockstep().execute(press.at);
             vi.advanceTimersByTime(240);
             keyboard.keyUp("a");
             session.lockstep().execute(100 * MsCycles);
