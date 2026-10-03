@@ -454,12 +454,39 @@ describe("SessionHost", () => {
             expect(host.report().events).toContainEqual(expect.objectContaining({ event: "control", guest: "g1" }));
         });
 
+        it("lists the host first in its own pane, marked while it is in control", async () => {
+            showLights();
+            const { host } = await hosting();
+            const channel = await joined();
+            const firstRow = () =>
+                document.querySelector("#session-pane .session-people tbody tr").cells[1].textContent;
+            host.showStatus();
+            expect(firstRow()).toBe(`${host.name} (you) (in control)`);
+            channel.emit("message", message({ type: "take" }));
+            expect(firstRow()).toBe(`${host.name} (you)`);
+        });
+
         it("tells every guest whether a key press takes control, as its option is set", async () => {
             showLights();
             await hosting();
             const channel = await joined();
+            expect(sentOf(channel, "roster").at(-1)).toMatchObject({ takeOnKey: false });
             document.querySelector("#session-pane .session-take-on-key").click();
             expect(sentOf(channel, "roster").at(-1)).toMatchObject({ takeOnKey: true });
+        });
+
+        it("tells a guest joining after it was set, in its first roster", async () => {
+            showLights();
+            await hosting([
+                { guest: "g1", sdp: "offer" },
+                { guest: "g2", sdp: "offer" },
+            ]);
+            const first = connectTo(0);
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(1));
+            document.querySelector("#session-pane .session-take-on-key").click();
+            const second = connectTo(1);
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+            expect(sentOf(second, "roster")[0]).toMatchObject({ takeOnKey: true });
         });
 
         it("passes on a key pressed to take it, as well as the key", async () => {
@@ -1235,7 +1262,7 @@ describe("SessionHost", () => {
         host.execute(0);
         vi.advanceTimersByTime(StatsIntervalMs);
         host.execute(0);
-        expect(document.querySelector("#session-panel .led").title).toBe(
+        expect(document.querySelectorAll("#session-panel .led")[1].title).toBe(
             "Guest 1: keeping up, 85 ms round trip, 30 ms behind",
         );
     });
@@ -1244,7 +1271,8 @@ describe("SessionHost", () => {
         showLights();
         const { host } = await hosting();
         const channel = await joined();
-        const lights = () => [...document.querySelectorAll("#session-panel .led")].map((light) => light.dataset.state);
+        const lights = () =>
+            [...document.querySelectorAll("#session-panel .led")].slice(1).map((light) => light.dataset.state);
         expect(lights()).toEqual(["connecting"]);
         channel.emit("message", message({ type: "stats", stats: { lagMs: 30, commits: 50 } }));
         vi.advanceTimersByTime(StatsIntervalMs);
@@ -1264,7 +1292,7 @@ describe("SessionHost", () => {
         const { host } = await hosting();
         const channel = await joined();
         channel.emit("message", message({ type: "hello", name: "Kieran" }));
-        expect(document.querySelector("#session-panel .led").title).toMatch(/^Kieran: /);
+        expect(document.querySelectorAll("#session-panel .led")[1].title).toMatch(/^Kieran: /);
         expect(host.report().events).toContainEqual(expect.objectContaining({ event: "hello", name: "Kieran" }));
     });
 

@@ -242,6 +242,7 @@ export class SessionHost {
         // Whether a key press takes control, for everyone: the host's to set, and sent to every guest.
         this.takeOnKey = false;
         this.panel = new SessionPanel({ ...sessionPane(this), setTakeOnKey: (on) => this.setTakeOnKey(on) });
+        this.panel.showTakeOnKey(this.takeOnKey);
     }
 
     setTakeOnKey(on) {
@@ -530,11 +531,18 @@ export class SessionHost {
         this.departed = this.departed.filter((guest) => nowMs - guest.leftMs < LeftShownMs);
         const views = [...this.guests.values(), ...this.departed].map((guest) => [guest, this.guestView(guest, nowMs)]);
         const count = this.connectedCount();
-        this.panel.show(
-            "hosting",
-            `${count} ${count === 1 ? "guest" : "guests"}`,
-            views.map(([, view]) => view),
-        );
+        // This page's own row, first, as each guest's pane has the host first; behind only a guest in control.
+        const cyclesPerMs = this.context.processor.model.cyclesPerSecond / 1000;
+        const self = {
+            label: `${this.name} (you)`,
+            state: "ok",
+            lagMs: this.replay ? Math.round(this.replay.behind() / cyclesPerMs) : undefined,
+            control: !this.controller,
+        };
+        this.panel.show("hosting", `${count} ${count === 1 ? "guest" : "guests"}`, [
+            self,
+            ...views.map(([, view]) => view),
+        ]);
         this.panel.showControl(this.controller ? guestName(this.controller) : "you", !!this.controller);
         for (const guest of [...this.guests.values()]) {
             if (!guest.welcomed) continue;
