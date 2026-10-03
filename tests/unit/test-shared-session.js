@@ -244,7 +244,7 @@ function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} 
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
-const showLights = () => domFromIndexHtml("session-panel", "session-pane");
+const showLights = () => domFromIndexHtml("leds", "session-pane");
 const message = (body) => ({ data: JSON.stringify(body) });
 // The second the session clock shows: wall time here, read as UTC.
 const wallClockSecondMs = (fromMs = Date.now()) =>
@@ -1031,6 +1031,20 @@ describe("SessionGuest", () => {
                 stats: expect.objectContaining({ frames: 2, framesMaxGapMs: 1000, starved: 2, lagMs: 0 }),
             },
         ]);
+    });
+
+    it("opens the session pane once it has joined, and not again at a resync", async () => {
+        showLights();
+        const { context, deliver } = await joining();
+        const pane = document.getElementById("session-pane");
+        expect(pane.hidden).toBe(true);
+        deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        expect(pane.hidden).toBe(false);
+        pane.querySelector(".session-pane-close").click();
+        deliver(snapshotMessages(200, [{ at: 200, upTo: 100000, inputs: [] }]));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
+        expect(pane.hidden).toBe(true);
     });
 
     it("measures its own round trip to the host, and shows and logs it", async () => {

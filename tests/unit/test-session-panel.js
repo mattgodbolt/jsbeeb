@@ -26,6 +26,7 @@ describe("peerState", () => {
 describe("SessionPanel", () => {
     afterEach(() => {
         document.body.innerHTML = "";
+        vi.restoreAllMocks();
     });
 
     const session = (overrides = {}) => ({
@@ -37,7 +38,7 @@ describe("SessionPanel", () => {
     });
 
     function page() {
-        domFromIndexHtml("session-panel", "session-pane");
+        domFromIndexHtml("leds", "session-pane");
         return { readout: document.getElementById("session-panel"), pane: document.getElementById("session-pane") };
     }
 
@@ -78,6 +79,26 @@ describe("SessionPanel", () => {
         button.click();
         expect(pane.hidden).toBe(true);
         expect(button.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("opens just above the lights, follows them as the window resizes, and stays wherever it was dragged", () => {
+        const { pane } = page();
+        const lightsTop = 700;
+        const lights = vi.spyOn(document.getElementById("leds"), "getBoundingClientRect");
+        lights.mockReturnValue({ top: lightsTop });
+        const panel = new SessionPanel(session());
+        panel.open();
+        expect(pane.style.bottom).toBe(`${window.innerHeight - lightsTop + 6}px`);
+        expect(pane.style.maxHeight).toBe(`${lightsTop - 12}px`);
+        lights.mockReturnValue({ top: lightsTop - 40 });
+        window.dispatchEvent(new Event("resize"));
+        expect(pane.style.bottom).toBe(`${window.innerHeight - lightsTop + 40 + 6}px`);
+        panel.floating.close();
+        pane.style.top = "10px";
+        pane.style.bottom = "auto";
+        panel.open();
+        expect(pane.style.bottom).toBe("auto");
+        expect(pane.style.maxHeight).toBe("");
     });
 
     it("copies the link and saves the report from the pane", () => {

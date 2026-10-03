@@ -11,6 +11,7 @@ export const LaggingMs = 100;
 export const SilentMs = 3000;
 // A guest that runs out of the host's commits now and then is barely seen; more often, it stutters.
 const MaxStarvedPerSecond = 2;
+const PaneGapPx = 6;
 
 const Descriptions = { connecting: "connecting", ok: "keeping up", lagging: "lagging", silent: "out of touch" };
 export const PeerStates = new Set([...Object.keys(Descriptions), "left"]);
@@ -94,6 +95,12 @@ export class SessionPanel {
         readout.addEventListener("click", () => this.floating.toggle());
         for (const event of ["open", "close"])
             this.floating.addEventListener(event, () => readout.setAttribute("aria-expanded", this.floating.isOpen));
+        const onResize = () => this.sitAboveLights();
+        this.floating.addEventListener("open", () => {
+            this.sitAboveLights();
+            window.addEventListener("resize", onResize);
+        });
+        this.floating.addEventListener("close", () => window.removeEventListener("resize", onResize));
         pane.querySelector(".session-you").textContent = `You are ${name}`;
         pane.querySelector(".session-link").textContent = link;
         pane.querySelector(".session-copy-link").addEventListener("click", () => copyLink());
@@ -102,6 +109,19 @@ export class SessionPanel {
 
     open() {
         this.floating?.open();
+    }
+
+    // The lights wrap onto more rows as the window narrows, so their height is measured, not assumed, and the
+    // pane is kept short enough that its header stays on screen. A pane that has been dragged stays where it was
+    // put, as tall as the window allows, and FloatingPanel keeps it inside the window.
+    sitAboveLights() {
+        if (this.pane.style.top) {
+            this.pane.style.maxHeight = "";
+            return;
+        }
+        const lightsTop = this.root.closest("#leds").getBoundingClientRect().top;
+        this.pane.style.bottom = `${window.innerHeight - lightsTop + PaneGapPx}px`;
+        this.pane.style.maxHeight = `${Math.max(0, lightsTop - 2 * PaneGapPx)}px`;
     }
 
     /**

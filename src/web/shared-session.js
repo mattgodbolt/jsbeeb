@@ -887,6 +887,7 @@ export class SessionGuest {
             loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
             notify(`Joined "${this.room}".`);
             this.showStatus();
+            this.panel.open();
         }
         this.log.record("restored", { cycle: cycleCount(processor) });
         if (this.buffering === snapshot) this.buffering = null;
