@@ -232,7 +232,7 @@ export class SessionHost {
         this.poll();
     }
 
-    // Logged with the cycle it will be applied at: the next execute's, since the machine is between executes.
+    // Logged with the cycle it is applied at: the machine is between two of the lockstep's executes.
     input(input, fields = {}) {
         this.log.record("input", { ...fields, ...input, cycle: cycleCount(this.context.processor) });
         this.lockstep.input(input);
@@ -342,7 +342,7 @@ export class SessionHost {
             this.input(input, fields);
             return;
         }
-        guest.scheduled.push({ input, at, fields });
+        guest.scheduled.push({ input, at, fields: { ...fields, arrivedMs: this.log.elapsed() } });
         if (guest.scheduled.length > MaxWaitingKeys) {
             for (const key of guest.scheduled.splice(0)) this.input(key.input, key.fields);
             guest.lastKeys.clear();

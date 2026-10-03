@@ -425,6 +425,23 @@ describe("SessionHost", () => {
             ]);
         });
 
+        it("that waited are logged when they go in, with when they came and the guest's time", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            press(channel);
+            channel.emit(
+                "message",
+                message({ type: "input", input: { kind: "key", mapping: A, down: false }, ms: 12.5 }),
+            );
+            vi.advanceTimersByTime(30);
+            run(host, 3, 20);
+            const releases = host.report().events.filter((each) => each.event === "input" && !each.down);
+            expect(releases).toEqual([
+                expect.objectContaining({ guest: "g1", guestMs: 12.5, cycle: 1000 + 40 * MsCycles }),
+            ]);
+            expect(releases[0].ms - releases[0].arrivedMs).toBe(30);
+        });
+
         it("in a bunch go in one at a time, in the order they came", async () => {
             const { host } = await hosting();
             const channel = await joined();
