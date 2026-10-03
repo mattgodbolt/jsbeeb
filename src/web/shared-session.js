@@ -3,7 +3,14 @@
 // rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
-import { isValidCommit, isValidInput, LockstepGuest, LockstepHost, restoreSessionSnapshot } from "../lockstep.js";
+import {
+    cycleCount,
+    isValidCommit,
+    isValidInput,
+    LockstepGuest,
+    LockstepHost,
+    restoreSessionSnapshot,
+} from "../lockstep.js";
 import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
@@ -24,6 +31,11 @@ const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
 const RoomGone = 404;
+// A guest's keys are applied at least this far apart, so a press and release that reach the host together
+// still span several of the OS's 10ms keyboard scans.
+const MinGuestKeySpacingMs = 40;
+// Far more than anyone types behind the longest hold-up; a guest with more waiting is dropped.
+const MaxWaitingKeys = 64;
 
 function notify(message) {
     console.log(`Shared session: ${message}`);
@@ -157,7 +169,7 @@ export class SessionHost {
             (commit) => this.broadcast(JSON.stringify(commit)),
             () => this.resyncEveryone(),
         );
-        loop.setLockstep(this.lockstep);
+        loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.lockstep.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
         window.addEventListener("pagehide", () => this.close());
@@ -166,6 +178,37 @@ export class SessionHost {
         link.hash = "";
         notify(`Hosting "${this.room}". Guests join at ${link}`);
         this.poll();
+    }
+
+    execute(cycles) {
+        const now = cycleCount(this.context.processor);
+        for (const guest of this.guests.values()) {
+            while (guest.scheduled.length > 0 && guest.scheduled[0].at <= now) {
+                this.lockstep.input(guest.scheduled.shift().input);
+            }
+        }
+        return this.lockstep.execute(cycles);
+    }
+
+    // Applied at once unless it would follow the guest's last key too closely, so keys that come as they
+    // were typed are not delayed, and a bunch that a lost packet held back is spread out.
+    scheduleKey(guest, input) {
+        const now = cycleCount(this.context.processor);
+        const at = Math.max(now, guest.lastKeyAt + this.keySpacingCycles());
+        guest.lastKeyAt = at;
+        if (at === now && guest.scheduled.length === 0) {
+            this.lockstep.input(input);
+            return;
+        }
+        guest.scheduled.push({ input, at });
+        if (guest.scheduled.length > MaxWaitingKeys) {
+            console.warn("Shared session: dropping a guest that sent keys faster than anyone types");
+            this.drop(guest);
+        }
+    }
+
+    keySpacingCycles() {
+        return (MinGuestKeySpacingMs * this.context.processor.model.cyclesPerSecond) / 1000;
     }
 
     async poll() {
@@ -220,6 +263,9 @@ export class SessionHost {
             ready: false,
             backlog: [],
             held: new Map(),
+            // Keys waiting for the cycle scheduleKey gave them, and the cycle of the last it scheduled.
+            scheduled: [],
+            lastKeyAt: -Infinity,
             lastSnapshotMs: 0,
             snapshotGeneration: 0,
             resyncTimer: null,
@@ -268,7 +314,7 @@ export class SessionHost {
             const { down } = message.input;
             if (down) guest.held.set(mappingKey(mapping), mapping);
             else guest.held.delete(mappingKey(mapping));
-            this.lockstep.input({ kind: "key", mapping, down });
+            this.scheduleKey(guest, { kind: "key", mapping, down });
         } else if (message.type === "bye") {
             this.drop(guest);
         } else if (message.type === "resync") {
@@ -293,8 +339,12 @@ export class SessionHost {
 
     // Nobody can replay their way across a jump, not even a guest whose snapshot is still
     // being compressed: that one is from before it.
+    // Keys still waiting were spaced on the old cycle count, so they are spaced again from the new one.
     resyncEveryone() {
+        const now = cycleCount(this.context.processor);
         for (const guest of this.guests.values()) {
+            guest.scheduled.forEach((key, index) => (key.at = now + index * this.keySpacingCycles()));
+            guest.lastKeyAt = guest.scheduled.at(-1)?.at ?? -Infinity;
             if (guest.channel) this.sendSnapshot(guest);
         }
     }
@@ -343,12 +393,18 @@ export class SessionHost {
         }
     }
 
-    // Whatever the guest was holding is let go, or it would stay down on every machine.
+    // Every key the guest is holding, or whose release is still waiting, is let go, or it would stay down.
+    releaseKeys(guest) {
+        const releases = new Map(guest.held);
+        for (const { input } of guest.scheduled.splice(0)) releases.set(mappingKey(input.mapping), input.mapping);
+        for (const mapping of releases.values()) this.lockstep.input({ kind: "key", mapping, down: false });
+    }
+
     drop(guest) {
         if (this.guests.get(guest.id) !== guest) return;
         this.guests.delete(guest.id);
         clearTimeout(guest.resyncTimer);
-        for (const mapping of guest.held.values()) this.lockstep.input({ kind: "key", mapping, down: false });
+        this.releaseKeys(guest);
         guest.pc.close();
         if (guest.welcomed) notify(`A guest left (${this.connectedCount()} connected).`);
     }
@@ -361,6 +417,7 @@ export class SessionHost {
         this.polling = false;
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
+        for (const guest of this.guests.values()) this.releaseKeys(guest);
         this.lockstep.execute(0);
         loop.setLockstep(null);
         for (const guest of this.guests.values()) {

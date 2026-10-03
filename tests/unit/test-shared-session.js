@@ -287,8 +287,8 @@ describe("SessionHost", () => {
         const { host } = await hosting();
         const channel = connect();
         for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
-        host.lockstep.execute(100);
-        host.lockstep.execute(100);
+        host.execute(100);
+        host.execute(100);
         await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
         const commits = channel.messages().filter((each) => each.type === "commit");
         expect(commits.map(({ at, upTo }) => [at, upTo])).toEqual([
@@ -317,12 +317,104 @@ describe("SessionHost", () => {
         const channel = await joined();
         channel.emit("message", keyMessage({ kind: "key", mapping: [4, 1], down: true }));
         channel.emit("message", message({ type: "bye" }));
-        host.lockstep.execute(0);
+        host.execute(0);
         expect(processor.sysvia.setMapped.mock.calls).toEqual([
             [[4, 1], 1],
             [[4, 1], 0],
         ]);
         expect(peers[0].closed).toBe(true);
+    });
+
+    describe("a guest's keys", () => {
+        const MsCycles = CyclesPerSecond / 1000;
+        const key = (down) => keyMessage({ kind: "key", mapping: [4, 1], down });
+        const appliedAt = (channel) =>
+            channel
+                .messages()
+                .filter((each) => each.type === "commit" && each.inputs.length > 0)
+                .flatMap((each) => each.inputs.map((input) => [input.down, each.at]));
+        const run = (host, count, ms) => {
+            for (let i = 0; i < count; ++i) host.execute(ms * MsCycles);
+        };
+
+        it("are applied as they come when they come further apart than the spacing", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            channel.emit("message", key(true));
+            run(host, 1, 50);
+            channel.emit("message", key(false));
+            run(host, 1, 0);
+            expect(appliedAt(channel)).toEqual([
+                [true, 1000],
+                [false, 1000 + 50 * MsCycles],
+            ]);
+        });
+
+        it("are spread out when they come together, so a tap spans the keyboard scan", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            for (const down of [true, false, true, false]) channel.emit("message", key(down));
+            run(host, 8, 20);
+            expect(appliedAt(channel)).toEqual([
+                [true, 1000],
+                [false, 1000 + 40 * MsCycles],
+                [true, 1000 + 80 * MsCycles],
+                [false, 1000 + 120 * MsCycles],
+            ]);
+        });
+
+        it("are not held back once a bunch has been spread out", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            for (const down of [true, false]) channel.emit("message", key(down));
+            run(host, 5, 20);
+            channel.emit("message", key(true));
+            run(host, 1, 0);
+            expect(appliedAt(channel).at(-1)).toEqual([true, 1000 + 100 * MsCycles]);
+        });
+
+        it("are let go when the guest leaves with a release still waiting", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            for (const down of [true, false]) channel.emit("message", key(down));
+            channel.emit("message", message({ type: "bye" }));
+            run(host, 3, 20);
+            expect(processor.sysvia.setMapped.mock.calls).toEqual([
+                [[4, 1], 1],
+                [[4, 1], 0],
+            ]);
+        });
+
+        it("are let go when the host closes with a release still waiting", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            for (const down of [true, false]) channel.emit("message", key(down));
+            host.close();
+            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([[4, 1], 0]);
+        });
+
+        it("still waiting at a jump are spaced again from the new cycle count", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            for (const down of [true, false, true]) channel.emit("message", key(down));
+            processor.currentCycles = processor.targetCycles = 50;
+            run(host, 1, 0);
+            run(host, 1, 40);
+            expect(processor.sysvia.setMapped.mock.calls).toEqual([
+                [[4, 1], 1],
+                [[4, 1], 0],
+            ]);
+            run(host, 1, 0);
+            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([[4, 1], 1]);
+        });
+
+        it("drop a guest that sends far more than anyone types", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            for (let i = 0; i < 100; ++i) channel.emit("message", key(i % 2 === 0));
+            expect(peers[0].closed).toBe(true);
+            expect(host.connectedCount()).toBe(0);
+        });
     });
 
     it("takes only well-formed keys from a guest, never BREAK, and passes on only what it checked", async () => {
@@ -333,7 +425,7 @@ describe("SessionHost", () => {
         channel.emit("message", keyMessage({ kind: "key", mapping: [99, 1], down: true }));
         channel.emit("message", { data: "not json" });
         channel.emit("message", keyMessage({ kind: "key", mapping: [4, 1], down: true, padding: "x".repeat(1000) }));
-        host.lockstep.execute(0);
+        host.execute(0);
         expect(processor.sysvia.setMapped.mock.calls).toEqual([[[4, 1], 1]]);
         expect(channel.messages().at(-1).inputs).toEqual([{ kind: "key", mapping: [4, 1], down: true }]);
     });
@@ -342,7 +434,7 @@ describe("SessionHost", () => {
         const { host } = await hosting();
         const channel = await joined();
         channel.full = true;
-        expect(host.lockstep.execute(100)).toBe(true);
+        expect(host.execute(100)).toBe(true);
         expect(peers[0].closed).toBe(true);
     });
 
@@ -363,7 +455,7 @@ describe("SessionHost", () => {
         for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
         expect(channel.messages()).toEqual([expect.objectContaining({ type: "welcome" })]);
         processor.currentCycles = processor.targetCycles = 50;
-        host.lockstep.execute(0);
+        host.execute(0);
         await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
         await settle();
         expect(channel.snapshots().map((snapshot) => snapshot.at)).toEqual([50]);
@@ -374,10 +466,10 @@ describe("SessionHost", () => {
         const { cmos } = processor.sysvia;
         const started = Date.now();
         expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
-        host.lockstep.execute(CyclesPerSecond * 5);
+        host.execute(CyclesPerSecond * 5);
         expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started + 5000));
         processor.cycleSeconds = 20;
-        host.lockstep.execute(0);
+        host.execute(0);
         expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
     });
 
