@@ -12,6 +12,8 @@ test("a guest joins a hosted session, and what either types reaches both machine
     const room = `e2e-${Date.now()}`;
     await beeb.open(`?server=${room}`);
     await beeb.expectScreenText("BASIC");
+    // Before the guest joins, so its copy of the machine has it too.
+    await beeb.disableAutoRepeat();
 
     const guestContext = await browser.newContext();
     const guest = new Beeb(await guestContext.newPage());
