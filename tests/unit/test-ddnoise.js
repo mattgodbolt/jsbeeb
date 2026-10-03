@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
 import { DdNoise } from "../../src/ddnoise.js";
 
 const Sounds = {
@@ -11,7 +12,9 @@ const Sounds = {
 
 const RunFirstClick = 0.0085;
 const RunClickSeconds = 0.024209;
-const GrainLead = 0.002;
+const RunClicks = 73;
+const GrainLead = 0.006;
+const GrainFade = 0.002;
 
 function stubContext() {
     return {
@@ -39,6 +42,23 @@ function loadedDdNoise(context) {
     ddNoise.sounds = Sounds;
     return ddNoise;
 }
+
+/** A 16-bit mono WAV's samples, as magnitudes from 0 to 1, and its rate. */
+function wavMagnitudes(path) {
+    const bytes = readFileSync(new URL(path, import.meta.url));
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const rate = view.getUint32(24, true);
+    let chunk = 12;
+    while (bytes.toString("latin1", chunk, chunk + 4) !== "data") chunk += 8 + view.getUint32(chunk + 4, true);
+    const count = view.getUint32(chunk + 4, true) / 2;
+    const samples = Float32Array.from(
+        { length: count },
+        (_, i) => Math.abs(view.getInt16(chunk + 8 + 2 * i, true)) / 32768,
+    );
+    return { samples, rate };
+}
+
+const median = (values) => values.toSorted((a, b) => a - b)[values.length >> 1];
 
 /** The starts made so far: which sound, when, from where in it, for how long. */
 const starts = (ddNoise) =>
@@ -110,6 +130,26 @@ describe("DdNoise seeks", () => {
         const [grain] = starts(ddNoise);
         expect(grain.offset + RunClickSeconds).toBeLessThanOrEqual(Sounds.seek3.duration);
         expect(grain.offset + RunClickSeconds).toBeGreaterThan(Sounds.seek3.duration - 2 * RunClickSeconds);
+    });
+
+    it("cuts most grains in the quiet between clicks, so neither fade takes much of a click", () => {
+        const { samples, rate } = wavMagnitudes("../../public/sounds/disc525/seek3.wav");
+        let next = 0;
+        vi.spyOn(Math, "random").mockImplementation(() => (next++ + 0.5) / RunClicks);
+        ddNoise.seekStart(RunClicks, 24);
+        const loudest = (from, to) =>
+            samples.subarray(Math.round(from * rate), Math.round(to * rate)).reduce((a, b) => Math.max(a, b));
+        const grains = starts(ddNoise).filter(({ sound }) => sound === Sounds.seek3);
+        const fadeIns = grains.map(
+            ({ offset, duration }) => loudest(offset, offset + GrainFade) / loudest(offset, offset + duration),
+        );
+        const fadeOuts = grains.map(
+            ({ offset, duration }) =>
+                loudest(offset + duration - GrainFade, offset + duration) / loudest(offset, offset + duration),
+        );
+        expect(new Set(grains.map(({ offset }) => offset)).size).toBe(RunClicks);
+        expect(median(fadeIns)).toBeLessThan(0.3);
+        expect(median(fadeOuts)).toBeLessThan(0.3);
     });
 
     it("drops the clicks past the step the head stopped at, and lets it ring from there", () => {
