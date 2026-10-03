@@ -291,14 +291,14 @@ repeated one whose release reached it late. Three steps, in this order.
 **Input delay, tuned to the link.** Each guest stamps a key with the cycle its machine has reached plus a delay,
 and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for the
 key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there. And the
-guest's lag must stay small and steady, which means pacing changes as well: today a guest settles anywhere up to a
-quarter of a second behind (see Pacing), so it would hold a target lag that follows the measured link instead.
-Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held back, and a
-release held up by less than the delay, go in where they were pressed. A key that arrives too late for its cycle
-goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one of the
-guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it. jsbeeb
-worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it, and
-the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
+guest's lag must stay small and steady, which means pacing changes as well: today a guest catches up whenever it
+is more than a fixed 40 ms behind (see Pacing), so it would hold a target lag that follows the measured link
+instead. Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held
+back, and a release held up by less than the delay, go in where they were pressed. A key that arrives too late for
+its cycle goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one
+of the guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it.
+jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it,
+and the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
 keeps retuning both. Between resyncs, a guest never stamps a key earlier than the last one it stamped, so a delay
 that shrinks takes effect only as the stamps catch up, and keys keep the order they were pressed in; keys clamped
 to one stamp share a cycle and fall to the same floor. A resync forgets the last stamp, since the machine it
