@@ -1,5 +1,7 @@
 import { BBC, getKeyMap } from "./keymap.js";
 
+export const KeyMatrixSize = 16;
+
 const ORB = 0x0,
     ORA = 0x1,
     DDRB = 0x2,
@@ -622,8 +624,8 @@ export class SysVia extends Via {
         this.capsLockLight = false;
         this.shiftLockLight = false;
         this.keys = [];
-        for (let i = 0; i < 16; ++i) {
-            this.keys[i] = new Uint8Array(16);
+        for (let i = 0; i < KeyMatrixSize; ++i) {
+            this.keys[i] = new Uint8Array(KeyMatrixSize);
         }
         // Mouse joystick button state
         this.mouseButton1 = false;
@@ -649,6 +651,27 @@ export class SysVia extends Via {
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
         };
+    }
+
+    /**
+     * The keys held down, which snapshots leave out so that a rewind or a loaded state
+     * keeps the keys the person is actually holding.
+     */
+    keyboardState() {
+        return {
+            keys: this.keys.map((column) => Array.from(column)),
+            physicalShiftDown: this._physicalShiftDown,
+            shiftOverrideActive: this._shiftOverrideActive,
+            shiftOverrideDesiredShift: this._shiftOverrideDesiredShift,
+        };
+    }
+
+    restoreKeyboard(state) {
+        state.keys.forEach((column, col) => this.keys[col].set(column));
+        this._physicalShiftDown = state.physicalShiftDown;
+        this._shiftOverrideActive = state.shiftOverrideActive;
+        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
+        this.updateKeys();
     }
 
     restoreState(state) {
@@ -697,10 +720,20 @@ export class SysVia extends Via {
     }
 
     set(key, val, shiftDown) {
-        if (!this.keyboardEnabled) return;
-        const mapping = this.keycodeToRowCol[!!shiftDown][key];
-        if (!mapping) return;
+        const mapping = this.keyMapping(key, shiftDown);
+        if (mapping) this.setMapped(mapping, val);
+    }
 
+    /**
+     * Where a key code lands on the BBC's key matrix under the current layout, as
+     * `[col, row, bbcShiftOverride?]`, or undefined.
+     */
+    keyMapping(key, shiftDown) {
+        return this.keycodeToRowCol[!!shiftDown][key];
+    }
+
+    setMapped(mapping, val) {
+        if (!this.keyboardEnabled) return;
         const [col, row, bbcShiftOverride] = mapping;
         const [shiftCol, shiftRow] = BBC.SHIFT;
 
