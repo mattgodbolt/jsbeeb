@@ -16,6 +16,7 @@ export const MaxCatchUpSeconds = 0.1;
 const FnvOffset = 0x811c9dc5;
 const FnvPrime = 0x01000193;
 const MsPerMinute = 60 * 1000;
+const RomBankBytes = 16384;
 
 /**
  * The emulated cycle the machine has reached, counted from power on. Between
@@ -50,11 +51,15 @@ function fnv1a(hash, bytes) {
     return hash;
 }
 
-/** A cheap fingerprint of the machine for desync detection: registers, RAM and the keyboard. */
+/** A cheap fingerprint of the machine for desync detection: registers, RAM, sideways RAM and the keyboard. */
 export function stateHash(cpu) {
     const registers = Uint8Array.of(cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc & 0xff, cpu.pc >>> 8, cpu.p.asByte());
     let hash = fnv1a(FnvOffset, registers);
     hash = fnv1a(hash, cpu.ramRomOs.subarray(0, cpu.romOffset));
+    cpu.model.swram.forEach((isRam, bank) => {
+        const start = cpu.romOffset + bank * RomBankBytes;
+        if (isRam) hash = fnv1a(hash, cpu.ramRomOs.subarray(start, start + RomBankBytes));
+    });
     for (const column of cpu.sysvia.keys) hash = fnv1a(hash, column);
     return (hash >>> 0).toString(16);
 }

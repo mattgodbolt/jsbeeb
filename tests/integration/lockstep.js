@@ -276,13 +276,18 @@ describe("lockstep sessions", () => {
             expect(guest.machine.processor.fdc.drives[0].disc).toBeDefined();
         });
 
-        it("fingerprints the registers and the keyboard as well as RAM", async () => {
+        it("fingerprints the registers, the keyboard and sideways RAM as well as RAM", async () => {
             const { host } = await pair();
             const { processor } = host;
             const unchanged = stateHash(processor);
             processor.sysvia.keyDown(keyCodes.A, false);
             expect(stateHash(processor)).not.toBe(unchanged);
             processor.sysvia.keyUp(keyCodes.A);
+            expect(stateHash(processor)).toBe(unchanged);
+            const sideways = processor.romOffset + SidewaysRamBank * RomBankBytes;
+            processor.ramRomOs[sideways] ^= 1;
+            expect(stateHash(processor)).not.toBe(unchanged);
+            processor.ramRomOs[sideways] ^= 1;
             expect(stateHash(processor)).toBe(unchanged);
             processor.x ^= 1;
             expect(stateHash(processor)).not.toBe(unchanged);
