@@ -33,17 +33,17 @@ Every peer runs the whole machine. They start from the same snapshot, apply the 
 emulated cycle, and so stay identical without sending any machine state.
 
 **Time is cycles, not milliseconds.** The session clock is the emulated cycle count, and every input is stamped
-with the cycle it applies at. In v0 that is wherever the host's machine had got to between two executes, which is
-always an instruction boundary, so any machine running the same code stops there exactly, whatever slices its own
-loop runs in. The host spaces a guest's keys that arrive together (see Known gaps), so a fixed quantum is not
-needed to keep a tap from landing on one cycle.
+with the cycle it applies at. The host's own keys go in wherever its machine had got to between two executes,
+which is always an instruction boundary, so any machine running the same code stops there exactly, whatever slices
+its own loop runs in. A guest's keys go in at the cycle the guest stamped them with (see the input delay, below),
+so their timing survives the network bunching them, and no fixed quantum is needed.
 
-**One sequencer orders the inputs.** The host is the sequencer. Guests send it their inputs as they happen; it
-applies them at its next execute (a guest's keys spaced as Known gaps says) and sends every guest a commit, `{at,
-inputs, upTo}`: the inputs it applied at cycle `at`, and how far it then ran. A guest runs up to the last commit
-and no further. Guests never hear from each other, and a quiet guest costs nothing because nobody waits on it. The
-host is also the hub every guest connects to (see v0); the protocol does not depend on that, so a server could
-take the job over later.
+**One sequencer orders the inputs.** The host is the sequencer. Guests send it their inputs as they happen, each
+stamped with a cycle; it applies its own at its next execute and a guest's at its stamp, and sends every guest a
+commit, `{at, inputs, upTo}`: the inputs it applied at cycle `at`, and how far it then ran. A guest runs up to the
+last commit and no further. Guests never hear from each other, and a quiet guest costs nothing because nobody
+waits on it. The host is also the hub every guest connects to (see v0); the protocol does not depend on that, so a
+server could take the job over later.
 
 **Inputs are machine-level events.** A key is sent after the sender's own mapping (layouts, user remaps in
 `src/keymap.js`), not as a host key code, because mapping is per-person configuration. That is more than a
@@ -246,12 +246,11 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### Known gaps
 
-- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host keeps
-  them in the order they came and applies each press at least 40ms after the guest's last, and each release 40ms
-  after its press, so a bunch still types one key at a time that the OS sees; a key held longer comes out 40ms
-  long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of them. A release
-  can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up arrives late, and
-  one that arrives behind a bunch waits for it. Nothing but the input delay after v0 (below) would hide that.
+- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. Each was
+  stamped a measured round trip and a 20 ms margin ahead, so one held up by less than that still goes in on its
+  own cycle. A bunch held up for longer goes in late, but as far apart as it was typed, so no key is lost; a
+  release held up that long still lengthens its hold, enough to start the OS's auto-repeat. The margin is a guess
+  until session reports show the jitter.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -267,8 +266,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
 - A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
-  measured), and with its ticks that far apart a guest's press and release nearly always reach it together, and
-  only the host's spacing of bunched keys keeps them apart.
+  measured); a guest's keys still go in on the cycles they were stamped with, but everything a guest sees is that
+  slow.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
 
@@ -292,22 +291,21 @@ one at a time; TURN; voice (below); and the steps in the next section.
 The first real session, the host in the US and a guest in the UK, lost keys that reached the host together and
 repeated one whose release reached it late. Three steps, in this order.
 
-**Input delay, tuned to the link.** Each guest stamps a key with the cycle its machine has reached plus a delay,
-and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for the
-key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there. And the
-guest's lag must stay small and steady, which means pacing changes as well: today a guest catches up whenever it
-is more than a fixed 40 ms behind (see Pacing), so it would hold a target lag that follows the measured link
-instead. Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held
-back, and a release held up by less than the delay, go in where they were pressed. A key that arrives too late for
-its cycle goes in as keys do now: at once, unless a bunch is still going in ahead of it. Two keys stamped in one
-of the guest's ticks still share a cycle, so the host's spacing of bunched keys stays as the floor under it.
-jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks it,
-and the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an ocean, and
-keeps retuning both. Between resyncs, a guest never stamps a key earlier than the last one it stamped, so a delay
-that shrinks takes effect only as the stamps catch up, and keys keep the order they were pressed in; keys clamped
-to one stamp share a cycle and fall to the same floor. A resync forgets the last stamp, since the machine it
-counted on has jumped, and each key carries the count of that guest's resyncs, so the host applies one stamped
-before the guest's latest at once rather than holding it for a cycle on a timeline that has gone. In this
+**Input delay, tuned to the link.** Each guest stamps a key with a cycle the host will not have passed when the
+key reaches it, and the host applies it at that cycle. In this first version that is the end of the host's last
+commit, plus the guest's measured round trip (200 ms until it has one), plus the time since that commit came, plus
+a 20 ms margin for jitter; it follows the link as it is measured, so a LAN pays little. It makes the guest's own
+keys no quicker to appear than before, about a round trip plus its lag, but every key keeps the timing it was
+typed with. Keys that arrive in time go in on their stamps, so a bunch that a lost packet held back for less than
+the margin, and a release held up as long, go in where they were pressed; a key that arrives too late moves the
+keys after it on by as much, so a longer hold-up delays a bunch without squeezing it, until nothing is waiting and
+keys come in time again. Two keys stamped in one of the guest's ticks share a cycle, as they would on a machine of
+its own. A guest never stamps a key earlier than the last one it stamped, so keys keep the order they were pressed
+in when the round trip shrinks. A resync forgets the last stamp, since the machine it counted on has jumped, and
+each key carries how many snapshots the guest has restored, so the host applies one stamped before the guest's
+latest at once rather than holding it for a cycle on a timeline that has gone; a key stamped implausibly far ahead
+goes in at once too. Still to come: holding the guest's lag to a target that follows the link (today it catches up
+whenever it is more than a fixed 40 ms behind, see Pacing), and a margin chosen from the measured jitter. In this
 paragraph the host stands for whoever is sequencing.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
@@ -315,25 +313,24 @@ sequencer moves to them, so their keys apply on their own machine at once and ev
 control" button, and an option to take control on a key press, with nothing game-specific. The handover: the new
 player asks; the current sequencer names the cycle its next commit starts at and stops there; the new player's
 machine reaches it; the new sequencer runs on from it. The old sequencer applies the key that asked for control,
-and every key it holds stamped at or after the cycle it names, which lose their spacing and fall to the same
-floor, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer, or
-back to the old one, which runs on from the named cycle, if the new player leaves before taking over. The host
-forwards a key stamped before its guest's latest resync marked as stale, so whoever sequences applies it at once.
-The star stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed,
-each starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The
-host stays the reference for desync: it replays every commit it relays, resyncs any guest from its own machine,
-keeping the relayed commits it has not yet replayed and sending those past the snapshot after it, as a late joiner
-is sent the commits made while its snapshot is compressed, and if its replay disagrees with a guest sequencer,
-takes control back and resyncs everyone, the sequencer included, so a guest cannot make an altered state
-everyone's. If a guest sequencer leaves or goes silent, during a handover or not, the host takes control back the
-same way, from the last commit it relayed: it releases the keys the sequencer had down, and sequences itself every
-key it forwarded, or kept back for the handover, that no relayed commit contained. Anything that moves a machine
-(a reset, a loaded state, rewind, the debugger) hands control back to the host first, so on a guest it is undone
-as now and on the host everyone resyncs from it. Once a guest holds control, everyone else, the host included, is
-a non-sequencer: their keys take the input delay, picked against the sequencer rather than the host. A handover
-costs about a round trip when the host is one end of it and two through the star, plus however far the new
-sequencer runs behind. Taking control on a key press suits turn-based play; two people typing at once would pass
-control back and forth.
+and every key it holds stamped at or after the cycle it names, which keep their order but go in together, before
+naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer, or back to the
+old one, which runs on from the named cycle, if the new player leaves before taking over. The host forwards a key
+stamped before its guest's latest resync marked as stale, so whoever sequences applies it at once. The star stays:
+the host relays the sequencer's commits, checking them as a guest checks the host's (well formed, each starting
+where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The host stays
+the reference for desync: it replays every commit it relays, resyncs any guest from its own machine, keeping the
+relayed commits it has not yet replayed and sending those past the snapshot after it, as a late joiner is sent the
+commits made while its snapshot is compressed, and if its replay disagrees with a guest sequencer, takes control
+back and resyncs everyone, the sequencer included, so a guest cannot make an altered state everyone's. If a guest
+sequencer leaves or goes silent, during a handover or not, the host takes control back the same way, from the last
+commit it relayed: it releases the keys the sequencer had down, and sequences itself every key it forwarded, or
+kept back for the handover, that no relayed commit contained. Anything that moves a machine (a reset, a loaded
+state, rewind, the debugger) hands control back to the host first, so on a guest it is undone as now and on the
+host everyone resyncs from it. Once a guest holds control, everyone else, the host included, is a non-sequencer:
+their keys take the input delay, picked against the sequencer rather than the host. A handover costs about a round
+trip when the host is one end of it and two through the star, plus however far the new sequencer runs behind.
+Taking control on a key press suits turn-based play; two people typing at once would pass control back and forth.
 
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
 peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle
