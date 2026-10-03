@@ -327,93 +327,181 @@ describe("SessionHost", () => {
 
     describe("a guest's keys", () => {
         const MsCycles = CyclesPerSecond / 1000;
-        const key = (down) => keyMessage({ kind: "key", mapping: [4, 1], down });
-        const appliedAt = (channel) =>
+        const MaxWaitingKeys = 64;
+        const A = [4, 1];
+        const B = [5, 2];
+        const key = (down, mapping = A) => keyMessage({ kind: "key", mapping, down });
+        // As sessionInput sends a key: a press, then a release under each shift state.
+        const press = (channel, mapping = A) => channel.emit("message", key(true, mapping));
+        const release = (channel, mapping = A) => {
+            channel.emit("message", key(false, mapping));
+            channel.emit("message", key(false, mapping));
+        };
+        const applied = (channel) =>
             channel
                 .messages()
                 .filter((each) => each.type === "commit" && each.inputs.length > 0)
-                .flatMap((each) => each.inputs.map((input) => [input.down, each.at]));
+                .flatMap((each) => each.inputs.map((input) => [input.mapping.join(), input.down, each.at]));
         const run = (host, count, ms) => {
             for (let i = 0; i < count; ++i) host.execute(ms * MsCycles);
         };
 
-        it("are applied as they come when they come further apart than the spacing", async () => {
+        it("go in as they come when typed, whatever the rollover", async () => {
             const { host } = await hosting();
             const channel = await joined();
-            channel.emit("message", key(true));
+            press(channel, A);
             run(host, 1, 50);
-            channel.emit("message", key(false));
+            press(channel, B);
+            run(host, 1, 10);
+            release(channel, A);
+            run(host, 1, 40);
+            release(channel, B);
             run(host, 1, 0);
-            expect(appliedAt(channel)).toEqual([
-                [true, 1000],
-                [false, 1000 + 50 * MsCycles],
+            expect(applied(channel)).toEqual([
+                ["4,1", true, 1000],
+                ["5,2", true, 1000 + 50 * MsCycles],
+                ["4,1", false, 1000 + 60 * MsCycles],
+                ["4,1", false, 1000 + 60 * MsCycles],
+                ["5,2", false, 1000 + 100 * MsCycles],
+                ["5,2", false, 1000 + 100 * MsCycles],
             ]);
         });
 
-        it("are spread out when they come together, so a tap spans the keyboard scan", async () => {
+        it("hold a tap that arrives whole long enough for the keyboard scan to see it", async () => {
             const { host } = await hosting();
             const channel = await joined();
-            for (const down of [true, false, true, false]) channel.emit("message", key(down));
-            run(host, 8, 20);
-            expect(appliedAt(channel)).toEqual([
-                [true, 1000],
-                [false, 1000 + 40 * MsCycles],
-                [true, 1000 + 80 * MsCycles],
-                [false, 1000 + 120 * MsCycles],
+            press(channel);
+            release(channel);
+            run(host, 3, 20);
+            expect(applied(channel)).toEqual([
+                ["4,1", true, 1000],
+                ["4,1", false, 1000 + 40 * MsCycles],
+                ["4,1", false, 1000 + 40 * MsCycles],
             ]);
         });
 
-        it("are not held back once a bunch has been spread out", async () => {
+        it("in a bunch go in one at a time, in the order they came", async () => {
             const { host } = await hosting();
             const channel = await joined();
-            for (const down of [true, false]) channel.emit("message", key(down));
+            press(channel, A);
+            release(channel, A);
+            press(channel, B);
+            release(channel, B);
+            press(channel, A);
+            run(host, 6, 20);
+            expect(applied(channel).map(([name, down, at]) => [name, down, (at - 1000) / MsCycles])).toEqual([
+                ["4,1", true, 0],
+                ["4,1", false, 40],
+                ["4,1", false, 40],
+                ["5,2", true, 40],
+                ["5,2", false, 80],
+                ["5,2", false, 80],
+                ["4,1", true, 80],
+            ]);
+        });
+
+        it("are spaced by their place on the matrix, whatever shift they force", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            channel.emit("message", key(true, [4, 1]));
+            channel.emit("message", key(false, [4, 1, false]));
+            channel.emit("message", key(false, [4, 1]));
+            run(host, 3, 20);
+            expect(applied(channel)).toEqual([
+                ["4,1", true, 1000],
+                ["4,1,false", false, 1000 + 40 * MsCycles],
+                ["4,1", false, 1000 + 40 * MsCycles],
+            ]);
+        });
+
+        it("keep SHIFT down for a shifted key in a bunch until the key is up", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            const Shift = [0, 0];
+            press(channel, Shift);
+            press(channel, A);
+            release(channel, A);
+            release(channel, Shift);
             run(host, 5, 20);
-            channel.emit("message", key(true));
+            expect(applied(channel).map(([name, down, at]) => [name, down, (at - 1000) / MsCycles])).toEqual([
+                ["0,0", true, 0],
+                ["4,1", true, 40],
+                ["4,1", false, 80],
+                ["4,1", false, 80],
+                ["0,0", false, 80],
+                ["0,0", false, 80],
+            ]);
+        });
+
+        it("that arrive after a jump, before the next execute, are spaced from the new cycle count", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            processor.currentCycles = processor.targetCycles = 5000000;
+            press(channel);
+            release(channel);
+            run(host, 3, 20);
+            expect(processor.sysvia.setMapped.mock.calls).toEqual([
+                [A, 1],
+                [A, 0],
+                [A, 0],
+            ]);
+        });
+
+        it("are not held back once a bunch has gone in", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            press(channel);
+            release(channel);
+            run(host, 3, 20);
+            press(channel, B);
             run(host, 1, 0);
-            expect(appliedAt(channel).at(-1)).toEqual([true, 1000 + 100 * MsCycles]);
+            expect(applied(channel).at(-1)).toEqual(["5,2", true, 1000 + 60 * MsCycles]);
+        });
+
+        it("all go in at once when far more are waiting than anyone types, and the guest stays", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            for (let i = 0; i < 100; ++i) channel.emit("message", key(i % 2 === 0));
+            run(host, 1, 0);
+            expect(applied(channel).length).toBeGreaterThan(MaxWaitingKeys);
+            expect(host.connectedCount()).toBe(1);
+            run(host, 40, 50);
+            expect(applied(channel)).toHaveLength(100);
         });
 
         it("are let go when the guest leaves with a release still waiting", async () => {
             const { host, processor } = await hosting();
             const channel = await joined();
-            for (const down of [true, false]) channel.emit("message", key(down));
+            press(channel);
+            release(channel);
             channel.emit("message", message({ type: "bye" }));
             run(host, 3, 20);
             expect(processor.sysvia.setMapped.mock.calls).toEqual([
-                [[4, 1], 1],
-                [[4, 1], 0],
+                [A, 1],
+                [A, 0],
             ]);
         });
 
         it("are let go when the host closes with a release still waiting", async () => {
             const { host, processor } = await hosting();
             const channel = await joined();
-            for (const down of [true, false]) channel.emit("message", key(down));
+            press(channel);
+            release(channel);
             host.close();
-            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([[4, 1], 0]);
+            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([A, 0]);
         });
 
-        it("still waiting at a jump are spaced again from the new cycle count", async () => {
+        it("still waiting at a jump move with the cycle count", async () => {
             const { host, processor } = await hosting();
             const channel = await joined();
-            for (const down of [true, false, true]) channel.emit("message", key(down));
+            press(channel);
+            release(channel);
             processor.currentCycles = processor.targetCycles = 50;
+            run(host, 1, 20);
+            expect(processor.sysvia.setMapped.mock.calls).toEqual([[A, 1]]);
+            run(host, 1, 20);
             run(host, 1, 0);
-            run(host, 1, 40);
-            expect(processor.sysvia.setMapped.mock.calls).toEqual([
-                [[4, 1], 1],
-                [[4, 1], 0],
-            ]);
-            run(host, 1, 0);
-            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([[4, 1], 1]);
-        });
-
-        it("drop a guest that sends far more than anyone types", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            for (let i = 0; i < 100; ++i) channel.emit("message", key(i % 2 === 0));
-            expect(peers[0].closed).toBe(true);
-            expect(host.connectedCount()).toBe(0);
+            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([A, 0]);
         });
     });
 
