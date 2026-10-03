@@ -210,16 +210,16 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Rendezvous:** one small AWS Lambda with a function URL, added to the existing bbc.xania.org CloudFront
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. Creating a room
-  returns a host secret that never leaves the host's tab. A guest creates an offer, waits for ICE gathering to
-  finish (or a short timeout) so the full SDP goes in one message, posts it under an ID of its own, and polls
-  for its answer. The host polls the room every second or two, answers each new offer, and keeps polling for
-  the life of the session, for late joiners. Listing offers, answering and extending the room need the host
-  secret; a guest can only post its offer and read its answer, so no guest sees another's address. Offers
-  expire on their own short clock, so a guest that closes its tab while waiting cannot fill the room's cap of
-  pending offers. The function checks IDs, caps bodies, treats anything past its expiry as gone (DynamoDB
-  deletes lazily), and stores only the SDPs and the secret's hash. The dev and preview servers serve the same
-  handler from memory, so sessions work locally with no AWS. Open tabs outlive a deploy, so the API stays
-  backward compatible.
+  returns a host secret, which the host sends to the rendezvous with each request that needs it and never to a
+  guest. A guest creates an offer, waits for ICE gathering to finish (or a short timeout) so the full SDP goes
+  in one message, posts it under an ID of its own, and polls for its answer. The host polls the room every
+  second or two, answers each new offer, and keeps polling for the life of the session, for late joiners.
+  Listing offers, answering and extending the room need the host secret; a guest can only post its offer and
+  read its answer, so no guest sees another's address. Offers expire on their own short clock, so a guest that
+  closes its tab while waiting cannot fill the room's cap of pending offers. The function checks IDs, caps
+  bodies, treats anything past its expiry as gone (DynamoDB deletes lazily), and stores only the SDPs and the
+  secret's hash. The dev and preview servers serve the same handler from memory, so sessions work locally with
+  no AWS. Open tabs outlive a deploy, so the API stays backward compatible.
 - **Infrastructure:** in [godbolt-terraform](https://github.com/mattgodbolt/godbolt-terraform): the function
   (Node 22, arm64, at most five at once), its table, role and log group in `new/jsbeeb-rendezvous.tf`, and
   `/api/rendezvous/*` on the bbc.xania.org distribution through `api_origins` on `module "jsbeeb"`. Terraform

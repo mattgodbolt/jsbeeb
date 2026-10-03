@@ -144,7 +144,7 @@ function fakeProcessor({ cycles = 1000 } = {}) {
         cycleSeconds: 0,
         currentCycles: cycles,
         targetCycles: cycles,
-        model: { cyclesPerSecond: CyclesPerSecond },
+        model: { cyclesPerSecond: CyclesPerSecond, swram: [] },
         hasTube: false,
         a: 0,
         x: 0,
