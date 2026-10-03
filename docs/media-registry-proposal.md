@@ -200,7 +200,7 @@ Signal's can still guess the machine.
 - The `controls` schema, with Robert Smallshire and Beebium.
 - Whether, and how, we can host screenshots.
 
-Do let me know what you think, preferably as comments on the PR.
+Do let me know what you think, in a [GitHub issue](https://github.com/mattgodbolt/jsbeeb/issues) or on [the PR that proposed this](https://github.com/mattgodbolt/jsbeeb/pull/1179).
 
 ---
 
