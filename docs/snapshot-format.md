@@ -1,13 +1,13 @@
-# jsbeeb Snapshot Format (Version 3)
+# jsbeeb Snapshot Format (Version 4)
 
-jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.json.gz`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON. Uncompressed `.json` files are also accepted on load for backward compatibility.
+jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.json.gz`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON, the larger ones deflated first. Uncompressed `.json` files are also accepted on load for backward compatibility.
 
 ## Top-level structure
 
 ```json
 {
   "format": "jsbeeb-snapshot",
-  "version": 3,
+  "version": 4,
   "model": "BBC B with DFS 1.2",
   "coProcessor": false,
   "timestamp": "2026-03-15T12:00:00.000Z",
@@ -19,7 +19,7 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 | Field         | Type    | Description                                                                     |
 | ------------- | ------- | ------------------------------------------------------------------------------- |
 | `format`      | string  | Always `"jsbeeb-snapshot"`                                                      |
-| `version`     | number  | Format version (currently `3`)                                                  |
+| `version`     | number  | Format version (currently `4`)                                                  |
 | `model`       | string  | jsbeeb model name or synonym (e.g. `"B"`, `"Master"`, `"BBC Master 128 (DFS)"`) |
 | `coProcessor` | boolean | _(v3+)_ Whether a second processor was fitted. Absent means no                  |
 | `timestamp`   | string  | ISO 8601 timestamp of when the snapshot was created                             |
@@ -54,6 +54,7 @@ When `discNCrc32` is present, it is compared against the CRC32 of the reloaded d
 - **v1** — Initial release. CPU, memory, VIA, video, sound, ACIA, ADC.
 - **v2** — Added FDC, disc drive, and disc track data. Dirty track persistence, embedded disc image data for local files, and CRC32 verification. v1 snapshots load with FDC state unchanged.
 - **v3** — Added second processor state (`state.tube`) and the top-level `coProcessor` flag. Nothing before v3 captured tube state, so earlier snapshots are always host-only and load into a machine without a co-processor unchanged.
+- **v4**: TypedArrays of 1024 bytes or more are deflated before their base64 encoding (see [TypedArray encoding](#typedarray-encoding)). The state itself is unchanged, and plain base64 arrays from earlier versions still load.
 
 ### Imported snapshots
 
@@ -91,6 +92,19 @@ Any TypedArray in the state tree is serialized as:
 ```
 
 The `type` field is the constructor name: `Uint8Array`, `Uint16Array`, `Uint32Array`, `Int32Array`, `Float32Array`, or `Float64Array`. Multi-byte types are encoded in the platform's native byte order (little-endian on all supported platforms).
+
+From v4, a TypedArray of 1024 bytes or more is written with an `encoding` field, and its `data` is the base64 of those bytes compressed as a zlib stream (RFC 1950 deflate, level 1):
+
+```json
+{
+  "__typedArray": true,
+  "type": "Uint32Array",
+  "encoding": "deflate",
+  "data": "<base64-encoded zlib stream>"
+}
+```
+
+No `encoding` field means plain base64, which is how every array before v4 and every smaller array is written. A reader accepts either form wherever an array appears, so the two may be mixed in one snapshot.
 
 ## State object
 

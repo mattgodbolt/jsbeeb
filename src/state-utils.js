@@ -27,12 +27,21 @@ export function base64ToTypedArray(base64, TypedArrayConstructor) {
     for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);
     }
-    // Create a properly aligned typed array from the raw bytes
+    return bytesToTypedArray(bytes, TypedArrayConstructor);
+}
+
+/**
+ * Copy raw bytes into a new, properly aligned TypedArray.
+ * @param {Uint8Array} bytes the array's contents in native byte order
+ * @param {function} TypedArrayConstructor constructor for the desired type (e.g., Uint32Array)
+ * @returns {ArrayBufferView} the typed array
+ */
+export function bytesToTypedArray(bytes, TypedArrayConstructor) {
     const elementSize = TypedArrayConstructor.BYTES_PER_ELEMENT;
     const length = bytes.length / elementSize;
     if (!Number.isInteger(length)) {
         throw new Error(
-            `Base64 data length (${bytes.length} bytes) is not a multiple of ${TypedArrayConstructor.name} element size (${elementSize})`,
+            `Data length (${bytes.length} bytes) is not a multiple of ${TypedArrayConstructor.name} element size (${elementSize})`,
         );
     }
     const result = new TypedArrayConstructor(length);

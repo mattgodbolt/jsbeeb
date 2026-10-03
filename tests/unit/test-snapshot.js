@@ -10,6 +10,7 @@ import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc } from "../../src/wd-fdc.js";
 import { crc32 } from "../../src/archive.js";
+import { typedArrayToBase64 } from "../../src/state-utils.js";
 
 function makeCpu(config = {}) {
     const fb32 = new Uint32Array(1024 * 768);
@@ -32,7 +33,7 @@ describe("Snapshot coordinator", () => {
             const snapshot = createSnapshot(cpu, model);
 
             expect(snapshot.format).toBe("jsbeeb-snapshot");
-            expect(snapshot.version).toBe(3);
+            expect(snapshot.version).toBe(4);
             expect(snapshot.model).toBe(model.name);
             expect(snapshot.timestamp).toBeDefined();
             expect(snapshot.state).toBeDefined();
@@ -94,7 +95,7 @@ describe("Snapshot coordinator", () => {
 
             // Verify metadata survived
             expect(restored.format).toBe("jsbeeb-snapshot");
-            expect(restored.version).toBe(3);
+            expect(restored.version).toBe(4);
             expect(restored.model).toBe(model.name);
 
             // Verify TypedArrays were properly reconstructed
@@ -151,6 +152,64 @@ describe("Snapshot coordinator", () => {
         });
     });
 
+    describe("TypedArray encoding", () => {
+        const encodingOf = (json, key) => JSON.parse(json)[key].encoding;
+
+        function patterned(Constructor, length) {
+            return Constructor.from({ length }, (_, i) => (i * 2654435761) % 997);
+        }
+
+        it("deflates an array of 1024 bytes or more and leaves a smaller one plain", () => {
+            const json = snapshotToJSON({ small: new Uint8Array(1023), large: new Uint8Array(1024) });
+
+            expect(encodingOf(json, "small")).toBeUndefined();
+            expect(encodingOf(json, "large")).toBe("deflate");
+        });
+
+        it("round-trips plain and deflated arrays of every element size", () => {
+            const original = {
+                small: patterned(Uint16Array, 8),
+                bytes: patterned(Uint8Array, 4096),
+                words: patterned(Uint32Array, 6000),
+                signed: patterned(Int32Array, 300).map((v) => -v),
+                floats: patterned(Float64Array, 200).map((v) => v / 7),
+                view: new Uint32Array(patterned(Uint32Array, 600).buffer, 4, 512),
+            };
+
+            const restored = snapshotFromJSON(snapshotToJSON(original));
+
+            for (const [key, array] of Object.entries(original)) {
+                expect(restored[key]).toBeInstanceOf(array.constructor);
+                expect(restored[key]).toEqual(array);
+            }
+        });
+
+        it("loads a version 3 snapshot, whose arrays are all plain base64", () => {
+            cpu.a = 0x42;
+            cpu.ramRomOs[0x200] = 0xdd;
+            const snapshot = { ...createSnapshot(cpu, model), version: 3 };
+            const v3Json = JSON.stringify(snapshot, (key, value) =>
+                ArrayBuffer.isView(value)
+                    ? { __typedArray: true, type: value.constructor.name, data: typedArrayToBase64(value) }
+                    : value,
+            );
+
+            const cpu2 = makeCpu();
+            restoreSnapshot(cpu2, model, snapshotFromJSON(v3Json));
+
+            expect(cpu2.a).toBe(0x42);
+            expect(cpu2.ramRomOs[0x200]).toBe(0xdd);
+        });
+
+        it("refuses an encoding it does not know", () => {
+            const json = JSON.stringify({
+                ram: { __typedArray: true, type: "Uint8Array", encoding: "lzma", data: "" },
+            });
+
+            expect(() => snapshotFromJSON(json)).toThrow(/Unknown TypedArray encoding: lzma/);
+        });
+    });
+
     describe("v1 backward compatibility", () => {
         it("should restore a v1 snapshot without FDC field", () => {
             const snapshot = createSnapshot(cpu, model);
@@ -181,7 +240,7 @@ describe("Snapshot coordinator", () => {
             expect(cpu2.touchScreen.tryReceive(true)).toBe(0x43);
         });
 
-        it("restores a pre-v4 snapshot without touchscreen state", () => {
+        it("restores a snapshot from before touchscreen state was saved", () => {
             const snapshot = createSnapshot(cpu, model);
             snapshot.version = 3;
             delete snapshot.state.touchScreen;
@@ -374,9 +433,9 @@ describe("Snapshot coordinator", () => {
             expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(originalPulse);
         });
 
-        it("should round-trip disc Uint32Array through JSON base64 encoding", () => {
+        it("should round-trip disc Uint32Array through JSON", () => {
             // This tests the rewind-like path: full disc data through JSON.
-            // snapshotState() retains tracks; snapshotToJSON encodes Uint32Arrays as base64.
+            // snapshotState() retains tracks, which snapshotToJSON deflates.
             const disc = new Disc(true, new DiscConfig(), "test-json");
             const ssdData = new Uint8Array(256 * 10);
             ssdData[0] = 0xab;
