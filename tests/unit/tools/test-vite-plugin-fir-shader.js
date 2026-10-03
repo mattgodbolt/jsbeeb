@@ -1,10 +1,10 @@
 import { readFileSync } from "fs";
 import { describe, it, expect } from "vitest";
 
-import { applyFirCoefficients, applyLumaCoefficients } from "../../tools/vite-plugin-fir-shader.js";
-import { LumaTaps } from "../../tools/luma-fir-generator.js";
+import { applyFirCoefficients, applyLumaCoefficients } from "../../../tools/vite-plugin-fir-shader.js";
+import { LumaTaps } from "../../../tools/luma-fir-generator.js";
 
-const ShaderPath = new URL("../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url);
+const ShaderPath = new URL("../../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url);
 
 const Section = `    // BEGIN_FIR_COEFFICIENTS
     // Cutoff: 2.0

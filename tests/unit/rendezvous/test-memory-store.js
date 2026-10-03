@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createMemoryStore } from "../../rendezvous/memory-store.js";
+import { createMemoryStore } from "../../../rendezvous/memory-store.js";
 
 describe("memory store", () => {
     it("writes conditionally only over an absent or expired item", async () => {

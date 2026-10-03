@@ -8,10 +8,10 @@ import {
     PathPrefix,
     RoomLifetimeSeconds,
     SecretBytes,
-} from "../../rendezvous/handler.js";
-import { createMemoryStore } from "../../rendezvous/memory-store.js";
-import { toFunctionUrlEvent } from "../../rendezvous/vite-plugin.js";
-import { createRendezvousClient, RendezvousError } from "../../src/web/rendezvous-client.js";
+} from "../../../rendezvous/handler.js";
+import { createMemoryStore } from "../../../rendezvous/memory-store.js";
+import { toFunctionUrlEvent } from "../../../rendezvous/vite-plugin.js";
+import { createRendezvousClient, RendezvousError } from "../../../src/web/rendezvous-client.js";
 
 const StartMs = 1800000000000;
 const Room = "abc";

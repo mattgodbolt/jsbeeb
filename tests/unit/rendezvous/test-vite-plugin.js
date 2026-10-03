@@ -2,9 +2,9 @@ import { createServer as createHttpServer } from "node:http";
 import { createServer as createViteServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { MaxBodyBytes, PathPrefix } from "../../rendezvous/handler.js";
-import { rendezvousPlugin, toFunctionUrlEvent } from "../../rendezvous/vite-plugin.js";
-import { createRendezvousClient } from "../../src/web/rendezvous-client.js";
+import { MaxBodyBytes, PathPrefix } from "../../../rendezvous/handler.js";
+import { rendezvousPlugin, toFunctionUrlEvent } from "../../../rendezvous/vite-plugin.js";
+import { createRendezvousClient } from "../../../src/web/rendezvous-client.js";
 
 describe("the dev server's adapter", () => {
     const request = (overrides) => ({

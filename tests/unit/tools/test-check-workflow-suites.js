@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { suitesMissingFrom } from "../../tools/check-workflow-suites.js";
+import { suitesMissingFrom } from "../../../tools/check-workflow-suites.js";
 
 describe("suitesMissingFrom", () => {
     const scripts = {

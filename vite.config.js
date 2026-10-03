@@ -28,16 +28,7 @@ export default defineConfig({
         // threads.
         maxWorkers: workersFor(2),
         projects: [
-            {
-                extends: true,
-                test: {
-                    name: "unit",
-                    // Any test-*.js in a folder under tests/ that no other project claims; tests/test-suite.js
-                    // is the CPU suite, run by node itself.
-                    include: ["tests/*/**/test-*.js"],
-                    exclude: [...configDefaults.exclude, "tests/integration/**", "tests/shader/**"],
-                },
-            },
+            { extends: true, test: { name: "unit", include: ["tests/unit/**/test-*.js"] } },
             {
                 extends: true,
                 test: {

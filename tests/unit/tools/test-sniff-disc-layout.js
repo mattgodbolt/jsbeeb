@@ -1,7 +1,7 @@
 import { brotliCompressSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
-import { decompressedIfBrotli } from "../../tools/sniff-disc-layout.js";
+import { decompressedIfBrotli } from "../../../tools/sniff-disc-layout.js";
 
 const hfe = (magic = "HXCHFEV3") => {
     const image = new Uint8Array(64);
