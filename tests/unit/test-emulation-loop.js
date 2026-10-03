@@ -406,10 +406,10 @@ describe("EmulationLoop", () => {
             expect(deps.gamepad.update).not.toHaveBeenCalled();
         });
 
-        it("never goes speedy", () => {
+        it("never goes speedy, even with turbo on from before the session", () => {
             const loop = started();
-            loop.setLockstep(lockstep);
             loop.toggleFastAsPossible();
+            loop.setLockstep(lockstep);
             vi.advanceTimersByTime(10);
             expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
             expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
