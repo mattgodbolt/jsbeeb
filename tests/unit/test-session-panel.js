@@ -14,7 +14,7 @@ describe("peerState", () => {
         ["silent", { connected: true, stats: keepingUp, statsAgeMs: SilentMs }],
         ["silent", { connected: true, stats: { ...keepingUp, commits: 0 }, statsAgeMs: 0 }],
         ["lagging", { connected: true, stats: { ...keepingUp, lagMs: LaggingMs + 1 }, statsAgeMs: 0 }],
-        ["lagging", { connected: true, stats: { ...keepingUp, catchingUp: 1 }, statsAgeMs: 0 }],
+        ["ok", { connected: true, stats: { ...keepingUp, catchingUp: 1 }, statsAgeMs: 0 }],
         ["lagging", { connected: true, stats: { ...keepingUp, starved: 10 }, statsAgeMs: 0 }],
         ["ok", { connected: true, stats: { ...keepingUp, starved: 1 }, statsAgeMs: 0 }],
     ])("is %s for %o", (state, peer) => {

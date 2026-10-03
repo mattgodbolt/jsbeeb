@@ -2,8 +2,9 @@
 // peer, so how everyone is doing can be seen at a glance, and a menu with the numbers
 // behind each and the session's report to save.
 
-// A peer more than this far behind the host is lagging; the host and a guest an ocean apart are well under it.
-export const LaggingMs = 200;
+// A guest catches up by up to 100 ms a frame from 40 ms behind, so one still this far behind after a frame of it
+// has fallen a long way behind, not just had a burst of commits.
+export const LaggingMs = 100;
 // Stats arrive once a second, so a peer silent this long has stalled, or its connection has.
 export const SilentMs = 3000;
 // A guest that runs out of the host's commits now and then is barely seen; more often, it stutters.
@@ -21,7 +22,7 @@ export function peerState({ connected, left, stats, statsAgeMs }) {
     if (left) return "left";
     if (!connected || !stats) return "connecting";
     if (statsAgeMs >= SilentMs || stats.commits === 0) return "silent";
-    if (stats.lagMs > LaggingMs || stats.starved > MaxStarvedPerSecond || stats.catchingUp > 0) return "lagging";
+    if (stats.lagMs > LaggingMs || stats.starved > MaxStarvedPerSecond) return "lagging";
     return "ok";
 }
 

@@ -53,14 +53,15 @@ a rule; the simplest is that each person's held keys are tracked separately and 
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
 change, and reset, disc changes and pastes would be events too; in v0 only keys and the host's BREAK are.
 
-**Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of
-a second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
-session the host runs as before. A guest runs what its loop asks but never past the host's last commit, and
-when it is more than 40 ms (two frames) behind it runs faster, by at most a tenth of a second at a time. A
-guest left waiting for commits does not get that time back, so on a jittery link it settles up to 40 ms behind
-the host, on top of the network's latency, and one that joined late catches up to that within a few frames. Catching up must not use the speedy frame skip:
-`FRAMESKIPENABLE` also gates video memory reads and the SAA5050's clocking (`src/video.js:1099`), so a peer that
-skipped frames would end up with different teletext state in MODE 7. A session never runs speedy.
+**Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of a
+second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
+session the host runs as before. A guest runs what its loop asks but never past the host's last commit, and when
+it is more than 40 ms (two frames) behind it runs faster, by at most a tenth of a second at a time. A guest left
+waiting for commits does not get that time back, so on a jittery link it settles up to 40 ms behind the host, on
+top of the network's latency, and one that joined late catches up to that within a few frames. Catching up must
+not use the speedy frame skip: `FRAMESKIPENABLE` also gates video memory reads and the SAA5050's clocking
+(`src/video.js:1099`), so a peer that skipped frames would end up with different teletext state in MODE 7. A
+session never runs speedy.
 
 **Late joining.** The host takes a snapshot where its next commit will start, and sends it with what ordinary
 snapshots leave out: the ROMs and sideways RAM, the keys held down and the CMOS. Commits made
@@ -230,10 +231,10 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Names:** `?name=` says what to call you; without it you get a random one. A guest says its name as it
   connects and the host gives its own in the welcome.
 - **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the
-  host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it lags or
-  stutters, red once it falls silent or leaves, each named in its tooltip and in the readout's menu. The host
-  sends every guest its list once a second, so a guest also sees each other guest's light, its own marked. Each
-  guest sends the host a summary of how it kept up once a second. Both sides log what they saw
+  host and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than
+  100 ms behind or stutters, red once it falls silent or leaves, each named in its tooltip and in the readout's
+  menu. The host sends every guest its list once a second, so a guest also sees each other guest's light, its own
+  marked. Each guest sends the host a summary of how it kept up once a second. Both sides log what they saw
   (`src/web/session-log.js`): inputs with the time they were pressed and the cycle they were applied at, those
   summaries, the browser's round trip and route for each connection, joins, departures and why, snapshots and
   desyncs. "Save session report" in the readout's menu downloads it as JSON; nothing is sent anywhere unless the
