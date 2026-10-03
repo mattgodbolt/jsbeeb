@@ -313,22 +313,27 @@ and every key it holds stamped at or after the cycle it names, which lose their 
 floor, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer. The
 star stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed, each
 starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The
-sequencer is the reference for desync, so the host resyncs from it like any guest. Anything that moves a machine
-(a reset, a loaded state, rewind, the debugger) hands control back to the host first, so on a guest it is undone
-as now and on the host everyone resyncs from it. Once a guest holds control, everyone else, the host included, is
-a non-sequencer: their keys take the input delay, picked against the sequencer rather than the host. A handover
-costs about a round trip when the host is one end of it and two through the star, plus however far the new
-sequencer runs behind. Taking control on a key press suits turn-based play; two people typing at once would pass
-control back and forth.
+sequencer is the reference for desync, so the host resyncs other guests from it; but if the host's own replay
+disagrees with a guest sequencer, the host takes control back and resyncs everyone, the sequencer included, from
+its own machine, so a guest cannot make an altered state everyone's. If a guest sequencer leaves or goes silent,
+during a handover or not, the host takes control back the same way, from the last commit it relayed, and lets go
+of the keys the sequencer held. Anything that moves a machine (a reset, a loaded state, rewind, the debugger)
+hands control back to the host first, so on a guest it is undone as now and on the host everyone resyncs from it.
+Once a guest holds control, everyone else, the host included, is a non-sequencer: their keys take the input delay,
+picked against the sequencer rather than the host. A handover costs about a round trip when the host is one end of
+it and two through the star, plus however far the new sequencer runs behind. Taking control on a key press suits
+turn-based play; two people typing at once would pass control back and forth.
 
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
 peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle
 already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and restore are
 already cheap (see Prior art); re-emulation needs painting suppressed and the sound chip's queued events unwound,
-and a correction shows as the other player's sprite jumping. Whatever leaves the machine waits until the cycle
-that caused it is confirmed: a disc write, in particular, reaches local storage or Google Drive through the disc's
-track write listeners, and a restore cannot undo that. What waits is the listener call, not just the save, since
-each image's listener (SSD and HFE alike) keeps its own copy of the image outside any snapshot.
+and a correction shows as the other player's sprite jumping. Every peer's messages carry the cycle it has reached,
+so each peer knows that nothing more will come from the others before the least of those cycles, which is the
+confirmed cycle. Whatever leaves the machine waits until the cycle that caused it is confirmed: a disc write, in
+particular, reaches local storage or Google Drive through the disc's track write listeners, and a restore cannot
+undo that. What waits is the listener call, not just the save, since each image's listener (SSD and HFE alike)
+keeps its own copy of the image outside any snapshot.
 
 ### Voice, later
 
