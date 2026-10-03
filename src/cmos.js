@@ -23,8 +23,9 @@ function fromBcd(value) {
 
 export { defaultCmos };
 
-// In a session the clock holds the host's wall time and is read as UTC, so the host's time zone is the only
-// one that counts.
+// A shared session (src/lockstep.js) runs the same machine on several computers in step, one of them hosting.
+// The session clock holds the host's local time as if it were UTC and is read and set through this view, so
+// every computer shows the host's time, whatever its own time zone.
 function utcView(date) {
     return {
         getSeconds: () => date.getUTCSeconds(),
@@ -119,8 +120,8 @@ export class Cmos {
     }
 
     /**
-     * The chip as a joiner needs it: the settings, the offset a program set the clock to, and how far
-     * through an access the bus is.
+     * The chip as a machine joining a shared session needs it: the settings, the offset a program set
+     * the clock to, and how far through an access the bus is.
      */
     sessionState() {
         const { store, timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
