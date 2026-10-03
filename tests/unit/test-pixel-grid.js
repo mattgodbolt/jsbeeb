@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { texelsPerPixel, encodeLineGrid } from "../../src/video-filters/pixel-grid.js";
-import { decodeLineGrid, LineGridRendered, LineGridVerticalDouble, LineGridWidthMask } from "../line-grid.js";
+import { decodeLineGrid, LineGridRendered, LineGridVerticalDouble, LineGridWidthMask } from "../helpers/line-grid.js";
 
 describe("logical pixel grid", () => {
     describe("texelsPerPixel", () => {

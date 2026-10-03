@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { analyseCapture, basicSource, buildSchedule, buildSsd, toneHz } from "../../tools/audio-sweep.js";
+import { analyseCapture, basicSource, buildSchedule, buildSsd, toneHz } from "../../../tools/audio-sweep.js";
 
 const Rate = 48000;
 const LeadSeconds = 1.5;

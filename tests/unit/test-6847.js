@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Video6847 } from "../../src/6847.js";
-import { decodeLineGrid } from "../line-grid.js";
-import { shortestRun } from "../pixel-runs.js";
+import { decodeLineGrid } from "../helpers/line-grid.js";
+import { shortestRun } from "../helpers/pixel-runs.js";
 
 // The Video6847 constructor needs a `video` object with a few methods it
 // calls during init. A minimal stub is enough for mode-table tests.

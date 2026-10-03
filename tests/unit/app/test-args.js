@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { getArguments } from "../../src/app/args.js";
+import { getArguments } from "../../../src/app/args.js";
 
 // Regression tests for issue #684: on Windows the packaged binary is jsbeeb.exe,
 // so basename(argv[0]) === "jsbeeb" was always false and the first user argument

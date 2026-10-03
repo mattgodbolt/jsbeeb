@@ -1,8 +1,8 @@
 import { readFileSync } from "fs";
 import { describe, it, expect } from "vitest";
 
-import { generateFirCoefficients } from "../../tools/fir-generator.js";
-import { applyFirCoefficients } from "../../tools/vite-plugin-fir-shader.js";
+import { generateFirCoefficients } from "../../../tools/fir-generator.js";
+import { applyFirCoefficients } from "../../../tools/vite-plugin-fir-shader.js";
 
 const SampleRateHz = 16e6;
 
@@ -10,7 +10,7 @@ const SampleRateHz = 16e6;
 const ShaderTaps = 21;
 const ShaderCutoffMhz = 1.108;
 
-const ShaderPath = new URL("../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url);
+const ShaderPath = new URL("../../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url);
 
 /** The numbers out of the generated GLSL, in tap order; an index never assigned is left undefined. */
 function coefficientsOf(code) {
