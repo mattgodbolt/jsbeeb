@@ -5,7 +5,7 @@ export const MaxBodyBytes = 16 * 1024;
 export const MaxPendingOffers = 8;
 // Ample margin over the gaps between a live host's polls, which refresh it; a host that vanishes without
 // deleting its room holds the name this long.
-export const RoomLifetimeSeconds = 2 * 60;
+export const RoomLifetimeSeconds = 30;
 // Longer than a guest waits for its answer, so an offer cannot expire under a guest still waiting.
 export const OfferLifetimeSeconds = 60;
 
