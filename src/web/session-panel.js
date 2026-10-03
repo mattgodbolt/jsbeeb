@@ -95,7 +95,12 @@ export class SessionPanel {
         readout.addEventListener("click", () => this.floating.toggle());
         for (const event of ["open", "close"])
             this.floating.addEventListener(event, () => readout.setAttribute("aria-expanded", this.floating.isOpen));
-        this.floating.addEventListener("open", () => this.sitAboveLights());
+        const onResize = () => this.sitAboveLights();
+        this.floating.addEventListener("open", () => {
+            this.sitAboveLights();
+            window.addEventListener("resize", onResize);
+        });
+        this.floating.addEventListener("close", () => window.removeEventListener("resize", onResize));
         pane.querySelector(".session-you").textContent = `You are ${name}`;
         pane.querySelector(".session-link").textContent = link;
         pane.querySelector(".session-copy-link").addEventListener("click", () => copyLink());
@@ -106,12 +111,13 @@ export class SessionPanel {
         this.floating?.open();
     }
 
-    // The lights wrap onto more rows as the window narrows, so their height is measured, not assumed. A pane
-    // that has been dragged stays where it was put.
+    // The lights wrap onto more rows as the window narrows, so their height is measured, not assumed, and the
+    // pane is kept short enough that its header stays on screen. A pane that has been dragged stays where it was put.
     sitAboveLights() {
         if (this.pane.style.top) return;
-        const lights = this.root.closest("#leds") ?? this.root;
-        this.pane.style.bottom = `${window.innerHeight - lights.getBoundingClientRect().top + PaneGapPx}px`;
+        const lightsTop = this.root.closest("#leds").getBoundingClientRect().top;
+        this.pane.style.bottom = `${window.innerHeight - lightsTop + PaneGapPx}px`;
+        this.pane.style.maxHeight = `${Math.max(0, lightsTop - 2 * PaneGapPx)}px`;
     }
 
     /**

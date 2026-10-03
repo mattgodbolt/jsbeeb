@@ -81,13 +81,18 @@ describe("SessionPanel", () => {
         expect(button.getAttribute("aria-expanded")).toBe("false");
     });
 
-    it("opens just above the lights, and stays wherever it was dragged", () => {
+    it("opens just above the lights, follows them as the window resizes, and stays wherever it was dragged", () => {
         const { pane } = page();
         const lightsTop = 700;
-        vi.spyOn(document.getElementById("leds"), "getBoundingClientRect").mockReturnValue({ top: lightsTop });
+        const lights = vi.spyOn(document.getElementById("leds"), "getBoundingClientRect");
+        lights.mockReturnValue({ top: lightsTop });
         const panel = new SessionPanel(session());
         panel.open();
         expect(pane.style.bottom).toBe(`${window.innerHeight - lightsTop + 6}px`);
+        expect(pane.style.maxHeight).toBe(`${lightsTop - 12}px`);
+        lights.mockReturnValue({ top: lightsTop - 40 });
+        window.dispatchEvent(new Event("resize"));
+        expect(pane.style.bottom).toBe(`${window.innerHeight - lightsTop + 40 + 6}px`);
         panel.floating.close();
         pane.style.top = "10px";
         pane.style.bottom = "auto";
