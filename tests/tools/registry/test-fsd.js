@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { IbmDiscFormat } from "../../src/disc.js";
-import { declaredLength, fsdSideBytes, FsdError, parseFsd, recoverableLength } from "../../tools/registry/fsd.js";
+import { IbmDiscFormat } from "../../../src/disc.js";
+import { declaredLength, fsdSideBytes, FsdError, parseFsd, recoverableLength } from "../../../tools/registry/fsd.js";
 
 const Header = [..."FSD"].map((c) => c.charCodeAt(0)).concat([0x10, 0xdc, 0x11, 0x02, 0x00]);
 const DataMark = 0xfb;

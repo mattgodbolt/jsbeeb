@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Disc, DiscConfig, IbmDiscFormat } from "../../src/disc.js";
-import { discFor } from "../../src/fdc.js";
-import { dfsCatalogue } from "../../tools/registry/dfs.js";
+import { Disc, DiscConfig, IbmDiscFormat } from "../../../src/disc.js";
+import { discFor } from "../../../src/fdc.js";
+import { dfsCatalogue } from "../../../tools/registry/dfs.js";
 import {
     addressedSideBytes,
     fingerprint,
@@ -10,7 +10,7 @@ import {
     SectorSize,
     sectorImageSides,
     trimFill,
-} from "../../tools/registry/fingerprint.js";
+} from "../../../tools/registry/fingerprint.js";
 
 const DfsTrackBytes = 10 * SectorSize;
 const AdfsTrackBytes = 16 * SectorSize;

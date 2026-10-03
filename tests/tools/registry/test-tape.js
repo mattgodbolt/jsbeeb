@@ -1,6 +1,6 @@
 import { deflateSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { decodeTape, pulsesToRuns, tapeBlocks, tapeCrc, tapeKey, tapeRuns } from "../../tools/registry/tape.js";
+import { decodeTape, pulsesToRuns, tapeBlocks, tapeCrc, tapeKey, tapeRuns } from "../../../tools/registry/tape.js";
 
 const MaxBlockLength = 256;
 const LastBlock = 0x80;
