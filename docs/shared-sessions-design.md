@@ -33,17 +33,17 @@ Every peer runs the whole machine. They start from the same snapshot, apply the 
 emulated cycle, and so stay identical without sending any machine state.
 
 **Time is cycles, not milliseconds.** The session clock is the emulated cycle count, and every input is stamped
-with the cycle it applies at. In v0 that is wherever the host's machine had got to between two executes,
-which is always an instruction boundary, so any machine running the same code stops there exactly, whatever
-slices its own loop runs in. A fixed quantum (a frame's worth of cycles, 40,000 on a 2MHz, 50Hz Beeb) would add
-one thing: a press and release that land in one quantum could be spread over two, so a tap too short for the
-OS's 100Hz keyboard scan is never lost. v0 has no quantum yet.
+with the cycle it applies at. In v0 that is wherever the host's machine had got to between two executes, which is
+always an instruction boundary, so any machine running the same code stops there exactly, whatever slices its own
+loop runs in. The host spaces a guest's keys that arrive together (see Known gaps), so a fixed quantum is not
+needed to keep a tap from landing on one cycle.
 
 **One sequencer orders the inputs.** The host is the sequencer. Guests send it their inputs as they happen; it
-applies them at its next execute and sends every guest a commit, `{at, inputs, upTo}`: the inputs it applied at
-cycle `at`, and how far it then ran. A guest runs up to the last commit and no further. Guests never hear from
-each other, and a quiet guest costs nothing because nobody waits on it. The host is also the hub every guest
-connects to (see v0); the protocol does not depend on that, so a server could take the job over later.
+applies them at its next execute (a guest's keys spaced as Known gaps says) and sends every guest a commit, `{at,
+inputs, upTo}`: the inputs it applied at cycle `at`, and how far it then ran. A guest runs up to the last commit
+and no further. Guests never hear from each other, and a quiet guest costs nothing because nobody waits on it. The
+host is also the hub every guest connects to (see v0); the protocol does not depend on that, so a server could
+take the job over later.
 
 **Inputs are machine-level events.** A key is sent after the sender's own mapping (layouts, user remaps in
 `src/keymap.js`), not as a host key code, because mapping is per-person configuration. That is more than a
@@ -241,9 +241,12 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### Known gaps
 
-- There is no quantum yet, so a guest's press and release that reach the host within one of its ticks apply at
-  the same cycle and the OS never sees the key. A lost packet that holds back several messages makes that
-  likely.
+- A lost packet holds back every message after it, so a guest's keys can reach the host in a bunch. The host
+  keeps them in the order they came and applies each press at least 40ms after the guest's last, and each
+  release 40ms after its press, so a bunch still types one key at a time that the OS sees; a key held longer
+  comes out 40ms long. Keys that come as they are typed go in at once, unless a bunch is still going in ahead of
+  them. A release can still lengthen a hold, enough to start the OS's auto-repeat: one that is itself held up
+  arrives late, and one that arrives behind a bunch waits for it. Nothing but an input delay would hide that.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -266,7 +269,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### What is left for v0
 
-- A fixed quantum and an input delay, so short taps survive and a guest's keys apply as promptly as the host's.
+- An input delay, so a guest's keys apply as promptly as the host's and a late release does not lengthen a hold.
 - More of the determinism test the experiment above stands for. The integration test already runs a B and a
   Master in random, uneven slices and compares cycles, RAM with the ROMs and sideways RAM byte for byte, the
   CMOS, the keyboard and the MODE 7 screen; still to come are a disc read during the run, framebuffers and
