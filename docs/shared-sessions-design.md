@@ -243,7 +243,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 - There is no quantum yet, so a guest's press and release that reach the host within one of its ticks apply at
   the same cycle and the OS never sees the key. A lost packet that holds back several messages makes that
-  likely. The input delay after v0 (below) keeps such keys apart when they were pressed in different ticks of the guest's.
+  likely. The input delay after v0 (below) keeps such keys apart when they were pressed in different ticks of
+  the guest's.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
@@ -287,28 +288,30 @@ The first real session, the host in the US and a guest in the UK, lost keys that
 repeated one whose release reached it late. Three steps, in this order.
 
 **Input delay, tuned to the link.** Each guest stamps a key with the cycle its machine has reached plus a delay,
-and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for
-the key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there.
-And the guest's lag must stay small and steady, which means pacing changes as well: today a guest settles
-anywhere up to a quarter of a second behind (see Pacing), so it would hold a target lag that follows the
-measured link instead. Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost
-packet held back, and a release held up by less than the delay, go in where they were pressed. A key that
-arrives too late for its cycle goes in at once, as every key does now. Two keys stamped in one of the guest's
-ticks still share a cycle, so the quantum (or the host's spacing of bunched keys) stays as the floor under it.
-jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not fixed: the session picks
-it, and the guests' target lag, from the measured round trip and jitter, small on a LAN and more across an
-ocean, and keeps retuning both. Between resyncs, a guest never stamps a key earlier than the last one it
-stamped, so a delay that shrinks takes effect only as the stamps catch up, and keys keep the order they were
-pressed in; keys clamped to one stamp share a cycle and fall to the same floor. A resync forgets the last stamp,
-since the machine it counted on has jumped.
+and the host applies it at the first instruction boundary at or after that cycle. Two things have to hold for the
+key to arrive in time. The delay must cover how far the guest runs behind the host and the trip there. And the
+guest's lag must stay small and steady, which means pacing changes as well: today a guest settles anywhere up to a
+quarter of a second behind (see Pacing), so it would hold a target lag that follows the measured link instead.
+Keys that arrive in time keep the spacing they were stamped with, so a bunch that a lost packet held back, and a
+release held up by less than the delay, go in where they were pressed. A key that arrives too late for its cycle
+goes in at once, as every key does now. Two keys stamped in one of the guest's ticks still share a cycle, so the
+quantum (or the host's spacing of bunched keys) stays as the floor under it. jsbeeb worked hard to get local input
+lag down to a frame or two, so the delay is not fixed: the session picks it, and the guests' target lag, from the
+measured round trip and jitter, small on a LAN and more across an ocean, and keeps retuning both. Between resyncs,
+a guest never stamps a key earlier than the last one it stamped, so a delay that shrinks takes effect only as the
+stamps catch up, and keys keep the order they were pressed in; keys clamped to one stamp share a cycle and fall to
+the same floor. A resync forgets the last stamp, since the machine it counted on has jumped, and each key carries
+the resync it was stamped after, so the host applies one stamped before the latest at once rather than holding it
+for a cycle on a timeline that has gone.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
 sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
 control" button, and an option to take control on a key press, with nothing game-specific. The handover: the new
 player asks; the current sequencer names the cycle its next commit starts at and stops there; the new player's
 machine reaches it; the new sequencer runs on from it. The old sequencer applies the key that asked for control,
-and every key it holds stamped beyond its next commit, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer. The star
-stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed, each
+and every key it holds stamped at or after the cycle it names, which lose their spacing and fall to the same
+floor, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer. The
+star stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed, each
 starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The
 sequencer is the reference for desync, so the host resyncs from it like any guest. Anything that moves a machine
 (a reset, a loaded state, rewind, the debugger) hands control back to the host first, so on a guest it is undone
@@ -318,14 +321,14 @@ costs about a round trip when the host is one end of it and two through the star
 sequencer runs behind. Taking control on a key press suits turn-based play; two people typing at once would pass
 control back and forth.
 
-**Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy.
-Each peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a
-cycle already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and
-restore are already cheap (see Prior art); re-emulation needs painting suppressed and the sound chip's queued
-events unwound, and a correction shows as the other player's sprite jumping. Whatever leaves the machine waits
-until the cycle that caused it is confirmed: a disc write, in particular, reaches local storage or Google Drive
-through the disc's track write listeners, and a restore cannot undo that. The flush itself waits, not just the
-save, since the SSD listener keeps its own copy of the image outside any snapshot.
+**Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
+peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle
+already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and restore are
+already cheap (see Prior art); re-emulation needs painting suppressed and the sound chip's queued events unwound,
+and a correction shows as the other player's sprite jumping. Whatever leaves the machine waits until the cycle
+that caused it is confirmed: a disc write, in particular, reaches local storage or Google Drive through the disc's
+track write listeners, and a restore cannot undo that. What waits is the listener call, not just the save, since
+each image's listener (SSD and HFE alike) keeps its own copy of the image outside any snapshot.
 
 ### Voice, later
 
