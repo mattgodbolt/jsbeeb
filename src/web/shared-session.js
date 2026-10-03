@@ -182,12 +182,13 @@ export class SessionHost {
         this.poll();
     }
 
-    // Run in pieces that end where waiting keys are due, so a long execute cannot bring keys spaced
-    // apart back onto one cycle.
+    // While keys are waiting, the cycles asked for run in pieces that end where the next is due, each its
+    // own commit, so a long execute cannot bring keys spaced apart back onto one cycle. The pieces add up
+    // to what was asked, so the processor's overshoot carries over as it does in one execute.
     execute(cycles) {
         const { processor } = this.context;
         this.followJump();
-        const end = cycleCount(processor) + cycles;
+        let remaining = cycles;
         for (;;) {
             const now = cycleCount(processor);
             let nextAt = Infinity;
@@ -197,9 +198,11 @@ export class SessionHost {
                 }
                 if (guest.scheduled.length > 0) nextAt = Math.min(nextAt, guest.scheduled[0].at);
             }
-            const running = this.lockstep.execute(Math.min(end, nextAt) - now);
+            const piece = Math.min(remaining, nextAt - now);
+            const running = this.lockstep.execute(piece);
             this.reachedAt = cycleCount(processor);
-            if (!running || this.reachedAt >= end) return running;
+            remaining -= piece;
+            if (!running || remaining <= 0) return running;
         }
     }
 

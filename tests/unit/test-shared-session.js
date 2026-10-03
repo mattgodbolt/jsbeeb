@@ -418,6 +418,22 @@ describe("SessionHost", () => {
             ]);
         });
 
+        it("leave an execute with nothing waiting as one commit, overshoot and all", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            // As the real processor does: whole instructions, so a little past the target.
+            processor.execute = function (count) {
+                this.targetCycles += count;
+                while (this.currentCycles < this.targetCycles) this.currentCycles += 7;
+                return true;
+            };
+            const commits = () => channel.messages().filter((each) => each.type === "commit").length;
+            const before = commits();
+            run(host, 10, 10);
+            expect(commits()).toBe(before + 10);
+            expect(processor.currentCycles - processor.targetCycles).toBeLessThan(7);
+        });
+
         it("are spaced by their place on the matrix, whatever shift they force", async () => {
             const { host } = await hosting();
             const channel = await joined();
