@@ -182,6 +182,9 @@ export class LockstepHost {
         const inputs = this.pending.splice(0);
         for (const input of inputs) applyInput(cpu, input);
         const running = cpu.execute(cycles);
+        // execute() adds each request to a running target, so a machine stopped early (a breakpoint) would
+        // otherwise run what it had left as well when it resumes, past the next commit's spacing.
+        if (!running) cpu.targetCycles = cpu.currentCycles;
         const upTo = cycleCount(cpu);
         this.reachedAt = upTo;
         const commit = { type: "commit", at, inputs, upTo };

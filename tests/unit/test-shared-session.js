@@ -194,8 +194,15 @@ function fakeProcessor({ cycles = 1000 } = {}) {
         },
         fdc: { drives: [] },
         adconverter: { setFixedValue: vi.fn() },
+        // As at a breakpoint: the CPU stops here, short of its target.
+        stopAt: Infinity,
         execute(count) {
             this.targetCycles += count;
+            if (this.targetCycles > this.stopAt) {
+                this.currentCycles = this.stopAt;
+                this.stopAt = Infinity;
+                return false;
+            }
             this.currentCycles = Math.max(this.currentCycles, this.targetCycles);
             return true;
         },
@@ -440,6 +447,26 @@ describe("SessionHost", () => {
                 expect.objectContaining({ guest: "g1", guestMs: 12.5, cycle: 1000 + 40 * MsCycles }),
             ]);
             expect(releases[0].ms - releases[0].arrivedMs).toBe(30);
+        });
+
+        it("stay spaced across a stop at a breakpoint", async () => {
+            const { host, processor } = await hosting();
+            const channel = await joined();
+            processor.stopAt = 1000 + MsCycles;
+            expect(host.execute(100 * MsCycles)).toBe(false);
+            press(channel, A);
+            release(channel, A);
+            press(channel, B);
+            release(channel, B);
+            run(host, 10, 20);
+            expect(applied(channel).map(([name, down, at]) => [name, down, (at - 1000) / MsCycles])).toEqual([
+                ["4,1", true, 1],
+                ["4,1", false, 41],
+                ["4,1", false, 41],
+                ["5,2", true, 41],
+                ["5,2", false, 81],
+                ["5,2", false, 81],
+            ]);
         });
 
         it("in a bunch go in one at a time, in the order they came", async () => {
