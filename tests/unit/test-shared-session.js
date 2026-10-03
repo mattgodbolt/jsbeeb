@@ -657,6 +657,15 @@ describe("SessionHost", () => {
             expect(applied(channel)).toHaveLength(100);
         });
 
+        it("after all going in at once start a fresh run", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            for (let i = 0; i <= MaxWaitingKeys; ++i) channel.emit("message", stamped(i % 2 === 0, 1000 + i * 10));
+            channel.emit("message", stamped(true, 50, B));
+            run(host, 4, 20);
+            expect(appliedMs(channel).at(-1)).toEqual(["5,2", true, 50]);
+        });
+
         it("are let go when the guest leaves with a release still waiting", async () => {
             const { host, processor } = await hosting();
             const channel = await joined();

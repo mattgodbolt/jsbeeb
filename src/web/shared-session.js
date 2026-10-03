@@ -349,10 +349,7 @@ export class SessionHost {
         const jump = cycleCount(this.context.processor) - this.reachedAt;
         if (jump === 0) return;
         this.reachedAt += jump;
-        for (const guest of this.guests.values()) {
-            for (const key of guest.scheduled) key.at += jump;
-            if (guest.lastKey) guest.lastKey = { at: guest.lastKey.at + jump, due: guest.lastKey.due + jump };
-        }
+        for (const guest of this.guests.values()) for (const key of guest.scheduled) key.at += jump;
     }
 
     /**
