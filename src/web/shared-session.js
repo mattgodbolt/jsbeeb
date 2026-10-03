@@ -4,6 +4,8 @@
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
 import { isValidCommit, isValidInput, LockstepGuest, LockstepHost, restoreSessionSnapshot } from "../lockstep.js";
+import { AdcCentreValue } from "../adc.js";
+import { findModel } from "../models.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
 import { toast } from "./toast.js";
@@ -14,7 +16,7 @@ const HostPollMs = 1500;
 const GuestPollMs = 1000;
 const PasteWaitMs = 500;
 const AnswerTimeoutMs = 30000;
-const ConnectTimeoutMs = 20000;
+export const ConnectTimeoutMs = 20000;
 export const MinResyncIntervalMs = 2000;
 // Offers anyone who knows the room's name can post; this bounds the connections they can make the host open.
 export const MaxConnectingGuests = 4;
@@ -103,6 +105,23 @@ export function sessionInput(sysvia, send, { allowBreak }) {
     };
 }
 
+// Each machine's ADC reads its own browser's gamepad, mouse and microphone, which
+// no other machine has, and the OS converts continuously into RAM; so in a session
+// every channel reads the centre.
+function holdAnalogue(processor, held) {
+    processor.adconverter.setFixedValue(held ? AdcCentreValue : null);
+}
+
+/** A parsed message from a peer, or null for anything that is not a JSON object. */
+function parsed(data) {
+    try {
+        const message = JSON.parse(data);
+        return message && typeof message === "object" ? message : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Everything a session needs from the page, gathered once in main.js.
  * @typedef {object} SessionContext
@@ -120,6 +139,7 @@ export class SessionHost {
         this.context = context;
         this.room = room;
         this.guests = new Map();
+        this.offersSeen = new Set();
         this.secret = null;
         this.closed = false;
     }
@@ -135,6 +155,7 @@ export class SessionHost {
         );
         loop.setSession(this.lockstep);
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.lockstep.input(input), { allowBreak: true }));
+        holdAnalogue(processor, true);
         window.addEventListener("pagehide", () => this.close());
         const link = new URL(window.location.href);
         link.search = `?client=${encodeURIComponent(this.room)}`;
@@ -147,8 +168,10 @@ export class SessionHost {
         while (!this.closed) {
             try {
                 const offers = await this.context.rendezvous.listOffers(this.room, this.secret);
+                // Each offer is answered once: one whose answer failed would otherwise be retried every poll.
                 for (const offer of offers) {
-                    if (!this.guests.has(offer.guest) && this.connectingCount() < MaxConnectingGuests) {
+                    if (!this.offersSeen.has(offer.guest) && this.connectingCount() < MaxConnectingGuests) {
+                        this.offersSeen.add(offer.guest);
                         this.answer(offer);
                     }
                 }
@@ -181,7 +204,10 @@ export class SessionHost {
             resyncTimer: null,
         };
         this.guests.set(id, guest);
-        pc.addEventListener("datachannel", ({ channel }) => this.adopt(guest, channel));
+        // A guest has one channel; another would cost the host a snapshot each.
+        pc.addEventListener("datachannel", ({ channel }) => {
+            if (!guest.channel) this.adopt(guest, channel);
+        });
         setTimeout(() => {
             if (!guest.channel) this.drop(guest);
         }, ConnectTimeoutMs);
@@ -213,12 +239,8 @@ export class SessionHost {
     }
 
     fromGuest(guest, data) {
-        let message;
-        try {
-            message = JSON.parse(data);
-        } catch {
-            return;
-        }
+        const message = parsed(data);
+        if (!message) return;
         if (message.type === "input" && message.input?.kind === "key" && isValidInput(message.input)) {
             // Rebuilt from the checked fields, since every other guest is sent it too.
             const mapping = [...message.input.mapping];
@@ -310,11 +332,17 @@ export class SessionHost {
         if (guest.welcomed) notify(`A guest left (${this.connectedCount()} connected).`);
     }
 
+    // A page kept for the back button comes back as an ordinary one.
     close() {
         if (this.closed) return;
         this.closed = true;
         for (const guest of this.guests.values()) guest.pc.close();
         this.context.rendezvous.deleteRoom(this.room, this.secret).catch(() => {});
+        const { processor, loop, keyboard } = this.context;
+        loop.setSession(null);
+        keyboard.setInput(null);
+        holdAnalogue(processor, false);
+        processor.sysvia.cmos.leaveSession();
     }
 }
 
@@ -345,6 +373,7 @@ export class SessionGuest {
         const { processor, loop, keyboard, rendezvous } = this.context;
         // Nothing runs until the host's snapshot arrives.
         loop.setSession({ execute: () => true });
+        holdAnalogue(processor, true);
         const pc = (this.pc = new RTCPeerConnection({ iceServers: IceServers }));
         const channel = (this.channel = pc.createDataChannel("session", { ordered: true }));
         channel.binaryType = "arraybuffer";
@@ -382,10 +411,8 @@ export class SessionGuest {
             this.receiveChunk(new Uint8Array(data));
             return;
         }
-        let message;
-        try {
-            message = JSON.parse(data);
-        } catch {
+        const message = parsed(data);
+        if (!message) {
             this.fail("the host sent something this page cannot read");
             return;
         }
@@ -419,7 +446,7 @@ export class SessionGuest {
     }
 
     welcome({ model, version }) {
-        if (typeof model !== "string") {
+        if (typeof model !== "string" || !findModel(model)) {
             this.fail("the host did not say what machine it is");
             return;
         }
@@ -488,6 +515,7 @@ export class SessionGuest {
 
     leave() {
         this.left = true;
+        holdAnalogue(this.context.processor, false);
         this.context.processor.sysvia.cmos.leaveSession();
         this.context.loop.setSession(null);
         this.context.keyboard.setInput(null);

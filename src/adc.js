@@ -4,6 +4,8 @@
  *
  * @typedef {import('./analogue-source.js').AnalogueSource} AnalogueSource
  */
+export const AdcCentreValue = 0x8000;
+
 export class Adc {
     /**
      * Create a new ADC
@@ -19,6 +21,16 @@ export class Adc {
 
         // Initialize channel sources (one source per channel)
         this.channelSources = [null, null, null, null];
+        this.fixedValue = null;
+    }
+
+    /**
+     * Makes every channel read `value` whatever its source, or read its source again
+     * with null.
+     * @param {number|null} value
+     */
+    setFixedValue(value) {
+        this.fixedValue = value;
     }
 
     /**
@@ -161,7 +173,7 @@ export class Adc {
         const channel = this.status & 0x03;
 
         const source = this.channelSources[channel];
-        const val = source ? source.getValue(channel) : 0x8000;
+        const val = this.fixedValue ?? (source ? source.getValue(channel) : AdcCentreValue);
 
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;

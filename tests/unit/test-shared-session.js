@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+    ConnectTimeoutMs,
     MaxConnectingGuests,
     MinResyncIntervalMs,
     SessionGuest,
@@ -12,6 +13,7 @@ import {
 } from "../../src/web/shared-session.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { LockstepHost } from "../../src/lockstep.js";
+import { AdcCentreValue } from "../../src/adc.js";
 import { Cmos } from "../../src/cmos.js";
 
 const CyclesPerSecond = 2000000;
@@ -149,6 +151,7 @@ function fakeProcessor({ cycles = 1000 } = {}) {
         ramRomOs: new Uint8Array(16),
         romOffset: 16,
         fdc: { drives: [] },
+        adconverter: { setFixedValue: vi.fn() },
         execute(count) {
             this.targetCycles += count;
             this.currentCycles = Math.max(this.currentCycles, this.targetCycles);
@@ -214,10 +217,10 @@ afterEach(() => {
 });
 
 describe("SessionHost", () => {
-    async function hosting(offers = [{ guest: "g1", sdp: "offer" }]) {
+    async function hosting(offers = [{ guest: "g1", sdp: "offer" }], rendezvous = {}) {
         const processor = fakeProcessor();
         const listOffers = vi.fn(async () => offers.splice(0));
-        const host = new SessionHost(fakeContext({ processor, rendezvous: { listOffers } }), "room");
+        const host = new SessionHost(fakeContext({ processor, rendezvous: { listOffers, ...rendezvous } }), "room");
         hosts.push(host);
         await host.start();
         await settle();
@@ -238,11 +241,42 @@ describe("SessionHost", () => {
 
     const keyMessage = (input) => message({ type: "input", input });
 
+    it("holds the analogue inputs at the centre for the session", async () => {
+        const { host, processor } = await hosting([]);
+        expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
+        host.close();
+        expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
+    });
+
     it("welcomes a guest with its model and version, then sends the machine", async () => {
         await hosting();
         const channel = await joined();
         expect(channel.messages()[0]).toEqual({ type: "welcome", model: "BBC B with 8271 (DFS 1.2)", version: "1.0" });
         expect(channel.snapshots()[0].at).toBe(1000);
+    });
+
+    it("sends a joiner the commits made while its snapshot was compressed, after it", async () => {
+        const { host } = await hosting();
+        const channel = connect();
+        for (let i = 0; i < 10 && channel.messages().length === 0; ++i) await Promise.resolve();
+        host.lockstep.execute(100);
+        host.lockstep.execute(100);
+        await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
+        const commits = channel.messages().filter((each) => each.type === "commit");
+        expect(commits.map(({ at, upTo }) => [at, upTo])).toEqual([
+            [1000, 1100],
+            [1100, 1200],
+        ]);
+        expect(channel.snapshots()[0].at).toBe(1000);
+    });
+
+    it("ignores a guest's second channel, which would cost another snapshot", async () => {
+        await hosting();
+        const channel = await joined();
+        const second = connect();
+        await settle();
+        expect(second.sent).toEqual([]);
+        expect(channel.snapshots()).toHaveLength(1);
     });
 
     it("lets go of a departing guest's keys on every machine", async () => {
@@ -261,6 +295,7 @@ describe("SessionHost", () => {
     it("takes only well-formed keys from a guest, never BREAK, and passes on only what it checked", async () => {
         const { host, processor } = await hosting();
         const channel = await joined();
+        channel.emit("message", { data: "null" });
         channel.emit("message", keyMessage({ kind: "break", down: true }));
         channel.emit("message", keyMessage({ kind: "key", mapping: [99, 1], down: true }));
         channel.emit("message", { data: "not json" });
@@ -313,15 +348,30 @@ describe("SessionHost", () => {
         expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
     });
 
-    it("opens only a few connections at a time, however many offers are waiting", async () => {
+    it("opens only a few connections at a time, and frees the place of one that never completes", async () => {
         const offers = Array.from({ length: MaxConnectingGuests + 2 }, (_, i) => ({ guest: `g${i}`, sdp: "offer" }));
-        await hosting(offers);
+        await hosting([], { listOffers: vi.fn(async () => offers) });
         expect(peers).toHaveLength(MaxConnectingGuests);
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        expect(peers.slice(0, MaxConnectingGuests).every((peer) => peer.closed)).toBe(true);
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        expect(peers).toHaveLength(MaxConnectingGuests + 2);
+    });
+
+    it("answers each offer once, even if answering it failed", async () => {
+        const offer = { guest: "g1", sdp: "offer" };
+        const postAnswer = vi.fn(async () =>
+            Promise.reject(new Error("Rendezvous post answer failed with status 500")),
+        );
+        await hosting([], { listOffers: vi.fn(async () => [offer]), postAnswer });
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        expect(postAnswer).toHaveBeenCalledTimes(1);
+        expect(peers).toHaveLength(1);
     });
 });
 
 describe("SessionGuest", () => {
-    function snapshotMessages(cycles, commits = [], { rtcBaseMs = 0, rtcOffsetMs = 0 } = {}) {
+    function snapshotMessages(cycles, commits = [], { rtcBaseMs = 0, rtcOffsetMs = 0, chunks = 1 } = {}) {
         const processor = fakeProcessor({ cycles });
         processor.sysvia.cmos.timeOffset = rtcOffsetMs;
         const snapshot = new LockstepHost(
@@ -331,9 +381,15 @@ describe("SessionGuest", () => {
             { rtcBaseMs },
         ).snapshot();
         const bytes = gzipSync(snapshotToJSON(snapshot));
+        const chunkBytes = Math.ceil(bytes.length / chunks);
+        const pieces = [];
+        for (let offset = 0; offset < bytes.length; offset += chunkBytes) {
+            const end = Math.min(offset + chunkBytes, bytes.length);
+            pieces.push({ data: bytes.buffer.slice(bytes.byteOffset + offset, bytes.byteOffset + end) });
+        }
         return [
             message({ type: "snapshot", bytes: bytes.length }),
-            { data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) },
+            ...pieces,
             ...commits.map((commit) => message({ type: "commit", ...commit })),
         ];
     }
@@ -356,6 +412,28 @@ describe("SessionGuest", () => {
         await expect(new SessionGuest(context, "room").start()).rejects.toThrow("No such room");
         expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
+    });
+
+    it("holds the analogue inputs at the centre while it is in the session", async () => {
+        const { context, channel } = await joining();
+        expect(context.processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
+        channel.emit("close");
+        expect(context.processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
+    });
+
+    it("puts a snapshot back together from its chunks", async () => {
+        const { context, deliver } = await joining();
+        deliver(snapshotMessages(700, [], { chunks: 3 }));
+        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        expect(context.processor.restoreState.mock.calls[0][0].cycles).toBe(700);
+    });
+
+    it("leaves the session on more snapshot than the host said it would send", async () => {
+        const { context, channel, deliver } = await joining();
+        const [header, ...chunks] = snapshotMessages(700);
+        channel.emit("message", message({ ...JSON.parse(header.data), bytes: 10 }));
+        deliver(chunks);
+        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
     });
 
     it("restores each snapshot in turn and replays the commits that follow it", async () => {
@@ -399,6 +477,8 @@ describe("SessionGuest", () => {
         ["a snapshot of an impossible size", { type: "snapshot", bytes: -1 }],
         ["a welcome from another version", { type: "welcome", model: "BBC B with 8271 (DFS 1.2)", version: "0.9" }],
         ["a welcome with no machine in it", { type: "welcome", model: 42, version: "1.0" }],
+        ["a welcome naming no machine there is", { type: "welcome", model: "Nonesuch", version: "1.0" }],
+        ["a message that is not an object", null],
     ])("leaves the session on %s", async (_, body) => {
         const { context, channel } = await joining();
         channel.emit("message", message(body));

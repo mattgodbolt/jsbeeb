@@ -194,6 +194,18 @@ describe("ADC", () => {
     });
 
     describe("Conversion completion", () => {
+        it("reads a fixed value instead of the source while one is set, and the source again after", () => {
+            adc.setChannelSource(1, { getValue: () => 0x1234, dispose: () => {} });
+            adc.setFixedValue(0x8000);
+            adc.write(0, 0x01);
+            adc.onComplete();
+            expect([adc.high, adc.low]).toEqual([0x80, 0x00]);
+            adc.setFixedValue(null);
+            adc.write(0, 0x01);
+            adc.onComplete();
+            expect([adc.high, adc.low]).toEqual([0x12, 0x34]);
+        });
+
         it("should handle completion with no source for the channel", () => {
             adc.clearChannelSource(1);
 
