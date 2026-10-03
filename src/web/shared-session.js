@@ -1,6 +1,6 @@
-// A shared session in the browser: one machine, the host's unless someone has
-// taken control, runs as usual and its inputs and cycles stream to the others
-// over WebRTC data channels, which the rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
+// A shared session in the browser: one machine, the host's unless someone
+// has taken control, runs as usual and its inputs and cycles stream to the
+// others over WebRTC data channels, which the rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
 import { humanId } from "human-id";
@@ -225,7 +225,8 @@ export class SessionHost {
         this.controller = null;
         this.sequencer = null;
         this.replay = null;
-        // While the guest in control is being asked to stop, who is to take over from it (null for the host).
+        // Whether the guest in control is being asked to stop; and who is to take over once control has changed
+        // hands (null for the host).
         this.releasing = false;
         this.taker = null;
         // The cycle this machine takes control back at, once its replay has reached it.
@@ -312,10 +313,12 @@ export class SessionHost {
      * goes to whoever asked last once it has.
      */
     requestControl(taker) {
-        if (this.releasing || (this.resumeAt !== null && taker)) {
+        if (this.releasing || this.resumeAt !== null) {
             this.taker = taker;
             return;
         }
+        // A guest whose snapshot is still on its way would have it undo the handover.
+        if (taker && !taker.ready) return;
         if (taker === this.controller && this.resumeAt === null) return;
         if (this.sequencer) {
             if (taker) this.handOver(taker);
@@ -335,7 +338,9 @@ export class SessionHost {
         const waiting = this.sequencer ? this.sequencer.releaseAll() : [];
         this.sequencer = null;
         this.rtcBaseMs = rtcBaseMs;
-        this.replay = new LockstepGuest(processor, (reason) => this.takeBackNow(reason));
+        this.replay = new LockstepGuest(processor, (reason) =>
+            this.takeBackNow(reason, cycleCount(processor) !== this.replay.reachedAt),
+        );
         this.controller = guest;
         this.lastCommitMs = this.log.elapsed();
         this.stamper.reset();
@@ -398,8 +403,12 @@ export class SessionHost {
         this.showStatus();
     }
 
-    /** Takes control back where this machine is now, and starts everyone afresh from it. */
-    takeBackNow(reason) {
+    /**
+     * Takes control back where this machine is now, and starts everyone afresh from it. The keys in commits it has
+     * passed on but not yet replayed go in at once, so a release among them is not lost; after a `jumped` machine,
+     * the session's clock starts again from the wall time, as it does when the host's machine jumps in control.
+     */
+    takeBackNow(reason, jumped = false) {
         if (this.sequencer) return;
         this.log.record("control", { guest: "host", reason });
         notify(`The host has taken control back: ${reason}.`);
@@ -407,8 +416,12 @@ export class SessionHost {
         this.releasing = false;
         this.taker = null;
         this.resyncWhenResumed = null;
-        this.heldBack.unshift(...this.forwarded.splice(0));
-        this.sequence(this.rtcBaseMs);
+        const relayed = (this.replay?.commits ?? []).flatMap(({ inputs }) => inputs);
+        this.heldBack.unshift(
+            ...relayed.map((input) => ({ source: "relayed", input, fields: {}, at: undefined })),
+            ...this.forwarded.splice(0),
+        );
+        this.sequence(jumped ? undefined : this.rtcBaseMs);
         this.resyncEveryone();
         this.showStatus();
     }
@@ -897,10 +910,8 @@ export class SessionGuest {
         this.panel.show("guest", summary, [host, ...guests]);
         const inControl = this.roster.find((guest) => guest.control);
         const controller = this.sequencer || inControl?.you ? "you" : (inControl?.label ?? null);
-        this.panel.showControl(
-            this.left ? null : (controller ?? this.hostName ?? "the host"),
-            !this.sequencer && !this.left,
-        );
+        const canTake = !this.sequencer && this.handoverAt === null && !this.left;
+        this.panel.showControl(this.left ? null : (controller ?? this.hostName ?? "the host"), canTake);
     }
 
     async start() {

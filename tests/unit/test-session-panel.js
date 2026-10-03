@@ -53,7 +53,7 @@ describe("SessionPanel", () => {
         const panel = new SessionPanel(session());
         panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting" }]);
         panel.show("hosting", "2 guests", [
-            { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40 },
+            { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40, control: true },
             { label: "Guest 2", state: "left", leftReason: "it said goodbye" },
         ]);
         expect(readout.hidden).toBe(false);
@@ -62,7 +62,7 @@ describe("SessionPanel", () => {
         expect(lights.map((light) => light.dataset.state)).toEqual(["ok", "left"]);
         expect(lights.every((light) => light.classList.contains("on"))).toBe(true);
         expect(rows(pane)).toEqual([
-            ["Guest 1", "keeping up", "85 ms", "40 ms"],
+            ["Guest 1 (in control)", "keeping up", "85 ms", "40 ms"],
             ["Guest 2", "left: it said goodbye", "", ""],
         ]);
     });

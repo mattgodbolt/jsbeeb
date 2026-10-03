@@ -345,14 +345,16 @@ included, go to it through the host, stamped against its commits with the host's
 keeps each until a commit carries it. Control moves on from one guest to another, or back to the host, by asking
 the guest in control to stop: it stops at the end of its last commit, or at the cycle it was to take control at if
 it had not yet, and hands back the keys it had not applied. The host takes control back at once, starting everyone
-afresh from its own machine, when a commit does not follow on, when its replay disagrees, when its own machine
-jumps (a reset, say) or when the host presses BREAK; and from the end of the last commit it relayed when the guest
-in control leaves or sends nothing for three seconds, applying itself the keys that guest had not committed and
-resyncing it if it is still there. A request for control while control is changing hands goes to whoever asked
-last once it has. A guest that desyncs while another is in control is resynced from the host's machine and the
-commits it has relayed but not yet replayed. Not yet: the old sequencer applying the key that asked for control
-before it stops (with take on a key press, that key reaches the new sequencer stamped like any other), and
-choosing the input delay against the sequencer from measured jitter.
+afresh from its own machine and applying the keys in commits it had passed on but not yet replayed, when a commit
+does not follow on, when its replay disagrees, when its own machine jumps (a reset, say, after which the session's
+clock starts again from the wall time) or when the host presses BREAK; and from the end of the last commit it
+relayed when the guest in control leaves or sends nothing for three seconds, applying itself the keys that guest
+had not committed and resyncing it if it is still there. A request for control while control is changing hands
+goes to whoever asked last once it has; a guest whose snapshot is still on its way cannot take control until it
+has it. A guest that desyncs while another is in control is resynced from the host's machine and the commits it
+has relayed but not yet replayed. Not yet: the old sequencer applying the key that asked for control before it
+stops (with take on a key press, that key reaches the new sequencer stamped like any other), and choosing the
+input delay against the sequencer from measured jitter.
 
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
 peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle

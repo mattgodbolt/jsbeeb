@@ -583,6 +583,118 @@ describe("SessionHost", () => {
             expect(sentOf(second, "commit").length).toBeGreaterThan(before);
         });
 
+        const keyAUp = { kind: "key", mapping: A, down: false };
+        const takeAndBreak = (host) => host.input({ kind: "break", down: true });
+
+        it("taking back at once, applies the keys in commits it passed on but had not yet replayed", async () => {
+            const { host, processor, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000, [keyA]));
+            host.execute(5000);
+            first.emit("message", commit(3000, 5000, [keyAUp]));
+            takeAndBreak(host);
+            host.execute(100);
+            expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
+        });
+
+        it("taking back at once, applies the keys it sent the guest in control that no commit carried", async () => {
+            const { host, processor, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            host.input(keyA);
+            takeAndBreak(host);
+            host.execute(CyclesPerSecond);
+            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
+        });
+
+        it("applies a key it sent the guest in control only once, when a commit carried it before that guest left", async () => {
+            const { host, processor, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            host.input(keyA);
+            first.emit("message", commit(1000, 3000, [keyA]));
+            first.emit("message", message({ type: "bye" }));
+            host.execute(5000);
+            host.execute(CyclesPerSecond);
+            expect(processor.sysvia.setMapped.mock.calls.filter(([, down]) => down === 1)).toHaveLength(1);
+        });
+
+        it("leaves control with a guest that keeps sending commits", async () => {
+            const { host, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            for (let at = 1000; at < 9000; at += 2000) {
+                first.emit("message", commit(at, at + 2000));
+                vi.advanceTimersByTime(1000);
+                host.execute(2000);
+            }
+            expect(first.snapshots()).toHaveLength(1);
+            expect(
+                host
+                    .report()
+                    .events.filter((each) => each.event === "control")
+                    .at(-1),
+            ).toMatchObject({ guest: "g1" });
+        });
+
+        it("does not let a guest whose snapshot is still on its way take control", async () => {
+            const { host, first } = await twoGuests();
+            host.resyncEveryone();
+            first.emit("message", message({ type: "take" }));
+            expect(sentOf(first, "handover")).toEqual([]);
+        });
+
+        it("hands control to a guest that asked while the host was taking it back, once it has", async () => {
+            const { host, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            first.emit("message", message({ type: "bye" }));
+            second.emit("message", message({ type: "take" }));
+            expect(sentOf(second, "handover")).toEqual([]);
+            host.execute(5000);
+            expect(sentOf(second, "handover")).toEqual([{ type: "handover", at: 3000 }]);
+        });
+
+        it("forgets a guest that asked for control and then left", async () => {
+            const { host, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            second.emit("message", message({ type: "take" }));
+            second.emit("message", message({ type: "bye" }));
+            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
+            host.execute(5000);
+            expect(
+                host
+                    .report()
+                    .events.filter((each) => each.event === "control")
+                    .at(-1),
+            ).toMatchObject({ guest: "host" });
+        });
+
+        it("takes control back at once if the guest in control stops anywhere but the end of its last commit", async () => {
+            const { first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            second.emit("message", message({ type: "take" }));
+            first.emit("message", message({ type: "released", at: 2500, waiting: [] }));
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
+        });
+
+        it("does not pass the guest in control its own keys back", async () => {
+            await hosting();
+            const channel = await joined();
+            channel.emit("message", message({ type: "take" }));
+            channel.emit("message", message({ type: "input", input: keyA, own: true }));
+            expect(sentOf(channel, "input")).toEqual([]);
+        });
+
+        it("starts the session's clock afresh when its machine jumps while a guest is in control", async () => {
+            const { host, processor, first } = await twoGuests();
+            const [before] = first.snapshots();
+            first.emit("message", message({ type: "take" }));
+            processor.currentCycles = processor.targetCycles = 50;
+            host.execute(100);
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            expect(first.snapshots()[1].rtcBaseMs).not.toBe(before.rtcBaseMs);
+        });
+
         it("resyncs another guest from its own machine and the commits it has not yet replayed", async () => {
             const { host, first, second } = await twoGuests();
             first.emit("message", message({ type: "take" }));
@@ -1326,6 +1438,15 @@ describe("SessionGuest", () => {
             lockstep().execute(500);
             const [header] = snapshotMessages(5000, [{ at: 5000, upTo: 6000, inputs: [] }]);
             deliver([header]);
+            lockstep().execute(500);
+            expect(channel.messages().filter((each) => each.type === "resync")).toEqual([]);
+        });
+
+        it("asks for nothing more after it stops", async () => {
+            const { channel, deliver, lockstep } = await inControl();
+            lockstep().execute(500);
+            deliver([message({ type: "release" })]);
+            lockstep().execute(500);
             lockstep().execute(500);
             expect(channel.messages().filter((each) => each.type === "resync")).toEqual([]);
         });
