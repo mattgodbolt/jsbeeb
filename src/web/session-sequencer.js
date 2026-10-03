@@ -25,6 +25,40 @@ export function nextInRun(at, earliest, last, gap, catchUp) {
     return Math.max(at, earliest, after, last?.went ?? -Infinity);
 }
 
+// A stamp allows this much on top of the round trip for the trip taking longer than it did.
+const JitterMarginMs = 20;
+// Commits come every few milliseconds from a sequencer running in real time; one that has gone quiet for longer is
+// running slowly (hidden, say), and counting the whole pause would stamp keys far beyond where it will be.
+const MaxSinceCommitMs = 100;
+
+/**
+ * Stamps keys sent to the sequencer with a cycle it will not have passed when they reach it. The sequencer was at
+ * `upTo`, the end of the last commit seen here, when it sent it, has run on since it came, and runs on for the trip
+ * back, `roundTripMs` in all. When the round trip shrinks, the stamps come down to it as nextInRun says, never going
+ * backwards and never squeezing keys pressed close together.
+ */
+export class KeyStamper {
+    constructor(cyclesPerSecond) {
+        this.cyclesPerMs = cyclesPerSecond / 1000;
+        this.last = null;
+    }
+
+    /** Starts afresh, the machine the stamps counted on having jumped. */
+    reset() {
+        this.last = null;
+    }
+
+    stamp({ upTo, roundTripMs, sinceCommitMs, nowMs }) {
+        const { cyclesPerMs, last } = this;
+        const aheadMs = roundTripMs + Math.min(sinceCommitMs, MaxSinceCommitMs) + JitterMarginMs;
+        const at = upTo + Math.round(aheadMs * cyclesPerMs);
+        const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
+        const stamp = nextInRun(at, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
+        this.last = { at: stamp, ms: nowMs };
+        return stamp;
+    }
+}
+
 export class Sequencer {
     /**
      * @param {object} processor
@@ -33,12 +67,13 @@ export class Sequencer {
      * @param {function(): import("./session-log.js").IntervalStats} options.stats the interval being gathered
      * @param {function(object): void} options.send takes each commit
      * @param {function(): void} options.onJump told when the machine has moved by itself, before the next commit
+     * @param {number} [options.rtcBaseMs] the wall time the session's clock counts from, if it has one already
      */
-    constructor(processor, { log, stats, send, onJump }) {
+    constructor(processor, { log, stats, send, onJump, rtcBaseMs }) {
         this.processor = processor;
         this.log = log;
         this.stats = stats;
-        this.lockstep = new LockstepHost(processor, send, onJump);
+        this.lockstep = new LockstepHost(processor, send, onJump, { rtcBaseMs });
         this.reachedAt = cycleCount(processor);
         // For each source of keys, those waiting for the cycle queue gave them, in the order they came, and the
         // stamp and cycle due of its last stamped key, which the next keeps its gap from.
@@ -53,6 +88,10 @@ export class Sequencer {
 
     snapshot() {
         return this.lockstep.snapshot();
+    }
+
+    get rtcBaseMs() {
+        return this.lockstep.rtcBaseMs;
     }
 
     // Logged with the cycle it is applied at: the machine is between two of the lockstep's executes.
@@ -102,10 +141,19 @@ export class Sequencer {
         if (source) source.lastKey = null;
     }
 
-    /** The keys source `id` still has waiting, which are dropped along with it. */
+    /** The keys source `id` still has waiting, each with the cycle it was due at, which are dropped with it. */
     release(id) {
-        const waiting = this.sources.get(id)?.scheduled.map(({ input }) => input) ?? [];
+        const waiting = this.sources.get(id)?.scheduled ?? [];
         this.sources.delete(id);
+        return waiting;
+    }
+
+    /** Every key still waiting, as `{ source, input, at }`, which are dropped: another sequencer is to apply them. */
+    releaseAll() {
+        const waiting = [...this.sources].flatMap(([source, { scheduled }]) =>
+            scheduled.map(({ input, at }) => ({ source, input, at })),
+        );
+        this.sources.clear();
         return waiting;
     }
 

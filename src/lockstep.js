@@ -124,6 +124,21 @@ export function restoreSessionSnapshot(cpu, snapshot) {
 }
 
 /**
+ * What a joiner needs to become `cpu`, which ordinary snapshots leave part of out: the ROMs, the keys held down,
+ * the reset line, the cycle it is at, the session's CMOS and the wall time its clock counts from.
+ */
+export function sessionSnapshot(cpu, rtcBaseMs) {
+    return {
+        state: cpu.snapshotState({ includeRoms: true }),
+        keyboard: cpu.sysvia.keyboardState(),
+        resetting: !cpu.resetLine,
+        at: cycleCount(cpu),
+        cmos: cpu.sysvia.cmos.sessionState(),
+        rtcBaseMs,
+    };
+}
+
+/**
  * The host's side. Wraps the machine's execute: inputs queued since the last
  * execute are applied at the cycle the machine has reached, then the machine
  * runs, and the commit describing both goes to `send`. If the machine is found
@@ -154,17 +169,8 @@ export class LockstepHost {
         joinSessionCmos(cpu, cpu.sysvia.cmos.sessionState(), this.rtcBaseMs);
     }
 
-    /** What a joiner needs to become this machine, which ordinary snapshots leave part of out. */
     snapshot() {
-        const { cpu } = this;
-        return {
-            state: cpu.snapshotState({ includeRoms: true }),
-            keyboard: cpu.sysvia.keyboardState(),
-            resetting: !cpu.resetLine,
-            at: cycleCount(cpu),
-            cmos: cpu.sysvia.cmos.sessionState(),
-            rtcBaseMs: this.rtcBaseMs,
-        };
+        return sessionSnapshot(this.cpu, this.rtcBaseMs);
     }
 
     input(input) {

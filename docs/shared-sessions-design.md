@@ -335,6 +335,21 @@ their keys take the input delay, picked against the sequencer rather than the ho
 trip when the host is one end of it and two through the star, plus however far the new sequencer runs behind.
 Taking control on a key press suits turn-based play; two people typing at once would pass control back and forth.
 
+**What is built of it.** The pane has a Take control button and a "Take control when I press a key" option, and
+says who is in control, marking them in its list. A guest that takes control is handed the cycle the host's
+machine had reached, with the keys still waiting there, and starts ordering inputs once its own machine reaches
+that cycle; the host relays its commits, checked as a guest checks the host's (well formed, each starting where
+the last ended, no BREAK) and replayed on its own machine, to every other guest. Everyone else's keys, the host's
+included, go to it through the host, stamped against its commits with the host's round trip to it added. Control
+moves on from one guest to another, or back to the host, by asking the guest in control to stop: it stops at the
+end of its last commit and hands back the keys it had not applied. The host takes control back at once, starting
+everyone afresh from its own machine, when a commit does not follow on, when its replay disagrees, when its own
+machine jumps (a reset, say) or when the host presses BREAK; and from the end of the last commit it relayed when
+the guest in control leaves or sends nothing for three seconds. A guest that desyncs while another is in control
+is resynced from the host's machine and the commits it has relayed but not yet replayed. Not yet: the old
+sequencer applying the key that asked for control before it stops, and choosing the input delay against the
+sequencer from measured jitter.
+
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
 peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle
 already passed, it restores the last snapshot before it and re-emulates to the present. Snapshot and restore are

@@ -423,6 +423,107 @@ describe("SessionHost", () => {
         expect(peers[0].closed).toBe(true);
     });
 
+    describe("control", () => {
+        const MsCycles = CyclesPerSecond / 1000;
+        const A = [4, 1];
+        const keyA = { kind: "key", mapping: A, down: true };
+        const sentOf = (channel, type) => channel.messages().filter((each) => each.type === type);
+        async function twoGuests() {
+            const { host, processor } = await hosting([
+                { guest: "g1", sdp: "offer" },
+                { guest: "g2", sdp: "offer" },
+            ]);
+            const first = connectTo(0);
+            const second = connectTo(1);
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(1));
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+            return { host, processor, first, second };
+        }
+        const commit = (at, upTo, inputs = []) => message({ type: "commit", at, upTo, inputs });
+
+        it("passes to a guest that asks, from where the machine is, with the keys still waiting for it", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            channel.emit("message", message({ type: "input", input: keyA, at: 1000 + 50 * MsCycles, snapshots: 1 }));
+            channel.emit("message", message({ type: "take" }));
+            expect(sentOf(channel, "handover")).toEqual([{ type: "handover", at: 1000 }]);
+            expect(sentOf(channel, "input")).toEqual([
+                { type: "input", input: keyA, at: 1000 + 50 * MsCycles, source: "g1" },
+            ]);
+            expect(host.report().events).toContainEqual(expect.objectContaining({ event: "control", guest: "g1" }));
+        });
+
+        it("passes on a key pressed to take it, as well as the key", async () => {
+            await hosting();
+            const channel = await joined();
+            channel.emit("message", message({ type: "input", input: keyA, take: true }));
+            expect(sentOf(channel, "handover")).toHaveLength(1);
+        });
+
+        it("replays the commits of the guest in control and passes them to the others", async () => {
+            const { host, processor, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000, [keyA]));
+            host.execute(5000);
+            expect(processor.currentCycles).toBe(3000);
+            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
+            expect(sentOf(second, "commit").at(-1)).toMatchObject({ at: 1000, upTo: 3000, inputs: [keyA] });
+            expect(sentOf(first, "commit").filter((each) => each.at >= 1000)).toEqual([]);
+        });
+
+        it("sends this page's keys to the guest in control, stamped", async () => {
+            const { host } = await hosting();
+            const channel = await joined();
+            channel.emit("message", message({ type: "take" }));
+            host.input(keyA);
+            const [sent] = sentOf(channel, "input");
+            expect(sent).toMatchObject({ input: keyA, source: "host" });
+            expect(sent.at).toBeGreaterThan(1000);
+        });
+
+        it.each([
+            ["sends a commit that does not follow on", commit(1500, 3000)],
+            ["sends a commit with BREAK in it", commit(1000, 3000, [{ kind: "break", down: true }])],
+        ])("is taken back, and everyone started afresh, when the guest in control %s", async (_, bad) => {
+            const { host, processor, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", bad);
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            host.input(keyA);
+            host.execute(100);
+            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
+        });
+
+        it("comes back to the host from the end of the last commit when the guest in control leaves", async () => {
+            const { host, processor, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            first.emit("message", message({ type: "bye" }));
+            host.execute(5000);
+            host.execute(100);
+            expect(processor.currentCycles).toBe(3100);
+            expect(sentOf(second, "commit").at(-1)).toMatchObject({ at: 3000, upTo: 3100 });
+            expect(second.snapshots()).toHaveLength(1);
+        });
+
+        it("goes from one guest to another through the first stopping", async () => {
+            const { host, first, second } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            second.emit("message", message({ type: "take" }));
+            expect(sentOf(first, "release")).toHaveLength(1);
+            expect(sentOf(second, "handover")).toEqual([]);
+            first.emit(
+                "message",
+                message({ type: "released", at: 3000, waiting: [{ source: "g2", input: keyA, at: 4000 }] }),
+            );
+            expect(sentOf(second, "handover")).toEqual([{ type: "handover", at: 3000 }]);
+            expect(sentOf(second, "input")).toEqual([{ type: "input", input: keyA, at: 4000, source: "g2" }]);
+            host.execute(5000);
+        });
+    });
+
     describe("a guest's keys", () => {
         const MsCycles = CyclesPerSecond / 1000;
         const MaxWaitingKeys = 64;
@@ -1044,6 +1145,70 @@ describe("SessionGuest", () => {
         vi.advanceTimersByTime(250);
         context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
         expect(channel.messages().find((each) => each.type === "input").ms).toBeGreaterThanOrEqual(250);
+    });
+
+    describe("in control", () => {
+        const A = [4, 1];
+        const commitsSent = (channel) => channel.messages().filter((each) => each.type === "commit");
+        async function inControl() {
+            const session = await joining();
+            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            session.deliver([message({ type: "handover", at: 1000 })]);
+            session.lockstep().execute(2000);
+            return session;
+        }
+
+        it("takes control at the cycle it is handed, once its machine has reached it, and sends its commits", async () => {
+            const { context, channel, lockstep } = await inControl();
+            expect(context.processor.currentCycles).toBe(1000);
+            lockstep().execute(500);
+            expect(commitsSent(channel)).toEqual([expect.objectContaining({ at: 1000, upTo: 1500, inputs: [] })]);
+        });
+
+        it("applies its own keys at once, and tells the host of them", async () => {
+            const { context, channel, lockstep } = await inControl();
+            context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
+            lockstep().execute(500);
+            const [own] = channel.messages().filter((each) => each.type === "input");
+            expect(own).toMatchObject({ own: true, input: { kind: "key", down: true } });
+            expect(commitsSent(channel)[0].inputs).toEqual([own.input]);
+        });
+
+        it("applies the keys the host passes on at their stamps", async () => {
+            const { channel, deliver, lockstep } = await inControl();
+            deliver([
+                message({ type: "input", input: { kind: "key", mapping: A, down: true }, at: 1200, source: "g2" }),
+            ]);
+            lockstep().execute(500);
+            expect(commitsSent(channel).map(({ at, inputs }) => [at, inputs.length])).toEqual([
+                [1000, 0],
+                [1200, 1],
+            ]);
+        });
+
+        it("stops where it is when asked, handing back the keys it had not applied", async () => {
+            const { channel, deliver, lockstep } = await inControl();
+            lockstep().execute(500);
+            const later = { kind: "key", mapping: A, down: true };
+            deliver([message({ type: "input", input: later, at: 100000, source: "host" })]);
+            deliver([message({ type: "release" })]);
+            expect(channel.messages().find((each) => each.type === "released")).toEqual({
+                type: "released",
+                at: 1500,
+                waiting: [{ source: "host", input: later, at: 100000 }],
+            });
+            lockstep().execute(500);
+            expect(commitsSent(channel)).toHaveLength(1);
+        });
+
+        it("gives it up when the host sends a snapshot", async () => {
+            const { context, channel, deliver, lockstep } = await inControl();
+            deliver(snapshotMessages(5000, [{ at: 5000, upTo: 6000, inputs: [] }]));
+            await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
+            lockstep().execute(500);
+            expect(commitsSent(channel)).toEqual([]);
+        });
     });
 
     describe("stamps each key", () => {

@@ -61,7 +61,7 @@ function peerRow(peer) {
     const left = peer.state === "left";
     row.append(
         lightCell,
-        cell(peer.label),
+        cell(peer.control ? `${peer.label} (in control)` : peer.label),
         cell(left ? `left: ${peer.leftReason}` : Descriptions[peer.state]),
         cell(!left && peer.rttMs !== undefined ? `${Math.round(peer.rttMs)} ms` : "", "number"),
         cell(!left && peer.lagMs !== undefined ? `${peer.lagMs} ms` : "", "number"),
@@ -76,9 +76,10 @@ export class SessionPanel {
      * @param {string} session.link the address a guest joins at
      * @param {function(): void} session.saveReport
      * @param {function(): void} session.copyLink
+     * @param {function(): void} session.requestControl asks for this page to order the session's inputs
      */
     constructor(
-        { name, link, saveReport, copyLink },
+        { name, link, saveReport, copyLink, requestControl },
         root = document.getElementById("session-panel"),
         pane = document.getElementById("session-pane"),
     ) {
@@ -105,6 +106,14 @@ export class SessionPanel {
         pane.querySelector(".session-link").textContent = link;
         pane.querySelector(".session-copy-link").addEventListener("click", () => copyLink());
         pane.querySelector(".session-report").addEventListener("click", () => saveReport());
+        // Neither keeps the focus a click gives it: the keyboard is the machine's.
+        const take = pane.querySelector(".session-take");
+        take.addEventListener("click", () => {
+            take.blur();
+            requestControl();
+        });
+        this.takeOnKey = pane.querySelector(".session-take-on-key");
+        this.takeOnKey.addEventListener("change", () => this.takeOnKey.blur());
     }
 
     open() {
@@ -122,6 +131,18 @@ export class SessionPanel {
         const lightsTop = this.root.closest("#leds").getBoundingClientRect().top;
         this.pane.style.bottom = `${window.innerHeight - lightsTop + PaneGapPx}px`;
         this.pane.style.maxHeight = `${Math.max(0, lightsTop - 2 * PaneGapPx)}px`;
+    }
+
+    /** Whether a key pressed here should take control, as the pane's option says. */
+    takesOnKeypress() {
+        return !!this.takeOnKey?.checked;
+    }
+
+    /** Says who orders the session's inputs, `who` ("you" for this page), and whether this page can ask to. */
+    showControl(who, canTake) {
+        if (!this.floating) return;
+        this.pane.querySelector(".session-control").textContent = who ? `In control: ${who}` : "";
+        this.pane.querySelector(".session-take").hidden = !canTake;
     }
 
     /**

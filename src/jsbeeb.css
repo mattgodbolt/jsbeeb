@@ -308,6 +308,25 @@ span.accesskey {
   user-select: all;
 }
 
+.session-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.session-control {
+  flex: auto;
+}
+
+.session-take-on-key-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #999;
+}
+
 .session-people {
   width: 100%;
   margin-bottom: 8px;
