@@ -6,10 +6,10 @@ different browsers. A first cut of [v0](#v0) is built (`src/lockstep.js`, `rende
 `src/web/shared-session.js`); the rest is a design to pick holes in.
 
 **Scope to start with: a Model B (`B-DFS1.2`) and a Master, each in its default configuration, with discs but
-not tapes.** A session refuses to start on anything else: tapes, the Atom, second processors, Music 5000,
-Econet, the teletext adaptor, extra ROMs, a CPU multiplier and the rest can come later, one at a time, each
-with its own determinism test. That takes a lot of the edges below off the critical path, and they are marked
-as later where they come up.
+not tapes.** A session should refuse to start on anything else (v0 refuses only the Atom and second
+processors so far): tapes, Music 5000, Econet, the teletext adaptor, extra ROMs, a CPU multiplier and the rest
+can come later, one at a time, each with its own determinism test. That takes a lot of the edges below off the
+critical path, and they are marked as later where they come up.
 
 ## What we mean
 
@@ -47,7 +47,7 @@ connects to (see v0); the protocol does not depend on that, so a server could ta
 
 **Inputs are machine-level events.** A key is sent after the sender's own mapping (layouts, user remaps in
 `src/keymap.js`), not as a host key code, because mapping is per-person configuration. That is more than a
-matrix position: in the symbolic layout a key can force BBC SHIFT up or down while it is held (`SysVia.set`),
+matrix position: in the symbolic layout a key can force BBC SHIFT up or down while it is held (`SysVia.setMapped`),
 so an event carries the position and the SHIFT it forces. With two people on one matrix, whose SHIFT wins needs
 a rule; the simplest is that each person's held keys are tracked separately and a forced SHIFT applies only
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
@@ -62,8 +62,8 @@ a second behind the host, on top of the network's latency. Catching up must not 
 `FRAMESKIPENABLE` also gates video memory reads and the SAA5050's clocking (`src/video.js:1099`), so a peer that
 skipped frames would end up with different teletext state in MODE 7. A session never runs speedy.
 
-**Late joining.** The host takes a snapshot between two executes, so its last commit ended exactly there, and
-sends it with what ordinary snapshots leave out: sideways RAM, the keys held down and the CMOS. Commits made
+**Late joining.** The host takes a snapshot where its next commit will start, and sends it with what ordinary
+snapshots leave out: the ROMs and sideways RAM, the keys held down and the CMOS. Commits made
 while it is being compressed wait for it. On my desktop, Node emulates a 50Hz frame of a B running Elite in
 about 3ms, so catching up is quick. The host does not pause.
 
@@ -137,11 +137,13 @@ Ranked by how much they would bite.
    pauses itself when hidden, and browsers throttle timers in background tabs, so commits would stall or
    bunch for everyone and no snapshot could be taken for a joiner. In a session the host keeps running when
    hidden, but a hidden tab's timers fire about once a second and each tick is capped at a tenth of a second,
-   so a silent hidden host runs the session at about a tenth of real speed (a tab playing sound is exempt), and
-   its rendezvous polling slows too. That is the cost of host-as-sequencer.
+   so a silent hidden host should run the session at about a tenth of real speed (a tab playing sound is
+   exempt; not measured), and its rendezvous polling slows too. That is the cost of host-as-sequencer.
 7. **Two clocks.** Each browser's audio runs on its own crystal, and in a session the emulation rate is set by
    the sequencer. Over minutes they drift, so each peer either stretches its audio slightly or skips and pads
-   it. The existing emulation lead logic (`setEmulationLead`) is the place for that.
+   it. The existing emulation lead logic (`setEmulationLead`) is the place for that. In v0 a guest simply runs
+   no faster than the host's commits and catches up when more than a quarter of a second behind (see
+   Pacing), so its audio stalls or races a little rather than drifting.
 8. **Smaller ones.** The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is
    audio only and harmless. Later, the Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a
    session-wide seed.
@@ -195,12 +197,12 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Transport:** WebRTC data channels in a star: each guest connects to the host only, over a reliable, ordered
   channel. A joiner's snapshot goes gzipped and in chunks over the same channel, discs included, so local and
   `gd:` discs need no fetching; each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
-  so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot connect is told "couldn't connect
-  directly". The host and each guest see each other's public IP address. A guest on another model reloads as
-  the host's before it joins, and one on another jsbeeb version is turned away. When the host leaves, each
-  guest's machine carries on as a local one, with its own CMOS and clock back. The host takes only keys, resync
-  requests and goodbyes from a guest, rate-limits its resyncs, drops one whose channel cannot keep up, and opens
-  only a few connections at a time.
+  so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
+  connect is told "couldn't connect directly". The host and each guest see each other's public IP address. A
+  guest on another model reloads as the host's before it joins, and one on another jsbeeb version is turned
+  away. When the host leaves, each guest's machine carries on as a local one, with its own CMOS and clock back.
+  The host takes only keys, resync requests and goodbyes from a guest, rate-limits its resyncs, drops one whose
+  channel cannot keep up, and opens only a few connections at a time.
 - **The clock:** every machine in a session reads its RTC as a base time the host sends plus its own emulated
   cycles, read as UTC, so everyone sees the host's wall time whatever their own time zone. It starts again from
   the wall time when the host's machine jumps.
@@ -231,24 +233,30 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   likely.
 - Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
-  every guest at once; anything else makes guests fail their next hash and be resynced from the host. On a
-  guest it is undone the same way.
+  every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
+  guests are resynced from the host. A disc change or a poke at a device may not show until the program reads
+  it. On a guest it is undone the same way.
+- Anything that pauses the host pauses the session: a dialog, the rewind panel, saving or loading a state, the
+  pause button. Guests wait, and catch up afterwards.
 - Inputs the machine reads for itself rather than being sent (the ADC's sources, the gamepad fire buttons the
   system VIA reads) are not blocked either, and desync a session the same way if used.
 - A guest's BREAK is ignored, and when a guest leaves, its keys are let go even if someone else is holding the
   same key.
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
 - A host's own `*CONFIGURE` changes made during a session are not saved, since its CMOS is the session's.
-- A hidden host runs the session at about a tenth of real speed (see challenge 6).
+- A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
+  measured), and with its ticks that far apart a guest's press and release nearly always reach it together, so
+  guests cannot type.
 - A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
   the reload is refused until the room expires, and a new name is the way out.
 
 ### What is left for v0
 
 - A fixed quantum and an input delay, so short taps survive and a guest's keys apply as promptly as the host's.
-- The determinism test the experiment above stands for: a B and a Master with a disc, several chunk sizes,
-  full state and framebuffers compared. The integration test so far compares a hash of registers, RAM and
-  keys and the MODE 7 screen.
+- More of the determinism test the experiment above stands for. The integration test already runs a B and a
+  Master in random, uneven slices and compares cycles, RAM with the ROMs and sideways RAM byte for byte, the
+  CMOS, the keyboard and the MODE 7 screen; still to come are a disc read during the run, framebuffers and
+  device state.
 - A build ID in place of the package version.
 - Blocking in a session what bypasses it, and refusing configurations outside the scope.
 - A share UI that generates the room's name.
