@@ -302,7 +302,7 @@ a guest never stamps a key earlier than the last one it stamped, so a delay that
 stamps catch up, and keys keep the order they were pressed in; keys clamped to one stamp share a cycle and fall to
 the same floor. A resync forgets the last stamp, since the machine it counted on has jumped, and each key carries
 the count of that guest's resyncs, so the host applies one stamped before the guest's latest at once rather than
-holding it for a cycle on a timeline that has gone. The host stands for whoever is sequencing, here and below.
+holding it for a cycle on a timeline that has gone. In this paragraph the host stands for whoever is sequencing.
 
 **Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone: the
 sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A "Take
