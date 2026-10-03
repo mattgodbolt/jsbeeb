@@ -1,5 +1,5 @@
 // A shared session in the browser: one machine, the host's unless someone
-// has taken control, runs as usual and its inputs and cycles stream to the
+// has taken control, runs as usual, and its inputs and cycles stream to the
 // others over WebRTC data channels, which the rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
@@ -317,8 +317,11 @@ export class SessionHost {
             this.taker = taker;
             return;
         }
-        // A guest whose snapshot is still on its way would have it undo the handover.
-        if (taker && !taker.ready) return;
+        // A guest whose snapshot is still on its way would have it undo the handover, so it waits for it.
+        if (taker && !taker.ready) {
+            this.taker = taker;
+            return;
+        }
         if (taker === this.controller && this.resumeAt === null) return;
         if (this.sequencer) {
             if (taker) this.handOver(taker);
@@ -338,8 +341,8 @@ export class SessionHost {
         const waiting = this.sequencer ? this.sequencer.releaseAll() : [];
         this.sequencer = null;
         this.rtcBaseMs = rtcBaseMs;
-        this.replay = new LockstepGuest(processor, (reason) =>
-            this.takeBackNow(reason, cycleCount(processor) !== this.replay.reachedAt),
+        this.replay = new LockstepGuest(processor, (reason, dropped, moved) =>
+            this.takeBackNow(reason, { jumped: moved, unreplayed: dropped }),
         );
         this.controller = guest;
         this.lastCommitMs = this.log.elapsed();
@@ -364,11 +367,11 @@ export class SessionHost {
         this.releasing = false;
         const taker = this.taker;
         this.taker = null;
-        if (taker && this.guests.get(taker.id) === taker) {
-            this.controller = null;
+        this.controller = null;
+        if (taker && this.guests.get(taker.id) === taker && taker.ready) {
             this.handOverFrom(taker, at);
         } else {
-            this.controller = null;
+            this.taker = taker;
             this.resumeAt = at;
             this.log.record("control", { guest: "host", at });
         }
@@ -405,10 +408,11 @@ export class SessionHost {
 
     /**
      * Takes control back where this machine is now, and starts everyone afresh from it. The keys in commits it has
-     * passed on but not yet replayed go in at once, so a release among them is not lost; after a `jumped` machine,
-     * the session's clock starts again from the wall time, as it does when the host's machine jumps in control.
+     * passed on but not yet replayed (`unreplayed`, if its replay has already dropped them) go in at once, so a
+     * release among them is not lost; after a `jumped` machine, the session's clock starts again from the wall
+     * time, as it does when the host's machine jumps in control.
      */
-    takeBackNow(reason, jumped = false) {
+    takeBackNow(reason, { jumped = false, unreplayed = this.replay?.commits ?? [] } = {}) {
         if (this.sequencer) return;
         this.log.record("control", { guest: "host", reason });
         notify(`The host has taken control back: ${reason}.`);
@@ -416,7 +420,7 @@ export class SessionHost {
         this.releasing = false;
         this.taker = null;
         this.resyncWhenResumed = null;
-        const relayed = (this.replay?.commits ?? []).flatMap(({ inputs }) => inputs);
+        const relayed = unreplayed.flatMap(({ inputs }) => inputs);
         this.heldBack.unshift(
             ...relayed.map((input) => ({ source: "relayed", input, fields: {}, at: undefined })),
             ...this.forwarded.splice(0),
@@ -475,7 +479,7 @@ export class SessionHost {
                 if (former && this.guests.get(former.id) === former) this.sendSnapshot(former);
                 const taker = this.taker;
                 this.taker = null;
-                if (taker && this.guests.get(taker.id) === taker) this.handOver(taker);
+                if (taker && this.guests.get(taker.id) === taker) this.requestControl(taker);
                 this.showStatus();
             } else if (this.controller && this.log.elapsed() - this.lastCommitMs > ControllerSilentMs) {
                 this.takeBack(`${guestName(this.controller)} went quiet`);
@@ -750,6 +754,10 @@ export class SessionHost {
         }
         guest.backlog = [];
         guest.ready = true;
+        if (this.taker === guest && this.sequencer) {
+            this.taker = null;
+            this.handOver(guest);
+        }
     }
 
     /**

@@ -597,6 +597,44 @@ describe("SessionHost", () => {
             expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
         });
 
+        it.each([
+            [
+                "its machine jumps",
+                (host, processor, first) => {
+                    first.emit("message", commit(3000, 5000, [keyAUp]));
+                    processor.currentCycles = processor.targetCycles = 50;
+                    host.execute(100);
+                },
+            ],
+            [
+                "its replay disagrees",
+                (host, processor, first) => {
+                    first.emit("message", message({ type: "commit", at: 3000, upTo: 5000, inputs: [], hash: "nope" }));
+                    first.emit("message", commit(5000, 7000, [keyAUp]));
+                    host.execute(5000);
+                },
+            ],
+        ])("taking back at once because %s, applies the keys in commits it had not replayed", async (_, happen) => {
+            const { host, processor, first } = await twoGuests();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000, [keyA]));
+            host.execute(5000);
+            happen(host, processor, first);
+            host.execute(100);
+            expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
+        });
+
+        it("keeps the session's clock when its replay disagrees rather than its machine jumping", async () => {
+            const { host, first } = await twoGuests();
+            const [before] = first.snapshots();
+            first.emit("message", message({ type: "take" }));
+            vi.advanceTimersByTime(60000);
+            first.emit("message", message({ type: "commit", at: 1000, upTo: 3000, inputs: [], hash: "nope" }));
+            host.execute(5000);
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            expect(first.snapshots()[1].rtcBaseMs).toBe(before.rtcBaseMs);
+        });
+
         it("taking back at once, applies the keys it sent the guest in control that no commit carried", async () => {
             const { host, processor, first } = await twoGuests();
             first.emit("message", message({ type: "take" }));
@@ -634,11 +672,17 @@ describe("SessionHost", () => {
             ).toMatchObject({ guest: "g1" });
         });
 
-        it("does not let a guest whose snapshot is still on its way take control", async () => {
+        it("hands a guest whose snapshot is still on its way control once it has it", async () => {
             const { host, first } = await twoGuests();
             host.resyncEveryone();
             first.emit("message", message({ type: "take" }));
             expect(sentOf(first, "handover")).toEqual([]);
+            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            await vi.waitFor(() => expect(sentOf(first, "handover")).toHaveLength(1));
+            const sent = first.messages();
+            expect(sent.findIndex((each) => each.type === "handover")).toBeGreaterThan(
+                sent.findLastIndex((each) => each.type === "snapshot"),
+            );
         });
 
         it("hands control to a guest that asked while the host was taking it back, once it has", async () => {
@@ -1440,6 +1484,18 @@ describe("SessionGuest", () => {
             deliver([header]);
             lockstep().execute(500);
             expect(channel.messages().filter((each) => each.type === "resync")).toEqual([]);
+        });
+
+        it("hides its Take control button while control is on its way to it", async () => {
+            showLights();
+            const session = await joining();
+            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            const take = document.querySelector("#session-pane .session-take");
+            session.deliver([message({ type: "roster", guests: [] })]);
+            expect(take.hidden).toBe(false);
+            session.deliver([message({ type: "handover", at: 5000 }), message({ type: "roster", guests: [] })]);
+            expect(take.hidden).toBe(true);
         });
 
         it("asks for nothing more after it stops", async () => {

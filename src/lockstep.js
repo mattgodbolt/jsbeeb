@@ -207,7 +207,9 @@ export class LockstepHost {
  * A guest's side. Commits from the host queue up; execute replays them, running
  * no further than the host has, applying each input at the cycle it was applied
  * at and checking the host's hashes where they were taken. `onDesync` is called
- * once when this machine and the host's part, and not again until `resync`.
+ * once when this machine and the host's part, and not again until `resync`, with
+ * the reason, the commits it had not yet replayed (which it drops), and whether it
+ * was this machine that moved by itself.
  */
 export class LockstepGuest {
     constructor(cpu, onDesync) {
@@ -246,8 +248,9 @@ export class LockstepGuest {
      */
     execute(cycles) {
         const { cpu } = this;
-        if (cycleCount(cpu) !== this.reachedAt)
-            return this.desync(`this machine moved from ${this.reachedAt} by itself`);
+        if (cycleCount(cpu) !== this.reachedAt) {
+            return this.desync(`this machine moved from ${this.reachedAt} by itself`, true);
+        }
         const running = this.replay(cycles);
         this.reachedAt = cycleCount(cpu);
         return running;
@@ -276,11 +279,12 @@ export class LockstepGuest {
         return runTo(cpu, limit);
     }
 
-    desync(reason) {
+    desync(reason, moved = false) {
+        const dropped = this.commits;
         this.commits = [];
         if (!this.desynced) {
             this.desynced = true;
-            this.onDesync(reason);
+            this.onDesync(reason, dropped, moved);
         }
         return true;
     }
