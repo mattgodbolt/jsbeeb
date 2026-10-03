@@ -254,7 +254,6 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 ### What is left for v0
 
-- A fixed quantum and an input delay, so short taps survive and a guest's keys apply as promptly as the host's.
 - More of the determinism test the experiment above stands for. The integration test already runs a B and a
   Master in random, uneven slices and compares cycles, RAM with the ROMs and sideways RAM byte for byte, the
   CMOS, the keyboard and the MODE 7 screen; still to come are a disc read during the run, framebuffers and
@@ -266,8 +265,36 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
 snapshot links; the pulled inputs (ADC sources, gamepads, the mouse, the switches) through the session, with
 `src/adc.js`, the sources and `getJoysticks` reading only what came through it; the other configuration options
-one at a time; TURN; voice (below); and rollback (tier 4), only if tier 3 feels too laggy, which also needs
-painting suppressed during re-emulation and the sound chip's queued events unwound.
+one at a time; TURN; voice (below); and the steps in the next section.
+
+### After v0: keys on time, taking control, rollback
+
+The first real session, the host in the US and a guest in the UK, showed what applying a guest's keys
+wherever the host has got to costs: keys that arrive together land on one cycle, and a release that arrives
+late holds a key down long enough to auto-repeat. Three steps, in this order.
+
+**Input delay, tuned to the link.** Each peer stamps a key with the cycle its machine has reached plus a delay,
+and the host applies it at exactly that cycle. A guest's machine runs behind the host's, so the delay must cover
+how far behind it is and the trip to the host; then the key reaches the host before the host reaches its cycle.
+Keys land as far apart as they were pressed, in emulated cycles, so a tap is never lost and a release held up by
+less than the delay still lands on time; only a key that arrives too late for its cycle falls back to going in at
+once, as every key does now. jsbeeb worked hard to get local input lag down to a frame or two, so the delay is not
+fixed: the session picks it from the measured round trip and jitter (the telemetry's figures) and keeps retuning
+it, a frame or two on a LAN and more across an ocean. Nobody gets it without guests.
+
+**Taking control.** In a game where people take turns, the player whose turn it is should not wait on anyone:
+the sequencer moves to them, so their keys apply on their own machine at once and everyone else replays. A
+"Take control" button, and an option to take control on a key press, with nothing game-specific. The handover:
+the new player asks; the current sequencer names the cycle its next commit starts at and stops there; every
+machine reaches it; the new sequencer runs on from it. Its commits still go through the host, which keeps the
+star and relays them. Each handover pauses everyone for about a round trip. Taking control on a key press
+suits turn-based play; two people typing at once would pass control back and forth.
+
+**Rollback (tier 4).** For simultaneous real-time play (two players in Joust), if the input delay over a long
+link feels too laggy. Each peer applies its own keys at once and assumes everyone else's are unchanged; when a
+key arrives for a cycle already passed, it restores the last snapshot before it and re-emulates to the present.
+Snapshot and restore are already cheap (see Prior art); re-emulation needs painting suppressed and the sound
+chip's queued events unwound, and a correction shows as the other player's sprite jumping.
 
 ### Voice, later
 
@@ -289,7 +316,8 @@ WebRTC carries audio as readily as data, so voice in the session is mostly UI:
 ## Open questions
 
 - How SHIFT is shared when two people hold keys that force it different ways.
-- How much input delay is right by default, and whether a session should choose it from measured latency.
+- Whether the host's own keys take the input delay too: fair for a competitive game, a needless frame or two for
+  typing.
 - What a guest may do: type only, or also press BREAK, reset, change discs, rewind for everyone.
 - Where shared snapshots live (S3 behind a small upload endpoint, a gist, the user's Google Drive), for how
   long, and whether that is acceptable given a snapshot holds whatever was in RAM.
