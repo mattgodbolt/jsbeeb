@@ -28,7 +28,18 @@ export default defineConfig({
         // threads.
         maxWorkers: workersFor(2),
         projects: [
-            { extends: true, test: { name: "unit", include: ["tests/unit/**/test-*.js"] } },
+            {
+                extends: true,
+                test: {
+                    name: "unit",
+                    include: [
+                        "tests/unit/**/test-*.js",
+                        "tests/tools/**/test-*.js",
+                        "tests/rendezvous/**/test-*.js",
+                        "tests/helpers/**/test-*.js",
+                    ],
+                },
+            },
             {
                 extends: true,
                 test: {

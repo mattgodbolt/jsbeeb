@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findBands } from "../line-grid.js";
+import { findBands } from "./line-grid.js";
 import { encodeLineGrid } from "../../src/video-filters/pixel-grid.js";
 
 describe("findBands", () => {

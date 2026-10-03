@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
-import { decodeLineGrid, findBands } from "../line-grid.js";
+import { decodeLineGrid, findBands } from "../helpers/line-grid.js";
 
 // The logical pixel grid that display filters rely on is derived from the video
 // chips' own state, so the only test that really proves it is to render a real
