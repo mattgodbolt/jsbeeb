@@ -1,6 +1,6 @@
-// A shared session in the browser: the host's machine runs as usual and its
-// inputs and cycles stream to guests over WebRTC data channels, which the
-// rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
+// A shared session in the browser: one machine, the host's unless someone
+// has taken control, runs as usual, and its inputs and cycles stream to the
+// others over WebRTC data channels, which the rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
 import { humanId } from "human-id";
@@ -10,9 +10,9 @@ import {
     isValidCommit,
     isValidInput,
     LockstepGuest,
-    LockstepHost,
     MaxGuestLagSeconds,
     restoreSessionSnapshot,
+    sessionSnapshot,
 } from "../lockstep.js";
 import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
@@ -27,7 +27,8 @@ import {
     StatsIntervalMs,
     watchPage,
 } from "./session-log.js";
-import { PeerStates, peerState, SessionPanel } from "./session-panel.js";
+import { LaggingMs, PeerStates, peerState, SessionPanel } from "./session-panel.js";
+import { KeyStamper, Sequencer } from "./session-sequencer.js";
 import { downloadBlob } from "./dom-utils.js";
 import { toast } from "./toast.js";
 
@@ -45,22 +46,11 @@ const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
 const RoomGone = 404;
-// A key stamped further ahead of the host than this is applied at once; an honest guest's round trip and the
-// pause since the host's last commit come nowhere near it.
-const MaxStampAheadSeconds = 2;
-// A guest with more keys than this waiting for their cycles has them all applied at once instead.
-const MaxWaitingKeys = 64;
-// A guest stamps its keys with a round trip it has not measured yet as this, and allows this much on top for
-// the trip taking longer than it did.
+// Keys are stamped with a round trip not yet measured as this.
 const UnmeasuredRttMs = 200;
-const JitterMarginMs = 20;
-// Commits come every few milliseconds from a host running in real time; one that has gone quiet for longer is
-// running slowly (hidden, say), and counting the whole pause would stamp keys far beyond where it will be.
-const MaxSinceCommitMs = 100;
-// While keys are catching up, on a guest stamping later than it would or on a host applying them later than
-// stamped, a gap between two keys longer than this shrinks to it: four of the OS's 10 ms keyboard scans, so each
-// key is still seen, while keys pressed closer together stay as close.
-const CatchUpGapMs = 40;
+// A guest in control that sends no commit for this long has stalled, or its connection has, and the host takes
+// control back.
+const ControllerSilentMs = 3000;
 
 const MaxReasonLength = 200;
 const MaxNameLength = 32;
@@ -85,16 +75,6 @@ const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
 const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
-
-/**
- * When the next of a run of keys goes, `at` and no earlier than `earliest`, after the last went at `last.went`
- * `gap` before: as far after it as it was, but with a gap over `catchUp` shortened to it, so a run that has
- * fallen behind its own times makes the lag up a little with each key.
- */
-function nextInRun(at, earliest, last, gap, catchUp) {
-    const after = last ? last.went + Math.min(gap, catchUp) : -Infinity;
-    return Math.max(at, earliest, after, last?.went ?? -Infinity);
-}
 
 function notify(message) {
     console.log(`Shared session: ${message}`);
@@ -240,19 +220,42 @@ export class SessionHost {
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
         this.departed = [];
-        this.panel = new SessionPanel(sessionPane(this));
+        // Who orders the session's inputs: the host (null) or a guest. While a guest does, this machine replays
+        // its commits as a guest's does, and this page's keys go to it stamped as a guest's go to the host.
+        this.controller = null;
+        this.sequencer = null;
+        this.replay = null;
+        // Whether the guest in control is being asked to stop; and who is to take over once control has changed
+        // hands (null for the host).
+        this.releasing = false;
+        this.taker = null;
+        // The cycle this machine takes control back at, once its replay has reached it.
+        this.resumeAt = null;
+        // Keys for whoever is next in control, while nobody is; and those sent to the guest in control that no commit
+        // of its has carried yet, which the host applies itself if that guest goes.
+        this.heldBack = [];
+        this.forwarded = [];
+        // A guest in control that went before stopping, to be resynced once the host has control again.
+        this.resyncWhenResumed = null;
+        this.stamper = new KeyStamper(context.model.cyclesPerSecond);
+        this.lastCommitMs = 0;
+        // Whether a key press takes control, for everyone: the host's to set, and sent to every guest.
+        this.takeOnKey = false;
+        this.panel = new SessionPanel({ ...sessionPane(this), setTakeOnKey: (on) => this.setTakeOnKey(on) });
+        this.panel.showTakeOnKey(this.takeOnKey);
+    }
+
+    setTakeOnKey(on) {
+        this.takeOnKey = on;
+        this.log.record("take on key", { on });
+        this.showStatus();
     }
 
     async start() {
         const { processor, loop, keyboard, rendezvous } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
         this.secret = await rendezvous.createRoom(this.room);
-        this.lockstep = new LockstepHost(
-            processor,
-            (commit) => this.broadcast(JSON.stringify(commit)),
-            () => this.resyncEveryone(),
-        );
-        this.reachedAt = cycleCount(processor);
+        this.sequence();
         loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
@@ -264,35 +267,243 @@ export class SessionHost {
         this.poll();
     }
 
-    // Logged with the cycle it is applied at: the machine is between two of the lockstep's executes.
-    input(input, fields = {}) {
-        this.log.record("input", { ...fields, ...input, cycle: cycleCount(this.context.processor) });
-        this.lockstep.input(input);
+    sequence(rtcBaseMs) {
+        this.sequencer = new Sequencer(this.context.processor, {
+            log: this.log,
+            stats: () => this.stats,
+            send: (commit) => this.broadcast(JSON.stringify(commit)),
+            onJump: () => this.resyncEveryone(),
+            rtcBaseMs,
+        });
+        this.replay = null;
+        this.resumeAt = null;
+        for (const { source, input, fields, at } of this.heldBack.splice(0))
+            this.sequencer.queue(source, input, fields, at);
     }
 
-    // While keys are waiting, the cycles asked for run in pieces that end where the next is due, each its
-    // own commit, so a long execute cannot bring keys spaced apart back onto one cycle. The pieces add up
-    // to what was asked, so the processor's overshoot carries over as it does in one execute.
+    /** This page's own keys. BREAK is the host's alone, so it takes control back first. */
+    input(input) {
+        if (input.kind === "break" && !this.sequencer) this.takeBackNow("the host pressed BREAK");
+        if (input.kind === "break") {
+            this.sequencer.input(input);
+            return;
+        }
+        if (input.down && !this.sequencer && this.takeOnKey) this.requestControl(null);
+        this.deliverKey("host", input, {}, this.stampForController() ?? this.stampOwn());
+    }
+
+    // A key, a guest's or this page's, goes to whoever orders the inputs, or waits for them while control is
+    // changing hands.
+    deliverKey(source, input, fields, at) {
+        if (this.sequencer) this.sequencer.queue(source, input, fields, at);
+        else if (this.controller && !this.releasing) this.forward(this.controller, { source, input, fields, at });
+        else this.heldBack.push({ source, input, fields, at });
+    }
+
+    forward(guest, key) {
+        this.forwarded.push(key);
+        this.sendTo(guest, JSON.stringify({ type: "input", input: key.input, at: key.at, source: key.source }));
+    }
+
+    // This page's own keys go in at once, as on a machine of its own, except while control is coming back to it or
+    // its keys are catching up after: then they keep their gaps, so none is cut short.
+    stampOwn() {
+        const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
+        if (!this.sequencer) return this.stamper.follow({ ...now, heldBack: true });
+        if (this.stamper.catchingUp || this.sequencer.waiting("host")) return this.stamper.follow(now);
+        this.stamper.mark(now);
+        return undefined;
+    }
+
+    stampForController() {
+        if (!this.controller || this.releasing) return undefined;
+        const nowMs = this.log.elapsed();
+        return this.stamper.stamp({
+            upTo: this.replay.upTo,
+            roundTripMs: this.controller.rttMs ?? UnmeasuredRttMs,
+            sinceCommitMs: nowMs - this.lastCommitMs,
+            nowMs,
+        });
+    }
+
+    /**
+     * Gives control to `taker`, a guest, or takes it for the host if null. Asked while control is changing hands, it
+     * goes to whoever asked last once it has.
+     */
+    requestControl(taker) {
+        if (this.releasing || this.resumeAt !== null) {
+            this.taker = taker;
+            return;
+        }
+        // A guest whose snapshot is still on its way would have it undo the handover, so it waits for it.
+        if (taker && !taker.ready) {
+            this.taker = taker;
+            return;
+        }
+        this.taker = null;
+        if (taker === this.controller && this.resumeAt === null) return;
+        if (this.sequencer) {
+            if (taker) this.handOver(taker);
+            return;
+        }
+        if (!this.controller) return;
+        this.releasing = true;
+        this.taker = taker;
+        this.sendTo(this.controller, JSON.stringify({ type: "release" }));
+    }
+
+    // Between two executes, so the machine is at the end of the last commit, where the guest carries on from.
+    handOver(guest) {
+        const { processor } = this.context;
+        const at = cycleCount(processor);
+        const rtcBaseMs = this.sequencer?.rtcBaseMs ?? this.rtcBaseMs;
+        const waiting = this.sequencer ? this.sequencer.releaseAll() : [];
+        this.sequencer = null;
+        this.rtcBaseMs = rtcBaseMs;
+        this.replay = new LockstepGuest(processor, (reason, dropped, moved) =>
+            this.takeBackNow(reason, { jumped: moved, unreplayed: dropped }),
+        );
+        this.controller = guest;
+        this.lastCommitMs = this.log.elapsed();
+        this.stamper.reset();
+        this.log.record("control", { guest: guest.id, at });
+        this.sendTo(guest, JSON.stringify({ type: "handover", at }));
+        this.forwarded = [];
+        for (const key of [...waiting, ...this.heldBack.splice(0)]) this.forward(guest, { fields: {}, ...key });
+        this.showStatus();
+    }
+
+    // The guest in control has stopped at `at`, the end of its last commit, with `waiting` keys it had not applied.
+    released(guest, { at, waiting }) {
+        if (guest !== this.controller || !this.releasing) return;
+        if (at !== this.replay.upTo) {
+            this.takeBackNow(`${guestName(guest)} stopped at ${at}, not at the end of its last commit`);
+            return;
+        }
+        const keys = Array.isArray(waiting) ? waiting.flatMap((key) => checkedKey(key) ?? []) : [];
+        this.forwarded = [];
+        this.heldBack.unshift(...keys.map((key) => ({ ...key, fields: { guest: key.source } })));
+        this.releasing = false;
+        const taker = this.taker;
+        this.taker = null;
+        this.controller = null;
+        if (taker && this.guests.get(taker.id) === taker && taker.ready) {
+            this.handOverFrom(taker, at);
+        } else {
+            this.taker = taker;
+            this.resumeAt = at;
+            this.log.record("control", { guest: "host", at });
+        }
+    }
+
+    // As handOver, but from a guest that has just stopped, which this machine's replay may not yet have reached.
+    handOverFrom(guest, at) {
+        this.controller = guest;
+        this.lastCommitMs = this.log.elapsed();
+        this.stamper.reset();
+        this.log.record("control", { guest: guest.id, at });
+        this.sendTo(guest, JSON.stringify({ type: "handover", at }));
+        this.forwarded = [];
+        for (const key of this.heldBack.splice(0)) this.forward(guest, key);
+        this.showStatus();
+    }
+
+    /**
+     * Takes control back from a guest that has left or gone quiet, from the end of its last commit, which every
+     * other guest has been sent too; anything it sends after is ignored, and a snapshot puts it right.
+     */
+    takeBack(reason) {
+        if (!this.controller) return;
+        const former = this.controller;
+        this.log.record("control", { guest: "host", reason });
+        notify(`The host has control again: ${reason}.`);
+        this.controller = null;
+        this.releasing = false;
+        this.heldBack.unshift(...this.forwarded.splice(0));
+        this.resumeAt = this.replay.upTo;
+        this.resyncWhenResumed = former;
+        this.showStatus();
+    }
+
+    /**
+     * Takes control back where this machine is now, and starts everyone afresh from it. The keys in commits it has
+     * passed on but not yet replayed (`unreplayed`, if its replay has already dropped them) go in at once, so a
+     * release among them is not lost; after a `jumped` machine, the session's clock starts again from the wall
+     * time, as it does when the host's machine jumps in control.
+     */
+    takeBackNow(reason, { jumped = false, unreplayed = this.replay?.commits ?? [] } = {}) {
+        if (this.sequencer) return;
+        this.log.record("control", { guest: "host", reason });
+        notify(`The host has taken control back: ${reason}.`);
+        this.controller = null;
+        this.releasing = false;
+        this.taker = null;
+        this.resyncWhenResumed = null;
+        if (jumped) this.stamper.reset();
+        const relayed = unreplayed.flatMap(({ inputs }) => inputs);
+        this.heldBack.unshift(
+            ...relayed.map((input) => ({ source: "relayed", input, fields: {}, at: undefined })),
+            ...this.forwarded.splice(0),
+        );
+        this.sequence(jumped ? undefined : this.rtcBaseMs);
+        this.resyncEveryone();
+        this.showStatus();
+    }
+
+    // A commit from the guest in control: checked as a guest checks the host's, replayed here, and passed on.
+    relay(guest, message) {
+        if (guest !== this.controller || this.sequencer) return;
+        const inputs = Array.isArray(message.inputs) ? message.inputs : [];
+        if (
+            !isValidCommit(message) ||
+            inputs.some((input) => input.kind !== "key") ||
+            message.at !== this.replay.upTo
+        ) {
+            this.takeBackNow(`${guestName(guest)} sent a commit that does not follow on`);
+            return;
+        }
+        const commit = {
+            type: "commit",
+            at: message.at,
+            inputs: inputs.map(({ kind, mapping, down }) => ({ kind, mapping: [...mapping], down })),
+            upTo: message.upTo,
+            ...(message.hash !== undefined && { hash: message.hash }),
+        };
+        for (const { mapping, down } of commit.inputs) {
+            const index = this.forwarded.findIndex(
+                ({ input }) => input.down === down && mappingKey(input.mapping) === mappingKey(mapping),
+            );
+            if (index >= 0) this.forwarded.splice(index, 1);
+        }
+        const relayed = JSON.stringify(commit);
+        this.lastCommitMs = this.log.elapsed();
+        this.replay.receive(commit);
+        for (const other of this.guests.values()) {
+            if (other === guest) continue;
+            if (other.ready) this.sendTo(other, relayed);
+            else if (other.channel) other.backlog.push(relayed);
+        }
+    }
+
     execute(cycles) {
         const { processor } = this.context;
-        this.followJump();
-        let remaining = cycles;
         let running;
-        for (;;) {
-            const now = cycleCount(processor);
-            let nextAt = Infinity;
-            for (const guest of this.guests.values()) {
-                while (guest.scheduled.length > 0 && guest.scheduled[0].at <= now) {
-                    const { input, fields } = guest.scheduled.shift();
-                    this.input(input, fields);
-                }
-                if (guest.scheduled.length > 0) nextAt = Math.min(nextAt, guest.scheduled[0].at);
+        if (this.sequencer) {
+            running = this.sequencer.execute(cycles);
+        } else {
+            running = this.replay.execute(cycles);
+            if (this.resumeAt !== null && this.replay.behind() === 0 && cycleCount(processor) === this.resumeAt) {
+                const former = this.resyncWhenResumed;
+                this.resyncWhenResumed = null;
+                this.sequence(this.rtcBaseMs);
+                if (former && this.guests.get(former.id) === former) this.sendSnapshot(former);
+                const taker = this.taker;
+                this.taker = null;
+                if (taker && this.guests.get(taker.id) === taker) this.requestControl(taker);
+                this.showStatus();
+            } else if (this.controller && this.log.elapsed() - this.lastCommitMs > ControllerSilentMs) {
+                this.takeBack(`${guestName(this.controller)} went quiet`);
             }
-            const piece = Math.min(remaining, nextAt - now);
-            running = this.lockstep.execute(piece);
-            this.reachedAt = cycleCount(processor);
-            remaining -= piece;
-            if (!running || remaining <= 0) break;
         }
         this.stats.tick("frames");
         if (document.hidden) this.stats.count("hiddenFrames");
@@ -320,15 +531,24 @@ export class SessionHost {
         this.departed = this.departed.filter((guest) => nowMs - guest.leftMs < LeftShownMs);
         const views = [...this.guests.values(), ...this.departed].map((guest) => [guest, this.guestView(guest, nowMs)]);
         const count = this.connectedCount();
-        this.panel.show(
-            "hosting",
-            `${count} ${count === 1 ? "guest" : "guests"}`,
-            views.map(([, view]) => view),
-        );
+        // Behind only a guest in control, whose commits this machine is replaying.
+        const cyclesPerMs = this.context.processor.model.cyclesPerSecond / 1000;
+        const lagMs = this.replay ? Math.round(this.replay.behind() / cyclesPerMs) : undefined;
+        const self = {
+            label: `${this.name} (you)`,
+            state: lagMs > LaggingMs ? "lagging" : "ok",
+            lagMs,
+            control: !this.controller,
+        };
+        this.panel.show("hosting", `${count} ${count === 1 ? "guest" : "guests"}`, [
+            self,
+            ...views.map(([, view]) => view),
+        ]);
+        this.panel.showControl(this.controller ? guestName(this.controller) : "you", !!this.controller);
         for (const guest of [...this.guests.values()]) {
             if (!guest.welcomed) continue;
             const guests = views.map(([each, view]) => (each === guest ? { ...view, you: true } : view));
-            this.sendTo(guest, JSON.stringify({ type: "roster", guests }));
+            this.sendTo(guest, JSON.stringify({ type: "roster", guests, takeOnKey: this.takeOnKey }));
         }
     }
 
@@ -340,54 +560,14 @@ export class SessionHost {
             statsAgeMs: nowMs - guest.statsMs,
         });
         const { rttMs, leftReason } = guest;
-        return { label: guest.name ?? `Guest ${guest.number}`, state, rttMs, lagMs: guest.stats?.lagMs, leftReason };
+        const control = guest === this.controller;
+        return { label: guestName(guest), state, rttMs, lagMs: guest.stats?.lagMs, leftReason, control };
     }
 
-    // The machine only moves between executes by jumping (a reset, a loaded state), and the keys still
-    // waiting, due on the old cycle count, move with it.
-    followJump() {
-        const jump = cycleCount(this.context.processor) - this.reachedAt;
-        if (jump === 0) return;
-        this.reachedAt += jump;
-        for (const guest of this.guests.values()) for (const key of guest.scheduled) key.at += jump;
-    }
-
-    /**
-     * Applies a guest's key at the cycle `at` it was stamped with, if it was stamped after the guest's latest
-     * snapshot (`snapshots` is how many it had restored); otherwise at once. A key too late for its cycle goes in
-     * as soon as it can, and the ones after it keep their gaps from it, as nextInRun says, so a bunch held up past
-     * its cycles goes in as far apart as it was typed and the lag is made up over the keys that follow.
-     */
+    // A key stamped before the guest's latest snapshot (`snapshots` is how many it had restored) belongs to a
+    // machine that has since been replaced, so it goes in at once.
     queueKey(guest, input, fields, { at, snapshots }) {
-        this.followJump();
-        const { processor } = this.context;
-        const now = cycleCount(processor);
-        const cyclesPerMs = processor.model.cyclesPerSecond / 1000;
-        const stamped =
-            at !== undefined &&
-            snapshots === guest.snapshotsSent &&
-            at <= now + MaxStampAheadSeconds * 1000 * cyclesPerMs;
-        let due = Math.max(now, guest.scheduled.at(-1)?.at ?? now);
-        if (stamped) {
-            if (at < now) {
-                this.stats.count("lateKeys");
-                this.stats.peak("lateKeyMaxMs", rounded((now - at) / cyclesPerMs));
-            }
-            const last = guest.lastKey;
-            due = nextInRun(at, due, last && { went: last.due }, last ? at - last.at : 0, CatchUpGapMs * cyclesPerMs);
-            guest.lastKey = { at, due };
-        } else {
-            guest.lastKey = null;
-        }
-        if (due === now && guest.scheduled.length === 0) {
-            this.input(input, fields);
-            return;
-        }
-        guest.scheduled.push({ input, at: due, fields: { ...fields, arrivedMs: this.log.elapsed() } });
-        if (guest.scheduled.length > MaxWaitingKeys) {
-            for (const key of guest.scheduled.splice(0)) this.input(key.input, key.fields);
-            guest.lastKey = null;
-        }
+        this.deliverKey(guest.id, input, fields, snapshots === guest.snapshotsSent ? at : undefined);
     }
 
     async poll() {
@@ -452,13 +632,9 @@ export class SessionHost {
             ready: false,
             backlog: [],
             held: new Map(),
-            // Keys waiting for the cycle queueKey gave them, in the order they came.
-            scheduled: [],
             // Snapshots sent in full, which the guest counts as it restores them; a key stamped before the
             // latest belongs to a machine that has since been replaced.
             snapshotsSent: 0,
-            // The stamp and the cycle due of its last stamped key, which the next keeps its gap from.
-            lastKey: null,
             lastSnapshotMs: 0,
             snapshotGeneration: 0,
             resyncTimer: null,
@@ -512,6 +688,9 @@ export class SessionHost {
             const { down } = message.input;
             if (down) guest.held.set(mappingKey(mapping), mapping);
             else guest.held.delete(mappingKey(mapping));
+            // The guest in control applies its own keys; they come here only so they can be let go if it leaves.
+            if (message.own) return;
+            if (down && message.take) this.requestControl(guest);
             const guestMs = Number.isFinite(message.ms) ? message.ms : undefined;
             const at = Number.isSafeInteger(message.at) ? message.at : undefined;
             this.queueKey(
@@ -535,6 +714,12 @@ export class SessionHost {
             guest.statsMs = this.log.elapsed();
             this.log.record("guest stats", { ...guest.stats, guest: guest.id, dropped: guest.statsDropped });
             guest.statsDropped = 0;
+        } else if (message.type === "commit") {
+            this.relay(guest, message);
+        } else if (message.type === "take") {
+            this.requestControl(guest);
+        } else if (message.type === "released") {
+            this.released(guest, message);
         } else if (message.type === "bye") {
             this.drop(guest, "it said goodbye");
         } else if (message.type === "resync") {
@@ -576,10 +761,11 @@ export class SessionHost {
         clearTimeout(guest.resyncTimer);
         guest.resyncTimer = null;
         guest.ready = false;
-        guest.backlog = [];
         guest.lastSnapshotMs = Date.now();
         const startMs = this.log.elapsed();
-        const json = snapshotToJSON(this.lockstep.snapshot());
+        const { snapshot, pending } = this.currentSnapshot();
+        guest.backlog = pending;
+        const json = snapshotToJSON(snapshot);
         const takeMs = rounded(this.log.elapsed() - startMs);
         const bytes = await gzip(json);
         if (generation !== guest.snapshotGeneration) return;
@@ -590,12 +776,29 @@ export class SessionHost {
             if (!this.sendTo(guest, bytes.slice(offset, offset + SnapshotChunkBytes))) return;
         }
         ++guest.snapshotsSent;
-        guest.lastKey = null;
+        this.sequencer?.forget(guest.id);
         for (const commit of guest.backlog) {
             if (!this.sendTo(guest, commit)) return;
         }
         guest.backlog = [];
         guest.ready = true;
+        if (this.taker === guest) {
+            this.taker = null;
+            this.requestControl(guest);
+        }
+    }
+
+    /**
+     * This machine as a guest is to become it, and the commits that carry on from it: none while it orders the
+     * inputs, and while a guest does, those it has relayed but not yet replayed, the first cut to start here.
+     */
+    currentSnapshot() {
+        if (this.sequencer) return { snapshot: this.sequencer.snapshot(), pending: [] };
+        const at = cycleCount(this.context.processor);
+        const pending = this.replay.commits.map((commit) =>
+            JSON.stringify(commit.at < at ? { ...commit, at, inputs: [] } : commit),
+        );
+        return { snapshot: sessionSnapshot(this.context.processor, this.rtcBaseMs), pending };
     }
 
     /** Sends, or drops a guest whose channel has gone or whose send buffer is full. */
@@ -621,8 +824,10 @@ export class SessionHost {
     // Every key the guest is holding, or whose release is still waiting, is let go, or it would stay down.
     releaseKeys(guest) {
         const releases = new Map(guest.held);
-        for (const { input } of guest.scheduled.splice(0)) releases.set(mappingKey(input.mapping), input.mapping);
-        for (const mapping of releases.values()) this.input({ kind: "key", mapping, down: false }, { guest: guest.id });
+        const waiting = this.sequencer ? this.sequencer.release(guest.id) : [];
+        for (const { input } of waiting) releases.set(mappingKey(input.mapping), input.mapping);
+        for (const mapping of releases.values())
+            this.deliverKey(guest.id, { kind: "key", mapping, down: false }, { guest: guest.id }, undefined);
     }
 
     drop(guest, reason) {
@@ -632,6 +837,8 @@ export class SessionHost {
         guest.leftMs = this.log.elapsed();
         guest.leftReason = reason;
         this.departed.push(guest);
+        if (this.taker === guest) this.taker = null;
+        if (guest === this.controller) this.takeBack(`${guestName(guest)} left`);
         this.showStatus();
         clearTimeout(guest.resyncTimer);
         this.releaseKeys(guest);
@@ -648,8 +855,9 @@ export class SessionHost {
         this.stopWatchingPage?.();
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
+        if (!this.sequencer) this.sequence(this.rtcBaseMs);
         for (const guest of this.guests.values()) this.releaseKeys(guest);
-        this.lockstep.execute(0);
+        this.sequencer.execute(0);
         loop.setLockstep(null);
         for (const guest of this.guests.values()) {
             clearTimeout(guest.resyncTimer);
@@ -687,7 +895,14 @@ export class SessionGuest {
         this.buffering = null;
         this.restored = Promise.resolve();
         this.snapshotsRestored = 0;
-        this.lastStamp = null;
+        this.stamper = new KeyStamper(context.model.cyclesPerSecond);
+        // Set while this machine orders the session's inputs, having taken control; the cycle it is to take it at,
+        // once its replay has reached it; and the session clock's base, which it then keeps.
+        this.sequencer = null;
+        this.handoverAt = null;
+        this.rtcBaseMs = undefined;
+        // Keys the host passes on between handing this machine control and its reaching the cycle to take it at.
+        this.keysForControl = [];
         this.lastCommitMs = 0;
         this.left = false;
         this.log = new SessionLog({
@@ -704,6 +919,7 @@ export class SessionGuest {
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
+        this.takeOnKey = false;
         this.panel = new SessionPanel(sessionPane(this));
         this.showStatus();
     }
@@ -722,12 +938,17 @@ export class SessionGuest {
             rttMs: this.rttMs,
             lagMs: this.lastStats?.lagMs,
             leftReason: this.leftReason,
+            control: !this.left && !this.sequencer && !this.roster.some((guest) => guest.control),
         };
         const guests = this.left
             ? []
             : this.roster.map((guest) => (guest.you ? { ...guest, label: `${guest.label} (you)` } : guest));
         const summary = this.left ? "left" : this.lastStats ? `${this.lastStats.lagMs} ms behind` : "joining";
         this.panel.show("guest", summary, [host, ...guests]);
+        const inControl = this.roster.find((guest) => guest.control);
+        const controller = this.sequencer || inControl?.you ? "you" : (inControl?.label ?? null);
+        const canTake = !this.sequencer && this.handoverAt === null && !this.left;
+        this.panel.showControl(this.left ? null : (controller ?? this.hostName ?? "the host"), canTake);
     }
 
     async start() {
@@ -768,33 +989,44 @@ export class SessionGuest {
     // Sent with this page's time, so the host's log shows how long each key was really held, and the cycle it is
     // to go in at, so it keeps its place among the others however the network bunches them.
     input(input) {
+        // At once, as on a machine of its own, unless its keys are catching up after taking control: then keeping
+        // their gaps from the last, so none is cut short.
+        if (this.sequencer) {
+            const now = { cycle: cycleCount(this.context.processor), nowMs: this.log.elapsed() };
+            const behind = this.stamper.catchingUp || this.sequencer.waiting(this.id);
+            if (!behind) this.stamper.mark(now);
+            this.sequencer.queue(this.id, input, {}, behind ? this.stamper.follow(now) : undefined);
+            this.send({ type: "input", input, own: true });
+            return;
+        }
         const at = this.stamp();
         this.log.record("input", { ...input, at });
-        this.send({ type: "input", input, ms: this.log.elapsed(), at, snapshots: this.snapshotsRestored });
+        const take = input.down && this.takeOnKey;
+        this.send({ type: "input", input, ms: this.log.elapsed(), at, snapshots: this.snapshotsRestored, take });
     }
 
-    // A cycle the host will not have passed when the key reaches it. The host was at the end of the last commit
-    // when it sent it, has run on since it came, and runs on for the trip back. When the round trip shrinks, the
-    // stamps come down to it as nextInRun says, never going backwards and never squeezing keys pressed close
-    // together. Undefined before there is a machine to stamp against.
+    requestControl() {
+        if (!this.sequencer) this.send({ type: "take" });
+    }
+
+    // Undefined before there is a machine to stamp against.
     stamp() {
         if (!this.lockstep) return undefined;
         const nowMs = this.log.elapsed();
-        const sinceCommitMs = Math.min(nowMs - this.lastCommitMs, MaxSinceCommitMs);
-        const aheadMs = (this.rttMs ?? UnmeasuredRttMs) + sinceCommitMs + JitterMarginMs;
+        const { upTo } = this.lockstep;
+        // A guest in control is a further round trip away, through the host.
+        const controllerRttMs = this.roster.find((guest) => guest.control && !guest.you)?.rttMs ?? 0;
+        const roundTripMs = (this.rttMs ?? UnmeasuredRttMs) + controllerRttMs;
+        const stamp = this.stamper.stamp({ upTo, roundTripMs, sinceCommitMs: nowMs - this.lastCommitMs, nowMs });
         const cyclesPerMs = this.context.processor.model.cyclesPerSecond / 1000;
-        const at = this.lockstep.upTo + Math.round(aheadMs * cyclesPerMs);
-        const last = this.lastStamp;
-        const gap = last ? Math.round((nowMs - last.ms) * cyclesPerMs) : 0;
-        const stamp = nextInRun(at, -Infinity, last && { went: last.at }, gap, CatchUpGapMs * cyclesPerMs);
-        this.lastStamp = { at: stamp, ms: nowMs };
-        this.stats.peak("stampAheadMs", Math.round((stamp - this.lockstep.upTo) / cyclesPerMs));
+        this.stats.peak("stampAheadMs", Math.round((stamp - upTo) / cyclesPerMs));
         return stamp;
     }
 
     // Starved: the guest has caught the host up and waits on its next commit. Catching up: far enough behind
     // that it runs more than its slice, as LockstepGuest.replay decides.
     execute(cycles) {
+        if (this.sequencer) return this.executeInControl(cycles);
         const { processor } = this.context;
         const { lockstep, stats } = this;
         const cyclesPerMs = processor.model.cyclesPerSecond / 1000;
@@ -808,9 +1040,68 @@ export class SessionGuest {
         if (catchingUp) stats.count("catchingUp");
         else if (lockstep.behind() === 0 && ran < cycles) stats.count("starved");
         stats.peak("maxLagMs", Math.round(lagMs));
+        if (this.handoverAt === cycleCount(processor) && lockstep.behind() === 0) this.takeControl();
+        this.summarise(Math.round(lagMs));
+        return running;
+    }
+
+    // Ordering the inputs, as the host does: it never runs behind anyone.
+    executeInControl(cycles) {
+        const running = this.sequencer.execute(cycles);
+        this.stats.tick("frames");
+        if (document.hidden) this.stats.count("hiddenFrames");
+        this.summarise(0);
+        return running;
+    }
+
+    takeControl() {
+        const { processor } = this.context;
+        this.handoverAt = null;
+        this.sequencer = new Sequencer(processor, {
+            log: this.log,
+            stats: () => this.stats,
+            send: (commit) => {
+                this.stats.tick("commits");
+                this.send(commit);
+            },
+            // The host sees the next commit not follow on, takes control back and starts everyone afresh.
+            onJump: () => {},
+            rtcBaseMs: this.rtcBaseMs,
+        });
+        for (const { source, input, at } of this.keysForControl.splice(0))
+            this.sequencer.queue(source, input, { from: source }, at);
+        this.log.record("control", { at: cycleCount(processor) });
+        notify("You have control.");
+        this.showStatus();
+    }
+
+    // Stops between two executes, at the end of its last commit, and hands back the keys it had not applied yet; or,
+    // asked before it has taken control, gives it up at the cycle it was to take it at.
+    release() {
+        if (this.handoverAt !== null) {
+            const at = this.handoverAt;
+            this.handoverAt = null;
+            this.log.record("released", { at });
+            this.send({ type: "released", at, waiting: this.keysForControl.splice(0) });
+            this.showStatus();
+            return;
+        }
+        if (!this.sequencer) return;
+        const at = cycleCount(this.context.processor);
+        const waiting = this.sequencer.releaseAll();
+        this.sequencer = null;
+        this.lockstep.resync();
+        this.stamper.reset();
+        this.log.record("released", { at });
+        this.send({ type: "released", at, waiting });
+        this.showStatus();
+    }
+
+    summarise(lagMs) {
+        const { stats } = this;
         const summary = stats.take();
         if (summary) {
-            summary.lagMs = Math.round(lagMs);
+            summary.lagMs = lagMs;
             summary.commits = summary.commits ?? 0;
             this.log.record("stats", summary);
             this.send({ type: "stats", stats: summary });
@@ -824,7 +1115,6 @@ export class SessionGuest {
                 () => {},
             );
         }
-        return running;
     }
 
     async awaitAnswer() {
@@ -861,6 +1151,12 @@ export class SessionGuest {
                     this.fail("the host sent a snapshot of an impossible size");
                     return;
                 }
+                // A snapshot from the host makes this machine a replayer again, whatever it was doing; one that was
+                // in control waits for it from where it is, with nothing to replay.
+                if (this.sequencer) this.lockstep.resync();
+                this.sequencer = null;
+                this.handoverAt = null;
+                this.keysForControl = [];
                 this.incoming = { bytes: new Uint8Array(message.bytes), received: 0, commits: [] };
                 break;
             case "commit":
@@ -868,8 +1164,23 @@ export class SessionGuest {
                 break;
             case "roster":
                 this.roster = cleanRoster(message.guests);
+                this.takeOnKey = message.takeOnKey === true;
+                this.panel.showTakeOnKey(this.takeOnKey);
                 this.showStatus();
                 break;
+            case "handover":
+                if (Number.isSafeInteger(message.at)) this.handoverAt = message.at;
+                break;
+            case "release":
+                this.release();
+                break;
+            case "input": {
+                // Someone else's key, passed on by the host for this machine to apply while it is in control.
+                const key = checkedKey(message);
+                if (key && this.sequencer) this.sequencer.queue(key.source, key.input, { from: key.source }, key.at);
+                else if (key && this.handoverAt !== null) this.keysForControl.push(key);
+                break;
+            }
         }
     }
 
@@ -939,8 +1250,9 @@ export class SessionGuest {
         // Before the restore, which would cancel the typist's task and leave the keyboard it disabled.
         this.context.keyboard.cancelPaste();
         restoreSessionSnapshot(processor, restored);
+        this.rtcBaseMs = restored.rtcBaseMs;
         ++this.snapshotsRestored;
-        this.lastStamp = null;
+        this.stamper.reset();
         this.lastCommitMs = this.log.elapsed();
         if (this.lockstep) {
             this.lockstep.resync();
@@ -980,6 +1292,7 @@ export class SessionGuest {
 
     leave(reason = "couldn't join") {
         this.left = true;
+        this.sequencer = null;
         this.stopWatchingPage();
         this.leftReason = reason;
         holdAnalogue(this.context.processor, false);
@@ -998,6 +1311,19 @@ export class SessionGuest {
     }
 }
 
+const guestName = (guest) => guest.name ?? `Guest ${guest.number}`;
+
+/** A key a guest in control handed back, as `{ source, input, at }`, if it is one. */
+function checkedKey(key) {
+    if (key?.input?.kind !== "key" || !isValidInput(key.input)) return null;
+    const { mapping, down } = key.input;
+    return {
+        source: String(key.source).slice(0, MaxReasonLength),
+        input: { kind: "key", mapping: [...mapping], down },
+        at: Number.isSafeInteger(key.at) ? key.at : undefined,
+    };
+}
+
 const finiteOrUndefined = (value) => (Number.isFinite(value) ? value : undefined);
 
 /** The host's list of guests, as the lights can show it whatever the host sent. */
@@ -1010,6 +1336,7 @@ function cleanRoster(guests) {
         lagMs: finiteOrUndefined(guest?.lagMs),
         leftReason: typeof guest?.leftReason === "string" ? guest.leftReason.slice(0, MaxReasonLength) : undefined,
         you: guest?.you === true,
+        control: guest?.control === true,
     }));
 }
 
@@ -1038,6 +1365,7 @@ const sessionPane = (session) => ({
     link: joinLink(session.room),
     saveReport: () => saveReport(session),
     copyLink: () => copyJoinLink(session.room),
+    requestControl: () => session.requestControl(null),
 });
 
 function saveReport(session) {

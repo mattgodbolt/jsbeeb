@@ -34,6 +34,7 @@ describe("SessionPanel", () => {
         link: "https://bbc.xania.org/?client=scorch",
         saveReport: () => {},
         copyLink: () => {},
+        requestControl: () => {},
         ...overrides,
     });
 
@@ -52,7 +53,7 @@ describe("SessionPanel", () => {
         const panel = new SessionPanel(session());
         panel.show("hosting", "1 guest", [{ label: "Guest 1", state: "connecting" }]);
         panel.show("hosting", "2 guests", [
-            { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40 },
+            { label: "Guest 1", state: "ok", rttMs: 84.6, lagMs: 40, control: true },
             { label: "Guest 2", state: "left", leftReason: "it said goodbye" },
         ]);
         expect(readout.hidden).toBe(false);
@@ -61,7 +62,7 @@ describe("SessionPanel", () => {
         expect(lights.map((light) => light.dataset.state)).toEqual(["ok", "left"]);
         expect(lights.every((light) => light.classList.contains("on"))).toBe(true);
         expect(rows(pane)).toEqual([
-            ["Guest 1", "keeping up", "85 ms", "40 ms"],
+            ["Guest 1 (in control)", "keeping up", "85 ms", "40 ms"],
             ["Guest 2", "left: it said goodbye", "", ""],
         ]);
     });
@@ -110,6 +111,44 @@ describe("SessionPanel", () => {
         pane.querySelector(".session-copy-link").click();
         expect(saveReport).toHaveBeenCalledOnce();
         expect(copyLink).toHaveBeenCalledOnce();
+    });
+
+    it("asks for control from its button without keeping the focus, and says who has it", () => {
+        const { pane } = page();
+        const requestControl = vi.fn();
+        const panel = new SessionPanel(session({ requestControl }));
+        panel.open();
+        const take = pane.querySelector(".session-take");
+        take.focus();
+        take.click();
+        expect(requestControl).toHaveBeenCalledOnce();
+        expect(document.activeElement).not.toBe(take);
+        panel.showControl("brave-monkeys-train", true);
+        expect(pane.querySelector(".session-control").textContent).toBe("In control: brave-monkeys-train");
+        expect(take.disabled).toBe(false);
+        panel.showControl("you", false);
+        expect(take.disabled).toBe(true);
+    });
+
+    it("sets whether a key press takes control for everyone, without keeping the focus", () => {
+        const { pane } = page();
+        const setTakeOnKey = vi.fn();
+        new SessionPanel(session({ setTakeOnKey }));
+        const option = pane.querySelector(".session-take-on-key");
+        expect(option.disabled).toBe(false);
+        option.focus();
+        option.click();
+        expect(setTakeOnKey).toHaveBeenCalledWith(true);
+        expect(document.activeElement).not.toBe(option);
+    });
+
+    it("only shows whether a key press takes control when it is not this page's to set", () => {
+        const { pane } = page();
+        const panel = new SessionPanel(session());
+        const option = pane.querySelector(".session-take-on-key");
+        expect(option.disabled).toBe(true);
+        panel.showTakeOnKey(true);
+        expect(option.checked).toBe(true);
     });
 
     it("does nothing on a page without the lights", () => {

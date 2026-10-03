@@ -1,9 +1,9 @@
 // Deterministic lockstep for a shared session: every machine starts from the
 // host's snapshot and applies the same inputs at the same emulated cycle, so
-// they stay identical without sending any machine state. The host is the
-// sequencer; its machine runs as normal, and what it executes, and the inputs it
-// applied between executes, go out as commits that guests replay exactly. See
-// docs/shared-sessions-design.md.
+// they stay identical without sending any machine state. One machine is the
+// sequencer, the host unless someone has taken control; it runs as normal, and
+// what it executes, and the inputs it applied between executes, go out as commits
+// that every other machine replays exactly. See docs/shared-sessions-design.md.
 
 import { Disc, DiscConfig } from "./disc.js";
 import { KeyMatrixSize } from "./via.js";
@@ -124,6 +124,21 @@ export function restoreSessionSnapshot(cpu, snapshot) {
 }
 
 /**
+ * What a joiner needs to become `cpu`, which ordinary snapshots leave part of out: the ROMs, the keys held down,
+ * the reset line, the cycle it is at, the session's CMOS and the wall time its clock counts from.
+ */
+export function sessionSnapshot(cpu, rtcBaseMs) {
+    return {
+        state: cpu.snapshotState({ includeRoms: true }),
+        keyboard: cpu.sysvia.keyboardState(),
+        resetting: !cpu.resetLine,
+        at: cycleCount(cpu),
+        cmos: cpu.sysvia.cmos.sessionState(),
+        rtcBaseMs,
+    };
+}
+
+/**
  * The host's side. Wraps the machine's execute: inputs queued since the last
  * execute are applied at the cycle the machine has reached, then the machine
  * runs, and the commit describing both goes to `send`. If the machine is found
@@ -154,17 +169,8 @@ export class LockstepHost {
         joinSessionCmos(cpu, cpu.sysvia.cmos.sessionState(), this.rtcBaseMs);
     }
 
-    /** What a joiner needs to become this machine, which ordinary snapshots leave part of out. */
     snapshot() {
-        const { cpu } = this;
-        return {
-            state: cpu.snapshotState({ includeRoms: true }),
-            keyboard: cpu.sysvia.keyboardState(),
-            resetting: !cpu.resetLine,
-            at: cycleCount(cpu),
-            cmos: cpu.sysvia.cmos.sessionState(),
-            rtcBaseMs: this.rtcBaseMs,
-        };
+        return sessionSnapshot(this.cpu, this.rtcBaseMs);
     }
 
     input(input) {
@@ -201,7 +207,9 @@ export class LockstepHost {
  * A guest's side. Commits from the host queue up; execute replays them, running
  * no further than the host has, applying each input at the cycle it was applied
  * at and checking the host's hashes where they were taken. `onDesync` is called
- * once when this machine and the host's part, and not again until `resync`.
+ * once when this machine and the host's part, and not again until `resync`, with
+ * the reason, the commits it had not yet replayed (which it drops), and whether it
+ * was this machine that moved by itself.
  */
 export class LockstepGuest {
     constructor(cpu, onDesync) {
@@ -240,7 +248,9 @@ export class LockstepGuest {
      */
     execute(cycles) {
         const { cpu } = this;
-        if (cycleCount(cpu) !== this.reachedAt) this.desync(`this machine moved from ${this.reachedAt} by itself`);
+        if (cycleCount(cpu) !== this.reachedAt) {
+            return this.desync(`this machine moved from ${this.reachedAt} by itself`, true);
+        }
         const running = this.replay(cycles);
         this.reachedAt = cycleCount(cpu);
         return running;
@@ -269,11 +279,12 @@ export class LockstepGuest {
         return runTo(cpu, limit);
     }
 
-    desync(reason) {
+    desync(reason, moved = false) {
+        const dropped = this.commits;
         this.commits = [];
         if (!this.desynced) {
             this.desynced = true;
-            this.onDesync(reason);
+            this.onDesync(reason, dropped, moved);
         }
         return true;
     }
