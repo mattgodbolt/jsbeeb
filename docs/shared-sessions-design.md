@@ -310,20 +310,24 @@ control" button, and an option to take control on a key press, with nothing game
 player asks; the current sequencer names the cycle its next commit starts at and stops there; the new player's
 machine reaches it; the new sequencer runs on from it. The old sequencer applies the key that asked for control,
 and every key it holds stamped at or after the cycle it names, which lose their spacing and fall to the same
-floor, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer. The
-star stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed, each
-starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The host
-stays the reference for desync: it replays every commit it relays, resyncs any guest from its own machine, and if
-its replay disagrees with a guest sequencer, takes control back and resyncs everyone, the sequencer included, so a
-guest cannot make an altered state everyone's. If a guest sequencer leaves or goes silent, during a handover or
-not, the host takes control back the same way, from the last commit it relayed: it lets go of the keys the
-sequencer held, and sequences itself every key it forwarded or held for the handover that no relayed commit
-contained. Anything that moves a machine (a reset, a loaded state, rewind, the debugger) hands control back to the
-host first, so on a guest it is undone as now and on the host everyone resyncs from it. Once a guest holds
-control, everyone else, the host included, is a non-sequencer: their keys take the input delay, picked against the
-sequencer rather than the host. A handover costs about a round trip when the host is one end of it and two through
-the star, plus however far the new sequencer runs behind. Taking control on a key press suits turn-based play; two
-people typing at once would pass control back and forth.
+floor, before naming the cycle; keys pressed during the handover wait at the host and go to the new sequencer, or
+back to the old one, which runs on from the named cycle, if the new player leaves before taking over. The host
+forwards a key stamped before its guest's latest resync marked as stale, so whoever sequences applies it at once.
+The star stays: the host relays the sequencer's commits, checking them as a guest checks the host's (well formed,
+each starting where the last ended, no BREAK), and sends the sequencer everyone else's keys, its own included. The
+host stays the reference for desync: it replays every commit it relays, resyncs any guest from its own machine,
+keeping the relayed commits it has not yet replayed and sending those past the snapshot after it, as a late joiner
+is sent the commits made while its snapshot is compressed, and if its replay disagrees with a guest sequencer,
+takes control back and resyncs everyone, the sequencer included, so a guest cannot make an altered state
+everyone's. If a guest sequencer leaves or goes silent, during a handover or not, the host takes control back the
+same way, from the last commit it relayed: it releases the keys the sequencer had down, and sequences itself every
+key it forwarded, or kept back for the handover, that no relayed commit contained. Anything that moves a machine
+(a reset, a loaded state, rewind, the debugger) hands control back to the host first, so on a guest it is undone
+as now and on the host everyone resyncs from it. Once a guest holds control, everyone else, the host included, is
+a non-sequencer: their keys take the input delay, picked against the sequencer rather than the host. A handover
+costs about a round trip when the host is one end of it and two through the star, plus however far the new
+sequencer runs behind. Taking control on a key press suits turn-based play; two people typing at once would pass
+control back and forth.
 
 **Rollback (tier 4).** For simultaneous real-time play, if the input delay over a long link feels too laggy. Each
 peer applies its own keys at once and assumes everyone else's are unchanged; when a key arrives for a cycle
