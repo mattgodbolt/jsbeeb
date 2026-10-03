@@ -32,12 +32,10 @@ export default defineConfig({
                 extends: true,
                 test: {
                     name: "unit",
-                    include: [
-                        "tests/unit/**/test-*.js",
-                        "tests/tools/**/test-*.js",
-                        "tests/rendezvous/**/test-*.js",
-                        "tests/helpers/**/test-*.js",
-                    ],
+                    // Any test-*.js in a folder under tests/ that no other project claims; tests/test-suite.js
+                    // is the CPU suite, run by node itself.
+                    include: ["tests/*/**/test-*.js"],
+                    exclude: [...configDefaults.exclude, "tests/integration/**", "tests/shader/**"],
                 },
             },
             {
