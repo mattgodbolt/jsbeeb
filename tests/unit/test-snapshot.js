@@ -170,9 +170,11 @@ describe("Snapshot coordinator", () => {
             const original = {
                 small: patterned(Uint16Array, 8),
                 bytes: patterned(Uint8Array, 4096),
+                halves: patterned(Uint16Array, 1000),
+                singles: patterned(Float32Array, 400).map((v) => v / 3),
                 words: patterned(Uint32Array, 6000),
                 signed: patterned(Int32Array, 300).map((v) => -v),
-                floats: patterned(Float64Array, 200).map((v) => v / 7),
+                doubles: patterned(Float64Array, 200).map((v) => v / 7),
                 view: new Uint32Array(patterned(Uint32Array, 600).buffer, 4, 512),
             };
 
