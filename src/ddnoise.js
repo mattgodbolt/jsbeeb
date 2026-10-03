@@ -5,14 +5,15 @@ const SpinUp = 1;
 const Spinning = 2;
 const Volume = 0.25;
 /**
- * seek3.wav is a drive stepping at the DFS's 24 ms a step. Where its first click begins and
+ * seek3.wav is a drive stepping at the DFS's 24 ms a step. Where its first click peaks and
  * how far apart they come were fitted across the file's clicks, so a grain cut on that grid
- * holds one click; a run is such grains at the controller's own step rate.
+ * holds one click; a run is such grains at the controller's own step rate. A click's attack
+ * starts about 5 ms before its peak, so a grain starts in the quiet before that.
  */
 const RunFirstClickSeconds = 0.0085;
 const RunClickSeconds = 0.024209;
 const RunClicks = 73;
-const GrainLeadSeconds = 0.002;
+const GrainLeadSeconds = 0.006;
 const GrainFadeSeconds = 0.002;
 /** Where step.wav's burst gives way to its ring: what a run's last click leaves behind. */
 const SettleOffsetSeconds = 0.024;
