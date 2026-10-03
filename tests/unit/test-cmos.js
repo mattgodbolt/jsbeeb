@@ -248,6 +248,7 @@ describe("CMOS", () => {
         });
 
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
+            vi.stubEnv("TZ", "America/New_York");
             writeRegister(CMOS_ADDR.HOURS, toBcd(10));
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
             const store = [...defaultCmos];

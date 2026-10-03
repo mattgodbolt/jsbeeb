@@ -264,6 +264,27 @@ describe("lockstep sessions", () => {
             expect(firstTrack(shared)).toEqual(firstTrack(host.processor.fdc.drives[1]));
         });
 
+        it("puts the host's disc in a drive the guest had empty", async () => {
+            const image = "discs/elite.ssd";
+            const data = await fdc.load(image);
+            const { guest } = await pair({
+                prepareHost: ({ processor }) => processor.fdc.loadDisc(0, fdc.discFor(image, data)),
+            });
+            expect(guest.machine.processor.fdc.drives[0].disc).toBeDefined();
+        });
+
+        it("fingerprints the registers and the keyboard as well as RAM", async () => {
+            const { host } = await pair();
+            const { processor } = host;
+            const unchanged = stateHash(processor);
+            processor.sysvia.keyDown(keyCodes.A, false);
+            expect(stateHash(processor)).not.toBe(unchanged);
+            processor.sysvia.keyUp(keyCodes.A);
+            expect(stateHash(processor)).toBe(unchanged);
+            processor.x ^= 1;
+            expect(stateHash(processor)).not.toBe(unchanged);
+        });
+
         it("hands over the VIAs as they are, whatever keys the joiner was holding, and a held BREAK", async () => {
             const { host, lockstep, guest } = await pair({
                 prepareGuest: ({ processor }) => processor.sysvia.keyDown(keyCodes.A, false),
