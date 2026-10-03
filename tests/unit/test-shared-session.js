@@ -264,7 +264,7 @@ describe("SessionHost", () => {
         const gone = Object.assign(new Error("Rendezvous list offers failed with status 404"), { status: 404 });
         const listOffers = vi.fn(async () => Promise.reject(gone));
         const createRoom = vi.fn(async () => "secret");
-        const { context } = await hosting([], { listOffers, createRoom });
+        const { host, context } = await hosting([], { listOffers, createRoom });
         expect(createRoom).toHaveBeenCalledTimes(2);
         createRoom.mockRejectedValue(new Error("Room already exists"));
         await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
@@ -272,6 +272,8 @@ describe("SessionHost", () => {
         await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
         expect(listOffers.mock.calls.length).toBe(polls);
         expect(context.rendezvous.createRoom).toHaveBeenCalledTimes(3);
+        host.close();
+        expect(context.loop.setSession).toHaveBeenLastCalledWith(null);
     });
 
     it("welcomes a guest with its model and version, then sends the machine", async () => {

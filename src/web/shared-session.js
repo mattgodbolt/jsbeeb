@@ -144,6 +144,7 @@ export class SessionHost {
         this.guests = new Map();
         this.offersSeen = new Set();
         this.secret = null;
+        this.polling = true;
         this.closed = false;
     }
 
@@ -168,10 +169,10 @@ export class SessionHost {
     }
 
     async poll() {
-        while (!this.closed) {
+        while (this.polling) {
             try {
                 const offers = await this.context.rendezvous.listOffers(this.room, this.secret);
-                if (this.closed) return;
+                if (!this.polling) return;
                 // Each offer is answered once: one whose answer failed would otherwise be retried every poll.
                 for (const offer of offers) {
                     if (!this.offersSeen.has(offer.guest) && this.connectingCount() < MaxConnectingGuests) {
@@ -198,7 +199,7 @@ export class SessionHost {
             notify(`The room "${this.room}" had expired, and is open again.`);
         } catch (error) {
             notify(`The room "${this.room}" has gone, so nobody else can join: ${error.message}`);
-            this.closed = true;
+            this.polling = false;
         }
     }
 
@@ -357,6 +358,7 @@ export class SessionHost {
     close() {
         if (this.closed) return;
         this.closed = true;
+        this.polling = false;
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
         this.lockstep.execute(0);
