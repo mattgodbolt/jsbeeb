@@ -68,9 +68,8 @@ Closer to home:
   Robert has said he's keen on an emulator-agnostic way of describing game actions. The controls part of
   the registry should be worked out with him rather than separately.
 - Rich Talbot-Watkins' [Baron](https://github.com/waitingforvsync/baron) assembler writes every resolved
-  symbol to a JSON file with `--symbols`, which is pretty much a ready-made symbol format for the
-  debugger. Rich was in the original #107 discussion too, and we've been talking with him about source
-  formats since.
+  symbol to a JSON file with `--symbols`, which a converter can turn into a symbol set. Rich was in the
+  original #107 discussion too, and we've been talking with him about source formats since.
 - [bbcmicro.co.uk](https://bbcmicro.co.uk) already launches jsbeeb from its game pages, passing a model
   and `KEY.` remaps in the URL, and its database has per-game keys and a platform. See [the licensing
   rules](media-registry-proposal.md#licensing) before reaching for any of it.
@@ -243,10 +242,11 @@ sit on it, hence smaller regions with `minAnchors`.
 
 The rules: an anchor is four to eight bytes of whole instructions starting at a routine's entry point; no
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
-stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. The debugger
-checks a region when it's about to use it (showing the disassembly, stopping at a breakpoint set by
-name), and needs every anchor to match and at least `minAnchors` (default and minimum 1) of them. A
-region without anchors is never shown automatically, but can be picked by hand.
+stores), except the copies, swaps and loads that put whole programs in place (below); it has no run of two
+or more `NOP`s; and its bytes appear only once in the region. The debugger checks a region when it's
+about to use it (showing the disassembly, stopping at a breakpoint set by name), and needs every anchor
+to match and at least `minAnchors` (default and minimum 1) of them. A region without anchors is never
+shown automatically, but can be picked by hand.
 
 The project rebuilding Superior's PIPELINE byte for byte from source gave the format its second test, and
 most of what follows answers its feedback. According to that feedback, the disc holds several programs
@@ -258,18 +258,23 @@ its start-up code becomes a table of the level's objects once it has run.
 ### Format
 
 A set is in the registry's own format, not an assembler's, because what the debugger needs is narrower
-than any assembler's dump and those dumps change. Baron's, for one, has a JSON object per source file with
-labels and constants alike, so a consumer can't tell which numbers are addresses, and nothing says which
-program a label belongs to. Converters from each assembler or disassembler sort that out once, and a
-build that knows its own sections can emit a set directly. Each program, with what's always loaded along
-with it, is its own set, so its globals (zero page variables, the tune in page 8) show only when that
-program is there. Names are addresses only, since a constant used as an address is the one thing a
-debugger would get wrong; whether a name is code or data can be added later if a debugger finds a use for
-it, as new fields can.
+than any assembler's dump and those dumps change. Baron's, for one, puts labels and constants alike in
+one JSON object per source file, so a consumer can't tell which numbers are addresses, and, as the
+PIPELINE feedback points out, it doesn't say which section a label is in, so there's no load or run
+range to tie it to. Converters from each assembler or disassembler sort that out once, and a build that
+knows its own sections can emit a set directly. Each program, with what's always loaded along with it,
+is its own set, so its globals (zero page variables, the tune in page 8) show only when that program is
+there. Names are addresses only, since a constant shown as an address is the one thing a debugger would
+get wrong; whether a name is code or data can be added later if a debugger finds a use for it, as new
+fields can.
 
 A region's names win over its set's globals at the same address because that's where code turns into
 data: when the start-up code is overwritten, its region stops matching and the global naming the table
 shows instead.
+
+Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
+when someone else's file changes. That costs nothing extra, since a disassembly without a licence that
+allows it is a link only and never a set anyway.
 
 ### Where to cut regions
 
@@ -277,15 +282,15 @@ Every anchor in a region has to match. Letting a region tolerate one failing anc
 near-identical overlays both match, and the PIPELINE stubs share most of their candidate anchors. When
 an anchor fails while the code around it is still there, the region shows plain addresses for a while,
 which is the safe direction. So the work is in cutting regions where memory changes, using what the
-build or the listing already says:
+build or the listing already says. Copies, swaps and loads whose bounds the code gives (a block copy's
+inline arguments, an `OSFILE` parameter block) say where to cut, and don't rule out anchors in their
+range, since they move a whole program rather than change bytes within one:
 
-- Ranges the program copies or swaps, whose bounds are usually constants in the code. Cutting the game at
-  `&0D00` and `&1D00` means only the swapped part loses its names while the data file loads; the routine
-  doing the loading, outside that range, keeps them.
-- Code that's overwritten once it has run is a region of its own, with its anchors on the bytes that get
-  overwritten (the one exception to the store rule), so its names go when it does.
-- File loads whose address the code gives (an `OSFILE` parameter block, say) count as stores over that
-  range.
+- Cutting the game at `&0D00` and `&1D00`, the bounds of its swap, means only the swapped part loses its
+  names while the data file loads; the routine doing the loading, outside that range, keeps them.
+- Code that's overwritten once it has run is a region of its own, cut out of the region around it, with
+  its anchors on the bytes that get overwritten (the other exception to the store rule), so its names go
+  when it does.
 
 Writes no static analysis sees (the filing system's workspace, copies through a computed pointer) can
 still land on an anchor. The region then loses its names until the bytes come back, which is acceptable
@@ -296,15 +301,18 @@ There's also no way to label code that's parked somewhere it can't run, such as 
 game while it sits in screen memory; that would need a region with an offset, which isn't worth a field.
 
 Overlays are told apart by an anchor on a byte where they differ. The chooser looks for those, and the
-build checks that any two overlapping regions in a set have anchors that disagree about some byte. That
-means two regions of one set can never both match, so the debugger needs no rule for it. Between sets,
-the image's own records win, and anything else is the user's choice; merging names that happen to agree
-isn't worth its rules.
+build checks that any two overlapping regions in the sets of one record chain have anchors that disagree
+about some byte. On PIPELINE that covers the stubs, the game and the editors, which are separate sets
+hanging off one version. So the sets a disc's own records give can never both match, and the debugger
+needs no rule for it. Anything else that matches twice is the user's choice; merging names that happen
+to agree isn't worth its rules.
 
 Anchors are read from the memory being looked at, which covers sideways banks and shadow RAM without a
 field saying which bank a region is in, and works for a ROM whatever slot it's in. A breakpoint set by
-name checks the name's region when it's hit, so a breakpoint on the game's main loop doesn't stop when
-the level designer runs at that address.
+name stops only if the name applies when it's hit (its region matches, or for a global, any region of
+its set), so a breakpoint on the game's main loop doesn't stop when the level designer runs at that
+address. The price is that a write that breaks an anchor also quietly disarms the breakpoint; a
+breakpoint set by address always stops, for anyone who'd rather have that.
 
 The chooser takes a neutral input: each section's bytes at its run address, its instruction starts and
 labels, and the stores whose targets the assembler or disassembler could work out, plus the cuts and the
@@ -319,14 +327,18 @@ catalogue byte. Looking up a catalogued file's hash wouldn't help there, since o
 files are only the loader stubs, and those differ between copies while the code that matters is in
 sectors the catalogue doesn't cover.
 
-Since anchors are what make showing names safe, finding a set can be loose. The build publishes every
-set's regions and anchors in one file, and a client with nothing better checks memory against it. That
-covers used discs, cracks, compilations and tapes in one go. It stays small, a few dozen anchors of
-eight bytes or so per set, and it's fetched only when the debugger wants names and the records gave
-none. Checking it costs no more than checking a record's set, since only the regions covering the
-address being shown are read. A false match needs several routine entry points with the same bytes at the same
-addresses, which mostly happens when it's the same code, and then the names are usually right; a match
-from the image's own records still wins over one from the index.
+Since anchors check the code itself, a set can be found by its anchors. The build publishes every set's
+regions and anchors in one index, and a debugger with nothing from the records checks memory against it.
+That finds the set for any copy whose code is unchanged and where it was: a used disc, a crack that only
+touched the loader, a compilation that loads the game as it was. It doesn't help where code has moved,
+as it often has on a tape release. A match from the index is offered rather than shown, because the
+index tries every set against any program, and one small region with a short anchor at a common address
+could match something unrelated; a person can see at once whether the names fit. The index grows with
+the registry, at a few dozen anchors of eight bytes or so per set, and it's fetched only when the
+debugger wants names and the records gave none. Checking it reads every indexed region covering the
+address being shown, a few thousand byte comparisons even if hundreds of sets cover it, which is nothing
+next to drawing the view.
+It carries each set's licence, so a set found this way is attributed like any other.
 
 ## Licensing
 
