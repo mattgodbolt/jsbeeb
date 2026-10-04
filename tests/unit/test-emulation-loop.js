@@ -2,9 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmulationLoop } from "../../src/web/emulation-loop.js";
-import { domFromIndexHtml, toasts } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
+// Bootstrap's stand-in for a transitionend in jsdom fires after 5 ms.
+const ToastShowMs = 10;
 
 describe("EmulationLoop", () => {
     let deps;
@@ -51,11 +53,12 @@ describe("EmulationLoop", () => {
         };
     });
 
-    afterEach(() => {
+    // The loop's ticks rearm themselves, so teardownDom cannot run the timers out. A toast
+    // still has to finish showing, on Bootstrap's own timer, before it can be disposed.
+    afterEach(async () => {
+        vi.advanceTimersByTime(ToastShowMs);
         vi.clearAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
+        await teardownDom();
     });
 
     const make = () => new EmulationLoop(deps);
