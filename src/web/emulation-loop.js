@@ -24,7 +24,8 @@ class VirtualSpeedUpdater {
         this.cycles = 0;
         this.time = 0;
         this.v = document.querySelector(".virtualMHz");
-        this.header = document.getElementById("virtual-mhz-header");
+        this.normalIcon = document.getElementById("speed-normal");
+        this.turboIcon = document.getElementById("speed-turbo");
         this.speedy = false;
         this.display();
     }
@@ -32,7 +33,10 @@ class VirtualSpeedUpdater {
     update(cycles, time, speedy) {
         this.cycles += cycles;
         this.time += time;
+        if (speedy === this.speedy) return;
         this.speedy = speedy;
+        this.normalIcon.hidden = speedy;
+        this.turboIcon.hidden = !speedy;
     }
 
     display() {
@@ -43,7 +47,6 @@ class VirtualSpeedUpdater {
             if (this.cycles >= 10 * this.cpuSpeed) {
                 this.cycles = this.time = 0;
             }
-            this.header.style.color = this.speedy ? "red" : "white";
         }
         setTimeout(() => this.display(), VirtualMhzUpdateMs);
     }

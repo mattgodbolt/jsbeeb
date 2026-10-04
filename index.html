@@ -383,17 +383,28 @@
             <span class="hdr">shift<br />lock</span>
             <span class="led keyboard" id="shiftlight"></span>
           </div>
-          <div class="cell" title="Turbo: running as fast as possible (Alt-T, or fast tape while the motor runs)">
-            <span class="hdr">turbo</span>
-            <span class="led keyboard" id="turbolight"></span>
-          </div>
           <div class="cell bbc-only econet" title="Econet activity">
             <span class="hdr">econet<br />tx/rx</span>
             <span class="led disc" id="networklight"></span>
           </div>
           <div class="cell" title="Emulated processor speed">
-            <span class="hdr" id="virtual-mhz-header">virtual<br />MHz</span>
-            <span class="virtualMHz"></span>
+            <span class="hdr">virtual<br />MHz</span>
+            <span class="speed">
+              <span
+                id="speed-normal"
+                data-icon="play-fill"
+                role="img"
+                title="Normal speed. Alt-T turns turbo on and off, outside a shared session."
+              ></span>
+              <span
+                id="speed-turbo"
+                data-icon="fast-forward-fill"
+                role="img"
+                title="Turbo: as fast as it can go. Alt-T turns it on and off; fast tape turns it on while the cassette motor runs."
+                hidden
+              ></span>
+              <span class="virtualMHz"></span>
+            </span>
           </div>
         </div>
         <div class="session-readout" id="session-panel" hidden>

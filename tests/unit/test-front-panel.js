@@ -19,7 +19,7 @@ describe("FrontPanel", () => {
             atomppia: { motorOn: false, playTape: vi.fn(), stopTape: vi.fn(), rewindTape: vi.fn() },
             econet: null,
         };
-        loop = Object.assign(new EventTarget(), { isSpeedy: () => false });
+        loop = new EventTarget();
     });
 
     afterEach(teardownDom);
@@ -39,24 +39,6 @@ describe("FrontPanel", () => {
             expect(lit("capslight")).toBe(true);
             expect(lit("drive1")).toBe(true);
             expect(lit("shiftlight")).toBe(false);
-        });
-
-        it("light turbo while the machine runs speedy", () => {
-            const panel = make();
-            loop.isSpeedy = () => true;
-            panel.syncLights();
-            expect(lit("turbolight")).toBe(true);
-            loop.isSpeedy = () => false;
-            panel.syncLights();
-            expect(lit("turbolight")).toBe(false);
-        });
-
-        it("show turbo on an Atom too", () => {
-            const panel = make(true);
-            loop.isSpeedy = () => true;
-            panel.syncLights();
-            expect(lit("turbolight")).toBe(true);
-            expect(document.getElementById("turbolight").closest(".cell").style.display).toBe("");
         });
 
         it("only touch the DOM when something changed", () => {
@@ -81,6 +63,7 @@ describe("FrontPanel", () => {
             make(true);
             expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("none");
             expect(document.getElementById("motorlight").closest(".slot-readout").style.display).toBe("");
+            expect(document.getElementById("speed-turbo").closest(".cell").style.display).toBe("");
         });
 
         it("shows the BBC lights on a BBC", () => {

@@ -181,8 +181,21 @@ span.accesskey {
   padding: 0 2px;
 }
 
-#leds .virtualMHz {
+#leds .speed {
+  display: flex;
+  align-items: center;
+  gap: 3px;
   margin-top: 2px;
+}
+
+#leds .speed [data-icon] {
+  color: #888;
+}
+
+#leds .speed [data-icon] > svg {
+  display: block;
+  width: 1.15em;
+  height: 1.15em;
 }
 
 /* A slot reads down: its header, the name of what it holds, then its LED with the tape counter beside. */

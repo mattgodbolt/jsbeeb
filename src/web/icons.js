@@ -2,6 +2,7 @@ import arrowCounterclockwise from "bootstrap-icons/icons/arrow-counterclockwise.
 import cassette from "bootstrap-icons/icons/cassette.svg?raw";
 import clockHistory from "bootstrap-icons/icons/clock-history.svg?raw";
 import display from "bootstrap-icons/icons/display.svg?raw";
+import fastForwardFill from "bootstrap-icons/icons/fast-forward-fill.svg?raw";
 import floppy from "bootstrap-icons/icons/floppy.svg?raw";
 import gear from "bootstrap-icons/icons/gear.svg?raw";
 import headphones from "bootstrap-icons/icons/headphones.svg?raw";
@@ -19,6 +20,7 @@ const Icons = {
     cassette,
     "clock-history": clockHistory,
     display,
+    "fast-forward-fill": fastForwardFill,
     floppy,
     gear,
     headphones,
