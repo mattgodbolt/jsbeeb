@@ -153,8 +153,9 @@ and anchors. It has at most one `link`; any further disassembly of the same code
 debugger asks whether to fetch the linked names, showing the author's `home` and the site the file comes
 from, and remembers the answer for that `home`. If the user agrees, it fetches the file from the author's
 site, converts it, and adds the names to the set's: those in a region's range are that region's, the rest
-are globals, and stored names win where both name an address. So a linked file has to hold only the
-set's program. The `url` and `home` are https, and the client checks the names as the build does.
+are globals, and stored names win: a linked name for an address the set already names, or that the set
+gives to another address, is dropped. So a linked file has to hold only the set's program. The `url` and
+`home` are https, and the client checks the names as the build does.
 
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
 `"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
@@ -173,10 +174,11 @@ chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses, told apart by anchors on bytes where they differ.
 The anchor chooser tests every candidate anchor against every title's files in the corpus at the same
-address, and the pull request that adds a set carries its report of any other title a region matches,
-for the reviewer to judge; the same code becomes one shared set. The build checks each set on its own
-(the schema and licence, anchor lengths, `minAnchors`, anchors inside their regions, none in
-`&FC00-&FEFF`) but doesn't prove two sets apart. If regions of different sets still match at the same
+address, and every indexed region against the new program, and the pull request that adds a set carries
+its report of any other title a region matches, for the reviewer to judge; the same code becomes one
+shared set. The build checks each set on its own (the schema and licence, anchor lengths, `minAnchors`,
+anchors inside their regions, none in `&FC00-&FEFF`, `system` only on a set whose regions lie in
+`&C000-&FFFF`) but doesn't prove two sets apart. If regions of different sets still match at the same
 address, the debugger shows neither and offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
@@ -186,10 +188,10 @@ over part of it. On the BBC Micro, the Master, the Compact and the Electron, no 
 `&C000-&DFFF`; and a sideways ROM is cut at `&9000` and `&B000` because the Master's ANDY can be paged
 over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF` ([why](media-registry-design-notes.md#roms)).
 
-The build publishes `symbols/index.json`: every set's `url` (relative to the index), `licence` and, for a
-linked set, `link`, and its `regions` with their anchors but without their `symbols`. The debugger
-fetches the index when it first wants names, checks every indexed region each time the machine stops, and
-fetches only the sets that match ([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
+The build publishes `symbols/index.json`: every set's `url` (relative to the index), `licence`, `link` if
+it has one, and its `regions` with their anchors but without their `symbols`. The debugger fetches the
+index when it first wants names, checks every indexed region each time the machine stops, and fetches
+only the sets that match ([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
 
 ```json
 {
@@ -264,8 +266,8 @@ A build step enforces these ([why](media-registry-design-notes.md#licensing)):
 - Which keys a game uses is a fact; the text of its instructions is content.
 - A symbol set stores names from someone else's work only under a licence or recorded permission that
   allows it; otherwise it links them where it can, and where it can't, or the author has refused reuse, a
-  record links to the work. Sources under the GPL aren't used for sets, stored or linked, though a record
-  can link to them.
+  record or a set links to the work. Sources under the GPL aren't used for sets, stored or linked, though
+  a record or a set can link to them.
 
 ## Filling it in
 

@@ -246,12 +246,12 @@ The rules: an anchor is four to eight bytes of whole instructions starting at a 
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
 stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. Each
 exception is explained below: a copy, swap or load picked as moving the program, whose range covers the
-whole region, doesn't count as a store; run-once code is anchored on the bytes that get overwritten; a
-region with no code, such as an adventure's database, is anchored on data its interpreter never writes;
-and a ROM's anchors can sit anywhere but `&FC00-&FEFF`. The debugger checks regions each time the machine
-stops and when a breakpoint set by name is hit, and a region needs every anchor to match and at least
-`minAnchors` (default and minimum 1) of them. A region without anchors is never shown automatically, but
-can be picked by hand.
+whole region, doesn't count as a store; run-once code is anchored on the bytes that get overwritten; an
+anchor that tells two overlays apart needn't start at a routine's entry; a region with no code, such as
+an adventure's database, is anchored on data its interpreter never writes; and a ROM's anchors can sit
+anywhere but `&FC00-&FEFF`. The debugger checks regions each time the machine stops and when a breakpoint
+set by name is hit, and a region needs every anchor to match and at least `minAnchors` (default and
+minimum 1) of them. A region without anchors is never shown automatically, but can be picked by hand.
 
 The project rebuilding Superior's PIPELINE byte for byte from source gave the format its second test, and
 most of what follows answers its feedback. According to that feedback, the disc holds several programs
@@ -351,20 +351,24 @@ rules. The chooser warns when a single candidate is all that tells two overlays 
 change to the store rule could quietly take it away; according to the feedback, the PIPELINE stubs differ
 at only one labelled instruction, `read_whole_run` at `&0916`.
 
-Sets made separately are told apart by the corpus check ([below](#code-that-turns-up-elsewhere)): the
-chooser tests every candidate anchor against every title's files at the same address, and the pull
-request that adds a set carries its report for the reviewer to read. That's the trade: the build doesn't
-prove two sets apart, a person reading the report does. The build has no images, only anchors, so a
-proof would need every pair of overlapping regions to anchor a common address where they differ, which
-means extra anchors on every earlier set a new one overlaps, and that cost grows with the registry. The
-corpus check costs the same however big the registry gets, and it's the stronger test, since it tries
-anchors against real code rather than against other sets' anchors. It's also what the measurement was
-for: the worry was anchors matching unrelated code, and across the corpus the 2,228 matches between
-titles were all in files at least 10% alike, nearly all at 90% or more, and all the same code or data.
-The build checks what it can without images, set by set: the schema and licence, anchor lengths,
-`minAnchors`, anchors inside their regions, and none in `&FC00-&FEFF`. Anything that slips through falls
-to the debugger's rule: when regions of two sets match at the same address, it shows neither and offers
-the choice, as it does when a region picked by hand clashes with one that matches.
+Sets made separately are told apart by the corpus check ([below](#code-that-turns-up-elsewhere)). The
+chooser tests every candidate anchor against every title's files at the same address, and runs every
+region in the index over the new program's own bytes at its run address, which is the debugger's
+per-stop check, so an earlier set that would match the new program shows up too. The pull request that
+adds a set carries the report for the reviewer to read. That's the trade: the build doesn't prove two
+sets apart, a person reading the report does. The build has no images, only anchors, so a proof would
+need every pair of overlapping regions to anchor a common address where they differ, which means extra
+anchors on every earlier set a new one overlaps, and that cost grows with the registry. The corpus check
+costs the same however big the registry gets, and tries anchors against real code rather than against
+other sets' anchors, and the measurement shows what it finds: across the corpus, the 2,228 matches
+between titles were all in files at least 10% alike, nearly all at 90% or more, and all the same code or
+data. Its limit is the corpus's: files sit at their load addresses, so code that's relocated or
+decrypted as it loads, or that no catalogued file holds, isn't looked at, and a report with nothing in it
+says only that nothing at those addresses matched. The build checks what it can without images, set by
+set: the schema and licence, anchor lengths, `minAnchors`, anchors inside their regions, none in
+`&FC00-&FEFF`, and `system` only on a set whose regions lie in `&C000-&FFFF`. Anything that slips through
+falls to the debugger's rule: when regions of two sets match at the same address, it shows neither and
+offers the choice, as it does when a region picked by hand clashes with one that matches.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
 global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
@@ -381,12 +385,12 @@ ranges to avoid. The prototype reads a py8dis listing; BeebAsm and Baron builds 
 ### Finding sets by their anchors
 
 Records don't list symbol sets, because an image's key is the wrong thing to find them by. A key names
-one dump of one disc, while the code a set names turns up under many keys. PIPELINE's designers save to
-the game disc, so a copy that's been used has a new key, and the same code is in a crack that left it
-where it was, a compilation that loads the game as it was, a cheat disc, or a tape that loads it at the
-same address. Anchors check the code itself, so finding sets by them is one path for all of those, the
-disc we know included. It doesn't help where code has moved, as it often has on a tape release; a set
-made for that copy is then found the same way.
+one dump of one disc, while the code a set names turns up under many keys. PIPELINE's level designer and
+its Mission Generator (a BASIC program, so no set) save to the game disc, so a copy that's been used has
+a new key, and the same code is in a crack that left it where it was, a compilation that loads the game
+as it was, a cheat disc, or a tape that loads it at the same address. Anchors check the code itself, so
+finding sets by them is one path for all of those, the disc we know included. It doesn't help where code
+has moved, as it often has on a tape release; a set made for that copy is then found the same way.
 
 Looking up a catalogued file's hash wouldn't do as well. Our corpus has a PIPELINE copy that differs from
 a known capture only in a catalogue byte, the count of writes to it, and its stubs match the capture's,
@@ -394,12 +398,12 @@ so that lookup would find it; but on PIPELINE the catalogued files are only the 
 differ between the copies we have, while the code that matters is in sectors the catalogue doesn't cover.
 Anchors cope with both cases in the PIPELINE feedback. A used copy keeps whatever code its saves haven't
 covered. DFS can't see the sectors the catalogue doesn't cover, so a save goes after the last catalogued
-file and onto the game's code: according to the feedback, a second saved level lands on the game's first
-sectors, and a single mission or graphics set saved from the Mission Generator covers some or all of the
-game, which then no longer starts. The regions anchored in what was overwritten stop matching, which is
-right, and the rest still match. And Stairway To Hell's PIPELINE is a crack that left the code where it
-was: its game and graphics editor are byte for byte the originals, and the level designer's three changed
-bytes are mid-routine, away from any anchor, so all three sets match.
+file, which is just short of the game's code: according to the feedback, the first saved level fits, a
+second lands on the game's first sectors, and a single mission or graphics set saved from the Mission
+Generator covers some or all of the game, which then no longer starts. The regions anchored in what was
+overwritten stop matching, which is right, and the rest still match. And Stairway To Hell's PIPELINE is a
+crack that left the code where it was: its game and graphics editor are byte for byte the originals, and
+the level designer's three changed bytes are mid-routine, away from any anchor, so all three sets match.
 
 The build publishes every set's location, licence, `link` if it has one, and regions with their anchors,
 without the names, in `symbols/index.json`. The debugger fetches it once, the first time it wants names,
@@ -409,14 +413,14 @@ session. Memory doesn't change while the machine is stopped, so each time it sto
 every indexed region once and keeps the answers until memory can change: the machine runs, or the user
 edits memory, restores a snapshot or resets. Most regions fail on the first byte of their first anchor,
 so a few thousand regions cost little next to drawing the view. Only a set that matches has its names
-fetched, and a linked set's only once the user has agreed. Repton 2's set from the findings, 11 anchors
-in three regions, takes under 1 KB of the index, so hundreds of sets come to a few hundred KB. If the
+fetched, and linked names only once the user has agreed. Repton 2's set from the findings, 11 anchors in
+three regions, takes under 1 KB of the index, so hundreds of sets come to a few hundred KB. If the
 registry grows past a couple of thousand sets, the index can be split into one static file per 256-byte
 page, listing the regions over that page. Names need more than the pages on screen, though (the pages
 operands point into, the MOS's for system globals, and every set that might name a global shown on its
 own), so that's for when one file gets too big, not before.
 
-A set that matches is shown, not offered (a linked set once the user has agreed to fetch its names).
+A set that matches is shown, not offered (its linked names once the user has agreed to fetch them).
 Matching anchors only show that the anchored bytes are the same, but in the corpus a region that matches
 another title is that title's copy of the same code or data, nearly always with 90% or more of the file
 identical ([below](#code-that-turns-up-elsewhere)), so its names fit. Where two versions differ between
@@ -437,16 +441,17 @@ that code fit it wherever it turns up, as far as the code is the same.
 The risk is a set that names game-specific things (its data, its globals) in a region anchored only on
 shared code. A Level 9 game's set that took in the interpreter would label every Level 9 game's data with
 that one game's names. So the chooser checks candidate anchors against the corpus, with files placed at
-their load addresses, and flags any region that matches another title, leaving out titles the records
-already join to it (aliases, versions, `contains`), for a person to judge; the report goes in the pull
-request that adds the set. The same game elsewhere is fine. Programs that differ only where they can't
-both carry an anchor (in variables, a table of high scores, a run of `NOP`s a cheat poked) are the same
-code too. Shared code becomes a set of its own, such as one Level 9 interpreter set for every Level 9
-game, and each game's set keeps to what's its own: for an adventure, its database, in a region anchored
-on data the interpreter never writes (its text, vocabulary and action tables, not where the objects are).
-The interpreter's stores go through pointers, so no store rule finds those parts; a person, or a reader
-for the game's format, picks them. The interpreter's code then takes the database's names from another
-set's matching region. A shared set has one licence, so a second contributor's names join it only under a
+their load addresses, and flags any region that matches another title, for a person to judge; the report
+goes in the pull request that adds the set. A match in a title the records already join to it (an alias,
+a version, `contains`) isn't shared code, but it's reported all the same, since the two sets have to be
+told apart or made one. The same game elsewhere is fine. Programs that differ only where they can't both
+carry an anchor (in variables, a table of high scores, a run of `NOP`s a cheat poked) are the same code
+too. Shared code becomes a set of its own, such as one Level 9 interpreter set for every Level 9 game,
+and each game's set keeps to what's its own: for an adventure, its database, in a region anchored on data
+the interpreter never writes (its text, vocabulary and action tables, not where the objects are). The
+interpreter's stores go through pointers, so no store rule finds those parts; a person, or a reader for
+the game's format, picks them. The interpreter's code then takes the database's names from another set's
+matching region. A shared set has one licence, so a second contributor's names join it only under a
 licence that combines with the first's; otherwise they can be its `link`, or a plain link once it has
 one.
 
@@ -488,12 +493,13 @@ Most disassemblies state no licence, so a set can't store their names, but it ca
 with only a link keeps just what's ours, its regions and anchors, which come from the code's own bytes,
 and where the names live. A set can also store some names and link others: our MOS sets store the
 documented interface and the system globals, and can link a fuller disassembly of the same ROM, whose
-names show once the user agrees. Stored names win where both name an address, so system globals need no
-prompt. A set has one link, so any further disassembly of the same code is a plain link, in the set's
-`links` or a record's. jsbeeb fetches linked names from the author's site when someone wants them, and
-the registry never stores or republishes them. The debugger asks before fetching, because it's someone
-else's work from someone else's site: it shows the author's `home` and the site the file comes from, and
-remembers the answer for that `home`.
+names show once the user agrees. System globals are stored, so they need no prompt, and stored names win
+where the two disagree: a linked name for an address the set already names, or that the set already gives
+to another address, is dropped. A set has one link, so any further disassembly of the same code is a
+plain link, in the set's `links` or a record's. jsbeeb fetches linked names from the author's site when
+someone wants them, and the registry never stores or republishes them. The debugger asks before fetching,
+because it's someone else's work from someone else's site: it shows the author's `home` and the site the
+file comes from, and remembers the answer for that `home`.
 
 The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, never
 a branch), so the names and the anchors stay in step. The build fetches each pinned file once to check
@@ -516,11 +522,11 @@ CC0 for our own data lets every emulator take it, as MAME does with its software
 
 Disassemblies need particular care. Several published BBC disassemblies have no licence at all, and some
 say outright that no reuse is permitted. Without a licence, a set can only link their names ([linked
-sets](#linked-sets)); where reuse is refused, they're a plain link at most, unless and until their
-authors tell us otherwise. Sources under the GPL aren't used for sets, stored or linked, though a record
-can link to them: the GPL's terms on what's made from a source are more trouble than a registry of data
-other emulators take should carry. A permission such as the Atom sources' travels with its set in the
-set's `licence`.
+sets](#linked-sets)); where reuse is refused, they're a plain link at most, from a record or a set,
+unless and until their authors tell us otherwise. Sources under the GPL aren't used for sets, stored or
+linked, though a record or a set can link to them: the GPL's terms on what's made from a source are more
+trouble than a registry of data other emulators take should carry. A permission such as the Atom sources'
+travels with its set in the set's `licence`.
 
 Acorn's documented interface is different. The MOS's entry points, vectors and workspace, as Acorn
 documented them for programmers, are a published interface rather than anyone's disassembly, so sets of
