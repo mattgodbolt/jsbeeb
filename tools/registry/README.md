@@ -70,8 +70,8 @@ The studies:
   game running headless.
 - `anchor-collisions.js`: how often anchor-sized runs of bytes turn up at the same address in another
   title, with Stairway To Hell DFS files placed at their load addresses (leaving out BASIC programs, tiny
-  files, files of one repeated byte and files catalogued to load in page zero) (`--examples` lists the
-  regions that match, and how much of each file matches).
+  files, files of one repeated byte and files catalogued to load in page zero). `--examples` lists the
+  regions that match, and how much of each file matches.
 - `boot-survey.js`, `boot-survey-analyse.js`, `boot-survey-screen.js`: boots every distinct disc on a
   Model B and a Master and records how far it gets. It takes a couple of hours:
 
