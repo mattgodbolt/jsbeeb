@@ -282,10 +282,11 @@ Every anchor in a region has to match. Letting a region tolerate one failing anc
 near-identical overlays both match, and the PIPELINE stubs share most of their candidate anchors. When
 an anchor fails while the code around it is still there, the region shows plain addresses for a while,
 which is the safe direction. So the work is in cutting regions where memory changes, using what the
-build or the listing already says. Copies, swaps and loads whose bounds the code gives (a block copy's
-inline arguments, an `OSFILE` parameter block) say where to cut. Once regions are cut at those bounds,
-such a store covers whole regions, moving them rather than changing bytes within them, so it doesn't rule
-out anchors there; a copy over part of a region (a level's table into the middle of the code) still does:
+build or the listing already says. The code gives the bounds of its copies, swaps and loads (a block
+copy's inline arguments, an `OSFILE` parameter block), and whoever cuts the regions picks the ones that
+move a program: the copy that puts it in place, a swap that parks it. Cut at their bounds, those cover
+whole regions and don't rule out anchors in them. Any other store, such as a level's data copied into a
+table, still does:
 
 - Cutting the game at `&0D00` and `&1D00`, the bounds of its swap, means only the swapped part loses its
   names while the data file loads; the routine doing the loading, outside that range, keeps them.
