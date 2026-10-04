@@ -366,10 +366,11 @@ is the corpus's: files sit at their load addresses, so code that's relocated or 
 that no catalogued file holds, isn't looked at, nor is a match split across two files that load together,
 and a report with nothing in it says only that nothing at those addresses matched. The build checks what
 it can without images, set by set: the schema and licence, anchor lengths, `minAnchors`, anchors inside
-their regions, none in `&FC00-&FEFF`, and `system` only on a set whose regions lie in `&C000-&FFFF`.
-Anything that slips through falls to the debugger's rule: when regions of two sets match at the same
-address, it shows neither and offers the choice, as it does when a region picked by hand clashes with one
-that matches.
+their regions, none in `&FC00-&FEFF`, and `system` only on a set in the registry's list of MOS sets. That
+list is kept by hand, since no address range tells a MOS from other ROMs: the Atom's BASIC,
+floating-point and DOS ROMs sit at `&C000-&EFFF`, below its kernel. Anything that slips through falls to
+the debugger's rule: when regions of two sets match at the same address, it shows neither and offers the
+choice, as it does when a region picked by hand clashes with one that matches.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
 global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
