@@ -504,22 +504,25 @@ to another address, is dropped. A set has one link, so any further disassembly o
 plain link, in the set's `links` or a record's. jsbeeb fetches linked names from the author's site when
 someone wants them, and the registry never stores or republishes them. The debugger asks before fetching,
 because it's someone else's work from someone else's site: it shows the author's `home` and the site the
-file comes from, and remembers the answer for that `home`.
+file comes from, and remembers the answer for that `home` and that site together, so agreeing once never
+sends a request to a site the user wasn't shown.
 
 The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, never
-a branch), so the names and the anchors stay in step. The build fetches each pinned file once to check
+a branch), so the names and the anchors stay in step, and the set records the file's `sha256`, since a
+URL alone can't prove the file won't change. The build fetches each pinned file once to check its digest,
 that it parses and that labels land in each of the set's regions, and stores nothing; the client checks
-the names the same way when it fetches them, and the `url` and `home` are https. There are limits. The
-author's host has to allow fetches from another site and serve a file pinned to a version: GitHub's raw
-files at a commit do, a page that changes (GitHub Pages, most personal sites) doesn't, and those stay a
-plain link. The file has to carry addresses (a listing, a symbol or label file, an assembler's report),
-since jsbeeb won't assemble anything, and its format has to say which names are addresses, since
-constants stay out. The client gives a region the names in its range and makes the rest globals, so the
-file has to hold only the set's program, and a name the program uses as a global but that lies in a
-region's range, such as a table over run-once code, becomes that region's and goes when it does. And each
-format needs a small converter in jsbeeb, so only a few common ones are accepted. Where an author has
-said no reuse, their work is a plain link at most and is never fetched. Asking authors for a licence
-still helps: a stored set needs no converter, and survives the source moving or vanishing.
+the digest and the names the same way when it fetches them, and drops a file that doesn't match, and the
+`url` and `home` are https. There are limits. The author's host has to allow fetches from another site
+and serve a file pinned to a version: GitHub's raw files at a commit do, a page that changes (GitHub
+Pages, most personal sites) doesn't, and those stay a plain link. The file has to carry addresses (a
+listing, a symbol or label file, an assembler's report), since jsbeeb won't assemble anything, and its
+format has to say which names are addresses, since constants stay out. The client gives a region the
+names in its range and makes the rest globals, so the file has to hold only the set's program, and a name
+the program uses as a global but that lies in a region's range, such as a table over run-once code,
+becomes that region's and goes when it does. And each format needs a small converter in jsbeeb, so only a
+few common ones are accepted. Where an author has said no reuse, their work is a plain link at most and
+is never fetched. Asking authors for a licence still helps: a stored set needs no converter, and survives
+the source moving or vanishing.
 
 ## Licensing
 
