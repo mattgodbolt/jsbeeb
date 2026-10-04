@@ -242,8 +242,8 @@ sit on it, hence smaller regions with `minAnchors`.
 
 The rules: an anchor is four to eight bytes of whole instructions starting at a routine's entry point; no
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
-stores), except the copies, swaps and loads that put whole programs in place (below); it has no run of two
-or more `NOP`s; and its bytes appear only once in the region. The debugger checks a region when it's
+stores), except a copy, swap or load whose known range covers the whole region (below); it has no run of
+two or more `NOP`s; and its bytes appear only once in the region. The debugger checks a region when it's
 about to use it (showing the disassembly, stopping at a breakpoint set by name), and needs every anchor
 to match and at least `minAnchors` (default and minimum 1) of them. A region without anchors is never
 shown automatically, but can be picked by hand.
@@ -283,8 +283,9 @@ near-identical overlays both match, and the PIPELINE stubs share most of their c
 an anchor fails while the code around it is still there, the region shows plain addresses for a while,
 which is the safe direction. So the work is in cutting regions where memory changes, using what the
 build or the listing already says. Copies, swaps and loads whose bounds the code gives (a block copy's
-inline arguments, an `OSFILE` parameter block) say where to cut, and don't rule out anchors in their
-range, since they move a whole program rather than change bytes within one:
+inline arguments, an `OSFILE` parameter block) say where to cut. Once regions are cut at those bounds,
+such a store covers whole regions, moving them rather than changing bytes within them, so it doesn't rule
+out anchors there; a copy over part of a region (a level's table into the middle of the code) still does:
 
 - Cutting the game at `&0D00` and `&1D00`, the bounds of its swap, means only the swapped part loses its
   names while the data file loads; the routine doing the loading, outside that range, keeps them.
@@ -303,9 +304,10 @@ game while it sits in screen memory; that would need a region with an offset, wh
 Overlays are told apart by an anchor on a byte where they differ. The chooser looks for those, and the
 build checks that any two overlapping regions in the sets of one record chain have anchors that disagree
 about some byte. On PIPELINE that covers the stubs, the game and the editors, which are separate sets
-hanging off one version. So the sets a disc's own records give can never both match, and the debugger
-needs no rule for it. Anything else that matches twice is the user's choice; merging names that happen
-to agree isn't worth its rules.
+hanging off one version, and is easiest when one run of the chooser picks all of their anchors together.
+So no two of the sets a disc's own records give can match at once, and the debugger needs no rule for
+it. Anything else that matches twice is the user's choice; merging names that happen to agree isn't
+worth its rules.
 
 Anchors are read from the memory being looked at, which covers sideways banks and shadow RAM without a
 field saying which bank a region is in, and works for a ROM whatever slot it's in. A breakpoint set by
@@ -337,8 +339,8 @@ could match something unrelated; a person can see at once whether the names fit.
 the registry, at a few dozen anchors of eight bytes or so per set, and it's fetched only when the
 debugger wants names and the records gave none. Checking it reads every indexed region covering the
 address being shown, a few thousand byte comparisons even if hundreds of sets cover it, which is nothing
-next to drawing the view.
-It carries each set's licence, so a set found this way is attributed like any other.
+next to drawing the view. Each index entry names the record that lists its set, so a set found this way
+comes with that record's licence and provenance like any other.
 
 ## Licensing
 

@@ -144,10 +144,10 @@ regions in the sets of one record chain to have anchors that disagree about some
 both match. If regions of different sets still match at the same address, the debugger shows neither and
 offers the choice.
 
-The build also publishes `symbols/index.json`: every set's `url`, `licence`, regions and anchors, without
-the names. When the image's records give no set (a disc that's been written to, a crack that left the
-code where it was), the debugger checks memory against the index and offers any set that matches, rather
-than showing it straight away.
+The build also publishes `symbols/index.json`: every set's `url`, `licence`, the record that lists it,
+and its regions and anchors, without the names. When the image's records give no set (a disc that's
+been written to, a crack that left the code where it was), the debugger checks memory against the index
+and offers any set that matches, rather than showing it straight away.
 
 ```json
 {
