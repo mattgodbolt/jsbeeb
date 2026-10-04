@@ -138,6 +138,8 @@ export function sessionSnapshot(cpu, rtcBaseMs) {
     };
 }
 
+const commitSpan = ({ at, upTo }) => ({ at, upTo });
+
 /**
  * The host's side. Wraps the machine's execute: inputs queued since the last
  * execute are applied at the cycle the machine has reached, then the machine
@@ -208,8 +210,10 @@ export class LockstepHost {
  * no further than the host has, applying each input at the cycle it was applied
  * at and checking the host's hashes where they were taken. `onDesync` is called
  * once when this machine and the host's part, and not again until `resync`, with
- * the reason, the commits it had not yet replayed (which it drops), and whether it
- * was this machine that moved by itself.
+ * the reason, the commits it had not yet replayed (which it drops), whether it was
+ * this machine that moved by itself, and the evidence: the `cycle` it was at, and
+ * whichever of the commit's `at` and `upTo`, the cycle it moved `from`, and the
+ * `expectedHash` the commit carried and this machine's `hash` apply.
  */
 export class LockstepGuest {
     constructor(cpu, onDesync) {
@@ -230,7 +234,7 @@ export class LockstepGuest {
     /** Takes the host's next commit, which must start where the last one ended. */
     receive(commit) {
         if (commit.at !== this.upTo) {
-            this.desync(`the host's commit starts at ${commit.at}, not ${this.upTo}`);
+            this.desync(`a commit starts at ${commit.at}, not ${this.upTo}`, commitSpan(commit));
             return;
         }
         this.commits.push(commit);
@@ -249,7 +253,7 @@ export class LockstepGuest {
     execute(cycles) {
         const { cpu } = this;
         if (cycleCount(cpu) !== this.reachedAt) {
-            return this.desync(`this machine moved from ${this.reachedAt} by itself`, true);
+            return this.desync(`its machine moved from ${this.reachedAt} by itself`, { from: this.reachedAt }, true);
         }
         const running = this.replay(cycles);
         this.reachedAt = cycleCount(cpu);
@@ -265,7 +269,9 @@ export class LockstepGuest {
             if (commit.at > limit) break;
             if (!runTo(cpu, commit.at)) return false;
             if (commit.inputs.length > 0) {
-                if (cycleCount(cpu) !== commit.at) return this.desync(`reached ${cycleCount(cpu)} for ${commit.at}`);
+                if (cycleCount(cpu) !== commit.at) {
+                    return this.desync(`reached ${cycleCount(cpu)} for ${commit.at}`, commitSpan(commit));
+                }
                 for (const input of commit.inputs) applyInput(cpu, input);
                 commit.inputs = [];
             }
@@ -273,18 +279,24 @@ export class LockstepGuest {
             if (!runTo(cpu, commit.upTo)) return false;
             this.commits.shift();
             if (commit.hash !== undefined && stateHash(cpu) !== commit.hash) {
-                return this.desync(`state differs from the host's at cycle ${commit.upTo}`);
+                return this.desync(`state differs at cycle ${commit.upTo}`, {
+                    ...commitSpan(commit),
+                    expectedHash: commit.hash,
+                    hash: stateHash(cpu),
+                });
             }
         }
         return runTo(cpu, limit);
     }
 
-    desync(reason, moved = false) {
+    desync(reason, { at, upTo, from, expectedHash, hash }, moved = false) {
         const dropped = this.commits;
         this.commits = [];
         if (!this.desynced) {
             this.desynced = true;
-            this.onDesync(reason, dropped, moved);
+            const evidence = { cycle: cycleCount(this.cpu), at, upTo, from, expectedHash, hash };
+            const known = Object.entries(evidence).filter(([, value]) => value !== undefined);
+            this.onDesync(reason, dropped, moved, Object.fromEntries(known));
         }
         return true;
     }

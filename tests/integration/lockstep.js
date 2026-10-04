@@ -226,10 +226,7 @@ describe("lockstep sessions", () => {
         });
         expect(jumps).toBe(1);
         // Each is put right by the one resync it asks for, and the host's reset needs none.
-        expect(desyncs).toEqual([
-            "state differs from the host's at cycle 2617151",
-            "this machine moved from 1455645 by itself",
-        ]);
+        expect(desyncs).toEqual(["state differs at cycle 2617151", "its machine moved from 1455645 by itself"]);
         expect(mode7Text(host)).toContain("42");
         expectIdentical(host, guests);
     });
@@ -352,14 +349,53 @@ describe("lockstep sessions", () => {
             expect(guest.machine.processor.sysvia.hasAnyKeyDown()).toBe(true);
         });
 
-        it("asks for a resync, once, when commits go missing", async () => {
-            const { lockstep, guest, commits, desyncs } = await pair();
+        it("asks for a resync, once, when commits go missing, naming the commit that did not follow on", async () => {
+            const { host, lockstep, commits } = await pair();
+            const desyncs = [];
+            const guest = await joining(lockstep, host.model.name, (reason, ...rest) =>
+                desyncs.push([reason, rest[2]]),
+            );
             for (let i = 0; i < 4; ++i) lockstep.execute(1000);
             guest.lockstep.receive(commits[0]);
             guest.lockstep.receive(commits[2]);
             guest.lockstep.receive(commits[3]);
-            expect(desyncs).toHaveLength(1);
-            expect(desyncs[0]).toMatch(/starts at \d+, not \d+/);
+            const { at, upTo } = commits[2];
+            expect(desyncs).toEqual([
+                [`a commit starts at ${at}, not ${commits[0].upTo}`, { cycle: commits[0].at, at, upTo }],
+            ]);
+        });
+
+        it("says from which cycle its machine moved by itself", async () => {
+            const { host, lockstep } = await pair();
+            const desyncs = [];
+            const guest = await joining(lockstep, host.model.name, (...desync) => desyncs.push(desync));
+            const from = cycleCount(guest.machine.processor);
+            guest.machine.processor.execute(1000);
+            const cycle = cycleCount(guest.machine.processor);
+            guest.lockstep.execute(1000);
+            expect(desyncs).toEqual([[`its machine moved from ${from} by itself`, [], true, { cycle, from }]]);
+        });
+
+        it("says where its state parted from the host's, in which commit, and both hashes", async () => {
+            const { host, lockstep, commits } = await pair();
+            const desyncs = [];
+            const guest = await joining(lockstep, host.model.name, (...desync) => desyncs.push(desync));
+            for (let offset = 0; offset < ScribbleBytes; ++offset) {
+                guest.machine.processor.writemem(ScribbleAt + offset, Scribble);
+            }
+            lockstep.execute(host.model.cyclesPerSecond);
+            const [commit] = commits;
+            guest.lockstep.receive(commit);
+            guest.lockstep.execute(commit.upTo - commit.at);
+            const { at, upTo, hash } = commit;
+            expect(desyncs).toEqual([
+                [
+                    `state differs at cycle ${upTo}`,
+                    [],
+                    false,
+                    { cycle: upTo, at, upTo, expectedHash: hash, hash: stateHash(guest.machine.processor) },
+                ],
+            ]);
         });
 
         it("catches up a slice at a time when far behind, and runs no faster than asked when close", async () => {
