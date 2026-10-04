@@ -192,6 +192,12 @@ span.accesskey {
   color: #888;
 }
 
+/* Wide enough for "99.9", so a new reading moves neither the icon nor the bar. */
+#leds .speed .virtualMHz {
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+}
+
 #leds .speed [data-icon] > svg {
   display: block;
   width: 1.15em;
