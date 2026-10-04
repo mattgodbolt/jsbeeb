@@ -365,24 +365,25 @@ Whether anchors pick out a disc or the code on it decides how a symbol set is fo
 `anchor-collisions.js` measures how often bytes at an address turn up at the same address in another
 title. It places every DFS file on the Stairway To Hell discs at its load address, as a stand-in for
 memory, leaving out BASIC programs (tokenised text, not code), files under 64 bytes and files of one
-repeated byte. It counts each zip as a title: 1,421 titles, with 5,465 files that load into RAM, each
-distinct within its title. In each file of 1K or more it samples up to three runs of bytes at random
-offsets (seeded, so a rerun gives the same sample), at least 256 bytes apart, each with at least four
-distinct values in its first six bytes, so that fill doesn't count. That's 12,475 runs.
+repeated byte. It counts each zip as a title: 1,421 titles, with 5,466 files that load into RAM, each
+distinct within its title by content and load address. In each file of 1K or more it samples up to three
+runs of bytes at random offsets (seeded, so a rerun gives the same sample), at least 256 bytes apart,
+each with at least four distinct values in its first six bytes, so that fill doesn't count. That's 12,478
+runs.
 
 | Run length | Runs that turn up at the same address in another title |
 | ---------: | -----------------------------------------------------: |
-|    4 bytes |                                                  4,591 |
+|    4 bytes |                                                  4,592 |
 |    6 bytes |                                                  4,518 |
 |    8 bytes |                                                  4,502 |
 
-Doubling the length from four bytes to eight loses only 89 of the 4,591. A match by chance gets much
-less likely with every byte added, so if many of these were chance, eight bytes would find far fewer
-than four; nearly all of them are the same bytes because they're the same code or data.
+Doubling the length from four bytes to eight loses only 90 of the 4,592. A match by chance gets much less
+likely with every byte added, so if many of these were chance, eight bytes would find far fewer than
+four; nearly all of them are the same bytes because they're the same code or data.
 
-A file's three runs, cut to six bytes, then make a region's anchors, which match another title only
-when one of its files holds all three, as memory would. Of the 4,103 files with three runs, 1,355 match
-in at least one other title, 2,228 matches in all. For each match, the share of the source file that's
+A file's three runs, cut to six bytes, then make a region's anchors, which match another title only when
+one of its files holds all three, as memory would. Of the 4,104 files with three runs, 1,355 match in at
+least one other title, 2,228 matches in all. For each match, the share of the source file that's
 identical at the same addresses in the matching file:
 
 | Identical     | Matches |
@@ -416,10 +417,12 @@ or data. The reasons include:
 The shares below 90% are mostly engines holding different data, versions that differ, and files of
 different lengths. `--examples` lists every match, lowest share first.
 
-It's a proxy, with limits. Files sit at their load addresses, not in memory as it is at run time, so
-code that's relocated or decrypted as it loads is missed. The discs are Stairway To Hell's DFS images
-only, which leaves out protected originals and tapes. And the runs are at random offsets anywhere in a
-file, data included, not anchors at routine entry points. To rerun it from the jsbeeb root:
+It's a proxy, with limits. Files sit at their load addresses, not in memory as it is at run time, so code
+that's relocated or decrypted as it loads is missed. The discs are Stairway To Hell's DFS images only,
+which leaves out protected originals and tapes. The runs are at random offsets anywhere in a file, data
+included, not anchors at routine entry points. And a region counts as matching another title only when
+one of that title's files holds all three anchors, so a match split across two files that load together
+isn't counted. To rerun it from the jsbeeb root:
 
 ```sh
 node tools/registry/anchor-collisions.js --examples

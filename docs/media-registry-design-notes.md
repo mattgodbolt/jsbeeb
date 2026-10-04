@@ -408,17 +408,18 @@ the level designer's three changed bytes are mid-routine, away from any anchor, 
 The build publishes every set's location, licence, `link` if it has one, and regions with their anchors,
 without the names, in `symbols/index.json`. The debugger fetches it once, the first time it wants names,
 and HTTP caching takes care of it after that; if the index or a set can't be fetched, it shows plain
-addresses and tries again at the next stop, or for a linked set's file on someone else's site, once a
-session. Memory doesn't change while the machine is stopped, so each time it stops the debugger checks
-every indexed region once and keeps the answers until memory can change: the machine runs, or the user
-edits memory, restores a snapshot or resets. Most regions fail on the first byte of their first anchor,
-so a few thousand regions cost little next to drawing the view. Only a set that matches has its names
-fetched, and linked names only once the user has agreed. Repton 2's set from the findings, 11 anchors in
-three regions, takes under 1 KB of the index, so hundreds of sets come to a few hundred KB. If the
-registry grows past a couple of thousand sets, the index can be split into one static file per 256-byte
-page, listing the regions over that page. Names need more than the pages on screen, though (the pages
-operands point into, the MOS's for system globals, and every set that might name a global shown on its
-own), so that's for when one file gets too big, not before.
+addresses and tries again later, waiting longer after each failure rather than retrying at every stop,
+and for a linked file on someone else's site, at most once a session. Memory doesn't change while the
+machine is stopped, so each time it stops the debugger checks every indexed region once and keeps the
+answers until memory can change: the machine runs, or the user edits memory, restores a snapshot or
+resets. Most regions fail on the first byte of their first anchor, so a few thousand regions cost little
+next to drawing the view. Only a set that matches has its names fetched, and linked names only once the
+user has agreed. Repton 2's set from the findings, 11 anchors in three regions, takes under 1 KB of the
+index, so hundreds of sets come to a few hundred KB. If the registry grows past a couple of thousand
+sets, the index can be split into one static file per 256-byte page, listing the regions over that page.
+Names need more than the pages on screen, though (the pages operands point into, the MOS's for system
+globals, and every set that might name a global shown on its own), so that's for when one file gets too
+big, not before.
 
 A set that matches is shown, not offered (its linked names once the user has agreed to fetch them).
 Matching anchors only show that the anchored bytes are the same, but in the corpus a region that matches
