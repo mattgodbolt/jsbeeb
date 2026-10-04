@@ -364,12 +364,13 @@ node tools/registry/anchors-run.js r2set.json .registry-corpus/hfe/64D80D49.hfe 
 Whether anchors pick out a disc or the code on it decides how a symbol set is found, so
 `anchor-collisions.js` measures how often bytes at an address turn up at the same address in another
 title. It places every DFS file on the Stairway To Hell discs at its load address, as a stand-in for
-memory, leaving out BASIC programs (tokenised text, not code), files under 64 bytes and files of one
-repeated byte. It counts each zip as a title: 1,421 titles, with 5,466 files that load into RAM, each
-distinct within its title by content and load address. In each file of 1K or more it samples up to three
-runs of bytes at random offsets (seeded, so a rerun gives the same sample), at least 256 bytes apart,
-each with at least four distinct values in its first six bytes, so that fill doesn't count. That's 12,478
-runs.
+memory, leaving out BASIC programs (tokenised text, not code), files under 64 bytes, files of one
+repeated byte, and files catalogued to load in page zero, whose load address is usually a placeholder for
+data a program puts somewhere else. It counts each zip as a title: 1,421 titles, with 5,466 files that
+load into RAM, each distinct within its title by content and load address. In each file of 1K or more it
+samples up to three runs of bytes at random offsets (seeded, so a rerun gives the same sample), at least
+256 bytes apart, each with at least four distinct values in its first six bytes, so that fill doesn't
+count. That's 12,478 runs.
 
 | Run length | Runs that turn up at the same address in another title |
 | ---------: | -----------------------------------------------------: |
