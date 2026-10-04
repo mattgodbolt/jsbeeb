@@ -15,6 +15,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { unzip } from "../../src/archive.js";
 import { dfsCatalogue } from "./dfs.js";
 import { isSectorImage, sectorImageSides, SectorSize } from "./fingerprint.js";
@@ -228,7 +229,7 @@ async function main() {
     }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     main().catch((error) => {
         console.error(error);
         process.exit(1);
