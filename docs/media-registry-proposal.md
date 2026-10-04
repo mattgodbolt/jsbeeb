@@ -144,6 +144,15 @@ loads, a table that replaces code once it has run). A region's names show only w
 anchors matches memory and there are at least `minAnchors`. Anchors are read from the memory being looked
 at.
 
+A set stores names only when their licence, or their author's recorded permission, allows it. Otherwise
+it links them: in place of `symbols`, `globals` and `source` it has `link`, with the `url` of the names'
+file pinned to an exact version (a commit, never a branch), its `format`, and `home`, the author's page,
+and its own `licence` covers only its regions and anchors. The registry never stores linked names. When a
+linked set's regions match, the debugger asks once for each source whether to fetch its names, saying
+whose they are and where they're from, and remembers the answer. If the user agrees, it fetches the file
+from the author's site, converts it, and uses the names as a stored set's: those in a region's range are
+that region's, and the rest are globals.
+
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
 `"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
 last, while any of its regions matches. An instruction in one of a set's matching regions takes names
@@ -160,21 +169,22 @@ comes from, and lets the user drop a set. Without a match, it shows plain addres
 
 Overlays are separate regions over the same addresses. The build requires any two overlapping regions in
 the registry that have anchors to have anchors that disagree about some byte, so they can never both
-match. Two regions of different sets with no byte at all that differs are the same code, and become one
-shared set. If regions of different sets still match at the same address, the debugger shows neither and
-offers the choice.
+match. Two regions of different sets that differ only where they can't both carry an anchor are the same
+code, and become one shared set. If regions of different sets still match at the same address, the
+debugger shows neither and offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
 anchors can sit anywhere but the I/O range, and its regions are cut where a machine can put RAM or I/O
-over part of it. On the BBC Micro, the Master and the Electron, no region or anchor covers the I/O at
-`&FC00-&FEFF`; the Master's and the Compact's MOS are cut at `&E000` because HAZEL can be paged over
-`&C000-&DFFF`; and a sideways ROM is cut at `&9000` and `&B000` because the Master's ANDY can be paged
-over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF` ([why](media-registry-design-notes.md#roms)).
+over part of it. On the BBC Micro, the Master, the Compact and the Electron, no region or anchor covers
+the I/O at `&FC00-&FEFF`; the Master's and the Compact's MOS are cut at `&E000` because HAZEL can be
+paged over `&C000-&DFFF`; and a sideways ROM is cut at `&9000` and `&B000` because the Master's ANDY can
+be paged over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF`
+([why](media-registry-design-notes.md#roms)).
 
-The build publishes `symbols/index.json`: every set's `url` (relative to the index) and `licence`, and
-its `regions` with their anchors but without their `symbols`. The debugger fetches the index when it
-first wants names, checks every indexed region each time the machine stops, and fetches only the sets
-that match ([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
+The build publishes `symbols/index.json`: every set's `url` (relative to the index), `licence` and, for a
+linked set, `link`, and its `regions` with their anchors but without their `symbols`. The debugger
+fetches the index when it first wants names, checks every indexed region each time the machine stops, and
+fetches only the sets that match ([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
 
 ```json
 {
@@ -194,6 +204,32 @@ that match ([how](media-registry-design-notes.md#finding-sets-by-their-anchors))
         { "at": "0x2e40", "bytes": "20eeff..." }
       ],
       "symbols": { "main_loop": "0x1a2c" }
+    }
+  }
+}
+```
+
+A linked set:
+
+```json
+{
+  "format": 1,
+  "title": "Some game: the main code",
+  "licence": "CC0-1.0",
+  "link": {
+    "url": "https://raw.githubusercontent.com/<owner>/<repo>/<commit>/game.lst",
+    "format": "beebasm-listing",
+    "home": "https://github.com/<owner>/<repo>"
+  },
+  "regions": {
+    "main": {
+      "start": "0x1900",
+      "end": "0x5800",
+      "minAnchors": 2,
+      "anchors": [
+        { "at": "0x1a2c", "bytes": "a9008d..." },
+        { "at": "0x2e40", "bytes": "20eeff..." }
+      ]
     }
   }
 }
@@ -221,8 +257,9 @@ A build step enforces these ([why](media-registry-design-notes.md#licensing)):
 - Linking is always fine. Inlining, with attribution, needs a licence that allows it, or the author's
   recorded permission. Anything of unknown licence, and any disc or tape image, is never included.
 - Which keys a game uses is a fact; the text of its instructions is content.
-- A symbol set made from someone else's disassembly is kept only under a licence or recorded permission
-  that allows it; otherwise a record links to the disassembly.
+- A symbol set stores names from someone else's work only under a licence or recorded permission that
+  allows it; otherwise it links them, or, where the author has refused reuse, a record links to the work.
+  Sources under the GPL aren't used.
 
 ## Filling it in
 
@@ -252,8 +289,6 @@ Signal's can still guess the machine.
 - Whether, and how, we can host screenshots.
 - How many anchors the registry-wide overlay check costs once hundreds of sets overlap the same addresses
   ([why](media-registry-design-notes.md#where-to-cut-regions)).
-- Whether a symbol set may carry a copyleft licence such as the GPL
-  ([why](media-registry-design-notes.md#licensing)).
 
 Do let me know what you think, in a [GitHub issue](https://github.com/mattgodbolt/jsbeeb/issues) or on [the PR that proposed this](https://github.com/mattgodbolt/jsbeeb/pull/1179).
 

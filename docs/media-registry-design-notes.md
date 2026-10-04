@@ -247,8 +247,8 @@ store whose target can be worked out may reach any of its bytes (counting the fu
 stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. Each
 exception is explained below: a copy, swap or load picked as moving the program, whose range covers the
 whole region, doesn't count as a store; run-once code is anchored on the bytes that get overwritten; an
-anchor that tells a region apart from an earlier set's needn't start at a routine's entry; a region with
-no code, such as an adventure's database, is anchored on data its interpreter never writes; and a ROM's
+anchor that tells two overlapping regions apart needn't start at a routine's entry; a region with no
+code, such as an adventure's database, is anchored on data its interpreter never writes; and a ROM's
 anchors can sit anywhere but the I/O range. The debugger checks regions each time the machine stops and
 when a breakpoint set by name is hit, and a region needs every anchor to match and at least `minAnchors`
 (default and minimum 1) of them. A region without anchors is never shown automatically, but can be picked
@@ -314,8 +314,8 @@ region of their set matches, so the names are those of the MOS that's running. F
 its own they come last too, after a global that only one other set names.
 
 Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
-when someone else's file changes. That costs nothing extra, since a disassembly without a licence that
-allows it is a link only and never a set anyway.
+when someone else's file changes. A linked set is no exception: its regions and anchors are in the
+registry, and its names are pinned to one version of the author's file ([below](#linked-sets)).
 
 ### Where to cut regions
 
@@ -356,19 +356,23 @@ a single candidate is all that tells two overlays apart, since a later change to
 quietly take it away; according to the feedback, the PIPELINE stubs differ at only one labelled
 instruction, `read_whole_run` at `&0916`.
 
-Anchors chosen for two programs separately rarely share an address, so a set added later has to anchor
-where the earlier regions it overlaps are anchored. The chooser reads their anchors from the index and
-puts one of its own over one of each, wherever its code's bytes differ and no store reaches them; such an
-anchor needs whole instructions but not a routine's entry point. One anchor disagrees with every region
-anchored over the same bytes, so a later set can reuse addresses that earlier ones anchored. Where the
-later program agrees with every anchor of an earlier region, that region already matches it (a later
-version of the same game, often), and it's the earlier set that needs an anchor where the two differ,
-picked from that set's `madeFrom` images or its source. Only when the chooser finds no byte at all where
-two regions differ are they the same code, and then they become one shared set rather than two that name
-it differently. The build itself sees only anchors, so it can't tell a missing anchor from the same code
-and asks for the anchor. Regions without anchors never match on their own, so the check leaves them out.
-The price is anchors: over a busy range such as `&1100-&5800`, a set may need one for each earlier region
-it overlaps, and that grows with the registry. How far it grows is an open question.
+Anchors chosen for two programs separately rarely share an address, so a set added later usually has to
+gain anchors to meet the check. For each earlier region it overlaps, the chooser looks in the memory the
+two share for an address where the programs' bytes differ and both could carry an anchor (whole
+instructions, though not necessarily at a routine's entry, and no store of either program reaching it),
+and gives an anchor over it to whichever region lacks one there: the new set, the earlier one, or both.
+One anchor disagrees with every region anchored over the same bytes that holds other bytes there, so a
+set can reuse addresses that earlier ones anchored. Choosing an anchor for the earlier set needs its
+program's stores as well as its bytes, so it takes that set's source or listing, not just its `madeFrom`
+images; until someone supplies those, a set that needs the earlier one to gain an anchor can't be added.
+Two programs that differ only where they can't both carry an anchor (in variables, a table of high
+scores, a run of `NOP`s a cheat poked), or don't differ at all, are the same code for this purpose, and
+become one shared set rather than two that name it differently. A shared set has one licence, so a second
+contributor's names join it only under a licence that combines with the first's. The build itself sees
+only anchors, so it can't tell a missing anchor from the same code and asks for the anchor. Regions
+without anchors never match on their own, so the check leaves them out. The price is anchors: over a busy
+range such as `&1100-&5800`, a set may need one for each earlier region it overlaps, and that grows with
+the registry. How far it grows is an open question.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
 global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
@@ -419,20 +423,20 @@ name a global shown on its own), so that's for when one file gets too big, not b
 
 A set that matches is shown, not offered. Matching anchors only show that the anchored bytes are the
 same, but in the corpus a region that matches another title is that title's copy of the same code or
-data, mostly byte for byte ([below](#code-that-turns-up-elsewhere)), so its names fit. Where two
-versions differ between the anchors, some names can be off, and the debugger says which set the names
-come from so that someone who sees names that don't fit can drop it. Each set carries its own licence and
-provenance, so one found this way needs nothing from a record.
+data, nearly always with 90% or more of the file identical ([below](#code-that-turns-up-elsewhere)), so
+its names fit. Where two versions differ between the anchors, some names can be off, and the debugger
+says which set the names come from so that someone who sees names that don't fit can drop it. Each set
+carries its own licence and provenance, so one found this way needs nothing from a record.
 
 ### Code that turns up elsewhere
 
 Anchors identify code, not discs. [The findings](media-registry-findings.md#anchors-across-titles) placed
 every file on the Stairway To Hell discs at its load address and looked for anchor-sized runs of bytes at
-the same address in other titles. Where they turn up, it's the same code or data, mostly whole files the
-same byte for byte: the game in a compilation, on a cheat disc or in a re-release; an engine that games
-share, such as the Scott Adams, Level 9, GAC and Epic adventure interpreters; or a loader a publisher
-used again, such as Superior's at `&1900` in Baron, Barbarian II and 3D Dotty. Names made for that code
-fit it wherever it turns up, as far as the code is the same.
+the same address in other titles. Where they turn up, it's the same code or data, nearly always with 90%
+or more of the file identical: the game in a compilation, on a cheat disc or in a re-release; an engine
+that games share, such as the Scott Adams, Level 9, GAC and Epic adventure interpreters; or a loader a
+publisher used again, such as Superior's at `&1900` in Baron, Barbarian II and 3D Dotty. Names made for
+that code fit it wherever it turns up, as far as the code is the same.
 
 The risk is a set that names game-specific things (its data, its globals) in a region anchored only on
 shared code. A Level 9 game's set that took in the interpreter would label every Level 9 game's data with
@@ -466,57 +470,80 @@ that isn't paged in would need jsbeeb's disassembly view to read a chosen bank, 
 jsbeeb, not to the format.
 
 A ROM address isn't always ROM, so a ROM's regions are cut at the bounds of what the hardware can put
-over it. `&FC00-&FEFF` is I/O on the BBC Micro, the Master and the Electron, so no region of their ROMs
-covers it, and no anchor sits there even in a ROM image that has bytes for it: dumps of the same ROM
-differ there (jsbeeb's Master MOS 3.20 and beebjit's differ in that range and nowhere else). The Atom's
-I/O is at `&B000-&BFFF`, where it has no ROM, so its kernel's regions run to `&FFFF`. The Master can page
-HAZEL, its 8K of filing system RAM, over the MOS at `&C000-&DFFF` (bit Y of ACCCON), and ANDY, 4K of RAM,
-over `&8000-&8FFF` of the sideways ROMs (bit 7 of ROMSEL); those are the bounds jsbeeb's Master memory
-map uses. The B+ pages 12K of RAM over `&8000-&AFFF` by bit 7 of ROMSEL too, though jsbeeb doesn't
-emulate the B+. The Compact is built the same way as the Master. So the Master's and the Compact's MOS
-are cut into `&C000-&DFFF`, `&E000-&FBFF` and `&FF00-&FFFF`, and while HAZEL is in, the first region just
-doesn't match; and a sideways ROM's set is cut at `&9000` and `&B000`, so the rest of it keeps its names
-while that RAM is in.
+over it. `&FC00-&FEFF` is I/O on the BBC Micro, the Master, the Compact and the Electron, so no region of
+their ROMs covers it, and no anchor sits there even in a ROM image that has bytes for it: dumps of the
+same ROM differ there (jsbeeb's Master MOS 3.20 and beebjit's differ in that range and nowhere else). The
+Atom's I/O is at `&B000-&BFFF`, where it has no ROM, so its kernel's regions run to `&FFFF`. The Master
+can page HAZEL, its 8K of filing system RAM, over the MOS at `&C000-&DFFF` (bit Y of ACCCON), and ANDY,
+4K of RAM, over `&8000-&8FFF` of the sideways ROMs (bit 7 of ROMSEL); those are the bounds jsbeeb's
+Master memory map uses. The B+ pages 12K of RAM over `&8000-&AFFF` by bit 7 of ROMSEL too, though jsbeeb
+doesn't emulate the B+. The Compact pages its memory the same way as the Master. So the Master's and the
+Compact's MOS are cut into `&C000-&DFFF`, `&E000-&FBFF` and `&FF00-&FFFF`, and while HAZEL is in, the
+first region just doesn't match; and a sideways ROM's set is cut at `&9000` and `&B000`, so the rest of
+it keeps its names while that RAM is in.
+
+### Linked sets
+
+Most disassemblies state no licence, so a set can't store their names, but it can point at them. A
+linked set keeps only what's ours, its regions and anchors, which come from the code's own bytes, and
+where the names live. jsbeeb fetches the names from the author's site when someone wants them, and the
+registry never stores or republishes them. The debugger asks before fetching, because it's someone
+else's work from someone else's site: it says whose names they are and where they're from, and
+remembers the answer for that source.
+
+The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`,
+never a branch), so the names and the anchors stay in step. The build fetches each pinned file once to
+check that it parses and that its labels land inside the set's regions, and stores nothing. There are
+limits. The author's host has to allow fetches from another site: GitHub's raw files and GitHub Pages
+do, many personal sites don't, and those stay a plain link to the page. The file has to carry addresses
+(a listing, a symbol or label file, an assembler's report), since jsbeeb won't assemble anything, and
+its format has to say which names are addresses, since constants stay out. And each format needs a
+small converter in jsbeeb, so only a few common ones are accepted. Where an author has said no reuse,
+their work is a plain link at most and is never fetched. Asking authors for a licence still helps: a
+stored set needs no converter, and survives the source moving or vanishing.
 
 ## Licensing
 
 CC0 for our own data lets every emulator take it, as MAME does with its software lists.
 
 Disassemblies need particular care. Several published BBC disassemblies have no licence at all, and some
-say outright that no reuse is permitted. Those are links only, unless and until their authors tell us
-otherwise.
+say outright that no reuse is permitted. Without a licence, a set can only link their names ([linked
+sets](#linked-sets)); where reuse is refused, they're a plain link at most, unless and until their
+authors tell us otherwise. Sources under the GPL aren't used: a set made from one would be under the GPL
+too, which is more than data other emulators take should carry.
+
+Anchors are a few bytes of the program itself. They identify it rather than reproduce it, so we treat
+them as facts about it, like a hash, and they're CC0 with the rest of our own data.
 
 Acorn's documented interface is different. The MOS's entry points, vectors and workspace, as Acorn
 documented them for programmers, are a published interface rather than anyone's disassembly, so sets of
 them for each MOS version can be ours from the start, and with them the system globals.
 
-The ROMs are well covered, but not yet usable. Annotated disassemblies or reconstructed sources, most of
-them rebuilding byte for byte, cover every BBC MOS from 0.10 to 2.00, the Master's 3.20 and 3.50, the
-Compact's 5.10, the Electron's 1.00, BASIC I to 4r32 and HiBASIC, the DFSes and ADFS, and the Atom's
-ROMs, and Acorn's own sources for OS 1.20, BASIC 4 and DNFS 3.00 have been published. Almost none of them
-states a licence, so for now they're links only, and asking their authors for one is the next step.
-Acorn's own rights in the ROM code and in its published sources are unsettled, and whether short symbol
-names can be protected at all is a legal question, so names taken from those sources stay out until
-that's clearer. What can be used now is py8dis's
-[`acorn.py`](https://github.com/ZornsLemma/py8dis/blob/master/py8dis/acorn.py), under the MIT licence,
-which names the OS vectors at `&0200-&0235`, the entry points at `&FFB9-&FFF7`, some of zero page, and
-the FRED, JIM and SHEILA registers of the B, the Electron and the Master. With Acorn's documented
-interface, that's where our own sets start: CC0 where they come from Acorn's documentation alone, MIT
-where they take from `acorn.py`, with its notice in the set's `notice`, since MIT asks for it in every
-copy and sets are fetched one at a time. BeebEm's [OS 1.20 memory
-map](https://github.com/stardot/beebem-windows/blob/master/UserData/BeebFile/BBC/OS12.map) describes OS
-1.20's address ranges under the GPL, and whether a set may carry a copyleft licence is open: the rules
-allow inlining under a licence that allows it, which the GPL does, but a set made from it would be under
-the GPL too, and an emulator under another licence might not be able to take it.
+The ROMs are well covered. Annotated disassemblies or reconstructed sources, most of them rebuilding byte
+for byte, cover every BBC MOS from 0.10 to 2.00, the Master's 3.20 and 3.50, the Compact's 5.10, the
+Electron's 1.00, BASIC I to 4r32 and HiBASIC, the DFSes and ADFS, and the Atom's ROMs. We treat Acorn's
+ROMs and the sources Acorn has published (OS 1.20, BASIC 4 and DNFS 3.00) as effectively in the public
+domain, so those sources can be where a stored set's names come from. So can the complete [Atom kernel
+and BASIC sources](https://theoddys.com/acorn/acorn_system_computers/atom/atom.html): their site
+[allows](https://theoddys.com/acorn/index.html) any use that isn't for commercial gain, which the
+registry's isn't, and that permission is recorded as their licence. The other disassemblies almost all
+state no licence; their authors are being asked for one, and until they give it, sets can only link
+their names. py8dis's [`acorn.py`](https://github.com/ZornsLemma/py8dis/blob/master/py8dis/acorn.py),
+under the MIT licence, names the OS vectors at `&0200-&0235`, the entry points at `&FFB9-&FFF7`, some of
+zero page, and the FRED, JIM and SHEILA registers of the B, the Electron and the Master. With Acorn's
+documented interface, that's where our own MOS sets start: CC0 where they come from Acorn's
+documentation alone, MIT where they take from `acorn.py`, with its notice in the set's `notice`, since
+MIT asks for it in every copy and sets are fetched one at a time.
 
 Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, so
 `controls` records it along with where it came from, but the text of the instructions is content.
 
 The detail behind the proposal's rules: permission to inline is recorded in the entry (a link to where it
-was given, or when); disassemblies without a permissive licence or recorded permission are links only,
-never symbol sets; MAME's software lists are CC0 and can be used directly; TOSEC's names and hashes are
-factual data, used with credit; and any database without a stated licence is asked first and linked to
-meanwhile. Whether we mirror a disc image is a separate decision about that image.
+was given, or when); disassemblies without a permissive licence or recorded permission are never stored
+sets, only linked ones, or a plain link where their authors refuse reuse; MAME's software lists are CC0
+and can be used directly; TOSEC's names and hashes are factual data, used with credit; and any database
+without a stated licence is asked first and linked to meanwhile. Whether we mirror a disc image is a
+separate decision about that image.
 
 ## Finding aliases
 
