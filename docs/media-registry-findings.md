@@ -359,6 +359,68 @@ node tools/registry/anchors-run.js r2set.json .registry-corpus/hfe/64D80D49.hfe 
     --listing r2dis/repton2.s --exclude-section 0x70a0 --seconds 300
 ```
 
+## Anchors across titles
+
+Whether anchors pick out a disc or the code on it decides how a symbol set is found, so
+`anchor-collisions.js` measures how often bytes at an address turn up at the same address in another
+title. It places every DFS file on the Stairway To Hell discs at its load address, as a stand-in for
+memory, and counts each zip as a title: 1,421 titles, with 5,465 distinct files that load into RAM. In
+each file of 1K or more it samples up to three runs of bytes at random offsets (seeded, so a rerun gives
+the same sample), at least 256 bytes apart, each with at least four distinct values in its first six
+bytes, so that fill doesn't count. That's 12,475 runs.
+
+| Run length | Runs that turn up at the same address in another title |
+| ---------: | -----------------------------------------------------: |
+|    4 bytes |                                                  4,591 |
+|    6 bytes |                                                  4,518 |
+|    8 bytes |                                                  4,502 |
+
+Doubling the length from four bytes to eight loses only 89 of the 4,591. A match by chance gets much
+less likely with every byte added, so if many of these were chance, eight bytes would find far fewer
+than four; nearly all of them are the same bytes because they're the same code or data.
+
+A file's three runs, cut to six bytes, then make a region's anchors, which match another title only
+when one of its files holds all three, as memory would. Of the 4,103 files with three runs, 1,355 match
+in at least one other title, 2,228 matches in all. For each match, the share of the source file that's
+identical at the same addresses in the matching file:
+
+| Identical     | Matches |
+| ------------- | ------: |
+| 90% or more   |   2,117 |
+| 50% to 90%    |      96 |
+| 10% to 50%    |      15 |
+| less than 10% |       0 |
+
+We went through all 111 matches below 90%, and every match between two publishers' folders (leaving out
+the cheat and re-release folders, which hold other publishers' games), and all of them are the same code:
+
+- The same game elsewhere: in a compilation (US Gold's Gold Collection holds Jetpac, Sabre Wulf and four
+  Scott Adams adventures; Mastertronic's Megaplay holds Geoff Capes and Eddie Kidd), on a cheat disc, in a
+  re-release (Superior's of Tynesoft's Summer Olympiad and Aardvark's Zalaga and Frak), or as another
+  version (tape, Electron, an earlier release).
+- Engines that games share: the Level 9 interpreter, the same files at the same addresses in Level 9's
+  own games and Mandarin's (Gnome Ranger, Ingrid's Back, Scapeghost, Lancelot, Time and Magik); the
+  runtime of Incentive's Graphic Adventure Creator in games made with it (Bungle Brothers, Daark, Dragon's
+  Tooth); Epic's adventures, at `&7100`; the Scott Adams adventures, where Secret Mission and Pyramid of
+  Doom are 54% identical, the interpreter the same and the game's data not; and the Repton 3 engine on
+  Repton 3's data discs.
+- Code a publisher used again: Superior's loader at `&1900` in Baron, Barbarian II and 3D Dotty, and
+  files Alligata, Icon and Bug Byte each put in more than one game.
+- Discs that also hold another game's files: Cluedo's code is on the Chichen Itza disc, and Spycat's on
+  Black Queen Bridge.
+
+The shares below 90% are mostly engines holding different data, versions that differ, and files of
+different lengths. `--examples` lists every match, lowest share first.
+
+It's a proxy, with limits. Files sit at their load addresses, not in memory as it is at run time, so
+code that's relocated or decrypted as it loads is missed. The discs are Stairway To Hell's DFS images
+only, which leaves out protected originals and tapes. And the runs are at random offsets anywhere in a
+file, data included, not anchors at routine entry points. To rerun it from the jsbeeb root:
+
+```sh
+node tools/registry/anchor-collisions.js --examples
+```
+
 ## Booting the discs
 
 All but two of the 7,365 distinct disc keys of the time (the two ADLs; that was before the rule for
@@ -425,6 +487,8 @@ which is a modified version is the part that needs judgement.
 - The judging categories gained another disc of the same set, 40- or 80-track packaging, and a direction
   for `contains`.
 - Anchors avoid `NOP` runs and come in smaller regions with a minimum count.
+- Symbol sets are found by their anchors, not by an image's key, and the anchor chooser checks its
+  regions against the corpus for code other titles share.
 - A track that repeats a sector ID with different contents keeps each content once, in byte order.
 - Open: whether duplicator leftovers should split copies.
 
