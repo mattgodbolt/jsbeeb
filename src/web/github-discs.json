@@ -10,8 +10,8 @@
   },
   {
     "repo": "mattgodbolt/chuckie-egg-2-beeb",
-    "path": "chuckie-egg-2-wip.ssd",
-    "title": "Chuckie Egg 2 (work in progress)",
+    "path": "chuckie-egg-2.ssd",
+    "title": "Chuckie Egg 2",
     "publisher": "Matt Godbolt",
     "authors": "A&F Software (original game); port by Matt Godbolt and Claude",
     "year": 2026,
