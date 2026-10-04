@@ -311,11 +311,11 @@ gets no set's globals but the MOS's (below): whatever it does with zero page, it
 doing it. The same goes for a short routine a program copies somewhere no anchor survives, such as page
 1, unless its set gives it a region it can match in. An address shown on its own has no instruction to go
 by. Inside a matching region it takes only that region's names. Outside every matching region it takes a
-global when one non-system set with a matching region names it, no name when two or more do, and a system
-global (below) only when none does. That labels the object table once the start-up code has gone and
-leaves the stub's and the editor's zero page bare. It also means a loader left over a buffer the running
-program has taken shows the loader's names there, or none, not the program's global for the buffer. A
-region picked by hand counts as matching.
+global when one non-system set with a matching region names it, no name when two or more name it
+differently, and a system global (below) only when none does. That labels the object table once the
+start-up code has gone and leaves the stub's and the editor's zero page bare. It also means a loader left
+over a buffer the running program has taken shows the loader's names there, or none, not the program's
+global for the buffer. A region picked by hand counts as matching.
 
 Operands are named by what's in memory now, which has one known limit. According to the PIPELINE
 feedback, its game's `load_mission` writes an `RTI` to the MOS's NMI routine at `&0D00` after swapping
@@ -532,14 +532,14 @@ Most disassemblies state no licence, so a set can't store their names, but it ca
 with only a link keeps just what's ours, its regions and anchors, which come from the code's own bytes,
 and where the names live. A set can also store some names and link others: our MOS sets store the
 documented interface and the system globals, and can link a fuller disassembly of the same ROM, whose
-names show once the user agrees. System globals are stored, so they need no prompt, and stored names win
-where the two disagree: a linked name for an address the set already names, or that the set already gives
-to another address, is dropped. A set has one link, so any further disassembly of the same code is a
-plain link, in the set's `links` or a record's. jsbeeb fetches linked names from the author's site when
-someone wants them, and the registry never stores or republishes them. The debugger asks before fetching,
-because it's someone else's work from someone else's site: it shows the author's `home` and the host the
-file comes from, and remembers the answer for that `home` and that host together. Neither the build nor
-the client follows a redirect to another host, so agreeing once never sends a request to a host the user
+names show once the user agrees. The stored system globals need no prompt, and stored names win where the
+two disagree: a linked name for an address the set already names, or that the set already gives to
+another address, is dropped. A set has one link, so any further disassembly of the same code is a plain
+link, in the set's `links` or a record's. jsbeeb fetches linked names from the author's site when someone
+wants them, and the registry never stores or republishes them. The debugger asks before fetching, because
+it's someone else's work from someone else's site: it shows the author's `home` and the host the file
+comes from, and remembers the answer for that `home` and that host together. Neither the build nor the
+client follows a redirect to another host, so agreeing once never sends a request to a host the user
 wasn't shown.
 
 The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, never

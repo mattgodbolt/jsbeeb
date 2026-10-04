@@ -167,14 +167,14 @@ takes names from that set's matching regions, then its globals, then other sets'
 system globals if its set isn't the system set; an instruction outside every matching region takes names
 from matching regions, then system globals. An address shown on its own, such as a row of the memory
 view, takes only that region's names if it lies in a matching region. Otherwise it takes the global that
-one non-system set with a matching region names, no name if two or more such sets name it, or a system
-global if none does. A breakpoint set by name only stops while its region matches or, for a global, while
-any region of its set does.
+one non-system set with a matching region names, no name if two or more such sets name it differently, or
+a system global if none does. A breakpoint set by name only stops while its region matches or, for a
+global, while any region of its set does.
 
 The debugger shows the names from every set that matches without being asked (linked names once the user
-has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without a
-match, it shows plain addresses as it does today ([why, and how regions and anchors are
-chosen](media-registry-design-notes.md#symbols)).
+has agreed to the fetch), says which set each name comes from, and lets the user drop a set, which then
+counts as not matching. Without a match, it shows plain addresses as it does today ([why, and how regions
+and anchors are chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses, told apart by anchors on bytes where they differ.
 The anchor chooser tests every candidate anchor against every title's files in the corpus at the same
