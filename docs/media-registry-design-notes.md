@@ -245,19 +245,21 @@ sit on it, hence smaller regions with `minAnchors`.
 The rules: an anchor is four to eight bytes of whole instructions starting at a routine's entry point; no
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
 stores); it has no run of two or more `NOP`s; its bytes appear only once in the region; and it covers
-only bytes the source assembles, never padding or bytes left over from whatever was in memory when a file
-was saved, which the chooser takes from the listing (according to the PIPELINE project, the never-run
-last 16 bytes of its MRUN, left over from page 7, match three other titles' files). Runs that many
-programs share make weak anchors even so, such as an entry point that opens with an OS call (`*FX4,1` is
-`LDA #4 : LDX #1 : JSR OSBYTE`) or a BASIC program's first line at `&1900`, and the corpus check finds
-them. Each exception is explained below: a copy, swap or load picked as moving the program, whose range
-covers the whole region, doesn't count as a store; run-once code is anchored on the bytes that get
-overwritten; an anchor that tells two overlays apart needn't start at a routine's entry; a region with no
-code, such as an adventure's database, is anchored on data its interpreter never writes; and a ROM's
-anchors can sit anywhere but `&FC00-&FEFF`. The debugger checks regions each time the machine stops and
-when a breakpoint set by name is hit, and a region needs every anchor to match and at least `minAnchors`
-(default and minimum 1) of them. A region without anchors is never shown automatically, but can be picked
-by hand.
+only code or data the program uses, never padding or bytes left over from whatever was in memory when a
+file was saved. A byte-for-byte rebuild has to emit those too, so the listing or the person choosing
+marks them, not a trace (according to the PIPELINE project, the never-run last 16 bytes of its MRUN, left
+over from page 7, match three other titles' files). Runs that many programs share make weak anchors even
+so, such as an entry point that opens with an OS call (`*FX4,1` is `LDA #4 : LDX #1 : JSR OSBYTE`), or,
+where a build labels a BASIC program's start (as PIPELINE's does for its MENU and MISSION), that
+program's first line at `&1900`. The chooser's corpus check finds them, and unlike the measurement in the
+findings, it keeps BASIC programs in the corpus to do so. Each exception is explained below: a copy, swap
+or load picked as moving the program, whose range covers the whole region, doesn't count as a store;
+run-once code is anchored on the bytes that get overwritten; an anchor that tells two overlays apart
+needn't start at a routine's entry; a region with no code, such as an adventure's database, is anchored
+on data its interpreter never writes; and a ROM's anchors can sit anywhere but `&FC00-&FEFF`. The
+debugger checks regions each time the machine stops and when a breakpoint set by name is hit, and a
+region needs every anchor to match and at least `minAnchors` (default and minimum 1) of them. A region
+without anchors is never shown automatically, but can be picked by hand.
 
 The project rebuilding Superior's PIPELINE byte for byte from source gave the format its second test, and
 most of what follows answers its feedback. According to that feedback, the disc holds several programs
@@ -276,13 +278,14 @@ to tie it to. Converters from each assembler or disassembler sort that out once,
 its own sections can emit a set directly. Where a format doesn't mark addresses, such as Baron's listing,
 whose `NAME = value` lines define numbers and addresses alike, a converter takes a `=` name as an address
 when an instruction uses it as a memory operand (not after `#`). On PIPELINE, according to its project,
-that keeps every zero page variable and the fields of a file the game reads, and none of a layout
-included only to work out offsets. It isn't exact: a number added to an address in an operand
-(`logo + LOGO_BAND, Y`) counts too. Each program, with what's always loaded along with it, is its own
-set, so its globals (zero page variables, the tune in page 8) name operands only in that program's code.
-Names are addresses only, since a constant shown as an address is the one thing a debugger would get
-wrong; whether a name is code or data can be added later if a debugger finds a use for it, as new fields
-can.
+that keeps every zero page variable and the 17 fields of its IO file that the game reads, and none of
+IO's layout, which the Graphics Designer includes only to work out offsets into a file it loads
+elsewhere. It isn't exact: a number added to an address in an operand (`logo + LOGO_BAND, Y`) counts too,
+and an address the code reaches only through a pointer or a table of addresses is missed. Each program,
+with what's always loaded along with it, is its own set, so its globals (zero page variables, the tune in
+page 8) name operands only in that program's code. Names are addresses only, since a constant shown as an
+address is the one thing a debugger would get wrong; whether a name is code or data can be added later if
+a debugger finds a use for it, as new fields can.
 
 A set carries its own `title`, `licence` and `source` because no record lists it. What a set names is
 code, and the same code turns up under many keys (a copy that's been written to, a crack, a compilation,
@@ -307,9 +310,12 @@ meet the loader's own return address. Code outside every matching region, such a
 gets no set's globals but the MOS's (below): whatever it does with zero page, it isn't any set's program
 doing it. The same goes for a short routine a program copies somewhere no anchor survives, such as page
 1, unless its set gives it a region it can match in. An address shown on its own has no instruction to go
-by, so it takes a global only when one set with a matching region names it, which labels the object table
-once the start-up code has gone and leaves the stub's and the editor's zero page bare. A region picked by
-hand counts as matching.
+by. Inside a matching region it takes only that region's names; outside every matching region it takes a
+global only when one non-system set with a matching region names it, or else a system global (below).
+That labels the object table once the start-up code has gone and leaves the stub's and the editor's zero
+page bare. It also means a loader left over a buffer the running program has taken shows the loader's
+names there, or none, not the program's global for the buffer. A region picked by hand counts as
+matching.
 
 Operands are named by what's in memory now, which has one known limit. According to the PIPELINE
 feedback, its game's `load_mission` writes an `RTI` to the MOS's NMI routine at `&0D00` after swapping
@@ -323,16 +329,14 @@ set and the instruction to the game's. So a MOS's set is marked as a system set,
 one; the chooser checks each MOS version's anchors against the other versions, which keeps them to one at
 a time. A system set lends its globals (vectors, OS variables, workspace) to all code, after everything
 else: the instruction's own set's regions and globals, then other sets' matching regions. That names the
-OS's addresses everywhere, including in the most common case of all, a game no set covers. A game that
+OS's addresses in any program, including the most common case of all, a game no set covers. A game that
 has taken over the machine and reuses OS workspace for its own variables gets the OS's names for them
 unless its own set names those addresses, and even a name that's wrong for the game says what the address
 was. System globals apply while any region of their set matches, so the names are those of the MOS that's
-running, and never to an address inside a matching region of a non-system set, for an operand or an
-address shown on its own. According to the PIPELINE feedback, its Level Designer's `draw_map_nibble` runs
-over the MOS's envelope storage at `&08C0`, and its game's code over the MOS's buffers from `&0A00`;
-those addresses are that code, not the MOS's workspace, while the program runs. An address shown on its
-own inside a matching region takes only that region's names; outside every matching region, it takes a
-global that only one non-system set names, or else a system global.
+running. They never name an address inside a matching region of a non-system set, for an operand or an
+address shown on its own, because there the address is that program's code or data while it runs, and the
+MOS's name would only mislead. According to the PIPELINE feedback, its Level Designer's `draw_map_nibble`
+runs over the MOS's envelope storage at `&08C0`, and its game's code over the MOS's buffers from `&0A00`.
 
 Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
 when someone else's file changes. A linked set is no exception: its regions and anchors are in the
@@ -376,39 +380,41 @@ Sets made separately are told apart by the corpus check ([below](#code-that-turn
 chooser tests every candidate anchor against every title's files at the same address, and runs every
 region in the index over the new program's own bytes at its run address, which is the debugger's per-stop
 check, so an earlier set that would match the new program shows up too. The pull request that adds a set
-carries the report for the reviewer to read, giving for every match how much of the region is identical
-at the same addresses. A region that is all or nearly all identical is the same code, such as a crack, a
-compilation or a re-release, and the set rightly applies there; anchors that agree over a region whose
-other bytes differ are a collision, and the region needs another anchor. The person reading the report
-makes that call, so it lists every title a region matches rather than counting any match as a failure: on
-the Stairway To Hell discs, according to the PIPELINE feedback, PIPELINE's three big programs show up
-only through a crack, which is the same code under another disc key. That's the trade: the build doesn't
-prove two sets apart, a person reading the report does. The build has no images, only anchors, so a proof
-would need every pair of overlapping regions to anchor a common address where they differ, which means
-extra anchors on every earlier set a new one overlaps, and that cost grows with the registry. The corpus
-check costs the same however big the registry gets, and tries anchors against real code rather than
-against other sets' anchors, and the measurement shows what it finds: across the corpus, the 2,228
-matches between titles were all in files at least 10% alike, nearly all at 90% or more, and all the same
-code or data. Its limit is the corpus's: files sit at their load addresses, so code that's relocated or
-decrypted as it loads, or that no catalogued file holds, isn't looked at, nor is a match split across two
-files that load together, and a report with nothing in it says only that nothing at those addresses
-matched. The build checks what it can without images, set by set: the schema and licence, anchor lengths,
-`minAnchors`, anchors inside their regions, none in `&FC00-&FEFF`, and `system` only on a set in the
-registry's list of MOS sets. Two sets that slip past the corpus check fall to the debugger's rule: when
-regions of two sets match at the same address, it shows neither and offers the choice, as it does when a
-region picked by hand clashes with one that matches. The list of MOS sets is kept by hand, since no
-address range tells a MOS from other ROMs (the Atom's BASIC, floating-point and DOS ROMs sit at
-`&C000-&EFFF`, below its kernel), and a change to it needs a maintainer's review, which the repository
-can require of that one file; the debugger's rule wouldn't catch a set wrongly on it.
+carries the report for the reviewer to read, giving for every match how much of the region that title's
+files hold and how much of it is identical at the same addresses. A region that is all or nearly all
+identical is the same code, such as a crack, a compilation or a re-release, and the set rightly applies
+there; anchors that agree over a region whose other bytes differ are a collision, and the region needs
+another anchor. The person reading the report makes that call, so it lists every title a region matches
+rather than counting any match as a failure: on the Stairway To Hell discs, according to the PIPELINE
+feedback, PIPELINE's three big programs show up only through a crack, which is the same code under
+another disc key. That's the trade: the build doesn't prove two sets apart, a person reading the report
+does. The build has no images, only anchors, so a proof would need every pair of overlapping regions to
+anchor a common address where they differ, which means extra anchors on every earlier set a new one
+overlaps, and that cost grows with the registry. The corpus check costs the same however big the registry
+gets, and tries anchors against real code rather than against other sets' anchors, and the measurement
+shows what it finds: across the corpus, the 2,228 matches between titles were all in files at least 10%
+alike, nearly all at 90% or more, and all the same code or data. Its limit is the corpus's: files sit at
+their load addresses, so code that's relocated or decrypted as it loads, or that no catalogued file
+holds, isn't looked at, nor is a match split across two files that load together, and a report with
+nothing in it says only that nothing at those addresses matched. The build checks what it can without
+images, set by set: the schema and licence, anchor lengths, `minAnchors`, anchors inside their regions,
+none in `&FC00-&FEFF`, and `system` only on a set in the registry's list of MOS sets. Two sets that slip
+past the corpus check fall to the debugger's rule: when regions of two sets match at the same address, it
+shows neither and offers the choice, as it does when a region picked by hand clashes with one that
+matches. The list of MOS sets is kept by hand, since no address range tells a MOS from other ROMs (the
+Atom's BASIC, floating-point and DOS ROMs sit at `&C000-&EFFF`, below its kernel), and a change to it
+needs a maintainer's review, which the repository can require of that one file; the debugger's rule
+wouldn't catch a set wrongly on it.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
-global, any region of its set does, and for a system global, its address is outside every non-system
-set's matching region), so a breakpoint on the game's main loop doesn't stop when the level designer runs
-at that address. The price is that a write that breaks an anchor also quietly disarms the breakpoint; a
-breakpoint set by address always stops, for anyone who'd rather have that. A breakpoint on a global can
-also stop for another program's use of that address while a region of its set is still in memory, which
-for a breakpoint is the safer mistake: a program's variables are also written by code no set covers, such
-as the filing system filling a buffer.
+global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
+designer runs at that address. The price is that a write that breaks an anchor also quietly disarms the
+breakpoint; a breakpoint set by address always stops, for anyone who'd rather have that. A breakpoint on
+a global can also stop for another program's use of that address while a region of its set is still in
+memory, which for a breakpoint is the safer mistake: a program's variables are also written by code no
+set covers, such as the filing system filling a buffer. A breakpoint on a system global is no different:
+it stops even where a non-system set's region covers its address and the name isn't shown there, which is
+the same safer mistake.
 
 The chooser takes a neutral input: each section's bytes at its run address, its instruction starts and
 labels, and the stores whose targets the assembler or disassembler could work out, plus the cuts and the
@@ -545,19 +551,19 @@ couldn't be loaded. The `url` and `home` are https. There are limits. The author
 fetches from another site and serve a file pinned to a version: GitHub's raw files at a commit do, a page
 that changes (GitHub Pages, most personal sites) doesn't, and those stay a plain link. The file has to
 carry addresses (a listing, a symbol or label file, an assembler's report), since jsbeeb won't assemble
-anything, and its format has to say which names are addresses, since constants stay out. The client gives
-a region the names in its range and makes the rest globals, so the file has to hold only the set's
-program, and names for data overlaid at run time go with the wrong region. PIPELINE has several such
-cases, according to its project: the level being edited fills the Level Designer's start-up code, IO is
-loaded over H.GAME's loader, and the Graphics Designer includes IO's layout only for offsets. By range,
-the level's names and IO's go with the region they're loaded over and vanish while that data is there,
-and cutting the region smaller only turns the moved code's labels into globals shown over IO's data. A
-set like that is stored, with its regions and globals assigned by hand, as PIPELINE's own would be
-anyway. A link pinned to a commit also needs the file committed, one per program, since build output
-usually isn't. And each format needs a small converter in jsbeeb, so only a few common ones are accepted.
-Where an author has said no reuse, their work is a plain link at most and is never fetched. Asking
-authors for a licence still helps: a stored set needs no converter, and survives the source moving or
-vanishing.
+anything, and its names have to be told apart from constants, by its format or by the converter rule
+above. The client gives a region the names in its range and makes the rest globals, so the file has to
+hold only the set's program, and names for data overlaid at run time go with the wrong region. PIPELINE
+has two such cases, according to its project: the level being edited fills the Level Designer's start-up
+code, and IO is loaded over H.GAME's loader. By range, the level's names and IO's go with the region
+they're loaded over and vanish while that data is there, and cutting the region smaller only turns the
+moved code's labels into globals shown over IO's data. A set like that needs storing, with its regions
+and globals assigned by hand, which needs a licence or permission; without one, it's a link with those
+names wrong, or a plain link. A link pinned to a commit also needs the file committed, one per program,
+since build output usually isn't. And each format needs a small converter in jsbeeb, so only a few common
+ones are accepted. Where an author has said no reuse, their work is a plain link at most and is never
+fetched. Asking authors for a licence still helps: a stored set needs no converter, and survives the
+source moving or vanishing.
 
 ## Licensing
 

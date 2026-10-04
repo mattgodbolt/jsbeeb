@@ -167,9 +167,8 @@ its globals, then other sets' matching regions, then system globals; an instruct
 matching region takes names from matching regions, then system globals. An address shown on its own, such
 as a row of the memory view, takes only that region's names if it lies in a matching region; otherwise it
 takes a global if only one non-system set with a matching region names it, or else a system global. A
-breakpoint set by name only stops while the name applies: while its region matches or, for a global,
-while any region of its set does, and for a system global, while its address is outside every non-system
-set's matching region.
+breakpoint set by name only stops while its region matches or, for a global, while any region of its set
+does.
 
 The debugger shows the names from every set that matches without being asked (linked names once the user
 has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without a
@@ -179,15 +178,15 @@ chosen](media-registry-design-notes.md#symbols)).
 Overlays are separate regions over the same addresses, told apart by anchors on bytes where they differ.
 The anchor chooser tests every candidate anchor against every title's files in the corpus at the same
 address, and every indexed region against the new program, and the pull request that adds a set carries
-its report of every other title a region matches, with how much of the region is identical there. The
-reviewer judges each: a region that's all or nearly all identical is the same code (a crack, a
-compilation) and the set rightly applies there, while anchors that agree over a region whose other bytes
-differ are a collision and need another anchor. If another set already covers the same code, the two
-become one shared set. The build checks each set on its own (the schema and licence, anchor lengths,
-`minAnchors`, anchors inside their regions, none in `&FC00-&FEFF`, `system` only on a set in a list of
-MOS sets that maintainers keep, and a linked file's digest and names) but doesn't prove two sets apart.
-If regions of different sets still match at the same address, the debugger shows neither and offers the
-choice.
+its report of every title a region matches, with how much of the region that title's files hold and how
+much of it is identical there. The reviewer judges each: a region that's all or nearly all identical is
+the same code (a crack, a compilation) and the set rightly applies there, while anchors that agree over a
+region whose other bytes differ are a collision and need another anchor. If another set already covers
+the same code, the two become one shared set. The build checks each set on its own (the schema and
+licence, anchor lengths, `minAnchors`, anchors inside their regions, none in `&FC00-&FEFF`, `system` only
+on a set in a list of MOS sets that maintainers keep, and a linked file's digest and names) but doesn't
+prove two sets apart. If regions of different sets still match at the same address, the debugger shows
+neither and offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
 anchors can sit anywhere but `&FC00-&FEFF`, and its regions are cut where a machine can put RAM or I/O
