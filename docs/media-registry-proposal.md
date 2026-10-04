@@ -160,15 +160,16 @@ program. The `url` and `home` are https, a redirect to another host is refused, 
 file as the build does; a file that fails counts as a failed fetch.
 
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
-`"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
-last, while any of its regions matches, but never an address inside a matching region of a non-system
-set. An instruction in one of a set's matching regions takes names from that set's matching regions, then
-its globals, then other sets' matching regions, then system globals; an instruction outside every
-matching region takes names from matching regions, then system globals. An address shown on its own, such
-as a row of the memory view, takes only that region's names if it lies in a matching region; otherwise it
-takes a global if only one non-system set with a matching region names it, or else a system global. A
-breakpoint set by name only stops while its region matches or, for a global, while any region of its set
-does.
+`"system": true` (no other set can be one), whose globals (system globals) name its own code's operands
+as any set's do, and also every other code's, last, while any of its regions matches, but never an
+address inside a matching region of a non-system set. An instruction in one of a set's matching regions
+takes names from that set's matching regions, then its globals, then other sets' matching regions, then
+system globals if its set isn't the system set; an instruction outside every matching region takes names
+from matching regions, then system globals. An address shown on its own, such as a row of the memory
+view, takes only that region's names if it lies in a matching region. Otherwise it takes the global that
+one non-system set with a matching region names, no name if two or more such sets name it, or a system
+global if none does. A breakpoint set by name only stops while its region matches or, for a global, while
+any region of its set does.
 
 The debugger shows the names from every set that matches without being asked (linked names once the user
 has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without a

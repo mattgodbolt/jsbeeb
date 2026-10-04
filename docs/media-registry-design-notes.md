@@ -310,12 +310,12 @@ meet the loader's own return address. Code outside every matching region, such a
 gets no set's globals but the MOS's (below): whatever it does with zero page, it isn't any set's program
 doing it. The same goes for a short routine a program copies somewhere no anchor survives, such as page
 1, unless its set gives it a region it can match in. An address shown on its own has no instruction to go
-by. Inside a matching region it takes only that region's names; outside every matching region it takes a
-global only when one non-system set with a matching region names it, or else a system global (below).
-That labels the object table once the start-up code has gone and leaves the stub's and the editor's zero
-page bare. It also means a loader left over a buffer the running program has taken shows the loader's
-names there, or none, not the program's global for the buffer. A region picked by hand counts as
-matching.
+by. Inside a matching region it takes only that region's names. Outside every matching region it takes a
+global when one non-system set with a matching region names it, no name when two or more do, and a system
+global (below) only when none does. That labels the object table once the start-up code has gone and
+leaves the stub's and the editor's zero page bare. It also means a loader left over a buffer the running
+program has taken shows the loader's names there, or none, not the program's global for the buffer. A
+region picked by hand counts as matching.
 
 Operands are named by what's in memory now, which has one known limit. According to the PIPELINE
 feedback, its game's `load_mission` writes an `RTI` to the MOS's NMI routine at `&0D00` after swapping
@@ -327,16 +327,17 @@ The MOS's globals are the exception, because every program uses the MOS's addres
 Under the rule above, a game's `STA &020E` wouldn't read `WRCHV`, since that name belongs to the MOS's
 set and the instruction to the game's. So a MOS's set is marked as a system set, and only a MOS's can be
 one; the chooser checks each MOS version's anchors against the other versions, which keeps them to one at
-a time. A system set lends its globals (vectors, OS variables, workspace) to all code, after everything
-else: the instruction's own set's regions and globals, then other sets' matching regions. That names the
-OS's addresses in any program, including the most common case of all, a game no set covers. A game that
-has taken over the machine and reuses OS workspace for its own variables gets the OS's names for them
-unless its own set names those addresses, and even a name that's wrong for the game says what the address
-was. System globals apply while any region of their set matches, so the names are those of the MOS that's
-running. They never name an address inside a matching region of a non-system set, for an operand or an
-address shown on its own, because there the address is that program's code or data while it runs, and the
-MOS's name would only mislead. According to the PIPELINE feedback, its Level Designer's `draw_map_nibble`
-runs over the MOS's envelope storage at `&08C0`, and its game's code over the MOS's buffers from `&0A00`.
+a time. A system set's own code takes its globals (vectors, OS variables, workspace) as any set's code
+takes its own, and the set lends them to all other code, after everything else: the instruction's own
+set's regions and globals, then other sets' matching regions. That names the OS's addresses in any
+program, including the most common case of all, a game no set covers. A game that has taken over the
+machine and reuses OS workspace for its own variables gets the OS's names for them unless its own set
+names those addresses, and even a name that's wrong for the game says what the address was. System
+globals apply while any region of their set matches, so the names are those of the MOS that's running.
+They never name an address inside a matching region of a non-system set, for an operand or an address
+shown on its own, because there the address is that program's code or data while it runs, and the MOS's
+name would only mislead. According to the PIPELINE feedback, its Level Designer's `draw_map_nibble` runs
+over the MOS's envelope storage at `&08C0`, and its game's code over the MOS's buffers from `&0A00`.
 
 Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
 when someone else's file changes. A linked set is no exception: its regions and anchors are in the
