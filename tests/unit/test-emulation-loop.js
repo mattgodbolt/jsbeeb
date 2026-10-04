@@ -186,7 +186,10 @@ describe("EmulationLoop", () => {
         const loop = make();
         loop.toggleFastAsPossible();
         loop.toggleFastAsPossible();
-        expect(toasts()).toEqual([expect.stringContaining("Turbo is on"), expect.stringContaining("Turbo is off")]);
+        expect(toasts()).toEqual([
+            expect.stringContaining("Turbo is on. Alt-T turns it off."),
+            expect.stringContaining("Turbo is off. Alt-T turns it on."),
+        ]);
     });
 
     it("speeds up for a tape motor only when told fast tape", () => {
@@ -438,13 +441,16 @@ describe("EmulationLoop", () => {
             expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
         });
 
-        it("shows normal speed while turbo from before the session waits for it to end", () => {
+        it("shows normal speed for the session, and turbo from before it again once it ends", () => {
             const loop = started();
             loop.toggleFastAsPossible();
             vi.advanceTimersByTime(10);
             loop.setLockstep(lockstep);
             vi.advanceTimersByTime(10);
             expect(speedIconsShown()).toEqual(["speed-normal"]);
+            loop.setLockstep(null);
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-turbo"]);
         });
 
         it("refuses turbo, saying why, rather than arming it for after the session", () => {
