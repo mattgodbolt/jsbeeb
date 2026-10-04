@@ -123,28 +123,49 @@ The first fields:
 
 ### Symbol sets
 
-A symbol set comes from a file (Baron's `--symbols` JSON, say), split into address regions. Each region
-has anchors, short runs of bytes at known addresses, and the debugger shows a region's labels only while
-all of its anchors match memory, and there are at least `minAnchors`. Symbols outside any region go in
-`globals`. Without matching anchors, the debugger shows plain addresses as it does today ([why, and how
-anchors are chosen](media-registry-design-notes.md#symbols)).
+A symbol set names the addresses of one program, or of programs that are always in memory together. It's
+a JSON file in the registry's own small format, made by a converter from an assembler's output or a
+disassembly listing (BeebAsm, Baron, py8dis), and a record's `source` entry gives its `url` and
+`licence`. Every name in it is an address; constants stay out.
+
+A set has `regions`, each a range of memory with `anchors` (short runs of bytes at known addresses),
+`minAnchors` and `symbols` (names for addresses in that range), and `globals`, names for addresses the
+program uses outside its regions (zero page, buffers, data it loads). A region's names show only while
+every one of its anchors matches memory and there are at least `minAnchors`; a set's globals show while
+any of its regions does, and where a matching region and a global name the same address, the region
+wins. Anchors are read from the memory being looked at: the bank a disassembly view shows, or what the
+CPU sees when a breakpoint set by name is hit, which only stops if the name's region matches then.
+Without a match, the debugger shows plain addresses as it does today ([why, and how regions and anchors
+are chosen](media-registry-design-notes.md#symbols)).
+
+Overlays are separate regions over the same addresses, and the build requires any two overlapping
+regions of one set to have anchors that disagree about some byte, so they can never both match. Where
+regions of different sets match at the same address, sets from the image's own records win; otherwise
+the debugger shows neither and offers the choice.
+
+The build also publishes `symbols.json`: every set's `url`, regions and anchors, without the names. A
+client that finds no set through the image's records (a disc that's been written to, a crack, a
+compilation, a tape) checks memory against it instead, and fetches the set that matches.
 
 ```json
 {
   "source": {
-    "exile-v1-1-labels": {
-      "format": "baron-symbols",
-      "url": "https://.../exile-v1-1.json",
-      "globals": { "osbyte": "0xfff4" },
-      "regions": {
-        "main": {
-          "start": "0x1100",
-          "end": "0x5800",
-          "minAnchors": 2,
-          "anchors": [{ "at": "0x1a2c", "bytes": "a9008d..." }]
-        }
-      },
-      "licence": "CC0-1.0"
+    "exile-v1-1-game": { "kind": "symbols", "url": "https://.../exile-v1-1-game.json", "licence": "CC0-1.0" }
+  }
+}
+```
+
+```json
+{
+  "format": 1,
+  "globals": { "player_x": "0x70" },
+  "regions": {
+    "main": {
+      "start": "0x1100",
+      "end": "0x5800",
+      "minAnchors": 2,
+      "anchors": [{ "at": "0x1a2c", "bytes": "a9008d..." }],
+      "symbols": { "main_loop": "0x1a2c" }
     }
   }
 }

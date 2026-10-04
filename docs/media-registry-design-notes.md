@@ -243,11 +243,90 @@ sit on it, hence smaller regions with `minAnchors`.
 
 The rules: an anchor is four to eight bytes of whole instructions starting at a routine's entry point; no
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
-stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. Overlays are
-separate regions over the same addresses. The debugger checks a region when it's about to show it
-(stopped at a breakpoint, or scrolling the disassembly), and needs every anchor to match and at least
-`minAnchors` (default and minimum 1) of them; `globals` show whenever any region matches. A symbol set
-without anchors is never shown automatically, but can be picked by hand.
+stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. The debugger
+checks a region when it's about to use it (showing the disassembly, stopping at a breakpoint set by
+name), and needs every anchor to match and at least `minAnchors` (default and minimum 1) of them. A
+region without anchors is never shown automatically, but can be picked by hand.
+
+The project rebuilding Superior's PIPELINE byte for byte from source gave the format its second test, and
+most of what follows answers its feedback. According to that feedback, the disc holds several programs
+that take turns in the same memory: three loader stubs at `&0900` that differ in 6 of their `&D9`
+bytes, a game, a level designer and a graphics editor, and a data file the game loads over its own load
+image. Their notes say the game swaps `&0D00-&1CFF` with the screen while it loads that file, and that
+its start-up code becomes a table of the level's objects once it has run.
+
+### Format
+
+A set is in the registry's own format, not an assembler's, because what the debugger needs is narrower
+than any assembler's dump and those dumps change. Baron's, for one, has a JSON object per source file with
+labels and constants alike, so a consumer can't tell which numbers are addresses, and nothing says which
+program a label belongs to. Converters from each assembler or disassembler sort that out once, and a
+build that knows its own sections can emit a set directly. Each program, with what's always loaded along
+with it, is its own set, so its globals (zero page variables, the tune in page 8) show only when that
+program is there. Names are addresses only, since a constant used as an address is the one thing a
+debugger would get wrong; whether a name is code or data can be added later if a debugger finds a use for
+it, as new fields can.
+
+A region's names win over its set's globals at the same address because that's where code turns into
+data: when the start-up code is overwritten, its region stops matching and the global naming the table
+shows instead.
+
+### Where to cut regions
+
+Every anchor in a region has to match. Letting a region tolerate one failing anchor would let
+near-identical overlays both match, and the PIPELINE stubs share most of their candidate anchors. When
+an anchor fails while the code around it is still there, the region shows plain addresses for a while,
+which is the safe direction. So the work is in cutting regions where memory changes, using what the
+build or the listing already says:
+
+- Ranges the program copies or swaps, whose bounds are usually constants in the code. Cutting the game at
+  `&0D00` and `&1D00` means only the swapped part loses its names while the data file loads; the routine
+  doing the loading, outside that range, keeps them.
+- Code that's overwritten once it has run is a region of its own, with its anchors on the bytes that get
+  overwritten (the one exception to the store rule), so its names go when it does.
+- File loads whose address the code gives (an `OSFILE` parameter block, say) count as stores over that
+  range.
+
+Writes no static analysis sees (the filing system's workspace, copies through a computed pointer) can
+still land on an anchor. The region then loses its names until the bytes come back, which is acceptable
+during a disc load, and a person who notices can move the anchor or tell the chooser to avoid a range.
+We don't record runs of the game to find these writes: anyone with the source or a listing should be able
+to make a set without playing every part of the game, and a recorded run only covers what was played.
+There's also no way to label code that's parked somewhere it can't run, such as the swapped part of the
+game while it sits in screen memory; that would need a region with an offset, which isn't worth a field.
+
+Overlays are told apart by an anchor on a byte where they differ. The chooser looks for those, and the
+build checks that any two overlapping regions in a set have anchors that disagree about some byte. That
+means two regions of one set can never both match, so the debugger needs no rule for it. Between sets,
+the image's own records win, and anything else is the user's choice; merging names that happen to agree
+isn't worth its rules.
+
+Anchors are read from the memory being looked at, which covers sideways banks and shadow RAM without a
+field saying which bank a region is in, and works for a ROM whatever slot it's in. A breakpoint set by
+name checks the name's region when it's hit, so a breakpoint on the game's main loop doesn't stop when
+the level designer runs at that address.
+
+The chooser takes a neutral input: each section's bytes at its run address, its instruction starts and
+labels, and the stores whose targets the assembler or disassembler could work out, plus the cuts and the
+ranges to avoid. The prototype reads a py8dis listing; BeebAsm and Baron builds would produce the same.
+
+### Finding a set without a record
+
+Symbol sets hang off version records, but the image's key doesn't always lead there. PIPELINE's
+designers save to the game disc, so a copy that's been used has a new key and no record, although its
+code hasn't changed; our corpus has one such copy, identical in every catalogued file and different in one
+catalogue byte. Looking up a catalogued file's hash wouldn't help there, since on PIPELINE the catalogued
+files are only the loader stubs, and those differ between copies while the code that matters is in
+sectors the catalogue doesn't cover.
+
+Since anchors are what make showing names safe, finding a set can be loose. The build publishes every
+set's regions and anchors in one file, and a client with nothing better checks memory against it. That
+covers used discs, cracks, compilations and tapes in one go. It stays small, a few dozen anchors of eight bytes or so per set
+and it's fetched only when the debugger wants names and the records gave none.
+Checking it costs no more than checking a record's set, since only the regions covering the address
+being shown are read. A false match needs several routine entry points with the same bytes at the same
+addresses, which mostly happens when it's the same code, and then the names are usually right; a match
+from the image's own records still wins over one from the index.
 
 ## Licensing
 
