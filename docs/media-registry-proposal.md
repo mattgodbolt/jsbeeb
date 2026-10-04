@@ -158,14 +158,14 @@ gives to another address, is dropped. So a linked file has to hold only the set'
 `home` are https, and the client checks the names as the build does.
 
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
-`"system": true` (no other set can be one; maintainers keep the list of MOS sets the build allows it on),
-whose globals (system globals) name operands in any code, last, while any of its regions matches. An
-instruction in one of a set's matching regions takes names from that set's matching regions, then its
-globals, then other sets' matching regions, then system globals; an instruction outside every matching
-region takes names from matching regions, then system globals. An address shown on its own, such as a row
-of the memory view, takes a matching region's name, or else a global if only one set with a matching
-region names it, not counting system sets, or else a system global. A breakpoint set by name only stops
-while the name's region matches or, for a global, while any region of its set does.
+`"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
+last, while any of its regions matches. An instruction in one of a set's matching regions takes names
+from that set's matching regions, then its globals, then other sets' matching regions, then system
+globals; an instruction outside every matching region takes names from matching regions, then system
+globals. An address shown on its own, such as a row of the memory view, takes a matching region's name,
+or else a global if only one set with a matching region names it, not counting system sets, or else a
+system global. A breakpoint set by name only stops while the name's region matches or, for a global,
+while any region of its set does.
 
 The debugger shows the names from every set that matches without being asked (linked names once the user
 has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without a
@@ -177,9 +177,9 @@ The anchor chooser tests every candidate anchor against every title's files in t
 address, and every indexed region against the new program, and the pull request that adds a set carries
 its report of any other title a region matches, for the reviewer to judge; the same code becomes one
 shared set. The build checks each set on its own (the schema and licence, anchor lengths, `minAnchors`,
-anchors inside their regions, none in `&FC00-&FEFF`, `system` only on a set in the registry's list of MOS
-sets) but doesn't prove two sets apart. If regions of different sets still match at the same address, the
-debugger shows neither and offers the choice.
+anchors inside their regions, none in `&FC00-&FEFF`, `system` only on a set in a list of MOS sets that
+maintainers keep) but doesn't prove two sets apart. If regions of different sets still match at the same
+address, the debugger shows neither and offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
 anchors can sit anywhere but `&FC00-&FEFF`, and its regions are cut where a machine can put RAM or I/O
