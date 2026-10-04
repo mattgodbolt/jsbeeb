@@ -14,6 +14,7 @@ import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
 import { SthSource } from "./web/sth-source.js";
 import { HfeSource } from "./web/hfe-source.js";
 import { BitshiftersSource } from "./web/bitshifters-source.js";
+import { GitHubSource } from "./web/github-source.js";
 import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
@@ -245,6 +246,7 @@ const autoBoot = new Autoboot({
 new SthSource({ media });
 new HfeSource({ media });
 new BitshiftersSource({ media });
+new GitHubSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
 const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
 const snapshots = new SnapshotUI({

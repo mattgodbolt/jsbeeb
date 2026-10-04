@@ -14,7 +14,8 @@ Every listed entry is one descriptor, whichever source it came from:
 ```
 
 - `ref` is what `loadDiscImage` or `loadTapeImage` takes and what goes in the URL, schema
-  included: `bitshifters:bs-paradroid.ssd`, `hfe:c0ced89b14aaef23.hfe`, `sth:Elite.zip`.
+  included: `bitshifters:bs-paradroid.ssd`, `hfe:c0ced89b14aaef23.hfe`, `sth:Elite.zip`,
+  `github:mattgodbolt/nm/ninja_music.ssd`.
 - `kind` is `disc` or `tape`.
 - `title`, `publisher` and `detail` are what the row shows and what the search matches; `detail`
   is free text, joined with `·` when it has several parts.
@@ -40,7 +41,8 @@ metadata (the authors' own releases, the flux captures), then the sources withou
 served (`route`) and which source it counts as. A reference with no schema is a bare name from
 the built-in folder. Archive sources register their fetcher with `MediaResolver.addSource(schema,
 fetcher)`, and a route that is just "bytes by path" (`hfe`, `bitshifters`) needs nothing more than
-its `case` in `resolve`.
+its `case` in `resolve`. A route that only rewrites the reference as a URL (`github`) loads it the
+way the `url` route does and registers nothing, so every resolver can load it.
 
 ## The Bitshifters manifest
 
@@ -68,6 +70,50 @@ which any remote source needs, since the browser fetches them cross-origin.
 `machine` is the machine the disc needs: `Master` is the Master 128 with DFS and no Tube,
 `MasterTurbo` the same with the 65C102 co-processor. Any other field we come to read, or need
 the manifest to gain, is documented here in the same change that starts reading it.
+
+## GitHub
+
+`github:<owner>/<repo>/<path>` names a file committed to a public GitHub repo, at its default
+branch: `github:mattgodbolt/frogman/frogman_rebuilt.ssd`. `@<ref>` after the repo name picks a
+branch, tag or commit instead: `github:mattgodbolt/frogman@classic/frogman_rebuilt.ssd`. A ref
+has no `/` in it. The resolver loads `https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>`
+(with `HEAD` as the ref when none is given), encoding each segment of the path, and opens a zip
+as it would one from a URL. raw.githubusercontent.com sends `Access-Control-Allow-Origin: *`, and
+caches for five minutes, so a push takes up to that long to show.
+
+A GitHub release asset cannot be loaded: its download is a redirect from github.com with no CORS
+header, so the browser refuses it, and the disc has to be committed to the repo instead. A GitHub
+Pages site does send the header, so a disc published there loads as a plain `https:` URL.
+
+The media window lists the discs in `src/web/github-discs.json`, which is bundled into the page
+when it is built, so the list itself has nothing to fetch. Each entry has the Bitshifters
+manifest's fields, with `repo` and `ref` in place of the site:
+
+```json
+{
+  "repo": "mattgodbolt/nm",
+  "path": "ninja_music.ssd",
+  "title": "Ninja Massacre music",
+  "publisher": "Matt Godbolt",
+  "authors": "Music by David Whittaker",
+  "year": 2026,
+  "type": "Music",
+  "machine": "Master"
+}
+```
+
+- `repo` is `owner/name` and `path` is the file within it. `title`, `publisher`, `year` and
+  `type` are required.
+- `ref` is optional. Without it the entry follows the default branch, so it always loads the
+  latest build, and a broken push breaks it until the next push fixes it.
+- `authors` is optional, and plain text.
+- `machine` is optional, and takes the names `MachineRequirements` knows, as the Bitshifters
+  manifest's does.
+- `url` is optional and defaults to the repo's page, `https://github.com/<repo>`.
+
+The entry is listed as `github:<repo>/<path>`, or `github:<repo>@<ref>/<path>` when it has a ref.
+`tests/unit/test-github-source.js` checks every entry's fields, and that no two entries name the
+same disc.
 
 ## Adding a source
 

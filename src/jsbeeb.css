@@ -2064,6 +2064,11 @@ div.smoothie-chart-tooltip {
   border-color: #8a3f66;
 }
 
+.media-source.src-github {
+  color: #f5b98a;
+  border-color: #8a5530;
+}
+
 .media-source.src-builtin {
   color: #9ec5fe;
   border-color: #2f5a8f;

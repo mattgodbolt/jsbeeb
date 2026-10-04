@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuiltInImages, MediaLoader } from "../../src/web/media-loader.js";
+import { GitHubSource } from "../../src/web/github-source.js";
+import { MachineRequirements } from "../../src/web/media-catalogue.js";
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
@@ -253,6 +255,15 @@ describe("MediaLoader", () => {
             for (const ref of ["sth:Games/Exile.zip", "hfe:a.hfe", "elite.ssd"])
                 await expect(media.describe(ref)).resolves.toBeNull();
             expect(listed).not.toHaveBeenCalled();
+        });
+
+        it("describes a github: reference on the bundled list, with the machine it needs", async () => {
+            const media = make();
+            new GitHubSource({ media });
+            await expect(media.describe("github:mattgodbolt/nm/ninja_music.ssd")).resolves.toMatchObject({
+                requires: MachineRequirements.Master,
+            });
+            await expect(media.describe("github:someone/else/disc.ssd")).resolves.toBeNull();
         });
 
         it("keeps listing when one source fails, and says which", async () => {

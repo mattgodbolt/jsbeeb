@@ -32,6 +32,11 @@ export const Sources = Object.freeze({
         phrase: "Bitshifters",
         title: "Demos and games released at bitshifters.github.io, each with the page that presents it",
     },
+    github: {
+        name: "GitHub",
+        phrase: "GitHub",
+        title: "Games and demos from their authors' GitHub repos, each with a link to its repo",
+    },
     gdrive: { name: "Google Drive", phrase: "Google Drive", title: "Your Google Drive; changes are kept there" },
     browser: {
         name: "This browser",
@@ -122,18 +127,34 @@ export function satisfiesRequirement(requires, { model, hasTube }) {
 // The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
 const stripTags = (text) => text.replace(/<[^>]*>/g, "");
 
+const manifestDetail = ({ type, machine, year }, authors) => [type, machine, year, authors].filter(Boolean).join(" · ");
+
 export function describeBitshiftersEntry(file) {
-    const detail = [file.type, file.machine, file.year, file.authors && stripTags(file.authors)];
     return {
         ref: `bitshifters:${file.path}`,
         kind: "disc",
         title: file.title || file.path,
         publisher: stripTags(file.publisher ?? ""),
-        detail: detail.filter(Boolean).join(" · "),
+        detail: manifestDetail(file, file.authors && stripTags(file.authors)),
         source: "bitshifters",
         savesChanges: false,
         url: file.url,
         requires: machineRequirement(file.machine),
+    };
+}
+
+/** An entry of github-discs.json, whose disc is at its repo's default branch unless the entry names a `ref`. */
+export function describeGitHubEntry(entry) {
+    return {
+        ref: `github:${entry.repo}${entry.ref ? `@${entry.ref}` : ""}/${entry.path}`,
+        kind: "disc",
+        title: entry.title,
+        publisher: entry.publisher,
+        detail: manifestDetail(entry, entry.authors),
+        source: "github",
+        savesChanges: false,
+        url: entry.url ?? `https://github.com/${entry.repo}`,
+        requires: machineRequirement(entry.machine),
     };
 }
 
@@ -233,7 +254,7 @@ export const matchesQuery = (descriptor, query) => scoreQuery(descriptor, query)
 
 // Among equal matches with one title: the user's own discs, then the sources with metadata
 // (the authors' own releases, the flux captures) before the one without.
-const SourceRank = { browser: 1, gdrive: 1, session: 1, bitshifters: 2, hfe: 2, hfeRebuilt: 3, sth: 4 };
+const SourceRank = { browser: 1, gdrive: 1, session: 1, bitshifters: 2, github: 2, hfe: 2, hfeRebuilt: 3, sth: 4 };
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 

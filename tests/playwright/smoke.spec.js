@@ -318,3 +318,17 @@ test("a link that boots a Bitshifters disc without naming a model comes up on th
     await page.goBack();
     await expect(page).not.toHaveURL(/bitshifters/);
 });
+
+test("a link that boots a disc on the GitHub list comes up on the machine the list gives", async ({ beeb, page }) => {
+    await page.route("https://raw.githubusercontent.com/mattgodbolt/nm/HEAD/ninja_music.ssd", (route) =>
+        route.fulfill({ path: "public/discs/elite.ssd", contentType: "application/octet-stream" }),
+    );
+    await beeb.open("?disc=github:mattgodbolt/nm/ninja_music.ssd&autoboot");
+    await expect(page).toHaveURL(/model=Master/);
+    await expect(page.locator(".toast")).toContainText("Switched to a BBC Master 128 for Ninja Massacre music");
+    expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
+    await beeb.expectDrive0("ninja_music.ssd");
+    await page.click("#navbarMedia");
+    await page.click('#media-chips .media-chip[title^="Games and demos from their authors"]');
+    await expect(page.locator("#media-list .media-row .media-source").first()).toHaveText("GitHub");
+});
