@@ -146,17 +146,18 @@ at.
 
 A set stores names only when their licence, or their author's recorded permission, allows it. Names it
 can't store it can link: `link` holds the `url` of the names' file pinned to an exact version (a commit,
-never a branch), the file's `sha256`, its `format`, and `home`, the author's page. A set can have stored
-names and a link, or a link alone, when it has no `symbols`, `globals` or `source` and its `licence`
-covers just its regions and anchors. It has at most one `link`; any further disassembly of the same code
-is a plain link in its `links`, as in a record. The registry never stores linked names. When a set with a
-link matches, the debugger asks whether to fetch the linked names, showing the author's `home` and the
-site the file comes from, and remembers the answer for that `home` and that site together. If the user
-agrees, it fetches the file from the author's site, checks its `sha256`, converts it, and adds the names
-to the set's: those in a region's range are that region's, the rest are globals, and stored names win: a
-linked name for an address the set already names, or that the set gives to another address, is dropped.
-So a linked file has to hold only the set's program. The `url` and `home` are https, and the client
-checks the names as the build does.
+never a branch), the file's `sha256` (the full digest, 64 lowercase hex characters), its `format`, and
+`home`, the author's page. A set can have stored names and a link, or a link alone, when it has no
+`symbols`, `globals` or `source` and its `licence` covers just its regions and anchors. It has at most
+one `link`; any further disassembly of the same code is a plain link in its `links`, as in a record. The
+registry never stores linked names. When a set with a link matches, the debugger asks whether to fetch
+the linked names, showing the author's `home` and the host the file comes from, and remembers the answer
+for that `home` and that host together. If the user agrees, it fetches the file from the author's site,
+checks its `sha256`, converts it, and adds the names to the set's: those in a region's range are that
+region's, the rest are globals, and stored names win: a linked name for an address the set already names,
+or that the set gives to another address, is dropped. So a linked file has to hold only the set's
+program. The `url` and `home` are https, a redirect to another host is refused, and the client checks the
+file as the build does; a file that fails counts as a failed fetch.
 
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
 `"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
@@ -179,8 +180,8 @@ address, and every indexed region against the new program, and the pull request 
 its report of any other title a region matches, for the reviewer to judge; the same code becomes one
 shared set. The build checks each set on its own (the schema and licence, anchor lengths, `minAnchors`,
 anchors inside their regions, none in `&FC00-&FEFF`, `system` only on a set in a list of MOS sets that
-maintainers keep) but doesn't prove two sets apart. If regions of different sets still match at the same
-address, the debugger shows neither and offers the choice.
+maintainers keep, and a linked file's digest and names) but doesn't prove two sets apart. If regions of
+different sets still match at the same address, the debugger shows neither and offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
 anchors can sit anywhere but `&FC00-&FEFF`, and its regions are cut where a machine can put RAM or I/O
