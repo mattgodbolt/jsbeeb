@@ -321,10 +321,10 @@ sectors the catalogue doesn't cover.
 
 Since anchors are what make showing names safe, finding a set can be loose. The build publishes every
 set's regions and anchors in one file, and a client with nothing better checks memory against it. That
-covers used discs, cracks, compilations and tapes in one go. It stays small, a few dozen anchors of eight bytes or so per set
-and it's fetched only when the debugger wants names and the records gave none.
-Checking it costs no more than checking a record's set, since only the regions covering the address
-being shown are read. A false match needs several routine entry points with the same bytes at the same
+covers used discs, cracks, compilations and tapes in one go. It stays small, a few dozen anchors of
+eight bytes or so per set, and it's fetched only when the debugger wants names and the records gave
+none. Checking it costs no more than checking a record's set, since only the regions covering the
+address being shown are read. A false match needs several routine entry points with the same bytes at the same
 addresses, which mostly happens when it's the same code, and then the names are usually right; a match
 from the image's own records still wins over one from the index.
 
