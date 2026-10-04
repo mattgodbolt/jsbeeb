@@ -129,18 +129,19 @@ disassembly listing (BeebAsm, Baron, py8dis), and kept in the registry beside th
 `symbols/`; a record's `source` entry gives its `url` and `licence`. Every name in it is an address;
 constants stay out.
 
-A set has `regions`, each a range of memory with `anchors` (short runs of bytes at known addresses),
-`minAnchors` and `symbols` (names for addresses in that range), and `globals`, names not tied to one
-region's code (zero page, buffers, data it loads, a table that replaces code once it has run). A region's
-names show only while every one of its anchors matches memory and there are at least `minAnchors`. A
-set's globals name only its own code's operands: an instruction in one of the set's matching regions
-takes names from that set's matching regions, then its globals, then other sets' matching regions, and an
-instruction outside every matching region takes no globals. An address shown on its own, such as a row of
-the memory view, takes a matching region's name, or else a global if only one set with a matching region
-names it. Anchors are read from the memory being looked at: the bank a disassembly view shows, or what
-the CPU sees when a breakpoint set by name is hit, which only stops while the name's region matches or,
-for a global, while any region of its set does. Without a match, the debugger shows plain addresses as it
-does today ([why, and how regions and anchors are chosen](media-registry-design-notes.md#symbols)).
+A set has `regions`, each a range of memory (`start` up to but not including `end`) with `anchors` (short
+runs of bytes at known addresses), `minAnchors` and `symbols` (names for addresses in that range), and
+`globals`, names not tied to one region's code (zero page, buffers, data it loads, a table that replaces
+code once it has run). A region's names show only while every one of its anchors matches memory and there
+are at least `minAnchors`. A set's globals name only its own code's operands: an instruction in one of
+the set's matching regions takes names from that set's matching regions, then its globals, then other
+sets' matching regions, and an instruction outside every matching region takes no globals. An address
+shown on its own, such as a row of the memory view, takes a matching region's name, or else a global if
+only one set with a matching region names it. Anchors are read from the memory being looked at: the bank
+a disassembly view shows, or what the CPU sees when a breakpoint set by name is hit, which only stops
+while the name's region matches or, for a global, while any region of its set does. Without a match, the
+debugger shows plain addresses as it does today ([why, and how regions and anchors are
+chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses, and the build requires any two overlapping
 regions in the sets of one record chain to have anchors that disagree about some byte, so they can never
