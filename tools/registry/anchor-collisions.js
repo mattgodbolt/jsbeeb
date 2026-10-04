@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // How often an anchor-sized run of bytes turns up at the same address in another title, which says
 // whether anchors identify code or a disc. Every DFS file on the Stairway To Hell discs is placed at its
-// load address as a proxy for memory, and each zip is one title. BASIC programs, tiny files, fill and
-// files catalogued to load in page zero, whose address is usually a placeholder for data a program puts
-// somewhere else, are left out. In each file of 1K or more, up to three runs are sampled at seeded
-// random offsets, at least 256 bytes apart, each with at least four distinct values in its first six
-// bytes so that fill doesn't count. For each run it counts whether its first 4, 6 and 8 bytes reappear
-// at the same address in a file of another title. A file's three runs, cut to 6 bytes, are then a
-// region's anchors, which match another title only when one of its files holds all three. For every
-// match it gives the share of the source file that is identical at the same addresses in the matching
-// file.
+// load address as a proxy for memory, and each zip is one title. BASIC programs, tiny files, files of
+// one repeated byte and files catalogued to load in page zero, whose address is usually a placeholder
+// for data a program puts somewhere else, are left out. In each file of 1K or more, up to three runs are
+// sampled at seeded random offsets, at least 256 bytes apart, each with at least four distinct values in
+// its first six bytes so that fill doesn't count. For each run it counts whether its first 4, 6 and 8
+// bytes reappear at the same address in a file of another title. A file's three runs, cut to 6 bytes,
+// are then a region's anchors, which match another title only when one of its files holds all three. For
+// every match it gives the share of the source file that is identical at the same addresses in the
+// matching file.
 //
 //   node tools/registry/anchor-collisions.js [--corpus .registry-corpus] [--seed 1] [--examples]
 //
