@@ -1397,6 +1397,7 @@ describe("MediaWindow", () => {
             expect(sourceOf("|Games/ELITE.zip")).toBe("STH archive");
             expect(sourceOf("hfe:3A1DAB83.hfe")).toBe("HFE archive");
             expect(sourceOf("bitshifters:bs-paradroid.ssd")).toBe("Bitshifters");
+            expect(sourceOf("github:mattgodbolt/nm/ninja_music.ssd")).toBe("GitHub");
             expect(sourceOf("gd:abc/mine.ssd")).toBe("Google Drive");
             expect(sourceOf("local:mine")).toBe("this browser");
             expect(sourceOf("!mine")).toBe("this browser");
