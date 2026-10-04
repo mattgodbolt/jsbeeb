@@ -166,7 +166,10 @@ and offers any set that matches, rather than showing it straight away.
       "start": "0x1100",
       "end": "0x5800",
       "minAnchors": 2,
-      "anchors": [{ "at": "0x1a2c", "bytes": "a9008d..." }],
+      "anchors": [
+        { "at": "0x1a2c", "bytes": "a9008d..." },
+        { "at": "0x2e40", "bytes": "20eeff..." }
+      ],
       "symbols": { "main_loop": "0x1a2c" }
     }
   }
