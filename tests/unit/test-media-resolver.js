@@ -9,6 +9,7 @@ describe("splitImage", () => {
         ["|ELITE.zip", "|", "ELITE.zip"],
         ["hfe:3A1DAB83.hfe", "hfe", "3A1DAB83.hfe"],
         ["bitshifters:bs-paradroid.ssd", "bitshifters", "bs-paradroid.ssd"],
+        ["github:mattgodbolt/frogman@classic/frogman.ssd", "github", "mattgodbolt/frogman@classic/frogman.ssd"],
         ["gd:abc123/name.ssd", "gd", "abc123/name.ssd"],
         ["local:mydisc", "local", "mydisc"],
         ["!mydisc", "!", "mydisc"],
@@ -55,6 +56,65 @@ describe("MediaResolver", () => {
         expect(name).toBe("a.ssd");
         expect((await resolver.resolve("disc", "file:///tmp/b.ssd")).name).toBe("b.ssd");
         expect(load).toHaveBeenLastCalledWith("file:///tmp/b.ssd");
+    });
+
+    describe("a github: reference", () => {
+        const Raw = "https://raw.githubusercontent.com";
+
+        it("loads the raw file at the repo's default branch, or at the ref after an @, disc or tape", async () => {
+            const { resolver, load } = make({
+                [`${Raw}/mattgodbolt/frogman/HEAD/frogman_rebuilt.ssd`]: bytes("latest"),
+                [`${Raw}/mattgodbolt/frogman/classic/frogman_rebuilt.ssd`]: bytes("classic"),
+                [`${Raw}/o/r/HEAD/tapes/game.uef`]: bytes("tape"),
+            });
+            expect(await resolver.resolve("disc", "github:mattgodbolt/frogman/frogman_rebuilt.ssd")).toEqual({
+                name: "frogman_rebuilt.ssd",
+                data: bytes("latest"),
+                ignored: [],
+            });
+            const classic = await resolver.resolve("disc", "github:mattgodbolt/frogman@classic/frogman_rebuilt.ssd");
+            expect(classic.data).toEqual(bytes("classic"));
+            expect((await resolver.resolve("tape", "github:o/r/tapes/game.uef")).name).toBe("game.uef");
+            expect(load).toHaveBeenCalledTimes(3);
+        });
+
+        it("encodes each segment of the path, and names the image as the repo does", async () => {
+            const { resolver, load } = make({
+                [`${Raw}/kieranhj/Atomic-AGD-Suite/HEAD/BBC%20Suite/Discs/cambridge%20disc.ssd`]: bytes("c"),
+                [`${Raw}/o/r/v1.0%231/a%3Fb.ssd`]: bytes("q"),
+            });
+            const { name } = await resolver.resolve(
+                "disc",
+                "github:kieranhj/Atomic-AGD-Suite/BBC Suite/Discs/cambridge disc.ssd",
+            );
+            expect(name).toBe("cambridge disc.ssd");
+            expect((await resolver.resolve("disc", "github:o/r@v1.0#1/a?b.ssd")).name).toBe("a?b.ssd");
+            expect(load).toHaveBeenCalledTimes(2);
+        });
+
+        it("opens a zip as a URL's would be opened", async () => {
+            const zip = await zipOf([
+                ["side1.ssd", "one"],
+                ["side2.ssd", "two"],
+            ]);
+            const { resolver } = make({ [`${Raw}/o/r/HEAD/game.zip`]: zip });
+            expect(await resolver.resolve("disc", "github:o/r/game.zip")).toEqual({
+                name: "side1.ssd",
+                data: bytes("one"),
+                ignored: ["side2.ssd"],
+            });
+        });
+
+        it.each(["github:mattgodbolt/frogman", "github:mattgodbolt/frogman/", "github:o/r@/x.ssd", "github:o@r/x.ssd"])(
+            "says what a reference should look like when %s is not one",
+            async (ref) => {
+                const { resolver, load } = make();
+                await expect(resolver.resolve("disc", ref)).rejects.toThrow(
+                    "A github: reference is owner/repo/path or owner/repo@ref/path",
+                );
+                expect(load).not.toHaveBeenCalled();
+            },
+        );
     });
 
     it("opens a zip once, wherever it came from, and names what it passed over", async () => {

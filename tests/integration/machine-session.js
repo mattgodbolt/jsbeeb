@@ -1,7 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { MachineSession } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
+import { RepoRoot } from "./helpers.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
@@ -483,6 +486,29 @@ describe("MachineSession snapshots", () => {
 });
 
 describe("MachineSession disc images", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it(
+        "puts a github: disc in a drive from the raw file in the repo",
+        async () => {
+            const session = new MachineSession("B-DFS1.2");
+            await session.initialise();
+            await session.boot(30);
+            const elite = readFileSync(path.join(RepoRoot, "public/discs/elite.ssd"));
+            const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(elite));
+            expect(await session.loadDiscImage("github:someone/games@v1/discs/elite.ssd", 1)).toEqual({
+                name: "elite.ssd",
+                ignored: [],
+            });
+            expect(fetch).toHaveBeenCalledWith("https://raw.githubusercontent.com/someone/games/v1/discs/elite.ssd");
+            await session.type("*CAT 1");
+            const { screenText } = await session.runUntilPrompt(30);
+            expect(screenText).toContain("Elite");
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
     it(
         "puts a built-in disc in drive 0 by its bare name and catalogues it",
         async () => {

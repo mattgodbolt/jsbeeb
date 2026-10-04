@@ -19,6 +19,7 @@ export const Schemas = Object.freeze({
     "|": { route: "sth", source: "sth" },
     hfe: { route: "hfe", source: "hfe" },
     bitshifters: { route: "bitshifters", source: "bitshifters" },
+    github: { route: "github", source: "github" },
     gd: { route: "drive", source: "gdrive" },
     local: { route: "browser", source: "browser" },
     "!": { route: "browser", source: "browser" },
@@ -32,6 +33,17 @@ export const Schemas = Object.freeze({
 
 /** How a reference is served; a schema this page does not know is read as a folder name. */
 export const routeOf = (ref) => (Schemas[splitImage(ref).schema] ?? Schemas[""]).route;
+
+const GitHubRawBase = "https://raw.githubusercontent.com";
+const GitHubDefaultRef = "HEAD";
+
+/** Where a `github:` reference's `<owner>/<repo>[@<ref>]/<path>` is served; no ref is the default branch. */
+function gitHubRawUrl(location) {
+    const match = location.match(/^([^/@]+)\/([^/@]+)(?:@([^/]+))?\/(.+)$/);
+    if (!match) throw new Error(`A github: reference is owner/repo/path or owner/repo@ref/path, not "${location}"`);
+    const [, owner, repo, ref = GitHubDefaultRef, path] = match;
+    return [GitHubRawBase, ...[owner, repo, ref, ...path.split("/")].map(encodeURIComponent)].join("/");
+}
 
 // Where a bare name is looked for, and which registered source serves the archive.
 const Kinds = {
@@ -47,9 +59,10 @@ export function openIfZip(name, data) {
 /**
  * Turns any image reference the URL can name into bytes, `{ name, data, ignored }`,
  * for a disc or a tape: the archives through the sources registered for them,
- * `data:` and `b64data:` inline, `http:`, `https:` and `file:` by URL, and a
- * bare name from the built-in folder. Zips are opened once, here. Nothing in
- * it needs a page, so a headless machine can load the same references.
+ * `data:` and `b64data:` inline, `http:`, `https:` and `file:` by URL, `github:`
+ * by the URL of its raw file, and a bare name from the built-in folder. Zips
+ * are opened once, here. Nothing in it needs a page, so a headless machine can
+ * load the same references.
  */
 export class MediaResolver {
     constructor({ load = loadData } = {}) {
@@ -81,6 +94,8 @@ export class MediaResolver {
             case "url":
                 // The URL may end in query parameters, which would upset the extension check.
                 return openIfZip(new URL(ref).pathname.split("/").pop(), await this.load(ref));
+            case "github":
+                return openIfZip(image.split("/").pop(), await this.load(gitHubRawUrl(image)));
             default:
                 return openIfZip(image, await this.load(`${folder}/${image}`));
         }
