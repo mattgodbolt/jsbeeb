@@ -124,7 +124,7 @@ async function walk(dir) {
     return out;
 }
 
-/** Every title's distinct DFS files that load into RAM, as {title, name, load, data}. */
+/** Every title's DFS files that load into RAM, one per content and load address, as {title, name, load, data}. */
 async function loadTitles(sthDir) {
     const titles = [];
     for (const zip of (await walk(sthDir)).sort()) {
@@ -145,8 +145,9 @@ async function loadTitles(sthDir) {
                     const load = entry.load & 0xffff;
                     if (!entry.complete || entry.uniform || entry.length < MinFileLength) continue;
                     if (BasicExecAddresses.has(entry.exec & 0xffff)) continue;
-                    if (load < PageSize || load + entry.length > RamTop || seen.has(entry.hash)) continue;
-                    seen.add(entry.hash);
+                    const placement = `${entry.hash}@${load}`;
+                    if (load < PageSize || load + entry.length > RamTop || seen.has(placement)) continue;
+                    seen.add(placement);
                     const data = side.subarray(entry.start * SectorSize, entry.start * SectorSize + entry.length);
                     files.push({ title, name: `${name}:${entry.name}`, load, data });
                 }
