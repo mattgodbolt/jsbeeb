@@ -148,10 +148,11 @@ A set stores names only when their licence, or their author's recorded permissio
 it links them: in place of `symbols`, `globals` and `source` it has `link`, with the `url` of the names'
 file pinned to an exact version (a commit, never a branch), its `format`, and `home`, the author's page,
 and its own `licence` covers only its regions and anchors. The registry never stores linked names. When a
-linked set's regions match, the debugger asks once for each source whether to fetch its names, saying
-whose they are and where they're from, and remembers the answer. If the user agrees, it fetches the file
-from the author's site, converts it, and uses the names as a stored set's: those in a region's range are
-that region's, and the rest are globals.
+linked set's regions match, the debugger asks whether to fetch its names, showing the author's `home` and
+the site the file comes from, and remembers the answer for that `home`. If the user agrees, it fetches
+the file from the author's site, converts it, and uses the names as a stored set's: those in a region's
+range are that region's, and the rest are globals, so a linked file has to hold only the set's program.
+The `url` and `home` are https, and the client checks the names as the build does.
 
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
 `"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
@@ -163,9 +164,10 @@ or else a global if only one set with a matching region names it, not counting s
 system global. A breakpoint set by name only stops while the name's region matches or, for a global,
 while any region of its set does.
 
-The debugger shows the names from every set that matches without being asked, says which set each name
-comes from, and lets the user drop a set. Without a match, it shows plain addresses as it does today
-([why, and how regions and anchors are chosen](media-registry-design-notes.md#symbols)).
+The debugger shows the names from every set that matches without being asked (a linked set's once the
+user has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without
+a match, it shows plain addresses as it does today ([why, and how regions and anchors are
+chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses. The build requires any two overlapping regions in
 the registry that have anchors to have anchors that disagree about some byte, so they can never both
@@ -258,8 +260,9 @@ A build step enforces these ([why](media-registry-design-notes.md#licensing)):
   recorded permission. Anything of unknown licence, and any disc or tape image, is never included.
 - Which keys a game uses is a fact; the text of its instructions is content.
 - A symbol set stores names from someone else's work only under a licence or recorded permission that
-  allows it; otherwise it links them, or, where the author has refused reuse, a record links to the work.
-  Sources under the GPL aren't used.
+  allows it; otherwise it links them where it can, and where it can't, or the author has refused reuse, a
+  record links to the work. Sources under the GPL aren't used for sets, stored or linked, though a record
+  can link to them.
 
 ## Filling it in
 

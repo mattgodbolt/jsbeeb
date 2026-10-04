@@ -361,8 +361,9 @@ gain anchors to meet the check. For each earlier region it overlaps, the chooser
 two share for an address where the programs' bytes differ and both could carry an anchor (whole
 instructions, though not necessarily at a routine's entry, and no store of either program reaching it),
 and gives an anchor over it to whichever region lacks one there: the new set, the earlier one, or both.
-One anchor disagrees with every region anchored over the same bytes that holds other bytes there, so a
-set can reuse addresses that earlier ones anchored. Choosing an anchor for the earlier set needs its
+It prefers an address the earlier region already anchors, since then the earlier set needs nothing. One
+anchor disagrees with every region anchored over the same bytes that holds other bytes there, so a set
+can reuse addresses that earlier ones anchored. Choosing an anchor for the earlier set needs its
 program's stores as well as its bytes, so it takes that set's source or listing, not just its `madeFrom`
 images; until someone supplies those, a set that needs the earlier one to gain an anchor can't be added.
 Two programs that differ only where they can't both carry an anchor (in variables, a table of high
@@ -407,26 +408,29 @@ there with it, which is right. And Stairway To Hell's PIPELINE is a crack that l
 was: its game and graphics editor are byte for byte the originals, and the level designer's three
 changed bytes are mid-routine, away from any anchor, so all three sets match.
 
-The build publishes every set's location, licence and regions with their anchors, without the names, in
-`symbols/index.json`. The debugger fetches it once, the first time it wants names, and HTTP caching
-takes care of it after that; if the index or a set can't be fetched, it shows plain addresses and tries
-again at the next stop. Memory doesn't change while the machine is stopped, so each time it stops the
-debugger checks every indexed region once and keeps the answers until memory can change: the machine
-runs, or the user edits memory, restores a snapshot or resets. Most regions fail on the first byte of
-their first anchor, so a few thousand regions cost little next to drawing the view. Only a set that
-matches has its names fetched. Repton 2's set from the findings, 11 anchors in three regions, takes under
-1 KB of the index, so hundreds of sets come to a few hundred KB, before the overlay check adds anchors to
-sets over busy ranges. If the registry grows past a couple of thousand sets, the index can be split into
-one static file per 256-byte page, listing the regions over that page. Names need more than the pages on
-screen, though (the pages operands point into, the MOS's for system globals, and every set that might
-name a global shown on its own), so that's for when one file gets too big, not before.
+The build publishes every set's location, licence, `link` if it has one, and regions with their anchors,
+without the names, in `symbols/index.json`. The debugger fetches it once, the first time it wants names,
+and HTTP caching takes care of it after that; if the index or a set can't be fetched, it shows plain
+addresses and tries again at the next stop, or for a linked set's file on someone else's site, once a
+session. Memory doesn't change while the machine is stopped, so each time it stops the debugger checks
+every indexed region once and keeps the answers until memory can change: the machine runs, or the user
+edits memory, restores a snapshot or resets. Most regions fail on the first byte of their first anchor,
+so a few thousand regions cost little next to drawing the view. Only a set that matches has its names
+fetched, and a linked set's only once the user has agreed. Repton 2's set from the findings, 11 anchors
+in three regions, takes under 1 KB of the index, so hundreds of sets come to a few hundred KB, before the
+overlay check adds anchors to sets over busy ranges. If the registry grows past a couple of thousand
+sets, the index can be split into one static file per 256-byte page, listing the regions over that page.
+Names need more than the pages on screen, though (the pages operands point into, the MOS's for system
+globals, and every set that might name a global shown on its own), so that's for when one file gets too
+big, not before.
 
-A set that matches is shown, not offered. Matching anchors only show that the anchored bytes are the
-same, but in the corpus a region that matches another title is that title's copy of the same code or
-data, nearly always with 90% or more of the file identical ([below](#code-that-turns-up-elsewhere)), so
-its names fit. Where two versions differ between the anchors, some names can be off, and the debugger
-says which set the names come from so that someone who sees names that don't fit can drop it. Each set
-carries its own licence and provenance, so one found this way needs nothing from a record.
+A set that matches is shown, not offered (a linked set once the user has agreed to fetch its names).
+Matching anchors only show that the anchored bytes are the same, but in the corpus a region that matches
+another title is that title's copy of the same code or data, nearly always with 90% or more of the file
+identical ([below](#code-that-turns-up-elsewhere)), so its names fit. Where two versions differ between
+the anchors, some names can be off, and the debugger says which set the names come from so that someone
+who sees names that don't fit can drop it. Each set carries its own licence and provenance, so one found
+this way needs nothing from a record.
 
 ### Code that turns up elsewhere
 
@@ -484,23 +488,27 @@ it keeps its names while that RAM is in.
 
 ### Linked sets
 
-Most disassemblies state no licence, so a set can't store their names, but it can point at them. A
-linked set keeps only what's ours, its regions and anchors, which come from the code's own bytes, and
-where the names live. jsbeeb fetches the names from the author's site when someone wants them, and the
-registry never stores or republishes them. The debugger asks before fetching, because it's someone
-else's work from someone else's site: it says whose names they are and where they're from, and
-remembers the answer for that source.
+Most disassemblies state no licence, so a set can't store their names, but it can point at them. A linked
+set keeps only what's ours, its regions and anchors, which come from the code's own bytes, and where the
+names live. jsbeeb fetches the names from the author's site when someone wants them, and the registry
+never stores or republishes them. The debugger asks before fetching, because it's someone else's work
+from someone else's site: it shows the author's `home` and the site the file comes from, and remembers
+the answer for that `home`.
 
-The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`,
-never a branch), so the names and the anchors stay in step. The build fetches each pinned file once to
-check that it parses and that its labels land inside the set's regions, and stores nothing. There are
-limits. The author's host has to allow fetches from another site: GitHub's raw files and GitHub Pages
-do, many personal sites don't, and those stay a plain link to the page. The file has to carry addresses
-(a listing, a symbol or label file, an assembler's report), since jsbeeb won't assemble anything, and
-its format has to say which names are addresses, since constants stay out. And each format needs a
-small converter in jsbeeb, so only a few common ones are accepted. Where an author has said no reuse,
-their work is a plain link at most and is never fetched. Asking authors for a licence still helps: a
-stored set needs no converter, and survives the source moving or vanishing.
+The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, never
+a branch), so the names and the anchors stay in step. The build fetches each pinned file once to check
+that it parses and that labels land in each of the set's regions, and stores nothing; the client checks
+the names the same way when it fetches them, and the `url` and `home` are https. There are limits. The
+author's host has to allow fetches from another site and serve a file pinned to a version: GitHub's raw
+files at a commit do, a page that changes (GitHub Pages, most personal sites) doesn't, and those stay a
+plain link. The file has to carry addresses (a listing, a symbol or label file, an assembler's report),
+since jsbeeb won't assemble anything, and its format has to say which names are addresses, since
+constants stay out. The client gives a region the names in its range and makes the rest globals, so the
+file has to hold only the set's program, and a name the program uses as a global but that lies in a
+region's range, such as a table over run-once code, becomes that region's and goes when it does. And each
+format needs a small converter in jsbeeb, so only a few common ones are accepted. Where an author has
+said no reuse, their work is a plain link at most and is never fetched. Asking authors for a licence
+still helps: a stored set needs no converter, and survives the source moving or vanishing.
 
 ## Licensing
 
@@ -509,8 +517,10 @@ CC0 for our own data lets every emulator take it, as MAME does with its software
 Disassemblies need particular care. Several published BBC disassemblies have no licence at all, and some
 say outright that no reuse is permitted. Without a licence, a set can only link their names ([linked
 sets](#linked-sets)); where reuse is refused, they're a plain link at most, unless and until their
-authors tell us otherwise. Sources under the GPL aren't used: a set made from one would be under the GPL
-too, which is more than data other emulators take should carry.
+authors tell us otherwise. Sources under the GPL aren't used for sets, stored or linked, though a record
+can link to them: the GPL's terms on what's made from a source are more trouble than a registry of data
+other emulators take should carry. A permission such as the Atom sources' travels with its set in the
+set's `licence`.
 
 Acorn's documented interface is different. The MOS's entry points, vectors and workspace, as Acorn
 documented them for programmers, are a published interface rather than anyone's disassembly, so sets of
@@ -533,7 +543,8 @@ documentation alone, MIT where they take from `acorn.py`, with its notice in the
 MIT asks for it in every copy and sets are fetched one at a time.
 
 Anchors are a few bytes of the program itself. They identify it rather than reproduce it, so we treat
-them as facts about it, like a hash, and they're CC0 with the rest of our own data.
+them as facts about it, like a hash, and they're CC0 with the rest of our own data, whatever a set's
+`licence` says about its names.
 
 Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, so
 `controls` records it along with where it came from, but the text of the instructions is content.
