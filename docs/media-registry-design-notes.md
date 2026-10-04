@@ -263,9 +263,10 @@ one JSON object per source file, so a consumer can't tell which numbers are addr
 PIPELINE feedback points out, it doesn't say which section a label is in, so there's no load or run range
 to tie it to. Converters from each assembler or disassembler sort that out once, and a build that knows
 its own sections can emit a set directly. Each program, with what's always loaded along with it, is its
-own set, so its globals (zero page variables, the tune in page 8) name only that program's code. Names
-are addresses only, since a constant shown as an address is the one thing a debugger would get wrong;
-whether a name is code or data can be added later if a debugger finds a use for it, as new fields can.
+own set, so its globals (zero page variables, the tune in page 8) name operands only in that program's
+code. Names are addresses only, since a constant shown as an address is the one thing a debugger would
+get wrong; whether a name is code or data can be added later if a debugger finds a use for it, as new
+fields can.
 
 A region's names win over its set's globals at the same address because that's where code turns into
 data: when the start-up code is overwritten, its region stops matching and the global naming the table
@@ -279,9 +280,13 @@ region keeps matching, and its zero page names `&70` and `&72` differently from 
 instruction's operands from its own set gives the stub's code the stub's names and the editor's code the
 editor's, whichever of them is running. Choosing by the running program instead (the PC, or a return
 address on the stack when the PC is in a ROM) would name the code on screen after whatever holds the PC,
-and a scan of the stack meets the resident loader's own return address long after it has handed over.
-Code outside every matching region, such as the MOS, gets no globals, since its use of zero page isn't
-the program's.
+and if the loader called what it loaded and the stack was never reset, a scan of the stack could still
+meet the loader's own return address. Code outside every matching region, such as the MOS, gets no
+globals, since its use of zero page isn't the program's; so does a short routine the program copies
+somewhere no anchor survives, such as page 1, unless its set gives it a region it can match in. An
+address shown on its own has no instruction to go by, so it takes a global only when one set with a
+matching region names it, which labels the object table once the start-up code has gone and leaves the
+stub's and the editor's zero page bare. A region picked by hand counts as matching.
 
 Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
 when someone else's file changes. That costs nothing extra, since a disassembly without a licence that
@@ -331,7 +336,8 @@ set does), so a breakpoint on the game's main loop doesn't stop when the level d
 address. The price is that a write that breaks an anchor also quietly disarms the breakpoint; a
 breakpoint set by address always stops, for anyone who'd rather have that. A breakpoint on a global can
 also stop for another program's use of that address while a region of its set is still in memory, which
-for a breakpoint is the safer mistake.
+for a breakpoint is the safer mistake: a program's variables are also written by code no set covers, such
+as the filing system filling a buffer.
 
 The chooser takes a neutral input: each section's bytes at its run address, its instruction starts and
 labels, and the stores whose targets the assembler or disassembler could work out, plus the cuts and the
