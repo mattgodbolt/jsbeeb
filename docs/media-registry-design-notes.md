@@ -214,12 +214,12 @@ The rule, as `tools/registry/tape.js` implements it:
 
 ## Record chains
 
-Instructions and keys belong to a title, and a version or a copy overrides only what differs, such as
-the machine it needs. A chain merged with JSON Merge Patch does that with no special cases, and there are
+Instructions and keys belong to a title, and a version or a copy overrides only what differs, such as the
+machine it needs. A chain merged with JSON Merge Patch does that with no special cases, and there are
 libraries for it in pretty much every language. Symbol sets aren't part of the chain at all
-([why](#finding-sets-by-their-anchors)). Merge Patch replaces arrays wholesale, which is
-why collections are objects keyed by a stable name: a version can change one action, or add one link,
-without repeating everything else.
+([why](#finding-sets-by-their-anchors)). Merge Patch replaces arrays wholesale, which is why collections
+are objects keyed by a stable name: a version can change one action, or add one link, without repeating
+everything else.
 
 Redirects are only for slugs, because a hash key is already an alias with a parent; if two title slugs
 are merged, the losing one becomes a redirect.
@@ -244,11 +244,14 @@ sit on it, hence smaller regions with `minAnchors`.
 
 The rules: an anchor is four to eight bytes of whole instructions starting at a routine's entry point; no
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
-stores), except a copy, swap or load whose known range covers the whole region (below); it has no run of
-two or more `NOP`s; and its bytes appear only once in the region. A ROM's anchors can sit anywhere
-([below](#roms)). The debugger checks regions each time the machine stops and when a breakpoint set by
-name is hit, and a region needs every anchor to match and at least `minAnchors` (default and minimum 1)
-of them. A region without anchors is never shown automatically, but can be picked by hand.
+stores), except a copy, swap or load that has been picked as moving the program and whose range covers
+the whole region (below); it has no run of two or more `NOP`s; and its bytes appear only once in the
+region. A region that holds no code, such as an adventure's database run by a shared interpreter, has no
+routines to start at, so its anchors are runs of its data, under the same store rule. A ROM's anchors can
+sit anywhere ([below](#roms)). The debugger checks regions each time the machine stops and when a
+breakpoint set by name is hit, and a region needs every anchor to match and at least `minAnchors`
+(default and minimum 1) of them. A region without anchors is never shown automatically, but can be picked
+by hand.
 
 The project rebuilding Superior's PIPELINE byte for byte from source gave the format its second test, and
 most of what follows answers its feedback. According to that feedback, the disc holds several programs
@@ -341,17 +344,26 @@ offset, which isn't worth a field.
 
 Overlays are told apart by an anchor on a byte where they differ. The chooser looks for those, and the
 build checks that any two overlapping regions in the registry, in one set or two, have anchors that
-disagree about some byte. Only pairs that overlap in address are compared, so the check stays cheap as
-the registry grows. On PIPELINE that covers the stubs, the game and the editors, which are separate sets,
-and it's easiest when one run of the chooser picks all of their anchors together. A set added later meets
-it by anchoring where the index already has anchors over the same addresses, since one anchor disagrees
-with every region anchored there that holds other bytes. Two regions of different sets that can't be told
-apart are the same code, so the build asks for one shared set rather than two that name it differently.
-No two regions in the registry can then match at once, and the debugger needs no rule for it; a region
-picked by hand can still clash with one that matches, and then it's the user's choice. Merging names that
-happen to agree isn't worth its rules. The chooser warns when a single candidate is all that tells two
-overlays apart, since a later change to the store rule could quietly take it away; according to the
-feedback, the PIPELINE stubs differ at only one labelled instruction, `read_whole_run` at `&0916`.
+disagree about some byte: an address both of them anchor, holding different bytes in each. Only pairs
+that overlap in address are compared, so the check itself stays cheap. On PIPELINE that covers the
+stubs, the game and the editors, which are separate sets, and it's easiest when one run of the chooser
+picks all of their anchors together. No two regions in the registry can then match at once, and the
+debugger needs no rule for it; a region picked by hand can still clash with one that matches, and then
+it's the user's choice. Merging names that happen to agree isn't worth its rules. The chooser warns when
+a single candidate is all that tells two overlays apart, since a later change to the store rule could
+quietly take it away; according to the feedback, the PIPELINE stubs differ at only one labelled
+instruction, `read_whole_run` at `&0916`.
+
+Anchors chosen for two programs separately rarely share an address, so a set added later has to anchor
+where the earlier regions it overlaps are anchored. The chooser reads their anchors from the index and
+puts one of its own over one of each, wherever its code's bytes differ and no store reaches them; such an
+anchor needs whole instructions but not a routine's entry point. One anchor disagrees with every region
+anchored over the same bytes, so a later set can reuse addresses that earlier ones anchored. The build
+can't tell a missing anchor from the same code, so it asks for the anchor first; only when the chooser
+finds no byte where two regions differ are they the same code, and then the build asks for one shared
+set rather than two that name it differently. The price is anchors: over a busy range such as
+`&1100-&5800`, a set may need one for each earlier region it overlaps, and that grows with the registry.
+How far it grows is an open question.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
 global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
@@ -388,14 +400,17 @@ changed bytes are mid-routine, away from any anchor, so all three sets match.
 
 The build publishes every set's location, licence and regions with their anchors, without the names, in
 `symbols/index.json`. The debugger fetches it once, the first time it wants names, and HTTP caching
-takes care of it after that. Memory doesn't change while the machine is stopped, so each time it stops
-the debugger checks every indexed region once and keeps the answers until the machine runs again or the
-user changes memory. Most regions fail on the first byte of their first anchor, so a few thousand
-regions cost little next to drawing the view. Only a set that matches has its names fetched. Repton 2's
-set from the findings, 11 anchors in three regions, takes under 1 KB of the index, so hundreds of sets
-come to a few hundred KB. If the registry grows past a couple of thousand sets, the index can be split
-into one static file per 256-byte page, listing the regions over that page, and the debugger fetches the
-pages it shows.
+takes care of it after that; if the index or a set can't be fetched, it shows plain addresses and tries
+again at the next stop. Memory doesn't change while the machine is stopped, so each time it stops the
+debugger checks every indexed region once and keeps the answers until memory can change: the machine
+runs, or the user edits memory, restores a snapshot or resets. Most regions fail on the first byte of
+their first anchor, so a few thousand regions cost little next to drawing the view. Only a set that
+matches has its names fetched. Repton 2's set from the findings, 11 anchors in three regions, takes under
+1 KB of the index, so hundreds of sets come to a few hundred KB, before the overlay check adds anchors to
+sets over busy ranges. If the registry grows past a couple of thousand sets, the index can be split into
+one static file per 256-byte page, listing the regions over that page. Names need more than the pages on
+screen, though (the pages operands point into, the MOS's for system globals, and every set that might
+name a global shown on its own), so that's for when one file gets too big, not before.
 
 A set that matches is shown, not offered. Anchors that match are the same code
 ([below](#code-that-turns-up-elsewhere)), and names made for that code are right for it wherever it is.
@@ -406,26 +421,33 @@ set. Each set carries its own licence and provenance, so one found this way need
 
 Anchors identify code, not discs. [The findings](media-registry-findings.md#anchors-across-titles) placed
 every file on the Stairway To Hell discs at its load address and looked for anchor-sized runs of bytes at
-the same address in other titles. Where they turn up, it's the same code: the game in a compilation, on a
-cheat disc or in a re-release; an engine that games share, such as the Scott Adams, Level 9, GAC and Epic
-adventure interpreters; or a loader a publisher used again, such as Superior's at `&1900` in Baron,
-Barbarian II and 3D Dotty. Names made for that code are right for it wherever it turns up.
+the same address in other titles. Where they turn up, it's the same code or data: the game in a
+compilation, on a cheat disc or in a re-release; an engine that games share, such as the Scott Adams,
+Level 9, GAC and Epic adventure interpreters; or a loader a publisher used again, such as Superior's at
+`&1900` in Baron, Barbarian II and 3D Dotty. Names made for that code are right for it wherever it turns
+up.
 
 The risk is a set that names game-specific things (its data, its globals) in a region anchored only on
 shared code. A Level 9 game's set that took in the interpreter would label every Level 9 game's data with
 that one game's names. So the chooser checks candidate anchors against the corpus, with files placed at
-their load addresses, and flags any region that matches another title. The same game elsewhere is fine.
-Shared code becomes a set of its own, such as one Level 9 interpreter set for every Level 9 game, and
-each game's set keeps to what's its own.
+their load addresses, and flags any region that matches another title, leaving out titles the records
+already join to it (aliases, versions, `contains`), for a person to judge. The same game elsewhere is
+fine. Shared code becomes a set of its own, such as one Level 9 interpreter set for every Level 9 game,
+and each game's set keeps to what's its own: for an adventure, its database, in a region anchored on its
+data. The interpreter's code then takes the database's names from another set's matching region.
 
 ### ROMs
 
 ROMs are the easy case. Nothing writes to them, so the store rule and the cuts at copies don't apply, and
-anchors can sit anywhere. Each ROM version gets a set: OS 1.20, the B+'s 2.00, the Master's 3.20 and
-3.50, the Compact's 5.10, the Electron's MOS, the US MOS and the Atom's; BASIC 2 and 4; each DFS and
-ADFS. The overlay check tells the versions apart without anyone having to: two versions over the same
-addresses must disagree about some byte, and in a ROM any byte can be an anchor. Several sets match at
-once without any conflict: the MOS, a DFS in one sideways slot, BASIC in another, and the game in RAM.
+anchors can sit anywhere but the I/O range (below). Each ROM version gets a set: OS 1.20, the B+'s 2.00,
+the Master's 3.20 and 3.50, the Compact's 5.10, the Electron's MOS, the US MOS and the Atom's; BASIC 2
+and 4; each DFS and ADFS. The overlay check tells the versions apart without anyone having to: two
+versions over the same addresses must disagree about some byte, and in a ROM any byte can be an anchor.
+Sets for different parts of memory match at once without any conflict: the MOS, whichever sideways ROM
+is paged in, and the game in RAM. A language's set matches whenever it's paged in, which on a B is BASIC
+through most games, so if it names its workspace as globals, a game's own names for those addresses are
+left bare in the memory view; instructions aren't affected, since BASIC's globals name only BASIC's
+operands.
 
 Anchors are read from the memory being looked at, so a sideways ROM's set matches in whatever slot the
 ROM is in, with no field saying which, and shadow RAM works the same way. jsbeeb's debugger reads memory
@@ -433,13 +455,16 @@ as the CPU sees it, so stopped inside DFS code, DFS is what's paged in and its n
 that isn't paged in would need jsbeeb's disassembly view to read a chosen bank, which is a change to
 jsbeeb, not to the format.
 
-A ROM address isn't always ROM, so a ROM's regions are cut at the bounds of what the hardware can put over
-it. `&FC00-&FEFF` is I/O on the BBC Micro, the Master and the Electron, so no region covers it. The Master
-can page HAZEL, its 8K of filing system RAM, over the MOS at `&C000-&DFFF` (bit Y of ACCCON), and ANDY,
-4K of RAM, over `&8000-&8FFF` of the sideways ROMs (bit 7 of ROMSEL); those are the bounds jsbeeb's
-Master memory map uses. So the Master's MOS is cut into `&C000-&DFFF`, `&E000-&FBFF` and `&FF00-&FFFF`,
-and while HAZEL is in, the first region just doesn't match; and a sideways ROM's set is cut at `&9000`,
-so the rest of it keeps its names while ANDY is in.
+A ROM address isn't always ROM, so a ROM's regions are cut at the bounds of what the hardware can put
+over it. `&FC00-&FEFF` is I/O on the BBC Micro, the Master and the Electron, so no region covers it, and
+no anchor sits there even in a ROM image that has bytes for it: dumps of the same ROM differ there, and
+jsbeeb's own B+ OS 2.00, Master 3.20 and Compact 5.10 files differ from byte-exact rebuilds of those ROMs
+only in that range. The Master can page HAZEL, its 8K of filing system RAM, over the MOS at `&C000-&DFFF`
+(bit Y of ACCCON), and ANDY, 4K of RAM, over `&8000-&8FFF` of the sideways ROMs (bit 7 of ROMSEL); those
+are the bounds jsbeeb's Master memory map uses. The B+ pages 12K of RAM over `&8000-&AFFF` by bit 7 of
+ROMSEL too, though jsbeeb doesn't emulate the B+. So the Master's MOS is cut into `&C000-&DFFF`,
+`&E000-&FBFF` and `&FF00-&FFFF`, and while HAZEL is in, the first region just doesn't match; and a
+sideways ROM's set is cut at `&9000` and `&B000`, so the rest of it keeps its names while that RAM is in.
 
 ## Licensing
 
@@ -450,8 +475,26 @@ say outright that no reuse is permitted. Those are links only, unless and until 
 otherwise.
 
 Acorn's documented interface is different. The MOS's entry points, vectors and workspace, as Acorn
-documented them for programmers, are a published interface rather than anyone's disassembly, so a CC0
-set of them for each MOS version can be ours from the start, and with it the system globals.
+documented them for programmers, are a published interface rather than anyone's disassembly, so sets of
+them for each MOS version can be ours from the start, and with them the system globals.
+
+The ROMs are well covered, but not yet usable. Annotated disassemblies or reconstructed sources, most of
+them rebuilding byte for byte, cover every BBC MOS from 0.10 to 2.00, the Master's 3.20 and 3.50, the
+Compact's 5.10, the Electron's 1.00, BASIC I to 4r32 and HiBASIC, the DFSes and ADFS, and the Atom's
+ROMs, and Acorn's own sources for OS 1.20, BASIC 4 and DNFS 3.00 have been published. Almost none of them
+states a licence, so none can be the source of a stored set yet: they're links only until their authors
+give one, and asking is the next step. Acorn's own rights in the ROM code and in its published sources
+are unsettled, and whether short symbol names can be protected at all is a legal question, so names taken
+from those sources stay out until that's clearer. What can be used now is py8dis's
+[`acorn.py`](https://github.com/ZornsLemma/py8dis/blob/master/py8dis/acorn.py), under the MIT licence,
+which names the OS vectors at `&0200-&0236`, the entry points at `&FFB9-&FFF7`, some of zero page, and
+the FRED, JIM and SHEILA registers of the B, the Electron and the Master. With Acorn's documented
+interface, that's where our own sets start: CC0 where they come from Acorn's documentation alone, MIT
+where they take from `acorn.py`. BeebEm's [OS 1.20 memory
+map](https://github.com/stardot/beebem-windows/blob/master/UserData/BeebFile/BBC/OS12.map) describes OS
+1.20's address ranges under the GPL, and whether a set may carry a copyleft licence is open: the rules
+allow inlining under a licence that allows it, which the GPL does, but a set made from it would be under
+the GPL too, and an emulator under another licence might not be able to take it.
 
 Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, so
 `controls` records it along with where it came from, but the text of the instructions is content.

@@ -364,10 +364,11 @@ node tools/registry/anchors-run.js r2set.json .registry-corpus/hfe/64D80D49.hfe 
 Whether anchors pick out a disc or the code on it decides how a symbol set is found, so
 `anchor-collisions.js` measures how often bytes at an address turn up at the same address in another
 title. It places every DFS file on the Stairway To Hell discs at its load address, as a stand-in for
-memory, and counts each zip as a title: 1,421 titles, with 5,465 distinct files that load into RAM. In
-each file of 1K or more it samples up to three runs of bytes at random offsets (seeded, so a rerun gives
-the same sample), at least 256 bytes apart, each with at least four distinct values in its first six
-bytes, so that fill doesn't count. That's 12,475 runs.
+memory, leaving out BASIC programs (tokenised text, not code), files under 64 bytes and files of one
+repeated byte. It counts each zip as a title: 1,421 titles, with 5,465 files that load into RAM, each
+distinct within its title. In each file of 1K or more it samples up to three runs of bytes at random
+offsets (seeded, so a rerun gives the same sample), at least 256 bytes apart, each with at least four
+distinct values in its first six bytes, so that fill doesn't count. That's 12,475 runs.
 
 | Run length | Runs that turn up at the same address in another title |
 | ---------: | -----------------------------------------------------: |
@@ -392,20 +393,23 @@ identical at the same addresses in the matching file:
 | less than 10% |       0 |
 
 We went through all 111 matches below 90%, and every match between two publishers' folders (leaving out
-the cheat and re-release folders, which hold other publishers' games), and all of them are the same code:
+the cheat and re-release folders, which hold other publishers' games), and all of them are the same code
+or data. The reasons include:
 
-- The same game elsewhere: in a compilation (US Gold's Gold Collection holds Jetpac, Sabre Wulf and four
-  Scott Adams adventures; Mastertronic's Megaplay holds Geoff Capes and Eddie Kidd), on a cheat disc, in a
-  re-release (Superior's of Tynesoft's Summer Olympiad and Aardvark's Zalaga and Frak), or as another
-  version (tape, Electron, an earlier release).
+- The same game elsewhere: in a compilation (US Gold's Gold Collection holds Jetpac, Sabre Wulf, Knight
+  Lore, Nightshade and four Scott Adams adventures; Mastertronic's Megaplay holds Geoff Capes and Eddie
+  Kidd), on a cheat disc, in a re-release (Superior's of Tynesoft's Summer Olympiad and Aardvark's Zalaga
+  and Frak), or as another version (tape, Electron, an earlier release).
 - Engines that games share: the Level 9 interpreter, the same files at the same addresses in Level 9's
   own games and Mandarin's (Gnome Ranger, Ingrid's Back, Scapeghost, Lancelot, Time and Magik); the
-  runtime of Incentive's Graphic Adventure Creator in games made with it (Bungle Brothers, Daark, Dragon's
-  Tooth); Epic's adventures, at `&7100`; the Scott Adams adventures, where Secret Mission and Pyramid of
-  Doom are 54% identical, the interpreter the same and the game's data not; and the Repton 3 engine on
-  Repton 3's data discs.
+  runtime of Incentive's Graphic Adventure Creator in games made with it (Bungle Brothers, Daark,
+  Dragon's Tooth); Epic's adventures, at `&7100`; the Scott Adams adventures, where Secret Mission and
+  Pyramid of Doom are 54% identical, the interpreter the same and the game's data not; Robico's adventure
+  code in Myorem and the Rick Hanson trilogy; and the Repton 3 engine on Repton 3's data discs.
 - Code a publisher used again: Superior's loader at `&1900` in Baron, Barbarian II and 3D Dotty, and
-  files Alligata, Icon and Bug Byte each put in more than one game.
+  files that Alligata, Icon, Bug Byte, Tynesoft, Firebird and Blue Ribbon each put in more than one game.
+- Files in two publishers' games: Tynesoft's Trek II and Icon's Warp 1 share a file, Audiogenic's Last of
+  the Free and IJK's Quest for Freedom most of one, and Audiogenic's Shark and Impact's Clogger a screen.
 - Discs that also hold another game's files: Cluedo's code is on the Chichen Itza disc, and Spycat's on
   Black Queen Bridge.
 

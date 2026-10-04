@@ -4,8 +4,8 @@ A registry lets an emulator work out what software it has just loaded and find o
 title, instructions, which keys it uses, which machine it needs. A client computes a key from any disc or
 tape image, fetches a static JSON record for it, and uses whatever's in it. The registry also holds
 symbols for the debugger ([#107](https://github.com/mattgodbolt/jsbeeb/issues/107)), which are found from
-the code in memory rather than from the image. Nothing here is implemented yet; this is a proposal to pick
-holes in.
+the code in memory rather than from the image. Nothing here is implemented yet; this is a proposal to
+pick holes in.
 
 This says what to build, in outline. The exact rules are in the design notes, until a reference
 implementation and its test vectors take over; `tools/registry/` has a prototype of one. Why it's built
@@ -130,15 +130,18 @@ same address all find a set the same way.
 
 A set is a JSON file in the registry's own small format, made by a converter from an assembler's output
 or a disassembly listing (BeebAsm, Baron, py8dis), and kept in the registry under `symbols/`. Besides
-`format` (1), it has a `title` for the debugger to show, its `licence`, its `source` (where the names came
-from) and optionally `madeFrom`, the keys of the images it was made from, which record where it came from
-and are never used to find it. Every name in it is an address; constants stay out.
+`format` (1), it has a `title` for the debugger to show, its `licence`, its `source` (where the names
+came from) and optionally `madeFrom`, the keys of the images it was made from, which record where it came
+from and are never used to find it. Every name in it is an address; constants stay out. Names are unique
+within a set, and no address has two names in one region or in the globals: the converter qualifies local
+labels with their scope and picks between two names for one address.
 
-A set has `regions`, each a range of memory (`start` up to but not including `end`) with `anchors` (short
-runs of bytes at known addresses), `minAnchors` and `symbols` (names for addresses in that range), and
-`globals`, names not tied to one region's code (zero page, buffers, data it loads, a table that replaces
-code once it has run). A region's names show only while every one of its anchors matches memory and there
-are at least `minAnchors`. Anchors are read from the memory being looked at.
+A set has `regions`, each a range of memory (`start` up to but not including `end`, which can be
+`0x10000`) with `anchors` (short runs of bytes at known addresses), `minAnchors` and `symbols` (names for
+addresses in that range), and `globals`, names not tied to one region's code (zero page, buffers, data it
+loads, a table that replaces code once it has run). A region's names show only while every one of its
+anchors matches memory and there are at least `minAnchors`. Anchors are read from the memory being looked
+at.
 
 A set's globals name only its own code's operands, except in a system set: one marked `"system": true`,
 such as a MOS, whose globals (system globals) name operands in any code, last, while any of its regions
@@ -154,15 +157,17 @@ comes from, and lets the user drop a set. Without a match, it shows plain addres
 ([why, and how regions and anchors are chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses. The build requires any two overlapping regions in
-the registry to have anchors that disagree about some byte, so they can never both match, and when two
-regions of different sets are the same code it fails and asks for one shared set. If regions of different
-sets still match at the same address, the debugger shows neither and offers the choice.
+the registry to have anchors that disagree about some byte, so they can never both match. When two
+regions of different sets have no byte that differs, they're the same code, and it asks for one shared
+set. If regions of different sets still match at the same address, the debugger shows neither and offers
+the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
-anchors can sit anywhere, but its regions are cut where a machine can put RAM or I/O over part of it: no
-region covers the I/O at `&FC00-&FEFF`, the Master's MOS is cut at `&E000` because HAZEL can be paged
-over `&C000-&DFFF`, and a sideways ROM is cut at `&9000` because the Master's ANDY can be paged over
-`&8000-&8FFF` ([why](media-registry-design-notes.md#roms)).
+anchors can sit anywhere but the I/O range, and its regions are cut where a machine can put RAM or I/O
+over part of it: no region covers the I/O at `&FC00-&FEFF`, the Master's MOS is cut at `&E000` because
+HAZEL can be paged over `&C000-&DFFF`, and a sideways ROM is cut at `&9000` and `&B000` because the
+Master's ANDY can be paged over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF`
+([why](media-registry-design-notes.md#roms)).
 
 The build publishes `symbols/index.json`: every set's `url` and `licence`, and its `regions` with their
 anchors but without their `symbols`. The debugger fetches the index when it first wants names, checks
@@ -243,6 +248,10 @@ Signal's can still guess the machine.
 - Where the repository lives and what it's called, so other emulators feel it's theirs too.
 - The `controls` schema, with Robert Smallshire and Beebium.
 - Whether, and how, we can host screenshots.
+- How many anchors the registry-wide overlay check costs once hundreds of sets overlap the same addresses
+  ([why](media-registry-design-notes.md#where-to-cut-regions)).
+- Whether a symbol set may carry a copyleft licence such as the GPL
+  ([why](media-registry-design-notes.md#licensing)).
 
 Do let me know what you think, in a [GitHub issue](https://github.com/mattgodbolt/jsbeeb/issues) or on [the PR that proposed this](https://github.com/mattgodbolt/jsbeeb/pull/1179).
 
