@@ -512,9 +512,6 @@ sets](#linked-sets)); where reuse is refused, they're a plain link at most, unle
 authors tell us otherwise. Sources under the GPL aren't used: a set made from one would be under the GPL
 too, which is more than data other emulators take should carry.
 
-Anchors are a few bytes of the program itself. They identify it rather than reproduce it, so we treat
-them as facts about it, like a hash, and they're CC0 with the rest of our own data.
-
 Acorn's documented interface is different. The MOS's entry points, vectors and workspace, as Acorn
 documented them for programmers, are a published interface rather than anyone's disassembly, so sets of
 them for each MOS version can be ours from the start, and with them the system globals.
@@ -534,6 +531,9 @@ zero page, and the FRED, JIM and SHEILA registers of the B, the Electron and the
 documented interface, that's where our own MOS sets start: CC0 where they come from Acorn's
 documentation alone, MIT where they take from `acorn.py`, with its notice in the set's `notice`, since
 MIT asks for it in every copy and sets are fetched one at a time.
+
+Anchors are a few bytes of the program itself. They identify it rather than reproduce it, so we treat
+them as facts about it, like a hash, and they're CC0 with the rest of our own data.
 
 Instructions and screenshots have a copyright of their own. Which keys a game uses is a fact, so
 `controls` records it along with where it came from, but the text of the instructions is content.
