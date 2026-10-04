@@ -130,14 +130,15 @@ disassembly listing (BeebAsm, Baron, py8dis), and kept in the registry beside th
 constants stay out.
 
 A set has `regions`, each a range of memory with `anchors` (short runs of bytes at known addresses),
-`minAnchors` and `symbols` (names for addresses in that range), and `globals`, names that hold whenever
-the program is there (zero page, buffers, data it loads). A region's names show only while every one of
-its anchors matches memory and there are at least `minAnchors`; a set's globals show while any of its
-regions does, and where a matching region and a global name the same address, the region wins. Anchors
-are read from the memory being looked at: the bank a disassembly view shows, or what the CPU sees when a
-breakpoint set by name is hit, which only stops if the name applies then. Without a match, the debugger
-shows plain addresses as it does today ([why, and how regions and anchors are
-chosen](media-registry-design-notes.md#symbols)).
+`minAnchors` and `symbols` (names for addresses in that range), and `globals`, names that hold while the
+program runs (zero page, buffers, data it loads). A region's names show only while every one of its
+anchors matches memory and there are at least `minAnchors`. A set's globals show only while its program
+runs, which the debugger reads off the machine: the matching region the PC is in or, when the PC is in
+none (inside the MOS, say), the matching region holding the nearest return address on the stack. Where a
+matching region and a global name the same address, the region wins. Anchors are read from the memory
+being looked at: the bank a disassembly view shows, or what the CPU sees when a breakpoint set by name is
+hit, which only stops if the name applies then. Without a match, the debugger shows plain addresses as it
+does today ([why, and how regions and anchors are chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses, and the build requires any two overlapping
 regions in the sets of one record chain to have anchors that disagree about some byte, so they can never
