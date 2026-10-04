@@ -1,10 +1,11 @@
 # A media registry for BBC Micro software
 
 A registry lets an emulator work out what software it has just loaded and find out things about it: a
-title, instructions, which keys it uses, which machine it needs, symbols for the debugger
-([#107](https://github.com/mattgodbolt/jsbeeb/issues/107)). A client computes a key from any disc or tape
-image, fetches a static JSON record for it, and uses whatever's in it. Nothing here is implemented yet;
-this is a proposal to pick holes in.
+title, instructions, which keys it uses, which machine it needs. A client computes a key from any disc or
+tape image, fetches a static JSON record for it, and uses whatever's in it. The registry also holds
+symbols for the debugger ([#107](https://github.com/mattgodbolt/jsbeeb/issues/107)), which are found from
+the code in memory rather than from the image. Nothing here is implemented yet; this is a proposal to pick
+holes in.
 
 This says what to build, in outline. The exact rules are in the design notes, until a reference
 implementation and its test vectors take over; `tools/registry/` has a prototype of one. Why it's built
@@ -77,12 +78,12 @@ A client treats `ambiguous` as no match, or offers the candidates.
 Records chain through `parent`: title, version, alias is the convention, but any depth works. A record's
 metadata is its chain merged with [JSON Merge Patch](https://www.rfc-editor.org/rfc/rfc7396) from the
 title down, so the record nearest the image wins. Any record can set any field. Collections a lower
-record might change one entry of (`controls.actions`, `links`, `content`, `source`) are objects keyed by
-a stable name, not arrays ([why](media-registry-design-notes.md#record-chains)).
+record might change one entry of (`controls.actions`, `links`, `content`) are objects keyed by a stable
+name, not arrays ([why](media-registry-design-notes.md#record-chains)).
 
 ```
 exile                    title: instructions, controls, links
-+-- exile-v1-1           version: its symbols
++-- exile-v1-1           version: what differs, such as requires
     +-- <disc key A>     alias: "original, protected"
     +-- <disc key B>     alias: "protection removed"
 ```
@@ -117,53 +118,64 @@ The first fields:
   that front ends turn into touch and gamepad controls. Host keys and layouts stay out of the record.
 - `links` to pages elsewhere, and `content` shown inline, each `content` entry with a `source` and a
   `licence`.
-- `source`: symbol sets (below).
 - `provenance`: where each field's value came from, and how.
 - On aliases, `note`, `tags` and `seenIn`: how this copy differs and where it was found.
 
 ### Symbol sets
 
 A symbol set names the addresses of one program, or of programs that are always in memory together. It's
-a JSON file in the registry's own small format, made by a converter from an assembler's output or a
-disassembly listing (BeebAsm, Baron, py8dis), and kept in the registry beside the records under
-`symbols/`; a record's `source` entry gives its `url` and `licence`. Every name in it is an address;
-constants stay out.
+found by its anchors, never by an image's key, so records don't list symbol sets: a known disc, a copy
+that's been written to, a crack, a compilation, a cheat disc and a tape that loads the same code at the
+same address all find a set the same way.
+
+A set is a JSON file in the registry's own small format, made by a converter from an assembler's output
+or a disassembly listing (BeebAsm, Baron, py8dis), and kept in the registry under `symbols/`. Besides
+`format` (1), it has a `title` for the debugger to show, its `licence`, its `source` (where the names came
+from) and optionally `madeFrom`, the keys of the images it was made from, which record where it came from
+and are never used to find it. Every name in it is an address; constants stay out.
 
 A set has `regions`, each a range of memory (`start` up to but not including `end`) with `anchors` (short
 runs of bytes at known addresses), `minAnchors` and `symbols` (names for addresses in that range), and
 `globals`, names not tied to one region's code (zero page, buffers, data it loads, a table that replaces
 code once it has run). A region's names show only while every one of its anchors matches memory and there
-are at least `minAnchors`. A set's globals name only its own code's operands: an instruction in one of
-the set's matching regions takes names from that set's matching regions, then its globals, then other
-sets' matching regions, and an instruction outside every matching region takes no globals. An address
-shown on its own, such as a row of the memory view, takes a matching region's name, or else a global if
-only one set with a matching region names it. Anchors are read from the memory being looked at: the bank
-a disassembly view shows, or what the CPU sees when a breakpoint set by name is hit, which only stops
-while the name's region matches or, for a global, while any region of its set does. Without a match, the
-debugger shows plain addresses as it does today ([why, and how regions and anchors are
-chosen](media-registry-design-notes.md#symbols)).
+are at least `minAnchors`. Anchors are read from the memory being looked at.
 
-Overlays are separate regions over the same addresses, and the build requires any two overlapping
-regions in the sets of one record chain to have anchors that disagree about some byte, so they can never
-both match. If regions of different sets still match at the same address, the debugger shows neither and
-offers the choice.
+A set's globals name only its own code's operands, except in a system set: one marked `"system": true`,
+such as a MOS, whose globals (system globals) name operands in any code, last, while any of its regions
+matches. An instruction in one of a set's matching regions takes names from that set's matching regions,
+then its globals, then other sets' matching regions, then system globals; an instruction outside every
+matching region takes names from matching regions, then system globals. An address shown on its own, such
+as a row of the memory view, takes a matching region's name, or else a global if only one set with a
+matching region names it, not counting system sets, or else a system global. A breakpoint set by name
+only stops while the name's region matches or, for a global, while any region of its set does.
 
-The build also publishes `symbols/index.json`: every set's `url`, `licence`, the record that lists it,
-and its regions and anchors, without the names. When the image's records give no set (a disc that's
-been written to, a crack that left the code where it was), the debugger checks memory against the index
-and offers any set that matches, rather than showing it straight away.
+The debugger shows the names from every set that matches without being asked, says which set each name
+comes from, and lets the user drop a set. Without a match, it shows plain addresses as it does today
+([why, and how regions and anchors are chosen](media-registry-design-notes.md#symbols)).
 
-```json
-{
-  "source": {
-    "exile-v1-1-game": { "url": "symbols/exile-v1-1-game.json", "licence": "CC0-1.0" }
-  }
-}
-```
+Overlays are separate regions over the same addresses. The build requires any two overlapping regions in
+the registry to have anchors that disagree about some byte, so they can never both match, and when two
+regions of different sets are the same code it fails and asks for one shared set. If regions of different
+sets still match at the same address, the debugger shows neither and offers the choice.
+
+ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
+anchors can sit anywhere, but its regions are cut where a machine can put RAM or I/O over part of it: no
+region covers the I/O at `&FC00-&FEFF`, the Master's MOS is cut at `&E000` because HAZEL can be paged
+over `&C000-&DFFF`, and a sideways ROM is cut at `&9000` because the Master's ANDY can be paged over
+`&8000-&8FFF` ([why](media-registry-design-notes.md#roms)).
+
+The build publishes `symbols/index.json`: every set's `url` and `licence`, and its `regions` with their
+anchors but without their `symbols`. The debugger fetches the index when it first wants names, checks
+every indexed region each time the machine stops, and fetches only the sets that match
+([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
 
 ```json
 {
   "format": 1,
+  "title": "Exile v1.1: the game",
+  "licence": "CC0-1.0",
+  "source": "https://...",
+  "madeFrom": ["<disc key A>"],
   "globals": { "player_x": "0x70" },
   "regions": {
     "main": {
@@ -197,11 +209,13 @@ following a `redirect`'s `to` (at most a handful of times).
 A build step enforces these ([why](media-registry-design-notes.md#licensing)):
 
 - Our own data (keys, computed facts, relations) is CC0.
-- Anything from elsewhere records its `source` and `licence`; `content` or `source` without a licence
+- Anything from elsewhere records its `source` and `licence`; `content` or a symbol set without a licence
   fails the build.
 - Linking is always fine. Inlining, with attribution, needs a licence that allows it, or the author's
   recorded permission. Anything of unknown licence, and any disc or tape image, is never included.
 - Which keys a game uses is a fact; the text of its instructions is content.
+- A symbol set made from someone else's disassembly is kept only under a licence or recorded permission
+  that allows it; otherwise a record links to the disassembly.
 
 ## Filling it in
 
