@@ -263,22 +263,25 @@ one JSON object per source file, so a consumer can't tell which numbers are addr
 PIPELINE feedback points out, it doesn't say which section a label is in, so there's no load or run range
 to tie it to. Converters from each assembler or disassembler sort that out once, and a build that knows
 its own sections can emit a set directly. Each program, with what's always loaded along with it, is its
-own set, so its globals (zero page variables, the tune in page 8) show only when that program is running.
-Names are addresses only, since a constant shown as an address is the one thing a debugger would get
-wrong; whether a name is code or data can be added later if a debugger finds a use for it, as new fields
-can.
+own set, so its globals (zero page variables, the tune in page 8) name only that program's code. Names
+are addresses only, since a constant shown as an address is the one thing a debugger would get wrong;
+whether a name is code or data can be added later if a debugger finds a use for it, as new fields can.
 
 A region's names win over its set's globals at the same address because that's where code turns into
 data: when the start-up code is overwritten, its region stops matching and the global naming the table
-shows instead.
+shows instead. An instruction's own set comes before any other, since a loader left in memory can still
+match over a buffer the running program has taken for itself.
 
-Globals follow the PC rather than any matching region, because a loader often stays where it was after
-jumping to what it loaded. According to the PIPELINE feedback, the stub at `&0900` that loads the
-graphics editor stays intact while the editor runs, so its region keeps matching; its own names there are
-right, since those are its bytes, but its zero page names `&70` and `&72` differently from the editor's.
-The PC says which program is running, and when it's in the MOS, a return address on the stack says which
-program called it. Both are read from the machine as it stands when the debugger looks, with no history
-kept, and a stray value on the stack only counts if it lies in a matching region.
+Globals belong to the code that uses them, rather than showing whenever a region of their set matches,
+because a loader often stays where it was after jumping to what it loaded. According to the PIPELINE
+feedback, the stub at `&0900` that loads the graphics editor stays intact while the editor runs, so its
+region keeps matching, and its zero page names `&70` and `&72` differently from the editor's. Naming an
+instruction's operands from its own set gives the stub's code the stub's names and the editor's code the
+editor's, whichever of them is running. Choosing by the running program instead (the PC, or a return
+address on the stack when the PC is in a ROM) would name the code on screen after whatever holds the PC,
+and a scan of the stack meets the resident loader's own return address long after it has handed over.
+Code outside every matching region, such as the MOS, gets no globals, since its use of zero page isn't
+the program's.
 
 Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
 when someone else's file changes. That costs nothing extra, since a disassembly without a licence that
@@ -303,28 +306,32 @@ table, still does:
   when it does.
 
 Writes no static analysis sees (the filing system's workspace, copies through a computed pointer) can
-still land on an anchor. The region then loses its names until the bytes come back, which is acceptable
-during a disc load, and a person who notices can move the anchor or tell the chooser to avoid a range.
-We don't record runs of the game to find these writes: anyone with the source or a listing should be able
-to make a set without playing every part of the game, and a recorded run only covers what was played.
-There's also no way to label code that's parked somewhere it can't run, such as the swapped part of the
-game while it sits in screen memory; that would need a region with an offset, which isn't worth a field.
+still land on an anchor. The region then loses its names, and its code its set's globals, until the bytes
+come back, which is acceptable during a disc load, and a person who notices can move the anchor or tell
+the chooser to avoid a range. We don't record runs of the game to find these writes: anyone with the
+source or a listing should be able to make a set without playing every part of the game, and a recorded
+run only covers what was played. There's also no way to label code that's parked somewhere it can't run,
+such as the swapped part of the game while it sits in screen memory; that would need a region with an
+offset, which isn't worth a field.
 
 Overlays are told apart by an anchor on a byte where they differ. The chooser looks for those, and the
 build checks that any two overlapping regions in the sets of one record chain have anchors that disagree
 about some byte. On PIPELINE that covers the stubs, the game and the editors, which are separate sets
 hanging off one version, and is easiest when one run of the chooser picks all of their anchors together.
-The chooser warns when a single candidate is all that tells two overlays apart, as one instruction in
-each stub is on PIPELINE, since a later change to the store rule could quietly take it away. So no two of
-the sets a disc's own records give can match at once, and the debugger needs no rule for it. Anything
-else that matches twice is the user's choice; merging names that happen to agree isn't worth its rules.
+So no two of the sets a disc's own records give can match at once, and the debugger needs no rule for it.
+Anything else that matches twice is the user's choice; merging names that happen to agree isn't worth its
+rules. The chooser warns when a single candidate is all that tells two overlays apart, since a later
+change to the store rule could quietly take it away; according to the feedback, the PIPELINE stubs differ
+at only one labelled instruction, `read_whole_run` at `&0916`.
 
 Anchors are read from the memory being looked at, which covers sideways banks and shadow RAM without a
 field saying which bank a region is in, and works for a ROM whatever slot it's in. A breakpoint set by
-name stops only if the name applies when it's hit (its region matches, or for a global, its program is
-the one running), so a breakpoint on the game's main loop doesn't stop when the level designer runs at
-that address. The price is that a write that breaks an anchor also quietly disarms the breakpoint; a
-breakpoint set by address always stops, for anyone who'd rather have that.
+name stops only if the name applies when it's hit (its region matches, or for a global, any region of its
+set does), so a breakpoint on the game's main loop doesn't stop when the level designer runs at that
+address. The price is that a write that breaks an anchor also quietly disarms the breakpoint; a
+breakpoint set by address always stops, for anyone who'd rather have that. A breakpoint on a global can
+also stop for another program's use of that address while a region of its set is still in memory, which
+for a breakpoint is the safer mistake.
 
 The chooser takes a neutral input: each section's bytes at its run address, its instruction starts and
 labels, and the stores whose targets the assembler or disassembler could work out, plus the cuts and the
@@ -337,24 +344,26 @@ save to the game disc, so a copy that's been used has a new key and no record. I
 first saved level, though not the second: DFS can't see the sectors the catalogue doesn't cover, so
 according to the PIPELINE feedback the first level fits before the game's code and the second lands on
 its first sectors, taking the regions anchored there with it, which is right. Our corpus has a copy that
-differs from a known one only in a catalogue byte, the count of writes to it. Looking up a catalogued
-file's hash wouldn't help there, since on PIPELINE the catalogued files are only the loader stubs, and
-those differ between copies while the code that matters is in sectors the catalogue doesn't cover.
+differs from a known capture only in a catalogue byte, the count of writes to it. Looking up a catalogued
+file's hash would find that one, since its stubs match the capture's, but on PIPELINE the catalogued
+files are only the loader stubs, which differ between the copies we have, while the code that matters is
+in sectors the catalogue doesn't cover. A used copy whose stubs we haven't seen, or a crack, would find
+nothing that way.
 
 Since anchors check the code itself, a set can be found by its anchors. The build publishes every set's
 regions and anchors in one index, and a debugger with nothing from the records checks memory against it.
-That finds the set for any copy whose code is unchanged and where it was: a used disc, a crack that only
-touched the loader, a compilation that loads the game as it was. The feedback found Stairway To Hell's
+That finds the set for any copy whose code is unchanged and where it was: a used disc, a crack that left
+the code where it was, a compilation that loads the game as it was. The feedback found Stairway To Hell's
 PIPELINE to be such a crack: its game and graphics editor are byte for byte the originals, and the level
-designer's three changed bytes are mid-routine, away from any anchor. It doesn't help where code has
-moved, as it often has on a tape release. A match from the index is offered rather than shown, because
-the index tries every set against any program, and one small region with a short anchor at a common
-address could match something unrelated; a person can see at once whether the names fit. The index grows
-with the registry, at a few dozen anchors of eight bytes or so per set, and it's fetched only when the
-debugger wants names and the records gave none. Checking it reads every indexed region covering the
-address being shown, a few thousand byte comparisons even if hundreds of sets cover it, which is nothing
-next to drawing the view. Each index entry names the record that lists its set, so a set found this way
-comes with that record's licence and provenance like any other.
+designer's three changed bytes are mid-routine, away from any anchor, so all three sets would be offered.
+It doesn't help where code has moved, as it often has on a tape release. A match from the index is
+offered rather than shown, because the index tries every set against any program, and one small region
+with a short anchor at a common address could match something unrelated; a person can see at once whether
+the names fit. The index grows with the registry, at a few dozen anchors of eight bytes or so per set,
+and it's fetched only when the debugger wants names and the records gave none. Checking it reads every
+indexed region covering the address being shown, a few thousand byte comparisons even if hundreds of sets
+cover it, which is nothing next to drawing the view. Each index entry names the record that lists its
+set, so a set found this way comes with that record's licence and provenance like any other.
 
 ## Licensing
 
