@@ -132,8 +132,7 @@ async function loadTitles(sthDir) {
         try {
             members = await unzip(await readFile(zip));
         } catch (error) {
-            console.error(`Skipping ${zip}: ${error.message}`);
-            continue;
+            throw new Error(`Can't read ${zip}: ${error.message}`, { cause: error });
         }
         const title = path.relative(sthDir, zip);
         const seen = new Set();
