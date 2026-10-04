@@ -1,8 +1,16 @@
-import { typedArrayToBase64, base64ToTypedArray } from "./state-utils.js";
+import { deflate } from "pako";
+import { typedArrayToBase64, base64ToTypedArray, bytesToTypedArray } from "./state-utils.js";
 import { findModel } from "./models.js";
+import { inflate } from "./archive.js";
 
 const SnapshotFormat = "jsbeeb-snapshot";
-const SnapshotVersion = 3;
+const SnapshotVersion = 4;
+
+const CompressedArrayEncoding = "deflate";
+// Smaller arrays (registers, palettes) gain too little to pay for a deflate call and its header.
+const CompressArraysFromBytes = 1024;
+// A session's join waits on this; the default level 6 takes over twice as long to save a sixth of the bytes.
+const ArrayCompressionLevel = 1;
 
 /**
  * Whether a snapshot was taken on a machine with a second processor fitted.
@@ -113,22 +121,39 @@ export function restoreSnapshot(cpu, model, snapshot) {
     cpu.restoreState(snapshot.state);
 }
 
+function encodeTypedArray(array) {
+    const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+    const type = array.constructor.name;
+    if (bytes.length < CompressArraysFromBytes) return { __typedArray: true, type, data: typedArrayToBase64(bytes) };
+    return {
+        __typedArray: true,
+        type,
+        encoding: CompressedArrayEncoding,
+        data: typedArrayToBase64(deflate(bytes, { level: ArrayCompressionLevel })),
+    };
+}
+
+function decodeTypedArray({ type, encoding, data }) {
+    const Constructor = TypedArrayConstructors[type];
+    if (!Constructor) {
+        throw new Error(`Unknown TypedArray type: ${type}`);
+    }
+    if (encoding === undefined) return base64ToTypedArray(data, Constructor);
+    if (encoding !== CompressedArrayEncoding) {
+        throw new Error(`Unknown TypedArray encoding: ${encoding}`);
+    }
+    return bytesToTypedArray(inflate(base64ToTypedArray(data, Uint8Array)), Constructor);
+}
+
 /**
- * Serialize a snapshot to a JSON string, converting TypedArrays to base64.
+ * Serialize a snapshot to a JSON string, converting TypedArrays to base64, deflating the large ones first.
  * @param {object} snapshot
  * @returns {string} JSON string
  */
 export function snapshotToJSON(snapshot) {
-    return JSON.stringify(snapshot, (key, value) => {
-        if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
-            return {
-                __typedArray: true,
-                type: value.constructor.name,
-                data: typedArrayToBase64(value),
-            };
-        }
-        return value;
-    });
+    return JSON.stringify(snapshot, (key, value) =>
+        ArrayBuffer.isView(value) && !(value instanceof DataView) ? encodeTypedArray(value) : value,
+    );
 }
 
 /**
@@ -137,14 +162,5 @@ export function snapshotToJSON(snapshot) {
  * @returns {object} snapshot object
  */
 export function snapshotFromJSON(json) {
-    return JSON.parse(json, (key, value) => {
-        if (value && value.__typedArray) {
-            const Constructor = TypedArrayConstructors[value.type];
-            if (!Constructor) {
-                throw new Error(`Unknown TypedArray type: ${value.type}`);
-            }
-            return base64ToTypedArray(value.data, Constructor);
-        }
-        return value;
-    });
+    return JSON.parse(json, (key, value) => (value && value.__typedArray ? decodeTypedArray(value) : value));
 }
