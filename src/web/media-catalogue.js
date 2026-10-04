@@ -143,7 +143,6 @@ export function describeBitshiftersEntry(file) {
     };
 }
 
-/** An entry of github-discs.json, whose disc is at its repo's default branch unless the entry names a `ref`. */
 export function describeGitHubEntry(entry) {
     return {
         ref: `github:${entry.repo}${entry.ref ? `@${entry.ref}` : ""}/${entry.path}`,

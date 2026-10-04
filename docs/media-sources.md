@@ -3,7 +3,8 @@
 A media source is somewhere the media window can list discs from and load them. Each one is a
 pair of functions keyed by a URL schema: a lister that describes what the source holds, and a
 fetcher that returns the bytes of one entry. The window, the URL parameters, the headless
-session and the MCP server all go through the same two.
+session and the MCP server all go through the same two. GitHub has no fetcher of its own, since
+its references are URLs by another name (see [GitHub](#github)).
 
 ## What a source hands the window
 
@@ -105,13 +106,17 @@ manifest's fields, with `repo` and `ref` in place of the site:
 - `repo` is `owner/name` and `path` is the file within it. `title`, `publisher`, `year` and
   `type` are required.
 - `ref` is optional. Without it the entry follows the default branch, so it always loads the
-  latest build, and a broken push breaks it until the next push fixes it.
+  latest build. The cost: a broken push breaks it until the next push fixes it, and a save state
+  made with it stops restoring once a new build is pushed, because a state will not restore over
+  a disc that has changed since it was saved.
 - `authors` is optional, and plain text.
 - `machine` is optional, and takes the names `MachineRequirements` knows, as the Bitshifters
   manifest's does.
 - `url` is optional and defaults to the repo's page, `https://github.com/<repo>`.
 
 The entry is listed as `github:<repo>/<path>`, or `github:<repo>@<ref>/<path>` when it has a ref.
+A link that boots it finds its `machine` only when the link spells the reference that way: the
+same disc named with `@main`, say, loads but is not switched to the machine it needs.
 `tests/unit/test-github-source.js` checks every entry's fields, and that no two entries name the
 same disc.
 
@@ -130,6 +135,7 @@ same disc.
    so a link that boots one of its discs can find the requirement without listing the catalogue.
 5. Wiring: construct the source in `src/main.js` beside the others, and register the fetcher in
    `src/machine-session.js` so the headless session and the MCP server can load its references.
+   A source whose route needs no fetcher, as GitHub's does not, has nothing to register there.
 6. The README's list of `disc=` forms, and a mention in the media window paragraph.
 7. Tests: the archive (`fetch` stubbed with `vi.spyOn`, restored after each test), the source's
    registration, the descriptor in the catalogue tests, the schema in the resolver tests, and any
