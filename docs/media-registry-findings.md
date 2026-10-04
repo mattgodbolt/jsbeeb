@@ -492,7 +492,8 @@ which is a modified version is the part that needs judgement.
   for `contains`.
 - Anchors avoid `NOP` runs and come in smaller regions with a minimum count.
 - Symbol sets are found by their anchors, not by an image's key, and the anchor chooser checks its
-  regions against the corpus for code other titles share.
+  regions against the corpus for code other titles share. A person reading that check's report, not the
+  build, is what tells sets apart.
 - A track that repeats a sector ID with different contents keeps each content once, in byte order.
 - Open: whether duplicator leftovers should split copies.
 

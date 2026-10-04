@@ -246,13 +246,12 @@ The rules: an anchor is four to eight bytes of whole instructions starting at a 
 store whose target can be worked out may reach any of its bytes (counting the full reach of indexed
 stores); it has no run of two or more `NOP`s; and its bytes appear only once in the region. Each
 exception is explained below: a copy, swap or load picked as moving the program, whose range covers the
-whole region, doesn't count as a store; run-once code is anchored on the bytes that get overwritten; an
-anchor that tells two overlapping regions apart needn't start at a routine's entry; a region with no
-code, such as an adventure's database, is anchored on data its interpreter never writes; and a ROM's
-anchors can sit anywhere but the I/O range. The debugger checks regions each time the machine stops and
-when a breakpoint set by name is hit, and a region needs every anchor to match and at least `minAnchors`
-(default and minimum 1) of them. A region without anchors is never shown automatically, but can be picked
-by hand.
+whole region, doesn't count as a store; run-once code is anchored on the bytes that get overwritten; a
+region with no code, such as an adventure's database, is anchored on data its interpreter never writes;
+and a ROM's anchors can sit anywhere but `&FC00-&FEFF`. The debugger checks regions each time the machine
+stops and when a breakpoint set by name is hit, and a region needs every anchor to match and at least
+`minAnchors` (default and minimum 1) of them. A region without anchors is never shown automatically, but
+can be picked by hand.
 
 The project rebuilding Superior's PIPELINE byte for byte from source gave the format its second test, and
 most of what follows answers its feedback. According to that feedback, the disc holds several programs
@@ -304,14 +303,15 @@ hand counts as matching.
 The MOS's globals are the exception, because every program uses the MOS's addresses as well as its own.
 Under the rule above, a game's `STA &020E` wouldn't read `WRCHV`, since that name belongs to the MOS's
 set and the instruction to the game's. So a MOS's set is marked as a system set, and only a MOS's can be
-one, which the overlay check keeps to one at a time. A system set lends its globals (vectors, OS
-variables, workspace) to all code, after everything else: the instruction's own set's regions and
-globals, then other sets' matching regions. That names the OS's addresses everywhere, including in the
-most common case of all, a game no set covers. A game that has taken over the machine and reuses OS
-workspace for its own variables gets the OS's names for them unless its own set names those addresses,
-and even a name that's wrong for the game says what the address was. System globals apply while any
-region of their set matches, so the names are those of the MOS that's running. For an address shown on
-its own they come last too, after a global that only one other set names.
+one; the chooser checks each MOS version's anchors against the other versions, which keeps them to one at
+a time. A system set lends its globals (vectors, OS variables, workspace) to all code, after everything
+else: the instruction's own set's regions and globals, then other sets' matching regions. That names the
+OS's addresses everywhere, including in the most common case of all, a game no set covers. A game that
+has taken over the machine and reuses OS workspace for its own variables gets the OS's names for them
+unless its own set names those addresses, and even a name that's wrong for the game says what the address
+was. System globals apply while any region of their set matches, so the names are those of the MOS that's
+running. For an address shown on its own they come last too, after a global that only one other set
+names.
 
 Sets live in the registry, not at a link elsewhere, so the build's checks and the index can't go stale
 when someone else's file changes. A linked set is no exception: its regions and anchors are in the
@@ -344,36 +344,27 @@ run only covers what was played. There's also no way to label code that's parked
 such as the swapped part of the game while it sits in screen memory; that would need a region with an
 offset, which isn't worth a field.
 
-Overlays are told apart by an anchor on a byte where they differ. The chooser looks for those, and the
-build checks that any two overlapping regions in the registry, in one set or two, have anchors that
-disagree about some byte: an address both of them anchor, holding different bytes in each. Only pairs
-that overlap in address are compared, so the check itself stays cheap. On PIPELINE that covers the
-stubs, the game and the editors, which are separate sets, and it's easiest when one run of the chooser
-picks all of their anchors together. No two regions in the registry can then match at once, and the
-debugger needs no rule for it; a region picked by hand can still clash with one that matches, and then
-it's the user's choice. Merging names that happen to agree isn't worth its rules. The chooser warns when
-a single candidate is all that tells two overlays apart, since a later change to the store rule could
-quietly take it away; according to the feedback, the PIPELINE stubs differ at only one labelled
-instruction, `read_whole_run` at `&0916`.
+Overlays are told apart by an anchor on a byte where they differ. On PIPELINE the stubs, the game and
+the editors are separate sets, and one run of the chooser picks all of their anchors together, checking
+each region's anchors against the others' bytes. Merging names that happen to agree isn't worth its
+rules. The chooser warns when a single candidate is all that tells two overlays apart, since a later
+change to the store rule could quietly take it away; according to the feedback, the PIPELINE stubs differ
+at only one labelled instruction, `read_whole_run` at `&0916`.
 
-Anchors chosen for two programs separately rarely share an address, so a set added later usually has to
-gain anchors to meet the check. For each earlier region it overlaps, the chooser looks in the memory the
-two share for an address where the programs' bytes differ and both could carry an anchor (whole
-instructions, though not necessarily at a routine's entry, and no store of either program reaching it),
-and gives an anchor over it to whichever region lacks one there: the new set, the earlier one, or both.
-It prefers an address the earlier region already anchors, since then the earlier set needs nothing. One
-anchor disagrees with every region anchored over the same bytes that holds other bytes there, so a set
-can reuse addresses that earlier ones anchored. Choosing an anchor for the earlier set needs its
-program's stores as well as its bytes, so it takes that set's source or listing, not just its `madeFrom`
-images; until someone supplies those, a set that needs the earlier one to gain an anchor can't be added.
-Two programs that differ only where they can't both carry an anchor (in variables, a table of high
-scores, a run of `NOP`s a cheat poked), or don't differ at all, are the same code for this purpose, and
-become one shared set rather than two that name it differently. A shared set has one licence, so a second
-contributor's names join it only under a licence that combines with the first's. The build itself sees
-only anchors, so it can't tell a missing anchor from the same code and asks for the anchor. Regions
-without anchors never match on their own, so the check leaves them out. The price is anchors: over a busy
-range such as `&1100-&5800`, a set may need one for each earlier region it overlaps, and that grows with
-the registry. How far it grows is an open question.
+Sets made separately are told apart by the corpus check ([below](#code-that-turns-up-elsewhere)): the
+chooser tests every candidate anchor against every title's files at the same address, and the pull
+request that adds a set carries its report for the reviewer to read. That's the trade: the build doesn't
+prove two sets apart, a person reading the report does. The build has no images, only anchors, so a
+proof would need every pair of overlapping regions to anchor a common address where they differ, which
+means extra anchors on every earlier set a new one overlaps, and that cost grows with the registry. The
+corpus check costs the same however big the registry gets, and it's the stronger test, since it tries
+anchors against real code rather than against other sets' anchors. It's also what the measurement was
+for: the worry was anchors matching unrelated code, and across the corpus the 2,228 matches between
+titles were all in files at least 10% alike, nearly all at 90% or more, and all the same code or data.
+The build checks what it can without images, set by set: the schema and licence, anchor lengths,
+`minAnchors`, anchors inside their regions, and none in `&FC00-&FEFF`. Anything that slips through falls
+to the debugger's rule: when regions of two sets match at the same address, it shows neither and offers
+the choice, as it does when a region picked by hand clashes with one that matches.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
 global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
@@ -400,13 +391,15 @@ made for that copy is then found the same way.
 Looking up a catalogued file's hash wouldn't do as well. Our corpus has a PIPELINE copy that differs from
 a known capture only in a catalogue byte, the count of writes to it, and its stubs match the capture's,
 so that lookup would find it; but on PIPELINE the catalogued files are only the loader stubs, which
-differ between the copies we have, while the code that matters is in sectors the catalogue doesn't
-cover. Anchors cope with both cases in the PIPELINE feedback. A used copy keeps its code through one
-saved level, though not the second: DFS can't see the sectors the catalogue doesn't cover, so the first
-level fits before the game's code and the second lands on its first sectors, taking the regions anchored
-there with it, which is right. And Stairway To Hell's PIPELINE is a crack that left the code where it
-was: its game and graphics editor are byte for byte the originals, and the level designer's three
-changed bytes are mid-routine, away from any anchor, so all three sets match.
+differ between the copies we have, while the code that matters is in sectors the catalogue doesn't cover.
+Anchors cope with both cases in the PIPELINE feedback. A used copy keeps whatever code its saves haven't
+covered. DFS can't see the sectors the catalogue doesn't cover, so a save goes after the last catalogued
+file and onto the game's code: according to the feedback, a second saved level lands on the game's first
+sectors, and a single mission or graphics set saved from the Mission Generator covers some or all of the
+game, which then no longer starts. The regions anchored in what was overwritten stop matching, which is
+right, and the rest still match. And Stairway To Hell's PIPELINE is a crack that left the code where it
+was: its game and graphics editor are byte for byte the originals, and the level designer's three changed
+bytes are mid-routine, away from any anchor, so all three sets match.
 
 The build publishes every set's location, licence, `link` if it has one, and regions with their anchors,
 without the names, in `symbols/index.json`. The debugger fetches it once, the first time it wants names,
@@ -417,12 +410,11 @@ every indexed region once and keeps the answers until memory can change: the mac
 edits memory, restores a snapshot or resets. Most regions fail on the first byte of their first anchor,
 so a few thousand regions cost little next to drawing the view. Only a set that matches has its names
 fetched, and a linked set's only once the user has agreed. Repton 2's set from the findings, 11 anchors
-in three regions, takes under 1 KB of the index, so hundreds of sets come to a few hundred KB, before the
-overlay check adds anchors to sets over busy ranges. If the registry grows past a couple of thousand
-sets, the index can be split into one static file per 256-byte page, listing the regions over that page.
-Names need more than the pages on screen, though (the pages operands point into, the MOS's for system
-globals, and every set that might name a global shown on its own), so that's for when one file gets too
-big, not before.
+in three regions, takes under 1 KB of the index, so hundreds of sets come to a few hundred KB. If the
+registry grows past a couple of thousand sets, the index can be split into one static file per 256-byte
+page, listing the regions over that page. Names need more than the pages on screen, though (the pages
+operands point into, the MOS's for system globals, and every set that might name a global shown on its
+own), so that's for when one file gets too big, not before.
 
 A set that matches is shown, not offered (a linked set once the user has agreed to fetch its names).
 Matching anchors only show that the anchored bytes are the same, but in the corpus a region that matches
@@ -446,26 +438,29 @@ The risk is a set that names game-specific things (its data, its globals) in a r
 shared code. A Level 9 game's set that took in the interpreter would label every Level 9 game's data with
 that one game's names. So the chooser checks candidate anchors against the corpus, with files placed at
 their load addresses, and flags any region that matches another title, leaving out titles the records
-already join to it (aliases, versions, `contains`), for a person to judge. The same game elsewhere is
-fine. Shared code becomes a set of its own, such as one Level 9 interpreter set for every Level 9 game,
-and each game's set keeps to what's its own: for an adventure, its database, in a region anchored on data
-the interpreter never writes (its text, vocabulary and action tables, not where the objects are). The
-interpreter's stores go through pointers, so no store rule finds those parts; a person, or a reader for
-the game's format, picks them. The interpreter's code then takes the database's names from another set's
-matching region.
+already join to it (aliases, versions, `contains`), for a person to judge; the report goes in the pull
+request that adds the set. The same game elsewhere is fine. Programs that differ only where they can't
+both carry an anchor (in variables, a table of high scores, a run of `NOP`s a cheat poked) are the same
+code too. Shared code becomes a set of its own, such as one Level 9 interpreter set for every Level 9
+game, and each game's set keeps to what's its own: for an adventure, its database, in a region anchored
+on data the interpreter never writes (its text, vocabulary and action tables, not where the objects are).
+The interpreter's stores go through pointers, so no store rule finds those parts; a person, or a reader
+for the game's format, picks them. The interpreter's code then takes the database's names from another
+set's matching region. A shared set has one licence, so a second contributor's names join it only under a
+licence that combines with the first's; otherwise they can be its `link`, or a plain link once it has
+one.
 
 ### ROMs
 
 ROMs are the easy case. Nothing writes to them, so the store rule and the cuts at copies don't apply, and
-anchors can sit anywhere but the I/O range of the machines that have one there (below). Each ROM version
-gets a set: OS 1.20, the B+'s 2.00, the Master's 3.20 and 3.50, the Compact's 5.10, the Electron's MOS,
-the US MOS and the Atom's; BASIC 2 and 4; each DFS and ADFS. The overlay check makes the versions
-disagree about some byte, and in a ROM any byte where two versions differ can be an anchor, in either
-set, so the chooser can always meet it. Sets for different parts of memory match at once without any
-conflict: the MOS, whichever sideways ROM is paged in, and the game in RAM. A language's set matches
-whenever it's paged in, which on a B is BASIC through most games, so if it names its workspace as
-globals, a game's own names for those addresses are left bare in the memory view; instructions aren't
-affected, since BASIC's globals name only BASIC's operands.
+anchors can sit anywhere but `&FC00-&FEFF` (below). Each ROM version gets a set: OS 1.20, the B+'s 2.00,
+the Master's 3.20 and 3.50, the Compact's 5.10, the Electron's MOS, the US MOS and the Atom's; BASIC 2
+and 4; each DFS and ADFS. The chooser tells the versions apart by checking each one's anchors against the
+other versions' images, and in a ROM any byte where two versions differ can be an anchor. Sets for
+different parts of memory match at once without any conflict: the MOS, whichever sideways ROM is paged
+in, and the game in RAM. A language's set matches whenever it's paged in, which on a B is BASIC through
+most games, so if it names its workspace as globals, a game's own names for those addresses are left bare
+in the memory view; instructions aren't affected, since BASIC's globals name only BASIC's operands.
 
 Anchors are read from the memory being looked at, so a sideways ROM's set matches in whatever slot the
 ROM is in, with no field saying which, and shadow RAM works the same way. jsbeeb's debugger reads memory
@@ -477,23 +472,28 @@ A ROM address isn't always ROM, so a ROM's regions are cut at the bounds of what
 over it. `&FC00-&FEFF` is I/O on the BBC Micro, the Master, the Compact and the Electron, so no region of
 their ROMs covers it, and no anchor sits there even in a ROM image that has bytes for it: dumps of the
 same ROM differ there (jsbeeb's Master MOS 3.20 and beebjit's differ in that range and nowhere else). The
-Atom's I/O is at `&B000-&BFFF`, where it has no ROM, so its kernel's regions run to `&FFFF`. The Master
-can page HAZEL, its 8K of filing system RAM, over the MOS at `&C000-&DFFF` (bit Y of ACCCON), and ANDY,
-4K of RAM, over `&8000-&8FFF` of the sideways ROMs (bit 7 of ROMSEL); those are the bounds jsbeeb's
-Master memory map uses. The B+ pages 12K of RAM over `&8000-&AFFF` by bit 7 of ROMSEL too, though jsbeeb
-doesn't emulate the B+. The Compact pages its memory the same way as the Master. So the Master's and the
-Compact's MOS are cut into `&C000-&DFFF`, `&E000-&FBFF` and `&FF00-&FFFF`, and while HAZEL is in, the
-first region just doesn't match; and a sideways ROM's set is cut at `&9000` and `&B000`, so the rest of
-it keeps its names while that RAM is in.
+Atom's I/O is at `&B000-&BFFF`, where it has no ROM, so its kernel's regions run to `&FFFF`, though its
+anchors stay out of `&FC00-&FEFF` like every other set's, which keeps the build's check the same for all.
+The Master can page HAZEL, its 8K of filing system RAM, over the MOS at `&C000-&DFFF` (bit Y of ACCCON),
+and ANDY, 4K of RAM, over `&8000-&8FFF` of the sideways ROMs (bit 7 of ROMSEL); those are the bounds
+jsbeeb's Master memory map uses. The B+ pages 12K of RAM over `&8000-&AFFF` by bit 7 of ROMSEL too,
+though jsbeeb doesn't emulate the B+. The Compact pages its memory the same way as the Master. So the
+Master's and the Compact's MOS are cut into `&C000-&DFFF`, `&E000-&FBFF` and `&FF00-&FFFF`, and while
+HAZEL is in, the first region just doesn't match; and a sideways ROM's set is cut at `&9000` and `&B000`,
+so the rest of it keeps its names while that RAM is in.
 
 ### Linked sets
 
-Most disassemblies state no licence, so a set can't store their names, but it can point at them. A linked
-set keeps only what's ours, its regions and anchors, which come from the code's own bytes, and where the
-names live. jsbeeb fetches the names from the author's site when someone wants them, and the registry
-never stores or republishes them. The debugger asks before fetching, because it's someone else's work
-from someone else's site: it shows the author's `home` and the site the file comes from, and remembers
-the answer for that `home`.
+Most disassemblies state no licence, so a set can't store their names, but it can point at them. A set
+with only a link keeps just what's ours, its regions and anchors, which come from the code's own bytes,
+and where the names live. A set can also store some names and link others: our MOS sets store the
+documented interface and the system globals, and can link a fuller disassembly of the same ROM, whose
+names show once the user agrees. Stored names win where both name an address, so system globals need no
+prompt. A set has one link, so any further disassembly of the same code is a plain link, in the set's
+`links` or a record's. jsbeeb fetches linked names from the author's site when someone wants them, and
+the registry never stores or republishes them. The debugger asks before fetching, because it's someone
+else's work from someone else's site: it shows the author's `home` and the site the file comes from, and
+remembers the answer for that `home`.
 
 The link is pinned to an exact version (`raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, never
 a branch), so the names and the anchors stay in step. The build fetches each pinned file once to check

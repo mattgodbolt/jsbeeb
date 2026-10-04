@@ -144,15 +144,17 @@ loads, a table that replaces code once it has run). A region's names show only w
 anchors matches memory and there are at least `minAnchors`. Anchors are read from the memory being looked
 at.
 
-A set stores names only when their licence, or their author's recorded permission, allows it. Otherwise
-it links them: in place of `symbols`, `globals` and `source` it has `link`, with the `url` of the names'
-file pinned to an exact version (a commit, never a branch), its `format`, and `home`, the author's page,
-and its own `licence` covers only its regions and anchors. The registry never stores linked names. When a
-linked set's regions match, the debugger asks whether to fetch its names, showing the author's `home` and
-the site the file comes from, and remembers the answer for that `home`. If the user agrees, it fetches
-the file from the author's site, converts it, and uses the names as a stored set's: those in a region's
-range are that region's, and the rest are globals, so a linked file has to hold only the set's program.
-The `url` and `home` are https, and the client checks the names as the build does.
+A set stores names only when their licence, or their author's recorded permission, allows it. Names it
+can't store it can link: `link` holds the `url` of the names' file pinned to an exact version (a commit,
+never a branch), its `format`, and `home`, the author's page. A set can have stored names and a link, or
+a link alone, when it has no `symbols`, `globals` or `source` and its `licence` covers just its regions
+and anchors. It has at most one `link`; any further disassembly of the same code is a plain link in its
+`links`, as in a record. The registry never stores linked names. When a set with a link matches, the
+debugger asks whether to fetch the linked names, showing the author's `home` and the site the file comes
+from, and remembers the answer for that `home`. If the user agrees, it fetches the file from the author's
+site, converts it, and adds the names to the set's: those in a region's range are that region's, the rest
+are globals, and stored names win where both name an address. So a linked file has to hold only the
+set's program. The `url` and `home` are https, and the client checks the names as the build does.
 
 A set's globals name only its own code's operands, except in a system set: a MOS's set marked
 `"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
@@ -164,24 +166,25 @@ or else a global if only one set with a matching region names it, not counting s
 system global. A breakpoint set by name only stops while the name's region matches or, for a global,
 while any region of its set does.
 
-The debugger shows the names from every set that matches without being asked (a linked set's once the
-user has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without
-a match, it shows plain addresses as it does today ([why, and how regions and anchors are
+The debugger shows the names from every set that matches without being asked (linked names once the user
+has agreed to the fetch), says which set each name comes from, and lets the user drop a set. Without a
+match, it shows plain addresses as it does today ([why, and how regions and anchors are
 chosen](media-registry-design-notes.md#symbols)).
 
-Overlays are separate regions over the same addresses. The build requires any two overlapping regions in
-the registry that have anchors to have anchors that disagree about some byte, so they can never both
-match. Two regions of different sets that differ only where they can't both carry an anchor are the same
-code, and become one shared set. If regions of different sets still match at the same address, the
-debugger shows neither and offers the choice.
+Overlays are separate regions over the same addresses, told apart by anchors on bytes where they differ.
+The anchor chooser tests every candidate anchor against every title's files in the corpus at the same
+address, and the pull request that adds a set carries its report of any other title a region matches,
+for the reviewer to judge; the same code becomes one shared set. The build checks each set on its own
+(the schema and licence, anchor lengths, `minAnchors`, anchors inside their regions, none in
+`&FC00-&FEFF`) but doesn't prove two sets apart. If regions of different sets still match at the same
+address, the debugger shows neither and offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
-anchors can sit anywhere but the I/O range, and its regions are cut where a machine can put RAM or I/O
-over part of it. On the BBC Micro, the Master, the Compact and the Electron, no region or anchor covers
-the I/O at `&FC00-&FEFF`; the Master's and the Compact's MOS are cut at `&E000` because HAZEL can be
-paged over `&C000-&DFFF`; and a sideways ROM is cut at `&9000` and `&B000` because the Master's ANDY can
-be paged over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF`
-([why](media-registry-design-notes.md#roms)).
+anchors can sit anywhere but `&FC00-&FEFF`, and its regions are cut where a machine can put RAM or I/O
+over part of it. On the BBC Micro, the Master, the Compact and the Electron, no region covers the I/O at
+`&FC00-&FEFF`; the Master's and the Compact's MOS are cut at `&E000` because HAZEL can be paged over
+`&C000-&DFFF`; and a sideways ROM is cut at `&9000` and `&B000` because the Master's ANDY can be paged
+over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF` ([why](media-registry-design-notes.md#roms)).
 
 The build publishes `symbols/index.json`: every set's `url` (relative to the index), `licence` and, for a
 linked set, `link`, and its `regions` with their anchors but without their `symbols`. The debugger
@@ -290,8 +293,6 @@ Signal's can still guess the machine.
 - Where the repository lives and what it's called, so other emulators feel it's theirs too.
 - The `controls` schema, with Robert Smallshire and Beebium.
 - Whether, and how, we can host screenshots.
-- How many anchors the registry-wide overlay check costs once hundreds of sets overlap the same addresses
-  ([why](media-registry-design-notes.md#where-to-cut-regions)).
 
 Do let me know what you think, in a [GitHub issue](https://github.com/mattgodbolt/jsbeeb/issues) or on [the PR that proposed this](https://github.com/mattgodbolt/jsbeeb/pull/1179).
 
