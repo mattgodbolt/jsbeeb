@@ -18,6 +18,7 @@ describe("peerState", () => {
         ["ok", { connected: true, stats: { ...keepingUp, catchingUp: 1 }, statsAgeMs: 0 }],
         ["lagging", { connected: true, stats: { ...keepingUp, starved: 10 }, statsAgeMs: 0 }],
         ["ok", { connected: true, stats: { ...keepingUp, starved: 1 }, statsAgeMs: 0 }],
+        ["desynced", { connected: true, stats: { ...keepingUp, desyncs: 1, starved: 10 }, statsAgeMs: 0 }],
     ])("is %s for %o", (state, peer) => {
         expect(peerState(peer)).toBe(state);
     });

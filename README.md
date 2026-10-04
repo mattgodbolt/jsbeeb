@@ -145,7 +145,7 @@ changing layout.
 
 ### Discs and Tapes
 
-**Media** on the top bar opens the media window: two disc drives and a cassette deck showing what is loaded, and one searchable list of everything you can load: the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, the demos and games Bitshifters publish (each row links to its page, and picking one that needs a Master 128 switches the emulator to one: without asking when it is to boot, after asking otherwise), your Google Drive once connected, discs kept in this browser, and files opened this session. Type to search, `Enter` loads the best match into the aimed drive, `Shift+Enter` loads it, ticks **Autoboot** and boots it, and the arrows walk the rows. Aim at a drive or the deck with the **Into** control, by clicking a slot, or from its line in the LED panel under the screen. Each drive front has its eject latch, its 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser. The footer opens a file from this computer, makes a blank disc in this browser or on Google Drive, and connects Google Drive. [docs/media-sources.md](docs/media-sources.md) says how the sources fit together and what adding one takes.
+**Media** on the top bar opens the media window: two disc drives and a cassette deck showing what is loaded, and one searchable list of everything you can load: the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, the demos and games Bitshifters publish (each row links to its page, and picking one that needs a Master 128 switches the emulator to one: without asking when it is to boot, after asking otherwise), games and demos from their authors' GitHub repos (each row links to its repo, and one that needs a Master switches the same way), your Google Drive once connected, discs kept in this browser, and files opened this session. Type to search, `Enter` loads the best match into the aimed drive, `Shift+Enter` loads it, ticks **Autoboot** and boots it, and the arrows walk the rows. Aim at a drive or the deck with the **Into** control, by clicking a slot, or from its line in the LED panel under the screen. Each drive front has its eject latch, its 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser. The footer opens a file from this computer, makes a blank disc in this browser or on Google Drive, and connects Google Drive. [docs/media-sources.md](docs/media-sources.md) says how the sources fit together and what adding one takes.
 
 ### Emulator Shortcuts
 
@@ -312,6 +312,10 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `disc1=hfe:ZZZ` - loads disc ZZZ from the HFE archive of flux captures
 - `disc1=bitshifters:ZZZ` - loads disc ZZZ from [Bitshifters](https://bitshifters.github.io/), e.g.
   `bitshifters:bs-paradroid.ssd`
+- `disc1=github:OWNER/REPO/PATH` - loads the disc at PATH in a public GitHub repo's default branch, e.g.
+  `github:mattgodbolt/frogman/frogman_rebuilt.ssd`. `github:OWNER/REPO@REF/PATH` loads it from a branch, tag or
+  commit instead. The disc has to be committed to the repo; a release asset will not load. See
+  [docs/media-sources.md](docs/media-sources.md#github)
 - `drive0Tracks=40` / `drive0Tracks=80` - fixes drive 0's 40/80 track switch, as the switch on the back of a real
   drive did. `drive1Tracks` does the same for drive 1. Left alone, each drive follows whatever disc is loaded into it:
   a 40 track image is laid out the way a 40 track drive wrote it, on every other track of the surface, and the drive
@@ -320,6 +324,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   them apart. [docs/disc-track-layouts.md](docs/disc-track-layouts.md) explains how an image's layout is worked out.
 - `tape=XXX` - loads tape XXX (from the `tapes/` directory)
 - `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
+- `tape=github:OWNER/REPO/PATH` - loads a tape from a public GitHub repo, as `disc1=github:` does a disc
 - `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See
   [Remapping Keys](#remapping-keys).
 - `patch=P` - applies a memory patch `P`. See below.

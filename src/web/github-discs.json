@@ -1,0 +1,67 @@
+[
+  {
+    "repo": "mattgodbolt/beeb-scorched-earth",
+    "path": "scorched-earth.ssd",
+    "title": "Scorched Earth",
+    "publisher": "Matt Godbolt",
+    "authors": "Wendell Hicken (original game); fan port written with Claude Code",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/chuckie-egg-2-beeb",
+    "path": "chuckie-egg-2.ssd",
+    "title": "Chuckie Egg 2",
+    "publisher": "Matt Godbolt",
+    "authors": "A&F Software (original game); port by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/daredevil-demis",
+    "path": "daredevil-demis.ssd",
+    "title": "Daredevil Demis",
+    "publisher": "Matt Godbolt",
+    "authors": "Spoof of Visions Software's Daredevil Dennis; written with Claude Code",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/frogman",
+    "path": "frogman_rebuilt.ssd",
+    "title": "Frogman",
+    "publisher": "Matt Godbolt",
+    "authors": "Matt Godbolt and Richard Talbot-Watkins",
+    "year": 1993,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/frogman",
+    "path": "frogman_rebuilt.ssd",
+    "ref": "classic",
+    "title": "Frogman (classic)",
+    "publisher": "Matt Godbolt",
+    "authors": "Matt Godbolt and Richard Talbot-Watkins",
+    "year": 1993,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/nm",
+    "path": "ninja_music.ssd",
+    "title": "Ninja Massacre music",
+    "publisher": "Matt Godbolt",
+    "authors": "Music by David Whittaker",
+    "year": 2026,
+    "type": "Music",
+    "machine": "Master"
+  },
+  {
+    "repo": "mattgodbolt/onslaught",
+    "path": "original-disc.ssd",
+    "title": "Onslaught",
+    "publisher": "Matt Godbolt",
+    "authors": "Rich Talbot-Watkins and Matt Godbolt",
+    "year": 1993,
+    "type": "Game"
+  }
+]

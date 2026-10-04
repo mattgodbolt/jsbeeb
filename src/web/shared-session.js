@@ -68,6 +68,7 @@ const GuestStatsKeys = [
     "longTasks",
     "longTaskMaxMs",
     "stampAheadMs",
+    "desyncs",
 ];
 // A guest sends a summary each StatsIntervalMs; more often than this, the rest are dropped.
 const MinGuestStatsIntervalMs = StatsIntervalMs / 2;
@@ -79,6 +80,21 @@ const LeftShownMs = 30000;
 function notify(message) {
     console.log(`Shared session: ${message}`);
     toast(message, { title: ToastTitle });
+}
+
+/**
+ * Tells this person of the session's `desyncs`th desync: `what` desynced, and why. A second is a bug rather than a
+ * blip, so it asks for the report from `other` too; any after are only logged, so a machine that keeps desyncing
+ * does not bury the page in toasts.
+ */
+function announceDesync(desyncs, what, reason, other) {
+    if (desyncs === 1) notify(`${what}: ${reason}. Resyncing; please save a session report.`);
+    if (desyncs === 2) {
+        notify(
+            `Another desync. ${what}: ${reason}. More than one in a session is a bug: please save a session report ` +
+                `here and on ${other}, and send both with a bug report.`,
+        );
+    }
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -220,6 +236,7 @@ export class SessionHost {
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
         this.departed = [];
+        this.desyncs = 0;
         // Who orders the session's inputs: the host (null) or a guest. While a guest does, this machine replays
         // its commits as a guest's does, and this page's keys go to it stamped as a guest's go to the host.
         this.controller = null;
@@ -360,9 +377,20 @@ export class SessionHost {
         const waiting = this.sequencer ? this.sequencer.releaseAll() : [];
         this.sequencer = null;
         this.rtcBaseMs = rtcBaseMs;
-        this.replay = new LockstepGuest(processor, (reason, dropped, moved) =>
-            this.takeBackNow(reason, { jumped: moved, unreplayed: dropped }),
-        );
+        this.replay = new LockstepGuest(processor, (reason, dropped, moved, evidence) => {
+            if (moved) {
+                this.takeBackNow(reason, { jumped: true, unreplayed: dropped });
+                return;
+            }
+            this.log.record("desync", { guest: guest.id, reason, ...evidence });
+            announceDesync(
+                ++this.desyncs,
+                `This machine desynced from ${guestName(guest)}, which was in control, and took control back`,
+                reason,
+                `${guestName(guest)}'s machine`,
+            );
+            this.takeBackNow(reason, { unreplayed: dropped, announce: false });
+        });
         this.controller = guest;
         this.lastCommitMs = this.log.elapsed();
         this.stamper.reset();
@@ -431,10 +459,10 @@ export class SessionHost {
      * release among them is not lost; after a `jumped` machine, the session's clock starts again from the wall
      * time, as it does when the host's machine jumps in control.
      */
-    takeBackNow(reason, { jumped = false, unreplayed = this.replay?.commits ?? [] } = {}) {
+    takeBackNow(reason, { jumped = false, unreplayed = this.replay?.commits ?? [], announce = true } = {}) {
         if (this.sequencer) return;
         this.log.record("control", { guest: "host", reason });
-        notify(`The host has taken control back: ${reason}.`);
+        if (announce) notify(`The host has taken control back: ${reason}.`);
         this.controller = null;
         this.releasing = false;
         this.taker = null;
@@ -732,6 +760,8 @@ export class SessionHost {
     requestSnapshot(guest, reason) {
         if (!guest.ready || guest.resyncTimer) return;
         this.log.record("resync asked", { guest: guest.id, reason });
+        const name = guestName(guest);
+        announceDesync(++this.desyncs, `${name} desynced`, reason, `${name}'s machine`);
         const waitMs = guest.lastSnapshotMs + MinResyncIntervalMs - Date.now();
         if (waitMs <= 0) {
             this.sendSnapshot(guest);
@@ -920,6 +950,7 @@ export class SessionGuest {
         this.leftReason = null;
         this.roster = [];
         this.takeOnKey = false;
+        this.desyncs = 0;
         this.panel = new SessionPanel(sessionPane(this));
         this.showStatus();
     }
@@ -1257,7 +1288,9 @@ export class SessionGuest {
         if (this.lockstep) {
             this.lockstep.resync();
         } else {
-            this.lockstep = new LockstepGuest(processor, (reason) => this.desynced(reason));
+            this.lockstep = new LockstepGuest(processor, (reason, dropped, moved, evidence) =>
+                this.desynced(reason, evidence),
+            );
             // The first summary would otherwise cover the whole of joining.
             this.stats = new IntervalStats();
             loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
@@ -1270,10 +1303,11 @@ export class SessionGuest {
         for (const commit of snapshot.commits) this.lockstep.receive(commit);
     }
 
-    desynced(reason) {
-        console.warn(`Shared session: ${reason}; asking the host to resync`);
-        this.log.record("desync", { reason });
+    desynced(reason, evidence) {
+        this.log.record("desync", { reason, ...evidence });
+        this.stats.count("desyncs");
         this.send({ type: "resync", reason });
+        announceDesync(++this.desyncs, "This machine desynced", reason, "the host");
     }
 
     hostLeft() {

@@ -8,6 +8,7 @@ import {
     describeBrowserDisc,
     describeBuiltIn,
     describeDriveFile,
+    describeGitHubEntry,
     describeHfeEntry,
     describeSessionFile,
     describeSthDisc,
@@ -123,6 +124,50 @@ describe("the media catalogue", () => {
         });
     });
 
+    describe("GitHub", () => {
+        const nm = {
+            repo: "mattgodbolt/nm",
+            path: "ninja_music.ssd",
+            title: "Ninja Massacre music",
+            publisher: "Matt Godbolt",
+            authors: "Music by David Whittaker",
+            year: 2026,
+            type: "Music",
+            machine: "Master",
+        };
+
+        it("names the disc at the repo's default branch, and links to the repo", () => {
+            expect(describeGitHubEntry(nm)).toEqual({
+                ref: "github:mattgodbolt/nm/ninja_music.ssd",
+                kind: "disc",
+                title: "Ninja Massacre music",
+                publisher: "Matt Godbolt",
+                detail: "Music · Master · 2026 · Music by David Whittaker",
+                source: "github",
+                savesChanges: false,
+                url: "https://github.com/mattgodbolt/nm",
+                requires: MachineRequirements.Master,
+            });
+        });
+
+        it("names the ref an entry pins, takes the page it gives, and leaves out what it does not have", () => {
+            const described = describeGitHubEntry({
+                repo: "mattgodbolt/frogman",
+                path: "discs/frogman rebuilt.ssd",
+                ref: "classic",
+                title: "Frogman (classic)",
+                publisher: "Matt Godbolt",
+                year: 1993,
+                type: "Game",
+                url: "https://example.com/frogman",
+            });
+            expect(described.ref).toBe("github:mattgodbolt/frogman@classic/discs/frogman rebuilt.ssd");
+            expect(described.url).toBe("https://example.com/frogman");
+            expect(described.detail).toBe("Game · 1993");
+            expect(described.requires).toBeUndefined();
+        });
+    });
+
     it("holds a requirement to the very model named and the co-processor as named, nothing looser", () => {
         const machine = (name, hasTube = false) => ({ model: findModel(name), hasTube });
         const { Master, MasterTurbo } = MachineRequirements;
@@ -165,6 +210,8 @@ describe("the media catalogue", () => {
         const hfe = (title, publisher = "Acornsoft") => describeHfeEntry({ path: `${title}.hfe`, title, publisher });
         const bitshifters = (title) =>
             describeBitshiftersEntry({ path: `${title}.ssd`, title, publisher: "Bitshifters" });
+        const github = (title) =>
+            describeGitHubEntry({ repo: "mattgodbolt/x", path: `${title}.ssd`, title, publisher: "Matt Godbolt" });
         const builtIn = describeBuiltIn({ name: "Welcome", desc: "The disc supplied", file: "Welcome.ssd" });
 
         it("puts the built-in discs first, then everything by title with the richer source first", () => {
@@ -176,6 +223,8 @@ describe("the media catalogue", () => {
                 builtIn,
                 sth("Bitshifters/Paradroid.zip"),
                 bitshifters("Paradroid"),
+                sth("Unreleased/Onslaught.zip"),
+                github("Onslaught"),
             ];
             const ordered = rows.sort(compareForQuery("")).map((d) => `${d.source}:${d.title}`);
             expect(ordered).toEqual([
@@ -184,6 +233,8 @@ describe("the media catalogue", () => {
                 "hfe:Elite",
                 "sth:Elite",
                 "sth:Exile",
+                "github:Onslaught",
+                "sth:Onslaught",
                 "bitshifters:Paradroid",
                 "sth:Paradroid",
             ]);

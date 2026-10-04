@@ -421,7 +421,8 @@ span.accesskey {
   --led: var(--led-data);
 }
 
-.led.session[data-state="lagging"] {
+.led.session[data-state="lagging"],
+.led.session[data-state="desynced"] {
   --led: var(--led-disc);
 }
 
@@ -2062,6 +2063,11 @@ div.smoothie-chart-tooltip {
 .media-source.src-bitshifters {
   color: #f0a0c8;
   border-color: #8a3f66;
+}
+
+.media-source.src-github {
+  color: #f5b98a;
+  border-color: #8a5530;
 }
 
 .media-source.src-builtin {
