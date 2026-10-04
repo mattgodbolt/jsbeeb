@@ -131,10 +131,11 @@ same address all find a set the same way.
 A set is a JSON file in the registry's own small format, made by a converter from an assembler's output
 or a disassembly listing (BeebAsm, Baron, py8dis), and kept in the registry under `symbols/`. Besides
 `format` (1), it has a `title` for the debugger to show, its `licence`, its `source` (where the names
-came from) and optionally `madeFrom`, the keys of the images it was made from, which record where it came
-from and are never used to find it. Every name in it is an address; constants stay out. Names are unique
-within a set, and no address has two names in one region or in the globals: the converter qualifies local
-labels with their scope and picks between two names for one address.
+came from), optionally the `notice` its licence asks copies to carry, and optionally `madeFrom`, the keys
+of the images it was made from, which record where it came from and are never used to find it. Every name
+in it is an address; constants stay out. Names are unique within a set, and no address has two names in
+one region or in the globals: the converter qualifies local labels with their scope and picks between two
+names for one address.
 
 A set has `regions`, each a range of memory (`start` up to but not including `end`, which can be
 `0x10000`) with `anchors` (short runs of bytes at known addresses), `minAnchors` and `symbols` (names for
@@ -143,36 +144,37 @@ loads, a table that replaces code once it has run). A region's names show only w
 anchors matches memory and there are at least `minAnchors`. Anchors are read from the memory being looked
 at.
 
-A set's globals name only its own code's operands, except in a system set: one marked `"system": true`,
-such as a MOS, whose globals (system globals) name operands in any code, last, while any of its regions
-matches. An instruction in one of a set's matching regions takes names from that set's matching regions,
-then its globals, then other sets' matching regions, then system globals; an instruction outside every
-matching region takes names from matching regions, then system globals. An address shown on its own, such
-as a row of the memory view, takes a matching region's name, or else a global if only one set with a
-matching region names it, not counting system sets, or else a system global. A breakpoint set by name
-only stops while the name's region matches or, for a global, while any region of its set does.
+A set's globals name only its own code's operands, except in a system set: a MOS's set marked
+`"system": true` (no other set can be one), whose globals (system globals) name operands in any code,
+last, while any of its regions matches. An instruction in one of a set's matching regions takes names
+from that set's matching regions, then its globals, then other sets' matching regions, then system
+globals; an instruction outside every matching region takes names from matching regions, then system
+globals. An address shown on its own, such as a row of the memory view, takes a matching region's name,
+or else a global if only one set with a matching region names it, not counting system sets, or else a
+system global. A breakpoint set by name only stops while the name's region matches or, for a global,
+while any region of its set does.
 
 The debugger shows the names from every set that matches without being asked, says which set each name
 comes from, and lets the user drop a set. Without a match, it shows plain addresses as it does today
 ([why, and how regions and anchors are chosen](media-registry-design-notes.md#symbols)).
 
 Overlays are separate regions over the same addresses. The build requires any two overlapping regions in
-the registry to have anchors that disagree about some byte, so they can never both match. When two
-regions of different sets have no byte that differs, they're the same code, and it asks for one shared
-set. If regions of different sets still match at the same address, the debugger shows neither and offers
-the choice.
+the registry that have anchors to have anchors that disagree about some byte, so they can never both
+match. Two regions of different sets with no byte at all that differs are the same code, and become one
+shared set. If regions of different sets still match at the same address, the debugger shows neither and
+offers the choice.
 
 ROMs have sets too, one for each version of a MOS, BASIC, DFS or ADFS. Nothing writes to a ROM, so its
 anchors can sit anywhere but the I/O range, and its regions are cut where a machine can put RAM or I/O
-over part of it: no region covers the I/O at `&FC00-&FEFF`, the Master's MOS is cut at `&E000` because
-HAZEL can be paged over `&C000-&DFFF`, and a sideways ROM is cut at `&9000` and `&B000` because the
-Master's ANDY can be paged over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF`
-([why](media-registry-design-notes.md#roms)).
+over part of it. On the BBC Micro, the Master and the Electron, no region or anchor covers the I/O at
+`&FC00-&FEFF`; the Master's and the Compact's MOS are cut at `&E000` because HAZEL can be paged over
+`&C000-&DFFF`; and a sideways ROM is cut at `&9000` and `&B000` because the Master's ANDY can be paged
+over `&8000-&8FFF` and the B+'s RAM over `&8000-&AFFF` ([why](media-registry-design-notes.md#roms)).
 
-The build publishes `symbols/index.json`: every set's `url` and `licence`, and its `regions` with their
-anchors but without their `symbols`. The debugger fetches the index when it first wants names, checks
-every indexed region each time the machine stops, and fetches only the sets that match
-([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
+The build publishes `symbols/index.json`: every set's `url` (relative to the index) and `licence`, and
+its `regions` with their anchors but without their `symbols`. The debugger fetches the index when it
+first wants names, checks every indexed region each time the machine stops, and fetches only the sets
+that match ([how](media-registry-design-notes.md#finding-sets-by-their-anchors)).
 
 ```json
 {
