@@ -353,22 +353,23 @@ at only one labelled instruction, `read_whole_run` at `&0916`.
 
 Sets made separately are told apart by the corpus check ([below](#code-that-turns-up-elsewhere)). The
 chooser tests every candidate anchor against every title's files at the same address, and runs every
-region in the index over the new program's own bytes at its run address, which is the debugger's
-per-stop check, so an earlier set that would match the new program shows up too. The pull request that
-adds a set carries the report for the reviewer to read. That's the trade: the build doesn't prove two
-sets apart, a person reading the report does. The build has no images, only anchors, so a proof would
-need every pair of overlapping regions to anchor a common address where they differ, which means extra
-anchors on every earlier set a new one overlaps, and that cost grows with the registry. The corpus check
-costs the same however big the registry gets, and tries anchors against real code rather than against
-other sets' anchors, and the measurement shows what it finds: across the corpus, the 2,228 matches
-between titles were all in files at least 10% alike, nearly all at 90% or more, and all the same code or
-data. Its limit is the corpus's: files sit at their load addresses, so code that's relocated or
-decrypted as it loads, or that no catalogued file holds, isn't looked at, and a report with nothing in it
-says only that nothing at those addresses matched. The build checks what it can without images, set by
-set: the schema and licence, anchor lengths, `minAnchors`, anchors inside their regions, none in
-`&FC00-&FEFF`, and `system` only on a set whose regions lie in `&C000-&FFFF`. Anything that slips through
-falls to the debugger's rule: when regions of two sets match at the same address, it shows neither and
-offers the choice, as it does when a region picked by hand clashes with one that matches.
+region in the index over the new program's own bytes at its run address, which is the debugger's per-stop
+check, so an earlier set that would match the new program shows up too. The pull request that adds a set
+carries the report for the reviewer to read. That's the trade: the build doesn't prove two sets apart, a
+person reading the report does. The build has no images, only anchors, so a proof would need every pair
+of overlapping regions to anchor a common address where they differ, which means extra anchors on every
+earlier set a new one overlaps, and that cost grows with the registry. The corpus check costs the same
+however big the registry gets, and tries anchors against real code rather than against other sets'
+anchors, and the measurement shows what it finds: across the corpus, the 2,228 matches between titles
+were all in files at least 10% alike, nearly all at 90% or more, and all the same code or data. Its limit
+is the corpus's: files sit at their load addresses, so code that's relocated or decrypted as it loads, or
+that no catalogued file holds, isn't looked at, nor is a match split across two files that load together,
+and a report with nothing in it says only that nothing at those addresses matched. The build checks what
+it can without images, set by set: the schema and licence, anchor lengths, `minAnchors`, anchors inside
+their regions, none in `&FC00-&FEFF`, and `system` only on a set whose regions lie in `&C000-&FFFF`.
+Anything that slips through falls to the debugger's rule: when regions of two sets match at the same
+address, it shows neither and offers the choice, as it does when a region picked by hand clashes with one
+that matches.
 
 A breakpoint set by name stops only if the name applies when it's hit (its region matches, or for a
 global, any region of its set does), so a breakpoint on the game's main loop doesn't stop when the level
@@ -408,18 +409,18 @@ the level designer's three changed bytes are mid-routine, away from any anchor, 
 The build publishes every set's location, licence, `link` if it has one, and regions with their anchors,
 without the names, in `symbols/index.json`. The debugger fetches it once, the first time it wants names,
 and HTTP caching takes care of it after that; if the index or a set can't be fetched, it shows plain
-addresses and tries again later, waiting longer after each failure rather than retrying at every stop,
-and for a linked file on someone else's site, at most once a session. Memory doesn't change while the
-machine is stopped, so each time it stops the debugger checks every indexed region once and keeps the
-answers until memory can change: the machine runs, or the user edits memory, restores a snapshot or
-resets. Most regions fail on the first byte of their first anchor, so a few thousand regions cost little
-next to drawing the view. Only a set that matches has its names fetched, and linked names only once the
-user has agreed. Repton 2's set from the findings, 11 anchors in three regions, takes under 1 KB of the
-index, so hundreds of sets come to a few hundred KB. If the registry grows past a couple of thousand
-sets, the index can be split into one static file per 256-byte page, listing the regions over that page.
-Names need more than the pages on screen, though (the pages operands point into, the MOS's for system
-globals, and every set that might name a global shown on its own), so that's for when one file gets too
-big, not before.
+addresses and tries again later, waiting longer after each failure, up to a limit, rather than retrying
+at every stop, and for a linked file on someone else's site, at most once a session. Memory doesn't
+change while the machine is stopped, so each time it stops the debugger checks every indexed region once
+and keeps the answers until memory can change: the machine runs, or the user edits memory, restores a
+snapshot or resets. Most regions fail on the first byte of their first anchor, so a few thousand regions
+cost little next to drawing the view. Only a set that matches has its names fetched, and linked names
+only once the user has agreed. Repton 2's set from the findings, 11 anchors in three regions, takes under
+1 KB of the index, so hundreds of sets come to a few hundred KB. If the registry grows past a couple of
+thousand sets, the index can be split into one static file per 256-byte page, listing the regions over
+that page. Names need more than the pages on screen, though (the pages operands point into, the MOS's for
+system globals, and every set that might name a global shown on its own), so that's for when one file
+gets too big, not before.
 
 A set that matches is shown, not offered (its linked names once the user has agreed to fetch them).
 Matching anchors only show that the anchored bytes are the same, but in the corpus a region that matches

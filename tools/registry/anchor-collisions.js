@@ -6,8 +6,8 @@
 // distinct values in its first six bytes so that fill doesn't count. For each run it counts whether
 // its first 4, 6 and 8 bytes reappear at the same address in a file of another title. A file's three
 // runs, cut to 6 bytes, are then a region's anchors, which match another title only when one of its
-// files holds all three, as memory would. For every match it gives the share of the source file that
-// is identical at the same addresses in the matching file.
+// files holds all three. For every match it gives the share of the source file that is identical at the
+// same addresses in the matching file.
 //
 //   node tools/registry/anchor-collisions.js [--corpus .registry-corpus] [--seed 1] [--examples]
 //

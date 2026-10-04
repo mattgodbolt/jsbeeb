@@ -382,9 +382,9 @@ likely with every byte added, so if many of these were chance, eight bytes would
 four; nearly all of them are the same bytes because they're the same code or data.
 
 A file's three runs, cut to six bytes, then make a region's anchors, which match another title only when
-one of its files holds all three, as memory would. Of the 4,104 files with three runs, 1,355 match in at
-least one other title, 2,228 matches in all. For each match, the share of the source file that's
-identical at the same addresses in the matching file:
+one of its files holds all three. Of the 4,104 files with three runs, 1,355 match in at least one other
+title, 2,228 matches in all. For each match, the share of the source file that's identical at the same
+addresses in the matching file:
 
 | Identical     | Matches |
 | ------------- | ------: |
@@ -420,9 +420,9 @@ different lengths. `--examples` lists every match, lowest share first.
 It's a proxy, with limits. Files sit at their load addresses, not in memory as it is at run time, so code
 that's relocated or decrypted as it loads is missed. The discs are Stairway To Hell's DFS images only,
 which leaves out protected originals and tapes. The runs are at random offsets anywhere in a file, data
-included, not anchors at routine entry points. And a region counts as matching another title only when
-one of that title's files holds all three anchors, so a match split across two files that load together
-isn't counted. To rerun it from the jsbeeb root:
+included, not anchors at routine entry points. And requiring one file to hold all three anchors misses a
+match split across two files that load together, which memory could hold. To rerun it from the jsbeeb
+root:
 
 ```sh
 node tools/registry/anchor-collisions.js --examples
