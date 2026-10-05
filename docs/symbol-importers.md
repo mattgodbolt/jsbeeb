@@ -32,7 +32,7 @@ Nothing in it is an address list: the names come from the build.
 
 - `id`: the prefix of the title's set files, `<id>-<set id>.json`.
 - `licence`, `notice`, `madeFrom`: copied into every set.
-- `source`: the `repository` and the `commit` that was built. The importer and the in-memory check refuse a
+- `source`: the `repository` and the `commit` that was built. The importer, the corpus check and the in-memory check refuse a
   build directory that isn't in a git checkout of that commit with nothing changed or added, and each set's
   `source` links the tree at that commit. They can't tell a build left over from another commit; the source
   repository's own build keeps that true.
@@ -86,7 +86,7 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
   the region it points into if only that region's code uses it, and is a global otherwise.
 - **One name per address.** In a region, a scope's own name wins over the labels inside it (`pl` over
   `pl.start`), then the label written last, nearest the bytes (`tune` over `sound_data`). In the globals,
-  the name the most instructions use.
+  the `=` name the most instructions use, over any label of a `globalsSections` section.
 - Every label the listing gives has to agree with the symbol dump, or the importer stops: the dump is what
   baron resolved, and the listing is where the scopes, sections and bytes come from.
 
