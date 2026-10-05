@@ -54,13 +54,17 @@ export function checkSourceCommit(config, sourceDir) {
     if (changes) throw new Error(`The checkout ${sourceDir} has changes, so it isn't ${config.source.commit}`);
 }
 
-/** Fetches just the config's commit of its repository into `dir`, a new directory. */
+/**
+ * Fetches just the config's commit of its repository into `dir`, a new directory, running none of the
+ * user's git hooks there.
+ */
 export function cloneSource(config, dir) {
     const { repository, commit } = config.source;
     mkdirSync(dir, { recursive: true });
     try {
         git(dir, "init", "-q");
-        git(dir, "fetch", "-q", "--depth", "1", repository, commit);
+        git(dir, "config", "core.hooksPath", "/dev/null");
+        git(dir, "fetch", "-q", "--depth", "1", "--", repository, commit);
         git(dir, "checkout", "-q", "FETCH_HEAD");
     } catch (error) {
         throw new Error(`Couldn't fetch ${commit} from ${repository}: ${error.stderr?.toString().trim()}`, {
@@ -116,7 +120,10 @@ export function baronVersion(baron) {
     return version;
 }
 
-/** Assembles each source on its own, as baron gives each a fresh symbol table. */
+/**
+ * Assembles each source in a run of its own, since one run's listing doesn't say where one source ends
+ * and the next begins.
+ */
 export function assemble(config, sourceDir, buildDir, baron) {
     for (const dir of Object.values(BuildLayout)) mkdirSync(path.join(buildDir, dir), { recursive: true });
     const sources = sourcesToAssemble(config, sourceDir);
