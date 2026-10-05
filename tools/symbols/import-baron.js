@@ -350,11 +350,13 @@ class Importer {
 
     /** One set: its regions with their names and anchors, its globals, and the names left out. */
     set(spec) {
-        const sources = spec.sources.map((name) => this.source(name));
+        const regions = spec.regions.map((regionSpec) => this.region(spec, regionSpec));
+        const sources = [
+            ...new Set([...spec.sources.map((name) => this.source(name)), ...regions.map((r) => r.source)]),
+        ];
         const strip = spec.stripScope;
         const shown = (name) => (strip && name.startsWith(`${strip}.`) ? name.slice(strip.length + 1) : name);
         const globalsSections = new Set(spec.globalsSections ?? []);
-        const regions = spec.regions.map((regionSpec) => this.region(spec, regionSpec));
         const named = new Map(regions.map((region) => [region, new Map()]));
         const globalsNamed = new Map();
         const dropped = [];
@@ -366,8 +368,7 @@ class Importer {
         const runs = (region, statement) => statement.section === region.section && holds(region, statement.address);
 
         // Labels belong to the region of the section they're assembled in.
-        const labelSources = [...new Set([...sources, ...regions.map((region) => region.source)])];
-        for (const source of labelSources) {
+        for (const source of sources) {
             for (const label of source.listing.labels) {
                 if (label.name === strip) continue;
                 const section = label.section;

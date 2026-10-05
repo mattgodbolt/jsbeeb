@@ -317,6 +317,32 @@ describe("importBaron's names", () => {
         );
     });
 
+    it("names the `=` addresses the code of a region from another source uses", () => {
+        const other = [
+            "ptr = 114 [&72]",
+            "SECTION other, org=&2000",
+            statement(0x2000, [0x85, 0x72], "STA ptr"),
+            statement(0x2002, [0xa9, 0x11], "LDA #&11"),
+            statement(0x2004, [0xa2, 0x22], "LDX #&22"),
+            statement(0x2006, [0x60], "RTS"),
+            "ENDSECTION",
+        ].join("\n");
+        const both = baronBuild(
+            new Map([
+                ["other", other],
+                ["prog", listing],
+            ]),
+            { ...dump, "src/other.6502": { ptr: 0x72 } },
+            [],
+        );
+        const regions = [
+            { name: "main", section: "prog" },
+            { name: "other", source: "other", section: "other" },
+        ];
+        const { sets } = importBaron(config(regions), both);
+        expect(sets[0].json.globals.ptr).toBe("0x0072");
+    });
+
     it("refuses a set whose sources give one global name two addresses", () => {
         const other = [
             "counter = 113 [&71]",
