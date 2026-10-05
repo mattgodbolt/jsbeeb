@@ -63,6 +63,11 @@ describe("Disassemble6502", () => {
             expect(disassembler.disassemble(0x2000)[0]).toBe(listing);
         });
 
+        it("wraps a branch's target round the top of memory, as the CPU does", () => {
+            mem.set([0xd0, 0x10], 0xfff8);
+            expect(disassembler.disassemble(0xfff8)).toEqual([`BNE ${instrRef(0x0a, "000a")}`, 0xfffa, 0x0a]);
+        });
+
         it("keeps references out of the plain listing", () => {
             mem.set([0xb1, 0xf2], 0x2000);
             expect(disassembler.disassemble(0x2000, true)[0]).toBe("LDA ($f2),Y ; $eaea + Y");

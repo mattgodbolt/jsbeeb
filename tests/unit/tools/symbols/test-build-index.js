@@ -69,6 +69,10 @@ describe("the symbol set build", () => {
             ["a link", (json) => (json.link = { url: "https://example.com" }), "linked sets"],
             ["madeFrom that isn't keys", (json) => (json.madeFrom = ["exile.ssd"]), "madeFrom"],
             ["no regions", (json) => (json.regions = {}), "no regions"],
+            ["regions as a list", (json) => (json.regions = [json.regions.main]), "regions isn't an object"],
+            ["a region's symbols as a list", (json) => (json.regions.main.symbols = ["0x1900"]), "symbols isn't"],
+            ["globals as a list", (json) => (json.globals = ["0x70"]), "globals isn't"],
+            ["anchors that aren't a list", (json) => (json.regions.main.anchors = {}), "anchors isn't"],
             ["an address that isn't one", (json) => (json.globals.lives = "70"), "lives"],
         ])("reject %s", (_, change, message) => {
             expect(problemsWith(change)).toEqual([expect.stringContaining(message)]);

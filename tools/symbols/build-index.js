@@ -57,12 +57,35 @@ function checkNames(names, where, seen, problems) {
     }
 }
 
+const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The containers the client reads with Object.entries, which would take an array as an object. */
+function checkShape(json) {
+    if (!isObject(json)) return ["it isn't a JSON object"];
+    const problems = [];
+    if (json.globals !== undefined && !isObject(json.globals)) problems.push("globals isn't an object of names");
+    if (!isObject(json.regions)) return [...problems, "regions isn't an object of regions"];
+    for (const [name, region] of Object.entries(json.regions)) {
+        if (!isObject(region)) {
+            problems.push(`region ${name} isn't an object`);
+            continue;
+        }
+        if (region.symbols !== undefined && !isObject(region.symbols))
+            problems.push(`region ${name}'s symbols isn't an object of names`);
+        if (region.anchors !== undefined && !(Array.isArray(region.anchors) && region.anchors.every(isObject)))
+            problems.push(`region ${name}'s anchors isn't a list of anchors`);
+    }
+    return problems;
+}
+
 /**
  * What the build would reject in one set file: its schema and licence, its anchors' lengths,
  * places and number, `system` only on a set the MOS list names, and its names.
  * @returns {string[]} the problems, none for a good set
  */
 export function checkSet(json, { file, mosSets }) {
+    const shapeProblems = checkShape(json);
+    if (shapeProblems.length) return shapeProblems;
     let set;
     try {
         set = parseSet(json);

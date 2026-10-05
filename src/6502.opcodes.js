@@ -1049,13 +1049,13 @@ class Disassemble6502 {
                 return [`${split[0]} ${formatter(destAddr)}${suffix}`, addr + 3, destAddr];
             }
             case "branch": {
-                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 1)) + 2;
+                const destAddr = (addr + signExtend(this.cpu.peekmem(addr + 1)) + 2) & 0xffff;
                 return [`${split[0]} ${formatJumpAddr(destAddr)}${suffix}`, addr + 2, destAddr];
             }
             case "zp":
                 return [`${split[0]} ${formatZpAddr(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
             case "zp,branch": {
-                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 2)) + 3;
+                const destAddr = (addr + signExtend(this.cpu.peekmem(addr + 2)) + 3) & 0xffff;
                 return [
                     `${split[0]} ${formatZpAddr(this.cpu.peekmem(addr + 1))}, ${formatJumpAddr(destAddr)}`,
                     addr + 3,
