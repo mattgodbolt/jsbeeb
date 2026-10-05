@@ -245,6 +245,13 @@ describe("symbol sets", () => {
             expect(loadReal.mock.calls.map(([url]) => url)).toEqual([`${RealSymbols}index.json`]);
         });
 
+        it("leaves an Atom's addresses plain", async () => {
+            const cpu = fake6502(findModel("Atom"));
+            await cpu.initialise();
+            const names = await namesFor((address) => cpu.peekmem(address));
+            expect(names.sets).toEqual([]);
+        });
+
         it.each(["bpos.rom", "usmos.rom", "os01.rom", "compact/os51.rom"])(
             "leaves %s's addresses plain",
             async (rom) => {

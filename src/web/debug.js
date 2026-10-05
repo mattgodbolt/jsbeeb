@@ -23,8 +23,16 @@ function nameNode(named, addr) {
     return node;
 }
 
+function isHttps(text) {
+    try {
+        return new URL(text).protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
 function sourceNode(source) {
-    if (!URL.canParse(source) || new URL(source).protocol !== "https:") return document.createTextNode(source);
+    if (!isHttps(source)) return document.createTextNode(source);
     const link = document.createElement("a");
     link.href = source;
     link.target = "_blank";
