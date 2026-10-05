@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "title": "PIPELINE: the LEVDES stub loader",
+  "licence": "LicenseRef-TBD",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/01596528eb4df6268f248fde0c2feb7db2adb47e",
+  "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
+  "regions": {
+    "main": {
+      "start": "0x0900",
+      "end": "0x09d9",
+      "minAnchors": 2,
+      "anchors": [
+        { "at": "0x0900", "bytes": "209c09a2c9a009" },
+        { "at": "0x0916", "bytes": "a905a224a01f" }
+      ],
+      "symbols": {
+        "start": "0x0900",
+        "read_whole_run": "0x0916",
+        "read_next_track": "0x0924",
+        "take_rest_of_track": "0x0930",
+        "read_this_track": "0x0956",
+        "step_to_next_track": "0x0968",
+        "sector_read_fault": "0x0980",
+        "next_track_or_run": "0x0995",
+        "seek": "0x099c",
+        "disc_command": "0x09a0",
+        "set_track_register": "0x09a5",
+        "seek_block": "0x09ab",
+        "seek_track": "0x09b2",
+        "track_register_block": "0x09b4",
+        "track_register_value": "0x09bc",
+        "read_block": "0x09be",
+        "read_address": "0x09bf",
+        "read_track": "0x09c5",
+        "read_sector": "0x09c6",
+        "read_size_count": "0x09c7",
+        "read_result": "0x09c8",
+        "read_id_block": "0x09c9",
+        "double_step": "0x09d4",
+        "id_track": "0x09d5"
+      }
+    }
+  },
+  "globals": { "sectors_this_read": "0x0070", "sectors_left": "0x0072", "hidden_entry": "0x2e21" }
+}
