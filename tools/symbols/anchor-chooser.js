@@ -104,7 +104,7 @@ const range = (from, to) => Array.from({ length: Math.max(0, to - from) }, (_, i
  * @param {ChooserStatement[]} statements - every statement of the program's code
  * @param {{tableSizes: Map<number, number>, moves: Set<number>}} options - tables by address, moves by
  *     the address of their store
- * @returns {Store[]}
+ * @returns {{stores: Store[], used: Set<number>}} the stores, and which tables and moves they matched
  */
 export function storesIn(statements, { tableSizes, moves }) {
     const out = [];
@@ -128,9 +128,7 @@ export function storesIn(statements, { tableSizes, moves }) {
             out.push({ statement, first: target, last: target + IndexedReach - 1 });
         }
     }
-    const unused = [...tableSizes.keys(), ...moves].filter((address) => !used.has(address));
-    if (unused.length) throw new Error("A table or a move matches no store");
-    return out;
+    return { stores: out, used };
 }
 
 /** A BASIC program's line headers, its first line and its REMs' text, but for any code in a REM. */

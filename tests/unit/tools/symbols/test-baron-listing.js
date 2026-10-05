@@ -110,6 +110,13 @@ describe("parseBaronListing", () => {
         expect(image.has(0x0400)).toBe(false);
     });
 
+    it("counts SKIPTO as padding, as SKIP is", () => {
+        const padded = parseBaronListing(
+            ["SECTION pad, org=&2000", statement(0x2000, [0, 0, 0, 0], "SKIPTO &2004"), "ENDSECTION"].join("\n"),
+        );
+        expect(padded.statements[0].skip).toBe(true);
+    });
+
     it("refuses a section name that isn't there", () => {
         expect(() => sectionNamed(parsed, "nowhere")).toThrow("nowhere");
     });

@@ -39,7 +39,7 @@ const range = (from, to) => Array.from({ length: to - from }, (_, i) => from + i
 
 describe("storesIn", () => {
     it("reaches a direct store's byte, and 256 bytes or all of zero page for an indexed one", () => {
-        const stores = storesIn(
+        const { stores } = storesIn(
             [
                 code(0x1900, [0x85, 0x70]),
                 code(0x1902, [0x9d, 0x00, 0x20]),
@@ -58,14 +58,20 @@ describe("storesIn", () => {
     it("reaches a table's size where it's given, and not at all for a move", () => {
         const table = { ...code(0x1900, [0x9d, 0x00, 0x01]), base: 0x100 };
         const move = code(0x1903, [0x99, 0x00, 0x04]);
-        const stores = storesIn([table, move], { tableSizes: new Map([[0x100, 4]]), moves: new Set([0x1903]) });
+        const { stores, used } = storesIn([table, move], {
+            tableSizes: new Map([[0x100, 4]]),
+            moves: new Set([0x1903]),
+        });
         expect(stores.map(({ first, last }) => [first, last])).toEqual([[0x100, 0x103]]);
+        expect(used).toEqual(new Set([0x100, 0x1903]));
     });
 
-    it("refuses a table no store writes", () => {
-        expect(() =>
-            storesIn([code(0x1900, [0x85, 0x70])], { tableSizes: new Map([[0x100, 4]]), moves: new Set() }),
-        ).toThrow("matches no store");
+    it("leaves a table no store writes out of those it matched", () => {
+        const { used } = storesIn([code(0x1900, [0x85, 0x70])], {
+            tableSizes: new Map([[0x100, 4]]),
+            moves: new Set(),
+        });
+        expect(used).toEqual(new Set());
     });
 });
 
