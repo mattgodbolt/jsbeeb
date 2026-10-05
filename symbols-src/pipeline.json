@@ -3,13 +3,9 @@
   "licence": "LicenseRef-TBD",
   "source": {
     "repository": "https://github.com/mattgodbolt/pipeline-disasm",
-    "commit": "01596528eb4df6268f248fde0c2feb7db2adb47e"
-  },
-  "build": {
-    "symbols": "symbols.json",
-    "listings": "listings",
-    "files": "files",
-    "disc": "pipeline.ssd"
+    "commit": "3fed305e4746f566f32caa9cca2670cb9541b4f0",
+    "assemble": ["src/*.6502"],
+    "disc": "original/pipeline.ssd"
   },
   "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
   "leftToSystemSets": ["os.6502inc"],

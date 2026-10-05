@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 /**
- * Makes a title's symbol sets from its baron build: the symbol dump (`--symbols`), each source's -vv
- * listing and the built files with their .inf sidecars. A curator's config under symbols-src/ says
- * which programs make a set and where each is cut into regions, in the source's own names;
- * docs/symbol-importers.md says how the names and anchors are chosen.
+ * Makes a title's symbol sets from its baron build (baron-build.js): the symbol dumps (`--symbols`),
+ * each source's -vv listing and the built files with their .inf sidecars. A curator's config under
+ * symbols-src/ says which programs make a set and where each is cut into regions, in the source's own
+ * names; docs/symbol-importers.md says how the names and anchors are chosen.
  *
- * Usage: node tools/symbols/import-baron.js --config symbols-src/pipeline.json --build <build dir>
- *            [--out public/symbols/sets] [--verbose]
+ * Usage: node tools/symbols/import-baron.js --config symbols-src/pipeline.json
+ *            [--source <checkout>] [--baron <path>] [--out public/symbols/sets] [--verbose]
  *
- * Writes <config id>-<set id>.json for each set, then `node tools/symbols/build-index.js` remakes
- * the index. Refuses to write anything if a region can't be anchored, its anchors match another of
- * the build's images, a set fails the index's checks, or the build isn't of the commit the config
- * names.
+ * Fetches the config's commit of its repository, or takes `--source`, a clean checkout of it, and
+ * assembles it with `--baron`, else $BARON, else `baron` on the PATH. Writes <config id>-<set id>.json
+ * for each set, then `node tools/symbols/build-index.js` remakes the index. Refuses to write anything
+ * if a region can't be anchored, its anchors match another of the build's images, or a set fails the
+ * index's checks.
  */
 
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,12 +22,19 @@ import { parseArgs } from "node:util";
 
 import { Format } from "../../src/symbol-sets.js";
 import { chooseAnchors, storesIn } from "./anchor-chooser.js";
+import {
+    BuildLayout,
+    BuildOptions,
+    BuildUsage,
+    ListingExtension,
+    SymbolsExtension,
+    withBaronBuild,
+} from "./baron-build.js";
 import { parseBaronListing, sectionNamed } from "./baron-listing.js";
 import { checkSet, formatJson, readMosSets, SymbolsDir } from "./build-index.js";
 
 const AddressLimit = 0x10000;
 const IoAddressMask = 0xffff;
-const ListingExtension = ".txt";
 const InfExtension = ".inf";
 const SetsDir = path.join(SymbolsDir, "sets");
 
@@ -157,38 +164,6 @@ function dumpEntry(dump, name) {
     return dump[keys[0]];
 }
 
-/**
- * The environment without git's own variables: run from a git hook, GIT_DIR or GIT_INDEX_FILE would
- * point `git -C dir` at the repository the hook belongs to.
- */
-export function environmentWithoutGit() {
-    return Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
-}
-
-const git = (dir, ...args) =>
-    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: "pipe", env: environmentWithoutGit() }).trim();
-
-/**
- * Refuses a build directory that isn't in a git checkout of the config's commit with nothing changed or
- * added, since every set's `source` will name that commit. It can't tell a build left over from another
- * commit; the source repository's own build keeps that true.
- */
-export function checkBuildCommit(config, buildDir) {
-    let head;
-    let changes;
-    try {
-        head = git(buildDir, "rev-parse", "HEAD");
-        changes = git(buildDir, "status", "--porcelain");
-    } catch (error) {
-        throw new Error(`${buildDir} isn't in a git checkout, so nothing says it's ${config.source.commit}`, {
-            cause: error,
-        });
-    }
-    if (head !== config.source.commit)
-        throw new Error(`The checkout ${buildDir} is in is at ${head}, and the config names ${config.source.commit}`);
-    if (changes) throw new Error(`The checkout ${buildDir} is in has changes, so it isn't ${config.source.commit}`);
-}
-
 /** A rank to sort candidates for one address by, highest first, keeping the first of equals. */
 const byRankDescending = (a, b) => b.rank[0] - a.rank[0] || b.rank[1] - a.rank[1];
 
@@ -212,20 +187,20 @@ export function baronBuild(listings, dump, files) {
     return { sources, files };
 }
 
-/** Reads a baron build from disc: every listing, the dump, and every built file with an .inf. */
-export function readBaronBuild(buildDir, buildLayout) {
-    const listingsDir = path.join(buildDir, buildLayout.listings);
-    const filesDir = path.join(buildDir, buildLayout.files);
-    const dump = JSON.parse(readFileSync(path.join(buildDir, buildLayout.symbols), "utf8"));
-    const listings = new Map(
-        readdirSync(listingsDir)
-            .filter((name) => name.endsWith(ListingExtension))
+/** Reads a build in baron-build.js's layout: every listing, the dumps, and every built file with an .inf. */
+export function readBaronBuild(buildDir) {
+    const inBuild = (dir) => path.join(buildDir, dir);
+    const textsIn = (dir, extension, encoding) =>
+        readdirSync(inBuild(dir))
+            .filter((name) => name.endsWith(extension))
             .sort()
-            .map((file) => [
-                file.slice(0, -ListingExtension.length),
-                readFileSync(path.join(listingsDir, file), "latin1"),
-            ]),
+            .map((file) => [file.slice(0, -extension.length), readFileSync(path.join(inBuild(dir), file), encoding)]);
+    const listings = new Map(textsIn(BuildLayout.listings, ListingExtension, "latin1"));
+    const dump = Object.assign(
+        {},
+        ...textsIn(BuildLayout.symbols, SymbolsExtension, "utf8").map(([, text]) => JSON.parse(text)),
     );
+    const filesDir = inBuild(BuildLayout.files);
     const files = readdirSync(filesDir)
         .filter((name) => name.endsWith(InfExtension))
         .sort()
@@ -516,11 +491,13 @@ export function importBaron(config, build) {
     return { sets, errors: importer.errors, notes: importer.notes, reasons: importer.reasons };
 }
 
-/** Reads a curator's config and the build it names, checking the build is of the config's commit. */
-export function loadTitle(configPath, buildDir) {
+/**
+ * Runs `use` with a curator's config and its title's baron build, made from the commit the config names.
+ * @param {{source?: string, baron?: string}} options - as withBaronBuild takes them
+ */
+export function withTitle(configPath, options, use) {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
-    checkBuildCommit(config, buildDir);
-    return { config, build: readBaronBuild(buildDir, config.build) };
+    return withBaronBuild(config, options, (made) => use({ config, build: readBaronBuild(made.buildDir), ...made }));
 }
 
 /**
@@ -551,14 +528,19 @@ async function main() {
     const { values } = parseArgs({
         options: {
             config: { type: "string" },
-            build: { type: "string" },
+            ...BuildOptions,
             out: { type: "string", default: SetsDir },
             verbose: { type: "boolean", short: "v", default: false },
         },
     });
-    if (!values.config || !values.build) throw new Error("Usage: import-baron.js --config <file> --build <dir>");
-    const { config, build } = loadTitle(values.config, values.build);
-    const imported = importBaron(config, build);
+    if (!values.config) throw new Error(`Usage: import-baron.js --config <file> ${BuildUsage}`);
+    return withTitle(values.config, values, ({ config, build, sources, baron }) => {
+        console.log(`Assembled ${sources.length} sources with ${baron}`);
+        return writeTitle(config, importBaron(config, build), values);
+    });
+}
+
+async function writeTitle(config, imported, values) {
     for (const { id, json, regions, dropped } of imported.sets) {
         const summary = regions.map((region) => `${region.name} ${region.anchors.length}/${region.symbols.size}`);
         console.log(
