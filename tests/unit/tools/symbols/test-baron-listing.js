@@ -122,6 +122,16 @@ describe("parseBaronListing", () => {
         expect(padded.statements.map((s) => s.skip)).toEqual([true, true]);
     });
 
+    it("reads a section written in lower case", () => {
+        const lower = parseBaronListing(
+            ['section low, filename="LOW", org=&2000, exec=&2000', statement(0x2000, [0x60], "rts"), "endsection"].join(
+                "\n",
+            ),
+        );
+        const section = sectionNamed(lower, "low");
+        expect([section.filename, section.exec, section.org, section.end]).toEqual(["LOW", 0x2000, 0x2000, 0x2001]);
+    });
+
     it("reads an INCLUDE written in lower case", () => {
         const included = parseBaronListing(
             [statement(0, [], 'include "os.6502inc"'), "OSWRCH = 65518 [&FFEE]"].join("\n"),

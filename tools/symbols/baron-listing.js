@@ -26,6 +26,8 @@ const Mnemonics = new Set(
 const AddressLine = /^ {2}([0-9A-F]{4}) {2}/;
 const LabelLine = /^ {2}([0-9A-F]{4}) {2}\.([A-Za-z_]\w*)\s*$/;
 const AssignLine = /^([A-Za-z_]\w*) = /;
+const SectionLine = /^SECTION /i;
+const EndSectionLine = /^ENDSECTION$/i;
 const IncludeStatement = /^INCLUDE\s+"([^"]*)"/i;
 const HexByte = /^[0-9A-F]{2}$/;
 const BytesColumn = 8;
@@ -74,12 +76,12 @@ export class Section {
     }
 
     get filename() {
-        return /filename="([^"]*)"/.exec(this.header)?.[1] ?? null;
+        return /filename="([^"]*)"/i.exec(this.header)?.[1] ?? null;
     }
 
     /** The exec address the SECTION line gives, or null. */
     get exec() {
-        const digits = /exec=&([0-9A-Fa-f]+)/.exec(this.header)?.[1];
+        const digits = /exec=&([0-9A-Fa-f]+)/i.exec(this.header)?.[1];
         return digits === undefined ? null : parseInt(digits, 16);
     }
 
@@ -143,8 +145,9 @@ export function parseBaronListing(text) {
         lastLabel = null;
         const assign = AssignLine.exec(line);
         if (!assign) include = null;
-        if (line.startsWith("SECTION ")) {
-            const name = line.slice("SECTION ".length).split(",")[0].trim();
+        const sectionStart = SectionLine.exec(line);
+        if (sectionStart) {
+            const name = line.slice(sectionStart[0].length).split(",")[0].trim();
             const parent = stack.at(-1) ?? null;
             const section = new Section(name, line, parent);
             if (parent) {
@@ -156,7 +159,7 @@ export function parseBaronListing(text) {
             current = null;
             return;
         }
-        if (line === "ENDSECTION") {
+        if (EndSectionLine.test(line)) {
             const section = stack.pop();
             section.end = position.get(section) ?? section.org;
             const parent = stack.at(-1);
