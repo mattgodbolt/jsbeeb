@@ -110,11 +110,23 @@ describe("parseBaronListing", () => {
         expect(image.has(0x0400)).toBe(false);
     });
 
-    it("counts SKIPTO as padding, as SKIP is", () => {
+    it("counts SKIPTO as padding, as SKIP is, in any case", () => {
         const padded = parseBaronListing(
-            ["SECTION pad, org=&2000", statement(0x2000, [0, 0, 0, 0], "SKIPTO &2004"), "ENDSECTION"].join("\n"),
+            [
+                "SECTION pad, org=&2000",
+                statement(0x2000, [0, 0, 0, 0], "SKIPTO &2004"),
+                statement(0x2004, [0, 0], "skip 2"),
+                "ENDSECTION",
+            ].join("\n"),
         );
-        expect(padded.statements[0].skip).toBe(true);
+        expect(padded.statements.map((s) => s.skip)).toEqual([true, true]);
+    });
+
+    it("reads an INCLUDE written in lower case", () => {
+        const included = parseBaronListing(
+            [statement(0, [], 'include "os.6502inc"'), "OSWRCH = 65518 [&FFEE]"].join("\n"),
+        );
+        expect(included.includedNames.get("os.6502inc")).toEqual(new Set(["OSWRCH"]));
     });
 
     it("refuses a section name that isn't there", () => {

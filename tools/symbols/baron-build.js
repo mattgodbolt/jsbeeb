@@ -149,7 +149,8 @@ export function assemble(config, sourceDir, buildDir, baron) {
  * @param {(build: {sourceDir: string, buildDir: string, sources: string[], baron: string}) => any} use
  */
 export async function withBaronBuild(config, { source, baron } = {}, use) {
-    const baronPath = baron ?? process.env.BARON ?? "baron";
+    const named = baron ?? process.env.BARON ?? "baron";
+    const baronPath = named.includes(path.sep) ? path.resolve(named) : named;
     const version = baronVersion(baronPath);
     const temp = mkdtempSync(path.join(tmpdir(), "symbols-baron-"));
     try {

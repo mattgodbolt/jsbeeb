@@ -44,7 +44,7 @@ const OperandToken = new RegExp(
     "g",
 );
 const Registers = new Set(["A", "X", "Y"]);
-const OsBlockOperand = new RegExp(String.raw`^#\s*LO\(\s*(${Name})\s*\)$`);
+const OsBlockOperand = new RegExp(String.raw`^#\s*LO\(\s*(${Name})\s*\)$`, "i");
 const ExpressionToken = new RegExp(String.raw`\s*(?:&([0-9A-Fa-f]+)|(\d+)|(${Name})|([-+*/()]))`, "y");
 
 export const hexAddress = (address) => `0x${address.toString(16).padStart(4, "0")}`;
@@ -239,7 +239,7 @@ function buildImages({ sources, files }, programSources) {
 }
 
 /** Addresses of the blocks a source hands the OS with `LDX #LO(block)`. */
-function osBlockTargets(source) {
+export function osBlockTargets(source) {
     const out = new Set();
     for (const statement of source.listing.statements) {
         if (statement.mnemonic !== "LDX") continue;
