@@ -100,7 +100,7 @@ instruction's start (aiming for 6 bytes), or data from any byte. A candidate is 
   stores, and the copies in `moves` don't count;
 - in a block the code hands the OS (`LDX #LO(block)`), which OSWORD, OSFILE and OSGBPB write results into:
   from its label to the next one that starts code or another block, 18 bytes at most;
-- SKIP padding, or under a label the source names as dead or leftover (`unused`, `leftover`, `junk`,
+- SKIP or SKIPTO padding, or under a label the source names as dead or leftover (`unused`, `leftover`, `junk`,
   `spare`, `stray` as a word of any of its scopes), up to the next label;
 - in a BASIC program (a section saved to run at `&8023`), its first line, any line's CR, number and length,
   or a REM's text (but for code in the REM);
