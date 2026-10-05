@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -15,6 +15,7 @@ import {
     cloneSource,
     environmentWithoutGit,
     sourcesToAssemble,
+    withBaronBuild,
 } from "../../../../tools/symbols/baron-build.js";
 
 // The throwaway repository must not sign its commits or run hooks from the user's own git config.
@@ -28,6 +29,22 @@ const IsolatedGitConfig = [
     "-c",
     "core.hooksPath=/dev/null",
 ];
+
+const StubBaron = `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "baron 9.9.9"; exit 1; fi
+while [ $# -gt 1 ]; do
+    case "$1" in
+        -p) files=$2; shift ;;
+        --symbols) symbols=$2; shift ;;
+        -log0) listing=$2; shift ;;
+    esac
+    shift
+done
+if grep -q FAIL "$1"; then echo "no good" >&2; exit 2; fi
+echo "listing of $1" > "$listing"
+printf '{"%s": {}}' "$1" > "$symbols"
+printf X > "$files/$(basename "$1" .6502)"
+`;
 
 const DiscBytes = 2560;
 const DiscFill = 0xe5;
@@ -148,6 +165,55 @@ describe("a title's source", () => {
             writeFileSync(path.join(dir, "prog.6502"), "RTS\n");
             expect(() => sourcesToAssemble(pinned("", { assemble: ["*.6502", "src/*.6502"] }), dir)).toThrow(
                 "called prog",
+            );
+        });
+    });
+    describe("withBaronBuild", () => {
+        let bin;
+        let baron;
+        beforeEach(() => {
+            bin = mkdtempSync(path.join(tmpdir(), "symbols-bin-"));
+            baron = path.join(bin, "baron");
+            writeFileSync(baron, StubBaron, { mode: 0o755 });
+        });
+        afterEach(() => rmSync(bin, { recursive: true, force: true }));
+
+        it("fetches the commit and lays out each source's listing, dump and files, then removes it all", async () => {
+            let seen;
+            const result = await withBaronBuild(
+                pinned(git("rev-parse", "HEAD"), { disc: "original/demo.ssd" }),
+                { baron },
+                (made) => {
+                    seen = made;
+                    return readFileSync(path.join(made.buildDir, BuildLayout.listings, "prog.txt"), "utf8");
+                },
+            );
+            expect(result).toBe("listing of src/prog.6502\n");
+            expect(seen.sources).toEqual(["src/data.6502", "src/prog.6502"]);
+            expect(seen.baron).toBe("baron 9.9.9");
+            expect(existsSync(seen.sourceDir)).toBe(false);
+            expect(existsSync(seen.buildDir)).toBe(false);
+        });
+
+        it("builds a --source checkout where it is, and leaves it", async () => {
+            const buildFiles = await withBaronBuild(
+                pinned(git("rev-parse", "HEAD")),
+                { source: dir, baron },
+                (made) => {
+                    expect(made.sourceDir).toBe(dir);
+                    return readdirSync(path.join(made.buildDir, BuildLayout.files));
+                },
+            );
+            expect(buildFiles).toEqual(["data", "prog"]);
+            expect(existsSync(path.join(dir, "src", "prog.6502"))).toBe(true);
+        });
+
+        it("says which source baron failed on, and what it said", async () => {
+            writeFileSync(path.join(dir, "src", "bad.6502"), "FAIL\n");
+            git("add", ".");
+            git("commit", "-q", "-m", "bad");
+            await expect(withBaronBuild(pinned(git("rev-parse", "HEAD")), { baron }, () => {})).rejects.toThrow(
+                "baron failed on src/bad.6502: no good",
             );
         });
     });
