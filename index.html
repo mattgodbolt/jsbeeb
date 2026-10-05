@@ -388,8 +388,23 @@
             <span class="led disc" id="networklight"></span>
           </div>
           <div class="cell" title="Emulated processor speed">
-            <span class="hdr" id="virtual-mhz-header">virtual<br />MHz</span>
-            <span class="virtualMHz"></span>
+            <span class="hdr">virtual<br />MHz</span>
+            <span class="speed">
+              <span
+                id="speed-normal"
+                data-icon="play-fill"
+                role="img"
+                title="Normal speed. Alt-T turns turbo on and off, outside a shared session."
+              ></span>
+              <span
+                id="speed-turbo"
+                data-icon="fast-forward-fill"
+                role="img"
+                title="Turbo: as fast as it can go, from Alt-T until it is pressed again, or from fast tape while the cassette motor runs."
+                hidden
+              ></span>
+              <span class="virtualMHz"></span>
+            </span>
           </div>
         </div>
         <div class="session-readout" id="session-panel" hidden>

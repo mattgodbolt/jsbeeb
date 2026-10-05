@@ -5,10 +5,10 @@ import { IconNames, installIcons } from "../../src/web/icons.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("installIcons", () => {
-    beforeEach(() => domFromIndexHtml("header-bar"));
+    beforeEach(() => domFromIndexHtml("header-bar", "leds"));
     afterEach(teardownDom);
 
-    it("fills every icon placeholder on the top bar with an SVG", () => {
+    it("fills every icon placeholder on the top bar and the lights bar with an SVG", () => {
         installIcons();
         const placeholders = [...document.querySelectorAll("[data-icon]")];
         expect(placeholders.length).toBeGreaterThan(0);

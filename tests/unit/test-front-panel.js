@@ -63,6 +63,7 @@ describe("FrontPanel", () => {
             make(true);
             expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("none");
             expect(document.getElementById("motorlight").closest(".slot-readout").style.display).toBe("");
+            expect(document.getElementById("speed-turbo").closest(".cell").style.display).toBe("");
         });
 
         it("shows the BBC lights on a BBC", () => {

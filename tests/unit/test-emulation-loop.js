@@ -2,9 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmulationLoop } from "../../src/web/emulation-loop.js";
-import { domFromIndexHtml } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
+// Bootstrap's stand-in for a transitionend in jsdom fires after 5 ms.
+const ToastShowMs = 10;
 
 describe("EmulationLoop", () => {
     let deps;
@@ -51,16 +53,18 @@ describe("EmulationLoop", () => {
         };
     });
 
-    afterEach(() => {
+    // The loop's ticks rearm themselves, so teardownDom cannot run the timers out. A toast
+    // still has to finish showing, on Bootstrap's own timer, before it can be disposed.
+    afterEach(async () => {
+        vi.advanceTimersByTime(ToastShowMs);
         vi.clearAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
+        await teardownDom();
     });
 
     const make = () => new EmulationLoop(deps);
     const lockstepStub = () => ({ execute: vi.fn(() => true) });
     const cyclesExecuted = () => deps.processor.execute.mock.calls.map(([cycles]) => cycles);
+    const speedIconsShown = () => ["speed-normal", "speed-turbo"].filter((id) => !document.getElementById(id).hidden);
 
     const started = () => {
         const loop = make();
@@ -181,6 +185,16 @@ describe("EmulationLoop", () => {
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(true);
     });
 
+    it("says whether turbo is now on or off each time it is toggled", () => {
+        const loop = make();
+        loop.toggleFastAsPossible();
+        loop.toggleFastAsPossible();
+        expect(toasts()).toEqual([
+            expect.stringContaining("Turbo is on. Alt-T turns it off."),
+            expect.stringContaining("Turbo is off. Alt-T turns it on."),
+        ]);
+    });
+
     it("speeds up for a tape motor only when told fast tape", () => {
         deps.fastTape = true;
         const loop = started();
@@ -188,6 +202,28 @@ describe("EmulationLoop", () => {
         vi.advanceTimersByTime(10);
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 50);
         expect(loop.isRunning()).toBe(true);
+    });
+
+    describe("the speed readout", () => {
+        it("shows normal speed, turbo while the machine runs speedy, and normal again after", () => {
+            const loop = started();
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-normal"]);
+            loop.toggleFastAsPossible();
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-turbo"]);
+            loop.toggleFastAsPossible();
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-normal"]);
+        });
+
+        it("shows turbo for fast tape while the cassette motor runs", () => {
+            deps.fastTape = true;
+            started();
+            deps.processor.tapeInterface.motorOn = true;
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-turbo"]);
+        });
     });
 
     it("stops into the debugger when the processor stops itself", () => {
@@ -399,13 +435,34 @@ describe("EmulationLoop", () => {
             expect(deps.gamepad.update).not.toHaveBeenCalled();
         });
 
-        it("never goes speedy", () => {
+        it("never goes speedy, even with turbo on from before the session", () => {
             const loop = started();
-            loop.setLockstep(lockstep);
             loop.toggleFastAsPossible();
+            loop.setLockstep(lockstep);
             vi.advanceTimersByTime(10);
             expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
             expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
+        });
+
+        it("shows normal speed for the session, and turbo from before it again once it ends", () => {
+            const loop = started();
+            loop.toggleFastAsPossible();
+            vi.advanceTimersByTime(10);
+            loop.setLockstep(lockstep);
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-normal"]);
+            loop.setLockstep(null);
+            vi.advanceTimersByTime(10);
+            expect(speedIconsShown()).toEqual(["speed-turbo"]);
+        });
+
+        it("refuses turbo, saying why, rather than arming it for after the session", () => {
+            const loop = started();
+            loop.setLockstep(lockstep);
+            loop.toggleFastAsPossible();
+            loop.setLockstep(null);
+            expect(loop.isSpeedy()).toBe(false);
+            expect(toasts()).toEqual([expect.stringContaining("not available in a shared session")]);
         });
 
         it("runs the processor again once the session is over", () => {

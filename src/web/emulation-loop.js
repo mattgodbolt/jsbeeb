@@ -1,4 +1,5 @@
 import { noteEvent } from "./analytics.js";
+import { toast } from "./toast.js";
 
 // The machine runs in short slices of real time on a timer, whatever the
 // display is doing (issue #885). Audio gains most from the fine grain: its
@@ -23,7 +24,8 @@ class VirtualSpeedUpdater {
         this.cycles = 0;
         this.time = 0;
         this.v = document.querySelector(".virtualMHz");
-        this.header = document.getElementById("virtual-mhz-header");
+        this.normalIcon = document.getElementById("speed-normal");
+        this.turboIcon = document.getElementById("speed-turbo");
         this.speedy = false;
         this.display();
     }
@@ -31,7 +33,10 @@ class VirtualSpeedUpdater {
     update(cycles, time, speedy) {
         this.cycles += cycles;
         this.time += time;
+        if (speedy === this.speedy) return;
         this.speedy = speedy;
+        this.normalIcon.hidden = speedy;
+        this.turboIcon.hidden = !speedy;
     }
 
     display() {
@@ -42,7 +47,6 @@ class VirtualSpeedUpdater {
             if (this.cycles >= 10 * this.cpuSpeed) {
                 this.cycles = this.time = 0;
             }
-            this.header.style.color = this.speedy ? "red" : "white";
         }
         setTimeout(() => this.display(), VirtualMhzUpdateMs);
     }
@@ -161,7 +165,13 @@ export class EmulationLoop extends EventTarget {
     }
 
     toggleFastAsPossible() {
+        if (this.lockstep) {
+            toast("Turbo is not available in a shared session.", { title: "Turbo" });
+            return;
+        }
         this.fastAsPossible = !this.fastAsPossible;
+        const [now, next] = this.fastAsPossible ? ["on", "off"] : ["off", "on"];
+        toast(`Turbo is ${now}. Alt-T turns it ${next}.`, { title: "Turbo" });
     }
 
     /**
