@@ -10,6 +10,7 @@ import {
     evaluate,
     importBaron,
     operandBase,
+    osBlockTargets,
     readBaronBuild,
     writeSets,
 } from "../../../../tools/symbols/import-baron.js";
@@ -96,6 +97,24 @@ describe("operandBase", () => {
         expect(operandBase("tile(CELL_FLOOR), X")).toBeNull();
         expect(operandBase("A")).toBeNull();
         expect(operandBase("")).toBeNull();
+    });
+});
+
+describe("osBlockTargets", () => {
+    it("takes a block handed to the OS with LDX #LO(...) in either case", () => {
+        const osListing = [
+            "SECTION os, org=&2000",
+            statement(0x2000, [0xa2, 0x06], "LDX #lo(block)"),
+            statement(0x2002, [0xa2, 0x07], "LDX #LO(other)"),
+            label(0x2004, "block"),
+            statement(0x2004, [0, 0], "EQUW 0"),
+            label(0x2006, "other"),
+            statement(0x2006, [0, 0], "EQUW 0"),
+            "ENDSECTION",
+        ].join("\n");
+        const osDump = { "src/os.6502": { block: 0x2004, other: 0x2006 } };
+        const source = baronBuild(new Map([["os", osListing]]), osDump, []).sources.get("os");
+        expect(osBlockTargets(source)).toEqual(new Set([0x2004, 0x2006]));
     });
 });
 

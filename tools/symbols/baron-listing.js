@@ -26,7 +26,7 @@ const Mnemonics = new Set(
 const AddressLine = /^ {2}([0-9A-F]{4}) {2}/;
 const LabelLine = /^ {2}([0-9A-F]{4}) {2}\.([A-Za-z_]\w*)\s*$/;
 const AssignLine = /^([A-Za-z_]\w*) = /;
-const IncludeStatement = /^INCLUDE\s+"([^"]*)"/;
+const IncludeStatement = /^INCLUDE\s+"([^"]*)"/i;
 const HexByte = /^[0-9A-F]{2}$/;
 const BytesColumn = 8;
 const SourceColumn = 36;
@@ -54,7 +54,7 @@ export class Statement {
         this.code = this.mnemonic !== null;
         const space = text.search(/\s/);
         this.operand = space < 0 ? "" : text.slice(space).trim();
-        this.skip = Padding.has(firstWord(text));
+        this.skip = Padding.has(word);
     }
 }
 

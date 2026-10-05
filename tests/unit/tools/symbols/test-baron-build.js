@@ -195,6 +195,12 @@ describe("a title's source", () => {
             expect(existsSync(seen.buildDir)).toBe(false);
         });
 
+        it("runs a baron given by a relative path from the caller's directory", async () => {
+            const relative = path.relative(process.cwd(), baron);
+            const made = await withBaronBuild(pinned(git("rev-parse", "HEAD")), { baron: relative }, (m) => m.sources);
+            expect(made).toEqual(["src/data.6502", "src/prog.6502"]);
+        });
+
         it("builds a --source checkout where it is, and leaves it", async () => {
             const buildFiles = await withBaronBuild(
                 pinned(git("rev-parse", "HEAD")),
