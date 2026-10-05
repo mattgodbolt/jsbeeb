@@ -72,6 +72,19 @@ describe("corpusReport", () => {
         expect(report).toContain("64 of 64 | 6 (9.4%) (collision) |");
     });
 
+    it("counts two files of one title by what they hold, even with the same name", () => {
+        const split = {
+            ...region,
+            anchors: [...region.anchors, { at: 0x1924, data: [...program.subarray(0x24, 0x2a)] }],
+        };
+        const halves = [
+            { name: "c.dsd:$.GAME", load: 0x1900, data: program.subarray(0, 0x20) },
+            { name: "c.dsd:$.GAME", load: 0x1920, data: program.subarray(0x20) },
+        ];
+        const { report } = corpusReport([{ id: "demo", regions: [split] }], new Map([["Pub/Sides.zip", halves]]));
+        expect(report).toContain("| Pub/Sides.zip | c.dsd:$.GAME | 64 of 64 | 64 (100.0%) |");
+    });
+
     it("says none when no title holds every anchor", () => {
         const { report, collisions } = corpusReport(sets, new Map());
         expect(collisions).toBe(0);

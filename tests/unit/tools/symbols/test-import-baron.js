@@ -152,6 +152,47 @@ describe("importBaron", () => {
         expect(sets[0].json.regions.body).toMatchObject({ start: "0x190f", end: "0x191d" });
     });
 
+    it("looks a table up in whichever of a set's sources has it", () => {
+        const other = [
+            "SECTION other, org=&2000",
+            label(0x2000, "table"),
+            statement(0x2000, [1, 2, 3, 4], "EQUB 1, 2, 3, 4"),
+            label(0x2004, "fill"),
+            statement(0x2004, [0x9d, 0x00, 0x20], "STA table, X"),
+            statement(0x2007, [0xa9, 0x11], "LDA #&11"),
+            statement(0x2009, [0xa2, 0x22], "LDX #&22"),
+            statement(0x200b, [0xa0, 0x33], "LDY #&33"),
+            statement(0x200d, [0x60], "RTS"),
+            "ENDSECTION",
+        ].join("\n");
+        const both = baronBuild(
+            new Map([
+                ["other", other],
+                ["prog", listing],
+            ]),
+            { ...dump, "src/other.6502": { table: 0x2000, fill: 0x2004 } },
+            [],
+        );
+        const twoSources = (tableSizes) => ({
+            ...config(),
+            sets: [
+                {
+                    ...config().sets[0],
+                    sources: ["prog", "other"],
+                    tableSizes,
+                    regions: [
+                        { name: "main", section: "prog" },
+                        { name: "other", section: "other", source: "other" },
+                    ],
+                },
+            ],
+        });
+        const { sets, errors } = importBaron(twoSources({ table: "4" }), both);
+        expect(errors).toEqual([]);
+        expect(sets[0].json.regions.other.anchors.every(({ at }) => parseInt(at, 16) >= 0x2004)).toBe(true);
+        expect(() => importBaron(twoSources({ nowhere: "4" }), both)).toThrow("names no symbol: nowhere");
+    });
+
     it("refuses a config naming an INCLUDE no listing has", () => {
         expect(() => importBaron({ ...config(), leftToSystemSets: ["nowhere.inc"] }, build())).toThrow("nowhere.inc");
     });

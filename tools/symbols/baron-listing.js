@@ -31,6 +31,7 @@ const HexByte = /^[0-9A-F]{2}$/;
 const BytesColumn = 8;
 const SourceColumn = 36;
 const AnonymousScope = "@";
+const Padding = new Set(["SKIP", "SKIPTO"]);
 
 const firstWord = (text) => text.trim().split(/\s+/, 1)[0] ?? "";
 
@@ -53,7 +54,7 @@ export class Statement {
         this.code = this.mnemonic !== null;
         const space = text.search(/\s/);
         this.operand = space < 0 ? "" : text.slice(space).trim();
-        this.skip = firstWord(text) === "SKIP";
+        this.skip = Padding.has(firstWord(text));
     }
 }
 

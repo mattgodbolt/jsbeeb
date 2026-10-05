@@ -101,17 +101,18 @@ export function titlesHolding(region, byPage) {
         .filter(([, found]) => found.size === region.anchors.length)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([title, found]) => {
-            const files = new Map([...found.values()].flat().map((file) => [file.name, file]));
+            const files = [...new Set([...found.values()].flat())];
             let held = 0;
             let same = 0;
             for (const [address, byte] of region.memory) {
-                const here = [...files.values()]
+                const here = files
                     .filter(({ load, data }) => address >= load && address < load + data.length)
                     .map(({ load, data }) => data[address - load]);
                 if (here.length) held++;
                 if (here.includes(byte)) same++;
             }
-            return { title, files: [...files.keys()].sort(), held, same, share: held ? same / held : 0 };
+            const names = [...new Set(files.map(({ name }) => name))].sort();
+            return { title, files: names, held, same, share: held ? same / held : 0 };
         });
     return { holding: holders.size, matches };
 }
