@@ -25,3 +25,7 @@ at the commit `tools/symbols/make-mos-set.js` names, and `public/roms/os.rom`. R
 ```sh
 node tools/symbols/make-mos-set.js && node tools/symbols/build-index.js
 ```
+
+The `pipeline-*.json` sets are imported from PIPELINE's baron build by `tools/symbols/import-baron.js`, as
+`symbols-src/pipeline.json` describes; [the importers' doc](../../docs/symbol-importers.md) says how to remake and
+check them.

@@ -27,6 +27,296 @@
           ]
         }
       }
+    },
+    {
+      "url": "sets/pipeline-game-stub.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "main": {
+          "start": "0x0900",
+          "end": "0x09d9",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x0900", "bytes": "209c09a2c9a009" },
+            { "at": "0x0916", "bytes": "a900a21da021" }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-game.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "loader": {
+          "start": "0x3000",
+          "end": "0x5100",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x3000", "bytes": "a2ff9aa009bea230" }]
+        },
+        "event_handler": {
+          "start": "0x0131",
+          "end": "0x0191",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x014e", "bytes": "a00184388439" }]
+        },
+        "sound_data": {
+          "start": "0x0880",
+          "end": "0x0900",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x08c0", "bytes": "0401ff010102" }]
+        },
+        "low_code": {
+          "start": "0x0400",
+          "end": "0x0800",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x0450", "bytes": "207e0da88550" },
+            { "at": "0x0780", "bytes": "a5941869088570" }
+          ]
+        },
+        "main_low": {
+          "start": "0x0900",
+          "end": "0x0d00",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0900", "bytes": "a54249010544" }]
+        },
+        "main_swapped": {
+          "start": "0x0d00",
+          "end": "0x12a3",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x0d0f", "bytes": "6903c51f90db" },
+            { "at": "0x110f", "bytes": "f006a2030930" }
+          ]
+        },
+        "game_start": {
+          "start": "0x12a3",
+          "end": "0x12c3",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x12a3", "bytes": "4948a9db8d0202" }]
+        },
+        "main_swapped_2": {
+          "start": "0x12c3",
+          "end": "0x1d00",
+          "minAnchors": 3,
+          "anchors": [
+            { "at": "0x13a9", "bytes": "a908a2018550" },
+            { "at": "0x17f8", "bytes": "a650b524301b" },
+            { "at": "0x1ab1", "bytes": "a0033820bb1a" }
+          ]
+        },
+        "main_high": {
+          "start": "0x1d00",
+          "end": "0x23ad",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x1d06", "bytes": "38a512d02c8619" }]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-graphic-stub.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "main": {
+          "start": "0x0900",
+          "end": "0x09d9",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x0900", "bytes": "209c09a2c9a009" },
+            { "at": "0x0916", "bytes": "a905a220a021" }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-graphics-designer.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "main": {
+          "start": "0x1ab0",
+          "end": "0x3bb0",
+          "minAnchors": 4,
+          "anchors": [
+            { "at": "0x2109", "bytes": "a462a207a57c" },
+            { "at": "0x2300", "bytes": "297fc958a900" },
+            { "at": "0x2b40", "bytes": "a677bd4223a00f" },
+            { "at": "0x3394", "bytes": "8571a2e6204b33" }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-levdes-stub.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "main": {
+          "start": "0x0900",
+          "end": "0x09d9",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x0900", "bytes": "209c09a2c9a009" },
+            { "at": "0x0916", "bytes": "a905a224a01f" }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-level-designer.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "main": {
+          "start": "0x1100",
+          "end": "0x25a1",
+          "minAnchors": 3,
+          "anchors": [
+            { "at": "0x1103", "bytes": "4c6c134b1296" },
+            { "at": "0x17e2", "bytes": "a01f98a65b3df326" },
+            { "at": "0x1f5a", "bytes": "a901a45b598027" }
+          ]
+        },
+        "startup": {
+          "start": "0x25a1",
+          "end": "0x3000",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x2e4d", "bytes": "bda1259500ca" }]
+        },
+        "low_code": {
+          "start": "0x0880",
+          "end": "0x0cc0",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x0898", "bytes": "4c6f0ba000847e" },
+            { "at": "0x0913", "bytes": "a90085738a0a" }
+          ]
+        },
+        "font": {
+          "start": "0x0400",
+          "end": "0x0800",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x04c6", "bytes": "690f3c78f0b4" },
+            { "at": "0x07b4", "bytes": "1e3c780fc369" }
+          ]
+        },
+        "wdata": {
+          "start": "0x7000",
+          "end": "0x7c4e",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x7100", "bytes": "028116100712" },
+            { "at": "0x7651", "bytes": "92071e040e0f" }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-menu.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "program": {
+          "start": "0x1900",
+          "end": "0x2300",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x1999", "bytes": "d23d902b2641" },
+            { "at": "0x1e08", "bytes": "f54e253da584" }
+          ]
+        },
+        "scroller": {
+          "start": "0x2300",
+          "end": "0x3200",
+          "minAnchors": 4,
+          "anchors": [
+            { "at": "0x2300", "bytes": "a98085740a8572" },
+            { "at": "0x2a80", "bytes": "69616e20666f" },
+            { "at": "0x2f19", "bytes": "656d70742062" },
+            { "at": "0x2ffb", "bytes": "222073656374" }
+          ]
+        },
+        "menu_screen": {
+          "start": "0x3200",
+          "end": "0x3900",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x3200", "bytes": "94ffe695feaf" }]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-mission.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "program": {
+          "start": "0x1900",
+          "end": "0x3128",
+          "minAnchors": 6,
+          "anchors": [
+            { "at": "0x19c6", "bytes": "a202bd140448" },
+            { "at": "0x1f0a", "bytes": "73697a652988" },
+            { "at": "0x2519", "bytes": "ddf26c6f636b" },
+            { "at": "0x2b4b", "bytes": "6c6563742066" },
+            { "at": "0x2f16", "bytes": "e79f3d313720" },
+            { "at": "0x303d", "bytes": "ddf27265706f" }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-mrun.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "main": {
+          "start": "0x0780",
+          "end": "0x0800",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x07b3", "bytes": "b9cf0748a8a200" }]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-pl.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "decryptor": {
+          "start": "0x0400",
+          "end": "0x043b",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0400", "bytes": "78a201bdfcff" }]
+        },
+        "encrypted": {
+          "start": "0x043c",
+          "end": "0x06fc",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x043c", "bytes": "cdfd5c50499d" }]
+        },
+        "cheat": {
+          "start": "0x043b",
+          "end": "0x06fc",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x043b", "bytes": "300100a00cb9d805" }]
+        }
+      }
+    },
+    {
+      "url": "sets/pipeline-title.json",
+      "licence": "LicenseRef-TBD",
+      "regions": {
+        "title": {
+          "start": "0x6300",
+          "end": "0x7979",
+          "minAnchors": 3,
+          "anchors": [
+            { "at": "0x6303", "bytes": "ff00fe010307" },
+            { "at": "0x6a85", "bytes": "0fffe0c0804f" },
+            { "at": "0x790e", "bytes": "b1729170c8d0f9" }
+          ]
+        },
+        "unpack": {
+          "start": "0x2f18",
+          "end": "0x2f79",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x2f18", "bytes": "a900aaa88570" }]
+        }
+      }
     }
   ]
 }

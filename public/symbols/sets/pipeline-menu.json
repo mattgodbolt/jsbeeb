@@ -1,0 +1,59 @@
+{
+  "format": 1,
+  "title": "PIPELINE: MENU",
+  "licence": "LicenseRef-TBD",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/01596528eb4df6268f248fde0c2feb7db2adb47e",
+  "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
+  "regions": {
+    "program": {
+      "start": "0x1900",
+      "end": "0x2300",
+      "minAnchors": 2,
+      "anchors": [
+        { "at": "0x1999", "bytes": "d23d902b2641" },
+        { "at": "0x1e08", "bytes": "f54e253da584" }
+      ],
+      "symbols": { "program": "0x1900" }
+    },
+    "scroller": {
+      "start": "0x2300",
+      "end": "0x3200",
+      "minAnchors": 4,
+      "anchors": [
+        { "at": "0x2300", "bytes": "a98085740a8572" },
+        { "at": "0x2a80", "bytes": "69616e20666f" },
+        { "at": "0x2f19", "bytes": "656d70742062" },
+        { "at": "0x2ffb", "bytes": "222073656374" }
+      ],
+      "symbols": {
+        "scroller": "0x2300",
+        "scroller.each_row": "0x231d",
+        "scroller.enable_vsync_event": "0x2348",
+        "scroller.vsync_handler": "0x234d",
+        "scroller.shift_left": "0x234f",
+        "scroller.have_character": "0x2390",
+        "scroller.each_pixel_row": "0x239f",
+        "scroller.unlit": "0x23a8",
+        "scroller.done": "0x23c8",
+        "scroll_text": "0x23c9"
+      }
+    },
+    "menu_screen": {
+      "start": "0x3200",
+      "end": "0x3900",
+      "minAnchors": 1,
+      "anchors": [{ "at": "0x3200", "bytes": "94ffe695feaf" }],
+      "symbols": { "menu_screen": "0x3200", "menu_screen_end": "0x3480", "tune": "0x3500" }
+    }
+  },
+  "globals": {
+    "scroll_phase": "0x0060",
+    "scroll_row_temp": "0x0070",
+    "scroll_text_ptr": "0x0072",
+    "scroll_column_mask": "0x0074",
+    "scroll_text_start": "0x0075",
+    "scroll_handler_addr": "0x0077",
+    "scroll_cell_ptrs": "0x007b",
+    "char_definition": "0x008b"
+  }
+}

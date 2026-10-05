@@ -1,0 +1,247 @@
+{
+  "id": "pipeline",
+  "licence": "LicenseRef-TBD",
+  "source": {
+    "repository": "https://github.com/mattgodbolt/pipeline-disasm",
+    "commit": "01596528eb4df6268f248fde0c2feb7db2adb47e"
+  },
+  "build": {
+    "symbols": "symbols.json",
+    "listings": "listings",
+    "files": "files",
+    "disc": "pipeline.ssd"
+  },
+  "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
+  "leftToSystemSets": ["os.6502inc"],
+  "bytesPerAnchor": 2048,
+  "spreadAnchors": 4,
+  "check": "pipeline-check.js",
+  "sets": [
+    {
+      "id": "game",
+      "title": "PIPELINE: the game",
+      "sources": ["hidden_game"],
+      "stripScope": "game",
+      "tableSizes": {
+        "action_keys": "MENU_KEYS",
+        "work0": "MONSTER_BYTES",
+        "trigger_flags": "PUZZLES",
+        "keys_were_down": "4"
+      },
+      "regions": [
+        {
+          "name": "loader",
+          "section": "hidden_game",
+          "overwritten": true
+        },
+        {
+          "name": "event_handler",
+          "section": "event_handler"
+        },
+        {
+          "name": "sound_data",
+          "section": "sound_data"
+        },
+        {
+          "name": "low_code",
+          "section": "low_code"
+        },
+        {
+          "name": "main_low",
+          "section": "main_code",
+          "to": "SWAP_START"
+        },
+        {
+          "name": "main_swapped",
+          "section": "main_code",
+          "from": "SWAP_START",
+          "to": "game_start"
+        },
+        {
+          "name": "game_start",
+          "section": "main_code",
+          "from": "game_start",
+          "to": "new_game",
+          "overwritten": true
+        },
+        {
+          "name": "main_swapped_2",
+          "section": "main_code",
+          "from": "new_game",
+          "to": "SWAP_END"
+        },
+        {
+          "name": "main_high",
+          "section": "main_code",
+          "from": "SWAP_END"
+        }
+      ]
+    },
+    {
+      "id": "graphics-designer",
+      "title": "PIPELINE: the Graphics Designer",
+      "sources": ["hidden_graphic"],
+      "regions": [
+        {
+          "name": "main",
+          "section": "hidden_graphic"
+        }
+      ]
+    },
+    {
+      "id": "level-designer",
+      "title": "PIPELINE: the Level Designer",
+      "sources": ["hidden_levdes"],
+      "globalsSections": ["zero_page_init"],
+      "moves": ["entry_copy_code_store", "entry_copy_font_store"],
+      "regions": [
+        {
+          "name": "main",
+          "section": "hidden_levdes",
+          "to": "level"
+        },
+        {
+          "name": "startup",
+          "section": "hidden_levdes",
+          "from": "level",
+          "overwritten": true
+        },
+        {
+          "name": "low_code",
+          "section": "low_code"
+        },
+        {
+          "name": "font",
+          "section": "font"
+        },
+        {
+          "name": "wdata",
+          "source": "wdata",
+          "section": "wdata"
+        }
+      ]
+    },
+    {
+      "id": "game-stub",
+      "title": "PIPELINE: the GAME stub loader",
+      "sources": ["game"],
+      "stripScope": "game_loader",
+      "regions": [
+        {
+          "name": "main",
+          "section": "game"
+        }
+      ]
+    },
+    {
+      "id": "graphic-stub",
+      "title": "PIPELINE: the GRAPHIC stub loader",
+      "sources": ["graphic"],
+      "stripScope": "graphic_loader",
+      "regions": [
+        {
+          "name": "main",
+          "section": "graphic"
+        }
+      ]
+    },
+    {
+      "id": "levdes-stub",
+      "title": "PIPELINE: the LEVDES stub loader",
+      "sources": ["levdes"],
+      "stripScope": "levdes_loader",
+      "regions": [
+        {
+          "name": "main",
+          "section": "levdes"
+        }
+      ]
+    },
+    {
+      "id": "mrun",
+      "title": "PIPELINE: MRUN",
+      "sources": ["mrun"],
+      "stripScope": "mrun",
+      "regions": [
+        {
+          "name": "main",
+          "section": "mrun"
+        }
+      ]
+    },
+    {
+      "id": "title",
+      "title": "PIPELINE: TITLE",
+      "sources": ["title"],
+      "stripScope": "title",
+      "regions": [
+        {
+          "name": "title",
+          "section": "title",
+          "overwritten": true
+        },
+        {
+          "name": "unpack",
+          "section": "title_relocated"
+        }
+      ]
+    },
+    {
+      "id": "pl",
+      "title": "PIPELINE: PL, Ian's cheat",
+      "sources": ["pl"],
+      "regions": [
+        {
+          "name": "decryptor",
+          "section": "pl",
+          "to": "pl.encrypted - 1"
+        },
+        {
+          "name": "encrypted",
+          "section": "pl",
+          "from": "pl.encrypted",
+          "overwritten": true
+        },
+        {
+          "name": "cheat",
+          "section": "pl_decrypted"
+        }
+      ]
+    },
+    {
+      "id": "menu",
+      "title": "PIPELINE: MENU",
+      "sources": ["menu"],
+      "regions": [
+        {
+          "name": "program",
+          "section": "menu",
+          "to": "program_end"
+        },
+        {
+          "name": "scroller",
+          "section": "menu",
+          "from": "scroller",
+          "to": "menu_screen"
+        },
+        {
+          "name": "menu_screen",
+          "section": "menu",
+          "from": "menu_screen",
+          "avoid": [["menu_screen_end", "menu_screen + &700"]]
+        }
+      ]
+    },
+    {
+      "id": "mission",
+      "title": "PIPELINE: MISSION, the Mission Generator",
+      "sources": ["mission"],
+      "regions": [
+        {
+          "name": "program",
+          "section": "mission"
+        }
+      ]
+    }
+  ]
+}
