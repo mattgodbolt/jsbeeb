@@ -191,6 +191,7 @@ describe("importBaron", () => {
         expect(errors).toEqual([]);
         expect(sets[0].json.regions.other.anchors.every(({ at }) => parseInt(at, 16) >= 0x2004)).toBe(true);
         expect(() => importBaron(twoSources({ nowhere: "4" }), both)).toThrow("names no symbol: nowhere");
+        expect(() => importBaron(twoSources({ fill: "4" }), both)).toThrow("matches no store: fill");
     });
 
     it("refuses a config naming an INCLUDE no listing has", () => {

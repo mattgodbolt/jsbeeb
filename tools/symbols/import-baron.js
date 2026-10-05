@@ -339,7 +339,6 @@ class Importer {
         };
     }
 
-    /** The program's stores, with each instruction's operand base looked up for the table sizes. */
     /**
      * The set's stores across all its sources. A table or a move is looked up in each source that has
      * the name, and has to name a symbol in one of them and match a store in one of them.
@@ -347,6 +346,7 @@ class Importer {
     stores(spec, sources) {
         const tableNames = Object.entries(spec.tableSizes ?? {});
         const moveNames = spec.moves ?? [];
+        const all = [...tableNames.map(([name]) => name), ...moveNames];
         const named = new Set();
         const matched = new Set();
         const stores = sources.flatMap((source) => {
@@ -356,18 +356,15 @@ class Importer {
                 tableNames.filter(([name]) => found(name)).map(([name, size]) => [find(name), evaluate(size, find)]),
             );
             const moves = new Set(moveNames.filter(found).map(find));
-            [...tableNames.map(([name]) => name), ...moveNames].filter(found).forEach((name) => named.add(name));
+            all.filter(found).forEach((name) => named.add(name));
             for (const statement of source.listing.statements) {
                 const base = statement.code ? operandBase(statement.operand) : null;
                 statement.base = base ? source.lookup(source.resolve(statement.scope, base)) : undefined;
             }
             const { stores: sourceStores, used } = storesIn(source.listing.statements, { tableSizes, moves });
-            [...tableNames.map(([name]) => name), ...moveNames]
-                .filter((name) => found(name) && used.has(find(name)))
-                .forEach((name) => matched.add(name));
+            all.filter((name) => found(name) && used.has(find(name))).forEach((name) => matched.add(name));
             return sourceStores;
         });
-        const all = [...tableNames.map(([name]) => name), ...moveNames];
         const unnamed = all.filter((name) => !named.has(name));
         if (unnamed.length) throw new Error(`${spec.id}: a table or a move names no symbol: ${unnamed.join(", ")}`);
         const unmatched = all.filter((name) => !matched.has(name));

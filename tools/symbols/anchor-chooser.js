@@ -8,7 +8,7 @@
  * @property {number} address - where it runs
  * @property {number[]} data
  * @property {boolean} code - an instruction, rather than data
- * @property {boolean} skip - padding (SKIP), which holds whatever was in memory
+ * @property {boolean} skip - padding (SKIP or SKIPTO), which holds whatever was in memory
  * @property {object | null} section - which section it's in, compared by identity
  * @property {number | undefined} [base] - for an instruction, the address its operand's name is built on
  *
