@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { BBC } from "../src/keymap.js";
-import { holdUntil, pressKey, runScript, runSeconds } from "../tools/symbols/check-memory.js";
+import { holdUntil, pressKey, ReleaseFrames, runScript, runSeconds } from "../tools/symbols/check-memory.js";
 
 // MENU's screen comes up this long after the boot, after the loading picture and the warning page.
 const MenuSecs = 33;
@@ -17,6 +17,8 @@ const StepsPerCheck = 25;
 const PlayMoments = 30;
 const PlayFramesPerMoment = 200;
 const PlaySeed = 1;
+const PlayMinHoldFrames = 5;
+const PlayHoldFrameRange = 40;
 const LevelBytesChecked = 0x100;
 
 const Game = [
@@ -274,9 +276,9 @@ export const scenarios = {
         for (let moment = 1; moment <= PlayMoments; moment++) {
             for (let frames = 0; frames < PlayFramesPerMoment;) {
                 const key = keys[random(keys.length)];
-                const held = 5 + random(40);
+                const held = PlayMinHoldFrames + random(PlayHoldFrameRange);
                 await pressKey(session, key, held);
-                frames += held + 2;
+                frames += held + ReleaseFrames;
             }
             check(`random play, moment ${moment}`, Game);
         }
