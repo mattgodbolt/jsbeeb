@@ -2,7 +2,7 @@
   "format": 1,
   "title": "PIPELINE: the game",
   "licence": "LicenseRef-TBD",
-  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/01596528eb4df6268f248fde0c2feb7db2adb47e",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/3fed305e4746f566f32caa9cca2670cb9541b4f0",
   "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
   "regions": {
     "loader": {

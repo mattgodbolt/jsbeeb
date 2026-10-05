@@ -7,12 +7,13 @@
  * compilation); anchors that agree over a region whose other bytes differ are a collision, and the
  * region needs another anchor.
  *
- * Usage: node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --build <build dir>
- *            --corpus .registry-corpus/sth-disc
+ * Usage: node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --corpus .registry-corpus/sth-disc
+ *            [--source <checkout>] [--baron <path>]
  *
  * Each zip is one title. Every complete DFS file on an .ssd or .dsd is placed at its load address,
  * BASIC programs included, since a BASIC program's lines can collide too; a file of one repeated
- * byte, or catalogued to load in page zero (a placeholder, usually), is left out. Prints the report
+ * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It builds the title as
+ * import-baron.js does, taking `--source` and `--baron` as that does. Prints the report
  * as Markdown, and exits 1 if anything collides.
  */
 
@@ -24,7 +25,8 @@ import { parseArgs } from "node:util";
 import { unzip } from "../../src/archive.js";
 import { dfsCatalogue } from "../registry/dfs.js";
 import { extensionOf, sectorImageSides } from "../registry/fingerprint.js";
-import { importBaron, loadTitle } from "./import-baron.js";
+import { BuildOptions, BuildUsage } from "./baron-build.js";
+import { importBaron, withTitle } from "./import-baron.js";
 
 const Page = 0x100;
 const AddressLimit = 0x10000;
@@ -167,12 +169,11 @@ export function corpusReport(sets, titles) {
 
 async function main() {
     const { values } = parseArgs({
-        options: { config: { type: "string" }, build: { type: "string" }, corpus: { type: "string" } },
+        options: { config: { type: "string" }, corpus: { type: "string" }, ...BuildOptions },
     });
-    if (!values.config || !values.build || !values.corpus)
-        throw new Error("Usage: corpus-check.js --config <file> --build <dir> --corpus <dir>");
-    const { config, build } = loadTitle(values.config, values.build);
-    const { sets } = importBaron(config, build);
+    if (!values.config || !values.corpus)
+        throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage}`);
+    const { sets } = await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
     const { report, collisions } = corpusReport(sets, await readCorpus(values.corpus));
     console.log(report);
     return collisions ? 1 : 0;

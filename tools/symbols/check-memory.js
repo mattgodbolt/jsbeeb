@@ -5,12 +5,13 @@
  * each time the machine stops, and whether that's exactly the regions expected there. A moment fails
  * if other regions match, or if two matching regions overlap, since the debugger then shows neither.
  *
- * Usage: node tools/symbols/check-memory.js --config symbols-src/pipeline.json --build <build dir>
- *            [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
+ * Usage: node tools/symbols/check-memory.js --config symbols-src/pipeline.json [--source <checkout>]
+ *            [--baron <path>] [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
  *
- * The config's `check` names the module of scenarios, beside it, and `build.disc` the disc in the
- * build they boot. With no SCENARIO, it runs them all, each on a fresh machine. Exits 1 if any moment
- * fails.
+ * The config's `check` names the module of scenarios, beside it, and `source.disc` the original disc in
+ * the source repository they boot. The title is built as import-baron.js builds it, for the scenarios
+ * that read its files. With no SCENARIO, it runs them all, each on a fresh machine. Exits 1 if any
+ * moment fails.
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,7 +24,7 @@ import { MachineSession } from "../../src/machine-session.js";
 import { parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
 import { SymbolsDir } from "./build-index.js";
-import { checkBuildCommit } from "./import-baron.js";
+import { BuildLayout, BuildOptions, BuildUsage, withBaronBuild } from "./baron-build.js";
 
 const CyclesPerSecond = 2000000;
 const Model = "B-DFS1.2";
@@ -177,34 +178,34 @@ async function main() {
     const { values, positionals } = parseArgs({
         options: {
             config: { type: "string" },
-            build: { type: "string" },
+            ...BuildOptions,
             sets: { type: "string", default: path.join(SymbolsDir, "sets") },
             shots: { type: "string" },
         },
         allowPositionals: true,
     });
-    if (!values.config || !values.build)
-        throw new Error("Usage: check-memory.js --config <file> --build <dir> [SCENARIO...]");
+    if (!values.config) throw new Error(`Usage: check-memory.js --config <file> ${BuildUsage} [SCENARIO...]`);
     const config = JSON.parse(readFileSync(values.config, "utf8"));
-    checkBuildCommit(config, values.build);
+    if (config.source.disc === undefined) throw new Error(`${values.config} names no source.disc to boot`);
     const sets = loadTitleSets(values.sets, config.id);
     const { scenarios } = await import(pathToFileURL(path.resolve(path.dirname(values.config), config.check)).href);
-    const disc = path.resolve(values.build, config.build.disc);
     const wanted = positionals.length ? positionals : Object.keys(scenarios);
+    for (const name of wanted) if (!scenarios[name]) throw new Error(`There's no scenario ${name}`);
     if (values.shots) mkdirSync(values.shots, { recursive: true });
     const results = [];
-    for (const name of wanted) {
-        if (!scenarios[name]) throw new Error(`There's no scenario ${name}`);
-        console.log(`-- ${name}`);
-        const session = await startMachine(disc);
-        try {
-            await scenarios[name](
-                scenarioContext(session, sets, path.join(values.build, config.build.files), values.shots, results),
-            );
-        } finally {
-            session.destroy();
+    await withBaronBuild(config, values, async ({ sourceDir, buildDir }) => {
+        const disc = path.join(sourceDir, config.source.disc);
+        const filesDir = path.join(buildDir, BuildLayout.files);
+        for (const name of wanted) {
+            console.log(`-- ${name}`);
+            const session = await startMachine(disc);
+            try {
+                await scenarios[name](scenarioContext(session, sets, filesDir, values.shots, results));
+            } finally {
+                session.destroy();
+            }
         }
-    }
+    });
     const failures = results.filter((ok) => !ok).length;
     console.log(`${results.length} moments, ${failures} failed`);
     return failures ? 1 : 0;

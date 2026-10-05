@@ -1,14 +1,14 @@
 # Symbol set importers
 
-How the symbol sets under `public/symbols/sets/` are made from a title's own build. The format is "Symbol
+How the symbol sets under `public/symbols/sets/` are made from a title's source. The format is "Symbol
 sets" in [the media registry proposal](media-registry-proposal.md); this is how a curator gets from a source
 repository to a set in that format.
 
 ## The idea
 
-A source repository never changes for jsbeeb. It builds as it always does: baron with `--symbols` and `-vv`,
-BeebAsm with its own outputs, or a published disassembly listing. jsbeeb's tools then import that output, so
-nobody has to emit jsbeeb metadata.
+A source repository never changes for jsbeeb, and needs no build rules for it. jsbeeb's tools take its source
+at a commit and make what they read themselves: for a baron title, they run baron on each source with
+`--symbols` and `-vv`. Nobody has to emit jsbeeb metadata.
 
 The curator's job lives here, beside the sets: which programs make a set, where a program's memory changes
 while it runs (so where its regions are cut), and the anchors that tell the program apart in memory. Each
@@ -16,6 +16,7 @@ input format gets an importer, and every importer feeds one anchor chooser and t
 
 | Piece                             | What it does                                                                                             |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tools/symbols/baron-build.js`    | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
 | `tools/symbols/baron-listing.js`  | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
 | `tools/symbols/import-baron.js`   | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
 | `tools/symbols/anchor-chooser.js` | Chooses each region's anchors from what an importer read; shared by every importer                       |
@@ -32,12 +33,13 @@ Nothing in it is an address list: the names come from the build.
 
 - `id`: the prefix of the title's set files, `<id>-<set id>.json`.
 - `licence`, `notice`, `madeFrom`: copied into every set.
-- `source`: the `repository` and the `commit` that was built. The importer, the corpus check and the in-memory check refuse a
-  build directory that isn't in a git checkout of that commit with nothing changed or added, and each set's
-  `source` links the tree at that commit. They can't tell a build left over from another commit; the source
-  repository's own build keeps that true.
-- `build`: where in the build directory the importer finds the symbol dump, the `-vv` listings (one per
-  source, `<source>.txt`), the built files with their `.inf` sidecars, and the disc the in-memory check boots.
+- `source`: where the title's source is and what of it to assemble.
+  - `repository` and `commit`: the importer, the corpus check and the in-memory check fetch that commit, or
+    take a checkout of it with nothing changed or added, and each set's `source` links the tree there.
+  - `assemble`: globs, from the repository's root, of the sources to assemble. Every one, not only those
+    that make a set: the anchors are chosen against everything the title puts in memory.
+  - `disc`: the original disc in the repository, the one the source rebuilds. Its image key has to be one
+    of `madeFrom`'s, and it's the disc the in-memory check boots.
 - `leftToSystemSets`: INCLUDEd files whose names a system set (the MOS's) already gives. The listing doesn't
   mark where an INCLUDE ends, so these are the `=` names it shows straight after the INCLUDE line, before
   any other line.
@@ -59,19 +61,23 @@ Nothing in it is an address list: the names come from the build.
 
 ## Running it
 
-For a baron title, build it as its repository does, including a `-vv` listing per source (plain `-v` cuts a
-statement's bytes at eight, so it can't be read for them), then:
+For a baron title, with baron on the PATH, in `$BARON`, or given as `--baron`:
 
 ```sh
-node tools/symbols/import-baron.js --config symbols-src/pipeline.json --build ../pipeline-disasm/build
+node tools/symbols/import-baron.js --config symbols-src/pipeline.json
 node tools/symbols/build-index.js
-node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --build ../pipeline-disasm/build \
-    --corpus .registry-corpus/sth-disc
-node tools/symbols/check-memory.js --config symbols-src/pipeline.json --build ../pipeline-disasm/build
+node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --corpus .registry-corpus/sth-disc
+node tools/symbols/check-memory.js --config symbols-src/pipeline.json
 ```
 
+Each fetches the config's commit into a temporary directory, or takes `--source`, a checkout of it, and runs
+baron there on each source on its own, as `-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v`
+cuts a statement's bytes at eight, so its listing can't be read for them. The importer prints the baron it
+ran, from `--version`.
+
 The importer writes nothing if a region can't be anchored, if its anchors all match another of the build's
-images, if a set fails the index's checks, or if the build directory isn't in a clean checkout of the config's commit. `--verbose` lists
+images, if a set fails the index's checks, if the checkout isn't of the config's commit or has changes, or if
+the config's disc isn't one `madeFrom` names. `--verbose` lists
 every name left out, and why, and every anchor added to tell another image apart. The in-memory check takes
 scenario names to run only those, and `--shots DIR` to save the screenshots a scenario asks for.
 

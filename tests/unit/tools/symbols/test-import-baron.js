@@ -1,17 +1,16 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { checkSet, readMosSets, SymbolsDir } from "../../../../tools/symbols/build-index.js";
+import { BuildLayout } from "../../../../tools/symbols/baron-build.js";
 import {
     baronBuild,
-    checkBuildCommit,
-    environmentWithoutGit,
     evaluate,
     importBaron,
     operandBase,
+    readBaronBuild,
     writeSets,
 } from "../../../../tools/symbols/import-baron.js";
 
@@ -333,66 +332,25 @@ describe("importBaron's names", () => {
     });
 });
 
-// The throwaway repository must not sign its commits or run hooks from the user's own git config.
-const IsolatedGitConfig = [
-    "-c",
-    "user.name=t",
-    "-c",
-    "user.email=t@example.com",
-    "-c",
-    "commit.gpgsign=false",
-    "-c",
-    "core.hooksPath=/dev/null",
-];
-
-describe("checkBuildCommit", () => {
+describe("readBaronBuild", () => {
     let dir;
-    const git = (...args) =>
-        execFileSync("git", ["-C", dir, ...IsolatedGitConfig, ...args], {
-            encoding: "utf8",
-            env: environmentWithoutGit(),
-        }).trim();
-
     beforeEach(() => {
-        dir = mkdtempSync(path.join(tmpdir(), "symbols-build-"));
-        git("init", "-q");
-        writeFileSync(path.join(dir, "source.6502"), "RTS\n");
-        git("add", ".");
-        git("commit", "-q", "-m", "build");
+        dir = mkdtempSync(path.join(tmpdir(), "symbols-read-"));
+        for (const sub of Object.values(BuildLayout)) mkdirSync(path.join(dir, sub));
+        writeFileSync(path.join(dir, BuildLayout.listings, "prog.txt"), listing, "latin1");
+        writeFileSync(path.join(dir, BuildLayout.symbols, "prog.json"), JSON.stringify(dump));
+        writeFileSync(path.join(dir, BuildLayout.symbols, "other.json"), JSON.stringify({ "src/other.6502": {} }));
+        writeFileSync(path.join(dir, BuildLayout.files, "PROG"), Buffer.from([0xa9, 0x00]));
+        writeFileSync(path.join(dir, BuildLayout.files, "PROG.inf"), "$.PROG FFFF1900 FFFF1900 000002\n");
+        writeFileSync(path.join(dir, BuildLayout.files, "NOINF"), Buffer.from([1]));
     });
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-    const pinned = (commit) => ({ source: { repository: "https://example.com/r", commit } });
-
-    it("passes a clean checkout at the config's commit", () => {
-        expect(() => checkBuildCommit(pinned(git("rev-parse", "HEAD")), dir)).not.toThrow();
-    });
-
-    it("looks at the build's checkout even when run from another repository's git hook", () => {
-        const head = git("rev-parse", "HEAD");
-        vi.stubEnv("GIT_DIR", path.join(tmpdir(), "no-such-repository"));
-        vi.stubEnv("GIT_INDEX_FILE", path.join(tmpdir(), "no-such-index"));
-        try {
-            expect(() => checkBuildCommit(pinned(head), dir)).not.toThrow();
-        } finally {
-            vi.unstubAllEnvs();
-        }
-    });
-
-    it("refuses a checkout at another commit, or with changes or new files", () => {
-        const head = git("rev-parse", "HEAD");
-        expect(() => checkBuildCommit(pinned("0".repeat(40)), dir)).toThrow(`is at ${head}`);
-        writeFileSync(path.join(dir, "new.6502inc"), "X = 1\n");
-        expect(() => checkBuildCommit(pinned(head), dir)).toThrow("has changes");
-    });
-
-    it("refuses a directory outside any checkout", () => {
-        const outside = mkdtempSync(path.join(tmpdir(), "symbols-loose-"));
-        try {
-            expect(() => checkBuildCommit(pinned("0".repeat(40)), outside)).toThrow("isn't in a git checkout");
-        } finally {
-            rmSync(outside, { recursive: true, force: true });
-        }
+    it("reads each listing against its source's dump, and each file with an .inf where it loads", () => {
+        const { sources, files } = readBaronBuild(dir);
+        expect([...sources.keys()]).toEqual(["prog"]);
+        expect(sources.get("prog").lookup("prog.loop")).toBe(0x190f);
+        expect(files).toEqual([{ name: "PROG", load: 0x1900, data: Buffer.from([0xa9, 0x00]) }]);
     });
 });
 
