@@ -156,17 +156,36 @@ function dumpEntry(dump, name) {
     return dump[keys[0]];
 }
 
-function gitHead(dir) {
+/**
+ * The environment without git's own variables: run from a git hook, GIT_DIR or GIT_INDEX_FILE would
+ * point `git -C dir` at the repository the hook belongs to.
+ */
+export function environmentWithoutGit() {
+    return Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
+}
+
+const git = (dir, ...args) =>
+    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: "pipe", env: environmentWithoutGit() }).trim();
+
+/**
+ * Refuses a build directory that isn't in a git checkout of the config's commit with nothing changed or
+ * added, since every set's `source` will name that commit. It can't tell a build left over from another
+ * commit; the source repository's own build keeps that true.
+ */
+export function checkBuildCommit(config, buildDir) {
+    let head;
+    let changes;
     try {
-        const head = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8", stdio: "pipe" }).trim();
-        const changed = execFileSync("git", ["-C", dir, "status", "--porcelain", "--untracked-files=no"], {
-            encoding: "utf8",
-            stdio: "pipe",
-        }).trim();
-        return { head, changed: changed.length > 0 };
-    } catch (_error) {
-        return null;
+        head = git(buildDir, "rev-parse", "HEAD");
+        changes = git(buildDir, "status", "--porcelain");
+    } catch (error) {
+        throw new Error(`${buildDir} isn't in a git checkout, so nothing says it's ${config.source.commit}`, {
+            cause: error,
+        });
     }
+    if (head !== config.source.commit)
+        throw new Error(`The checkout ${buildDir} is in is at ${head}, and the config names ${config.source.commit}`);
+    if (changes) throw new Error(`The checkout ${buildDir} is in has changes, so it isn't ${config.source.commit}`);
 }
 
 /** A rank to sort candidates for one address by, highest first, keeping the first of equals. */
@@ -487,12 +506,32 @@ export function importBaron(config, build) {
 /** Reads a curator's config and the build it names, checking the build is of the config's commit. */
 export function loadTitle(configPath, buildDir) {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
-    const git = gitHead(buildDir);
-    if (git && git.head !== config.source.commit)
-        throw new Error(`The build in ${buildDir} is of ${git.head}, and ${configPath} names ${config.source.commit}`);
-    if (git?.changed)
-        throw new Error(`The checkout ${buildDir} is in has changes, so it isn't ${config.source.commit}`);
+    checkBuildCommit(config, buildDir);
     return { config, build: readBaronBuild(buildDir, config.build) };
+}
+
+/**
+ * Checks the imported sets as the index will, and only if nothing failed replaces the title's set files
+ * in `out` with them, every one formatted before any file is touched.
+ * @returns {Promise<string[]>} the errors, the importer's and the index's, none if the sets were written
+ */
+export async function writeSets({ sets, errors }, { out, titleId, mosSets }) {
+    const problems = [
+        ...errors,
+        ...sets.flatMap(({ file, json }) =>
+            checkSet(json, { file: `sets/${file}`, mosSets }).map((problem) => `${file}: ${problem}`),
+        ),
+    ];
+    if (problems.length) return problems;
+    const formatted = [];
+    for (const { file, json } of sets) {
+        const target = path.join(out, file);
+        formatted.push([target, await formatJson(json, target)]);
+    }
+    for (const stale of readdirSync(out).filter((name) => name.startsWith(`${titleId}-`) && name.endsWith(".json")))
+        rmSync(path.join(out, stale));
+    for (const [target, text] of formatted) writeFileSync(target, text);
+    return [];
 }
 
 async function main() {
@@ -506,11 +545,8 @@ async function main() {
     });
     if (!values.config || !values.build) throw new Error("Usage: import-baron.js --config <file> --build <dir>");
     const { config, build } = loadTitle(values.config, values.build);
-    const { sets, errors, notes, reasons } = importBaron(config, build);
-    const mosSets = readMosSets();
-    for (const { file, json } of sets)
-        errors.push(...checkSet(json, { file: `sets/${file}`, mosSets }).map((problem) => `${file}: ${problem}`));
-    for (const { id, json, regions, dropped } of sets) {
+    const imported = importBaron(config, build);
+    for (const { id, json, regions, dropped } of imported.sets) {
         const summary = regions.map((region) => `${region.name} ${region.anchors.length}/${region.symbols.size}`);
         console.log(
             `${id}: ${summary.join(", ")}; ${Object.keys(json.globals).length} globals (${dropped.length} names left out)`,
@@ -518,22 +554,15 @@ async function main() {
         if (values.verbose)
             for (const [name, address, why] of dropped) console.log(`    left out ${name} ${hex(address)}: ${why}`);
     }
-    if (values.verbose) for (const reason of reasons) console.log(`    ${reason}`);
-    for (const note of notes) console.log(`note: ${note}`);
+    if (values.verbose) for (const reason of imported.reasons) console.log(`    ${reason}`);
+    for (const note of imported.notes) console.log(`note: ${note}`);
+    const errors = await writeSets(imported, { out: values.out, titleId: config.id, mosSets: readMosSets() });
     if (errors.length) {
         for (const error of errors) console.error(`error: ${error}`);
         console.error("Nothing written");
         return 1;
     }
-    for (const stale of readdirSync(values.out).filter(
-        (name) => name.startsWith(`${config.id}-`) && name.endsWith(".json"),
-    ))
-        rmSync(path.join(values.out, stale));
-    for (const { file, json } of sets) {
-        const target = path.join(values.out, file);
-        writeFileSync(target, await formatJson(json, target));
-    }
-    console.log(`Wrote ${sets.length} sets to ${values.out}`);
+    console.log(`Wrote ${imported.sets.length} sets to ${values.out}`);
     return 0;
 }
 

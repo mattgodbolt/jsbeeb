@@ -18,6 +18,7 @@ const sets = {
     cheat: set({
         decrypted: anchored("0x043b", "0x0500", "0x0440", "a2058e02"),
         far: anchored("0x2000", "0x2100", "0x2000", "deadbeef"),
+        tail: anchored("0x20ff", "0x2200", "0x2100", "a9018d02"),
     }),
 };
 
@@ -42,6 +43,7 @@ describe("overlappingRegions", () => {
         expect(overlappingRegions(sets, ["cheat/decrypted", "loader/main", "cheat/far"])).toEqual([
             "cheat/decrypted and loader/main",
         ]);
+        expect(overlappingRegions(sets, ["cheat/far", "cheat/tail"])).toEqual(["cheat/far and cheat/tail"]);
         expect(overlappingRegions(sets, ["cheat/far", "loader/main"])).toEqual([]);
     });
 });
