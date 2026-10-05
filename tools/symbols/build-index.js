@@ -12,16 +12,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { format as prettier, resolveConfig } from "prettier";
 
-import { parseAddress, parseSet } from "../../src/symbol-sets.js";
+import { Format, parseAddress, parseSet, RelativeJsonPath } from "../../src/symbol-sets.js";
 
 export const SymbolsDir = fileURLToPath(new URL("../../public/symbols/", import.meta.url));
 const SetsDir = "sets";
 const IndexFile = "index.json";
 const MosSetsFile = "mos-sets.json";
 
-const Format = 1;
-const MinAnchorBytes = 4;
-const MaxAnchorBytes = 8;
+export const MinAnchorBytes = 4;
+export const MaxAnchorBytes = 8;
 const IoStart = 0xfc00;
 const IoEnd = 0xff00;
 const ImageKey = /^[0-9a-f]{32}$/;
@@ -71,6 +70,7 @@ export function checkSet(json, { file, mosSets }) {
         return [error.message];
     }
     const problems = [];
+    if (!RelativeJsonPath.test(file)) problems.push(`its path, ${file}, isn't one the debugger will fetch`);
     if (!isText(json.title)) problems.push("it has no title");
     if (!isText(json.licence)) problems.push("it has no licence");
     else if (GplFamily.test(json.licence))

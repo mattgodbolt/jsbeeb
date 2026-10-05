@@ -18,9 +18,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Cpu6502 } from "../../src/6502.opcodes.js";
-import { parseSet } from "../../src/symbol-sets.js";
+import { Format, parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
-import { formatJson, SymbolsDir } from "./build-index.js";
+import { formatJson, MaxAnchorBytes, MinAnchorBytes, SymbolsDir } from "./build-index.js";
 
 const Py8disCommit = "5da0ecb47c54ff5afe62a8e62c03eca4ec42ccac";
 const Py8disRaw = `https://raw.githubusercontent.com/ZornsLemma/py8dis/${Py8disCommit}`;
@@ -34,8 +34,6 @@ const RomBase = 0xc000;
 const RomSize = 0x4000;
 const KeyHexDigits = 32;
 
-const MinAnchorBytes = 4;
-const MaxAnchorBytes = 8;
 const MinAnchors = 2;
 
 // The code anchors start at the reset and IRQ entries, the default RDCHV, WRCHV and FILEV handlers
@@ -137,7 +135,7 @@ async function main() {
     const inRegion = ([value]) => Object.values(Regions).some(({ start, end }) => value >= start && value < end);
     const source = `https://github.com/ZornsLemma/py8dis/blob/${Py8disCommit}/${AcornPy}`;
     const json = {
-        format: 1,
+        format: Format,
         title: "BBC Micro MOS 1.20",
         licence: "MIT",
         source,

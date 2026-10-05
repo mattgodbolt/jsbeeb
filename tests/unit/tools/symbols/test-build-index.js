@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { parseIndex } from "../../../../src/symbol-sets.js";
 import { checkSet, indexOf, readMosSets, readSets, SymbolsDir } from "../../../../tools/symbols/build-index.js";
 
 const MosFile = "sets/mos.json";
@@ -47,6 +48,7 @@ describe("the symbol set build", () => {
         it("are what the index lists", () => {
             const index = JSON.parse(readFileSync(path.join(SymbolsDir, "index.json"), "utf8"));
             expect(index).toEqual(indexOf(readSets()));
+            expect(parseIndex(index).map(({ url }) => url)).toEqual(readSets().map(({ file }) => file));
         });
 
         it("are listed without their names", () => {
@@ -95,6 +97,10 @@ describe("the symbol set build", () => {
                 expect.stringContaining("fewer than its minAnchors"),
             ]);
             expect(problemsWith((json) => (json.regions.main.anchors = []))).toEqual([]);
+        });
+
+        it("reject a file the debugger wouldn't fetch from the index", () => {
+            expect(problemsWith(() => {}, "sets/Exile v1.1.json")).toEqual([expect.stringContaining("Exile v1.1")]);
         });
 
         it("reject a system set the MOS list doesn't name", () => {

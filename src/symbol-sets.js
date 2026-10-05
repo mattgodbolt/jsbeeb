@@ -4,11 +4,11 @@ import { matchRegions, NoNames, SymbolNames } from "./symbol-names.js";
 /** @typedef {import("./symbol-names.js").SymbolSet} SymbolSet */
 /** @typedef {import("./symbol-names.js").Region} Region */
 
-const Format = 1;
+export const Format = 1;
 const AddressSpace = 0x10000;
 const FirstRetryDelayMs = 5000;
 const MaxRetryDelayMs = 5 * 60 * 1000;
-const RelativeJsonPath = /^(?:[\w-]+\/)*[\w-][\w.-]*\.json$/;
+export const RelativeJsonPath = /^(?:[\w-]+\/)*[\w-][\w.-]*\.json$/;
 
 /** "0x1a2c" as a number; only a region's end can be 0x10000. */
 export function parseAddress(text, what, limit = AddressSpace - 1) {
