@@ -291,10 +291,22 @@ describe("importBaron's names", () => {
     });
 });
 
+// The throwaway repository must not sign its commits or run hooks from the user's own git config.
+const IsolatedGitConfig = [
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@example.com",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+];
+
 describe("checkBuildCommit", () => {
     let dir;
     const git = (...args) =>
-        execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+        execFileSync("git", ["-C", dir, ...IsolatedGitConfig, ...args], {
             encoding: "utf8",
             env: environmentWithoutGit(),
         }).trim();
