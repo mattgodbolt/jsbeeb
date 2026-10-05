@@ -29,7 +29,7 @@ export class PALCompositeFilter {
             image: "images/tv.png",
             imageAlt: "A Ferguson television",
             imageWidth: 1000,
-            imageHeight: 719,
+            imageHeight: 717,
             canvasLeft: 25,
             canvasTop: 60,
             visibleWidth: 825,
