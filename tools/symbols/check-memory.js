@@ -29,7 +29,7 @@ const CyclesPerSecond = 2000000;
 const Model = "B-DFS1.2";
 const BootTimeoutSecs = 30;
 const DefaultKeyFrames = 3;
-const ReleaseFrames = 2;
+export const ReleaseFrames = 2;
 
 const hex = (address) => `&${address.toString(16).toUpperCase().padStart(4, "0")}`;
 

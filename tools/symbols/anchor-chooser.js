@@ -55,6 +55,8 @@ const ZeroPageEnd = 0x100;
 const OsBlockMost = 18;
 // BASIC II's entry, a saved BASIC program's exec address.
 const BasicExec = 0x8023;
+// An exec address in the I/O processor, whatever its top 16 bits.
+const IoAddressMask = 0xffff;
 const BasicLineLength = 3;
 const BasicLineText = 4;
 const BasicLineNumberLimit = 0x80;
@@ -134,7 +136,7 @@ export function storesIn(statements, { tableSizes, moves }) {
 /** A BASIC program's line headers, its first line and its REMs' text, but for any code in a REM. */
 function basicLineStarts(region) {
     const section = region.sectionInfo;
-    if (section.exec === null || (section.exec & 0xffff) !== BasicExec) return [];
+    if (section.exec === null || (section.exec & IoAddressMask) !== BasicExec) return [];
     const code = new Set(
         section.statements.filter((s) => s.code).flatMap((s) => range(s.address, s.address + s.data.length)),
     );

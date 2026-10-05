@@ -26,6 +26,7 @@ import { parseBaronListing, sectionNamed } from "./baron-listing.js";
 import { checkSet, formatJson, readMosSets, SymbolsDir } from "./build-index.js";
 
 const AddressLimit = 0x10000;
+const IoAddressMask = 0xffff;
 const ListingExtension = ".txt";
 const InfExtension = ".inf";
 const SetsDir = path.join(SymbolsDir, "sets");
@@ -230,7 +231,8 @@ export function readBaronBuild(buildDir, buildLayout) {
         .sort()
         .map((inf) => {
             const name = inf.slice(0, -InfExtension.length);
-            const load = parseInt(readFileSync(path.join(filesDir, inf), "latin1").trim().split(/\s+/)[1], 16) & 0xffff;
+            const load =
+                parseInt(readFileSync(path.join(filesDir, inf), "latin1").trim().split(/\s+/)[1], 16) & IoAddressMask;
             return { name, load, data: readFileSync(path.join(filesDir, name)) };
         });
     return baronBuild(listings, dump, files);
