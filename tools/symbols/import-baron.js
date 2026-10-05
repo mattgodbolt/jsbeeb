@@ -420,9 +420,11 @@ class Importer {
 
         // One name per address: in a region, a scope's own name over the labels inside it, then the
         // label nearest the bytes (the last written); in the globals, the name most instructions use.
+        const repeated = new Set();
         const choose = (names, chosen, saying) => {
             for (const [address, entries] of names) {
                 entries.sort(byRankDescending);
+                if (chosen.has(entries[0].name)) repeated.add(entries[0].name);
                 chosen.set(entries[0].name, address);
                 for (const { name } of entries.slice(1)) dropped.push([name, address, `${saying} ${entries[0].name}`]);
             }
@@ -432,7 +434,7 @@ class Importer {
         choose(globalsNamed, globals, "the globals call it");
 
         const every = [...regions.flatMap((region) => [...region.symbols.keys()]), ...globals.keys()];
-        const twice = [...new Set(every.filter((name, i) => every.indexOf(name) !== i))].sort();
+        const twice = [...new Set([...repeated, ...every.filter((name, i) => every.indexOf(name) !== i)])].sort();
         if (twice.length) throw new Error(`${spec.id}: names given twice: ${twice.join(", ")}`);
 
         const stores = this.stores(spec, sources);

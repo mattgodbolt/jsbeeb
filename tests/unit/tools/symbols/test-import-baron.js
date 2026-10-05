@@ -317,6 +317,26 @@ describe("importBaron's names", () => {
         );
     });
 
+    it("refuses a set whose sources give one global name two addresses", () => {
+        const other = [
+            "counter = 113 [&71]",
+            "SECTION other, org=&2000",
+            statement(0x2000, [0x85, 0x71], "STA counter"),
+            statement(0x2002, [0x60], "RTS"),
+            "ENDSECTION",
+        ].join("\n");
+        const both = baronBuild(
+            new Map([
+                ["other", other],
+                ["prog", listing],
+            ]),
+            { ...dump, "src/other.6502": { counter: 0x71 } },
+            [],
+        );
+        const twoSources = { ...config(), sets: [{ ...config().sets[0], sources: ["prog", "other"] }] };
+        expect(() => importBaron(twoSources, both)).toThrow("names given twice: counter");
+    });
+
     it("refuses a set that would give one name twice", () => {
         const twice = [
             "SECTION s, org=&1900",
