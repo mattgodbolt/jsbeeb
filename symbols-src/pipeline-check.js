@@ -198,7 +198,6 @@ const Tours = {
         // Holding CTRL steps the pixel cursor without the sprite selection.
         "down ControlLeft", ...hold("KeyX", 1), ...hold("Slash", 1), "up ControlLeft",
     ],
-    // Escape: stay, then leave for the menu through /MRUN.
 };
 
 export const scenarios = {
@@ -283,7 +282,7 @@ export const scenarios = {
         }
     },
 
-    async levdes({ session, sets, buildDir, address, check }) {
+    async levdes({ session, sets, filesDir, address, check }) {
         await menuOption(session, 4);
         await session.runUntilAddress(address("level-designer", "startup", "entry"));
         // MENU's screen data is still above it, until MODE 1.
@@ -303,7 +302,7 @@ export const scenarios = {
         await runScript(session, ["key F2", "wait 1", "key Enter", "wait 1", "key KeyY", "wait 1"]);
         await runScript(session, ["type LEVEL1", "wait 1", "type 677636", "wait 4"]);
         const level = [...sets["level-designer"].globals].find(([, name]) => name === "level_names")[0];
-        const levelFile = readFileSync(path.join(buildDir, "files", "LEVEL1")).subarray(0, LevelBytesChecked);
+        const levelFile = readFileSync(path.join(filesDir, "LEVEL1")).subarray(0, LevelBytesChecked);
         if (!Buffer.from(session.readMemory(level, LevelBytesChecked)).equals(levelFile))
             throw new Error("LEVEL1 didn't load");
         check("waiting for a key, LEVEL1 loaded", LevelDesigner);

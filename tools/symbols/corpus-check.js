@@ -86,7 +86,7 @@ const holds = (file, at, bytes) =>
  * @param {{start: number, end: number, anchors: {at: number, data: number[]}[], memory: Map<number, number>}} region
  * @param {Map<number, [string, object][]>} byPage - the corpus's files by each page they cover
  */
-export function regionMatches(region, byPage) {
+export function titlesHolding(region, byPage) {
     const holders = new Map();
     for (const { at, data } of region.anchors)
         for (const [title, file] of byPage.get(at >> 8) ?? []) {
@@ -146,7 +146,7 @@ export function corpusReport(sets, titles) {
         lines.push("| Region | Anchors | Holding one | Title holding all | Files | Held | Identical |");
         lines.push("|---|---|---|---|---|---|---|");
         for (const region of regions) {
-            const { holding, matches } = regionMatches(region, byPage);
+            const { holding, matches } = titlesHolding(region, byPage);
             const where = `${region.name} ${hex(region.start)}-${hex(region.end - 1)} | ${region.anchors.length} | ${holding}`;
             if (!matches.length) lines.push(`| ${where} | none | | | |`);
             for (const { title, files, held, same, share } of matches) {

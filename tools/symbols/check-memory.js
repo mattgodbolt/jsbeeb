@@ -23,6 +23,7 @@ import { MachineSession } from "../../src/machine-session.js";
 import { parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
 import { SymbolsDir } from "./build-index.js";
+import { checkBuildCommit } from "./import-baron.js";
 
 const CyclesPerSecond = 2000000;
 const Model = "B-DFS1.2";
@@ -145,10 +146,10 @@ export async function runScript(session, commands, { shots } = {}) {
 }
 
 /**
- * The context a scenario gets: the machine, the sets, the build, where to save screenshots (if anywhere),
+ * The context a scenario gets: the machine, the sets, the build's built files, where to save screenshots (if anywhere),
  * `address(set, region, name)` for a symbol's address, and `check(moment, expected)`.
  */
-function scenarioContext(session, sets, buildDir, shots, results) {
+function scenarioContext(session, sets, filesDir, shots, results) {
     const address = (id, regionName, name) => {
         const region = sets[id]?.regions.find((r) => r.name === regionName);
         const found = region && [...region.symbols].find(([, symbol]) => symbol === name);
@@ -169,7 +170,7 @@ function scenarioContext(session, sets, buildDir, shots, results) {
         }
         results.push(ok);
     };
-    return { session, sets, buildDir, shots, address, check };
+    return { session, sets, filesDir, shots, address, check };
 }
 
 async function main() {
@@ -185,6 +186,7 @@ async function main() {
     if (!values.config || !values.build)
         throw new Error("Usage: check-memory.js --config <file> --build <dir> [SCENARIO...]");
     const config = JSON.parse(readFileSync(values.config, "utf8"));
+    checkBuildCommit(config, values.build);
     const sets = loadTitleSets(values.sets, config.id);
     const { scenarios } = await import(pathToFileURL(path.resolve(path.dirname(values.config), config.check)).href);
     const disc = path.resolve(values.build, config.build.disc);
@@ -196,7 +198,9 @@ async function main() {
         console.log(`-- ${name}`);
         const session = await startMachine(disc);
         try {
-            await scenarios[name](scenarioContext(session, sets, values.build, values.shots, results));
+            await scenarios[name](
+                scenarioContext(session, sets, path.join(values.build, config.build.files), values.shots, results),
+            );
         } finally {
             session.destroy();
         }

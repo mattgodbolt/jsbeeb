@@ -32,8 +32,10 @@ Nothing in it is an address list: the names come from the build.
 
 - `id`: the prefix of the title's set files, `<id>-<set id>.json`.
 - `licence`, `notice`, `madeFrom`: copied into every set.
-- `source`: the `repository` and the `commit` that was built. The importer refuses a build in a checkout at
-  another commit, or with changes, and each set's `source` links the tree at that commit.
+- `source`: the `repository` and the `commit` that was built. The importer and the in-memory check refuse a
+  build directory that isn't in a git checkout of that commit with nothing changed or added, and each set's
+  `source` links the tree at that commit. They can't tell a build left over from another commit; the source
+  repository's own build keeps that true.
 - `build`: where in the build directory the importer finds the symbol dump, the `-vv` listings (one per
   source, `<source>.txt`), the built files with their `.inf` sidecars, and the disc the in-memory check boots.
 - `leftToSystemSets`: INCLUDEd files whose names a system set (the MOS's) already gives. The listing doesn't
@@ -69,7 +71,7 @@ node tools/symbols/check-memory.js --config symbols-src/pipeline.json --build ..
 ```
 
 The importer writes nothing if a region can't be anchored, if its anchors all match another of the build's
-images, if a set fails the index's checks, or if the build isn't of the config's commit. `--verbose` lists
+images, if a set fails the index's checks, or if the build directory isn't in a clean checkout of the config's commit. `--verbose` lists
 every name left out, and why, and every anchor added to tell another image apart. The in-memory check takes
 scenario names to run only those, and `--shots DIR` to save the screenshots a scenario asks for.
 
