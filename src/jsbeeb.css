@@ -88,10 +88,34 @@ body {
   width: 90px;
 }
 
+#debug-symbols,
 #debug-keys {
   clear: both;
   padding-top: 3px;
   color: #aaaaaa;
+}
+
+#debug-symbols a {
+  color: #aaaaff;
+}
+
+.symbol,
+.symbol-set {
+  color: #f0d080;
+}
+
+#disassembly .dis_elem {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.named {
+  display: inline-block;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 #crtc_debug {
@@ -481,6 +505,10 @@ div.modal-body > div:not(:first-child) {
   display: inline-block;
   width: 8em;
   color: #d0d0d0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 .instr_bytes {

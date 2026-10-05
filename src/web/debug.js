@@ -1,5 +1,6 @@
 import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
+import { NoNames } from "../symbol-names.js";
 
 const noop = () => {};
 
@@ -7,6 +8,31 @@ const numToShow = 16;
 
 function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
+}
+
+function showName(node, { name, set }, addr) {
+    node.classList.add("named");
+    node.textContent = name;
+    node.title = `${name}: $${hexword(addr)}, from ${set.title}`;
+}
+
+function nameNode(named, addr) {
+    const node = document.createElement("span");
+    node.className = "symbol";
+    showName(node, named, addr);
+    return node;
+}
+
+function sourceNode(source) {
+    if (!URL.canParse(source) || new URL(source).protocol !== "https:") return document.createTextNode(source);
+    const link = document.createElement("a");
+    link.href = source;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "source";
+    // A focused link would keep the debugger's keys from reaching it.
+    link.addEventListener("click", () => link.blur());
+    return link;
 }
 
 // Clone a template row, unhide it, append to parent, and remove the template class.
@@ -91,7 +117,11 @@ class MemoryView {
 }
 
 export class Debugger {
-    constructor() {
+    /**
+     * @param {object} [options]
+     * @param {import("../symbol-sets.js").SymbolSets} [options.symbolSets] - where names for addresses come from
+     */
+    constructor({ symbolSets = null } = {}) {
         this.patchInstructions = new Map();
         this._enabled = false;
         this.disass = document.getElementById("disassembly");
@@ -103,6 +133,15 @@ export class Debugger {
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
         this.breakpoints = {};
+        this._symbolSets = symbolSets;
+        this._names = NoNames;
+        this._symbolsLine = document.getElementById("debug-symbols");
+        toggle(this._symbolsLine, false);
+        symbolSets?.addEventListener("loaded", () => {
+            if (!this._enabled) return;
+            this._matchSymbols();
+            this.updateDisassembly(this.disassPc);
+        });
 
         function setupGoto(form, func) {
             const addr = form.querySelector(".goto-addr");
@@ -320,6 +359,7 @@ export class Debugger {
 
     debug(where) {
         this.enable(true);
+        this._matchSymbols();
         this.updateDisassembly(where);
         this.updateRegisters();
         this._memoryView.update();
@@ -327,6 +367,22 @@ export class Debugger {
         this.uservia();
         this.crtc();
         this.cpu.video.debugPaint();
+    }
+
+    _matchSymbols() {
+        this._names = this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
+        const sets = this._names.sets;
+        toggle(this._symbolsLine, sets.length > 0);
+        this._symbolsLine.replaceChildren(
+            "names from ",
+            ...sets.flatMap((set, i) => {
+                const title = document.createElement("span");
+                title.className = "symbol-set";
+                title.textContent = set.title;
+                title.title = [set.licence, set.notice].filter(Boolean).join("\n\n");
+                return [...(i ? [" · "] : []), title, " (", sourceNode(set.source), ")"];
+            }),
+        );
     }
 
     enable(e) {
@@ -350,13 +406,21 @@ export class Debugger {
         const updateDisElem = (elem, address) => {
             const result = this.disassemble(address);
             const dump = this._memoryView.dump(address, result[1]);
-            elem.querySelector(".dis_addr").innerHTML = labelHtml(address);
+            const addrNode = elem.querySelector(".dis_addr");
+            addrNode.innerHTML = labelHtml(address);
+            const named = this._names.address(address);
+            if (named) addrNode.append(" ", nameNode(named, address));
             elem.classList.toggle("current", address === this.cpu.pc);
             elem.classList.toggle("highlight", address === this.disassPc);
             elem.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
             elem.querySelector(".instr_asc").textContent = dump.asc.join("");
             const disNode = elem.querySelector(".disassembly");
             disNode.innerHTML = result[0];
+            for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
+                const target = parseInt(ref.dataset.ref, 10);
+                const operand = this._names.operand(address, target);
+                if (operand) showName(ref, operand, target);
+            }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
                 ref.addEventListener("click", (e) => this.memClick(e));
             }
