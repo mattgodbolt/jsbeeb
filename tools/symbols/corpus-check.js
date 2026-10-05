@@ -173,7 +173,12 @@ async function main() {
     });
     if (!values.config || !values.corpus)
         throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage}`);
-    const { sets } = await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
+    const { sets, errors } = await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
+    if (errors.length) {
+        for (const error of errors) console.error(`error: ${error}`);
+        console.error("The import failed, so there's no corpus report");
+        return 1;
+    }
     const { report, collisions } = corpusReport(sets, await readCorpus(values.corpus));
     console.log(report);
     return collisions ? 1 : 0;
