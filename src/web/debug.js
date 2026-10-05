@@ -38,8 +38,8 @@ function sourceNode(source) {
     link.target = "_blank";
     link.rel = "noopener";
     link.textContent = "source";
-    // A focused link would keep the debugger's keys from reaching it.
-    link.addEventListener("click", () => link.blur());
+    // A focused link would keep the debugger's keys from reaching it, so no button may focus it.
+    link.addEventListener("mousedown", (e) => e.preventDefault());
     return link;
 }
 

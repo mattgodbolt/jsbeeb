@@ -62,6 +62,7 @@ describe("the symbol set build", () => {
         });
 
         it.each([
+            ["no title", (json) => delete json.title, "no title"],
             ["no licence", (json) => delete json.licence, "no licence"],
             ["a GPL licence", (json) => (json.licence = "GPL-3.0-or-later"), "GPL"],
             ["no source", (json) => delete json.source, "source"],

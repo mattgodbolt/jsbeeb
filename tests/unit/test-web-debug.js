@@ -261,6 +261,27 @@ describe("Debugger", () => {
             expect(code(0x3004).textContent).toBe("BNE oswrch");
         });
 
+        it("still follows a named zero-page operand to the memory view", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA os_text_ptr"));
+            code(0x200d)
+                .querySelector(".instr_mem_ref")
+                .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
+        });
+
+        it("shows a source that isn't https as text, not a link", async () => {
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("mos.json")) json.source = "javascript:alert(1)";
+                return json;
+            });
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+            expect(symbolsLine().textContent).toBe("names from Test MOS (javascript:alert(1))");
+            expect(symbolsLine().querySelector("a")).toBeNull();
+        });
+
         it("checks the anchors again at each stop", async () => {
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
