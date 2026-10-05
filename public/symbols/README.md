@@ -19,8 +19,8 @@ node tools/symbols/build-index.js
 ```
 
 `sets/bbc-b-mos-1.20.json` is made from py8dis's
-[acorn.py](https://github.com/ZornsLemma/py8dis/blob/master/py8dis/acorn.py), at the commit
-`tools/symbols/make-mos-set.js` names, and `public/roms/os.rom`. Remaking it needs python3:
+[acorn.py](https://github.com/ZornsLemma/py8dis/blob/5da0ecb47c54ff5afe62a8e62c03eca4ec42ccac/py8dis/acorn.py),
+at the commit `tools/symbols/make-mos-set.js` names, and `public/roms/os.rom`. Remaking it needs python3:
 
 ```sh
 node tools/symbols/make-mos-set.js && node tools/symbols/build-index.js

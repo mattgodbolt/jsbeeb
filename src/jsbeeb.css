@@ -118,6 +118,10 @@ body {
   vertical-align: bottom;
 }
 
+.dis_addr .named {
+  max-width: calc(100% - 5ch);
+}
+
 #crtc_debug {
   background-color: #333333;
   border: 1px solid #555555;
