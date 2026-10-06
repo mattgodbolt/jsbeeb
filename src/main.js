@@ -45,6 +45,9 @@ import { parseMediaParams, processAutobootParams, processDriveTrackParams, proce
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { startSessionFromUrl } from "./web/shared-session.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
+import { SymbolSets } from "./symbol-sets.js";
+
+const SymbolsBaseUrl = "symbols/";
 
 installIcons();
 
@@ -81,7 +84,7 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 // The pieces that exist before the machine: settings, screen, sound.
 // ------------------------------------------------------------------------
 
-const dbgr = new Debugger();
+const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl, document.baseURI) }) });
 
 const gamepad = new GamePad();
 if (!window.isSecureContext)

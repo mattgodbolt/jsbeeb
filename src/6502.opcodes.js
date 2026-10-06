@@ -1016,12 +1016,11 @@ class Disassemble6502 {
     }
 
     disassemble(addr, plain) {
-        let formatAddr = (addr) => `<span class="instr_mem_ref" data-ref="${addr}">${hexword(addr)}</span>`;
-        let formatJumpAddr = (addr) => `<span class="instr_instr_ref" data-ref="${addr}">${hexword(addr)}</span>`;
-        if (plain) {
-            formatAddr = hexword;
-            formatJumpAddr = hexword;
-        }
+        const ref = (kind, addr, hex) =>
+            plain ? `$${hex(addr)}` : `<span class="${kind}" data-ref="${addr}">$${hex(addr)}</span>`;
+        const formatAddr = (addr) => ref("instr_mem_ref", addr, hexword);
+        const formatZpAddr = (addr) => ref("instr_mem_ref", addr, hexbyte);
+        const formatJumpAddr = (addr) => ref("instr_instr_ref", addr, hexword);
         const opcodeByte = this.cpu.peekmem(addr);
         const opcode = this.opcodes[opcodeByte];
         if (!opcode) {
@@ -1047,34 +1046,34 @@ class Disassemble6502 {
             case "abs": {
                 const formatter = split[0] === "JMP" || split[0] === "JSR" ? formatJumpAddr : formatAddr;
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
-                return [`${split[0]} $${formatter(destAddr)}${suffix}`, addr + 3, destAddr];
+                return [`${split[0]} ${formatter(destAddr)}${suffix}`, addr + 3, destAddr];
             }
             case "branch": {
-                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 1)) + 2;
-                return [`${split[0]} $${formatJumpAddr(destAddr)}${suffix}`, addr + 2, destAddr];
+                const destAddr = (addr + signExtend(this.cpu.peekmem(addr + 1)) + 2) & 0xffff;
+                return [`${split[0]} ${formatJumpAddr(destAddr)}${suffix}`, addr + 2, destAddr];
             }
             case "zp":
-                return [`${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
+                return [`${split[0]} ${formatZpAddr(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
             case "zp,branch": {
-                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 2)) + 3;
+                const destAddr = (addr + signExtend(this.cpu.peekmem(addr + 2)) + 3) & 0xffff;
                 return [
-                    `${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}, $${formatJumpAddr(destAddr)}`,
+                    `${split[0]} ${formatZpAddr(this.cpu.peekmem(addr + 1))}, ${formatJumpAddr(destAddr)}`,
                     addr + 3,
                     destAddr,
                 ];
             }
             case "(,x)":
-                return [`${split[0]} ($${hexbyte(this.cpu.peekmem(addr + 1))}, X)${suffix}`, addr + 2];
+                return [`${split[0]} (${formatZpAddr(this.cpu.peekmem(addr + 1))}, X)${suffix}`, addr + 2];
             case "()": {
                 const zp = this.cpu.peekmem(addr + 1);
                 const destAddr = this.cpu.peekmem(zp) | (this.cpu.peekmem(zp + 1) << 8);
-                return [`${split[0]} ($${hexbyte(zp)})${suffix} ; $${hexword(destAddr)}${suffix2}`, addr + 2];
+                return [`${split[0]} (${formatZpAddr(zp)})${suffix} ; $${hexword(destAddr)}${suffix2}`, addr + 2];
             }
             case "(abs)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
                 return [
-                    `${split[0]} ($${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`,
+                    `${split[0]} (${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`,
                     addr + 3,
                     indDest,
                 ];
@@ -1082,7 +1081,7 @@ class Disassemble6502 {
             case "(abs,x)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
-                return [`${split[0]} ($${formatJumpAddr(destAddr)},x)${suffix}`, addr + 3, indDest];
+                return [`${split[0]} (${formatJumpAddr(destAddr)},x)${suffix}`, addr + 3, indDest];
             }
         }
         return [split.join(" "), addr + 1];

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { FakeVideo } from "../../src/video.js";
+import { SymbolSets } from "../../src/symbol-sets.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("Debugger", () => {
@@ -188,6 +189,128 @@ describe("Debugger", () => {
             expect(regRows[0].querySelector(".value").textContent).toBe("00");
             const stateRows = [...document.querySelectorAll("#crtc_debug .crtc_state tr:not(.template)")];
             expect(stateRows.map((row) => row.querySelector(".register").textContent)).toContain("vertCounter");
+        });
+    });
+
+    describe("names from symbol sets", () => {
+        const BaseUrl = "https://symbols.example/";
+        const OswrchAt = 0x3000;
+        const mosRegion = { start: "0x3000", end: "0x3100", anchors: [{ at: "0x3000", bytes: "6c0e0260" }] };
+        const files = new Map([
+            [
+                `${BaseUrl}index.json`,
+                { format: 1, sets: [{ url: "mos.json", licence: "MIT", regions: { rom: mosRegion } }] },
+            ],
+            [
+                `${BaseUrl}mos.json`,
+                {
+                    format: 1,
+                    title: "Test MOS",
+                    licence: "MIT",
+                    source: "https://example.com/mos.lst",
+                    notice: "Copyright the test",
+                    system: true,
+                    globals: { os_text_ptr: "0xf2", wrchv: "0x20e", system_via_register_b: "0xfe40" },
+                    regions: { rom: { ...mosRegion, symbols: { oswrch: "0x3000" } } },
+                },
+            ],
+        ]);
+        let load;
+        const rowAt = (address) => disRows().find((row) => Number(row.dataset.addr) === address);
+        const code = (address) => rowAt(address).querySelector(".disassembly");
+        const symbolsLine = () => document.getElementById("debug-symbols");
+
+        beforeEach(() => {
+            [0x20, 0x00, 0x30, 0x8d, 0x40, 0xfe, 0xb1, 0xf2, 0x6c, 0x0e, 0x02, 0xa5, 0xf2].forEach((byte, i) =>
+                cpu.writemem(0x2002 + i, byte),
+            );
+            [0x6c, 0x0e, 0x02, 0x60, 0xd0, 0xfa].forEach((byte, i) => cpu.writemem(OswrchAt + i, byte));
+            load = vi.fn(async (url) => structuredClone(files.get(url)));
+            document.body.innerHTML = "";
+            domFromIndexHtml("crtc_debug", "debug", "hardware_debug");
+            dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: BaseUrl, load }) });
+            dbgr.setCpu(cpu);
+        });
+
+        it("names operands once the sets that match have arrived, and says where the names came from", async () => {
+            dbgr.debug(cpu.pc);
+            expect(code(0x2002).textContent).toBe("JSR $3000");
+            expect(visible("debug-symbols")).toBe(false);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            expect(code(0x2005).textContent).toBe("STA system_via_register_b");
+            expect(code(0x2008).textContent).toMatch(/^LDA \(os_text_ptr\),Y ; \$[0-9a-f]{4} \+ Y$/);
+            expect(code(0x200a).textContent).toMatch(/^JMP \(wrchv\) ; \$/);
+            expect(code(0x200d).textContent).toBe("LDA os_text_ptr");
+            expect(code(0x2000).textContent).toBe("LDA #$41");
+            expect(code(0x2002).querySelector(".instr_instr_ref").title).toBe("oswrch: $3000, from Test MOS");
+            expect(visible("debug-symbols")).toBe(true);
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
+            expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
+        });
+
+        it("names an address in the address column, and still follows a named operand", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            expect(rowAt(0x2002).querySelector(".dis_addr").textContent).toBe("2002");
+            code(0x2002)
+                .querySelector(".instr_instr_ref")
+                .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            expect(currentRow().querySelector(".dis_addr .symbol").title).toBe("oswrch: $3000, from Test MOS");
+            expect(code(0x3004).textContent).toBe("BNE oswrch");
+        });
+
+        it("still follows a named zero-page operand to the memory view", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA os_text_ptr"));
+            code(0x200d)
+                .querySelector(".instr_mem_ref")
+                .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
+        });
+
+        it("shows a source that isn't https as text, not a link", async () => {
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("mos.json")) json.source = "javascript:alert(1)";
+                return json;
+            });
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+            expect(symbolsLine().textContent).toBe("names from Test MOS (javascript:alert(1))");
+            expect(symbolsLine().querySelector("a")).toBeNull();
+        });
+
+        it("checks the anchors again at each stop", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            dbgr.hide();
+            cpu.writemem(OswrchAt + 3, 0xea);
+            dbgr.debug(cpu.pc);
+            expect(code(0x2002).textContent).toBe("JSR $3000");
+            expect(visible("debug-symbols")).toBe(false);
+        });
+
+        it("keeps plain addresses and a working debugger when the index can't be fetched", async () => {
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+            load.mockRejectedValue(new Error("offline"));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(console.warn).toHaveBeenCalled());
+            expect(code(0x2002).textContent).toBe("JSR $3000");
+            expect(visible("debug-symbols")).toBe(false);
+            keyPress("n");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
+        });
+
+        it("waits for the next stop to look for sets when the index arrives while the machine runs", async () => {
+            dbgr.debug(cpu.pc);
+            dbgr.hide();
+            await vi.waitFor(() => expect(load.mock.settledResults[0]?.type).toBe("fulfilled"));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(load).toHaveBeenCalledTimes(1);
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
         });
     });
 
