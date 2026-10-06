@@ -12,6 +12,7 @@ import {
     operandBase,
     osBlockTargets,
     readBaronBuild,
+    symbolsBySource,
     writeSets,
 } from "../../../../tools/symbols/import-baron.js";
 
@@ -57,18 +58,39 @@ const listing = [
     "ENDSECTION",
 ].join("\n");
 
-const dump = {
-    "src/prog.6502": {
-        OSWRCH: 0xffee,
-        counter: 0x70,
-        buffer: 0x0900,
-        patch: 0x1915,
-        prog: 0x1900,
-        "prog.start": 0x1900,
-        "prog.loop": 0x190f,
-        prog_end: 0x191d,
-    },
+const progDump = {
+    format: 2,
+    assemblies: [
+        {
+            sources: ["src/prog.6502", "src/os.6502inc", "src/zp.6502inc"],
+            sections: [
+                {
+                    parent: null,
+                    size: 29,
+                    assignments: {
+                        OSWRCH: { value: 0xffee },
+                        counter: { value: 0x70 },
+                        buffer: { value: 0x0900 },
+                        patch: { value: 0x1915 },
+                    },
+                },
+                {
+                    name: "prog",
+                    parent: 0,
+                    size: 29,
+                    attributes: { filename: "PROG", org: 0x1900, load: 0x1900, exec: 0x1900 },
+                    labels: {
+                        prog: { value: 0x1900 },
+                        "prog.start": { value: 0x1900 },
+                        "prog.loop": { value: 0x190f },
+                        prog_end: { value: 0x191d },
+                    },
+                },
+            ],
+        },
+    ],
 };
+const dump = symbolsBySource(progDump);
 
 const config = (regions = [{ name: "main", section: "prog" }]) => ({
     id: "demo",
@@ -397,14 +419,54 @@ describe("importBaron's names", () => {
     });
 });
 
+describe("symbolsBySource", () => {
+    it("takes every group of every section, by each assembly's root file", () => {
+        const twoFiles = {
+            format: 2,
+            assemblies: [
+                {
+                    sources: ["src/a.6502", "-D DEBUG=1"],
+                    sections: [
+                        { parent: null, size: 0, defines: { DEBUG: { value: 1 } } },
+                        {
+                            name: "code",
+                            parent: 0,
+                            size: 3,
+                            labels: { start: { value: 0x1900 } },
+                            za_autos: { ptr: { value: 0x70 } },
+                            loop_vars: { "@0:12:0.i": { value: 0 } },
+                            params: { "@0:40.n": { value: 2 } },
+                        },
+                    ],
+                },
+                {
+                    sources: ["src/b.6502"],
+                    sections: [{ parent: null, size: 0, assignments: { b: { value: "two" } } }],
+                },
+            ],
+        };
+        expect(symbolsBySource(twoFiles)).toEqual({
+            "src/a.6502": { DEBUG: 1, start: 0x1900, ptr: 0x70, "@0:12:0.i": 0, "@0:40.n": 2 },
+            "src/b.6502": { b: "two" },
+        });
+    });
+
+    it("refuses the flat dump an older baron wrote", () => {
+        expect(() => symbolsBySource({ "src/prog.6502": { prog: 0x1900 } })).toThrow("baron 0.5.0.0 or later");
+    });
+});
+
 describe("readBaronBuild", () => {
     let dir;
     beforeEach(() => {
         dir = mkdtempSync(path.join(tmpdir(), "symbols-read-"));
         for (const sub of Object.values(BuildLayout)) mkdirSync(path.join(dir, sub));
         writeFileSync(path.join(dir, BuildLayout.listings, "prog.txt"), listing, "latin1");
-        writeFileSync(path.join(dir, BuildLayout.symbols, "prog.json"), JSON.stringify(dump));
-        writeFileSync(path.join(dir, BuildLayout.symbols, "other.json"), JSON.stringify({ "src/other.6502": {} }));
+        writeFileSync(path.join(dir, BuildLayout.symbols, "prog.json"), JSON.stringify(progDump));
+        writeFileSync(
+            path.join(dir, BuildLayout.symbols, "other.json"),
+            JSON.stringify({ format: 2, assemblies: [{ sources: ["src/other.6502"], sections: [] }] }),
+        );
         writeFileSync(path.join(dir, BuildLayout.files, "PROG"), Buffer.from([0xa9, 0x00]));
         writeFileSync(path.join(dir, BuildLayout.files, "PROG.inf"), "$.PROG FFFF1900 FFFF1900 000002\n");
         writeFileSync(path.join(dir, BuildLayout.files, "NOINF"), Buffer.from([1]));
