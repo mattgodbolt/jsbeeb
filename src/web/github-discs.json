@@ -1,5 +1,14 @@
 [
   {
+    "repo": "ebenupton/cleo",
+    "path": "cleo.ssd",
+    "title": "Cleo",
+    "publisher": "Eben Upton",
+    "authors": "High Energy Magic (original game); port by Eben Upton",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
     "repo": "mattgodbolt/beeb-scorched-earth",
     "path": "scorched-earth.ssd",
     "title": "Scorched Earth",
