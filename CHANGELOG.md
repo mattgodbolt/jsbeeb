@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.4.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.2...v2.4.0) (2026-10-06)
+
+
+### Features
+
+* a guest stamps its keys with the cycle they go in at, a round trip ahead, so the network cannot bunch them ([#1208](https://github.com/mattgodbolt/jsbeeb/issues/1208)) ([af30ae8](https://github.com/mattgodbolt/jsbeeb/commit/af30ae8c0cc501399ab9f37d42b4507be8266071))
+* a session pane with the link to join, who you are and each peer's numbers live ([#1204](https://github.com/mattgodbolt/jsbeeb/issues/1204)) ([1f1a4c2](https://github.com/mattgodbolt/jsbeeb/commit/1f1a4c22d3a436cf48d36e90a9d4966623afe3b0))
+* deflate a snapshot's large arrays, so a session's join encodes in a fraction of the time ([#1212](https://github.com/mattgodbolt/jsbeeb/issues/1212)) ([faf968d](https://github.com/mattgodbolt/jsbeeb/commit/faf968d3e81ef36eeb2924f5f8810bd4d16fdbb7))
+* host or join a shared session with ?server=&lt;room&gt; and ?client=&lt;room&gt; ([#1190](https://github.com/mattgodbolt/jsbeeb/issues/1190)) ([0660562](https://github.com/mattgodbolt/jsbeeb/commit/0660562f4e0390b195e045a14d076b64643388f5))
+* list Eben Upton's Cleo port among the GitHub games in the media window ([#1224](https://github.com/mattgodbolt/jsbeeb/issues/1224)) ([464a296](https://github.com/mattgodbolt/jsbeeb/commit/464a296aa13e837508375663a3f7764de13a1c08))
+* load github: disc references, and list games and demos from their authors' GitHub repos in the media window ([#1217](https://github.com/mattgodbolt/jsbeeb/issues/1217)) ([9ebaeff](https://github.com/mattgodbolt/jsbeeb/commit/9ebaeffbcfeb0bf67af1a43a443a42e986bfd25a))
+* log whether a session's page is visible and focused, its long tasks, and what a snapshot costs the host ([#1206](https://github.com/mattgodbolt/jsbeeb/issues/1206)) ([506c697](https://github.com/mattgodbolt/jsbeeb/commit/506c6970c6dc33802b1488dd6ef7282608991dee))
+* open the session pane for guests too, just above the lights ([#1207](https://github.com/mattgodbolt/jsbeeb/issues/1207)) ([48302b7](https://github.com/mattgodbolt/jsbeeb/commit/48302b7eb56553f697df42a17d369c55ebaf786a))
+* say when a shared session desyncs, count it, and call a repeat a bug ([#1213](https://github.com/mattgodbolt/jsbeeb/issues/1213)) ([6ca09be](https://github.com/mattgodbolt/jsbeeb/commit/6ca09be2ea3628a386173cf9a5d679d4ecff4cd6))
+* show turbo as an icon in the virtual MHz readout, and say when Alt-T turns it on or off ([#1214](https://github.com/mattgodbolt/jsbeeb/issues/1214)) ([594cd86](https://github.com/mattgodbolt/jsbeeb/commit/594cd861ca1f1a37a8d64184c27ede0f90d0acf0))
+* show who is in a shared session and how well each keeps up, and save a report of it ([#1194](https://github.com/mattgodbolt/jsbeeb/issues/1194)) ([63a67ef](https://github.com/mattgodbolt/jsbeeb/commit/63a67ef63667dd6d1183ac5518c57f400f6970c4))
+* take control of a shared session from the pane, handing the ordering of inputs to a guest and back ([#1209](https://github.com/mattgodbolt/jsbeeb/issues/1209)) ([4464898](https://github.com/mattgodbolt/jsbeeb/commit/446489852e06681c990589148a7e568ff4ee0c44))
+
+
+### Bug Fixes
+
+* cut each seek grain before its click's attack, not part way through it ([#1211](https://github.com/mattgodbolt/jsbeeb/issues/1211)) ([ce66a42](https://github.com/mattgodbolt/jsbeeb/commit/ce66a421563b4b8c59182527b969eb5109902331))
+* keep a guest within 40 ms of the host rather than wherever it joined ([#1199](https://github.com/mattgodbolt/jsbeeb/issues/1199)) ([1a92bb0](https://github.com/mattgodbolt/jsbeeb/commit/1a92bb0586a98befef124724774b3d71522c4150))
+* skip sound that stays far ahead of the playback, as after a stall ([#1193](https://github.com/mattgodbolt/jsbeeb/issues/1193)) ([967c5b5](https://github.com/mattgodbolt/jsbeeb/commit/967c5b50e46b5618c242c0e5d795a80de9ae8144))
+* space a guest's keys that arrive in a bunch, so the keyboard scan sees each one ([#1195](https://github.com/mattgodbolt/jsbeeb/issues/1195)) ([d221e0b](https://github.com/mattgodbolt/jsbeeb/commit/d221e0b2cf5540b9d9e90755a5455c0a2a9ef3d0))
+* tidy the PAL TV's Ferguson cut-out, so its edges are clean and no light seam rings the screen ([#1221](https://github.com/mattgodbolt/jsbeeb/issues/1221)) ([317a5f5](https://github.com/mattgodbolt/jsbeeb/commit/317a5f555e9756530fef4c5e2690ebdad265732b))
+
 ## [2.3.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.1...v2.3.2) (2026-10-02)
 
 
