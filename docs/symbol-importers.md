@@ -73,8 +73,12 @@ node tools/symbols/check-memory.js --config symbols-src/pipeline.json
 Each fetches the config's commit into a temporary directory, or takes `--source`, a checkout of it, and runs
 baron there on each source on its own, as `-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v`
 cuts a statement's bytes at eight, so its listing can't be read for them. The importer prints the baron it
-ran, from `--version`, and needs baron 0.5.0.0 or later: that's the first to write the symbol dump with
-sections and kinds of symbol (`"format": 2`), and an older baron's flat dump is refused.
+ran, from `--version`.
+
+The importer, and so the corpus check, needs baron 0.5.0.0 or later, whose symbol dump replaced the flat one
+an older baron wrote, and refuses the flat one. Until 0.5.0 is released that means a build of baron's `main`
+from commit `07b425d` on. The in-memory check doesn't read the dumps, so any baron that builds the source
+will do for it.
 
 The importer writes nothing if a region can't be anchored, if its anchors all match another of the build's
 images, if a set fails the index's checks, if the checkout isn't of the config's commit or has changes, or if
@@ -163,8 +167,11 @@ What baron's output can't give the importer, and how it copes:
   ([baron#14](https://github.com/waitingforvsync/baron/issues/14)): the importer reads operands back out of
   the `-vv` listing's text, which is why it needs the per-source `-vv` listings and can't follow a FUNCTION.
 - **Each symbol's kind (a label, an address, a constant) and the section a label was emitted in**
-  ([baron#15](https://github.com/waitingforvsync/baron/issues/15)): the importer takes a label's section
-  from where the listing shows it, and an `=` name as an address only when an instruction uses it as one.
+  ([baron#15](https://github.com/waitingforvsync/baron/issues/15)): baron 0.5.0.0's dump gives each label's
+  section and how each symbol was defined (a label, an `=`, a `ZA_AUTO`), though not whether an `=` name is
+  an address or a constant. The importer takes only values from it so far: a label's section from where the
+  listing shows it, and an `=` name as an address only when an instruction uses it as one. Moving to the
+  dump is for when baron#14 lets the importer stop reading the listing.
 - **A table's size, and where the OS or a pointer writes**: nothing in the build says these, so the config
   gives the sizes and the chooser guesses OS blocks from `LDX #LO(...)`.
 

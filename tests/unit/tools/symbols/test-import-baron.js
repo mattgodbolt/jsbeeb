@@ -90,7 +90,7 @@ const progDump = {
         },
     ],
 };
-const dump = symbolsBySource(progDump);
+const progSymbols = symbolsBySource(progDump);
 
 const config = (regions = [{ name: "main", section: "prog" }]) => ({
     id: "demo",
@@ -103,7 +103,7 @@ const config = (regions = [{ name: "main", section: "prog" }]) => ({
     sets: [{ id: "prog", title: "Demo", sources: ["prog"], stripScope: "prog", regions }],
 });
 
-const build = () => baronBuild(new Map([["prog", listing]]), dump, []);
+const build = () => baronBuild(new Map([["prog", listing]]), progSymbols, []);
 
 describe("operandBase", () => {
     it("is the first name of a memory operand", () => {
@@ -134,8 +134,8 @@ describe("osBlockTargets", () => {
             statement(0x2006, [0, 0], "EQUW 0"),
             "ENDSECTION",
         ].join("\n");
-        const osDump = { "src/os.6502": { block: 0x2004, other: 0x2006 } };
-        const source = baronBuild(new Map([["os", osListing]]), osDump, []).sources.get("os");
+        const osSymbols = { "src/os.6502": { block: 0x2004, other: 0x2006 } };
+        const source = baronBuild(new Map([["os", osListing]]), osSymbols, []).sources.get("os");
         expect(osBlockTargets(source)).toEqual(new Set([0x2004, 0x2006]));
     });
 });
@@ -210,7 +210,7 @@ describe("importBaron", () => {
                 ["other", other],
                 ["prog", listing],
             ]),
-            { ...dump, "src/other.6502": { table: 0x2000, fill: 0x2004 } },
+            { ...progSymbols, "src/other.6502": { table: 0x2000, fill: 0x2004 } },
             [],
         );
         const twoSources = (tableSizes) => ({
@@ -239,7 +239,7 @@ describe("importBaron", () => {
     });
 
     it("refuses a listing whose labels the symbol dump disagrees with", () => {
-        const moved = { "src/prog.6502": { ...dump["src/prog.6502"], "prog.loop": 0x1910 } };
+        const moved = { "src/prog.6502": { ...progSymbols["src/prog.6502"], "prog.loop": 0x1910 } };
         expect(() => baronBuild(new Map([["prog", listing]]), moved, [])).toThrow("prog.loop");
     });
 });
@@ -282,7 +282,7 @@ const namingListing = [
     "ENDSECTION",
 ].join("\n");
 
-const namingDump = {
+const namingSymbols = {
     "src/names.6502": {
         counter: 0x70,
         lives: 0x72,
@@ -317,7 +317,7 @@ const namingConfig = {
 };
 
 describe("importBaron's names", () => {
-    const [set] = importBaron(namingConfig, baronBuild(new Map([["names", namingListing]]), namingDump, [])).sets;
+    const [set] = importBaron(namingConfig, baronBuild(new Map([["names", namingListing]]), namingSymbols, [])).sets;
 
     it("gives an address a scope's own name over the labels inside it, then the label written last", () => {
         expect(set.json.regions.a.symbols).toEqual({ sub: "0x1900", local: "0x1905", second: "0x1910" });
@@ -354,7 +354,7 @@ describe("importBaron's names", () => {
                 ["other", other],
                 ["prog", listing],
             ]),
-            { ...dump, "src/other.6502": { ptr: 0x72 } },
+            { ...progSymbols, "src/other.6502": { ptr: 0x72 } },
             [],
         );
         const regions = [
@@ -378,7 +378,7 @@ describe("importBaron's names", () => {
                 ["other", other],
                 ["prog", listing],
             ]),
-            { ...dump, "src/other.6502": { counter: 0x71 } },
+            { ...progSymbols, "src/other.6502": { counter: 0x71 } },
             [],
         );
         const twoSources = { ...config(), sets: [{ ...config().sets[0], sources: ["prog", "other"] }] };
@@ -397,7 +397,7 @@ describe("importBaron's names", () => {
             statement(0x1902, [0x60], "RTS"),
             "ENDSECTION",
         ].join("\n");
-        const dumped = { "s.6502": { s: 0x1900, "s.x": 0x1900, x: 0x1902 } };
+        const twiceSymbols = { "s.6502": { s: 0x1900, "s.x": 0x1900, x: 0x1902 } };
         const stripped = {
             ...namingConfig,
             sets: [
@@ -413,7 +413,7 @@ describe("importBaron's names", () => {
                 },
             ],
         };
-        expect(() => importBaron(stripped, baronBuild(new Map([["s", twice]]), dumped, []))).toThrow(
+        expect(() => importBaron(stripped, baronBuild(new Map([["s", twice]]), twiceSymbols, []))).toThrow(
             "names given twice: x",
         );
     });
@@ -451,8 +451,11 @@ describe("symbolsBySource", () => {
         });
     });
 
-    it("refuses the flat dump an older baron wrote", () => {
-        expect(() => symbolsBySource({ "src/prog.6502": { prog: 0x1900 } })).toThrow("baron 0.5.0.0 or later");
+    it("refuses the flat dump an older baron wrote, and a format it doesn't know", () => {
+        expect(() => symbolsBySource({ "src/prog.6502": { prog: 0x1900 } })).toThrow(
+            "the flat one baron wrote before 0.5.0.0",
+        );
+        expect(() => symbolsBySource({ format: 3, assemblies: [] })).toThrow("format 3");
     });
 });
 
@@ -473,7 +476,7 @@ describe("readBaronBuild", () => {
     });
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-    it("reads each listing against its source's dump, and each file with an .inf where it loads", () => {
+    it("reads each listing against its source's symbols, and each file with an .inf where it loads", () => {
         const { sources, files } = readBaronBuild(dir);
         expect([...sources.keys()]).toEqual(["prog"]);
         expect(sources.get("prog").lookup("prog.loop")).toBe(0x190f);
