@@ -36,6 +36,8 @@ import { checkSet, formatJson, readMosSets, SymbolsDir } from "./build-index.js"
 const AddressLimit = 0x10000;
 const IoAddressMask = 0xffff;
 const InfExtension = ".inf";
+const DumpFormat = 2;
+const SymbolGroups = ["labels", "assignments", "defines", "za_autos", "loop_vars", "params"];
 const SetsDir = path.join(SymbolsDir, "sets");
 
 const Name = String.raw`[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*`;
@@ -157,6 +159,27 @@ class Source {
     }
 }
 
+/**
+ * A symbol dump (`--symbols`, in the format baron 0.5.0.0 first wrote) as each command-line source's
+ * symbols, name to value, by that source's file.
+ */
+export function symbolsBySource(dump) {
+    if (dump.format !== DumpFormat)
+        throw new Error(`The symbol dump isn't format ${DumpFormat}: assemble with baron 0.5.0.0 or later`);
+    return Object.fromEntries(
+        dump.assemblies.map(({ sources, sections }) => [
+            sources[0],
+            Object.fromEntries(
+                sections.flatMap((section) =>
+                    SymbolGroups.flatMap((group) =>
+                        Object.entries(section[group] ?? {}).map(([name, { value }]) => [name, value]),
+                    ),
+                ),
+            ),
+        ]),
+    );
+}
+
 /** The dump's entry for a listing: the one whose file name, less its extension, is the listing's. */
 function dumpEntry(dump, name) {
     const keys = Object.keys(dump).filter((key) => path.parse(key).name === name);
@@ -177,7 +200,7 @@ const byAddress = (names) =>
 /**
  * A baron build as the importer reads it.
  * @param {Map<string, string>} listings - each source's -vv listing, by the source's name
- * @param {object} dump - the symbol dump, by source file
+ * @param {object} dump - each source's symbols, as symbolsBySource gives them
  * @param {{name: string, load: number, data: Uint8Array}[]} files - the built files, where each loads
  */
 export function baronBuild(listings, dump, files) {
@@ -198,7 +221,7 @@ export function readBaronBuild(buildDir) {
     const listings = new Map(textsIn(BuildLayout.listings, ListingExtension, "latin1"));
     const dump = Object.assign(
         {},
-        ...textsIn(BuildLayout.symbols, SymbolsExtension, "utf8").map(([, text]) => JSON.parse(text)),
+        ...textsIn(BuildLayout.symbols, SymbolsExtension, "utf8").map(([, text]) => symbolsBySource(JSON.parse(text))),
     );
     const filesDir = inBuild(BuildLayout.files);
     const files = readdirSync(filesDir)

@@ -73,7 +73,8 @@ node tools/symbols/check-memory.js --config symbols-src/pipeline.json
 Each fetches the config's commit into a temporary directory, or takes `--source`, a checkout of it, and runs
 baron there on each source on its own, as `-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v`
 cuts a statement's bytes at eight, so its listing can't be read for them. The importer prints the baron it
-ran, from `--version`.
+ran, from `--version`, and needs baron 0.5.0.0 or later: that's the first to write the symbol dump with
+sections and kinds of symbol (`"format": 2`), and an older baron's flat dump is refused.
 
 The importer writes nothing if a region can't be anchored, if its anchors all match another of the build's
 images, if a set fails the index's checks, if the checkout isn't of the config's commit or has changes, or if

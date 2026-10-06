@@ -42,7 +42,7 @@ while [ $# -gt 1 ]; do
 done
 if grep -q FAIL "$1"; then echo "no good" >&2; exit 2; fi
 echo "listing of $1" > "$listing"
-printf '{"%s": {}}' "$1" > "$symbols"
+printf '{"format": 2, "assemblies": [{"sources": ["%s"], "sections": []}]}' "$1" > "$symbols"
 printf X > "$files/$(basename "$1" .6502)"
 `;
 
