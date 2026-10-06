@@ -123,7 +123,7 @@ export function evaluate(expression, lookup) {
     return Math.trunc(value);
 }
 
-/** One source file's listing and its symbols as the dump gives them. */
+/** One source file's listing and its symbols, name to value. */
 class Source {
     constructor(name, listing, symbols) {
         this.name = name;
@@ -159,13 +159,12 @@ class Source {
     }
 }
 
-/**
- * A symbol dump (`--symbols`, in the format baron 0.5.0.0 first wrote) as each command-line source's
- * symbols, name to value, by that source's file.
- */
+/** A symbol dump (`--symbols`) as each command-line source's symbols, name to value, by that source's file. */
 export function symbolsBySource(dump) {
+    if (dump.format === undefined)
+        throw new Error("The symbol dump is the flat one baron wrote before 0.5.0.0: assemble with 0.5.0.0 or later");
     if (dump.format !== DumpFormat)
-        throw new Error(`The symbol dump isn't format ${DumpFormat}: assemble with baron 0.5.0.0 or later`);
+        throw new Error(`The symbol dump is format ${dump.format}, and the importer reads format ${DumpFormat}`);
     return Object.fromEntries(
         dump.assemblies.map(({ sources, sections }) => [
             sources[0],
@@ -180,11 +179,11 @@ export function symbolsBySource(dump) {
     );
 }
 
-/** The dump's entry for a listing: the one whose file name, less its extension, is the listing's. */
-function dumpEntry(dump, name) {
-    const keys = Object.keys(dump).filter((key) => path.parse(key).name === name);
-    if (keys.length !== 1) throw new Error(`The symbol dump has ${keys.length} sources called ${name}`);
-    return dump[keys[0]];
+/** A listing's symbols: those of the source whose file name, less its extension, is the listing's. */
+function listingSymbols(symbols, name) {
+    const keys = Object.keys(symbols).filter((key) => path.parse(key).name === name);
+    if (keys.length !== 1) throw new Error(`The symbol dumps have ${keys.length} sources called ${name}`);
+    return symbols[keys[0]];
 }
 
 /** A rank to sort candidates for one address by, highest first, keeping the first of equals. */
@@ -200,12 +199,15 @@ const byAddress = (names) =>
 /**
  * A baron build as the importer reads it.
  * @param {Map<string, string>} listings - each source's -vv listing, by the source's name
- * @param {object} dump - each source's symbols, as symbolsBySource gives them
+ * @param {object} symbols - each source's symbols, name to value, by the source's file
  * @param {{name: string, load: number, data: Uint8Array}[]} files - the built files, where each loads
  */
-export function baronBuild(listings, dump, files) {
+export function baronBuild(listings, symbols, files) {
     const sources = new Map(
-        [...listings].map(([name, text]) => [name, new Source(name, parseBaronListing(text), dumpEntry(dump, name))]),
+        [...listings].map(([name, text]) => [
+            name,
+            new Source(name, parseBaronListing(text), listingSymbols(symbols, name)),
+        ]),
     );
     return { sources, files };
 }
@@ -219,7 +221,7 @@ export function readBaronBuild(buildDir) {
             .sort()
             .map((file) => [file.slice(0, -extension.length), readFileSync(path.join(inBuild(dir), file), encoding)]);
     const listings = new Map(textsIn(BuildLayout.listings, ListingExtension, "latin1"));
-    const dump = Object.assign(
+    const symbols = Object.assign(
         {},
         ...textsIn(BuildLayout.symbols, SymbolsExtension, "utf8").map(([, text]) => symbolsBySource(JSON.parse(text))),
     );
@@ -233,7 +235,7 @@ export function readBaronBuild(buildDir) {
                 parseInt(readFileSync(path.join(filesDir, inf), "latin1").trim().split(/\s+/)[1], 16) & IoAddressMask;
             return { name, load, data: readFileSync(path.join(filesDir, name)) };
         });
-    return baronBuild(listings, dump, files);
+    return baronBuild(listings, symbols, files);
 }
 
 /**
