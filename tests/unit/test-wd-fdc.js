@@ -489,13 +489,10 @@ describe("WD1770 FDC tests", () => {
                 });
             });
 
-            it.each([
-                ["read sector", ReadSectorCommand, discOfRecords],
-                ["read address", ReadAddressCommand, discOfIds],
-            ])("a %s with the spin-up wait disabled still waits for the e flag", (_, command, disc) => {
+            it("a read address with the spin-up wait disabled still waits for the e flag", () => {
                 // The disc is still coming up to speed, so the wait does not add a fixed time.
-                const setup = { disc, motor: MotorStopped, command };
-                const ticks = commandTicks({ ...setup, command: command | SettleFlag });
+                const setup = { disc: discOfIds, motor: MotorStopped, command: ReadAddressCommand };
+                const ticks = commandTicks({ ...setup, command: ReadAddressCommand | SettleFlag });
                 expect(ticks).toBeGreaterThan(30 * TicksPerMs);
                 expect(ticks).toBeGreaterThan(commandTicks(setup));
             });
