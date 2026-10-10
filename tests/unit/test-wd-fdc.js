@@ -35,7 +35,7 @@ const SeekCommand = 0x18;
 const ReadSectorCommand = 0x88;
 const ReadAddressCommand = 0xc8;
 const ReadTrackCommand = 0xe8;
-// The e flag adds the head settle delay after spin-up.
+// The e flag adds the head settle delay.
 const SettleFlag = 0x04;
 const SpinUpWaitFlag = 0x08;
 
@@ -138,7 +138,10 @@ function appendFmSector(builder, { idMark = IdMark, dataMark = DataMark, sector 
         .appendCrc(false);
 }
 
-function appendMfmSector(builder, { idMark = IdMark, dataMark = DataMark, sector = 0, data = sectorData() }) {
+function appendMfmSector(
+    builder,
+    { idMark = IdMark, dataMark = DataMark, sector = 0, lengthCode = SectorLengthCode, data = sectorData() },
+) {
     return builder
         .appendRepeatMfmByte(0x4e, SectorGap)
         .appendRepeatMfmByte(0x00, 12)
@@ -148,7 +151,7 @@ function appendMfmSector(builder, { idMark = IdMark, dataMark = DataMark, sector
         .appendMfmByte(0)
         .appendMfmByte(0)
         .appendMfmByte(sector)
-        .appendMfmByte(SectorLengthCode)
+        .appendMfmByte(lengthCode)
         .appendCrc(true)
         .appendRepeatMfmByte(0x4e, SectorGap)
         .appendRepeatMfmByte(0x00, 12)
@@ -445,20 +448,73 @@ describe("WD1770 FDC tests", () => {
             }
             const IdTicks = 22 * MfmByteTicks;
 
-            function readAddressTicks(variant, command) {
-                const { scheduler, fdc } = makeFdc({ disc: discOfIds(), variant });
+            // Every record is sector 0, so a read sector shows the settle delay to within one record.
+            const RecordDataBytes = 128;
+            const RecordLengthCode = 0;
+            const RecordTicks = 212 * MfmByteTicks;
+            function discOfRecords() {
+                const disc = blankDisc();
+                const builder = disc.buildTrack(false, 0);
+                for (let record = 0; record < 25; ++record) {
+                    appendMfmSector(builder, { lengthCode: RecordLengthCode, data: new Uint8Array(RecordDataBytes) });
+                }
+                builder.fillMfmByte(0x4e);
+                return disc;
+            }
+
+            const ReadSectorSpinningUp = ReadSectorCommand & ~SpinUpWaitFlag;
+            const ReadAddressSpinningUp = ReadAddressCommand & ~SpinUpWaitFlag;
+            const MotorStopped = "stopped";
+            const MotorRunning = "already running";
+
+            function commandTicks({ variant = WdFdcVariant.wd1770, disc, motor, command }) {
+                const { scheduler, fdc } = makeFdc({ disc: disc(), variant });
+                fdc.write(SectorRegister, 0);
+                if (motor === MotorRunning) runCommand(fdc, scheduler, ReadAddressSpinningUp);
                 return runCommand(fdc, scheduler, command).ticks;
             }
 
-            it.each([[WdFdcVariant.wd1770], [WdFdcVariant.wd1772]])(
-                "on a %s the e flag delays a type III command by 15 ms",
-                (variant) => {
-                    const command = ReadAddressCommand & ~SpinUpWaitFlag;
-                    const delay = readAddressTicks(variant, command | SettleFlag) - readAddressTicks(variant, command);
-                    expect(delay).toBeGreaterThan(15 * TicksPerMs - IdTicks);
-                    expect(delay).toBeLessThan(15 * TicksPerMs + IdTicks);
-                },
-            );
+            function settleDelay(setup) {
+                return commandTicks({ ...setup, command: setup.command | SettleFlag }) - commandTicks(setup);
+            }
+
+            describe.each([
+                ["read sector", ReadSectorSpinningUp, discOfRecords, RecordTicks],
+                ["read address", ReadAddressSpinningUp, discOfIds, IdTicks],
+            ])("a %s", (_, command, disc, tolerance) => {
+                it.each([[MotorStopped], [MotorRunning]])("waits 30 ms for the e flag with the motor %s", (motor) => {
+                    const delay = settleDelay({ disc, motor, command });
+                    expect(delay).toBeGreaterThan(30 * TicksPerMs - tolerance);
+                    expect(delay).toBeLessThan(30 * TicksPerMs + tolerance);
+                });
+            });
+
+            it.each([
+                ["read sector", ReadSectorCommand, discOfRecords],
+                ["read address", ReadAddressCommand, discOfIds],
+            ])("a %s with the spin-up wait disabled still waits for the e flag", (_, command, disc) => {
+                // The disc is still coming up to speed, so the wait does not add a fixed time.
+                const setup = { disc, motor: MotorStopped, command };
+                const ticks = commandTicks({ ...setup, command: command | SettleFlag });
+                expect(ticks).toBeGreaterThan(30 * TicksPerMs);
+                expect(ticks).toBeGreaterThan(commandTicks(setup));
+            });
+
+            it("a read sector without the e flag does not wait", () => {
+                const ticks = commandTicks({ disc: discOfRecords, motor: MotorRunning, command: ReadSectorCommand });
+                expect(ticks).toBeLessThan(2 * RecordTicks + DoneTimerTicks + PollTicks);
+            });
+
+            it("a 1772 waits 15 ms for the e flag", () => {
+                const delay = settleDelay({
+                    variant: WdFdcVariant.wd1772,
+                    disc: discOfIds,
+                    motor: MotorStopped,
+                    command: ReadAddressSpinningUp,
+                });
+                expect(delay).toBeGreaterThan(15 * TicksPerMs - IdTicks);
+                expect(delay).toBeLessThan(15 * TicksPerMs + IdTicks);
+            });
         });
 
         describe("Opus Challenger", () => {

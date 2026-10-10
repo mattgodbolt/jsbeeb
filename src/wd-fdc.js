@@ -64,6 +64,10 @@ const isDataMark = (data) => data === 0xfa || data === 0xfb;
 const isDeletedDataMark = (data) => data === 0xf8 || data === 0xf9;
 const FmIndexMark = 0xfc;
 
+// The datasheet figures. A Master 128 streaming sectors on a real WD1770 matches 30 ms, not 15 (#1225).
+const Wd1770HeadSettleMs = 30;
+const Wd1772HeadSettleMs = 15;
+
 /**
  * The drive control register is documented here:
  * https://www.cloud9.co.uk/james/BBCMicro/Documentation/wd1770.html
@@ -442,7 +446,7 @@ export class WdFdc {
             default:
                 throw new Error(`unimplemented command ${hexbyte(val)}`);
         }
-        if (this._commandType === 2 || (this._commandType === 3 && val & CommandBits.typeIIorIIISettle))
+        if ((this._commandType === 2 || this._commandType === 3) && val & CommandBits.typeIIorIIISettle)
             this._isCommandSettle = true;
         if (
             this._command === Command.writeSector ||
@@ -464,7 +468,7 @@ export class WdFdc {
         this._indexPulseCount = 0;
         if (this._statusRegister & Status.motorOn) {
             // Short circuit spin-up if motor is on.
-            this._dispatchCommand();
+            this._settleThenDispatch();
         } else {
             this._statusRegister |= Status.motorOn;
             this._currentDrive.startSpinning();
@@ -477,7 +481,7 @@ export class WdFdc {
             if (val & CommandBits.disableSpinUp) {
                 this._indexPulseCount = 6;
                 this._log(`command ${hexbyte(val)} spin up wait disabled, motor was off`);
-                this._dispatchCommand();
+                this._settleThenDispatch();
             } else {
                 this._setState(State.spinUpWait);
             }
@@ -832,13 +836,12 @@ export class WdFdc {
     _pulsesCallbackSpinUpWait() {
         if (this._indexPulseCount < 6) return;
         if (this._commandType === 1) this._statusRegister |= Status.typeISpinUpDone;
+        this._settleThenDispatch();
+    }
+
+    _settleThenDispatch() {
         if (this._isCommandSettle) {
-            // The WD1770 datasheet specifies 30ms head settle, but empirical testing
-            // against b-em (which uses 15ms for all WD1770/2 variants) shows 15ms is
-            // correct for BBC hardware. Using 30ms causes disc streaming demos (e.g.
-            // STNICC-beeb on Master 128) to hang because sectors don't arrive before
-            // the first vsync IRQ. The WD1772 also uses 15ms per its datasheet.
-            const settleMs = 15;
+            const settleMs = this._is1772 ? Wd1772HeadSettleMs : Wd1770HeadSettleMs;
             this._startTimer(TimerState.settle, settleMs * 1000);
         } else {
             this._dispatchCommand();
