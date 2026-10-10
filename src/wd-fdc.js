@@ -64,7 +64,7 @@ const isDataMark = (data) => data === 0xfa || data === 0xfb;
 const isDeletedDataMark = (data) => data === 0xf8 || data === 0xf9;
 const FmIndexMark = 0xfc;
 
-// The datasheet figures. A Master 128 streaming sectors on a real WD1770 matches 30 ms, not 15 (#1225).
+// The datasheet figures. A real Master 128's WD1770 takes the full 30 ms (#1225).
 const Wd1770HeadSettleMs = 30;
 const Wd1772HeadSettleMs = 15;
 
