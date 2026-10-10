@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "title": "PIPELINE: TITLE",
+  "licence": "LicenseRef-TBD",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/3fed305e4746f566f32caa9cca2670cb9541b4f0",
+  "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
+  "regions": {
+    "title": {
+      "start": "0x6300",
+      "end": "0x7979",
+      "minAnchors": 3,
+      "anchors": [
+        { "at": "0x6303", "bytes": "ff00fe010307" },
+        { "at": "0x6a85", "bytes": "0fffe0c0804f" },
+        { "at": "0x790e", "bytes": "b1729170c8d0f9" }
+      ],
+      "symbols": { "picture": "0x6300", "start": "0x7900", "relocate": "0x790e" }
+    },
+    "unpack": {
+      "start": "0x2f18",
+      "end": "0x2f79",
+      "minAnchors": 1,
+      "anchors": [{ "at": "0x2f18", "bytes": "a900aaa88570" }],
+      "symbols": {
+        "unpack": "0x2f18",
+        "next_code": "0x2f28",
+        "read_run_length": "0x2f38",
+        "store_zero": "0x2f3d",
+        "store_literal": "0x2f49",
+        "step_screen": "0x2f4b",
+        "step_packed": "0x2f50",
+        "clear_bottom": "0x2f5c",
+        "clear_page": "0x2f64",
+        "clear_byte": "0x2f65"
+      }
+    }
+  },
+  "globals": { "packed": "0x0070", "screen_ptr": "0x0072" }
+}
