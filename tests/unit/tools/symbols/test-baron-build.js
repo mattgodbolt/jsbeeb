@@ -198,10 +198,15 @@ describe("a title's source", () => {
 
         it("predefines the config's defines for every source", async () => {
             const config = pinned(git("rev-parse", "HEAD"), { defines: { BUILD: '"2026-10-04"', DEBUG: "TRUE" } });
-            const listing = await withBaronBuild(config, { baron }, (made) =>
-                readFileSync(path.join(made.buildDir, BuildLayout.listings, "data.txt"), "utf8"),
+            const listings = await withBaronBuild(config, { baron }, (made) =>
+                ["data", "prog"].map((name) =>
+                    readFileSync(path.join(made.buildDir, BuildLayout.listings, `${name}.txt`), "utf8"),
+                ),
             );
-            expect(listing).toBe('listing of src/data.6502 BUILD="2026-10-04" DEBUG=TRUE\n');
+            expect(listings).toEqual([
+                'listing of src/data.6502 BUILD="2026-10-04" DEBUG=TRUE\n',
+                'listing of src/prog.6502 BUILD="2026-10-04" DEBUG=TRUE\n',
+            ]);
         });
 
         it("runs a baron given by a relative path from the caller's directory", async () => {

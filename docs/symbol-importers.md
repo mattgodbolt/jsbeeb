@@ -53,8 +53,8 @@ Nothing in it is an address list: the names come from the build.
   - `stripScope`: a scope that wraps the whole program, left off its names;
   - `tableSizes`: tables written with an index, by name, with how far the index goes (an expression);
   - `moves`: labels of the copies that put the program in place, whose stores don't keep anchors off what
-    they copy: a store's own label, or a copy loop's, which takes the loop's indexed stores, up to the last
-    branch back to the label, in its section;
+    they copy. A label takes the store it's on, if it is, and if a loop in its section branches back to it,
+    the loop's indexed stores up to the last branch back;
   - `globalsSections`: sections whose labels are the program's globals (zero page, say, which holds no code
     and which every program writes, so a region there couldn't be anchored).
 - A region is a SECTION (`section`, in `source` if not the set's first), or part of one between `from` and
