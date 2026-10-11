@@ -560,8 +560,8 @@ export class DiscConfig {
     }
 }
 
-// Acorn's *FORM starts each track three sectors later than the one before, as do Greaseweazle and FlashFloppy for SSDs,
-// which leaves room to step and settle before the next track's first sector comes round.
+// Acorn's *FORM puts each track's sector 0 three slots later than the track before, as do Greaseweazle and FlashFloppy
+// for SSDs, which leaves room to step and settle before it comes round.
 const SsdTrackSkew = 3;
 
 class SsdFormat {
