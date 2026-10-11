@@ -1,8 +1,15 @@
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createZipBlob } from "../../../../src/archive.js";
+import { fingerprint } from "../../../../tools/registry/fingerprint.js";
 import { SymbolsDir } from "../../../../tools/symbols/build-index.js";
-import { loadTitleSets, matchingRegions, overlappingRegions } from "../../../../tools/symbols/check-memory.js";
+import {
+    fetchDisc,
+    loadTitleSets,
+    matchingRegions,
+    overlappingRegions,
+} from "../../../../tools/symbols/check-memory.js";
 import { parseSet } from "../../../../src/symbol-sets.js";
 
 const set = (regions) => parseSet({ format: 1, title: "t", licence: "CC0-1.0", source: "s", regions });
@@ -54,5 +61,28 @@ describe("loadTitleSets", () => {
         expect(Object.keys(pipeline)).toContain("game");
         expect(Object.keys(pipeline)).not.toContain("bbc-b-mos-1.20");
         expect(pipeline.game.regions.map(({ name }) => name)).toContain("main_high");
+    });
+});
+
+describe("fetchDisc", () => {
+    const url = "https://example.com/demo.zip";
+    const image = "Games/Demo.ssd";
+    const disc = new Uint8Array(0x400).map((_, i) => i * 7);
+    const { discKey } = fingerprint(image, disc);
+
+    afterEach(() => vi.restoreAllMocks());
+
+    const serving = (files) =>
+        vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(createZipBlob(files)));
+
+    it("takes the named image out of the zip when its key is the config's", async () => {
+        serving([{ name: image, data: disc }]);
+        expect(await fetchDisc({ url, image, key: discKey })).toEqual(disc);
+    });
+
+    it("refuses an image whose key isn't the config's, or a zip without it", async () => {
+        serving([{ name: image, data: disc }]);
+        await expect(fetchDisc({ url, image, key: "0".repeat(32) })).rejects.toThrow(`is image ${discKey}`);
+        await expect(fetchDisc({ url, image: "Other.ssd", key: discKey })).rejects.toThrow("holds no Other.ssd");
     });
 });

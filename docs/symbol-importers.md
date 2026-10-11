@@ -8,7 +8,8 @@ repository to a set in that format.
 
 A source repository never changes for jsbeeb, and needs no build rules for it. jsbeeb's tools take its source
 at a commit and make what they read themselves: for a baron title, they run baron on each source with
-`--symbols` and `-vv`. Nobody has to emit jsbeeb metadata.
+`--symbols` and `-vv`; for a py8dis disassembly, they run its control script under py8dis. Nobody has to emit
+jsbeeb metadata.
 
 The curator's job lives here, beside the sets: which programs make a set, where a program's memory changes
 while it runs (so where its regions are cut), and the anchors that tell the program apart in memory. Each
@@ -19,6 +20,8 @@ input format gets an importer, and every importer feeds one anchor chooser and t
 | `tools/symbols/baron-build.js`    | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
 | `tools/symbols/baron-listing.js`  | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
 | `tools/symbols/import-baron.js`   | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
+| `tools/symbols/py8dis-dump.py`    | Runs a py8dis control script under py8dis and prints what py8dis made of the binary, as JSON             |
+| `tools/symbols/import-py8dis.js`  | The py8dis importer: names and pieces from that dump; writes the sets                                    |
 | `tools/symbols/anchor-chooser.js` | Chooses each region's anchors from what an importer read; shared by every importer                       |
 | `tools/symbols/corpus-check.js`   | The corpus check a set's pull request carries                                                            |
 | `tools/symbols/check-memory.js`   | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
@@ -114,7 +117,7 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
 
 ## Links to the author
 
-Every importer links each name back to its author's own site wherever there is one, with the set's
+Every importer should link each name back to its author's own site wherever there is one, with the set's
 `home`, `nameLink` and `places` ("Symbol sets" in [the proposal](media-registry-proposal.md)), so that
 someone reading a name in the debugger is one click from the author's own explanation of it:
 
@@ -127,6 +130,9 @@ someone reading a name in the debugger is one click from the author's own explan
 
 Where the author has no site of their own (a name list kept inside a tool, like py8dis's `acorn.py` for the
 MOS), `source` is the link and the set has none of these.
+
+The py8dis importer doesn't write them yet, so Repton 2's names have no links, though its source is on
+GitHub.
 
 ## Anchors
 
@@ -164,9 +170,10 @@ addresses in the build (every section of every source where it runs, every file 
   hold and how much of that is identical. 90% identical or more is the same code (a crack, a compilation);
   anything less is a collision, and the check exits 1. Files sit at their load addresses, so code a program
   moves to where it runs is only compared with other titles' files that load there.
-- **The in-memory check** boots the title's disc and, at each moment a scenario picks, lists the regions
-  whose anchors all match. A moment fails unless that's exactly the regions expected, and if two matching
-  regions overlap, of one set or two, since the debugger then shows neither.
+- **The in-memory check** boots the title's disc (its repository's, or one its config fetches) and, at each
+  moment a scenario picks, lists the regions whose anchors all match. A moment fails unless that's exactly
+  the regions expected, and if two matching regions overlap, of one set or two, since the debugger then
+  shows neither.
 
 ## What the baron importer gets wrong, or only roughly
 
@@ -201,6 +208,68 @@ What baron's output can't give the importer, and how it copes:
   dump is for when baron#14 lets the importer stop reading the listing.
 - **A table's size, and where the OS or a pointer writes**: nothing in the build says these, so the config
   gives the sizes and the chooser guesses OS blocks from `LDX #LO(...)`.
+
+## py8dis disassemblies
+
+A [py8dis](https://github.com/ZornsLemma/py8dis) disassembly is a control script that loads a binary, says
+where pieces of it are `move()`d to run, and names addresses. `py8dis-dump.py` runs the script under py8dis
+at the config's commit, lets py8dis trace and classify the binary as it would to emit assembly, and prints
+what py8dis then holds instead of the assembly: each piece of the binary where it runs (the binary where it
+loads, less what moves, and each move where it lands), every instruction and data line in it with its bytes,
+and every name the script gave, with the move it was given in. So nothing reads py8dis's assembly back in,
+and the output format the script was written for doesn't matter.
+
+A py8dis title's config differs from a baron title's in these:
+
+- `source.script`: the control script, from the repository's root. `source.directory`, if given, is where it
+  runs, which is where the paths it loads its binary from start; else it runs in its own directory.
+- `py8dis`: the `repository` and `commit` of the py8dis to run it under.
+- `disc`: the disc the in-memory check boots, when the repository has none: the `url` of a zip, the `image`'s
+  path in it, and its `key`, which the check refuses the image without.
+- A region is `from` an address to `to` one (the end of the piece `from` is in, if not given), expressions
+  in the script's names as a baron config's are. It has to lie in one piece.
+- `moves` and `tableSizes` name their stores and tables by expressions too, since a script names few of the
+  instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
+  `STA table+1,X` is `table + 1`.
+- No `home`, `places` or `nameLink`: the importer writes no links yet ("Links to the author").
+
+The importer runs it as
+
+```sh
+node tools/symbols/import-py8dis.js --config symbols-src/repton2.json
+```
+
+taking `--source` and `--py8dis`, clean checkouts of the two commits, instead of fetching them, and
+`--python`, else `$PYTHON`, else `python3`. It runs Python with `-I` and `-B`, from a directory of its own,
+so neither checkout's files are imported by accident or gain any. The corpus check and the in-memory check
+take a py8dis title's config as they take a baron one's.
+
+Its names:
+
+- **A name** goes to the region holding its address in the piece of its move. One in a piece no region
+  holds (a loader the disassembly added that the title doesn't have) is left out; one outside every piece
+  is a global.
+- **One name per address**: the first the script gave it, so a table's name (`data_tilegraphics_indices`)
+  wins over its first entry's (`data_tile00_empty`) when the script names the table first.
+- **One address per name**: a name the script gives two addresses stops the import, even if one of them is
+  in no region, since a config expression using it couldn't say which it means.
+- **Left out**: the names py8dis makes up (`l0070`, `sub_c1234`), expressions (`zp_ptr+1`), constants, and
+  the names py8dis's `acorn.py` gives the OS and the hardware, which the system sets have.
+
+And its anchors are the chooser's, with what py8dis can't say:
+
+- Nothing marks the blocks code hands the OS, so no OS block keeps anchors off.
+- Py8dis has no SKIP: every byte in a piece is the binary's.
+- Every store is in the program, the disassembly's own loader included, unless `moves` says it's a copy.
+
+Control scripts written for py8dis in September 2021 import `trace6502` and call
+`acorn.add_standard_labels()`, which py8dis has since dropped and renamed; `py8dis-dump.py` puts them back,
+as `commands.hook_subroutine` and `acorn.mos_labels`, so such a script runs unchanged under the config's py8dis (`2a60463` for Repton 2).
+
+py8dis's own examples are disassemblies too, and the dump reads them: `examples/python/dfs226.py`,
+`planb.py` and `lisp406.py` run from `examples/` (their `source.directory`). A set for one needs a config
+like Repton 2's, its regions cut where its pieces run, and a disc or ROM to check it on. The importer can't
+make DFS 2.26's yet: it moves two pieces to `&0D00`, and a region is found by its address alone.
 
 ## PIPELINE
 
@@ -239,3 +308,25 @@ Where the regions are cut, and why:
 The in-memory check's scenarios (`symbols-src/pipeline-check.js`) walk the menu, TITLE, the game (to its
 loader, `game_start`, IO loading, the title screen and play, then seeded random play), the Level Designer,
 the Graphics Designer and its tours of every menu, MRUN and PL.
+
+## Repton 2
+
+`symbols-src/repton2.json` makes one set from George Foot's
+[repton2disassembly](https://github.com/gfoot/repton2disassembly), whose `repton2.bin` is the game's code
+as it sits in memory once loaded, with a loader of his own appended.
+
+- **Py8dis.** The repository doesn't say which py8dis made its `repton2.s`. Its scripts were committed on
+  15 September 2021 (`42820e4`, `26137b7`); py8dis's xa output, which the Makefile assembles, starts the
+  next day at `b75d139`, and `cf93419` on 19 September renamed `acorn.add_standard_labels()`. Every py8dis
+  commit from `b75d139` to `c32b0f9`, the last before the rename, stops on the script's `byte()`s of
+  addresses the binary doesn't load, so none remakes `repton2.s`. The config's py8dis, `2a60463`, runs it
+  with the two names `py8dis-dump.py` puts back, and gives every name at the address `repton2.s` has it.
+- **The regions** are where the game runs: `main` (`&0D00-&5FFF`, up to the screen), and the two
+  pieces the loader moves, `music` to `&0380` and `page8` to `&0880`. The loader at `&70A0` is the
+  disassembly's, not the game's, so it has no region; its copies to `&0380` and `&0880` are `moves`, or their
+  indexed stores would leave the two pieces nothing to anchor on.
+- **The disc** is Stairway to Hell's `Superior/Repton2.zip`, whose `D.REPB` is the game encrypted; once its
+  loader has run, the three regions hold `repton2.bin`'s bytes exactly.
+
+The in-memory check's scenarios (`symbols-src/repton2-check.js`) look at the loader, `start1`, the status
+screen, play, the end of a game and the status screen again, then seeded random play.

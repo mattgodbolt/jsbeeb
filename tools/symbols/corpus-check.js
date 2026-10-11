@@ -8,13 +8,13 @@
  * region needs another anchor.
  *
  * Usage: node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --corpus .registry-corpus/sth-disc
- *            [--source <checkout>] [--baron <path>]
+ *            [--source <checkout>] [--baron <path>] [--py8dis <checkout>] [--python <path>]
  *
  * Each zip is one title. Every complete DFS file on an .ssd or .dsd is placed at its load address,
  * BASIC programs included, since a BASIC program's lines can collide too; a file of one repeated
- * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It builds the title as
- * import-baron.js does, taking `--source` and `--baron` as that does. Prints the report
- * as Markdown, and exits 1 if anything collides.
+ * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It makes the sets as
+ * import-baron.js does, or import-py8dis.js for a config that names `py8dis`, taking the options that
+ * one does. Prints the report as Markdown, and exits 1 if anything collides.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -27,6 +27,7 @@ import { dfsCatalogue } from "../registry/dfs.js";
 import { extensionOf, sectorImageSides } from "../registry/fingerprint.js";
 import { BuildOptions, BuildUsage } from "./baron-build.js";
 import { importBaron, withTitle } from "./import-baron.js";
+import { importPy8dis, Py8disOptions, Py8disUsage, withPy8disTitle } from "./import-py8dis.js";
 
 const Page = 0x100;
 const AddressLimit = 0x10000;
@@ -169,11 +170,13 @@ export function corpusReport(sets, titles) {
 
 async function main() {
     const { values } = parseArgs({
-        options: { config: { type: "string" }, corpus: { type: "string" }, ...BuildOptions },
+        options: { config: { type: "string" }, corpus: { type: "string" }, ...BuildOptions, ...Py8disOptions },
     });
     if (!values.config || !values.corpus)
-        throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage}`);
-    const { sets, errors } = await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
+        throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage} ${Py8disUsage}`);
+    const { sets, errors } = JSON.parse(readFileSync(values.config, "utf8")).py8dis
+        ? await withPy8disTitle(values.config, values, ({ config, dump }) => importPy8dis(config, dump))
+        : await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
     if (errors.length) {
         for (const error of errors) console.error(`error: ${error}`);
         console.error("The import failed, so there's no corpus report");

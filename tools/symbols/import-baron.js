@@ -215,7 +215,7 @@ function listingFile(symbols, name) {
 /** A rank to sort candidates for one address by, highest first, keeping the first of equals. */
 const byRankDescending = (a, b) => b.rank[0] - a.rank[0] || b.rank[1] - a.rank[1];
 
-const byAddress = (names) =>
+export const byAddress = (names) =>
     Object.fromEntries(
         [...names]
             .sort(([nameA, a], [nameB, b]) => a - b || (nameA < nameB ? -1 : nameA > nameB ? 1 : 0))
@@ -635,7 +635,11 @@ async function main() {
     });
 }
 
-async function writeTitle(config, imported, values) {
+/**
+ * Reports what an importer made of a title and writes its sets as writeSets does.
+ * @returns {Promise<number>} the exit code
+ */
+export async function writeTitle(config, imported, values) {
     for (const { id, json, regions, dropped } of imported.sets) {
         const summary = regions.map((region) => `${region.name} ${region.anchors.length}/${region.symbols.size}`);
         console.log(

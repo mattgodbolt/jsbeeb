@@ -8,21 +8,24 @@
  * Usage: node tools/symbols/check-memory.js --config symbols-src/pipeline.json [--source <checkout>]
  *            [--baron <path>] [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
  *
- * The config's `check` names the module of scenarios, beside it, and `source.disc` the original disc in
- * the source repository they boot. The title is built as import-baron.js builds it, for the scenarios
- * that read its files. With no SCENARIO, it runs them all, each on a fresh machine. Exits 1 if any
- * moment fails.
+ * The config's `check` names the module of scenarios, beside it. They boot `source.disc`, the original
+ * disc in a baron title's source repository, built as import-baron.js builds it for the scenarios that
+ * read its files; or `disc`, a disc image in a zip the config names by its URL, its path in the zip and
+ * its key. With no SCENARIO, it runs them all, each on a fresh machine. Exits 1 if any moment fails.
  */
 
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { unzip } from "../../src/archive.js";
 import { BBC } from "../../src/keymap.js";
 import { MachineSession } from "../../src/machine-session.js";
 import { parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
+import { fingerprint } from "../registry/fingerprint.js";
 import { SymbolsDir } from "./build-index.js";
 import { BuildLayout, BuildOptions, BuildUsage, withBaronBuild } from "./baron-build.js";
 
@@ -110,6 +113,28 @@ export async function holdUntil(session, key, address) {
     }
 }
 
+/** A seeded linear congruential generator, so random play is the same each run. */
+export function seededRandom(seed) {
+    let state = seed;
+    return (n) => {
+        state = (state * 1103515245 + 12345) & 0x7fffffff;
+        return Math.floor((state / 0x80000000) * n);
+    };
+}
+
+const RandomMinHoldFrames = 5;
+const RandomHoldFrameRange = 40;
+
+/** Presses keys `random` picks from `keys`, each held a random while, for at least `frames` in all. */
+export async function pressRandomKeys(session, keys, random, frames) {
+    for (let pressed = 0; pressed < frames;) {
+        const key = keys[random(keys.length)];
+        const held = RandomMinHoldFrames + random(RandomHoldFrameRange);
+        await pressKey(session, key, held);
+        pressed += held + ReleaseFrames;
+    }
+}
+
 /**
  * Runs a little script of host keys, each command one of: `wait SECS`, `key CODE [FRAMES]` (pressed and
  * released), `down CODE`, `up CODE`, `type TEXT`, and `shot NAME`, which saves NAME.png in `shots` if
@@ -174,6 +199,40 @@ function scenarioContext(session, sets, filesDir, shots, results) {
     return { session, sets, filesDir, shots, address, check };
 }
 
+/**
+ * Fetches a zip of disc images and takes the one `image` names out of it, refusing it unless its key is `key`.
+ * @returns {Promise<Uint8Array>}
+ */
+export async function fetchDisc({ url, image, key }) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Fetching ${url} failed with ${response.status}`);
+    const members = await unzip(new Uint8Array(await response.arrayBuffer()));
+    if (!members[image]) throw new Error(`${url} holds no ${image}`);
+    const { discKey } = fingerprint(image, members[image]);
+    if (discKey !== key) throw new Error(`${image} in ${url} is image ${discKey}, and the config names ${key}`);
+    return members[image];
+}
+
+/**
+ * Runs `use` with the disc a config's scenarios boot: a baron title's `source.disc`, in its build, or a
+ * disc the config's `disc` fetches from an archive.
+ */
+async function withTitleDisc(config, options, use) {
+    if (config.source.disc !== undefined)
+        return withBaronBuild(config, options, ({ sourceDir, buildDir }) =>
+            use({ disc: path.join(sourceDir, config.source.disc), filesDir: path.join(buildDir, BuildLayout.files) }),
+        );
+    if (config.disc === undefined) throw new Error("The config names no disc to boot, in source.disc or disc");
+    const temp = mkdtempSync(path.join(tmpdir(), "symbols-disc-"));
+    try {
+        const disc = path.join(temp, path.basename(config.disc.image));
+        writeFileSync(disc, await fetchDisc(config.disc));
+        return await use({ disc });
+    } finally {
+        rmSync(temp, { recursive: true, force: true });
+    }
+}
+
 async function main() {
     const { values, positionals } = parseArgs({
         options: {
@@ -186,16 +245,13 @@ async function main() {
     });
     if (!values.config) throw new Error(`Usage: check-memory.js --config <file> ${BuildUsage} [SCENARIO...]`);
     const config = JSON.parse(readFileSync(values.config, "utf8"));
-    if (config.source.disc === undefined) throw new Error(`${values.config} names no source.disc to boot`);
     const sets = loadTitleSets(values.sets, config.id);
     const { scenarios } = await import(pathToFileURL(path.resolve(path.dirname(values.config), config.check)).href);
     const wanted = positionals.length ? positionals : Object.keys(scenarios);
     for (const name of wanted) if (!scenarios[name]) throw new Error(`There's no scenario ${name}`);
     if (values.shots) mkdirSync(values.shots, { recursive: true });
     const results = [];
-    await withBaronBuild(config, values, async ({ sourceDir, buildDir }) => {
-        const disc = path.join(sourceDir, config.source.disc);
-        const filesDir = path.join(buildDir, BuildLayout.files);
+    await withTitleDisc(config, values, async ({ disc, filesDir }) => {
         for (const name of wanted) {
             console.log(`-- ${name}`);
             const session = await startMachine(disc);
