@@ -32,10 +32,12 @@ input format gets an importer, and every importer feeds one anchor chooser and t
 Nothing in it is an address list: the names come from the build.
 
 - `id`: the prefix of the title's set files, `<id>-<set id>.json`.
-- `licence`, `notice`, `madeFrom`: copied into every set.
+- `licence`, `notice`, `madeFrom`, and `home` if the author has a page of their own for the work: copied
+  into every set.
 - `source`: where the title's source is and what of it to assemble.
   - `repository` and `commit`: the importer, the corpus check and the in-memory check fetch that commit, or
-    take a checkout of it with nothing changed or added, and each set's `source` links the tree there.
+    take a checkout of it with nothing changed or added, and each set's `source` links the tree there. For
+    a repository on GitHub, each set's `nameLink` links a name to the line that defines it at that commit.
   - `assemble`: globs, from the repository's root, of the sources to assemble. Every one, not only those
     that make a set: the anchors are chosen against everything the title puts in memory.
   - `disc`: the original disc in the repository, the one the source rebuilds. Its image key has to be one
@@ -106,6 +108,25 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
   `globalsSections` section, or a virtual one only data mentions, counts as used by none.
 - Every label the listing gives has to agree with the symbol dump, or the importer stops: the dump is what
   baron resolved, and the listing is where the scopes, sections and bytes come from.
+- **Each name's place** is the file and line the symbol dump says defines it (`src/game.6502#L120`), in the
+  set's `places`, for the `nameLink` a GitHub repository gets. For such a repository, a name the dump gives
+  no place (a `-D` predefine, or any name in a dump without lines) stops the import.
+
+## Links to the author
+
+Every importer links each name back to its author's own site wherever there is one, with the set's
+`home`, `nameLink` and `places` ("Symbol sets" in [the proposal](media-registry-proposal.md)), so that
+someone reading a name in the debugger is one click from the author's own explanation of it:
+
+- source on GitHub at a pinned commit: `places` from each name's file and line, and
+  `https://github.com/<owner>/<repo>/blob/<commit>/{place}`;
+- a disassembly published with an anchor per address, such as acornaeology's (`#addr-800E`): a `nameLink`
+  with `{addr}`, and `home` for the disassembly's page;
+- a plain text disassembly with no anchors, such as level7.org.uk's: a text fragment,
+  `#:~:text={name}`, which takes a browser to the name's first appearance, and `home` for the page.
+
+Where the author has no site of their own (a name list kept inside a tool, like py8dis's `acorn.py` for the
+MOS), `source` is the link and the set has none of these.
 
 ## Anchors
 

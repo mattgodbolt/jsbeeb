@@ -122,6 +122,14 @@ body {
   max-width: calc(100% - 5ch);
 }
 
+a.symbol {
+  text-decoration: none;
+}
+
+a.symbol:hover {
+  text-decoration: underline;
+}
+
 #crtc_debug {
   background-color: #333333;
   border: 1px solid #555555;
