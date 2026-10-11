@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "sets": [
+    {
+      "url": "sets/bbc-b-mos-1.20.json",
+      "licence": "MIT",
+      "regions": {
+        "main": {
+          "start": "0xc000",
+          "end": "0xfc00",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0xd9cd", "bytes": "a9408d000d78d8" },
+            { "at": "0xdc1c", "bytes": "85fc68482910d003" },
+            { "at": "0xdec5", "bytes": "a90085e68a489848" },
+            { "at": "0xe0a4", "bytes": "488a489848ba" },
+            { "at": "0xf27d", "bytes": "4886c884c9a000" }
+          ]
+        },
+        "top-page": {
+          "start": "0xff00",
+          "end": "0x10000",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0xffb9", "bytes": "4c0bdc4cc0c4" },
+            { "at": "0xfffa", "bytes": "000dcdd91cdc" }
+          ]
+        }
+      }
+    }
+  ]
+}
