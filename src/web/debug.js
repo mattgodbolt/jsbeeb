@@ -1,6 +1,7 @@
 import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
+import { isHttps, nameUrl } from "../symbol-sets.js";
 
 const noop = () => {};
 
@@ -11,36 +12,38 @@ function labelHtml(addr) {
 }
 
 function showName(node, { name, set }, addr) {
+    const url = nameUrl(set, name, addr);
     node.classList.add("named");
     node.textContent = name;
-    node.title = `${name}: $${hexword(addr)}, from ${set.title}`;
+    node.title = `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
 }
 
 function nameNode(named, addr) {
-    const node = document.createElement("span");
-    node.className = "symbol";
+    const url = nameUrl(named.set, named.name, addr);
+    const node = url ? externalLink(url) : document.createElement("span");
+    node.classList.add("symbol");
     showName(node, named, addr);
     return node;
 }
 
-function isHttps(text) {
-    try {
-        return new URL(text).protocol === "https:";
-    } catch {
-        return false;
-    }
-}
-
-function sourceNode(source) {
-    if (!isHttps(source)) return document.createTextNode(source);
+function externalLink(url, text = "") {
     const link = document.createElement("a");
-    link.href = source;
+    link.href = url;
     link.target = "_blank";
     link.rel = "noopener";
-    link.textContent = "source";
+    link.textContent = text;
     // A focused link would keep the debugger's keys from reaching it, so no button may focus it.
     link.addEventListener("mousedown", (e) => e.preventDefault());
     return link;
+}
+
+function sourceNode(source) {
+    return isHttps(source) ? externalLink(source, "source") : document.createTextNode(source);
+}
+
+function homeNodes(home) {
+    if (!isHttps(home)) return [];
+    return [externalLink(home, new URL(home).hostname.replace(/^www\./, "")), ", "];
 }
 
 // Clone a template row, unhide it, append to parent, and remove the template class.
@@ -388,7 +391,7 @@ export class Debugger {
                 title.className = "symbol-set";
                 title.textContent = set.title;
                 title.title = [set.licence, set.notice].filter(Boolean).join("\n\n");
-                return [...(i ? [" · "] : []), title, " (", sourceNode(set.source), ")"];
+                return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
             }),
         );
     }

@@ -282,6 +282,60 @@ describe("Debugger", () => {
             expect(symbolsLine().querySelector("a")).toBeNull();
         });
 
+        describe("with links to the author's site", () => {
+            const PlaceUrl = "https://example.com/mos/blob/0123abc/mos.asm#L42";
+
+            beforeEach(() => {
+                load.mockImplementation(async (url) => {
+                    const json = structuredClone(files.get(url));
+                    if (url.endsWith("mos.json"))
+                        Object.assign(json, {
+                            home: "https://www.example.com/mos/",
+                            nameLink: "https://example.com/mos/blob/0123abc/{place}",
+                            places: { oswrch: "mos.asm#L42" },
+                        });
+                    return json;
+                });
+            });
+
+            it("links a name in the address column to its place, opening a tab without taking focus", async () => {
+                dbgr.debug(OswrchAt);
+                await vi.waitFor(() => expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch"));
+                const link = currentRow().querySelector(".dis_addr a.symbol");
+                expect(link.href).toBe(PlaceUrl);
+                expect(link.target).toBe("_blank");
+                expect(link.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
+                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+                link.dispatchEvent(press);
+                expect(press.defaultPrevented).toBe(true);
+            });
+
+            it("keeps a named operand following its address, saying where it's defined", async () => {
+                dbgr.debug(cpu.pc);
+                await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+                const operand = code(0x2002).querySelector(".instr_instr_ref");
+                expect(operand.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
+                operand.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+                expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            });
+
+            it("leaves a name with no place unlinked", async () => {
+                dbgr.debug(cpu.pc);
+                await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA os_text_ptr"));
+                expect(code(0x200d).querySelector(".instr_mem_ref").title).toBe("os_text_ptr: $00f2, from Test MOS");
+            });
+
+            it("links the author's page, by its site's name, beside the source", async () => {
+                dbgr.debug(cpu.pc);
+                await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+                expect(symbolsLine().textContent).toBe("names from Test MOS (example.com, source)");
+                expect([...symbolsLine().querySelectorAll("a")].map((a) => a.href)).toEqual([
+                    "https://www.example.com/mos/",
+                    "https://example.com/mos.lst",
+                ]);
+            });
+        });
+
         it("checks the anchors again at each stop", async () => {
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));

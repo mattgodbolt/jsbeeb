@@ -144,6 +144,20 @@ loads, a table that replaces code once it has run). A region's names show only w
 anchors matches memory and there are at least `minAnchors`. Anchors are read from the memory being looked
 at.
 
+A set points readers back at its author. Optionally, it has `home`, the author's own page for the work,
+and `nameLink`, a URL template for one name's place on the author's site, where the name is defined or
+explained. The template's placeholders are `{name}`, `{addr}` (the name's address, four upper-case hex
+digits) and `{place}`, which comes from `places`, an object from a name to the path and fragment of its
+place, for sources where each name sits at its own file and line. A name `places` doesn't give has no link
+from a template with `{place}`. So a disassembly with an anchor per address
+(`https://acornaeology.uk/bbc-basic/2.html#addr-{addr}`), source at a pinned commit
+(`https://github.com/<owner>/<repo>/blob/<commit>/{place}`, with `places` such as `src/game.6502#L120`) and a
+plain text file (`https://www.level7.org.uk/<path>.txt#:~:text={name}`) all link each name to where it's
+defined. `home` and `nameLink` are https, and the template starts with its site, which no placeholder can
+change; a place is a path below the template's own, with no `.` or `..` segments. The debugger links a name
+shown on its own to its place and says where that is beside a name in an operand, and shows `home` beside
+`source`. An importer fills these wherever the author has a site.
+
 A set stores names only when their licence, or their author's recorded permission, allows it. Names it
 can't store it can link: `link` holds the `url` of the names' file pinned to an exact version (a commit,
 never a branch), the file's `sha256` (the full digest, 64 lowercase hex characters), its `format`, and

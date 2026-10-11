@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
 import { loadData } from "../../src/loader.js";
 import { findModel } from "../../src/models.js";
-import { parseIndex, parseSet, SymbolSets } from "../../src/symbol-sets.js";
+import { nameLinkProblems, nameUrl, parseIndex, parseSet, SymbolSets } from "../../src/symbol-sets.js";
 
 const BaseUrl = "https://symbols.example/symbols/";
 const IndexUrl = `${BaseUrl}index.json`;
@@ -79,6 +79,74 @@ describe("symbol sets", () => {
             expect(parseIndex(index).map(({ url }) => url)).toEqual(["sets/game.json", "sets/other.json"]);
             for (const url of ["https://elsewhere.example/x.json", "/sets/x.json", "../x.json", "sets/../../x.json"])
                 expect(() => parseIndex({ format: 1, sets: [{ url, regions: {} }] })).toThrow("beside the index");
+        });
+
+        it("reads the author's page, the name link and the places", () => {
+            const parsed = parseSet({
+                ...game,
+                home: "https://acornaeology.uk/",
+                nameLink: "https://example.com/{place}",
+                places: { start: "src/game.6502#L12" },
+            });
+            expect(parsed.home).toBe("https://acornaeology.uk/");
+            expect(parsed.nameLink).toBe("https://example.com/{place}");
+            expect(parsed.places).toEqual(new Map([["start", "src/game.6502#L12"]]));
+            expect(parseSet(game).places).toEqual(new Map());
+        });
+    });
+
+    describe("a name's place on its author's site", () => {
+        const withLink = (nameLink, places = {}) => parseSet({ ...game, nameLink, places });
+
+        it.each([
+            [
+                "an address anchor",
+                "https://acornaeology.uk/bbc-basic/2.html#addr-{addr}",
+                {},
+                "https://acornaeology.uk/bbc-basic/2.html#addr-800E",
+            ],
+            [
+                "a line of a file at a commit",
+                "https://github.com/someone/disasm/blob/0123abc/{place}",
+                { start: "src/game.6502#L12" },
+                "https://github.com/someone/disasm/blob/0123abc/src/game.6502#L12",
+            ],
+            [
+                "a text fragment",
+                "https://www.level7.org.uk/miscellany/game.txt#:~:text={name}",
+                {},
+                "https://www.level7.org.uk/miscellany/game.txt#:~:text=start",
+            ],
+        ])("links %s", (_, nameLink, places, url) => {
+            expect(nameUrl(withLink(nameLink, places), "start", 0x800e)).toBe(url);
+        });
+
+        it("pads the address to four hex digits and encodes the name", () => {
+            const set = withLink("https://example.com/{addr}/{name}");
+            expect(nameUrl(set, "a b&c", 0x70)).toBe("https://example.com/0070/a%20b%26c");
+        });
+
+        it("gives no link without a template, or for a name the template wants a place for and has none", () => {
+            expect(nameUrl(parseSet(game), "start", 0x2000)).toBeUndefined();
+            expect(nameUrl(withLink("https://example.com/{place}"), "start", 0x2000)).toBeUndefined();
+        });
+
+        it("gives no link that isn't https or leaves the template's site", () => {
+            expect(nameUrl(withLink("http://example.com/{name}"), "start", 0x2000)).toBeUndefined();
+            expect(nameUrl(withLink("javascript:{name}"), "start", 0x2000)).toBeUndefined();
+            expect(nameUrl(withLink("https://{place}", { start: "elsewhere.example/" }), "start", 0)).toBeUndefined();
+        });
+
+        it.each([
+            ["a good template", "https://example.com/{place}", []],
+            ["text that isn't", 7, ["isn't text"]],
+            ["no https site first", "http://example.com/{name}", ["https site"]],
+            ["a placeholder in the site", "https://{place}/x", ["https site"]],
+            ["no placeholder", "https://example.com/", ["no placeholder"]],
+            ["an unknown placeholder", "https://example.com/{label}", ["{label}"]],
+            ["a stray brace", "https://example.com/{name}}", ["brace"]],
+        ])("finds the problems with %s", (_, template, problems) => {
+            expect(nameLinkProblems(template)).toEqual(problems.map((problem) => expect.stringContaining(problem)));
         });
     });
 

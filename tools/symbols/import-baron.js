@@ -31,7 +31,7 @@ import {
     withBaronBuild,
 } from "./baron-build.js";
 import { parseBaronListing, sectionNamed } from "./baron-listing.js";
-import { checkSet, formatJson, readMosSets, SymbolsDir } from "./build-index.js";
+import { checkSet, formatJson, isPlace, readMosSets, SymbolsDir } from "./build-index.js";
 
 const AddressLimit = 0x10000;
 const IoAddressMask = 0xffff;
@@ -39,6 +39,7 @@ const InfExtension = ".inf";
 const DumpFormat = 2;
 const SymbolGroups = ["labels", "assignments", "defines", "za_autos", "loop_vars", "params"];
 const SetsDir = path.join(SymbolsDir, "sets");
+const GitHub = "github.com";
 
 const Name = String.raw`[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*`;
 const OperandToken = new RegExp(
@@ -125,12 +126,13 @@ export function evaluate(expression, lookup) {
     return Math.trunc(value);
 }
 
-/** One source file's listing and its symbols, name to value. */
+/** One source file's listing, its symbols, name to value, and where each is defined, name to place. */
 class Source {
-    constructor(name, listing, symbols) {
+    constructor(name, listing, symbols, places) {
         this.name = name;
         this.listing = listing;
         this.symbols = symbols;
+        this.places = places;
         this.labelNames = new Set(listing.labels.map(({ name: label }) => label));
         for (const label of listing.labels)
             if (symbols[label.name] !== label.address)
@@ -181,11 +183,33 @@ export function symbolsBySource(dump) {
     );
 }
 
-/** A listing's symbols: those of the source whose file name, less its extension, is the listing's. */
-function listingSymbols(symbols, name) {
+/**
+ * A symbol dump as where each command-line source's symbols are defined, name to `<file>#L<line>`, the
+ * file relative to the repository's root, by that source's file. A predefine (`-D`) has no place.
+ */
+export function placesBySource(dump) {
+    return Object.fromEntries(
+        dump.assemblies.map(({ sources, sections }) => [
+            sources[0],
+            Object.fromEntries(
+                sections.flatMap((section) =>
+                    SymbolGroups.flatMap((group) =>
+                        Object.entries(section[group] ?? {}).flatMap(([name, { source, line }]) => {
+                            const place = `${path.posix.normalize(sources[source] ?? ".")}#L${line}`;
+                            return Number.isInteger(line) && isPlace(place) ? [[name, place]] : [];
+                        }),
+                    ),
+                ),
+            ),
+        ]),
+    );
+}
+
+/** A listing's source file: the one whose name, less its extension, is the listing's. */
+function listingFile(symbols, name) {
     const keys = Object.keys(symbols).filter((key) => path.parse(key).name === name);
     if (keys.length !== 1) throw new Error(`The symbol dumps have ${keys.length} sources called ${name}`);
-    return symbols[keys[0]];
+    return keys[0];
 }
 
 /** A rank to sort candidates for one address by, highest first, keeping the first of equals. */
@@ -203,13 +227,14 @@ const byAddress = (names) =>
  * @param {Map<string, string>} listings - each source's -vv listing, by the source's name
  * @param {object} symbols - each source's symbols, name to value, by the source's file
  * @param {{name: string, load: number, data: Uint8Array}[]} files - the built files, where each loads
+ * @param {object} [places] - where each source's symbols are defined, name to place, by the source's file
  */
-export function baronBuild(listings, symbols, files) {
+export function baronBuild(listings, symbols, files, places = {}) {
     const sources = new Map(
-        [...listings].map(([name, text]) => [
-            name,
-            new Source(name, parseBaronListing(text), listingSymbols(symbols, name)),
-        ]),
+        [...listings].map(([name, text]) => {
+            const file = listingFile(symbols, name);
+            return [name, new Source(name, parseBaronListing(text), symbols[file], places[file] ?? {})];
+        }),
     );
     return { sources, files };
 }
@@ -223,10 +248,9 @@ export function readBaronBuild(buildDir) {
             .sort()
             .map((file) => [file.slice(0, -extension.length), readFileSync(path.join(inBuild(dir), file), encoding)]);
     const listings = new Map(textsIn(BuildLayout.listings, ListingExtension, "latin1"));
-    const symbols = Object.assign(
-        {},
-        ...textsIn(BuildLayout.symbols, SymbolsExtension, "utf8").map(([, text]) => symbolsBySource(JSON.parse(text))),
-    );
+    const dumps = textsIn(BuildLayout.symbols, SymbolsExtension, "utf8").map(([, text]) => JSON.parse(text));
+    const symbols = Object.assign({}, ...dumps.map(symbolsBySource));
+    const places = Object.assign({}, ...dumps.map(placesBySource));
     const filesDir = inBuild(BuildLayout.files);
     const files = readdirSync(filesDir)
         .filter((name) => name.endsWith(InfExtension))
@@ -237,7 +261,7 @@ export function readBaronBuild(buildDir) {
                 parseInt(readFileSync(path.join(filesDir, inf), "latin1").trim().split(/\s+/)[1], 16) & IoAddressMask;
             return { name, load, data: readFileSync(path.join(filesDir, name)) };
         });
-    return baronBuild(listings, symbols, files);
+    return baronBuild(listings, symbols, files, places);
 }
 
 /**
@@ -387,10 +411,11 @@ class Importer {
         const named = new Map(regions.map((region) => [region, new Map()]));
         const globalsNamed = new Map();
         const dropped = [];
-        const add = (names, address, entry) => {
+        const add = (names, address, candidate) => {
             if (!names.has(address)) names.set(address, []);
-            names.get(address).push(entry);
+            names.get(address).push(candidate);
         };
+        const entry = (source, name, rank) => ({ name: shown(name), place: source.places[name], rank });
         const holds = (region, address) => address >= region.start && address < region.end;
         const runs = (region, statement) => statement.section === region.section && holds(region, statement.address);
 
@@ -435,12 +460,12 @@ class Importer {
                         dropped.push([shown(label.name), label.address, "past its section's end"]);
                     else if (!uses && !mentioned.get(source).has(label.name))
                         dropped.push([shown(label.name), label.address, "workspace no statement mentions"]);
-                    else add(globalsNamed, label.address, { name: shown(label.name), rank: [uses, label.order] });
+                    else add(globalsNamed, label.address, entry(source, label.name, [uses, label.order]));
                     continue;
                 }
                 if (section && globalsSections.has(section.name)) {
                     if (label.address >= section.org && label.address < section.end)
-                        add(globalsNamed, label.address, { name: shown(label.name), rank: [0, label.order] });
+                        add(globalsNamed, label.address, entry(source, label.name, [0, label.order]));
                     else dropped.push([shown(label.name), label.address, "past its section's end"]);
                     continue;
                 }
@@ -451,10 +476,7 @@ class Importer {
                     dropped.push([shown(label.name), label.address, "in no region"]);
                     continue;
                 }
-                add(named.get(homes[0]), label.address, {
-                    name: shown(label.name),
-                    rank: [-label.scope.length, label.order],
-                });
+                add(named.get(homes[0]), label.address, entry(source, label.name, [-label.scope.length, label.order]));
             }
         }
 
@@ -471,22 +493,25 @@ class Importer {
                 if (address === undefined || address < 0 || address >= AddressLimit) continue;
                 const inside = regions.filter((region) => region.source === source && holds(region, address));
                 if (inside.length === 1 && statements.every((statement) => runs(inside[0], statement)))
-                    add(named.get(inside[0]), address, {
-                        name: shown(name),
-                        rank: [-assigns.get(name).length - 1, order.get(name)],
-                    });
-                else add(globalsNamed, address, { name: shown(name), rank: [statements.length, order.get(name)] });
+                    add(
+                        named.get(inside[0]),
+                        address,
+                        entry(source, name, [-assigns.get(name).length - 1, order.get(name)]),
+                    );
+                else add(globalsNamed, address, entry(source, name, [statements.length, order.get(name)]));
             }
         }
 
         // One name per address: in a region, a scope's own name over the labels inside it, then the
         // label nearest the bytes (the last written); in the globals, the name most instructions use.
         const repeated = new Set();
+        const places = new Map();
         const choose = (names, chosen, saying) => {
             for (const [address, entries] of names) {
                 entries.sort(byRankDescending);
                 if (chosen.has(entries[0].name)) repeated.add(entries[0].name);
                 chosen.set(entries[0].name, address);
+                if (entries[0].place) places.set(entries[0].name, entries[0].place);
                 for (const { name } of entries.slice(1)) dropped.push([name, address, `${saying} ${entries[0].name}`]);
             }
         };
@@ -507,18 +532,22 @@ class Importer {
             this.notes.push(...notes);
             this.reasons.push(...reasons);
         }
-        return { json: this.json(spec, regions, globals), regions, dropped };
+        return { json: this.json(spec, regions, globals, places), regions, dropped };
     }
 
-    json(spec, regions, globals) {
+    json(spec, regions, globals, places) {
         const { config } = this;
+        const { repository, commit } = config.source;
+        const linked = places.size > 0 && new URL(repository).hostname === GitHub;
         return {
             format: Format,
             title: spec.title,
             licence: config.licence,
-            source: `${config.source.repository}/tree/${config.source.commit}`,
+            source: `${repository}/tree/${commit}`,
             ...(config.notice !== undefined && { notice: config.notice }),
             ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
+            ...(config.home !== undefined && { home: config.home }),
+            ...(linked && { nameLink: `${repository}/blob/${commit}/{place}` }),
             regions: Object.fromEntries(
                 regions.map((region) => [
                     region.name,
@@ -535,6 +564,7 @@ class Importer {
                 ]),
             ),
             globals: byAddress(globals),
+            ...(linked && { places: Object.fromEntries([...places].sort(([a], [b]) => (a < b ? -1 : 1))) }),
         };
     }
 }
