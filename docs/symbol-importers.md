@@ -117,8 +117,8 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
   baron resolved, and the listing is where the scopes, sections and bytes come from.
 - **Each name's place** is the file and line the symbol dump says defines it (`src/game.6502#L120`), in the
   set's `places`, for the `nameLink` a GitHub repository gets. For such a repository, a name in a set that
-  the dump gives no place (a `-D` predefine used as an address, or any name in a dump without lines) stops
-  the import; a `defines` entry no instruction addresses, like Scorched Earth's `BUILD`, isn't in a set.
+  the dump gives no place (any name, in a dump without lines) stops the import. A `defines` entry, like
+  Scorched Earth's `BUILD`, has no listing line, so it's never a name in a set.
 
 ## Links to the author
 
@@ -237,7 +237,8 @@ A py8dis title's config differs from a baron title's in these:
   in the script's names as a baron config's are. It has to lie in one piece.
 - `moves` and `tableSizes` name their stores and tables by expressions too, since a script names few of the
   instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
-  `STA table+1,X` is `table + 1`.
+  `STA table+1,X` is `table + 1`. A move can name a copy loop's first instruction, as a baron one names its
+  label; the loop is the one in the piece with an instruction there, or in any piece if several have one.
 - No `home`, `places` or `nameLink`: the importer writes no links yet ("Links to the author").
 
 The importer runs it as

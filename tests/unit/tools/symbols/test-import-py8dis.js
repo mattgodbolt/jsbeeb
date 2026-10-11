@@ -156,6 +156,28 @@ describe("importPy8dis", () => {
         expect(importPy8dis(config({ moves: [] }), dump).errors).toEqual(["prog/low: nothing to anchor on"]);
     });
 
+    it("takes a copy loop's indexed stores from a move on its label", () => {
+        const [main, loader, low] = dump.pieces;
+        const looping = {
+            ...dump,
+            pieces: [
+                main,
+                {
+                    ...loader,
+                    statements: [
+                        code(0x2010, [0xbd, 0x18, 0x20]),
+                        code(0x2013, [0x9d, 0x00, 0x09]),
+                        code(0x2016, [0xd0, 0xf8]),
+                    ],
+                },
+                low,
+            ],
+        };
+        const imported = importPy8dis(config({ moves: ["relocate"] }), looping);
+        expect(imported.errors).toEqual([]);
+        expect(imported.sets[0].regions.find(({ name }) => name === "low").anchors.length).toBeGreaterThan(0);
+    });
+
     it("refuses a move or a table that matches no store, and a region no piece holds", () => {
         expect(() => importPy8dis(config({ moves: ["relocate"] }), dump)).toThrow("matches no store: relocate");
         expect(() => importPy8dis(config({ tableSizes: { loop: "4" } }), dump)).toThrow("matches no store: loop");
