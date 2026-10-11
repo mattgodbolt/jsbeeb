@@ -8,23 +8,27 @@ repository to a set in that format.
 
 A source repository never changes for jsbeeb, and needs no build rules for it. jsbeeb's tools take its source
 at a commit and make what they read themselves: for a baron title, they run baron on each source with
-`--symbols` and `-vv`. Nobody has to emit jsbeeb metadata.
+`--symbols` and `-vv`; for a beebasm title, beebasm with `-v` and `-dd`. Nobody has to emit jsbeeb metadata.
 
 The curator's job lives here, beside the sets: which programs make a set, where a program's memory changes
 while it runs (so where its regions are cut), and the anchors that tell the program apart in memory. Each
 input format gets an importer, and every importer feeds one anchor chooser and the index's checks.
 
-| Piece                             | What it does                                                                                             |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `tools/symbols/baron-build.js`    | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
-| `tools/symbols/baron-listing.js`  | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
-| `tools/symbols/import-baron.js`   | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
-| `tools/symbols/anchor-chooser.js` | Chooses each region's anchors from what an importer read; shared by every importer                       |
-| `tools/symbols/corpus-check.js`   | The corpus check a set's pull request carries                                                            |
-| `tools/symbols/check-memory.js`   | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
-| `tools/symbols/build-index.js`    | Checks every set as the registry's build will, and writes `index.json`                                   |
-| `symbols-src/<title>.json`        | A curator's config for one title                                                                         |
-| `symbols-src/<title>-check.js`    | That title's moments for the in-memory check                                                             |
+| Piece                              | What it does                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tools/symbols/baron-build.js`     | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
+| `tools/symbols/baron-listing.js`   | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
+| `tools/symbols/import-baron.js`    | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
+| `tools/symbols/beebasm-build.js`   | Fetches a beebasm title's source at the config's commit and assembles it, PRINTing its `=` names         |
+| `tools/symbols/beebasm-listing.js` | Reads beebasm's `-v` listing and its `-dd` label dump                                                    |
+| `tools/symbols/import-beebasm.js`  | The beebasm importer: names from the listing, the dump and the saved files; writes the sets              |
+| `tools/symbols/title-build.js`     | Builds and imports a title with whichever importer its config's `source.assembler` names                 |
+| `tools/symbols/anchor-chooser.js`  | Chooses each region's anchors from what an importer read; shared by every importer                       |
+| `tools/symbols/corpus-check.js`    | The corpus check a set's pull request carries                                                            |
+| `tools/symbols/check-memory.js`    | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
+| `tools/symbols/build-index.js`     | Checks every set as the registry's build will, and writes `index.json`                                   |
+| `symbols-src/<title>.json`         | A curator's config for one title                                                                         |
+| `symbols-src/<title>-check.js`     | That title's moments for the in-memory check                                                             |
 
 ## A title's config
 
@@ -34,6 +38,8 @@ Nothing in it is an address list: the names come from the build.
 - `id`: the prefix of the title's set files, `<id>-<set id>.json`.
 - `licence`, `notice`, `madeFrom`: copied into every set.
 - `source`: where the title's source is and what of it to assemble.
+  - `assembler`: `baron`, unless it's `beebasm`; a beebasm title's config differs as
+    [beebasm titles](#beebasm-titles) says.
   - `repository` and `commit`: the importer, the corpus check and the in-memory check fetch that commit, or
     take a checkout of it with nothing changed or added, and each set's `source` links the tree there.
   - `assemble`: globs, from the repository's root, of the sources to assemble. Every one, not only those
@@ -84,6 +90,74 @@ images, if a set fails the index's checks, if the checkout isn't of the config's
 the config's disc isn't one `madeFrom` names. `--verbose` lists
 every name left out, and why, and every anchor added to tell another image apart. The in-memory check takes
 scenario names to run only those, and `--shots DIR` to save the screenshots a scenario asks for.
+
+## beebasm titles
+
+`import-beebasm.js` makes a beebasm title's sets, and its config differs from a baron title's:
+
+- `source.assemble` is the one main source, and `source.directory` where beebasm runs (the repository's root
+  if it names none), since beebasm finds an INCLUDE from where it runs, not from the file that INCLUDEs it.
+- A region names a saved file, `file`, as its SAVE writes it (`"../build/CODE"`), instead of a section, and
+  can be cut with `from` and `to` as a baron region can. beebasm has no sections: a SAVE writes whatever is
+  in memory between two addresses.
+- There's no `stripScope`, `tableSizes`, `moves`, `globalsSections` or `leftToSystemSets` yet; nothing
+  needed them.
+
+```sh
+node tools/symbols/import-beebasm.js --config symbols-src/nevryon.json
+```
+
+It takes `--source` as the baron importer does, and the beebasm to run as `--beebasm`, `$BEEBASM` or
+`beebasm` on the PATH. It needs beebasm 1.11 or later, the [stardot/beebasm](https://github.com/stardot/beebasm)
+release whose listing it was written against (the sets here were made with commit `ca2cc5f`); `-dd` came in
+1.10, and Ubuntu's snap of 1.10 can't write under `/tmp`, where the build runs. The corpus check and
+the in-memory check take `--beebasm` too.
+
+The build copies the checkout, since a SAVE writes wherever its source says (making the directories it
+needs), and runs beebasm on a wrapper that INCLUDEs the main source and then PRINTs each name the sources
+assign with `=`: beebasm's dumps hold labels only. A name the wrapper can't PRINT, because it was assigned
+inside braces or a loop, is dropped and the build run again.
+
+What beebasm's output gives, and what the importer makes of it:
+
+- **The listing** (`-v`) gives each instruction's address and bytes, with its operand already a number;
+  each EQUB, EQUW and EQUD value; an EQUS's or INCBIN's address and first three bytes; a SKIP's address;
+  each label's name, unscoped and without an address; and a line for each SAVE. SKIPTO, ALIGN and ORG leave
+  no line.
+- **The label dump** (`-dd -labels`) gives every label in the listing's order with its address and scopes:
+  a label just before a `{` names it, and a scope with no label of its own, a FOR loop's pass or a macro's
+  call is `_N` or `_var_value`. A label in a scope like that is left out, as baron's `@` scopes are.
+- **A saved file's address** isn't in any of it: the file starts at the address, among those listed before
+  its SAVE, from which it agrees with every statement it covers and covers the most. Its statements are
+  those in memory when it was saved, each the last listed at its address, so a block assembled over another
+  after a CLEAR belongs to the files saved after it. Its bytes are the file's: a statement the listing cuts
+  short runs to the next statement or label. Bytes no statement lists (SKIPTO and ALIGN padding) never
+  anchor.
+- **A label** goes to the file of the statement it's listed before, or, at the end of a block, of the one
+  it's listed after, then to the region holding it there.
+- **A `=` name** counts as an address when the sources write it first in a non-immediate operand
+  (`LDA ptr`, `STA (vec),Y`), an instruction of the set's files names its value as a memory operand, the MOS
+  set doesn't already name that address, no label of the set's regions is at it, and no other name that
+  passes the same tests has the same value; names that share a value are all left out. It goes to the
+  region it points into if only that region's code uses it, and to the globals otherwise. The listing's
+  operands are numbers, so which name an instruction was written with is never known: `ptr` and `ptr2`,
+  both `&70` and each used by different code, leave `&70` unnamed.
+- **An OS block** is an `LDX #lo` beside an `LDY #hi` that make a label's address.
+- **The original disc's files**, where its catalogue loads them, are among the images the anchors are chosen
+  to tell apart, besides the saved files where they run.
+
+What it gets wrong, or only roughly, beyond what the baron importer does:
+
+- **Names shared by code that doesn't run together** (a sound driver's and a title screen's workspace at the
+  same zero page address) are left out, where a baron title would keep each in its own region's code.
+- **A `=` name written in an operand only through an expression's later term** (`LDA base + ptr`) or a
+  macro's argument isn't seen as an operand, and the text search takes a name in a comment as readily as
+  in code.
+- **A label in braces that don't start at it** (`.routine LDA #0 : {`) loses its scope's name to `_N`, and
+  every label inside is left out.
+- **A file loaded in one place and run in another** is only compared with the corpus where it loads, so
+  the corpus check never sees Nevryon's CODE, which loads at `&0E00` though `*LOAD CODE 1100` puts it at
+  `&1100`.
 
 ## Names
 
@@ -180,6 +254,28 @@ What baron's output can't give the importer, and how it copes:
   dump is for when baron#14 lets the importer stop reading the listing.
 - **A table's size, and where the OS or a pointer writes**: nothing in the build says these, so the config
   gives the sizes and the chooser guesses OS blocks from `LDX #LO(...)`.
+
+## Nevryon
+
+`symbols-src/nevryon.json` makes one set, `game`, from
+[nevryon](https://github.com/waitingforvsync/nevryon)'s disassembly, from the four files its master source
+saves: CODE, CODE2, CODE3 and GRAPHIX, each where the loader puts it. The repository's disc is Stairway to
+Hell's `4thDimension/Nevryon.zip`, byte for byte.
+
+- **GRAPHIX** starts 16 bytes in: CODE3 ends 16 bytes into it, and LOADER3 loads CODE3 after Loader2 has
+  loaded GRAPHIX, so in memory those bytes are CODE3's.
+- The loader's menu, which shows a picture over where GRAPHIX goes, matches nothing; the game's own title
+  screen and play match all four.
+
+The in-memory check's scenario (`symbols-src/nevryon-check.js`) goes through the intro, the options and the
+menu, then into the game and seeded random play.
+
+## Daredevil Demis
+
+`symbols-src/daredevil-demis.json` is ready for
+[daredevil-demis](https://github.com/mattgodbolt/daredevil-demis), one region over its one saved file, but
+gives no licence and so makes no set: the repository has no LICENSE yet. Once it has one, the config needs
+its `licence` and `notice`, and its `commit` moved to one with the LICENSE.
 
 ## PIPELINE
 

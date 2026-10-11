@@ -16,7 +16,7 @@
  */
 
 /** The documented 6502 instruction set: anything else is data, a macro's call or a directive. */
-const Mnemonics = new Set(
+export const Mnemonics = new Set(
     (
         "ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CLV CMP CPX CPY " +
         "DEC DEX DEY EOR INC INX INY JMP JSR LDA LDX LDY LSR NOP ORA PHA PHP PLA PLP ROL " +

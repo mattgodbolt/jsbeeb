@@ -6,10 +6,10 @@
  * if other regions match, or if two matching regions overlap, since the debugger then shows neither.
  *
  * Usage: node tools/symbols/check-memory.js --config symbols-src/pipeline.json [--source <checkout>]
- *            [--baron <path>] [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
+ *            [--baron <path>] [--beebasm <path>] [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
  *
  * The config's `check` names the module of scenarios, beside it, and `source.disc` the original disc in
- * the source repository they boot. The title is built as import-baron.js builds it, for the scenarios
+ * the source repository they boot. The title is built as its importer builds it, for the scenarios
  * that read its files. With no SCENARIO, it runs them all, each on a fresh machine. Exits 1 if any
  * moment fails.
  */
@@ -24,7 +24,7 @@ import { MachineSession } from "../../src/machine-session.js";
 import { parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
 import { SymbolsDir } from "./build-index.js";
-import { BuildLayout, BuildOptions, BuildUsage, withBaronBuild } from "./baron-build.js";
+import { BuildOptions, BuildUsage, withTitleSource } from "./title-build.js";
 
 const CyclesPerSecond = 2000000;
 const Model = "B-DFS1.2";
@@ -193,9 +193,8 @@ async function main() {
     for (const name of wanted) if (!scenarios[name]) throw new Error(`There's no scenario ${name}`);
     if (values.shots) mkdirSync(values.shots, { recursive: true });
     const results = [];
-    await withBaronBuild(config, values, async ({ sourceDir, buildDir }) => {
+    await withTitleSource(config, values, async ({ sourceDir, filesDir }) => {
         const disc = path.join(sourceDir, config.source.disc);
-        const filesDir = path.join(buildDir, BuildLayout.files);
         for (const name of wanted) {
             console.log(`-- ${name}`);
             const session = await startMachine(disc);

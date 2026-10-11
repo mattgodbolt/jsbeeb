@@ -29,6 +29,50 @@
       }
     },
     {
+      "url": "sets/nevryon-game.json",
+      "licence": "MIT",
+      "regions": {
+        "code": {
+          "start": "0x1100",
+          "end": "0x27e7",
+          "minAnchors": 3,
+          "anchors": [
+            { "at": "0x1114", "bytes": "a28f205b15d015" },
+            { "at": "0x18a9", "bytes": "c8989d6b1ac003" },
+            { "at": "0x21a1", "bytes": "c926d005a202" }
+          ]
+        },
+        "code2": {
+          "start": "0x2800",
+          "end": "0x31e9",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x2800", "bytes": "a907a209a028" },
+            { "at": "0x2dc1", "bytes": "200913a20fa0d2" }
+          ]
+        },
+        "code3": {
+          "start": "0x3300",
+          "end": "0x3690",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x3373", "bytes": "ce5136a93a8d5236" },
+            { "at": "0x3685", "bytes": "435245444954" }
+          ]
+        },
+        "graphix": {
+          "start": "0x3690",
+          "end": "0x4a00",
+          "minAnchors": 3,
+          "anchors": [
+            { "at": "0x3860", "bytes": "001031337270" },
+            { "at": "0x4060", "bytes": "77c88316342d" },
+            { "at": "0x4912", "bytes": "ad4dfe30034c3549" }
+          ]
+        }
+      }
+    },
+    {
       "url": "sets/pipeline-game-stub.json",
       "licence": "MIT",
       "regions": {

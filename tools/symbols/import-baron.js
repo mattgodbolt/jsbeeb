@@ -277,6 +277,39 @@ export function osBlockTargets(source) {
     return out;
 }
 
+/**
+ * A set's JSON: the config's licence, notice and source, and each region with its anchors and names.
+ * @param {{name: string, start: number, end: number, anchors: {at: number, data: number[]}[],
+ *     symbols: Map<string, number>}[]} regions
+ * @param {Map<string, number>} globals
+ */
+export function setJson(config, spec, regions, globals) {
+    return {
+        format: Format,
+        title: spec.title,
+        licence: config.licence,
+        source: `${config.source.repository}/tree/${config.source.commit}`,
+        ...(config.notice !== undefined && { notice: config.notice }),
+        ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
+        regions: Object.fromEntries(
+            regions.map((region) => [
+                region.name,
+                {
+                    start: hexAddress(region.start),
+                    end: hexAddress(region.end),
+                    minAnchors: region.anchors.length,
+                    anchors: region.anchors.map(({ at, data }) => ({
+                        at: hexAddress(at),
+                        bytes: Buffer.from(data).toString("hex"),
+                    })),
+                    symbols: byAddress(region.symbols),
+                },
+            ]),
+        ),
+        globals: byAddress(globals),
+    };
+}
+
 class Importer {
     constructor(config, build) {
         this.config = config;
@@ -507,35 +540,7 @@ class Importer {
             this.notes.push(...notes);
             this.reasons.push(...reasons);
         }
-        return { json: this.json(spec, regions, globals), regions, dropped };
-    }
-
-    json(spec, regions, globals) {
-        const { config } = this;
-        return {
-            format: Format,
-            title: spec.title,
-            licence: config.licence,
-            source: `${config.source.repository}/tree/${config.source.commit}`,
-            ...(config.notice !== undefined && { notice: config.notice }),
-            ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
-            regions: Object.fromEntries(
-                regions.map((region) => [
-                    region.name,
-                    {
-                        start: hexAddress(region.start),
-                        end: hexAddress(region.end),
-                        minAnchors: region.anchors.length,
-                        anchors: region.anchors.map(({ at, data }) => ({
-                            at: hexAddress(at),
-                            bytes: Buffer.from(data).toString("hex"),
-                        })),
-                        symbols: byAddress(region.symbols),
-                    },
-                ]),
-            ),
-            globals: byAddress(globals),
-        };
+        return { json: setJson(this.config, spec, regions, globals), regions, dropped };
     }
 }
 
@@ -603,7 +608,12 @@ async function main() {
     });
 }
 
-async function writeTitle(config, imported, values) {
+/**
+ * Prints what an importer made of a title, and writes its sets with writeSets.
+ * @param {{out: string, verbose: boolean}} values - the command line's
+ * @returns {Promise<number>} the exit code
+ */
+export async function writeTitle(config, imported, values) {
     for (const { id, json, regions, dropped } of imported.sets) {
         const summary = regions.map((region) => `${region.name} ${region.anchors.length}/${region.symbols.size}`);
         console.log(

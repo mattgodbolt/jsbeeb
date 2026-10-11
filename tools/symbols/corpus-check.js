@@ -8,12 +8,12 @@
  * region needs another anchor.
  *
  * Usage: node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --corpus .registry-corpus/sth-disc
- *            [--source <checkout>] [--baron <path>]
+ *            [--source <checkout>] [--baron <path>] [--beebasm <path>]
  *
  * Each zip is one title. Every complete DFS file on an .ssd or .dsd is placed at its load address,
  * BASIC programs included, since a BASIC program's lines can collide too; a file of one repeated
  * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It builds the title as
- * import-baron.js does, taking `--source` and `--baron` as that does. Prints the report
+ * its importer does, taking `--source`, `--baron` and `--beebasm` as that does. Prints the report
  * as Markdown, and exits 1 if anything collides.
  */
 
@@ -25,8 +25,7 @@ import { parseArgs } from "node:util";
 import { unzip } from "../../src/archive.js";
 import { dfsCatalogue } from "../registry/dfs.js";
 import { extensionOf, sectorImageSides } from "../registry/fingerprint.js";
-import { BuildOptions, BuildUsage } from "./baron-build.js";
-import { importBaron, withTitle } from "./import-baron.js";
+import { BuildOptions, BuildUsage, importTitle } from "./title-build.js";
 
 const Page = 0x100;
 const AddressLimit = 0x10000;
@@ -173,7 +172,7 @@ async function main() {
     });
     if (!values.config || !values.corpus)
         throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage}`);
-    const { sets, errors } = await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
+    const { sets, errors } = await importTitle(values.config, values);
     if (errors.length) {
         for (const error of errors) console.error(`error: ${error}`);
         console.error("The import failed, so there's no corpus report");
