@@ -218,3 +218,50 @@ Where the regions are cut, and why:
 The in-memory check's scenarios (`symbols-src/pipeline-check.js`) walk the menu, TITLE, the game (to its
 loader, `game_start`, IO loading, the title screen and play, then seeded random play), the Level Designer,
 the Graphics Designer and its tours of every menu, MRUN and PL.
+
+## acornaeology's ROMs
+
+[acornaeology](https://github.com/acornaeology) publishes annotated disassemblies of Acorn's ROMs, each
+version with a JSON file that dasmos writes beside the listing (schema 4): every statement with its bytes
+and labels, and `external_labels`, the names it gives addresses outside the ROM. Its repositories for
+NFS and ANFS, the Tube client and ADFS write the same JSON, so in principle `tools/symbols/import-acornaeology.js`
+makes their sets too, each from a config like BASIC II's; only BASIC II has one so far.
+
+A config (`"importer": "acornaeology"`) has an `id`, which is also the set's file name, a `title`, the
+`licence`, and:
+
+- `source`: the `repository`, the `commit` to fetch, the `disassembly` JSON's path in it and the
+  `licenceFile` whose text becomes the set's notice.
+- `rom`: the ROM under `public/roms/` the set is anchored on. The importer refuses to write a set when
+  the JSON's bytes aren't that ROM's.
+- `regions`: each a `name`, a `start` and an `end`. A sideways ROM is cut at `&9000` and `&B000`, as the
+  proposal says.
+- `globals`: the ranges whose `external_labels` become the set's globals.
+- `bytesPerAnchor`, `spreadAnchors`: as for baron.
+
+```sh
+node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json
+node tools/symbols/build-index.js
+```
+
+Its names:
+
+- **Every label of a statement** goes to the region that holds it. dasmos gives each address one label.
+- **A name outside the ROM** is a global if it's in a `globals` range and no system set names its address:
+  the MOS's names for its vectors and pointers stay the MOS's. Where two names share an address, the one
+  the JSON's `memory_map` describes wins. The rest of `external_labels` (the hardware, the MOS's entry
+  points) are left to the MOS's set.
+- Constants and comments are never read.
+
+Its anchors come from the same chooser, with every statement of the ROM as one section and no stores,
+since nothing writes to a ROM. Every bank of every file under `public/roms/` that's a whole number of the
+ROM's size is another image: a region gets another anchor where one of them would hold all its anchors,
+and the importer fails if none tells them apart.
+
+The set isn't `system`: BASIC's workspace names then name BASIC's own code's operands, and the memory view
+while BASIC is paged in, but not another program's code. A game run from BASIC, with BASIC still paged in,
+keeps its own names for the zero page it shares with BASIC's in its code; in the memory view, an address
+the game's set and BASIC's both name, differently, shows neither, as the proposal's rule for two sets says.
+
+`check-memory.js` boots a title's disc, so it doesn't check a ROM's set; `tests/unit/test-symbol-sets.js`
+checks BASIC II's against the ROMs in `public/roms/`.

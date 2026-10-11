@@ -29,3 +29,11 @@ node tools/symbols/make-mos-set.js && node tools/symbols/build-index.js
 The `pipeline-*.json` sets are imported from PIPELINE's baron build by `tools/symbols/import-baron.js`, as
 `symbols-src/pipeline.json` describes; [the importers' doc](../../docs/symbol-importers.md) says how to remake and
 check them.
+
+`sets/bbc-basic-2.json` is made from acornaeology's
+[BBC BASIC II disassembly](https://github.com/acornaeology/bbc-basic) by `tools/symbols/import-acornaeology.js`,
+as `symbols-src/bbc-basic-2.json` describes, and `public/roms/BASIC.ROM`:
+
+```sh
+node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json && node tools/symbols/build-index.js
+```

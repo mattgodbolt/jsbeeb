@@ -580,7 +580,8 @@ describe("writeSets", () => {
 describe("the curator configs", () => {
     const configs = readdirSync(ConfigsDir)
         .filter((name) => name.endsWith(".json"))
-        .map((name) => JSON.parse(readFileSync(new URL(name, ConfigsDir), "utf8")));
+        .map((name) => JSON.parse(readFileSync(new URL(name, ConfigsDir), "utf8")))
+        .filter(({ importer }) => importer === undefined);
 
     it("each have their sets shipped, made from the commit they name", () => {
         expect(configs.length).toBeGreaterThan(0);

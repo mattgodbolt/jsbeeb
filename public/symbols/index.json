@@ -29,6 +29,41 @@
       }
     },
     {
+      "url": "sets/bbc-basic-2.json",
+      "licence": "MIT",
+      "regions": {
+        "low": {
+          "start": "0x8000",
+          "end": "0x9000",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0x8000", "bytes": "c901f01f60ea" },
+            { "at": "0x8810", "bytes": "4c3887d025202188" }
+          ]
+        },
+        "middle": {
+          "start": "0x9000",
+          "end": "0xb000",
+          "minAnchors": 4,
+          "anchors": [
+            { "at": "0x900d", "bytes": "a518850ca000" },
+            { "at": "0x9805", "bytes": "1860a50b8519" },
+            { "at": "0xa002", "bytes": "88b90006c930" },
+            { "at": "0xa801", "bytes": "20daa1f002100c" }
+          ]
+        },
+        "high": {
+          "start": "0xb000",
+          "end": "0xc000",
+          "minAnchors": 2,
+          "anchors": [
+            { "at": "0xb023", "bytes": "a9006020adaf" },
+            { "at": "0xb81f", "bytes": "840aa426a52a" }
+          ]
+        }
+      }
+    },
+    {
       "url": "sets/pipeline-game-stub.json",
       "licence": "MIT",
       "regions": {
