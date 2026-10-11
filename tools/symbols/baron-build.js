@@ -30,35 +30,24 @@ export function environmentWithoutGit() {
 const git = (dir, ...args) =>
     execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: "pipe", env: environmentWithoutGit() }).trim();
 
-/**
- * Refuses a source directory that isn't the root of a git checkout of the config's commit with nothing
- * changed or added.
- */
-export const checkSourceCommit = (config, sourceDir) => checkCommit(config.source, sourceDir);
-
 /** Refuses a directory that isn't the root of a git checkout of `commit` with nothing changed or added. */
-export function checkCommit({ commit }, sourceDir) {
+export function checkCommit({ commit }, dir) {
     let root;
     let head;
     let changes;
     try {
-        root = git(sourceDir, "rev-parse", "--show-toplevel");
-        head = git(sourceDir, "rev-parse", "HEAD");
-        changes = git(sourceDir, "status", "--porcelain");
+        root = git(dir, "rev-parse", "--show-toplevel");
+        head = git(dir, "rev-parse", "HEAD");
+        changes = git(dir, "status", "--porcelain");
     } catch (error) {
-        throw new Error(`${sourceDir} isn't in a git checkout, so nothing says it's ${commit}`, { cause: error });
+        throw new Error(`${dir} isn't in a git checkout, so nothing says it's ${commit}`, { cause: error });
     }
-    if (realpathSync(root) !== realpathSync(sourceDir))
-        throw new Error(`${sourceDir} isn't the root of its checkout, ${root}`);
-    if (head !== commit) throw new Error(`The checkout ${sourceDir} is at ${head}, and the config names ${commit}`);
-    if (changes) throw new Error(`The checkout ${sourceDir} has changes, so it isn't ${commit}`);
+    if (realpathSync(root) !== realpathSync(dir)) throw new Error(`${dir} isn't the root of its checkout, ${root}`);
+    if (head !== commit) throw new Error(`The checkout ${dir} is at ${head}, and the config names ${commit}`);
+    if (changes) throw new Error(`The checkout ${dir} has changes, so it isn't ${commit}`);
 }
 
-/**
- * Fetches just the config's commit of its repository into `dir`, a new directory, running none of the
- * user's git hooks there.
- */
-export const cloneSource = (config, dir) => cloneCommit(config.source, dir);
+export const checkSourceCommit = (config, sourceDir) => checkCommit(config.source, sourceDir);
 
 /** Fetches just `commit` of `repository` into `dir`, a new directory, running none of the user's git hooks there. */
 export function cloneCommit({ repository, commit }, dir) {
@@ -74,6 +63,8 @@ export function cloneCommit({ repository, commit }, dir) {
         });
     }
 }
+
+export const cloneSource = (config, dir) => cloneCommit(config.source, dir);
 
 /**
  * Refuses a config whose `source.disc` isn't one of the images its `madeFrom` names: that disc, in the

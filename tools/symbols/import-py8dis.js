@@ -51,8 +51,8 @@ function operand({ code, data }) {
 
 /**
  * A dump from py8dis-dump.py as the importer reads it: each piece where it runs, holding its own
- * statements and the labels py8dis put in it, and the names it gave each address, the first given
- * first.
+ * statements and the labels py8dis put in it, and each name's address. A name given two addresses is
+ * refused.
  */
 export function readDump(dump) {
     const pieces = dump.pieces.map((piece, index) => {
@@ -73,7 +73,11 @@ export function readDump(dump) {
     });
     const names = new Map();
     for (const label of dump.labels) {
-        if (!names.has(label.name)) names.set(label.name, label.address);
+        if (names.has(label.name) && names.get(label.name) !== label.address)
+            throw new Error(
+                `${label.name} names two addresses, ${hex(names.get(label.name))} and ${hex(label.address)}`,
+            );
+        names.set(label.name, label.address);
         const piece = pieces.find((p) => p.move === label.move && holds(p, label.address));
         if (piece) piece.labels.push({ address: label.address, name: label.name });
     }
@@ -181,7 +185,6 @@ class Importer {
         const regions = spec.regions.map((regionSpec) => this.region(spec, regionSpec));
         const globals = new Map();
         const dropped = [];
-        const named = new Set();
         for (const { name, address, move } of this.dump.labels) {
             const inPiece = this.dump.pieces.some((piece) => piece.move === move && holds(piece, address));
             const region = regions.find((r) => r.section.move === move && holds(r, address));
@@ -199,8 +202,6 @@ class Importer {
                 ]);
                 continue;
             }
-            if (named.has(name)) throw new Error(`${spec.id}: ${name} names two addresses`);
-            named.add(name);
             names.set(name, address);
         }
 

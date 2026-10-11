@@ -97,6 +97,7 @@ dump_output = sys.stdout
 def go_quietly(*args, **kwargs):
     go(*args, **{**kwargs, "print_output": False})
     json.dump(dump(), dump_output)
+    dump_output.flush()
 
 
 commands.go = go_quietly

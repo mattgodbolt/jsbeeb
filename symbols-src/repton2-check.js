@@ -4,27 +4,16 @@
  */
 
 import { BBC } from "../src/keymap.js";
-import { holdUntil, pressKey, ReleaseFrames, runSeconds } from "../tools/symbols/check-memory.js";
+import { holdUntil, pressKey, pressRandomKeys, runSeconds, seededRandom } from "../tools/symbols/check-memory.js";
 
 // The loader is still unpacking D.REPB this long after the boot.
 const LoadingSecs = 5;
 const PlayMoments = 30;
 const PlayFramesPerMoment = 200;
 const PlaySeed = 1;
-const PlayMinHoldFrames = 5;
-const PlayHoldFrameRange = 40;
 
 const Game = ["game/main", "game/music", "game/page8"];
 const Moves = [BBC.Z, BBC.X, BBC.COLON_STAR, BBC.SLASH];
-
-/** A seeded linear congruential generator, so random play is the same each run. */
-function seededRandom(seed) {
-    let state = seed;
-    return (n) => {
-        state = (state * 1103515245 + 12345) & 0x7fffffff;
-        return Math.floor((state / 0x80000000) * n);
-    };
-}
 
 export const scenarios = {
     async game({ session, address, check }) {
@@ -53,11 +42,7 @@ export const scenarios = {
         await holdUntil(session, BBC.SPACE, address("game", "main", "repton_postmove"));
         const random = seededRandom(PlaySeed);
         for (let moment = 1; moment <= PlayMoments; moment++) {
-            for (let frames = 0; frames < PlayFramesPerMoment;) {
-                const held = PlayMinHoldFrames + random(PlayHoldFrameRange);
-                await pressKey(session, Moves[random(Moves.length)], held);
-                frames += held + ReleaseFrames;
-            }
+            await pressRandomKeys(session, Moves, random, PlayFramesPerMoment);
             check(`random play, moment ${moment}`, Game);
         }
     },

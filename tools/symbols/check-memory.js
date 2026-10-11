@@ -25,8 +25,8 @@ import { BBC } from "../../src/keymap.js";
 import { MachineSession } from "../../src/machine-session.js";
 import { parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
-import { SymbolsDir } from "./build-index.js";
 import { fingerprint } from "../registry/fingerprint.js";
+import { SymbolsDir } from "./build-index.js";
 import { BuildLayout, BuildOptions, BuildUsage, withBaronBuild } from "./baron-build.js";
 
 const CyclesPerSecond = 2000000;
@@ -110,6 +110,28 @@ export async function holdUntil(session, key, address) {
         await session.runUntilAddress(address);
     } finally {
         session.keyUpRaw(key);
+    }
+}
+
+/** A seeded linear congruential generator, so random play is the same each run. */
+export function seededRandom(seed) {
+    let state = seed;
+    return (n) => {
+        state = (state * 1103515245 + 12345) & 0x7fffffff;
+        return Math.floor((state / 0x80000000) * n);
+    };
+}
+
+const RandomMinHoldFrames = 5;
+const RandomHoldFrameRange = 40;
+
+/** Presses keys `random` picks from `keys`, each held a random while, for at least `frames` in all. */
+export async function pressRandomKeys(session, keys, random, frames) {
+    for (let pressed = 0; pressed < frames;) {
+        const key = keys[random(keys.length)];
+        const held = RandomMinHoldFrames + random(RandomHoldFrameRange);
+        await pressKey(session, key, held);
+        pressed += held + ReleaseFrames;
     }
 }
 

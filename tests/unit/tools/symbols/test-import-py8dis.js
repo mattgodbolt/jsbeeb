@@ -86,11 +86,8 @@ const config = (set = {}) => ({
 });
 
 describe("readDump", () => {
-    it("puts each label in the piece of its move that holds it, and each name at its first address", () => {
-        const { pieces, names } = readDump({
-            ...dump,
-            labels: [...dump.labels, { name: "start", address: 0x2004, move: 0 }],
-        });
+    it("puts each label in the piece of its move that holds it, and looks each name up", () => {
+        const { pieces, names } = readDump(dump);
         expect(pieces.map(({ start, end }) => [start, end])).toEqual([
             [0x2000, 0x2010],
             [0x2010, 0x2018],
@@ -170,8 +167,13 @@ describe("importPy8dis", () => {
         );
     });
 
-    it("refuses a name given to two addresses", () => {
-        const twice = { ...dump, labels: [...dump.labels, { name: "loop", address: 0x0902, move: 1 }] };
-        expect(() => importPy8dis(config(), twice)).toThrow("prog: loop names two addresses");
+    it("refuses a name given to two addresses, even where one is in no region", () => {
+        const twice = (label) => ({ ...dump, labels: [...dump.labels, label] });
+        expect(() => importPy8dis(config(), twice({ name: "loop", address: 0x0902, move: 1 }))).toThrow(
+            "loop names two addresses, &200C and &0902",
+        );
+        expect(() => importPy8dis(config(), twice({ name: "bump", address: 0x2016, move: 0 }))).toThrow(
+            "bump names two addresses",
+        );
     });
 });

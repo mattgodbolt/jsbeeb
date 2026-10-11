@@ -147,9 +147,9 @@ addresses in the build (every section of every source where it runs, every file 
   anything less is a collision, and the check exits 1. Files sit at their load addresses, so code a program
   moves to where it runs is only compared with other titles' files that load there.
 - **The in-memory check** boots the title's disc (its repository's, or one its config fetches) and, at each
-  moment a scenario picks, lists the regions
-  whose anchors all match. A moment fails unless that's exactly the regions expected, and if two matching
-  regions overlap, of one set or two, since the debugger then shows neither.
+  moment a scenario picks, lists the regions whose anchors all match. A moment fails unless that's exactly
+  the regions expected, and if two matching regions overlap, of one set or two, since the debugger then
+  shows neither.
 
 ## What the baron importer gets wrong, or only roughly
 
@@ -205,7 +205,8 @@ A py8dis title's config differs from a baron title's in these:
 - A region is `from` an address to `to` one (the end of the piece `from` is in, if not given), expressions
   in the script's names as a baron config's are. It has to lie in one piece.
 - `moves` and `tableSizes` name their stores and tables by expressions too, since a script names few of the
-  instructions it traces (`boot_relocate_0380_loop + 3`).
+  instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
+  `STA table+1,X` is `table + 1`.
 
 The importer runs it as
 
@@ -287,11 +288,12 @@ the Graphics Designer and its tours of every menu, MRUN and PL.
 [repton2disassembly](https://github.com/gfoot/repton2disassembly), whose `repton2.bin` is the game's code
 as it sits in memory once loaded, with a loader of his own appended.
 
-- **Py8dis.** The repository doesn't say which py8dis made its `repton2.s`. Py8dis gained the xa output the
-  Makefile assembles the day after the script was committed, and none of its commits with xa and the API
-  `repton2.py` calls (16 to 19 September 2021) runs the script to the end: they stop on its `byte()`s of
-  addresses the binary doesn't load. Today's py8dis runs it with the two names `py8dis-dump.py` puts back,
-  and gives every name at the address `repton2.s` has it.
+- **Py8dis.** The repository doesn't say which py8dis made its `repton2.s`. Its scripts were committed on
+  15 September 2021 (`42820e4`, `26137b7`); py8dis's xa output, which the Makefile assembles, starts the
+  next day at `b75d139`, and `cf93419` on 19 September renamed `acorn.add_standard_labels()`. Every py8dis
+  commit from `b75d139` to `c32b0f9`, the last before the rename, stops on the script's `byte()`s of
+  addresses the binary doesn't load, so none remakes `repton2.s`. The config's py8dis, `2a60463`, runs it
+  with the two names `py8dis-dump.py` puts back, and gives every name at the address `repton2.s` has it.
 - **The regions** are where the game runs: `main` (`&0D00-&5FFF`, up to the screen), and the two
   pieces the loader moves, `music` to `&0380` and `page8` to `&0880`. The loader at `&70A0` is the
   disassembly's, not the game's, so it has no region; its copies to `&0380` and `&0880` are `moves`, or their
