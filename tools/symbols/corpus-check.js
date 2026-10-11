@@ -8,13 +8,14 @@
  * region needs another anchor.
  *
  * Usage: node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --corpus .registry-corpus/sth-disc
- *            [--source <checkout>] [--baron <path>] [--beebasm <path>]
+ *            [--source <checkout>] [--baron <path>] [--beebasm <path>] [--py8dis <checkout>] [--python <path>]
  *
  * Each zip is one title. Every complete DFS file on an .ssd or .dsd is placed at its load address,
  * BASIC programs included, since a BASIC program's lines can collide too; a file of one repeated
- * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It builds the title as
- * its importer does, taking `--source`, `--baron` and `--beebasm` as that does. Prints the report
- * as Markdown, and exits 1 if anything collides.
+ * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It makes the sets as
+ * the title's importer does (import-baron.js, import-beebasm.js, or import-py8dis.js for a config that
+ * names `py8dis`), taking the options that one does. Prints the report as Markdown, and exits 1 if
+ * anything collides.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

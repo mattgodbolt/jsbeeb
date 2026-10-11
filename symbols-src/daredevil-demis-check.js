@@ -24,7 +24,7 @@ export const scenarios = {
         check("a shoot starting", Game);
         const random = seededRandom(PlaySeed);
         for (let moment = 1; moment <= PlayMoments; moment++) {
-            await pressRandomKeys(session, random, PlayKeys, PlayFramesPerMoment);
+            await pressRandomKeys(session, PlayKeys, random, PlayFramesPerMoment);
             check(`random play, moment ${moment}`, Game);
         }
     },

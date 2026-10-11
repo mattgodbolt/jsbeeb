@@ -1,6 +1,7 @@
 /**
  * What the corpus check and the in-memory check need from a title, whichever assembler its source is
- * for: its config's `source.assembler`, `baron` unless it says `beebasm`.
+ * for: its config's `source.assembler`, `baron` unless it says `beebasm`; or, for a config that names
+ * `py8dis`, the py8dis disassembly it is.
  */
 
 import { readFileSync } from "node:fs";
@@ -10,9 +11,10 @@ import * as baron from "./baron-build.js";
 import * as beebasm from "./beebasm-build.js";
 import { importBaron, withTitle as withBaronTitle } from "./import-baron.js";
 import { importBeebasm, withTitle as withBeebasmTitle } from "./import-beebasm.js";
+import { importPy8dis, Py8disOptions, Py8disUsage, withPy8disTitle } from "./import-py8dis.js";
 
-export const BuildOptions = { ...baron.BuildOptions, ...beebasm.BuildOptions };
-export const BuildUsage = "[--source <checkout>] [--baron <path>] [--beebasm <path>]";
+export const BuildOptions = { ...baron.BuildOptions, ...beebasm.BuildOptions, ...Py8disOptions };
+export const BuildUsage = `[--baron <path>] [--beebasm <path>] ${Py8disUsage}`;
 
 const Assemblers = [baron.Baron, beebasm.Beebasm];
 
@@ -29,6 +31,7 @@ export function assemblerOf(config) {
 /** The title's sets as its importer makes them, with the importer's errors. */
 export function importTitle(configPath, options) {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
+    if (config.py8dis) return withPy8disTitle(configPath, options, ({ config, dump }) => importPy8dis(config, dump));
     if (assemblerOf(config) === beebasm.Beebasm)
         return withBeebasmTitle(configPath, options, ({ config, build, discFiles }) =>
             importBeebasm(config, build, { discFiles }),

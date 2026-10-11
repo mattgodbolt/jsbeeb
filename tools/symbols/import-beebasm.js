@@ -357,7 +357,7 @@ class Importer {
 
         const { stores } = storesIn(
             files.flatMap((file) => file.statements),
-            { tableSizes: new Map(), moves: new Set() },
+            { tableSizes: new Map(), moves: new Map() },
         );
         const spread = { bytesPerAnchor: this.config.bytesPerAnchor, spreadAnchors: this.config.spreadAnchors };
         for (const region of regions) {

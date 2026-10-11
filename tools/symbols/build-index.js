@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { format as prettier, resolveConfig } from "prettier";
 
-import { Format, parseAddress, parseSet, RelativeJsonPath } from "../../src/symbol-sets.js";
+import { Format, isHttps, nameLinkProblems, parseAddress, parseSet, RelativeJsonPath } from "../../src/symbol-sets.js";
 
 export const SymbolsDir = fileURLToPath(new URL("../../public/symbols/", import.meta.url));
 const SetsDir = "sets";
@@ -28,6 +28,35 @@ const GplFamily = /GPL/i;
 
 const hex = (address) => `&${address.toString(16).toUpperCase().padStart(4, "0")}`;
 const isText = (value) => typeof value === "string" && value.length > 0;
+const PlacePath = /^[\w.~-]+(?:\/[\w.~-]+)*$/;
+const PlaceFragment = /^[\w.~:=%,&-]*$/;
+
+/** A path from the template's base, and optionally a fragment, that can't climb out of it. */
+export function isPlace(text) {
+    const [pathPart, ...fragments] = text.split("#");
+    return (
+        fragments.length <= 1 &&
+        PlacePath.test(pathPart) &&
+        !pathPart.split("/").some((segment) => segment === "." || segment === "..") &&
+        PlaceFragment.test(fragments[0] ?? "")
+    );
+}
+
+function checkLinks(json, set, problems) {
+    if (json.home !== undefined && !isHttps(json.home)) problems.push(`its home, ${json.home}, isn't https`);
+    if (json.nameLink !== undefined) problems.push(...nameLinkProblems(json.nameLink));
+    const wantsPlaces = typeof json.nameLink === "string" && json.nameLink.includes("{place}");
+    if (json.places === undefined) {
+        if (wantsPlaces) problems.push("its nameLink has {place}, but it has no places");
+        return;
+    }
+    if (!wantsPlaces) problems.push("it has places, but no nameLink with {place}");
+    const names = new Set([...set.globals.values(), ...set.regions.flatMap((region) => [...region.symbols.values()])]);
+    for (const [name, place] of Object.entries(json.places)) {
+        if (!names.has(name)) problems.push(`places has ${name}, which the set doesn't name`);
+        if (!isPlace(place)) problems.push(`${name}'s place, "${place}", isn't a path and fragment`);
+    }
+}
 
 /** Every set under `dir`, with its path relative to `dir` as the index gives it. */
 export function readSets(dir = SymbolsDir) {
@@ -64,6 +93,11 @@ function checkShape(json) {
     if (!isObject(json)) return ["it isn't a JSON object"];
     const problems = [];
     if (json.globals !== undefined && !isObject(json.globals)) problems.push("globals isn't an object of names");
+    if (
+        json.places !== undefined &&
+        !(isObject(json.places) && Object.values(json.places).every((place) => typeof place === "string"))
+    )
+        problems.push("places isn't an object of names to text");
     if (!isObject(json.regions)) return [...problems, "regions isn't an object of regions"];
     for (const [name, region] of Object.entries(json.regions)) {
         if (!isObject(region)) {
@@ -109,6 +143,7 @@ export function checkSet(json, { file, mosSets }) {
     if (json.system !== undefined && typeof json.system !== "boolean") problems.push("system isn't true or false");
     if (set.system && !mosSets.includes(file)) problems.push(`it's a system set, but ${MosSetsFile} doesn't list it`);
     if (set.regions.length === 0) problems.push("it has no regions");
+    checkLinks(json, set, problems);
 
     for (const region of set.regions) {
         const where = `region ${region.name}`;

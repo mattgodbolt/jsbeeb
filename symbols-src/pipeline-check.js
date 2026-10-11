@@ -270,7 +270,7 @@ export const scenarios = {
         const keys = [BBC.Z, BBC.X, BBC.COLON_STAR, BBC.SLASH, BBC.P, BBC.D, BBC.T, BBC.RETURN, BBC.M, BBC.CTRL];
         const random = seededRandom(PlaySeed);
         for (let moment = 1; moment <= PlayMoments; moment++) {
-            await pressRandomKeys(session, random, keys, PlayFramesPerMoment);
+            await pressRandomKeys(session, keys, random, PlayFramesPerMoment);
             check(`random play, moment ${moment}`, Game);
         }
     },
