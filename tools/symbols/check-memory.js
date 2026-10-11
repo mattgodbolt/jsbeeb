@@ -6,10 +6,10 @@
  * if other regions match, or if two matching regions overlap, since the debugger then shows neither.
  *
  * Usage: node tools/symbols/check-memory.js --config symbols-src/pipeline.json [--source <checkout>]
- *            [--baron <path>] [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
+ *            [--baron <path>] [--beebasm <path>] [--sets public/symbols/sets] [--shots DIR] [SCENARIO...]
  *
  * The config's `check` names the module of scenarios, beside it. They boot `source.disc`, the original
- * disc in a baron title's source repository, built as import-baron.js builds it for the scenarios that
+ * disc in the source repository, with the title built as its importer builds it, for the scenarios that
  * read its files; or `disc`, a disc image in a zip the config names by its URL, its path in the zip and
  * its key. With no SCENARIO, it runs them all, each on a fresh machine. Exits 1 if any moment fails.
  */
@@ -27,13 +27,15 @@ import { parseSet } from "../../src/symbol-sets.js";
 import { regionMatches } from "../../src/symbol-names.js";
 import { fingerprint } from "../registry/fingerprint.js";
 import { SymbolsDir } from "./build-index.js";
-import { BuildLayout, BuildOptions, BuildUsage, withBaronBuild } from "./baron-build.js";
+import { BuildOptions, BuildUsage, withTitleSource } from "./title-build.js";
 
 const CyclesPerSecond = 2000000;
 const Model = "B-DFS1.2";
 const BootTimeoutSecs = 30;
 const DefaultKeyFrames = 3;
 export const ReleaseFrames = 2;
+const RandomMinHoldFrames = 5;
+const RandomHoldFrameRange = 40;
 
 const hex = (address) => `&${address.toString(16).toUpperCase().padStart(4, "0")}`;
 
@@ -121,9 +123,6 @@ export function seededRandom(seed) {
         return Math.floor((state / 0x80000000) * n);
     };
 }
-
-const RandomMinHoldFrames = 5;
-const RandomHoldFrameRange = 40;
 
 /** Presses keys `random` picks from `keys`, each held a random while, for at least `frames` in all. */
 export async function pressRandomKeys(session, keys, random, frames) {
@@ -214,13 +213,13 @@ export async function fetchDisc({ url, image, key }) {
 }
 
 /**
- * Runs `use` with the disc a config's scenarios boot: a baron title's `source.disc`, in its build, or a
- * disc the config's `disc` fetches from an archive.
+ * Runs `use` with the disc a config's scenarios boot: an assembled title's `source.disc`, in its build,
+ * or a disc the config's `disc` fetches from an archive.
  */
 async function withTitleDisc(config, options, use) {
     if (config.source.disc !== undefined)
-        return withBaronBuild(config, options, ({ sourceDir, buildDir }) =>
-            use({ disc: path.join(sourceDir, config.source.disc), filesDir: path.join(buildDir, BuildLayout.files) }),
+        return withTitleSource(config, options, ({ sourceDir, filesDir }) =>
+            use({ disc: path.join(sourceDir, config.source.disc), filesDir }),
         );
     if (config.disc === undefined) throw new Error("The config names no disc to boot, in source.disc or disc");
     const temp = mkdtempSync(path.join(tmpdir(), "symbols-disc-"));

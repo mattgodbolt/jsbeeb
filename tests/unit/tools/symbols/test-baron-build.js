@@ -10,6 +10,7 @@ import {
     baronArguments,
     baronVersion,
     BuildLayout,
+    checkAssembler,
     checkDisc,
     checkSourceCommit,
     cloneSource,
@@ -266,5 +267,21 @@ describe("baronArguments", () => {
 describe("baronVersion", () => {
     it("says how to name baron when it can't run it", () => {
         expect(() => baronVersion(path.join(tmpdir(), "no-such-baron"))).toThrow("give --baron, or set BARON");
+    });
+});
+
+describe("checkAssembler", () => {
+    const config = (assembler) => ({ id: "demo", source: { assembler } });
+
+    it("takes a config that names the assembler, or names none for baron", () => {
+        expect(() => checkAssembler(config(undefined), "baron")).not.toThrow();
+        expect(() => checkAssembler(config("beebasm"), "beebasm")).not.toThrow();
+    });
+
+    it("refuses a config for the other assembler, before running anything", async () => {
+        expect(() => checkAssembler(config(undefined), "beebasm")).toThrow("assembled with baron");
+        await expect(withBaronBuild(config("beebasm"), { baron: "/nowhere" }, () => {})).rejects.toThrow(
+            "demo's source is assembled with beebasm",
+        );
     });
 });

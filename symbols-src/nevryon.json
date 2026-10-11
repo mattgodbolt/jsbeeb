@@ -1,0 +1,42 @@
+{
+  "id": "nevryon",
+  "licence": "MIT",
+  "notice": "The names are nevryon's, from https://github.com/waitingforvsync/nevryon/tree/5680d10d7b8d7fdc5e28805fe0721dc076308d6a, under this licence:\n\nMIT License\n\nCopyright (c) 2026 richtw1 and contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n---\n\nNOTE ON SCOPE\n=============\n\nThis MIT license applies only to the disassembly, tools, documentation,\nvisualisations and other reverse-engineering artefacts contributed to this\nrepository. It DOES NOT apply to the original Nevryon game, which is\nCopyright \u00a9 1990 Graeme Richardson / The Fourth Dimension. The 6502 binaries\nin `extracted/` and the disk image in `4thDimension/` are included for\nresearch and preservation purposes; their copyright remains with the\noriginal rights holders.",
+  "source": {
+    "repository": "https://github.com/waitingforvsync/nevryon",
+    "commit": "5680d10d7b8d7fdc5e28805fe0721dc076308d6a",
+    "assembler": "beebasm",
+    "assemble": "disasm/Nevryon.6502",
+    "directory": "disasm",
+    "disc": "4thDimension/Nevryon.ssd"
+  },
+  "madeFrom": ["d6d8efc58e17d4a8fa53678979ccbe4b"],
+  "bytesPerAnchor": 2048,
+  "spreadAnchors": 4,
+  "check": "nevryon-check.js",
+  "sets": [
+    {
+      "id": "game",
+      "title": "Nevryon",
+      "regions": [
+        {
+          "name": "code",
+          "file": "../build/CODE"
+        },
+        {
+          "name": "code2",
+          "file": "../build/CODE2"
+        },
+        {
+          "name": "code3",
+          "file": "../build/CODE3"
+        },
+        {
+          "name": "graphix",
+          "file": "../build/GRAPHIX",
+          "from": "gfx_muzzle_flash_frame0 + &10"
+        }
+      ]
+    }
+  ]
+}

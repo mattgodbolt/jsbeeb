@@ -301,6 +301,45 @@ export function osBlockTargets(source) {
     return out;
 }
 
+/**
+ * A set's JSON: the config's licence, notice, source and home, and each region with its anchors and names.
+ * @param {{name: string, start: number, end: number, anchors: {at: number, data: number[]}[],
+ *     symbols: Map<string, number>}[]} regions
+ * @param {Map<string, number>} globals
+ * @param {Map<string, string> | null} places - each name's place in the source on GitHub, for its
+ *     `nameLink`; null for a set with no links
+ */
+export function setJson(config, spec, regions, globals, places = null) {
+    const { repository, commit } = config.source;
+    return {
+        format: Format,
+        title: spec.title,
+        licence: config.licence,
+        source: `${repository}/tree/${commit}`,
+        ...(config.notice !== undefined && { notice: config.notice }),
+        ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
+        ...(config.home !== undefined && { home: config.home }),
+        ...(places && { nameLink: `${repository}/blob/${commit}/{place}` }),
+        regions: Object.fromEntries(
+            regions.map((region) => [
+                region.name,
+                {
+                    start: hexAddress(region.start),
+                    end: hexAddress(region.end),
+                    minAnchors: region.anchors.length,
+                    anchors: region.anchors.map(({ at, data }) => ({
+                        at: hexAddress(at),
+                        bytes: Buffer.from(data).toString("hex"),
+                    })),
+                    symbols: byAddress(region.symbols),
+                },
+            ]),
+        ),
+        globals: byAddress(globals),
+        ...(places && { places: Object.fromEntries([...places].sort(([a], [b]) => (a < b ? -1 : 1))) }),
+    };
+}
+
 class Importer {
     constructor(config, build) {
         this.config = config;
@@ -541,39 +580,7 @@ class Importer {
             this.notes.push(...notes);
             this.reasons.push(...reasons);
         }
-        return { json: this.json(spec, regions, globals, places), regions, dropped };
-    }
-
-    json(spec, regions, globals, places) {
-        const { config } = this;
-        const { repository, commit } = config.source;
-        return {
-            format: Format,
-            title: spec.title,
-            licence: config.licence,
-            source: `${repository}/tree/${commit}`,
-            ...(config.notice !== undefined && { notice: config.notice }),
-            ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
-            ...(config.home !== undefined && { home: config.home }),
-            ...(this.onGitHub && { nameLink: `${repository}/blob/${commit}/{place}` }),
-            regions: Object.fromEntries(
-                regions.map((region) => [
-                    region.name,
-                    {
-                        start: hexAddress(region.start),
-                        end: hexAddress(region.end),
-                        minAnchors: region.anchors.length,
-                        anchors: region.anchors.map(({ at, data }) => ({
-                            at: hexAddress(at),
-                            bytes: Buffer.from(data).toString("hex"),
-                        })),
-                        symbols: byAddress(region.symbols),
-                    },
-                ]),
-            ),
-            globals: byAddress(globals),
-            ...(this.onGitHub && { places: Object.fromEntries([...places].sort(([a], [b]) => (a < b ? -1 : 1))) }),
-        };
+        return { json: setJson(this.config, spec, regions, globals, this.onGitHub ? places : null), regions, dropped };
     }
 }
 
@@ -642,7 +649,8 @@ async function main() {
 }
 
 /**
- * Reports what an importer made of a title and writes its sets as writeSets does.
+ * Prints what an importer made of a title, and writes its sets with writeSets.
+ * @param {{out: string, verbose: boolean}} values - the command line's
  * @returns {Promise<number>} the exit code
  */
 export async function writeTitle(config, imported, values) {

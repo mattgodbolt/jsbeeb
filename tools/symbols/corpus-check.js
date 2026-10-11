@@ -8,13 +8,14 @@
  * region needs another anchor.
  *
  * Usage: node tools/symbols/corpus-check.js --config symbols-src/pipeline.json --corpus .registry-corpus/sth-disc
- *            [--source <checkout>] [--baron <path>] [--py8dis <checkout>] [--python <path>]
+ *            [--source <checkout>] [--baron <path>] [--beebasm <path>] [--py8dis <checkout>] [--python <path>]
  *
  * Each zip is one title. Every complete DFS file on an .ssd or .dsd is placed at its load address,
  * BASIC programs included, since a BASIC program's lines can collide too; a file of one repeated
  * byte, or catalogued to load in page zero (a placeholder, usually), is left out. It makes the sets as
- * import-baron.js does, or import-py8dis.js for a config that names `py8dis`, taking the options that
- * one does. Prints the report as Markdown, and exits 1 if anything collides.
+ * the title's importer does (import-baron.js, import-beebasm.js, or import-py8dis.js for a config that
+ * names `py8dis`), taking the options that one does. Prints the report as Markdown, and exits 1 if
+ * anything collides.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -23,16 +24,9 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { unzip } from "../../src/archive.js";
-import { dfsCatalogue } from "../registry/dfs.js";
-import { extensionOf, sectorImageSides } from "../registry/fingerprint.js";
-import { BuildOptions, BuildUsage } from "./baron-build.js";
-import { importBaron, withTitle } from "./import-baron.js";
-import { importPy8dis, Py8disOptions, Py8disUsage, withPy8disTitle } from "./import-py8dis.js";
+import { placedFiles } from "./placed-files.js";
+import { BuildOptions, BuildUsage, importTitle } from "./title-build.js";
 
-const Page = 0x100;
-const AddressLimit = 0x10000;
-const IoAddressMask = 0xffff;
-const DfsImages = new Set([".ssd", ".dsd"]);
 // The share of a region's held bytes that are identical, above which the report calls it the same code.
 export const SameCode = 0.9;
 
@@ -42,32 +36,6 @@ function zipsUnder(dir) {
     return readdirSync(dir, { recursive: true })
         .filter((name) => name.endsWith(".zip"))
         .sort();
-}
-
-/**
- * Each file worth placing from one title's zip members, once per content and load address.
- * @param {Record<string, Uint8Array>} members
- * @returns {{name: string, load: number, data: Uint8Array}[]}
- */
-export function placedFiles(members) {
-    const files = [];
-    const seen = new Set();
-    for (const member of Object.keys(members).sort()) {
-        if (!DfsImages.has(extensionOf(member))) continue;
-        for (const side of sectorImageSides(member, members[member])) {
-            for (const file of dfsCatalogue(side)?.files ?? []) {
-                if (!file.complete || file.length === 0 || file.uniform) continue;
-                const load = file.load & IoAddressMask;
-                if (load < Page || load + file.length > AddressLimit) continue;
-                const key = `${load}:${file.hash}:${file.length}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                const data = side.subarray(file.start * Page, file.start * Page + file.length);
-                files.push({ name: `${path.basename(member)}:${file.name}`, load, data });
-            }
-        }
-    }
-    return files;
 }
 
 /** @returns {Promise<Map<string, {name: string, load: number, data: Uint8Array}[]>>} title to its files */
@@ -170,13 +138,11 @@ export function corpusReport(sets, titles) {
 
 async function main() {
     const { values } = parseArgs({
-        options: { config: { type: "string" }, corpus: { type: "string" }, ...BuildOptions, ...Py8disOptions },
+        options: { config: { type: "string" }, corpus: { type: "string" }, ...BuildOptions },
     });
     if (!values.config || !values.corpus)
-        throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage} ${Py8disUsage}`);
-    const { sets, errors } = JSON.parse(readFileSync(values.config, "utf8")).py8dis
-        ? await withPy8disTitle(values.config, values, ({ config, dump }) => importPy8dis(config, dump))
-        : await withTitle(values.config, values, ({ config, build }) => importBaron(config, build));
+        throw new Error(`Usage: corpus-check.js --config <file> --corpus <dir> ${BuildUsage}`);
+    const { sets, errors } = await importTitle(values.config, values);
     if (errors.length) {
         for (const error of errors) console.error(`error: ${error}`);
         console.error("The import failed, so there's no corpus report");
