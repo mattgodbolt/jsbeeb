@@ -156,7 +156,7 @@ describe("importPy8dis", () => {
         expect(importPy8dis(config({ moves: [] }), dump).errors).toEqual(["prog/low: nothing to anchor on"]);
     });
 
-    it("takes a copy loop's indexed stores from a move on its label", () => {
+    describe("a move on a copy loop's label", () => {
         const [main, loader, low] = dump.pieces;
         const looping = {
             ...dump,
@@ -173,9 +173,28 @@ describe("importPy8dis", () => {
                 low,
             ],
         };
-        const imported = importPy8dis(config({ moves: ["relocate"] }), looping);
-        expect(imported.errors).toEqual([]);
-        expect(imported.sets[0].regions.find(({ name }) => name === "low").anchors.length).toBeGreaterThan(0);
+        const overlay = {
+            binary: 0x2028,
+            runtime: 0x2010,
+            length: 0x06,
+            move: 2,
+            statements: [data(0x2010, [0x00]), code(0x2011, [0x9d, 0x00, 0x09]), code(0x2014, [0xd0, 0xfa])],
+        };
+        const lowAnchors = (imported) => imported.sets[0].regions.find(({ name }) => name === "low").anchors;
+
+        it("takes the loop's indexed stores", () => {
+            const imported = importPy8dis(config({ moves: ["relocate"] }), looping);
+            expect(imported.errors).toEqual([]);
+            expect(lowAnchors(imported).length).toBeGreaterThan(0);
+        });
+
+        it("takes no loop from another piece run at the same address", () => {
+            const imported = importPy8dis(config({ moves: ["relocate"] }), {
+                ...looping,
+                pieces: [...looping.pieces, overlay],
+            });
+            expect(imported.errors).toEqual(["prog/low: nothing to anchor on"]);
+        });
     });
 
     it("refuses a move or a table that matches no store, and a region no piece holds", () => {

@@ -115,8 +115,8 @@ function copyLoops(statements, moves) {
  * @param {ChooserStatement[]} statements - every statement of the program's code
  * @param {{tableSizes: Map<number, number>, moves: Map<number, object | null>}} options - tables by
  *     address; moves by the address of their store, or of a copy loop's first instruction, which takes
- *     the indexed stores of its section up to the last branch back to it, each with the section its
- *     label is in, if it's a label
+ *     the indexed stores of its section up to the last branch back to it, each with the section a
+ *     loop there has to be in, or null for a loop in any section
  * @returns {{stores: Store[], used: Set<number>}} the stores, and which tables and moves they matched
  */
 export function storesIn(statements, { tableSizes, moves }) {
