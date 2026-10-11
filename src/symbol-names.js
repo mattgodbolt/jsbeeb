@@ -19,6 +19,9 @@
  * @property {string} licence
  * @property {string} source
  * @property {string} [notice]
+ * @property {string} [home] - the author's own page
+ * @property {string} [nameLink] - a URL template for a name's place on the author's site
+ * @property {Map<string, string>} places - name to what `nameLink`'s {place} becomes
  * @property {boolean} system
  * @property {Map<number, string>} globals - address to name
  * @property {Region[]} regions

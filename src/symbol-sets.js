@@ -1,3 +1,4 @@
+import { hexword } from "./hex.js";
 import { loadData } from "./loader.js";
 import { matchRegions, NoNames, SymbolNames } from "./symbol-names.js";
 
@@ -9,6 +10,57 @@ const AddressSpace = 0x10000;
 const FirstRetryDelayMs = 5000;
 const MaxRetryDelayMs = 5 * 60 * 1000;
 export const RelativeJsonPath = /^(?:[\w-]+\/)*[\w-][\w.-]*\.json$/;
+export const NameLinkPlaceholders = ["name", "addr", "place"];
+const Placeholder = /\{([^{}]*)\}/g;
+const SiteOfTemplate = /^https:\/\/[^/{}]+\//;
+
+export function isHttps(text) {
+    try {
+        return new URL(text).protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * What the build rejects in a `nameLink` template: it starts with an https site and a slash, and has
+ * at least one placeholder, every one of them known.
+ * @returns {string[]}
+ */
+export function nameLinkProblems(template) {
+    if (typeof template !== "string") return ["nameLink isn't text"];
+    const problems = [];
+    if (!SiteOfTemplate.test(template) || !isHttps(template.replace(Placeholder, "x")))
+        problems.push(`nameLink is "${template}", which doesn't start with an https site and a slash`);
+    const placeholders = [...template.matchAll(Placeholder)].map(([, name]) => name);
+    if (!placeholders.length) problems.push("nameLink has no placeholder, so every name would link to one page");
+    for (const name of placeholders)
+        if (!NameLinkPlaceholders.includes(name)) problems.push(`nameLink has {${name}}, which isn't a placeholder`);
+    if (/[{}]/.test(template.replace(Placeholder, ""))) problems.push("nameLink has a brace outside a placeholder");
+    return problems;
+}
+
+/**
+ * The https URL of `name`'s place on its author's site, from the set's `nameLink`: undefined if the set
+ * has none, the template doesn't start with an https site (which no placeholder can then change), or it
+ * wants a place the set doesn't give the name.
+ * @param {SymbolSet} set
+ */
+export function nameUrl(set, name, address) {
+    if (typeof set.nameLink !== "string" || !SiteOfTemplate.test(set.nameLink)) return undefined;
+    const values = {
+        name: encodeURIComponent(name),
+        addr: hexword(address).toUpperCase(),
+        place: set.places.get(name),
+    };
+    let complete = true;
+    const url = set.nameLink.replace(Placeholder, (_, placeholder) => {
+        const value = values[placeholder];
+        if (typeof value !== "string") complete = false;
+        return value;
+    });
+    return complete && isHttps(url) ? url : undefined;
+}
 
 /** "0x1a2c" as a number; only a region's end can be 0x10000. */
 export function parseAddress(text, what, limit = AddressSpace - 1) {
@@ -67,6 +119,9 @@ export function parseSet(json) {
         licence: json.licence,
         source: json.source,
         notice: json.notice,
+        home: json.home,
+        nameLink: json.nameLink,
+        places: new Map(Object.entries(json.places ?? {})),
         system: json.system === true,
         globals: parseNames(json.globals, "global"),
         regions: parseRegions(json.regions),

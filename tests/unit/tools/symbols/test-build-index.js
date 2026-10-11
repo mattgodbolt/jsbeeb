@@ -134,5 +134,45 @@ describe("the symbol set build", () => {
             ]);
             expect(problemsWith((json) => (json.globals.table = "0x1900"))).toEqual([]);
         });
+
+        describe("on links to the author's site", () => {
+            const linked = (json) => {
+                json.home = "https://example.com/game/";
+                json.nameLink = "https://example.com/game/blob/0123abc/{place}";
+                json.places = { lives: "src/game.6502#L3", main_loop: "src/game.6502#L40" };
+            };
+
+            it("pass a home, a name link and places for the set's names", () => {
+                expect(problemsWith(linked)).toEqual([]);
+                expect(problemsWith((json) => (json.nameLink = "https://example.com/{name}#addr-{addr}"))).toEqual([]);
+            });
+
+            it.each([
+                ["a home that isn't https", (json) => (json.home = "http://example.com/"), "home"],
+                [
+                    "a name link with a bad placeholder",
+                    (json) => (json.nameLink = "https://x.example/{place}{line}"),
+                    "{line}",
+                ],
+                [
+                    "a place for a name the set doesn't have",
+                    (json) => (json.places.score = "src/game.6502#L9"),
+                    "score",
+                ],
+                ["a place that climbs out", (json) => (json.places.lives = "../other/x.6502#L3"), "lives's place"],
+                ["a place from the root", (json) => (json.places.lives = "/x.6502"), "lives's place"],
+                ["a place with two fragments", (json) => (json.places.lives = "x.6502#L3#L4"), "lives's place"],
+                ["places that aren't text", (json) => (json.places = { lives: 3 }), "places isn't"],
+                ["places without {place}", (json) => (json.nameLink = "https://example.com/{name}"), "no nameLink"],
+                ["{place} without places", (json) => delete json.places, "no places"],
+            ])("reject %s", (_, change, message) => {
+                expect(
+                    problemsWith((json) => {
+                        linked(json);
+                        change(json);
+                    }),
+                ).toEqual([expect.stringContaining(message)]);
+            });
+        });
     });
 });
