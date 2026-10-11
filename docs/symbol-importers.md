@@ -38,6 +38,9 @@ Nothing in it is an address list: the names come from the build.
     take a checkout of it with nothing changed or added, and each set's `source` links the tree there.
   - `assemble`: globs, from the repository's root, of the sources to assemble. Every one, not only those
     that make a set: the anchors are chosen against everything the title puts in memory.
+  - `defines`: symbols to predefine, name to a baron expression, passed as `-D name=expression`: what the
+    title's own build passes, such as a build stamp the code prints, without which the source wouldn't
+    rebuild the disc.
   - `disc`: the original disc in the repository, the one the source rebuilds. Its image key has to be one
     of `madeFrom`'s, and it's the disc the in-memory check boots.
 - `leftToSystemSets`: INCLUDEd files whose names a system set (the MOS's) already gives. The listing doesn't
@@ -50,7 +53,8 @@ Nothing in it is an address list: the names come from the build.
   - `stripScope`: a scope that wraps the whole program, left off its names;
   - `tableSizes`: tables written with an index, by name, with how far the index goes (an expression);
   - `moves`: labels of the copies that put the program in place, whose stores don't keep anchors off what
-    they copy;
+    they copy: a store's own label, or a copy loop's, which takes the loop's indexed stores, up to the last
+    branch back to the label;
   - `globalsSections`: sections whose labels are the program's globals (zero page, say, which holds no code
     and which every program writes, so a region there couldn't be anchored).
 - A region is a SECTION (`section`, in `source` if not the set's first), or part of one between `from` and
@@ -151,7 +155,9 @@ addresses in the build (every section of every source where it runs, every file 
 
 - **One program's zero page used differently in different regions** loses names, since a set's globals hold
   one name per address: PIPELINE's game loader's `copy_return`, `copy_from` and `menu_keys` give way to the
-  main code's `monster_x`, `monster_direction` and `work0`.
+  main code's `monster_x`, `monster_direction` and `work0`. So does baron's `ZA_AUTO` allocator, which gives
+  routines that never run together the same zero page: Scorched Earth keeps one name for each such byte and
+  loses the rest.
 - **The operand rule misses** `=` names the code reaches only through an immediate's `LO()`/`HI()`, through
   a FUNCTION, or through a table of addresses, and takes a name whose instruction is dead code as readily as
   any. A virtual section's labels count any mention, so they aren't missed that way.
@@ -218,3 +224,29 @@ Where the regions are cut, and why:
 The in-memory check's scenarios (`symbols-src/pipeline-check.js`) walk the menu, TITLE, the game (to its
 loader, `game_start`, IO loading, the title screen and play, then seeded random play), the Level Designer,
 the Graphics Designer and its tours of every menu, MRUN and PL.
+
+## Scorched Earth
+
+`symbols-src/scorched-earth.json` makes one set, the game, from
+[beeb-scorched-earth](https://github.com/mattgodbolt/beeb-scorched-earth). INTRO, the BASIC that `!BOOT`
+chains, has no names, so no set; the in-memory check makes sure nothing matches while it runs.
+
+- The game prints its build stamp, which its Makefile passes as `-D BUILD=...`, so the config's `defines`
+  gives the shipped disc's stamp. Without it the code after the stamp would move.
+- SCORCH loads at `&1900` and copies the game down to `&0E00`, over where it was loaded, so the loader
+  region is only its own code, from `loader`: as loaded, it would match beside the game it copied down,
+  and the debugger would show neither.
+- `startup` runs once from `skyrow` and `dirtrow`, which the first round fills. Before it calls the game it
+  copies five tables into holes below `&0E00` (the bottom of the stack page, the cassette workspace, the
+  printer buffer, the user-defined characters and the NMI area), each a region of its own. Its copy loops,
+  and the loader's, are `moves`.
+- `tableSizes` gives the per-player and per-shell arrays in the printer buffer, the user-defined characters
+  and the NMI area, which would otherwise reach over the low tables beside them and the start of the code.
+  `profile`'s is up to `fall_x`, since napalm's `liquid` is the same address and runs over three tables.
+- The workspace sections are `globalsSections`, and `defs.6502`'s OS and hardware names are left to the
+  MOS set.
+- `avoid` keeps anchors off the talk lines, which are Wendell Hicken's, not the MIT licence's.
+
+The scenarios (`symbols-src/scorched-earth-check.js`) walk INTRO and its instructions, the loader, the
+start-up code and the setup screen, a human's turn and a computer's, and a two-round game of computers
+through its explosions, scores, shop and champion.
