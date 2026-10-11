@@ -117,7 +117,7 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
 
 ## Links to the author
 
-Every importer links each name back to its author's own site wherever there is one, with the set's
+Every importer should link each name back to its author's own site wherever there is one, with the set's
 `home`, `nameLink` and `places` ("Symbol sets" in [the proposal](media-registry-proposal.md)), so that
 someone reading a name in the debugger is one click from the author's own explanation of it:
 
@@ -231,6 +231,7 @@ A py8dis title's config differs from a baron title's in these:
 - `moves` and `tableSizes` name their stores and tables by expressions too, since a script names few of the
   instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
   `STA table+1,X` is `table + 1`.
+- No `home`, `places` or `nameLink`: the importer writes no links yet ("Links to the author").
 
 The importer runs it as
 
