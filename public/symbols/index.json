@@ -29,6 +29,23 @@
       }
     },
     {
+      "url": "sets/daredevil-demis-game.json",
+      "licence": "MIT",
+      "regions": {
+        "code": {
+          "start": "0x1900",
+          "end": "0x480c",
+          "minAnchors": 4,
+          "anchors": [
+            { "at": "0x1926", "bytes": "20e126adcd28" },
+            { "at": "0x24f1", "bytes": "20fb262907c90c" },
+            { "at": "0x308f", "bytes": "0002030704ff" },
+            { "at": "0x3e62", "bytes": "a690a491a908" }
+          ]
+        }
+      }
+    },
+    {
       "url": "sets/nevryon-game.json",
       "licence": "MIT",
       "regions": {

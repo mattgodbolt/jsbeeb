@@ -273,10 +273,14 @@ menu, then into the game and seeded random play.
 
 ## Daredevil Demis
 
-`symbols-src/daredevil-demis.json` is ready for
-[daredevil-demis](https://github.com/mattgodbolt/daredevil-demis), one region over its one saved file, but
-gives no licence and so makes no set: the repository has no LICENSE yet. Once it has one, the config needs
-its `licence` and `notice`, and its `commit` moved to one with the LICENSE.
+`symbols-src/daredevil-demis.json` makes one set, `game`, from
+[daredevil-demis](https://github.com/mattgodbolt/daredevil-demis): one region over its one saved file, which
+runs where it loads. The repository's disc, the one jsbeeb's GitHub disc list serves, is what the source
+builds.
+
+Its modules share zero page workspace (`strp`, `sfx_ptr` and `ttl_str` are all `&90`), so those addresses
+go unnamed. The in-memory check's scenario (`symbols-src/daredevil-demis-check.js`) checks the title screen,
+then seeded random play.
 
 ## PIPELINE
 

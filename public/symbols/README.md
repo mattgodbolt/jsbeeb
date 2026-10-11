@@ -27,6 +27,7 @@ node tools/symbols/make-mos-set.js && node tools/symbols/build-index.js
 ```
 
 The `pipeline-*.json` sets are imported from PIPELINE's baron build by `tools/symbols/import-baron.js`, as
-`symbols-src/pipeline.json` describes, and `nevryon-game.json` from Nevryon's beebasm build by
-`tools/symbols/import-beebasm.js`, as `symbols-src/nevryon.json` describes; [the importers'
+`symbols-src/pipeline.json` describes, and `nevryon-game.json` and `daredevil-demis-game.json` from their
+beebasm builds by `tools/symbols/import-beebasm.js`, as `symbols-src/nevryon.json` and
+`symbols-src/daredevil-demis.json` describe; [the importers'
 doc](../../docs/symbol-importers.md) says how to remake and check them.
