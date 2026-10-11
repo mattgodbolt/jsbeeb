@@ -238,7 +238,7 @@ A py8dis title's config differs from a baron title's in these:
 - `moves` and `tableSizes` name their stores and tables by expressions too, since a script names few of the
   instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
   `STA table+1,X` is `table + 1`. A move can name a copy loop's first instruction, as a baron one names its
-  label; the loop is the one in the piece with an instruction there, or in any piece if several have one.
+  label; the loop is the one in the piece with an instruction there, or in any piece if none or several have one.
 - No `home`, `places` or `nameLink`: the importer writes no links yet ("Links to the author").
 
 The importer runs it as
