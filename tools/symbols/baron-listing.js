@@ -68,6 +68,8 @@ export class Section {
         this.header = header;
         this.parent = parent;
         this.virtual = virtual;
+        /** Where each of a virtual section's SKIPs starts: the addresses it hands out. */
+        this.reservedAt = new Set();
         /** The parent's address where this section's bytes are stored. */
         this.storedAt = null;
         this.org = null;
@@ -152,7 +154,8 @@ export function parseBaronListing(text) {
         if (sectionStart) {
             const name = line.slice(sectionStart[0].length).split(",")[0].trim();
             const parent = stack.at(-1) ?? null;
-            const reopens = sections.some((earlier) => earlier.name === name && earlier.virtual);
+            const bare = !line.includes(",");
+            const reopens = bare && sections.some((earlier) => earlier.name === name && earlier.virtual);
             const section = new Section(name, line, parent, reopens || VirtualAttribute.test(line));
             if (parent) {
                 section.storedAt = position.get(parent) ?? parent.org;
@@ -233,6 +236,7 @@ export function parseBaronListing(text) {
             statements.push(current);
         } else {
             current = null;
+            if (section?.virtual) section.reservedAt.add(address);
         }
         if (section) advance(section, address, data.length);
     });

@@ -712,7 +712,6 @@
     "level_collects": "0x26ea",
     "level_time": "0x26eb",
     "level_finish_x": "0x26ec",
-    "level_finish_y": "0x26ed",
     "level_monster_rules": "0x26ee",
     "level_sprites": "0x26ef",
     "level_objects": "0x26f0",
@@ -721,7 +720,6 @@
     "level_puzzle_positions": "0x2740",
     "level_puzzle_effects": "0x2780",
     "level_map": "0x2800",
-    "level_end": "0x3000",
     "wdata": "0x7000"
   }
 }

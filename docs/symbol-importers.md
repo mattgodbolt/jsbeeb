@@ -92,14 +92,17 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
   (`main_code_end`) is in no region and is left out. A label inside an anonymous scope (baron's `@` names) is
   never used.
 - **A virtual section's labels** (`SECTION zero_page, org=&00, virtual=TRUE`) are globals: the section only
-  hands out addresses for workspace and keeps no bytes, so no region holds them.
+  hands out addresses for workspace and keeps no bytes, so no region holds them. A program can include
+  another's layout just to reckon offsets from it, so a label no instruction reads as a memory operand is
+  kept only if some statement mentions it (`EQUW slot_28`, `LDA #LO(io_maps)`) and a SKIP starts at it; a
+  label no SKIP follows only marks where the workspace ends.
 - **`=` names** count as addresses when an instruction uses them as a memory operand: the operand's first
   name, not after `#`, not a FUNCTION's result, and not one `leftToSystemSets` covers. Such a name goes to
   the region it points into if only that region's code uses it, and is a global otherwise.
 - **One name per address.** In a region, a scope's own name wins over the labels inside it (`pl` over
   `pl.start`), then the label written last, nearest the bytes (`tune` over `sound_data`). In the globals,
-  the `=` name or virtual section label the most instructions use, over any label of a `globalsSections`
-  section.
+  the `=` name or virtual section label the most instructions use as a memory operand; a label of a
+  `globalsSections` section, or a virtual one only data mentions, counts as used by none.
 - Every label the listing gives has to agree with the symbol dump, or the importer stops: the dump is what
   baron resolved, and the listing is where the scopes, sections and bytes come from.
 

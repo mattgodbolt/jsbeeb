@@ -252,6 +252,9 @@ describe("importBaron's virtual sections", () => {
         statement(0x0070, [], "SKIP 2"),
         label(0x0072, "count"),
         statement(0x0072, [], "SKIP 1"),
+        label(0x0073, "unmentioned"),
+        statement(0x0073, [], "SKIP 1"),
+        label(0x0074, "work_end"),
         "ENDSECTION",
         'SECTION work_code, filename="WORK", org=&1900, load=&1900, exec=&1900',
         label(0x1900, "start"),
@@ -259,9 +262,12 @@ describe("importBaron's virtual sections", () => {
         statement(0x1902, [0xe6, 0x70], "INC ptr"),
         statement(0x1904, [0xc6, 0x72], "DEC count"),
         statement(0x1906, [0x60], "RTS"),
+        statement(0x1907, [0x70, 0x00], "EQUW spare"),
         "ENDSECTION",
     ].join("\n");
-    const workSymbols = { "src/work.6502": { ptr: 0x70, spare: 0x70, count: 0x72, start: 0x1900 } };
+    const workSymbols = {
+        "src/work.6502": { ptr: 0x70, spare: 0x70, count: 0x72, unmentioned: 0x73, work_end: 0x74, start: 0x1900 },
+    };
     const workConfig = {
         ...config(),
         leftToSystemSets: [],
@@ -272,6 +278,15 @@ describe("importBaron's virtual sections", () => {
     it("makes globals of a virtual section's labels, naming each address as most instructions do", () => {
         expect(set.json.globals).toEqual({ ptr: "0x0070", count: "0x0072" });
         expect(set.dropped).toContainEqual(["spare", 0x0070, "the globals call it ptr"]);
+    });
+
+    it("leaves out workspace no statement mentions, and the label that marks where it ends", () => {
+        expect(set.dropped).toEqual(
+            expect.arrayContaining([
+                ["unmentioned", 0x0073, "workspace no statement mentions"],
+                ["work_end", 0x0074, "past its section's end"],
+            ]),
+        );
     });
 });
 
