@@ -155,7 +155,7 @@ from a template with `{place}`. So a disassembly with an anchor per address
 each name to where it's defined, and a plain text file with no anchors
 (`https://www.level7.org.uk/<path>.txt#:~:text={name}`) to the name's first appearance. `home` and
 `nameLink` are https, and the template starts with its site, which no placeholder can change; the build
-takes a place only as a path below the template's own, with no `.` or `..` segments. The debugger links a name
+takes a place only as a relative path, and optionally a fragment, with no `.` or `..` segments. The debugger links a name
 shown on its own to its place and says where that is beside a name in an operand, and shows `home` beside
 `source`. An importer fills these wherever the author has a site.
 
