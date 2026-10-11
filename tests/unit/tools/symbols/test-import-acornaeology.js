@@ -168,11 +168,10 @@ describe("importAcornaeology", () => {
     });
 
     it("refuses a ROM that isn't the disassembly's size", () => {
-        const rom = new Uint8Array(RomSize * 2);
-        rom.set(romOf(disassemblyJson()));
+        const rom = romOf(disassemblyJson()).subarray(0, RomSize / 2);
         const { json, errors } = imported({ rom });
         expect(json).toBeNull();
-        expect(errors).toEqual(["DEMO.ROM is 512 bytes, the disassembly 256"]);
+        expect(errors).toEqual(["DEMO.ROM is 128 bytes, the disassembly 256"]);
     });
 
     it("writes a set that passes the index's checks", () => {
