@@ -68,7 +68,7 @@ export class Section {
         this.header = header;
         this.parent = parent;
         this.virtual = virtual;
-        /** Where each statement that reserves space in a virtual section (a SKIP, an EQUW) starts. */
+        /** Where each statement in a virtual section starts, a SKIP or an EQUW that keeps no bytes. */
         this.reservedAt = new Set();
         /** The parent's address where this section's bytes are stored. */
         this.storedAt = null;

@@ -94,7 +94,7 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
 - **A virtual section's labels** (`SECTION zero_page, org=&00, virtual=TRUE`) are globals: the section only
   hands out addresses for workspace and keeps no bytes, so no region holds them. A program can include
   another's layout just to reckon offsets from it, so a label no instruction uses as a memory operand is
-  kept only if some statement mentions it (`EQUW slot_28`, `LDA #LO(io_maps)`, but not inside a string) and
+  kept only if some statement mentions it (`EQUW slot_28`, `LDA #LO(io_maps)`; not a `=` line, nor a string) and
   a statement reserving space (a SKIP, or an EQUW that keeps no bytes) starts at it; a label nothing reserves
   space at only marks where the workspace ends.
 - **`=` names** count as addresses when an instruction uses them as a memory operand: the operand's first
