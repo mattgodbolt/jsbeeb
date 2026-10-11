@@ -11,7 +11,8 @@
  *
  * A SECTION inside another (a "rephased" section, assembled for where it runs but stored in its
  * parent's file) emits its bytes into the parent's stream at the parent's address when the SECTION
- * starts.
+ * starts. A virtual section only hands out addresses: it emits nothing, and a later bare `SECTION name`
+ * reopens it, so only its first SECTION line says it's virtual.
  */
 
 /** The documented 6502 instruction set: anything else is data, a macro's call or a directive. */
@@ -27,6 +28,7 @@ const AddressLine = /^ {2}([0-9A-F]{4}) {2}/;
 const LabelLine = /^ {2}([0-9A-F]{4}) {2}\.([A-Za-z_]\w*)\s*$/;
 const AssignLine = /^([A-Za-z_]\w*) = /;
 const SectionLine = /^SECTION /i;
+const VirtualAttribute = /\bvirtual\s*=\s*TRUE\b/i;
 const EndSectionLine = /^ENDSECTION$/i;
 const IncludeStatement = /^INCLUDE\s+"([^"]*)"/i;
 const HexByte = /^[0-9A-F]{2}$/;
@@ -61,10 +63,13 @@ export class Statement {
 }
 
 export class Section {
-    constructor(name, header, parent) {
+    constructor(name, header, parent, virtual) {
         this.name = name;
         this.header = header;
         this.parent = parent;
+        this.virtual = virtual;
+        /** Where each statement in a virtual section starts, a SKIP or an EQUW that keeps no bytes. */
+        this.reservedAt = new Set();
         /** The parent's address where this section's bytes are stored. */
         this.storedAt = null;
         this.org = null;
@@ -149,7 +154,8 @@ export function parseBaronListing(text) {
         if (sectionStart) {
             const name = line.slice(sectionStart[0].length).split(",")[0].trim();
             const parent = stack.at(-1) ?? null;
-            const section = new Section(name, line, parent);
+            const reopens = sections.some((earlier) => earlier.name === name && earlier.virtual);
+            const section = new Section(name, line, parent, reopens || VirtualAttribute.test(line));
             if (parent) {
                 section.storedAt = position.get(parent) ?? parent.org;
                 parent.children.push(section);
@@ -163,7 +169,7 @@ export function parseBaronListing(text) {
             const section = stack.pop();
             section.end = position.get(section) ?? section.org;
             const parent = stack.at(-1);
-            if (parent) advance(parent, section.storedAt, section.end - section.org);
+            if (parent && !section.virtual) advance(parent, section.storedAt, section.end - section.org);
             current = null;
             return;
         }
@@ -229,6 +235,7 @@ export function parseBaronListing(text) {
             statements.push(current);
         } else {
             current = null;
+            if (section?.virtual) section.reservedAt.add(address);
         }
         if (section) advance(section, address, data.length);
     });

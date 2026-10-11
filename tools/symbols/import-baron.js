@@ -45,6 +45,8 @@ const OperandToken = new RegExp(
     String.raw`\s*(?:&[0-9A-Fa-f]+|%[01]+|\d+|'(?:[^']|'')'|"(?:[^"]|"")*"|(?<name>${Name})|.)`,
     "g",
 );
+const NameToken = new RegExp(Name, "g");
+const QuotedText = /"[^"]*"|'[^']*'/g;
 const Registers = new Set(["A", "X", "Y"]);
 const OsBlockOperand = new RegExp(String.raw`^#\s*LO\(\s*(${Name})\s*\)$`, "i");
 const ExpressionToken = new RegExp(String.raw`\s*(?:&([0-9A-Fa-f]+)|(\d+)|(${Name})|([-+*/()]))`, "y");
@@ -392,11 +394,50 @@ class Importer {
         const holds = (region, address) => address >= region.start && address < region.end;
         const runs = (region, statement) => statement.section === region.section && holds(region, statement.address);
 
-        // Labels belong to the region of the section they're assembled in.
+        // Every name instructions use as a memory operand, with the instructions that use it.
+        const operandUses = new Map(
+            sources.map((source) => {
+                const uses = new Map();
+                for (const statement of source.listing.statements) {
+                    const base = statement.code ? operandBase(statement.operand) : null;
+                    const name = base ? source.resolve(statement.scope, base) : null;
+                    if (!name) continue;
+                    if (!uses.has(name)) uses.set(name, []);
+                    uses.get(name).push(statement);
+                }
+                return [source, uses];
+            }),
+        );
+
+        // Every name any statement mentions, operand or data, immediate or not.
+        const mentioned = new Map(
+            sources.map((source) => [
+                source,
+                new Set(
+                    source.listing.statements.flatMap((statement) =>
+                        [...statement.text.replace(QuotedText, "").matchAll(NameToken)].map(([token]) =>
+                            source.resolve(statement.scope, token),
+                        ),
+                    ),
+                ),
+            ]),
+        );
+
+        // Labels belong to the region of the section they're assembled in, and a virtual section's are
+        // globals, on the terms docs/symbol-importers.md gives.
         for (const source of sources) {
             for (const label of source.listing.labels) {
                 if (label.name === strip) continue;
                 const section = label.section;
+                if (section?.virtual) {
+                    const uses = operandUses.get(source).get(label.name)?.length ?? 0;
+                    if (!uses && !section.reservedAt.has(label.address))
+                        dropped.push([shown(label.name), label.address, "past its section's end"]);
+                    else if (!uses && !mentioned.get(source).has(label.name))
+                        dropped.push([shown(label.name), label.address, "workspace no statement mentions"]);
+                    else add(globalsNamed, label.address, { name: shown(label.name), rank: [uses, label.order] });
+                    continue;
+                }
                 if (section && globalsSections.has(section.name)) {
                     if (label.address >= section.org && label.address < section.end)
                         add(globalsNamed, label.address, { name: shown(label.name), rank: [0, label.order] });
@@ -421,15 +462,9 @@ class Importer {
         // region's code uses it, else a global.
         for (const source of sources) {
             const { assigns } = source.listing;
-            const uses = new Map();
-            for (const statement of source.listing.statements) {
-                const base = statement.code ? operandBase(statement.operand) : null;
-                const name = base ? source.resolve(statement.scope, base) : null;
-                if (name && assigns.has(name) && !source.labelNames.has(name) && !this.systemNames.has(name)) {
-                    if (!uses.has(name)) uses.set(name, []);
-                    uses.get(name).push(statement);
-                }
-            }
+            const uses = [...operandUses.get(source)].filter(
+                ([name]) => assigns.has(name) && !source.labelNames.has(name) && !this.systemNames.has(name),
+            );
             const order = new Map([...assigns.keys()].map((name, i) => [name, i]));
             for (const [name, statements] of uses) {
                 const address = source.lookup(name);

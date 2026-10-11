@@ -244,6 +244,68 @@ describe("importBaron", () => {
     });
 });
 
+describe("importBaron's virtual sections", () => {
+    const workListing = [
+        "SECTION work, org=&0070, virtual=TRUE",
+        label(0x0070, "ptr"),
+        label(0x0070, "spare"),
+        statement(0x0070, [], "SKIP 2"),
+        label(0x0072, "count"),
+        statement(0x0072, [], "SKIP 1"),
+        label(0x0073, "unmentioned"),
+        statement(0x0073, [], "SKIP 1"),
+        label(0x0074, "work_end"),
+        "ENDSECTION",
+        "SECTION pool, org=&0080, virtual=TRUE",
+        label(0x0080, "pool_start"),
+        statement(0x0080, [], "SKIP 4"),
+        label(0x0084, "pool_end"),
+        "ENDSECTION",
+        'SECTION work_code, filename="WORK", org=&1900, load=&1900, exec=&1900',
+        label(0x1900, "start"),
+        statement(0x1900, [0x85, 0x70], "STA ptr"),
+        statement(0x1902, [0xe6, 0x70], "INC ptr"),
+        statement(0x1904, [0xc6, 0x72], "DEC count"),
+        statement(0x1906, [0x60], "RTS"),
+        statement(0x1907, [0x70, 0x00], "EQUW spare"),
+        statement(0x1909, [0xc5, 0x84], "CMP pool_end"),
+        statement(0x190b, [...new TextEncoder().encode("unmentioned")], 'EQUS "unmentioned"'),
+        "ENDSECTION",
+    ].join("\n");
+    const workSymbols = {
+        "src/work.6502": {
+            ptr: 0x70,
+            spare: 0x70,
+            count: 0x72,
+            unmentioned: 0x73,
+            work_end: 0x74,
+            pool_start: 0x80,
+            pool_end: 0x84,
+            start: 0x1900,
+        },
+    };
+    const workConfig = {
+        ...config(),
+        leftToSystemSets: [],
+        sets: [{ id: "work", title: "Work", sources: ["work"], regions: [{ name: "main", section: "work_code" }] }],
+    };
+    const [set] = importBaron(workConfig, baronBuild(new Map([["work", workListing]]), workSymbols, [])).sets;
+
+    it("makes globals of a virtual section's labels, naming each address as most instructions do", () => {
+        expect(set.json.globals).toEqual({ ptr: "0x0070", count: "0x0072", pool_end: "0x0084" });
+        expect(set.dropped).toContainEqual(["spare", 0x0070, "the globals call it ptr"]);
+    });
+
+    it("leaves out workspace no statement mentions outside a string, and the label that only marks its end", () => {
+        expect(set.dropped).toEqual(
+            expect.arrayContaining([
+                ["unmentioned", 0x0073, "workspace no statement mentions"],
+                ["work_end", 0x0074, "past its section's end"],
+            ]),
+        );
+    });
+});
+
 const namingListing = [
     "counter = 112 [&70]",
     "lives = 114 [&72]",
