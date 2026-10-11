@@ -196,6 +196,14 @@ describe("importBaron", () => {
         });
     });
 
+    it("fails a GitHub repository's set with a name it can't place", () => {
+        const onGitHub = { ...config(), source: { repository: "https://github.com/someone/demo", commit: "0123abc" } };
+        const unplaced = baronBuild(new Map([["prog", listing]]), progSymbols, []);
+        expect(importBaron(onGitHub, unplaced).errors).toEqual([
+            "prog: no place to link for buffer, counter, loop, patch, start",
+        ]);
+    });
+
     it("leaves out the end label past its region, saying why", () => {
         const { sets } = importBaron(config(), build());
         expect(sets[0].dropped).toEqual([["prog_end", 0x191d, "in no region"]]);

@@ -1,3 +1,4 @@
+import { hexword } from "./hex.js";
 import { loadData } from "./loader.js";
 import { matchRegions, NoNames, SymbolNames } from "./symbol-names.js";
 
@@ -41,15 +42,15 @@ export function nameLinkProblems(template) {
 
 /**
  * The https URL of `name`'s place on its author's site, from the set's `nameLink`: undefined if the set
- * has none, the template wants a place the set doesn't give the name, or the URL leaves the template's site.
+ * has none, the template doesn't start with an https site (which no placeholder can then change), or it
+ * wants a place the set doesn't give the name.
  * @param {SymbolSet} set
  */
 export function nameUrl(set, name, address) {
-    const site = typeof set.nameLink === "string" ? SiteOfTemplate.exec(set.nameLink)?.[0] : undefined;
-    if (!site) return undefined;
+    if (typeof set.nameLink !== "string" || !SiteOfTemplate.test(set.nameLink)) return undefined;
     const values = {
         name: encodeURIComponent(name),
-        addr: address.toString(16).toUpperCase().padStart(4, "0"),
+        addr: hexword(address).toUpperCase(),
         place: set.places.get(name),
     };
     let complete = true;
@@ -58,8 +59,7 @@ export function nameUrl(set, name, address) {
         if (typeof value !== "string") complete = false;
         return value;
     });
-    if (!complete || !isHttps(url) || new URL(url).origin !== new URL(site).origin) return undefined;
-    return url;
+    return complete && isHttps(url) ? url : undefined;
 }
 
 /** "0x1a2c" as a number; only a region's end can be 0x10000. */

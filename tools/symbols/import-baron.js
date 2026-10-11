@@ -321,6 +321,7 @@ class Importer {
         );
         this.images = buildImages(build, programSources);
         this.osBlocks = new Map();
+        this.onGitHub = new URL(config.source.repository).hostname === GitHub;
     }
 
     source(name) {
@@ -522,6 +523,8 @@ class Importer {
         const every = [...regions.flatMap((region) => [...region.symbols.keys()]), ...globals.keys()];
         const twice = [...new Set([...repeated, ...every.filter((name, i) => every.indexOf(name) !== i)])].sort();
         if (twice.length) throw new Error(`${spec.id}: names given twice: ${twice.join(", ")}`);
+        const unplaced = this.onGitHub ? every.filter((name) => !places.has(name)).sort() : [];
+        if (unplaced.length) this.errors.push(`${spec.id}: no place to link for ${unplaced.join(", ")}`);
 
         const stores = this.stores(spec, sources);
         const spread = { bytesPerAnchor: this.config.bytesPerAnchor, spreadAnchors: this.config.spreadAnchors };
@@ -538,7 +541,6 @@ class Importer {
     json(spec, regions, globals, places) {
         const { config } = this;
         const { repository, commit } = config.source;
-        const linked = places.size > 0 && new URL(repository).hostname === GitHub;
         return {
             format: Format,
             title: spec.title,
@@ -547,7 +549,7 @@ class Importer {
             ...(config.notice !== undefined && { notice: config.notice }),
             ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
             ...(config.home !== undefined && { home: config.home }),
-            ...(linked && { nameLink: `${repository}/blob/${commit}/{place}` }),
+            ...(this.onGitHub && { nameLink: `${repository}/blob/${commit}/{place}` }),
             regions: Object.fromEntries(
                 regions.map((region) => [
                     region.name,
@@ -564,7 +566,7 @@ class Importer {
                 ]),
             ),
             globals: byAddress(globals),
-            ...(linked && { places: Object.fromEntries([...places].sort(([a], [b]) => (a < b ? -1 : 1))) }),
+            ...(this.onGitHub && { places: Object.fromEntries([...places].sort(([a], [b]) => (a < b ? -1 : 1))) }),
         };
     }
 }

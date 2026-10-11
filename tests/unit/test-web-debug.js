@@ -288,12 +288,14 @@ describe("Debugger", () => {
             beforeEach(() => {
                 load.mockImplementation(async (url) => {
                     const json = structuredClone(files.get(url));
-                    if (url.endsWith("mos.json"))
+                    if (url.endsWith("mos.json")) {
                         Object.assign(json, {
                             home: "https://www.example.com/mos/",
                             nameLink: "https://example.com/mos/blob/0123abc/{place}",
                             places: { oswrch: "mos.asm#L42" },
                         });
+                        json.regions.rom.symbols.unplaced = "0x3004";
+                    }
                     return json;
                 });
             });
@@ -320,9 +322,23 @@ describe("Debugger", () => {
             });
 
             it("leaves a name with no place unlinked", async () => {
+                dbgr.debug(OswrchAt);
+                await vi.waitFor(() =>
+                    expect(rowAt(0x3004).querySelector(".dis_addr").textContent).toBe("3004 unplaced"),
+                );
+                expect(rowAt(0x3004).querySelector(".dis_addr .symbol").tagName).toBe("SPAN");
+                expect(rowAt(0x3004).querySelector(".dis_addr .symbol").title).toBe("unplaced: $3004, from Test MOS");
+            });
+
+            it("shows a home that isn't https as no link", async () => {
+                load.mockImplementation(async (url) => {
+                    const json = structuredClone(files.get(url));
+                    if (url.endsWith("mos.json")) json.home = "javascript:alert(1)";
+                    return json;
+                });
                 dbgr.debug(cpu.pc);
-                await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA os_text_ptr"));
-                expect(code(0x200d).querySelector(".instr_mem_ref").title).toBe("os_text_ptr: $00f2, from Test MOS");
+                await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+                expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             });
 
             it("links the author's page, by its site's name, beside the source", async () => {

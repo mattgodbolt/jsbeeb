@@ -131,10 +131,13 @@ describe("symbol sets", () => {
             expect(nameUrl(withLink("https://example.com/{place}"), "start", 0x2000)).toBeUndefined();
         });
 
-        it("gives no link that isn't https or leaves the template's site", () => {
+        it("gives no link that isn't https, or whose site a placeholder could change", () => {
             expect(nameUrl(withLink("http://example.com/{name}"), "start", 0x2000)).toBeUndefined();
             expect(nameUrl(withLink("javascript:{name}"), "start", 0x2000)).toBeUndefined();
             expect(nameUrl(withLink("https://{place}", { start: "elsewhere.example/" }), "start", 0)).toBeUndefined();
+            expect(nameUrl(withLink("https://example.com{place}", { start: ".evil.example/" }), "start", 0)).toBe(
+                undefined,
+            );
         });
 
         it.each([
