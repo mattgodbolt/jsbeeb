@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "title": "PIPELINE: MRUN",
+  "licence": "LicenseRef-TBD",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/3fed305e4746f566f32caa9cca2670cb9541b4f0",
+  "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
+  "regions": {
+    "main": {
+      "start": "0x0780",
+      "end": "0x0800",
+      "minAnchors": 1,
+      "anchors": [{ "at": "0x07b3", "bytes": "b9cf0748a8a200" }],
+      "symbols": {
+        "start": "0x0780",
+        "type_next": "0x07b3",
+        "boot_command": "0x07cf",
+        "start_basic": "0x07dc",
+        "unused": "0x07e3"
+      }
+    }
+  },
+  "globals": { "default_vectors": "0x0050" }
+}

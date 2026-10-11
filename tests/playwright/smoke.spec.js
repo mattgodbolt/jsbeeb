@@ -31,6 +31,9 @@ const OneRowWidth = 4000;
 const ShaderCompileBudgetMs = 30000;
 // The bar expands at Bootstrap's lg breakpoint, 992px.
 const LaptopWidths = [993, 1024, 1280, 1400, 1440, 1512, 1536, 1600];
+const Oswrch = 0xffee;
+// osnewl's JSR oswrch, a few instructions above oswrch itself.
+const OsnewlCall = 0xffe9;
 
 test("boots to the BASIC prompt with a working console surface", async ({ beeb, page }) => {
     await beeb.open();
@@ -85,6 +88,18 @@ test("typing at the keyboard reaches the machine", async ({ beeb }) => {
     await beeb.expectScreenText(">");
     await beeb.pressKey("a");
     await beeb.expectScreenText(">A");
+});
+
+test("a breakpoint in the MOS names its addresses, and says where the names came from", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.evaluate((address) => window.processor.debugInstruction.add((pc) => pc === address), Oswrch);
+    await beeb.pressKey("a");
+    const stopped = page.locator("#disassembly .highlight");
+    await expect(stopped.locator(".dis_addr")).toHaveText("ffee oswrch");
+    await expect(stopped.locator(".disassembly")).toHaveText(/^JMP \(wrchv\) ; \$[0-9a-f]{4}$/);
+    await expect(page.locator(`#disassembly [data-addr="${OsnewlCall}"] .disassembly`)).toHaveText("JSR oswrch");
+    await expect(page.locator("#debug-symbols")).toHaveText("names from BBC Micro MOS 1.20 (source)");
 });
 
 test("a disc named in the URL is loaded and autobooted", async ({ beeb }) => {

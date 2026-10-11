@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "title": "PIPELINE: MISSION, the Mission Generator",
+  "licence": "LicenseRef-TBD",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/3fed305e4746f566f32caa9cca2670cb9541b4f0",
+  "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
+  "regions": {
+    "program": {
+      "start": "0x1900",
+      "end": "0x3128",
+      "minAnchors": 6,
+      "anchors": [
+        { "at": "0x19c6", "bytes": "a202bd140448" },
+        { "at": "0x1f0a", "bytes": "73697a652988" },
+        { "at": "0x2519", "bytes": "ddf26c6f636b" },
+        { "at": "0x2b4b", "bytes": "6c6563742066" },
+        { "at": "0x2f16", "bytes": "e79f3d313720" },
+        { "at": "0x303d", "bytes": "ddf27265706f" }
+      ],
+      "symbols": {
+        "program": "0x1900",
+        "line_60": "0x1978",
+        "scramble_editing_code": "0x19c6",
+        "each_byte": "0x19c8",
+        "line_70": "0x19e3"
+      }
+    }
+  },
+  "globals": { "swap_temp": "0x0070", "editing_code": "0x0414" }
+}

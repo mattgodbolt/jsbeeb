@@ -45,6 +45,35 @@ describe("Disassemble6502", () => {
         expect(disassembler65c02.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
     });
 
+    describe("operands in the debugger's listing", () => {
+        const memRef = (address, hex) => `<span class="instr_mem_ref" data-ref="${address}">$${hex}</span>`;
+        const instrRef = (address, hex) => `<span class="instr_instr_ref" data-ref="${address}">$${hex}</span>`;
+
+        it.each([
+            ["absolute", [0x8d, 0x40, 0xfe], `STA ${memRef(0xfe40, "fe40")}`],
+            ["zero page", [0xa5, 0xf2], `LDA ${memRef(0xf2, "f2")}`],
+            ["zero page indexed", [0xb5, 0x70], `LDA ${memRef(0x70, "70")},X`],
+            ["indexed indirect", [0xa1, 0x70], `LDA (${memRef(0x70, "70")}, X)`],
+            ["indirect indexed", [0xb1, 0xf2], `LDA (${memRef(0xf2, "f2")}),Y ; $eaea + Y`],
+            ["a call", [0x20, 0xee, 0xff], `JSR ${instrRef(0xffee, "ffee")}`],
+            ["an indirect jump", [0x6c, 0x0e, 0x02], `JMP (${instrRef(0x20e, "020e")}) ; $eaea`],
+            ["a branch", [0xd0, 0x10], `BNE ${instrRef(0x2012, "2012")}`],
+        ])("wraps a reference round the whole of %s operand", (_, bytes, listing) => {
+            mem.set(bytes, 0x2000);
+            expect(disassembler.disassemble(0x2000)[0]).toBe(listing);
+        });
+
+        it("wraps a branch's target round the top of memory, as the CPU does", () => {
+            mem.set([0xd0, 0x10], 0xfff8);
+            expect(disassembler.disassemble(0xfff8)).toEqual([`BNE ${instrRef(0x0a, "000a")}`, 0xfffa, 0x0a]);
+        });
+
+        it("keeps references out of the plain listing", () => {
+            mem.set([0xb1, 0xf2], 0x2000);
+            expect(disassembler.disassemble(0x2000, true)[0]).toBe("LDA ($f2),Y ; $eaea + Y");
+        });
+    });
+
     describe("documented and undocumented opcodes", () => {
         const countDocumented = (dis) => {
             let count = 0;
