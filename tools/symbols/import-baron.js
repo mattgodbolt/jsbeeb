@@ -392,11 +392,32 @@ class Importer {
         const holds = (region, address) => address >= region.start && address < region.end;
         const runs = (region, statement) => statement.section === region.section && holds(region, statement.address);
 
-        // Labels belong to the region of the section they're assembled in.
+        // Every name instructions use as a memory operand, with the instructions that use it.
+        const operandUses = new Map(
+            sources.map((source) => {
+                const uses = new Map();
+                for (const statement of source.listing.statements) {
+                    const base = statement.code ? operandBase(statement.operand) : null;
+                    const name = base ? source.resolve(statement.scope, base) : null;
+                    if (!name) continue;
+                    if (!uses.has(name)) uses.set(name, []);
+                    uses.get(name).push(statement);
+                }
+                return [source, uses];
+            }),
+        );
+
+        // Labels belong to the region of the section they're assembled in. A virtual section's are
+        // workspace, so globals, named like the `=` names below.
         for (const source of sources) {
             for (const label of source.listing.labels) {
                 if (label.name === strip) continue;
                 const section = label.section;
+                if (section?.virtual) {
+                    const uses = operandUses.get(source).get(label.name)?.length ?? 0;
+                    add(globalsNamed, label.address, { name: shown(label.name), rank: [uses, label.order] });
+                    continue;
+                }
                 if (section && globalsSections.has(section.name)) {
                     if (label.address >= section.org && label.address < section.end)
                         add(globalsNamed, label.address, { name: shown(label.name), rank: [0, label.order] });
@@ -421,15 +442,9 @@ class Importer {
         // region's code uses it, else a global.
         for (const source of sources) {
             const { assigns } = source.listing;
-            const uses = new Map();
-            for (const statement of source.listing.statements) {
-                const base = statement.code ? operandBase(statement.operand) : null;
-                const name = base ? source.resolve(statement.scope, base) : null;
-                if (name && assigns.has(name) && !source.labelNames.has(name) && !this.systemNames.has(name)) {
-                    if (!uses.has(name)) uses.set(name, []);
-                    uses.get(name).push(statement);
-                }
-            }
+            const uses = [...operandUses.get(source)].filter(
+                ([name]) => assigns.has(name) && !source.labelNames.has(name) && !this.systemNames.has(name),
+            );
             const order = new Map([...assigns.keys()].map((name, i) => [name, i]));
             for (const [name, statements] of uses) {
                 const address = source.lookup(name);

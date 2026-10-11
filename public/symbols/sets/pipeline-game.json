@@ -1,8 +1,9 @@
 {
   "format": 1,
   "title": "PIPELINE: the game",
-  "licence": "LicenseRef-TBD",
-  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/3fed305e4746f566f32caa9cca2670cb9541b4f0",
+  "licence": "MIT",
+  "source": "https://github.com/mattgodbolt/pipeline-disasm/tree/eb6b2bbacc864395e50ff4d2c302010704a53e0f",
+  "notice": "The names are pipeline-disasm's, from https://github.com/mattgodbolt/pipeline-disasm/tree/eb6b2bbacc864395e50ff4d2c302010704a53e0f, under this licence:\n\nMIT License\n\nCopyright (c) 2026 Matt Godbolt\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
   "madeFrom": ["dc7201d5fb5bfa137e302dade0b519da"],
   "regions": {
     "loader": {
@@ -725,12 +726,16 @@
     "backpack": "0x0024",
     "menu_key_left": "0x0029",
     "menu_key_right": "0x002a",
+    "menu_key_up": "0x002b",
+    "menu_key_down": "0x002c",
     "empty_channel": "0x002d",
     "lives": "0x002e",
     "sound_channel": "0x0030",
     "sound_channel_high": "0x0031",
     "sound_amplitude": "0x0032",
+    "sound_amplitude_high": "0x0033",
     "sound_pitch": "0x0034",
+    "sound_pitch_high": "0x0035",
     "sound_duration": "0x0036",
     "sound_duration_high": "0x0037",
     "tune_channel": "0x0038",
@@ -834,7 +839,9 @@
     "bit4_mask": "0x182f",
     "trigger_args": "0x23ad",
     "trigger_condition": "0x23b0",
+    "io_no_object_picture": "0x242d",
     "io_object_names": "0x24ad",
+    "io_mission_text": "0x2561",
     "io_time_rate": "0x257f",
     "io_map_levels": "0x2580",
     "io_backpack_last": "0x2581",
@@ -850,6 +857,12 @@
     "io_level_trigger_flags": "0x2680",
     "io_level_trigger_places": "0x2700",
     "io_level_trigger_args_0": "0x2800",
-    "io_level_trigger_args_1": "0x2900"
+    "io_level_trigger_args_1": "0x2900",
+    "io_maps": "0x2a00",
+    "io_tiles": "0x4a00",
+    "io_object_icons": "0x5200",
+    "io_player": "0x5400",
+    "io_alternates": "0x5600",
+    "map": "0x5800"
   }
 }

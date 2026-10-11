@@ -110,6 +110,32 @@ describe("parseBaronListing", () => {
         expect(image.has(0x0400)).toBe(false);
     });
 
+    it("marks a virtual section and the bare SECTION that reopens it, and stores nothing of it in its parent", () => {
+        const parsed = parseBaronListing(
+            [
+                "SECTION code, org=&2000",
+                statement(0x2000, [0xea], "NOP"),
+                "SECTION work, org=&0070, virtual=TRUE",
+                label(0x0070, "ptr"),
+                statement(0x0070, [], "SKIP 2"),
+                label(0x0072, "count"),
+                statement(0x0072, [], "SKIP 1"),
+                "ENDSECTION",
+                "SECTION moved, org=&0400",
+                statement(0x0400, [0x60], "RTS"),
+                "ENDSECTION",
+                "SECTION work",
+                label(0x0073, "flag"),
+                statement(0x0073, [], "SKIP 1"),
+                "ENDSECTION",
+                "ENDSECTION",
+            ].join("\n"),
+        );
+        const [code, work, moved, reopened] = parsed.sections;
+        expect([code.virtual, work.virtual, moved.virtual, reopened.virtual]).toEqual([false, true, false, true]);
+        expect(moved.storedAt).toBe(0x2001);
+    });
+
     it("counts SKIPTO as padding, as SKIP is, in any case", () => {
         const padded = parseBaronListing(
             [

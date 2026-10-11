@@ -30,7 +30,7 @@
     },
     {
       "url": "sets/pipeline-game-stub.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "main": {
           "start": "0x0900",
@@ -45,7 +45,7 @@
     },
     {
       "url": "sets/pipeline-game.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "loader": {
           "start": "0x3000",
@@ -115,7 +115,7 @@
     },
     {
       "url": "sets/pipeline-graphic-stub.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "main": {
           "start": "0x0900",
@@ -130,7 +130,7 @@
     },
     {
       "url": "sets/pipeline-graphics-designer.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "main": {
           "start": "0x1ab0",
@@ -147,7 +147,7 @@
     },
     {
       "url": "sets/pipeline-levdes-stub.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "main": {
           "start": "0x0900",
@@ -162,7 +162,7 @@
     },
     {
       "url": "sets/pipeline-level-designer.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "main": {
           "start": "0x1100",
@@ -211,7 +211,7 @@
     },
     {
       "url": "sets/pipeline-menu.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "program": {
           "start": "0x1900",
@@ -243,7 +243,7 @@
     },
     {
       "url": "sets/pipeline-mission.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "program": {
           "start": "0x1900",
@@ -262,7 +262,7 @@
     },
     {
       "url": "sets/pipeline-mrun.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "main": {
           "start": "0x0780",
@@ -274,7 +274,7 @@
     },
     {
       "url": "sets/pipeline-pl.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "decryptor": {
           "start": "0x0400",
@@ -298,7 +298,7 @@
     },
     {
       "url": "sets/pipeline-title.json",
-      "licence": "LicenseRef-TBD",
+      "licence": "MIT",
       "regions": {
         "title": {
           "start": "0x6300",
