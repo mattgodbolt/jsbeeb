@@ -9,6 +9,7 @@ import {
     beebasmVersion,
     memoryOperandNames,
     PrintPrefix,
+    withBeebasmBuild,
     wrapperSource,
 } from "../../../../tools/symbols/beebasm-build.js";
 
@@ -51,6 +52,12 @@ describe("a beebasm build", () => {
         expect(beebasmVersion(stub("newer", stubVersion("beebasm 2.0")))).toBe("beebasm 2.0");
         expect(() => beebasmVersion(stub("old", stubVersion("beebasm 1.10")))).toThrow("1.11 or later");
         expect(() => beebasmVersion(path.join(dir, "nowhere"))).toThrow("Can't run beebasm");
+    });
+
+    it("refuses a baron title before running anything", async () => {
+        await expect(withBeebasmBuild({ id: "demo", source: {} }, { beebasm: "/nowhere" }, () => {})).rejects.toThrow(
+            "demo's source is assembled with baron",
+        );
     });
 
     it("drops each name that isn't a top-level one, makes the directories SAVEs need, and reads the results", () => {
