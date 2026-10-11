@@ -319,6 +319,35 @@
       }
     },
     {
+      "url": "sets/repton2-game.json",
+      "licence": "Unlicense",
+      "regions": {
+        "main": {
+          "start": "0x0d00",
+          "end": "0x6000",
+          "minAnchors": 4,
+          "anchors": [
+            { "at": "0x0d00", "bytes": "40201a11c903" },
+            { "at": "0x21e1", "bytes": "860a840ba900" },
+            { "at": "0x3920", "bytes": "010005170307" },
+            { "at": "0x4b60", "bytes": "21844c4a7624" }
+          ]
+        },
+        "music": {
+          "start": "0x0380",
+          "end": "0x03e0",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x03ab", "bytes": "60e000f0fb48" }]
+        },
+        "page8": {
+          "start": "0x0880",
+          "end": "0x08c0",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0880", "bytes": "60a58bf0fba902" }]
+        }
+      }
+    },
+    {
       "url": "sets/scorched-earth-game.json",
       "licence": "MIT",
       "regions": {

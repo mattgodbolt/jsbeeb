@@ -11,6 +11,7 @@ import {
     importBaron,
     operandBase,
     osBlockTargets,
+    placesBySource,
     readBaronBuild,
     symbolsBySource,
     writeSets,
@@ -68,10 +69,10 @@ const progDump = {
                     parent: null,
                     size: 29,
                     assignments: {
-                        OSWRCH: { value: 0xffee },
-                        counter: { value: 0x70 },
-                        buffer: { value: 0x0900 },
-                        patch: { value: 0x1915 },
+                        OSWRCH: { value: 0xffee, source: 1, line: 1 },
+                        counter: { value: 0x70, source: 2, line: 1 },
+                        buffer: { value: 0x0900, source: 2, line: 2 },
+                        patch: { value: 0x1915, source: 2, line: 3 },
                     },
                 },
                 {
@@ -80,10 +81,10 @@ const progDump = {
                     size: 29,
                     attributes: { filename: "PROG", org: 0x1900, load: 0x1900, exec: 0x1900 },
                     labels: {
-                        prog: { value: 0x1900 },
-                        "prog.start": { value: 0x1900 },
-                        "prog.loop": { value: 0x190f },
-                        prog_end: { value: 0x191d },
+                        prog: { value: 0x1900, source: 0, line: 4 },
+                        "prog.start": { value: 0x1900, source: 0, line: 6 },
+                        "prog.loop": { value: 0x190f, source: 0, line: 13 },
+                        prog_end: { value: 0x191d, source: 0, line: 21 },
                     },
                 },
             ],
@@ -91,6 +92,7 @@ const progDump = {
     ],
 };
 const progSymbols = symbolsBySource(progDump);
+const progPlaces = placesBySource(progDump);
 
 const config = (regions = [{ name: "main", section: "prog" }]) => ({
     id: "demo",
@@ -103,7 +105,7 @@ const config = (regions = [{ name: "main", section: "prog" }]) => ({
     sets: [{ id: "prog", title: "Demo", sources: ["prog"], stripScope: "prog", regions }],
 });
 
-const build = () => baronBuild(new Map([["prog", listing]]), progSymbols, []);
+const build = () => baronBuild(new Map([["prog", listing]]), progSymbols, [], progPlaces);
 
 describe("operandBase", () => {
     it("is the first name of a memory operand", () => {
@@ -171,6 +173,35 @@ describe("importBaron", () => {
         expect(json.regions.main.symbols).toEqual({ start: "0x1900", loop: "0x190f", patch: "0x1915" });
         expect(json.globals).toEqual({ counter: "0x0070", buffer: "0x0900" });
         expect(json.regions.main.minAnchors).toBe(json.regions.main.anchors.length);
+        expect(json.nameLink).toBeUndefined();
+        expect(json.places).toBeUndefined();
+    });
+
+    it("links each name to the line that defines it, for a repository on GitHub", () => {
+        const onGitHub = {
+            ...config(),
+            home: "https://example.com/demo/",
+            source: { repository: "https://github.com/someone/demo", commit: "0123abc" },
+        };
+        const [{ file, json }] = importBaron(onGitHub, build()).sets;
+        expect(checkSet(json, { file: `sets/${file}`, mosSets: [] })).toEqual([]);
+        expect(json.home).toBe("https://example.com/demo/");
+        expect(json.nameLink).toBe("https://github.com/someone/demo/blob/0123abc/{place}");
+        expect(json.places).toEqual({
+            buffer: "src/zp.6502inc#L2",
+            counter: "src/zp.6502inc#L1",
+            loop: "src/prog.6502#L13",
+            patch: "src/zp.6502inc#L3",
+            start: "src/prog.6502#L6",
+        });
+    });
+
+    it("fails a GitHub repository's set with a name it can't place", () => {
+        const onGitHub = { ...config(), source: { repository: "https://github.com/someone/demo", commit: "0123abc" } };
+        const unplaced = baronBuild(new Map([["prog", listing]]), progSymbols, []);
+        expect(importBaron(onGitHub, unplaced).errors).toEqual([
+            "prog: no place to link for buffer, counter, loop, patch, start",
+        ]);
     });
 
     it("leaves out the end label past its region, saying why", () => {
@@ -553,6 +584,32 @@ describe("symbolsBySource", () => {
     });
 });
 
+describe("placesBySource", () => {
+    it("places each symbol at its file and line, from the repository's root", () => {
+        const dump = {
+            format: 2,
+            assemblies: [
+                {
+                    sources: ["src/a.6502", "src/../inc/zp.6502inc", "-D DEBUG=1", "../outside.6502inc"],
+                    sections: [
+                        {
+                            parent: null,
+                            size: 0,
+                            labels: { start: { value: 0x1900, source: 0, line: 7 } },
+                            assignments: {
+                                ptr: { value: 0x70, source: 1, line: 2 },
+                                far: { value: 0x72, source: 3, line: 1 },
+                            },
+                            defines: { DEBUG: { value: 1, source: 2, line: 1 } },
+                        },
+                    ],
+                },
+            ],
+        };
+        expect(placesBySource(dump)).toEqual({ "src/a.6502": { start: "src/a.6502#L7", ptr: "inc/zp.6502inc#L2" } });
+    });
+});
+
 describe("readBaronBuild", () => {
     let dir;
     beforeEach(() => {
@@ -574,6 +631,7 @@ describe("readBaronBuild", () => {
         const { sources, files } = readBaronBuild(dir);
         expect([...sources.keys()]).toEqual(["prog"]);
         expect(sources.get("prog").lookup("prog.loop")).toBe(0x190f);
+        expect(sources.get("prog").places["prog.loop"]).toBe("src/prog.6502#L13");
         expect(files).toEqual([{ name: "PROG", load: 0x1900, data: Buffer.from([0xa9, 0x00]) }]);
     });
 });
