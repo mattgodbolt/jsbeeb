@@ -88,10 +88,14 @@ export function sourcesToAssemble(config, sourceDir) {
     return sources.sort();
 }
 
-/** Baron's arguments to assemble one source, run from the repository's root, into `buildDir`'s layout. */
-export function baronArguments(source, buildDir) {
+/**
+ * Baron's arguments to assemble one source, run from the repository's root, into `buildDir`'s layout.
+ * @param {Object<string, string>} defines - symbols to predefine, name to a baron expression
+ */
+export function baronArguments(source, buildDir, defines = {}) {
     const name = path.parse(source).name;
     return [
+        ...Object.entries(defines).flatMap(([symbol, expression]) => ["-D", `${symbol}=${expression}`]),
         "-p",
         path.join(buildDir, BuildLayout.files),
         "--inf",
@@ -122,7 +126,7 @@ export function assemble(config, sourceDir, buildDir, baron) {
     const sources = sourcesToAssemble(config, sourceDir);
     for (const source of sources) {
         try {
-            execFileSync(baron, baronArguments(source, buildDir), {
+            execFileSync(baron, baronArguments(source, buildDir, config.source.defines), {
                 cwd: sourceDir,
                 stdio: ["ignore", "ignore", "pipe"],
             });

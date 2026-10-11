@@ -43,6 +43,9 @@ Nothing in it is an address list: the names come from the build.
     a repository on GitHub, each set's `nameLink` links a name to the line that defines it at that commit.
   - `assemble`: globs, from the repository's root, of the sources to assemble. Every one, not only those
     that make a set: the anchors are chosen against everything the title puts in memory.
+  - `defines`: symbols to predefine, name to a baron expression, passed as `-D name=expression`: what the
+    title's own build passes, such as a build stamp the code prints, without which the source wouldn't
+    rebuild the disc.
   - `disc`: the original disc in the repository, the one the source rebuilds. Its image key has to be one
     of `madeFrom`'s, and it's the disc the in-memory check boots.
 - `leftToSystemSets`: INCLUDEd files whose names a system set (the MOS's) already gives. The listing doesn't
@@ -55,7 +58,8 @@ Nothing in it is an address list: the names come from the build.
   - `stripScope`: a scope that wraps the whole program, left off its names;
   - `tableSizes`: tables written with an index, by name, with how far the index goes (an expression);
   - `moves`: labels of the copies that put the program in place, whose stores don't keep anchors off what
-    they copy;
+    they copy. A label takes the store it's on, if it is, and if a loop in its section branches back to it,
+    the loop's indexed stores up to the last branch back;
   - `globalsSections`: sections whose labels are the program's globals (zero page, say, which holds no code
     and which every program writes, so a region there couldn't be anchored).
 - A region is a SECTION (`section`, in `source` if not the set's first), or part of one between `from` and
@@ -76,9 +80,9 @@ node tools/symbols/check-memory.js --config symbols-src/pipeline.json
 ```
 
 Each fetches the config's commit into a temporary directory, or takes `--source`, a checkout of it, and runs
-baron there on each source on its own, as `-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v`
-cuts a statement's bytes at eight, so its listing can't be read for them. The importer prints the baron it
-ran, from `--version`.
+baron there on each source on its own, as `-D name=expression` for each of the config's `defines`, then
+`-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v` cuts a statement's bytes at eight, so its
+listing can't be read for them. The importer prints the baron it ran, from `--version`.
 
 The importer, and so the corpus check, needs baron 0.5.0 or later, whose symbol dump replaced the flat one
 an older baron wrote, and refuses the flat one. The in-memory check doesn't read the dumps, so any baron that
@@ -112,8 +116,9 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
 - Every label the listing gives has to agree with the symbol dump, or the importer stops: the dump is what
   baron resolved, and the listing is where the scopes, sections and bytes come from.
 - **Each name's place** is the file and line the symbol dump says defines it (`src/game.6502#L120`), in the
-  set's `places`, for the `nameLink` a GitHub repository gets. For such a repository, a name the dump gives
-  no place (a `-D` predefine, or any name in a dump without lines) stops the import.
+  set's `places`, for the `nameLink` a GitHub repository gets. For such a repository, a name in a set that
+  the dump gives no place (any name, in a dump without lines) stops the import. A `defines` entry, like
+  Scorched Earth's `BUILD`, has no listing line, so it's never a name in a set.
 
 ## Links to the author
 
@@ -179,7 +184,9 @@ addresses in the build (every section of every source where it runs, every file 
 
 - **One program's zero page used differently in different regions** loses names, since a set's globals hold
   one name per address: PIPELINE's game loader's `copy_return`, `copy_from` and `menu_keys` give way to the
-  main code's `monster_x`, `monster_direction` and `work0`.
+  main code's `monster_x`, `monster_direction` and `work0`. So does baron's `ZA_AUTO` allocator, which gives
+  routines that never run together the same zero page: Scorched Earth keeps one name for each such byte and
+  loses the rest.
 - **The operand rule misses** `=` names the code reaches only through an immediate's `LO()`/`HI()`, through
   a FUNCTION, or through a table of addresses, and takes a name whose instruction is dead code as readily as
   any. A virtual section's labels count any mention, so they aren't missed that way.
@@ -230,7 +237,8 @@ A py8dis title's config differs from a baron title's in these:
   in the script's names as a baron config's are. It has to lie in one piece.
 - `moves` and `tableSizes` name their stores and tables by expressions too, since a script names few of the
   instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
-  `STA table+1,X` is `table + 1`.
+  `STA table+1,X` is `table + 1`. A move can name a copy loop's first instruction, as a baron one names its
+  label; the loop is the one in the piece with an instruction there, or in any piece if none or several have one.
 - No `home`, `places` or `nameLink`: the importer writes no links yet ("Links to the author").
 
 The importer runs it as
@@ -308,6 +316,32 @@ Where the regions are cut, and why:
 The in-memory check's scenarios (`symbols-src/pipeline-check.js`) walk the menu, TITLE, the game (to its
 loader, `game_start`, IO loading, the title screen and play, then seeded random play), the Level Designer,
 the Graphics Designer and its tours of every menu, MRUN and PL.
+
+## Scorched Earth
+
+`symbols-src/scorched-earth.json` makes one set, the game, from
+[beeb-scorched-earth](https://github.com/mattgodbolt/beeb-scorched-earth). INTRO, the BASIC that `!BOOT`
+chains, has no names, so no set; the in-memory check makes sure nothing matches while it runs.
+
+- The game prints its build stamp, which its Makefile passes as `-D BUILD=...`, so the config's `defines`
+  gives the shipped disc's stamp. Without it the code after the stamp would move.
+- SCORCH loads at `&1900` and copies the game down to `&0E00`, over where it was loaded, so the loader
+  region is only its own code, from `loader`: as loaded, it would match beside the game it copied down,
+  and the debugger would show neither.
+- `startup` runs once from `skyrow` and `dirtrow`, which the first round fills. Before it calls the game it
+  copies five tables into holes below `&0E00` (the bottom of the stack page, the cassette workspace, the
+  printer buffer, the user-defined characters and the NMI area), each a region of its own. Its copy loops,
+  and the loader's, are `moves`.
+- `tableSizes` gives the per-player and per-shell arrays in the printer buffer, the user-defined characters
+  and the NMI area, which would otherwise reach over the low tables beside them and the start of the code.
+  `profile`'s is up to `fall_x`, since napalm's `liquid` is the same address and runs over three tables.
+- The workspace sections are `globalsSections`, and `defs.6502`'s OS and hardware names are left to the
+  MOS set.
+- `avoid` keeps anchors off the talk lines, which are Wendell Hicken's, not the MIT licence's.
+
+The scenarios (`symbols-src/scorched-earth-check.js`) walk INTRO and its instructions, the loader, the
+start-up code and the setup screen, a human's turn and a computer's, and a two-round game of computers
+through its explosions, scores, shop and champion.
 
 ## Repton 2
 

@@ -346,6 +346,65 @@
           "anchors": [{ "at": "0x0880", "bytes": "60a58bf0fba902" }]
         }
       }
+    },
+    {
+      "url": "sets/scorched-earth-game.json",
+      "licence": "MIT",
+      "regions": {
+        "loader": {
+          "start": "0x3e95",
+          "end": "0x3ec9",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x3eb2", "bytes": "b9673b990006" }]
+        },
+        "code": {
+          "start": "0x0e00",
+          "end": "0x3067",
+          "minAnchors": 4,
+          "anchors": [
+            { "at": "0x0e00", "bytes": "ad4dfe2902f002" },
+            { "at": "0x169a", "bytes": "a44799840a8a" },
+            { "at": "0x1f68", "bytes": "6038e903a8a9e7" },
+            { "at": "0x27da", "bytes": "a200861fbd6e0b" }
+          ]
+        },
+        "startup": {
+          "start": "0x0600",
+          "end": "0x0738",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0600", "bytes": "a260bd9e3c9d7f03" }]
+        },
+        "low_stack": {
+          "start": "0x0100",
+          "end": "0x01a8",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x017b", "bytes": "285a78a05050" }]
+        },
+        "low_tape": {
+          "start": "0x0380",
+          "end": "0x03e0",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0380", "bytes": "0004090d1216" }]
+        },
+        "low_printer": {
+          "start": "0x088c",
+          "end": "0x08bf",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x088c", "bytes": "060a1220090c" }]
+        },
+        "low_udg": {
+          "start": "0x0c6a",
+          "end": "0x0cec",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0c6a", "bytes": "0f3c3f300029" }]
+        },
+        "low_nmi": {
+          "start": "0x0db2",
+          "end": "0x0deb",
+          "minAnchors": 1,
+          "anchors": [{ "at": "0x0ddb", "bytes": "00030c0f3033" }]
+        }
+      }
     }
   ]
 }

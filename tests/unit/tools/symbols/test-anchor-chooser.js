@@ -4,7 +4,7 @@ import { blockedAddresses, candidates, chooseAnchors, storesIn } from "../../../
 
 const Section = { name: "main" };
 const OtherSection = { name: "other" };
-const NoTables = { tableSizes: new Map(), moves: new Set() };
+const NoTables = { tableSizes: new Map(), moves: new Map() };
 const Spread = { bytesPerAnchor: 0x100, spreadAnchors: 4 };
 
 const code = (address, data, section = Section) => ({ address, data, code: true, skip: false, section });
@@ -60,16 +60,67 @@ describe("storesIn", () => {
         const move = code(0x1903, [0x99, 0x00, 0x04]);
         const { stores, used } = storesIn([table, move], {
             tableSizes: new Map([[0x100, 4]]),
-            moves: new Set([0x1903]),
+            moves: new Map([[0x1903, null]]),
         });
         expect(stores.map(({ first, last }) => [first, last])).toEqual([[0x100, 0x103]]);
         expect(used).toEqual(new Set([0x100, 0x1903]));
     });
 
+    it("takes a copy loop's indexed stores as the move its label names, up to the last branch back", () => {
+        const statements = [
+            code(0x1900, [0xbd, 0x00, 0x20]),
+            code(0x1903, [0x99, 0x00, 0x0e]),
+            code(0x1906, [0xc8]),
+            code(0x1907, [0xd0, 0xf7]),
+            code(0x1909, [0x9d, 0x00, 0x10]),
+            code(0x190c, [0xee, 0x02, 0x19]),
+            code(0x190f, [0xca]),
+            code(0x1910, [0xd0, 0xee]),
+            code(0x1912, [0x99, 0x00, 0x0f]),
+        ];
+        const { stores, used } = storesIn(statements, {
+            tableSizes: new Map(),
+            moves: new Map([[0x1900, Section]]),
+        });
+        expect(stores.map(({ first, last }) => [first, last])).toEqual([
+            [0x1902, 0x1902],
+            [0x0f00, 0x0fff],
+        ]);
+        expect(used).toEqual(new Set([0x1900]));
+    });
+
+    it("leaves a store in another section from the loop where it is", () => {
+        const statements = [
+            code(0x1900, [0xbd, 0x00, 0x20]),
+            code(0x1903, [0x99, 0x00, 0x0e], OtherSection),
+            code(0x1906, [0xd0, 0xf8]),
+        ];
+        const { stores, used } = storesIn(statements, {
+            tableSizes: new Map(),
+            moves: new Map([[0x1900, Section]]),
+        });
+        expect(stores.map(({ first, last }) => [first, last])).toEqual([[0x0e00, 0x0eff]]);
+        expect(used).toEqual(new Set());
+    });
+
+    it("takes no loop from a branch in another section from the label", () => {
+        const statements = [
+            code(0x1900, [0xbd, 0x00, 0x20], OtherSection),
+            code(0x1903, [0x99, 0x00, 0x0e], OtherSection),
+            code(0x1906, [0xd0, 0xf8], OtherSection),
+        ];
+        const { stores, used } = storesIn(statements, {
+            tableSizes: new Map(),
+            moves: new Map([[0x1900, Section]]),
+        });
+        expect(stores.map(({ first, last }) => [first, last])).toEqual([[0x0e00, 0x0eff]]);
+        expect(used).toEqual(new Set());
+    });
+
     it("leaves a table no store writes out of those it matched", () => {
         const { used } = storesIn([code(0x1900, [0x85, 0x70])], {
             tableSizes: new Map([[0x100, 4]]),
-            moves: new Set(),
+            moves: new Map(),
         });
         expect(used).toEqual(new Set());
     });

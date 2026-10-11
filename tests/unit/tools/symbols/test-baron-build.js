@@ -37,11 +37,12 @@ while [ $# -gt 1 ]; do
         -p) files=$2; shift ;;
         --symbols) symbols=$2; shift ;;
         -log0) listing=$2; shift ;;
+        -D) defines="$defines $2"; shift ;;
     esac
     shift
 done
 if grep -q FAIL "$1"; then echo "no good" >&2; exit 2; fi
-echo "listing of $1" > "$listing"
+echo "listing of $1$defines" > "$listing"
 printf '{"format": 2, "assemblies": [{"sources": ["%s"], "sections": []}]}' "$1" > "$symbols"
 printf X > "$files/$(basename "$1" .6502)"
 `;
@@ -195,6 +196,19 @@ describe("a title's source", () => {
             expect(existsSync(seen.buildDir)).toBe(false);
         });
 
+        it("predefines the config's defines for every source", async () => {
+            const config = pinned(git("rev-parse", "HEAD"), { defines: { BUILD: '"2026-10-04"', DEBUG: "TRUE" } });
+            const listings = await withBaronBuild(config, { baron }, (made) =>
+                ["data", "prog"].map((name) =>
+                    readFileSync(path.join(made.buildDir, BuildLayout.listings, `${name}.txt`), "utf8"),
+                ),
+            );
+            expect(listings).toEqual([
+                'listing of src/data.6502 BUILD="2026-10-04" DEBUG=TRUE\n',
+                'listing of src/prog.6502 BUILD="2026-10-04" DEBUG=TRUE\n',
+            ]);
+        });
+
         it("runs a baron given by a relative path from the caller's directory", async () => {
             const relative = path.relative(process.cwd(), baron);
             const made = await withBaronBuild(pinned(git("rev-parse", "HEAD")), { baron: relative }, (m) => m.sources);
@@ -237,6 +251,14 @@ describe("baronArguments", () => {
             "-log0",
             path.join("/build", BuildLayout.listings, "prog.txt"),
             "src/prog.6502",
+        ]);
+    });
+
+    it("puts each define before the rest, as -D name=expression", () => {
+        expect(baronArguments("src/prog.6502", "/build", { BUILD: '"2026-10-04"' }).slice(0, 3)).toEqual([
+            "-D",
+            'BUILD="2026-10-04"',
+            "-p",
         ]);
     });
 });

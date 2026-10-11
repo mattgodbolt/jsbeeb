@@ -172,12 +172,20 @@ class Importer {
         const statements = this.dump.pieces.flatMap((piece) => piece.statements);
         const { stores, used } = storesIn(statements, {
             tableSizes: new Map(tables.map(([, address, size]) => [address, size])),
-            moves: new Set(moves.map(([, address]) => address)),
+            moves: new Map(moves.map(([, address]) => [address, this.pieceRunning(address)])),
         });
         const unmatched = [...tables, ...moves].filter(([, address]) => !used.has(address)).map(([name]) => name);
         if (unmatched.length)
             throw new Error(`${spec.id}: a table or a move matches no store: ${unmatched.join(", ")}`);
         return stores;
+    }
+
+    /** The one piece with an instruction at `address`, else null, which leaves a copy loop there to any piece. */
+    pieceRunning(address) {
+        const pieces = this.dump.pieces.filter((piece) =>
+            piece.statements.some((s) => s.code && s.address === address),
+        );
+        return pieces.length === 1 ? pieces[0] : null;
     }
 
     /** One set: its regions with their names and anchors, its globals, and the names left out. */

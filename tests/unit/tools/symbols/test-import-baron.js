@@ -265,6 +265,38 @@ describe("importBaron", () => {
         expect(() => importBaron(twoSources({ fill: "4" }), both)).toThrow("matches no store: fill");
     });
 
+    it("takes a move's copy loop only from its label's section, not from code assembled over it", () => {
+        const overlaid = [
+            "SECTION low, org=&2000",
+            label(0x2000, "copy"),
+            statement(0x2000, [0xa9, 0x01], "LDA #1"),
+            statement(0x2002, [0xca], "DEX"),
+            statement(0x2003, [0xd0, 0xfb], "BNE copy"),
+            "ENDSECTION",
+            "SECTION high, org=&2000",
+            statement(0x2000, [0xa9, 0x11], "LDA #&11"),
+            statement(0x2002, [0x9d, 0x00, 0x22], "STA &2200, X"),
+            statement(0x2005, [0xca], "DEX"),
+            statement(0x2006, [0xd0, 0xf8], "BNE P% - 6"),
+            "ENDSECTION",
+        ].join("\n");
+        const over = baronBuild(new Map([["over", overlaid]]), { "src/over.6502": { copy: 0x2000 } }, []);
+        const moving = {
+            ...config(),
+            leftToSystemSets: [],
+            sets: [
+                {
+                    id: "over",
+                    title: "Overlaid",
+                    sources: ["over"],
+                    moves: ["copy"],
+                    regions: [{ name: "low", section: "low" }],
+                },
+            ],
+        };
+        expect(() => importBaron(moving, over)).toThrow("matches no store: copy");
+    });
+
     it("refuses a config naming an INCLUDE no listing has", () => {
         expect(() => importBaron({ ...config(), leftToSystemSets: ["nowhere.inc"] }, build())).toThrow("nowhere.inc");
     });
