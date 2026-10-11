@@ -18,6 +18,7 @@ export const BuildUsage = "[--source <checkout>] [--baron <path>]";
 export const BuildLayout = { listings: "listings", symbols: "symbols", files: "files" };
 export const ListingExtension = ".txt";
 export const SymbolsExtension = ".json";
+export const Baron = "baron";
 
 /**
  * The environment without git's own variables: run from a git hook, GIT_DIR or GIT_INDEX_FILE would
@@ -52,6 +53,15 @@ export function checkSourceCommit(config, sourceDir) {
     if (head !== config.source.commit)
         throw new Error(`The checkout ${sourceDir} is at ${head}, and the config names ${config.source.commit}`);
     if (changes) throw new Error(`The checkout ${sourceDir} has changes, so it isn't ${config.source.commit}`);
+}
+
+/** Refuses a config whose `source.assembler` isn't `assembler`; a config that names none is baron's. */
+export function checkAssembler(config, assembler) {
+    const named = config.source.assembler ?? Baron;
+    if (named !== assembler)
+        throw new Error(
+            `${config.id}'s source is assembled with ${named}, and this importer reads ${assembler}'s output`,
+        );
 }
 
 /**
@@ -149,6 +159,7 @@ export function assemble(config, sourceDir, buildDir, baron) {
  * @param {(build: {sourceDir: string, buildDir: string, sources: string[], baron: string}) => any} use
  */
 export async function withBaronBuild(config, { source, baron } = {}, use) {
+    checkAssembler(config, Baron);
     const named = baron ?? process.env.BARON ?? "baron";
     const baronPath = path.basename(named) === named ? named : path.resolve(named);
     const version = baronVersion(baronPath);

@@ -25,7 +25,7 @@ import { chooseAnchors, storesIn } from "./anchor-chooser.js";
 import { BuildOptions, BuildUsage, PrintPrefix, withBeebasmBuild } from "./beebasm-build.js";
 import { labelName, parseBeebasmListing, parseLabelDump } from "./beebasm-listing.js";
 import { readMosSets, SymbolsDir } from "./build-index.js";
-import { placedFiles } from "./corpus-check.js";
+import { placedFiles } from "./placed-files.js";
 import { evaluate, setJson, writeTitle } from "./import-baron.js";
 
 const AddressLimit = 0x10000;
@@ -109,17 +109,19 @@ export function beebasmBuild({ listing, dump, saved, names, operandNames }) {
     const dumped = parseLabelDump(dump);
     if (dumped.length !== parsed.labels.length)
         throw new Error(`The listing shows ${parsed.labels.length} labels and the dump ${dumped.length}`);
+    const labelled = new Set(dumped.map(({ identifier }) => identifier));
     const labels = parsed.labels.map(({ order, name }, i) => {
         const { identifier, address } = dumped[i];
-        const qualified = labelName(identifier);
+        const qualified = labelName(identifier, labelled);
         if (qualified.name.split(".").at(-1) !== name)
             throw new Error(`The listing's label ${i}, ${name}, is ${identifier} in the dump`);
         return { order, address, ...qualified };
     });
     const constants = new Map();
     for (const name of names) {
-        const value = Number(parsed.printed.get(name));
-        if (Number.isInteger(value)) constants.set(name, value);
+        const text = parsed.printed.get(name) ?? "";
+        const value = Number(text);
+        if (text !== "" && Number.isInteger(value)) constants.set(name, value);
     }
     const { statements } = parsed;
     const files = new Map(
@@ -291,7 +293,6 @@ class Importer {
         };
         const holds = (region, address) => address >= region.start && address < region.end;
 
-        // Labels go to the region of the file they were assembled in.
         for (const file of files) {
             for (const label of file.labels) {
                 if (label.internal) {
@@ -307,8 +308,6 @@ class Importer {
             }
         }
 
-        // A `=` name counts as an address when the source writes it as a memory operand, an instruction
-        // of the set names its value as one, and no other such name has that value.
         const code = files.flatMap((file) => file.statements.filter((s) => s.code && s.target !== null));
         const byValue = new Map();
         for (const [name, value] of this.build.constants) {

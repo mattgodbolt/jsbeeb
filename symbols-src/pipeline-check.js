@@ -9,7 +9,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { BBC } from "../src/keymap.js";
-import { holdUntil, pressKey, ReleaseFrames, runScript, runSeconds } from "../tools/symbols/check-memory.js";
+import {
+    holdUntil,
+    pressKey,
+    pressRandomKeys,
+    runScript,
+    runSeconds,
+    seededRandom,
+} from "../tools/symbols/check-memory.js";
 
 // MENU's screen comes up this long after the boot, after the loading picture and the warning page.
 const MenuSecs = 33;
@@ -17,8 +24,6 @@ const StepsPerCheck = 25;
 const PlayMoments = 30;
 const PlayFramesPerMoment = 200;
 const PlaySeed = 1;
-const PlayMinHoldFrames = 5;
-const PlayHoldFrameRange = 40;
 const LevelBytesChecked = 0x100;
 
 const Game = [
@@ -38,15 +43,6 @@ const GraphicsDesigner = ["graphic-stub/main", "graphics-designer/main"];
 async function menuOption(session, n) {
     await runSeconds(session, MenuSecs);
     await runScript(session, [`key Digit${n}`, "key Enter"]);
-}
-
-/** A seeded linear congruential generator, so random play is the same each run. */
-function seededRandom(seed) {
-    let state = seed;
-    return (n) => {
-        state = (state * 1103515245 + 12345) & 0x7fffffff;
-        return Math.floor((state / 0x80000000) * n);
-    };
 }
 
 // The Graphics Designer's tours: painting, the OptionsA, OptionsB and Environment menus, and the CTRL
@@ -274,12 +270,7 @@ export const scenarios = {
         const keys = [BBC.Z, BBC.X, BBC.COLON_STAR, BBC.SLASH, BBC.P, BBC.D, BBC.T, BBC.RETURN, BBC.M, BBC.CTRL];
         const random = seededRandom(PlaySeed);
         for (let moment = 1; moment <= PlayMoments; moment++) {
-            for (let frames = 0; frames < PlayFramesPerMoment;) {
-                const key = keys[random(keys.length)];
-                const held = PlayMinHoldFrames + random(PlayHoldFrameRange);
-                await pressKey(session, key, held);
-                frames += held + ReleaseFrames;
-            }
+            await pressRandomKeys(session, random, keys, PlayFramesPerMoment);
             check(`random play, moment ${moment}`, Game);
         }
     },

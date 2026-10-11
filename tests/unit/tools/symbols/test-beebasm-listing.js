@@ -105,20 +105,25 @@ describe("parseLabelDump", () => {
 });
 
 describe("labelName", () => {
+    const labelled = new Set([".scan_keys", ".main", ".fin", "._row_0"]);
+
     it("joins a label's scopes", () => {
-        expect(labelName(".scan_keys.not_down")).toEqual({
+        expect(labelName(".scan_keys.not_down", labelled)).toEqual({
             name: "scan_keys.not_down",
             scope: ["scan_keys"],
             internal: false,
         });
-        expect(labelName(".main")).toEqual({ name: "main", scope: [], internal: false });
+        expect(labelName(".main", labelled)).toEqual({ name: "main", scope: [], internal: false });
     });
 
     it("marks a label in a scope beebasm named itself: a brace with no label, a FOR loop's pass, a macro's call", () => {
-        expect(labelName("._288.src").internal).toBe(true);
-        expect(labelName(".fin._i_0.lp").internal).toBe(true);
-        expect(labelName("._x_-1.5.lp").internal).toBe(true);
-        expect(labelName("._3.ml").internal).toBe(true);
-        expect(labelName("._private").internal).toBe(false);
+        expect(labelName("._288.src", labelled).internal).toBe(true);
+        expect(labelName(".fin._i_0.lp", labelled).internal).toBe(true);
+        expect(labelName("._3.ml", labelled).internal).toBe(true);
+    });
+
+    it("keeps a label in a scope a label of the source's names, whatever that label looks like", () => {
+        expect(labelName("._row_0.next", labelled).internal).toBe(false);
+        expect(labelName("._private", labelled).internal).toBe(false);
     });
 });

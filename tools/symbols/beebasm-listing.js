@@ -23,7 +23,6 @@ const DumpEntry = /'([^']*)':(-?\d+)L/g;
 const MemoryOperand = /^\(?&([0-9A-F]{1,4})\b/;
 const BranchMnemonics = new Set(["BCC", "BCS", "BEQ", "BMI", "BNE", "BPL", "BVC", "BVS", "BRA"]);
 const Separator = ".";
-const GeneratedScope = /^_\d+$|^_[A-Za-z_]\w*?_-?\d[\d.e+-]*$/;
 
 /**
  * @typedef {object} ListedStatement
@@ -126,13 +125,15 @@ export function parseLabelDump(text) {
 
 /**
  * A dumped label's name, its scopes joined with `.`, and whether it's inside a scope beebasm made up (a
- * brace with no label, a FOR loop's pass or a macro's call).
+ * brace with no label, a FOR loop's pass or a macro's call): one whose own identifier no label has.
+ * @param {Set<string>} labelled - every identifier the dump holds
  */
-export function labelName(identifier) {
+export function labelName(identifier, labelled) {
     const parts = identifier.split(Separator).filter(Boolean);
+    const scope = identifier.slice(0, identifier.lastIndexOf(Separator));
     return {
         name: parts.join(Separator),
         scope: parts.slice(0, -1),
-        internal: parts.slice(0, -1).some((part) => GeneratedScope.test(part)),
+        internal: scope !== "" && !labelled.has(scope),
     };
 }

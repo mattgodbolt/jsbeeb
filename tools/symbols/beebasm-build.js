@@ -10,7 +10,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { checkDisc, checkSourceCommit, cloneSource } from "./baron-build.js";
+import { checkAssembler, checkDisc, checkSourceCommit, cloneSource } from "./baron-build.js";
 import { Mnemonics } from "./baron-listing.js";
 
 export const BuildOptions = { source: { type: "string" }, beebasm: { type: "string" } };
@@ -18,6 +18,8 @@ export const BuildUsage = "[--source <checkout>] [--beebasm <path>]";
 
 /** What starts a line of the listing that the wrapper's PRINTs wrote. */
 export const PrintPrefix = "@jsbeeb-symbol";
+export const Beebasm = "beebasm";
+const ListingBytesMost = 1 << 30;
 const MinimumVersion = [1, 11];
 const Wrapper = "jsbeeb-symbols.asm";
 const LabelsFile = "labels.txt";
@@ -94,7 +96,7 @@ function runWrapped(beebasm, runDir, buildDir, main, names) {
         const { stdout, stderr, status, error } = spawnSync(beebasm, ["-i", wrapper, "-v", "-dd", "-labels", labels], {
             cwd: runDir,
             encoding: "latin1",
-            maxBuffer: 1 << 30,
+            maxBuffer: ListingBytesMost,
         });
         if (error) throw new Error(`Couldn't run ${beebasm}`, { cause: error });
         if (status === 0) return { stdout, stderr, names: kept };
@@ -155,6 +157,7 @@ export function assemble(config, workDir, buildDir, beebasm) {
  * @param {(build: {sourceDir: string, build: ReturnType<typeof assemble>, beebasm: string}) => any} use
  */
 export async function withBeebasmBuild(config, { source, beebasm } = {}, use) {
+    checkAssembler(config, Beebasm);
     const named = beebasm ?? process.env.BEEBASM ?? "beebasm";
     const beebasmPath = path.basename(named) === named ? named : path.resolve(named);
     const version = beebasmVersion(beebasmPath);

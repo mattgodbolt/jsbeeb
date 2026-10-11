@@ -126,7 +126,8 @@ What beebasm's output gives, and what the importer makes of it:
   no line.
 - **The label dump** (`-dd -labels`) gives every label in the listing's order with its address and scopes:
   a label just before a `{` names it, and a scope with no label of its own, a FOR loop's pass or a macro's
-  call is `_N` or `_var_value`. A label in a scope like that is left out, as baron's `@` scopes are.
+  call is `_N` or `_var_value`. A label in a scope like that, one no dumped label is, is left out, as
+  baron's `@` scopes are.
 - **A saved file's address** isn't in any of it: the file starts at the address, among those listed before
   its SAVE, from which it agrees with every statement it covers and covers the most. Its statements are
   those in memory when it was saved, each the last listed at its address, so a block assembled over another

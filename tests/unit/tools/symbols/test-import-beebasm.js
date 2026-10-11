@@ -4,6 +4,7 @@ import { PrintPrefix } from "../../../../tools/symbols/beebasm-build.js";
 import { checkSet, readMosSets } from "../../../../tools/symbols/build-index.js";
 import {
     beebasmBuild,
+    discFilesOf,
     importBeebasm,
     osBlockTargets,
     savedStart,
@@ -20,7 +21,7 @@ const printed = (name, value) => `${PrintPrefix}:${name}:${value} `;
 
 // PROG at &1900, then OVER assembled over PROG's last bytes (after a CLEAR) and saved from there.
 const prog = [
-    0xa9, 0x05, 0x85, 0x70, 0x20, 0xee, 0xff, 0xa2, 0x18, 0xa0, 0x19, 0x8d, 0x00, 0x1a, 0x4c, 0x16, 0x19, 0x60, 0x00,
+    0xa9, 0x05, 0x85, 0x70, 0x20, 0xee, 0xff, 0xa2, 0x18, 0xa0, 0x19, 0x8d, 0x17, 0x19, 0x4c, 0x16, 0x19, 0x60, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x00, 0x00, 0x00,
 ];
 const over = [0xa0, 0x07, 0x88, 0xd0, 0xfd, 0x60];
@@ -32,10 +33,11 @@ const listing = [
     instruction(0x1904, [0x20, 0xee, 0xff], "JSR &FFEE"),
     instruction(0x1907, [0xa2, 0x18], "LDX #&18"),
     instruction(0x1909, [0xa0, 0x19], "LDY #&19"),
-    instruction(0x190b, [0x8d, 0x00, 0x1a], "STA &1A00"),
+    instruction(0x190b, [0x8d, 0x17, 0x19], "STA &1917"),
     instruction(0x190e, [0x4c, 0x16, 0x19], "JMP &1916"),
     ".inner",
     instruction(0x1911, [0x60], "RTS"),
+    ".pad",
     ".block",
     data(0x1918, [0x01]),
     data(0x1919, [0x02]),
@@ -53,22 +55,24 @@ const listing = [
     "Saving file 'out/OVER'",
     printed("ptr", 112),
     printed("ALIAS", 112),
-    printed("buf", 6656),
+    printed("buf", 6423),
+    printed("jump_to", 6422),
     printed("OSWRCH", 65518),
     printed("KEY", 16),
     `${PrintPrefix}:greeting:hi`,
+    `${PrintPrefix}:blank: `,
 ].join("\n");
 const dump =
-    "[{'.start':6400L,'.start.loop':6404L,'._3.inner':6417L,'.block':6424L,'.text':6426L,'.work':6431L," +
+    "[{'.start':6400L,'.start.loop':6404L,'._3.inner':6417L,'.pad':6422L,'.block':6424L,'.text':6426L,'.work':6431L," +
     "'.prog_end':6434L,'.over':6426L}]";
-const made = (operandNames = ["ptr", "buf", "OSWRCH"]) => ({
+const made = (operandNames = ["ptr", "buf", "OSWRCH", "jump_to"]) => ({
     listing,
     dump,
     saved: new Map([
         ["PROG", Uint8Array.from(prog)],
         ["out/OVER", Uint8Array.from(over)],
     ]),
-    names: ["ptr", "ALIAS", "buf", "OSWRCH", "KEY", "greeting"],
+    names: ["ptr", "ALIAS", "buf", "jump_to", "OSWRCH", "KEY", "greeting", "blank"],
     operandNames: new Set(operandNames),
 });
 
@@ -112,6 +116,7 @@ describe("beebasmBuild", () => {
             "start",
             "start.loop",
             "_3.inner",
+            "pad",
             "block",
             "text",
             "work",
@@ -123,7 +128,8 @@ describe("beebasmBuild", () => {
         expect([...build.constants]).toEqual([
             ["ptr", 0x70],
             ["ALIAS", 0x70],
-            ["buf", 0x1a00],
+            ["buf", 0x1917],
+            ["jump_to", 0x1916],
             ["OSWRCH", 0xffee],
             ["KEY", 0x10],
         ]);
@@ -178,6 +184,8 @@ describe("importBeebasm", () => {
         expect(json.regions.main.symbols).toEqual({
             start: "0x1900",
             "start.loop": "0x1904",
+            pad: "0x1916",
+            buf: "0x1917",
             block: "0x1918",
             text: "0x191a",
             work: "0x191f",
@@ -187,21 +195,38 @@ describe("importBeebasm", () => {
 
     it("takes a `=` name the source writes as a memory operand whose value the set's code uses", () => {
         const { json, dropped } = imported().sets[0];
-        expect(json.globals).toEqual({ ptr: "0x0070", buf: "0x1a00" });
+        expect(json.globals).toEqual({ ptr: "0x0070" });
+        expect(json.regions.main.symbols.buf).toBe("0x1917");
         expect(dropped).toContainEqual(["OSWRCH", 0xffee, "left to the MOS set"]);
+        expect(dropped).toContainEqual(["jump_to", 0x1916, "a label names its address"]);
         expect(dropped.map(([name]) => name)).not.toContain("KEY");
+    });
+
+    it("puts a `=` name in the globals when code outside its region uses it", () => {
+        const regions = [
+            { name: "code", file: "PROG", to: "pad" },
+            { name: "data", file: "PROG", from: "pad" },
+        ];
+        const { json } = imported({ regions, operandNames: ["ptr", "buf"] }).sets[0];
+        expect(json.globals).toEqual({ ptr: "0x0070", buf: "0x1917" });
+        expect(json.regions.data.symbols.buf).toBeUndefined();
     });
 
     it("leaves out every name of a value two such names share", () => {
         const { json, dropped } = imported({ operandNames: ["ptr", "ALIAS", "buf"] }).sets[0];
-        expect(json.globals).toEqual({ buf: "0x1a00" });
+        expect(json.globals).toEqual({});
         expect(dropped).toContainEqual(["ALIAS", 0x70, "ptr, ALIAS have the same value"]);
     });
 
     it("cuts a region with expressions in the source's names", () => {
         const { json } = imported({ regions: [{ name: "code", file: "PROG", to: "block" }] }).sets[0];
         expect([json.regions.code.start, json.regions.code.end]).toEqual(["0x1900", "0x1918"]);
-        expect(json.regions.code.symbols).toEqual({ start: "0x1900", "start.loop": "0x1904" });
+        expect(json.regions.code.symbols).toEqual({
+            start: "0x1900",
+            "start.loop": "0x1904",
+            pad: "0x1916",
+            buf: "0x1917",
+        });
     });
 
     it("makes a set the index's checks accept, anchored away from its OS block", () => {
@@ -217,9 +242,32 @@ describe("importBeebasm", () => {
         expect(() => imported({ regions: [{ name: "x", file: "NOPE" }] })).toThrow("Nothing is saved as NOPE");
     });
 
+    it("adds an anchor where a file of the original disc that holds the others differs", () => {
+        const plain = imported().sets[0].regions[0].anchors;
+        const covered = new Set(plain.flatMap(({ at, data }) => data.map((_, i) => at + i)));
+        const changed = 0x190f;
+        expect(covered.has(changed)).toBe(false);
+        const disc = Uint8Array.from(prog);
+        disc[changed - 0x1900] ^= 0xff;
+        const discFiles = [{ name: "d.ssd:$.PROG", load: 0x1900, data: disc }];
+        const { sets, reasons } = importBeebasm(config(), beebasmBuild(made()), { discFiles, system });
+        const anchors = sets[0].regions[0].anchors;
+        expect(anchors).toHaveLength(plain.length + 1);
+        expect(anchors.some(({ at, data }) => changed >= at && changed < at + data.length)).toBe(true);
+        expect(reasons).toEqual([expect.stringContaining("for disc d.ssd:$.PROG")]);
+        const same = [{ name: "d.ssd:$.PROG", load: 0x1900, data: Uint8Array.from(prog) }];
+        expect(importBeebasm(config(), beebasmBuild(made()), { discFiles: same, system }).reasons).toEqual([]);
+    });
+
     it("makes no sets from a config with no licence", () => {
         const { licence: _licence, ...unlicensed } = config();
         expect(() => importBeebasm(unlicensed, beebasmBuild(made()), { system })).toThrow("gives no licence");
+    });
+});
+
+describe("discFilesOf", () => {
+    it("has nothing for a config that names no disc", () => {
+        expect(discFilesOf(config(), "/nowhere")).toEqual([]);
     });
 });
 

@@ -14,14 +14,22 @@ import { importBeebasm, withTitle as withBeebasmTitle } from "./import-beebasm.j
 export const BuildOptions = { ...baron.BuildOptions, ...beebasm.BuildOptions };
 export const BuildUsage = "[--source <checkout>] [--baron <path>] [--beebasm <path>]";
 
-const Beebasm = "beebasm";
+const Assemblers = [baron.Baron, beebasm.Beebasm];
 
-const isBeebasm = (config) => config.source.assembler === Beebasm;
+/** The assembler a config's source is for; refuses one no importer reads. */
+export function assemblerOf(config) {
+    const assembler = config.source.assembler ?? baron.Baron;
+    if (!Assemblers.includes(assembler))
+        throw new Error(
+            `${config.id}'s source.assembler is ${assembler}, and the importers are ${Assemblers.join(" and ")}'s`,
+        );
+    return assembler;
+}
 
 /** The title's sets as its importer makes them, with the importer's errors. */
 export function importTitle(configPath, options) {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
-    if (isBeebasm(config))
+    if (assemblerOf(config) === beebasm.Beebasm)
         return withBeebasmTitle(configPath, options, ({ config, build, discFiles }) =>
             importBeebasm(config, build, { discFiles }),
         );
@@ -34,7 +42,7 @@ export function importTitle(configPath, options) {
  * @param {(made: {sourceDir: string, filesDir: string | null}) => any} use
  */
 export function withTitleSource(config, options, use) {
-    if (isBeebasm(config))
+    if (assemblerOf(config) === beebasm.Beebasm)
         return beebasm.withBeebasmBuild(config, options, ({ sourceDir }) => use({ sourceDir, filesDir: null }));
     return baron.withBaronBuild(config, options, ({ sourceDir, buildDir }) =>
         use({ sourceDir, filesDir: path.join(buildDir, baron.BuildLayout.files) }),

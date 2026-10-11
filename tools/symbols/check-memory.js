@@ -31,6 +31,8 @@ const Model = "B-DFS1.2";
 const BootTimeoutSecs = 30;
 const DefaultKeyFrames = 3;
 export const ReleaseFrames = 2;
+const RandomMinHoldFrames = 5;
+const RandomHoldFrameRange = 40;
 
 const hex = (address) => `&${address.toString(16).toUpperCase().padStart(4, "0")}`;
 
@@ -107,6 +109,25 @@ export async function holdUntil(session, key, address) {
         await session.runUntilAddress(address);
     } finally {
         session.keyUpRaw(key);
+    }
+}
+
+/** A seeded linear congruential generator, so random play is the same each run. */
+export function seededRandom(seed) {
+    let state = seed;
+    return (n) => {
+        state = (state * 1103515245 + 12345) & 0x7fffffff;
+        return Math.floor((state / 0x80000000) * n);
+    };
+}
+
+/** Presses keys `random` picks from `keys`, each for a random time, until `frames` frames have gone. */
+export async function pressRandomKeys(session, random, keys, frames) {
+    for (let done = 0; done < frames;) {
+        const key = keys[random(keys.length)];
+        const held = RandomMinHoldFrames + random(RandomHoldFrameRange);
+        await pressKey(session, key, held);
+        done += held + ReleaseFrames;
     }
 }
 

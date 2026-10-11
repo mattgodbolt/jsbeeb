@@ -23,14 +23,9 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { unzip } from "../../src/archive.js";
-import { dfsCatalogue } from "../registry/dfs.js";
-import { extensionOf, sectorImageSides } from "../registry/fingerprint.js";
+import { placedFiles } from "./placed-files.js";
 import { BuildOptions, BuildUsage, importTitle } from "./title-build.js";
 
-const Page = 0x100;
-const AddressLimit = 0x10000;
-const IoAddressMask = 0xffff;
-const DfsImages = new Set([".ssd", ".dsd"]);
 // The share of a region's held bytes that are identical, above which the report calls it the same code.
 export const SameCode = 0.9;
 
@@ -40,32 +35,6 @@ function zipsUnder(dir) {
     return readdirSync(dir, { recursive: true })
         .filter((name) => name.endsWith(".zip"))
         .sort();
-}
-
-/**
- * Each file worth placing from one title's zip members, once per content and load address.
- * @param {Record<string, Uint8Array>} members
- * @returns {{name: string, load: number, data: Uint8Array}[]}
- */
-export function placedFiles(members) {
-    const files = [];
-    const seen = new Set();
-    for (const member of Object.keys(members).sort()) {
-        if (!DfsImages.has(extensionOf(member))) continue;
-        for (const side of sectorImageSides(member, members[member])) {
-            for (const file of dfsCatalogue(side)?.files ?? []) {
-                if (!file.complete || file.length === 0 || file.uniform) continue;
-                const load = file.load & IoAddressMask;
-                if (load < Page || load + file.length > AddressLimit) continue;
-                const key = `${load}:${file.hash}:${file.length}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                const data = side.subarray(file.start * Page, file.start * Page + file.length);
-                files.push({ name: `${path.basename(member)}:${file.name}`, load, data });
-            }
-        }
-    }
-    return files;
 }
 
 /** @returns {Promise<Map<string, {name: string, load: number, data: Uint8Array}[]>>} title to its files */

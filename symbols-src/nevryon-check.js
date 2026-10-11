@@ -4,7 +4,7 @@
  */
 
 import { BBC } from "../src/keymap.js";
-import { holdUntil, pressKey, runSeconds } from "../tools/symbols/check-memory.js";
+import { holdUntil, pressKey, pressRandomKeys, runSeconds, seededRandom } from "../tools/symbols/check-memory.js";
 
 // The boot shows the intro until SPACE, then the options until SPACE, then the menu until RETURN.
 const IntroSecs = 60;
@@ -14,20 +14,9 @@ const TitleSecs = 5;
 const PlayMoments = 8;
 const PlayFramesPerMoment = 150;
 const PlaySeed = 1;
-const PlayMinHoldFrames = 5;
-const PlayHoldFrameRange = 40;
 
 const Game = ["game/code", "game/code2", "game/code3", "game/graphix"];
 const PlayKeys = [BBC.X, BBC.Z, BBC.COLON_STAR, BBC.SLASH, BBC.RETURN];
-
-/** A seeded linear congruential generator, so random play is the same each run. */
-function seededRandom(seed) {
-    let state = seed;
-    return (n) => {
-        state = (state * 1103515245 + 12345) & 0x7fffffff;
-        return Math.floor((state / 0x80000000) * n);
-    };
-}
 
 export const scenarios = {
     async play({ session, address, check }) {
@@ -46,13 +35,7 @@ export const scenarios = {
         check("the main loop", Game);
         const random = seededRandom(PlaySeed);
         for (let moment = 1; moment <= PlayMoments; moment++) {
-            let frames = 0;
-            while (frames < PlayFramesPerMoment) {
-                const key = PlayKeys[random(PlayKeys.length)];
-                const hold = PlayMinHoldFrames + random(PlayHoldFrameRange);
-                await pressKey(session, key, hold);
-                frames += hold;
-            }
+            await pressRandomKeys(session, random, PlayKeys, PlayFramesPerMoment);
             check(`random play, moment ${moment}`, Game);
         }
     },
