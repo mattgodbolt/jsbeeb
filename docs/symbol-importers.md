@@ -116,8 +116,9 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
 - Every label the listing gives has to agree with the symbol dump, or the importer stops: the dump is what
   baron resolved, and the listing is where the scopes, sections and bytes come from.
 - **Each name's place** is the file and line the symbol dump says defines it (`src/game.6502#L120`), in the
-  set's `places`, for the `nameLink` a GitHub repository gets. For such a repository, a name the dump gives
-  no place (a `-D` predefine, or any name in a dump without lines) stops the import.
+  set's `places`, for the `nameLink` a GitHub repository gets. For such a repository, a name in a set that
+  the dump gives no place (a `-D` predefine used as an address, or any name in a dump without lines) stops
+  the import; a `defines` entry no instruction addresses, like Scorched Earth's `BUILD`, isn't in a set.
 
 ## Links to the author
 
