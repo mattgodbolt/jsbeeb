@@ -226,6 +226,8 @@ Its names:
   is a global.
 - **One name per address**: the first the script gave it, so a table's name (`data_tilegraphics_indices`)
   wins over its first entry's (`data_tile00_empty`) when the script names the table first.
+- **One address per name**: a name the script gives two addresses stops the import, even if one of them is
+  in no region, since a config expression using it couldn't say which it means.
 - **Left out**: the names py8dis makes up (`l0070`, `sub_c1234`), expressions (`zp_ptr+1`), constants, and
   the names py8dis's `acorn.py` gives the OS and the hardware, which the system sets have.
 
@@ -237,7 +239,7 @@ And its anchors are the chooser's, with what py8dis can't say:
 
 Control scripts written for py8dis in September 2021 import `trace6502` and call
 `acorn.add_standard_labels()`, which py8dis has since dropped and renamed; `py8dis-dump.py` puts them back,
-as `commands.hook_subroutine` and `acorn.mos_labels`, so such a script runs under today's py8dis unchanged.
+as `commands.hook_subroutine` and `acorn.mos_labels`, so such a script runs unchanged under the config's py8dis (`2a60463` for Repton 2).
 
 py8dis's own examples are disassemblies too, and the dump reads them: `examples/python/dfs226.py`,
 `planb.py` and `lisp406.py` run from `examples/` (their `source.directory`). A set for one needs a config
