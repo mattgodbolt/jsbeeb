@@ -337,6 +337,48 @@ function fortyTrackDisc(data, isDsd = false, onChange = null) {
     return loadSsd(new Disc(true, config, "test.ssd"), data, isDsd, onChange);
 }
 
+describe("SSD track skew", () => {
+    const sectorOrder = (disc, isSide1, track) =>
+        disc
+            .getTrack(isSide1, track)
+            .findSectors()
+            .map((sector) => sector.sectorNumber);
+
+    it("starts each track three sectors later than the one before, as Acorn's *FORM does", () => {
+        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), numberedImage(80), false, null);
+
+        expect(sectorOrder(disc, false, 0)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        expect(sectorOrder(disc, false, 1)).toEqual([7, 8, 9, 0, 1, 2, 3, 4, 5, 6]);
+        expect(sectorOrder(disc, false, 2)).toEqual([4, 5, 6, 7, 8, 9, 0, 1, 2, 3]);
+        expect(sectorOrder(disc, false, 3)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]);
+        expect(sectorOrder(disc, false, 10)).toEqual(sectorOrder(disc, false, 0));
+    });
+
+    it("keeps each sector's data with its ID", () => {
+        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.dsd"), numberedImage(80, 2), true, null);
+
+        for (const isSide1 of [false, true]) {
+            for (const track of [0, 1, 2, 79]) {
+                for (const sector of disc.getTrack(isSide1, track).findSectors()) {
+                    expect([...sector.sectorData.slice(0, 3)]).toEqual([track, sector.sectorNumber, isSide1 ? 1 : 0]);
+                }
+            }
+        }
+    });
+
+    it("skews both sides of a DSD alike", () => {
+        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.dsd"), numberedImage(80, 2), true, null);
+
+        for (const track of [0, 1, 2]) expect(sectorOrder(disc, true, track)).toEqual(sectorOrder(disc, false, track));
+    });
+
+    it("skews a 40 track image by its logical track", () => {
+        const disc = fortyTrackDisc(numberedImage(40));
+
+        expect(sectorOrder(disc, false, 2)).toEqual([7, 8, 9, 0, 1, 2, 3, 4, 5, 6]);
+    });
+});
+
 describe("40 track SSD images", () => {
     it("puts each logical track on every other physical track", () => {
         const disc = fortyTrackDisc(numberedImage(40));
@@ -350,8 +392,10 @@ describe("40 track SSD images", () => {
         ]) {
             const sectors = disc.getTrack(false, physical).findSectors();
             expect(sectors.length).toBe(SectorsPerTrack);
-            expect(sectors[0].trackNumber).toBe(logical);
-            expect([...sectors[0].sectorData.slice(0, 2)]).toEqual([logical, 0]);
+            for (const sector of sectors) {
+                expect(sector.trackNumber).toBe(logical);
+                expect([...sector.sectorData.slice(0, 2)]).toEqual([logical, sector.sectorNumber]);
+            }
         }
     });
 

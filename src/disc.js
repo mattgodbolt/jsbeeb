@@ -560,6 +560,10 @@ export class DiscConfig {
     }
 }
 
+// Acorn's *FORM starts each track three sectors later than the one before, as do Greaseweazle and FlashFloppy for SSDs,
+// which leaves room to step and settle before the next track's first sector comes round.
+const SsdTrackSkew = 3;
+
 class SsdFormat {
     static get sectorSize() {
         return 256;
@@ -705,16 +709,20 @@ export function loadSsd(disc, data, isDsd, onChange) {
         Math.max(SsdFormat.tracksPerDisc / trackStep, tracksWithData(data, numSides)),
     );
 
-    let offset = 0;
     for (let track = 0; track < numTracks; ++track) {
+        const firstSector =
+            (SsdFormat.sectorsPerTrack - ((SsdTrackSkew * track) % SsdFormat.sectorsPerTrack)) %
+            SsdFormat.sectorsPerTrack;
         for (let side = 0; side < numSides; ++side) {
+            const trackOffset = (track * numSides + side) * SsdFormat.trackSize;
             const trackBuilder = disc.buildTrack(side === 1, track * trackStep);
             // Sync pattern at start of track, as the index pulse starts, aka GAP 5.
             trackBuilder
                 .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
                 .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
 
-            for (let sector = 0; sector < SsdFormat.sectorsPerTrack; ++sector) {
+            for (let slot = 0; slot < SsdFormat.sectorsPerTrack; ++slot) {
+                const sector = (firstSector + slot) % SsdFormat.sectorsPerTrack;
                 // Sector header, aka ID.
                 trackBuilder
                     .resetCrc()
@@ -731,16 +739,16 @@ export function loadSsd(disc, data, isDsd, onChange) {
                     .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
 
                 // Sector data.
+                const offset = trackOffset + sector * SsdFormat.sectorSize;
                 const sectorData =
                     offset < data.length ? data.subarray(offset, offset + SsdFormat.sectorSize) : blankSector;
-                offset += SsdFormat.sectorSize;
                 trackBuilder
                     .resetCrc()
                     .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
                     .appendFmChunk(sectorData)
                     .appendCrc();
 
-                if (sector !== SsdFormat.sectorsPerTrack - 1) {
+                if (slot !== SsdFormat.sectorsPerTrack - 1) {
                     // Sync pattern between sectors, aka GAP 3.
                     trackBuilder
                         .appendRepeatFmByte(0xff, IbmDiscFormat.std10SectorGap3FFs)
