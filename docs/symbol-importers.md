@@ -15,23 +15,24 @@ The curator's job lives here, beside the sets: which programs make a set, where 
 while it runs (so where its regions are cut), and the anchors that tell the program apart in memory. Each
 input format gets an importer, and every importer feeds one anchor chooser and the index's checks.
 
-| Piece                              | What it does                                                                                             |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `tools/symbols/baron-build.js`     | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
-| `tools/symbols/baron-listing.js`   | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
-| `tools/symbols/import-baron.js`    | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
-| `tools/symbols/beebasm-build.js`   | Fetches a beebasm title's source at the config's commit and assembles it, PRINTing its `=` names         |
-| `tools/symbols/beebasm-listing.js` | Reads beebasm's `-v` listing and its `-dd` label dump                                                    |
-| `tools/symbols/import-beebasm.js`  | The beebasm importer: names from the listing, the dump and the saved files; writes the sets              |
-| `tools/symbols/py8dis-dump.py`     | Runs a py8dis control script under py8dis and prints what py8dis made of the binary, as JSON             |
-| `tools/symbols/import-py8dis.js`   | The py8dis importer: names and pieces from that dump; writes the sets                                    |
-| `tools/symbols/title-build.js`     | Builds and imports a title with whichever importer its config names                                      |
-| `tools/symbols/anchor-chooser.js`  | Chooses each region's anchors from what an importer read; shared by every importer                       |
-| `tools/symbols/corpus-check.js`    | The corpus check a set's pull request carries                                                            |
-| `tools/symbols/check-memory.js`    | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
-| `tools/symbols/build-index.js`     | Checks every set as the registry's build will, and writes `index.json`                                   |
-| `symbols-src/<title>.json`         | A curator's config for one title                                                                         |
-| `symbols-src/<title>-check.js`     | That title's moments for the in-memory check                                                             |
+| Piece                                  | What it does                                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tools/symbols/baron-build.js`         | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
+| `tools/symbols/baron-listing.js`       | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
+| `tools/symbols/import-baron.js`        | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
+| `tools/symbols/beebasm-build.js`       | Fetches a beebasm title's source at the config's commit and assembles it, PRINTing its `=` names         |
+| `tools/symbols/beebasm-listing.js`     | Reads beebasm's `-v` listing and its `-dd` label dump                                                    |
+| `tools/symbols/import-beebasm.js`      | The beebasm importer: names from the listing, the dump and the saved files; writes the sets              |
+| `tools/symbols/py8dis-dump.py`         | Runs a py8dis control script under py8dis and prints what py8dis made of the binary, as JSON             |
+| `tools/symbols/import-py8dis.js`       | The py8dis importer: names and pieces from that dump; writes the sets                                    |
+| `tools/symbols/title-build.js`         | Builds and imports a title with whichever importer its config names                                      |
+| `tools/symbols/import-acornaeology.js` | The acornaeology importer: a ROM's set from its disassembly's JSON                                       |
+| `tools/symbols/anchor-chooser.js`      | Chooses each region's anchors from what an importer read; shared by every importer                       |
+| `tools/symbols/corpus-check.js`        | The corpus check a set's pull request carries                                                            |
+| `tools/symbols/check-memory.js`        | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
+| `tools/symbols/build-index.js`         | Checks every set as the registry's build will, and writes `index.json`                                   |
+| `symbols-src/<title>.json`             | A curator's config for one title, or one ROM                                                             |
+| `symbols-src/<title>-check.js`         | That title's moments for the in-memory check                                                             |
 
 ## A title's config
 
@@ -212,8 +213,9 @@ someone reading a name in the debugger is one click from the author's own explan
 Where the author has no site of their own (a name list kept inside a tool, like py8dis's `acorn.py` for the
 MOS), `source` is the link and the set has none of these.
 
-The py8dis and beebasm importers don't write `nameLink` or `places` yet, so the names of Repton 2, Nevryon
-and Daredevil Demis have no links, though their sources are on GitHub.
+The py8dis, beebasm and acornaeology importers don't write `home`, `nameLink` or `places` yet, so the names
+of Repton 2, Nevryon, Daredevil Demis and BBC BASIC II have no links, though their sources are on GitHub
+(and BASIC II's disassembly is on acornaeology's site).
 
 ## Anchors
 
@@ -354,6 +356,56 @@ py8dis's own examples are disassemblies too, and the dump reads them: `examples/
 `planb.py` and `lisp406.py` run from `examples/` (their `source.directory`). A set for one needs a config
 like Repton 2's, its regions cut where its pieces run, and a disc or ROM to check it on. The importer can't
 make DFS 2.26's yet: it moves two pieces to `&0D00`, and a region is found by its address alone.
+
+## acornaeology's ROMs
+
+[acornaeology](https://github.com/acornaeology) publishes annotated disassemblies of Acorn's ROMs, each
+version with a JSON file that dasmos writes beside the listing (schema 4): every statement with its bytes
+and labels, and `external_labels`, the names it gives addresses outside the ROM. Its repositories for
+NFS and ANFS and for ADFS publish schema 4 JSON with the same fields, so in principle
+`tools/symbols/import-acornaeology.js` makes their sets too, each from a config like BASIC II's; only BASIC II
+has one so far. Its Tube client runs in the second processor, which the debugger's sets don't read.
+
+A config (`"importer": "acornaeology"`) has an `id`, which is also the set's file name, a `title`, the
+`licence`, and:
+
+- `source`: the `repository`, the `commit` to fetch, the `disassembly` JSON's path in it and the
+  `licenceFile` whose text becomes the set's notice.
+- `rom`: the ROM under `public/roms/` the set is anchored on. The importer refuses to write a set when
+  the JSON's bytes aren't that ROM's.
+- `regions`: each a `name`, a `start` and an `end`. A sideways ROM is cut at `&9000` and `&B000`, as the
+  proposal says.
+- `globals`: the ranges whose `external_labels` become the set's globals.
+- `bytesPerAnchor`, `spreadAnchors`: as for baron.
+
+```sh
+node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json
+node tools/symbols/build-index.js
+```
+
+Its names:
+
+- **Every label of a statement** goes to the region that holds it. dasmos gives each address one label.
+- **A name outside the ROM** is a global if it's in a `globals` range and no system set names its address:
+  the MOS's names for its vectors and pointers stay the MOS's. Where two names share an address, the one
+  the JSON's `memory_map` describes wins. The rest of `external_labels` (the hardware, the MOS's entry
+  points) are left to the MOS's set.
+- Constants and comments are never read.
+
+Its anchors come from the same chooser, with every statement of the ROM as one section and no stores,
+since nothing writes to a ROM. Every bank of every file under `public/roms/` that's a whole number of the
+ROM's size is another image: a region gets another anchor where one of them would hold all its anchors,
+and the importer fails if none tells them apart.
+
+The set isn't `system`: BASIC's workspace names then name BASIC's own code's operands, and the memory view
+while BASIC is paged in, but not another program's code. A game run from BASIC, with BASIC still paged in,
+keeps its own names for the zero page it shares with BASIC's in its code; in the memory view, an address
+the game's set and BASIC's both name, differently, shows neither, as the proposal's rule for two sets says.
+
+Neither check takes a ROM's config: `check-memory.js` boots a title's disc, with a `check` module of
+scenarios a ROM's config doesn't have, and `corpus-check.js` builds a title's source, so it refuses one. The
+importer's own comparison with every ROM under `public/roms/` stands in for the corpus check, and
+`tests/unit/test-symbol-sets.js` checks BASIC II's set against those ROMs.
 
 ## PIPELINE
 

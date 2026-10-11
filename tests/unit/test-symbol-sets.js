@@ -13,6 +13,8 @@ const SetUrl = `${BaseUrl}sets/game.json`;
 const RealSymbols = pathToFileURL("public/symbols/").href;
 const OsBase = 0xc000;
 const OsSize = 0x4000;
+const SidewaysBase = 0x8000;
+const SidewaysSize = 0x4000;
 
 const gameRegions = {
     main: { start: "0x2000", end: "0x2100", anchors: [{ at: "0x2000", bytes: "a9008d01" }] },
@@ -279,7 +281,7 @@ describe("symbol sets", () => {
         });
     });
 
-    describe("the MOS 1.20 set", () => {
+    describe("the shipped ROM sets", () => {
         const loadReal = vi.fn(async (url) => JSON.parse(new TextDecoder().decode(await loadData(url))));
 
         const namesFor = async (peek) => {
@@ -291,6 +293,35 @@ describe("symbol sets", () => {
             }
             return sets.names(peek);
         };
+
+        const withRoms = (sideways) => {
+            const memory = new Uint8Array(0x10000);
+            memory.set(readFileSync("public/roms/os.rom").subarray(0, OsSize), OsBase);
+            memory.set(readFileSync(`public/roms/${sideways}`).subarray(0, SidewaysSize), SidewaysBase);
+            return (address) => memory[address];
+        };
+
+        it("names BASIC II's code and workspace while it's paged in, beside the MOS", async () => {
+            const names = await namesFor(withRoms("BASIC.ROM"));
+            const nameOf = (at, target) => names.operand(at, target)?.name;
+            expect(names.sets.map(({ title }) => title).sort()).toEqual(["BBC BASIC II", "BBC Micro MOS 1.20"]);
+            expect(nameOf(0x8b9d, 0x0b)).toBe("zp_text_ptr");
+            expect(nameOf(0x2000, 0x8b9b)).toBe("statement_loop");
+            expect(nameOf(0x8b9d, 0xffee)).toBe("oswrch");
+            expect(nameOf(0x8b9d, 0xf2)).toBe("os_text_ptr");
+            expect(nameOf(0xe0a4, 0x0b)).toBeUndefined();
+            expect(nameOf(0x2000, 0x0b)).toBeUndefined();
+            expect(names.address(0x0000)?.name).toBe("zp_lomem");
+            expect(names.address(0x8023)?.name).toBe("language_startup");
+        });
+
+        it.each(["a01/BASIC1.rom", "us/USBASIC.rom", "compact/basic48.rom", "b/DFS-1.2.rom"])(
+            "leaves BASIC II's names out while %s is paged in",
+            async (rom) => {
+                const names = await namesFor(withRoms(rom));
+                expect(names.sets.map(({ title }) => title)).toEqual(["BBC Micro MOS 1.20"]);
+            },
+        );
 
         it("names a B's MOS and hardware, reading memory as the CPU sees it", async () => {
             const cpu = fake6502(findModel("B"));

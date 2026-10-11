@@ -31,3 +31,11 @@ Each title's sets are imported as its config in `symbols-src/` describes: `pipel
 `daredevil-demis-game.json` from their beebasm builds by `tools/symbols/import-beebasm.js`, and
 `repton2-game.json` from its py8dis disassembly by `tools/symbols/import-py8dis.js`;
 [the importers' doc](../../docs/symbol-importers.md) says how to remake and check them.
+
+`sets/bbc-basic-2.json` is made from acornaeology's
+[BBC BASIC II disassembly](https://github.com/acornaeology/bbc-basic) by `tools/symbols/import-acornaeology.js`,
+as `symbols-src/bbc-basic-2.json` describes, and `public/roms/BASIC.ROM`:
+
+```sh
+node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json && node tools/symbols/build-index.js
+```
