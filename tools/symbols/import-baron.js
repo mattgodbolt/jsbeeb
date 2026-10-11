@@ -46,7 +46,7 @@ const OperandToken = new RegExp(
     "g",
 );
 const NameToken = new RegExp(Name, "g");
-const QuotedString = /"[^"]*"/g;
+const QuotedText = /"[^"]*"|'[^']*'/g;
 const Registers = new Set(["A", "X", "Y"]);
 const OsBlockOperand = new RegExp(String.raw`^#\s*LO\(\s*(${Name})\s*\)$`, "i");
 const ExpressionToken = new RegExp(String.raw`\s*(?:&([0-9A-Fa-f]+)|(\d+)|(${Name})|([-+*/()]))`, "y");
@@ -415,7 +415,7 @@ class Importer {
                 source,
                 new Set(
                     source.listing.statements.flatMap((statement) =>
-                        [...statement.text.replace(QuotedString, "").matchAll(NameToken)].map(([token]) =>
+                        [...statement.text.replace(QuotedText, "").matchAll(NameToken)].map(([token]) =>
                             source.resolve(statement.scope, token),
                         ),
                     ),
@@ -423,10 +423,8 @@ class Importer {
             ]),
         );
 
-        // Labels belong to the region of the section they're assembled in. A virtual section's are
-        // workspace, so globals, named like the `=` names below. A program can include another's layout
-        // just to reckon offsets from it, so one its statements never mention is left out, as is one no
-        // SKIP follows, which only marks where the workspace ends, unless an instruction reads it.
+        // Labels belong to the region of the section they're assembled in, and a virtual section's are
+        // globals, on the terms docs/symbol-importers.md gives.
         for (const source of sources) {
             for (const label of source.listing.labels) {
                 if (label.name === strip) continue;

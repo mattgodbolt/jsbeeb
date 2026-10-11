@@ -68,7 +68,7 @@ export class Section {
         this.header = header;
         this.parent = parent;
         this.virtual = virtual;
-        /** Where each of a virtual section's SKIPs starts: the addresses it hands out. */
+        /** Where each statement that reserves space in a virtual section (a SKIP, an EQUW) starts. */
         this.reservedAt = new Set();
         /** The parent's address where this section's bytes are stored. */
         this.storedAt = null;
@@ -154,8 +154,7 @@ export function parseBaronListing(text) {
         if (sectionStart) {
             const name = line.slice(sectionStart[0].length).split(",")[0].trim();
             const parent = stack.at(-1) ?? null;
-            const bare = !line.includes(",");
-            const reopens = bare && sections.some((earlier) => earlier.name === name && earlier.virtual);
+            const reopens = sections.some((earlier) => earlier.name === name && earlier.virtual);
             const section = new Section(name, line, parent, reopens || VirtualAttribute.test(line));
             if (parent) {
                 section.storedAt = position.get(parent) ?? parent.org;

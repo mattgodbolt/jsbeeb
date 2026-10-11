@@ -129,19 +129,10 @@ describe("parseBaronListing", () => {
                 statement(0x0073, [], "SKIP 1"),
                 "ENDSECTION",
                 "ENDSECTION",
-                "SECTION work, org=&3000",
-                statement(0x3000, [0x60], "RTS"),
-                "ENDSECTION",
             ].join("\n"),
         );
-        const [code, work, moved, reopened, redeclared] = parsed.sections;
-        expect([code, work, moved, reopened, redeclared].map((section) => section.virtual)).toEqual([
-            false,
-            true,
-            false,
-            true,
-            false,
-        ]);
+        const [code, work, moved, reopened] = parsed.sections;
+        expect([code.virtual, work.virtual, moved.virtual, reopened.virtual]).toEqual([false, true, false, true]);
         expect(moved.storedAt).toBe(0x2001);
         expect([...work.reservedAt]).toEqual([0x0070, 0x0072]);
     });

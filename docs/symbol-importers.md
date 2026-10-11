@@ -93,9 +93,10 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
   never used.
 - **A virtual section's labels** (`SECTION zero_page, org=&00, virtual=TRUE`) are globals: the section only
   hands out addresses for workspace and keeps no bytes, so no region holds them. A program can include
-  another's layout just to reckon offsets from it, so a label no instruction reads as a memory operand is
-  kept only if some statement mentions it (`EQUW slot_28`, `LDA #LO(io_maps)`) and a SKIP starts at it; a
-  label no SKIP follows only marks where the workspace ends.
+  another's layout just to reckon offsets from it, so a label no instruction uses as a memory operand is
+  kept only if some statement mentions it (`EQUW slot_28`, `LDA #LO(io_maps)`, but not inside a string) and
+  a statement reserving space (a SKIP, or an EQUW that keeps no bytes) starts at it; a label nothing reserves
+  space at only marks where the workspace ends.
 - **`=` names** count as addresses when an instruction uses them as a memory operand: the operand's first
   name, not after `#`, not a FUNCTION's result, and not one `leftToSystemSets` covers. Such a name goes to
   the region it points into if only that region's code uses it, and is a global otherwise.
@@ -151,9 +152,9 @@ addresses in the build (every section of every source where it runs, every file 
 - **One program's zero page used differently in different regions** loses names, since a set's globals hold
   one name per address: PIPELINE's game loader's `copy_return`, `copy_from` and `menu_keys` give way to the
   main code's `monster_x`, `monster_direction` and `work0`.
-- **The operand rule misses** addresses the code reaches only through an immediate's `LO()`/`HI()`, through
+- **The operand rule misses** `=` names the code reaches only through an immediate's `LO()`/`HI()`, through
   a FUNCTION, or through a table of addresses, and takes a name whose instruction is dead code as readily as
-  any.
+  any. A virtual section's labels count any mention, so they aren't missed that way.
 - **Stores it can't see** stay unseen: through a pointer, or by the OS into blocks it was passed other than
   with `LDX #LO(...)`. The `LDX #LO(...)` rule also over-blocks: it takes OSCLI strings, which the OS only
   reads.
