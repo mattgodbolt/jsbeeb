@@ -1,0 +1,90 @@
+{
+  "id": "scorched-earth",
+  "licence": "MIT",
+  "notice": "The names are beeb-scorched-earth's, from https://github.com/mattgodbolt/beeb-scorched-earth/tree/124b65c9e02edd09aeccad63e6fd41070aa1d3bb, under this licence, which its README says leaves out the talk lines in src/talk.6502, and the game's name and design: those are Wendell Hicken's.\n\nMIT License\n\nCopyright (c) 2026 Matt Godbolt\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+  "source": {
+    "repository": "https://github.com/mattgodbolt/beeb-scorched-earth",
+    "commit": "124b65c9e02edd09aeccad63e6fd41070aa1d3bb",
+    "assemble": ["src/main.6502"],
+    "defines": {
+      "BUILD": "\"2026-10-04.2035-51BA34D\""
+    },
+    "disc": "scorched-earth.ssd"
+  },
+  "madeFrom": ["9510d085a8643a1be968b0362b1de883"],
+  "leftToSystemSets": ["defs.6502"],
+  "bytesPerAnchor": 2048,
+  "spreadAnchors": 4,
+  "check": "scorched-earth-check.js",
+  "sets": [
+    {
+      "id": "game",
+      "title": "Scorched Earth",
+      "sources": ["main"],
+      "tableSizes": {
+        "tank_shield": "MAXP",
+        "tank_mag": "MAXP",
+        "ground": "SCREEN_W + 1",
+        "profile": "fall_x - profile",
+        "profile_prev": "MAX_R + 1",
+        "colspan": "MAX_R / 2 + 2",
+        "fall_x": "MAX_R + 3",
+        "fall_top": "MAX_R + 3",
+        "fall_bot": "MAX_R + 3",
+        "fall_dist": "MAX_R + 3",
+        "tank_type": "MAXP",
+        "tank_plays": "MAXP",
+        "tank_tries": "MAXP",
+        "tank_money": "MAXP * 3",
+        "tank_score": "MAXP",
+        "inv": "MAXP * NITEMS",
+        "shells": "MAXSH * 16",
+        "sh_drawn": "MAXSH",
+        "sh_oldx": "MAXSH",
+        "tank_colour": "MAXP",
+        "sh_active": "MAXSH",
+        "sblk": "8"
+      },
+      "globalsSections": ["ZeroPage", "Printer", "Rows", "Tables", "Nmi"],
+      "moves": ["copy", "copy_boot", "boot.tape", "boot.stack", "boot.printer", "boot.udg", "boot.nmi"],
+      "regions": [
+        {
+          "name": "loader",
+          "section": "Loader",
+          "from": "loader",
+          "overwritten": true
+        },
+        {
+          "name": "code",
+          "section": "Code",
+          "avoid": [["talk", "say"]]
+        },
+        {
+          "name": "startup",
+          "section": "Startup",
+          "overwritten": true
+        },
+        {
+          "name": "low_stack",
+          "section": "LowStack"
+        },
+        {
+          "name": "low_tape",
+          "section": "LowTape"
+        },
+        {
+          "name": "low_printer",
+          "section": "LowPrinter"
+        },
+        {
+          "name": "low_udg",
+          "section": "LowUdg"
+        },
+        {
+          "name": "low_nmi",
+          "section": "LowNmi"
+        }
+      ]
+    }
+  ]
+}

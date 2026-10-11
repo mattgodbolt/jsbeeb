@@ -10,6 +10,7 @@ import {
     baronArguments,
     baronVersion,
     BuildLayout,
+    checkAssembler,
     checkDisc,
     checkSourceCommit,
     cloneSource,
@@ -37,11 +38,12 @@ while [ $# -gt 1 ]; do
         -p) files=$2; shift ;;
         --symbols) symbols=$2; shift ;;
         -log0) listing=$2; shift ;;
+        -D) defines="$defines $2"; shift ;;
     esac
     shift
 done
 if grep -q FAIL "$1"; then echo "no good" >&2; exit 2; fi
-echo "listing of $1" > "$listing"
+echo "listing of $1$defines" > "$listing"
 printf '{"format": 2, "assemblies": [{"sources": ["%s"], "sections": []}]}' "$1" > "$symbols"
 printf X > "$files/$(basename "$1" .6502)"
 `;
@@ -195,6 +197,19 @@ describe("a title's source", () => {
             expect(existsSync(seen.buildDir)).toBe(false);
         });
 
+        it("predefines the config's defines for every source", async () => {
+            const config = pinned(git("rev-parse", "HEAD"), { defines: { BUILD: '"2026-10-04"', DEBUG: "TRUE" } });
+            const listings = await withBaronBuild(config, { baron }, (made) =>
+                ["data", "prog"].map((name) =>
+                    readFileSync(path.join(made.buildDir, BuildLayout.listings, `${name}.txt`), "utf8"),
+                ),
+            );
+            expect(listings).toEqual([
+                'listing of src/data.6502 BUILD="2026-10-04" DEBUG=TRUE\n',
+                'listing of src/prog.6502 BUILD="2026-10-04" DEBUG=TRUE\n',
+            ]);
+        });
+
         it("runs a baron given by a relative path from the caller's directory", async () => {
             const relative = path.relative(process.cwd(), baron);
             const made = await withBaronBuild(pinned(git("rev-parse", "HEAD")), { baron: relative }, (m) => m.sources);
@@ -239,10 +254,34 @@ describe("baronArguments", () => {
             "src/prog.6502",
         ]);
     });
+
+    it("puts each define before the rest, as -D name=expression", () => {
+        expect(baronArguments("src/prog.6502", "/build", { BUILD: '"2026-10-04"' }).slice(0, 3)).toEqual([
+            "-D",
+            'BUILD="2026-10-04"',
+            "-p",
+        ]);
+    });
 });
 
 describe("baronVersion", () => {
     it("says how to name baron when it can't run it", () => {
         expect(() => baronVersion(path.join(tmpdir(), "no-such-baron"))).toThrow("give --baron, or set BARON");
+    });
+});
+
+describe("checkAssembler", () => {
+    const config = (assembler) => ({ id: "demo", source: { assembler } });
+
+    it("takes a config that names the assembler, or names none for baron", () => {
+        expect(() => checkAssembler(config(undefined), "baron")).not.toThrow();
+        expect(() => checkAssembler(config("beebasm"), "beebasm")).not.toThrow();
+    });
+
+    it("refuses a config for the other assembler, before running anything", async () => {
+        expect(() => checkAssembler(config(undefined), "beebasm")).toThrow("assembled with baron");
+        await expect(withBaronBuild(config("beebasm"), { baron: "/nowhere" }, () => {})).rejects.toThrow(
+            "demo's source is assembled with beebasm",
+        );
     });
 });

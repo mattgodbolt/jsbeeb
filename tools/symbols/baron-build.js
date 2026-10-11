@@ -18,6 +18,7 @@ export const BuildUsage = "[--source <checkout>] [--baron <path>]";
 export const BuildLayout = { listings: "listings", symbols: "symbols", files: "files" };
 export const ListingExtension = ".txt";
 export const SymbolsExtension = ".json";
+export const Baron = "baron";
 
 /**
  * The environment without git's own variables: run from a git hook, GIT_DIR or GIT_INDEX_FILE would
@@ -30,36 +31,36 @@ export function environmentWithoutGit() {
 const git = (dir, ...args) =>
     execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: "pipe", env: environmentWithoutGit() }).trim();
 
-/**
- * Refuses a source directory that isn't the root of a git checkout of the config's commit with nothing
- * changed or added.
- */
-export function checkSourceCommit(config, sourceDir) {
+/** Refuses a directory that isn't the root of a git checkout of `commit` with nothing changed or added. */
+export function checkCommit({ commit }, dir) {
     let root;
     let head;
     let changes;
     try {
-        root = git(sourceDir, "rev-parse", "--show-toplevel");
-        head = git(sourceDir, "rev-parse", "HEAD");
-        changes = git(sourceDir, "status", "--porcelain");
+        root = git(dir, "rev-parse", "--show-toplevel");
+        head = git(dir, "rev-parse", "HEAD");
+        changes = git(dir, "status", "--porcelain");
     } catch (error) {
-        throw new Error(`${sourceDir} isn't in a git checkout, so nothing says it's ${config.source.commit}`, {
-            cause: error,
-        });
+        throw new Error(`${dir} isn't in a git checkout, so nothing says it's ${commit}`, { cause: error });
     }
-    if (realpathSync(root) !== realpathSync(sourceDir))
-        throw new Error(`${sourceDir} isn't the root of its checkout, ${root}`);
-    if (head !== config.source.commit)
-        throw new Error(`The checkout ${sourceDir} is at ${head}, and the config names ${config.source.commit}`);
-    if (changes) throw new Error(`The checkout ${sourceDir} has changes, so it isn't ${config.source.commit}`);
+    if (realpathSync(root) !== realpathSync(dir)) throw new Error(`${dir} isn't the root of its checkout, ${root}`);
+    if (head !== commit) throw new Error(`The checkout ${dir} is at ${head}, and the config names ${commit}`);
+    if (changes) throw new Error(`The checkout ${dir} has changes, so it isn't ${commit}`);
 }
 
-/**
- * Fetches just the config's commit of its repository into `dir`, a new directory, running none of the
- * user's git hooks there.
- */
-export function cloneSource(config, dir) {
-    const { repository, commit } = config.source;
+/** Refuses a config whose `source.assembler` isn't `assembler`; a config that names none is baron's. */
+export function checkAssembler(config, assembler) {
+    const named = config.source.assembler ?? Baron;
+    if (named !== assembler)
+        throw new Error(
+            `${config.id}'s source is assembled with ${named}, and this importer reads ${assembler}'s output`,
+        );
+}
+
+export const checkSourceCommit = (config, sourceDir) => checkCommit(config.source, sourceDir);
+
+/** Fetches just `commit` of `repository` into `dir`, a new directory, running none of the user's git hooks there. */
+export function cloneCommit({ repository, commit }, dir) {
     mkdirSync(dir, { recursive: true });
     try {
         git(dir, "init", "-q");
@@ -72,6 +73,8 @@ export function cloneSource(config, dir) {
         });
     }
 }
+
+export const cloneSource = (config, dir) => cloneCommit(config.source, dir);
 
 /**
  * Refuses a config whose `source.disc` isn't one of the images its `madeFrom` names: that disc, in the
@@ -95,10 +98,14 @@ export function sourcesToAssemble(config, sourceDir) {
     return sources.sort();
 }
 
-/** Baron's arguments to assemble one source, run from the repository's root, into `buildDir`'s layout. */
-export function baronArguments(source, buildDir) {
+/**
+ * Baron's arguments to assemble one source, run from the repository's root, into `buildDir`'s layout.
+ * @param {Object<string, string>} defines - symbols to predefine, name to a baron expression
+ */
+export function baronArguments(source, buildDir, defines = {}) {
     const name = path.parse(source).name;
     return [
+        ...Object.entries(defines).flatMap(([symbol, expression]) => ["-D", `${symbol}=${expression}`]),
         "-p",
         path.join(buildDir, BuildLayout.files),
         "--inf",
@@ -129,7 +136,7 @@ export function assemble(config, sourceDir, buildDir, baron) {
     const sources = sourcesToAssemble(config, sourceDir);
     for (const source of sources) {
         try {
-            execFileSync(baron, baronArguments(source, buildDir), {
+            execFileSync(baron, baronArguments(source, buildDir, config.source.defines), {
                 cwd: sourceDir,
                 stdio: ["ignore", "ignore", "pipe"],
             });
@@ -149,6 +156,7 @@ export function assemble(config, sourceDir, buildDir, baron) {
  * @param {(build: {sourceDir: string, buildDir: string, sources: string[], baron: string}) => any} use
  */
 export async function withBaronBuild(config, { source, baron } = {}, use) {
+    checkAssembler(config, Baron);
     const named = baron ?? process.env.BARON ?? "baron";
     const baronPath = path.basename(named) === named ? named : path.resolve(named);
     const version = baronVersion(baronPath);

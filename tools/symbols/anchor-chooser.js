@@ -90,6 +90,9 @@ for (const opcode of [0x06, 0x26, 0x46, 0x66, 0xc6, 0xe6]) {
     StoreModes.set(opcode + 0x18, AbsoluteIndexed);
 }
 
+const BranchOpcodes = new Set([0x10, 0x30, 0x50, 0x70, 0x90, 0xb0, 0xd0, 0xf0]);
+const branchTarget = (statement) => statement.address + 2 + ((statement.data[1] << 24) >> 24);
+
 /** How a label names dead code, or bytes a file was saved with that aren't the program. */
 const NotTheProgram = /(^|_)(unused|leftover|junk|spare|stray)(_|$)/;
 
@@ -97,18 +100,29 @@ const holds = (region, address) => address >= region.start && address < region.e
 const runs = (region, statement) => statement.section === region.section && holds(region, statement.address);
 const range = (from, to) => Array.from({ length: Math.max(0, to - from) }, (_, i) => from + i);
 
+/** The loops `moves` names by their label: from it to each branch back to it, in its section. */
+function copyLoops(statements, moves) {
+    return statements
+        .filter((s) => s.code && BranchOpcodes.has(s.data[0]))
+        .map((s) => ({ section: s.section, from: branchTarget(s), to: s.address }))
+        .filter(({ section, from, to }) => moves.has(from) && (moves.get(from) ?? section) === section && from < to);
+}
+
 /**
  * Every store whose target the code gives, with how far it reaches: 256 bytes for an indexed one,
  * unless `tableSizes` gives its table's size, and none for a copy in `moves` that puts the program in
  * place.
  * @param {ChooserStatement[]} statements - every statement of the program's code
- * @param {{tableSizes: Map<number, number>, moves: Set<number>}} options - tables by address, moves by
- *     the address of their store
+ * @param {{tableSizes: Map<number, number>, moves: Map<number, object | null>}} options - tables by
+ *     address; moves by the address of their store, or of a copy loop's first instruction, which takes
+ *     the indexed stores of its section up to the last branch back to it, each with the section a
+ *     loop there has to be in, or null for a loop in any section
  * @returns {{stores: Store[], used: Set<number>}} the stores, and which tables and moves they matched
  */
 export function storesIn(statements, { tableSizes, moves }) {
     const out = [];
     const used = new Set();
+    const loops = copyLoops(statements, moves);
     for (const statement of statements) {
         if (!statement.code || !StoreModes.has(statement.data[0])) continue;
         if (moves.has(statement.address)) {
@@ -116,6 +130,16 @@ export function storesIn(statements, { tableSizes, moves }) {
             continue;
         }
         const mode = StoreModes.get(statement.data[0]);
+        const loop =
+            (mode === ZeroPageIndexed || mode === AbsoluteIndexed) &&
+            loops.find(
+                ({ section, from, to }) =>
+                    section === statement.section && from <= statement.address && statement.address < to,
+            );
+        if (loop) {
+            used.add(loop.from);
+            continue;
+        }
         const target = statement.data.length === 2 ? statement.data[1] : statement.data[1] | (statement.data[2] << 8);
         if (mode === ZeroPage || mode === Absolute) {
             out.push({ statement, first: target, last: target });
