@@ -357,7 +357,13 @@ class Importer {
             const tableSizes = new Map(
                 tableNames.filter(([name]) => found(name)).map(([name, size]) => [find(name), evaluate(size, find)]),
             );
-            const moves = new Set(moveNames.filter(found).map(find));
+            const moves = new Map(
+                moveNames.filter(found).map((name) => {
+                    const resolved = source.lookup(name) === undefined ? `${spec.stripScope}.${name}` : name;
+                    const label = source.listing.labels.find((l) => l.name === resolved);
+                    return [find(name), label?.section ?? null];
+                }),
+            );
             all.filter(found).forEach((name) => named.add(name));
             for (const statement of source.listing.statements) {
                 const base = statement.code ? operandBase(statement.operand) : null;

@@ -54,7 +54,7 @@ Nothing in it is an address list: the names come from the build.
   - `tableSizes`: tables written with an index, by name, with how far the index goes (an expression);
   - `moves`: labels of the copies that put the program in place, whose stores don't keep anchors off what
     they copy: a store's own label, or a copy loop's, which takes the loop's indexed stores, up to the last
-    branch back to the label;
+    branch back to the label, in its section;
   - `globalsSections`: sections whose labels are the program's globals (zero page, say, which holds no code
     and which every program writes, so a region there couldn't be anchored).
 - A region is a SECTION (`section`, in `source` if not the set's first), or part of one between `from` and
@@ -75,9 +75,9 @@ node tools/symbols/check-memory.js --config symbols-src/pipeline.json
 ```
 
 Each fetches the config's commit into a temporary directory, or takes `--source`, a checkout of it, and runs
-baron there on each source on its own, as `-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v`
-cuts a statement's bytes at eight, so its listing can't be read for them. The importer prints the baron it
-ran, from `--version`.
+baron there on each source on its own, as `-D name=expression` for each of the config's `defines`, then
+`-p <files> --inf --symbols <dump> -vv -log0 <listing>`. Plain `-v` cuts a statement's bytes at eight, so its
+listing can't be read for them. The importer prints the baron it ran, from `--version`.
 
 The importer, and so the corpus check, needs baron 0.5.0 or later, whose symbol dump replaced the flat one
 an older baron wrote, and refuses the flat one. The in-memory check doesn't read the dumps, so any baron that

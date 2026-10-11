@@ -12,7 +12,7 @@ import { holdUntil, pressKey, runScript, runSeconds } from "../tools/symbols/che
 const IntroSecs = 5;
 const ComputerRounds = 2;
 const DefaultRounds = 10;
-// Two computers can take up to MAX_TURNS turns over a round, which the game then calls a draw.
+// A round of computers is called a draw after MAX_TURNS (50) turns: this allows 12 seconds a turn.
 const RoundSecs = 600;
 
 const Game = ["game/code", "game/low_nmi", "game/low_printer", "game/low_stack", "game/low_tape", "game/low_udg"];

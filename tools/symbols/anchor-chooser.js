@@ -105,7 +105,7 @@ function copyLoops(statements, moves) {
     return statements
         .filter((s) => s.code && BranchOpcodes.has(s.data[0]))
         .map((s) => ({ section: s.section, from: branchTarget(s), to: s.address }))
-        .filter(({ from, to }) => moves.has(from) && from < to);
+        .filter(({ section, from, to }) => moves.has(from) && (moves.get(from) ?? section) === section && from < to);
 }
 
 /**
@@ -113,9 +113,10 @@ function copyLoops(statements, moves) {
  * unless `tableSizes` gives its table's size, and none for a copy in `moves` that puts the program in
  * place.
  * @param {ChooserStatement[]} statements - every statement of the program's code
- * @param {{tableSizes: Map<number, number>, moves: Set<number>}} options - tables by address, moves by
- *     the address of their store, or of a copy loop's first instruction, which takes the indexed stores
- *     up to the last branch back to it
+ * @param {{tableSizes: Map<number, number>, moves: Map<number, object | null>}} options - tables by
+ *     address; moves by the address of their store, or of a copy loop's first instruction, which takes
+ *     the indexed stores of its section up to the last branch back to it, each with the section its
+ *     label is in, if it's a label
  * @returns {{stores: Store[], used: Set<number>}} the stores, and which tables and moves they matched
  */
 export function storesIn(statements, { tableSizes, moves }) {
