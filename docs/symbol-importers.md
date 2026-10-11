@@ -225,8 +225,9 @@ the Graphics Designer and its tours of every menu, MRUN and PL.
 [acornaeology](https://github.com/acornaeology) publishes annotated disassemblies of Acorn's ROMs, each
 version with a JSON file that dasmos writes beside the listing (schema 4): every statement with its bytes
 and labels, and `external_labels`, the names it gives addresses outside the ROM. Its repositories for
-NFS and ANFS, the Tube client and ADFS publish schema 4 JSON with the same fields, so in principle `tools/symbols/import-acornaeology.js`
-makes their sets too, each from a config like BASIC II's; only BASIC II has one so far.
+NFS and ANFS and for ADFS publish schema 4 JSON with the same fields, so in principle
+`tools/symbols/import-acornaeology.js` makes their sets too, each from a config like BASIC II's; only BASIC II
+has one so far. Its Tube client runs in the second processor, which the debugger's sets don't read.
 
 A config (`"importer": "acornaeology"`) has an `id`, which is also the set's file name, a `title`, the
 `licence`, and:

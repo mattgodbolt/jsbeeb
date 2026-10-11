@@ -115,7 +115,13 @@ export function importAcornaeology(config, disassembly, { rom, otherRoms, system
     const errors = [];
     const notes = [];
     const dropped = [];
-    if (rom.length !== end - base) errors.push(`${config.rom} is ${rom.length} bytes, the disassembly ${end - base}`);
+    if (rom.length !== end - base)
+        return {
+            json: null,
+            errors: [`${config.rom} is ${rom.length} bytes, the disassembly ${end - base}`],
+            notes,
+            dropped,
+        };
     for (const { address, data } of statements)
         if (data.some((byte, i) => rom[address - base + i] !== byte))
             errors.push(`The disassembly's bytes at ${hex(address)} aren't ${config.rom}'s`);
