@@ -402,9 +402,10 @@ while BASIC is paged in, but not another program's code. A game run from BASIC, 
 keeps its own names for the zero page it shares with BASIC's in its code; in the memory view, an address
 the game's set and BASIC's both name, differently, shows neither, as the proposal's rule for two sets says.
 
-`check-memory.js` boots a title's disc and `corpus-check.js` builds a title's source, so neither takes a ROM's
-config, and both refuse it; the importer's own comparison with every ROM under `public/roms/` stands in for
-the corpus check, and `tests/unit/test-symbol-sets.js` checks BASIC II's set against those ROMs.
+Neither check takes a ROM's config: `check-memory.js` boots a title's disc, with a `check` module of
+scenarios a ROM's config doesn't have, and `corpus-check.js` builds a title's source, so it refuses one. The
+importer's own comparison with every ROM under `public/roms/` stands in for the corpus check, and
+`tests/unit/test-symbol-sets.js` checks BASIC II's set against those ROMs.
 
 ## PIPELINE
 
