@@ -14,17 +14,18 @@ The curator's job lives here, beside the sets: which programs make a set, where 
 while it runs (so where its regions are cut), and the anchors that tell the program apart in memory. Each
 input format gets an importer, and every importer feeds one anchor chooser and the index's checks.
 
-| Piece                             | What it does                                                                                             |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `tools/symbols/baron-build.js`    | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
-| `tools/symbols/baron-listing.js`  | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
-| `tools/symbols/import-baron.js`   | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
-| `tools/symbols/anchor-chooser.js` | Chooses each region's anchors from what an importer read; shared by every importer                       |
-| `tools/symbols/corpus-check.js`   | The corpus check a set's pull request carries                                                            |
-| `tools/symbols/check-memory.js`   | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
-| `tools/symbols/build-index.js`    | Checks every set as the registry's build will, and writes `index.json`                                   |
-| `symbols-src/<title>.json`        | A curator's config for one title                                                                         |
-| `symbols-src/<title>-check.js`    | That title's moments for the in-memory check                                                             |
+| Piece                                  | What it does                                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tools/symbols/baron-build.js`         | Fetches a baron title's source at the config's commit and assembles it, each source on its own           |
+| `tools/symbols/baron-listing.js`       | Reads one baron `-vv` listing: sections, statements and their bytes, labels, `=` names and scopes        |
+| `tools/symbols/import-baron.js`        | The baron importer: names from the listings, cross-checked against the `--symbols` dump; writes the sets |
+| `tools/symbols/anchor-chooser.js`      | Chooses each region's anchors from what an importer read; shared by every importer                       |
+| `tools/symbols/corpus-check.js`        | The corpus check a set's pull request carries                                                            |
+| `tools/symbols/check-memory.js`        | Checks the sets against the title running in a headless jsbeeb, at moments the curator picks             |
+| `tools/symbols/build-index.js`         | Checks every set as the registry's build will, and writes `index.json`                                   |
+| `tools/symbols/import-acornaeology.js` | The acornaeology importer: a ROM's set from its disassembly's JSON                                       |
+| `symbols-src/<title>.json`             | A curator's config for one title, or one ROM                                                             |
+| `symbols-src/<title>-check.js`         | That title's moments for the in-memory check                                                             |
 
 ## A title's config
 
@@ -224,7 +225,7 @@ the Graphics Designer and its tours of every menu, MRUN and PL.
 [acornaeology](https://github.com/acornaeology) publishes annotated disassemblies of Acorn's ROMs, each
 version with a JSON file that dasmos writes beside the listing (schema 4): every statement with its bytes
 and labels, and `external_labels`, the names it gives addresses outside the ROM. Its repositories for
-NFS and ANFS, the Tube client and ADFS write the same JSON, so in principle `tools/symbols/import-acornaeology.js`
+NFS and ANFS, the Tube client and ADFS publish schema 4 JSON with the same fields, so in principle `tools/symbols/import-acornaeology.js`
 makes their sets too, each from a config like BASIC II's; only BASIC II has one so far.
 
 A config (`"importer": "acornaeology"`) has an `id`, which is also the set's file name, a `title`, the

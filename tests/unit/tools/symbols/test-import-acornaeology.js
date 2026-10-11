@@ -11,7 +11,11 @@ const ConfigsDir = new URL("../../../../symbols-src/", import.meta.url);
 const Base = 0x8000;
 const RomSize = 0x100;
 const Pairs = 51;
+const OpcodeLdaImmediate = 0xa9;
+const OpcodeStaAbsolute = 0x8d;
 const OpcodeRts = 0x60;
+const PairBytes = 5;
+const StaOffset = 2;
 const SecondHalf = 0x8082;
 const LateInLow = 0x8070;
 
@@ -40,10 +44,11 @@ const config = {
 function items() {
     const out = [];
     for (let n = 0; n < Pairs; n++) {
-        out.push({ addr: Base + n * 5, bytes: [0xa9, n], type: "code", mnemonic: "lda" });
-        out.push({ addr: Base + n * 5 + 2, bytes: [0x8d, n, 0x30], type: "code", mnemonic: "sta" });
+        const addr = Base + n * PairBytes;
+        out.push({ addr, bytes: [OpcodeLdaImmediate, n], type: "code", mnemonic: "lda" });
+        out.push({ addr: addr + StaOffset, bytes: [OpcodeStaAbsolute, n, 0x30], type: "code", mnemonic: "sta" });
     }
-    out.push({ addr: Base + Pairs * 5, bytes: [OpcodeRts], type: "code", mnemonic: "rts" });
+    out.push({ addr: Base + Pairs * PairBytes, bytes: [OpcodeRts], type: "code", mnemonic: "rts" });
     out.find(({ addr }) => addr === Base).labels = ["entry"];
     out.find(({ addr }) => addr === SecondHalf).labels = ["second_half"];
     return out;
@@ -86,7 +91,11 @@ describe("readDisassembly", () => {
         const read = readDisassembly(disassemblyJson());
         expect(read.base).toBe(Base);
         expect(read.end).toBe(Base + RomSize);
-        expect(read.statements[1]).toEqual({ address: Base + 2, data: [0x8d, 0, 0x30], code: true });
+        expect(read.statements[1]).toEqual({
+            address: Base + StaOffset,
+            data: [OpcodeStaAbsolute, 0, 0x30],
+            code: true,
+        });
         expect(read.labels).toEqual([
             { address: Base, name: "entry" },
             { address: SecondHalf, name: "second_half" },
@@ -156,6 +165,14 @@ describe("importAcornaeology", () => {
         const { json, errors } = imported({ rom });
         expect(json).toBeNull();
         expect(errors).toEqual(["The disassembly's bytes at &8005 aren't DEMO.ROM's"]);
+    });
+
+    it("refuses a ROM that isn't the disassembly's size", () => {
+        const rom = new Uint8Array(RomSize * 2);
+        rom.set(romOf(disassemblyJson()));
+        const { json, errors } = imported({ rom });
+        expect(json).toBeNull();
+        expect(errors).toEqual(["DEMO.ROM is 512 bytes, the disassembly 256"]);
     });
 
     it("writes a set that passes the index's checks", () => {

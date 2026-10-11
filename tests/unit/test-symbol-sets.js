@@ -14,6 +14,7 @@ const RealSymbols = pathToFileURL("public/symbols/").href;
 const OsBase = 0xc000;
 const OsSize = 0x4000;
 const SidewaysBase = 0x8000;
+const SidewaysSize = 0x4000;
 
 const gameRegions = {
     main: { start: "0x2000", end: "0x2100", anchors: [{ at: "0x2000", bytes: "a9008d01" }] },
@@ -225,7 +226,7 @@ describe("symbol sets", () => {
         const withRoms = (sideways) => {
             const memory = new Uint8Array(0x10000);
             memory.set(readFileSync("public/roms/os.rom").subarray(0, OsSize), OsBase);
-            memory.set(readFileSync(`public/roms/${sideways}`).subarray(0, OsSize), SidewaysBase);
+            memory.set(readFileSync(`public/roms/${sideways}`).subarray(0, SidewaysSize), SidewaysBase);
             return (address) => memory[address];
         };
 
