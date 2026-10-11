@@ -131,6 +131,9 @@ someone reading a name in the debugger is one click from the author's own explan
 Where the author has no site of their own (a name list kept inside a tool, like py8dis's `acorn.py` for the
 MOS), `source` is the link and the set has none of these.
 
+The py8dis importer doesn't write them yet, so Repton 2's names have no links, though its source is on
+GitHub.
+
 ## Anchors
 
 Candidates are runs of 4 to 8 bytes of the region's own statements: whole instructions from an
