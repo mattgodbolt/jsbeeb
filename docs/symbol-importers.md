@@ -357,6 +357,55 @@ py8dis's own examples are disassemblies too, and the dump reads them: `examples/
 like Repton 2's, its regions cut where its pieces run, and a disc or ROM to check it on. The importer can't
 make DFS 2.26's yet: it moves two pieces to `&0D00`, and a region is found by its address alone.
 
+## acornaeology's ROMs
+
+[acornaeology](https://github.com/acornaeology) publishes annotated disassemblies of Acorn's ROMs, each
+version with a JSON file that dasmos writes beside the listing (schema 4): every statement with its bytes
+and labels, and `external_labels`, the names it gives addresses outside the ROM. Its repositories for
+NFS and ANFS and for ADFS publish schema 4 JSON with the same fields, so in principle
+`tools/symbols/import-acornaeology.js` makes their sets too, each from a config like BASIC II's; only BASIC II
+has one so far. Its Tube client runs in the second processor, which the debugger's sets don't read.
+
+A config (`"importer": "acornaeology"`) has an `id`, which is also the set's file name, a `title`, the
+`licence`, and:
+
+- `source`: the `repository`, the `commit` to fetch, the `disassembly` JSON's path in it and the
+  `licenceFile` whose text becomes the set's notice.
+- `rom`: the ROM under `public/roms/` the set is anchored on. The importer refuses to write a set when
+  the JSON's bytes aren't that ROM's.
+- `regions`: each a `name`, a `start` and an `end`. A sideways ROM is cut at `&9000` and `&B000`, as the
+  proposal says.
+- `globals`: the ranges whose `external_labels` become the set's globals.
+- `bytesPerAnchor`, `spreadAnchors`: as for baron.
+
+```sh
+node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json
+node tools/symbols/build-index.js
+```
+
+Its names:
+
+- **Every label of a statement** goes to the region that holds it. dasmos gives each address one label.
+- **A name outside the ROM** is a global if it's in a `globals` range and no system set names its address:
+  the MOS's names for its vectors and pointers stay the MOS's. Where two names share an address, the one
+  the JSON's `memory_map` describes wins. The rest of `external_labels` (the hardware, the MOS's entry
+  points) are left to the MOS's set.
+- Constants and comments are never read.
+
+Its anchors come from the same chooser, with every statement of the ROM as one section and no stores,
+since nothing writes to a ROM. Every bank of every file under `public/roms/` that's a whole number of the
+ROM's size is another image: a region gets another anchor where one of them would hold all its anchors,
+and the importer fails if none tells them apart.
+
+The set isn't `system`: BASIC's workspace names then name BASIC's own code's operands, and the memory view
+while BASIC is paged in, but not another program's code. A game run from BASIC, with BASIC still paged in,
+keeps its own names for the zero page it shares with BASIC's in its code; in the memory view, an address
+the game's set and BASIC's both name, differently, shows neither, as the proposal's rule for two sets says.
+
+`check-memory.js` boots a title's disc and `corpus-check.js` builds a title's source, so neither takes a ROM's
+config, and both refuse it; the importer's own comparison with every ROM under `public/roms/` stands in for
+the corpus check, and `tests/unit/test-symbol-sets.js` checks BASIC II's set against those ROMs.
+
 ## PIPELINE
 
 `symbols-src/pipeline.json` makes one set per program, from
@@ -468,51 +517,3 @@ builds.
 Its modules share zero page workspace (`strp`, `sfx_ptr` and `ttl_str` are all `&90`), so those addresses
 go unnamed. The in-memory check's scenario (`symbols-src/daredevil-demis-check.js`) checks the title screen,
 then seeded random play.
-
-## acornaeology's ROMs
-
-[acornaeology](https://github.com/acornaeology) publishes annotated disassemblies of Acorn's ROMs, each
-version with a JSON file that dasmos writes beside the listing (schema 4): every statement with its bytes
-and labels, and `external_labels`, the names it gives addresses outside the ROM. Its repositories for
-NFS and ANFS and for ADFS publish schema 4 JSON with the same fields, so in principle
-`tools/symbols/import-acornaeology.js` makes their sets too, each from a config like BASIC II's; only BASIC II
-has one so far. Its Tube client runs in the second processor, which the debugger's sets don't read.
-
-A config (`"importer": "acornaeology"`) has an `id`, which is also the set's file name, a `title`, the
-`licence`, and:
-
-- `source`: the `repository`, the `commit` to fetch, the `disassembly` JSON's path in it and the
-  `licenceFile` whose text becomes the set's notice.
-- `rom`: the ROM under `public/roms/` the set is anchored on. The importer refuses to write a set when
-  the JSON's bytes aren't that ROM's.
-- `regions`: each a `name`, a `start` and an `end`. A sideways ROM is cut at `&9000` and `&B000`, as the
-  proposal says.
-- `globals`: the ranges whose `external_labels` become the set's globals.
-- `bytesPerAnchor`, `spreadAnchors`: as for baron.
-
-```sh
-node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json
-node tools/symbols/build-index.js
-```
-
-Its names:
-
-- **Every label of a statement** goes to the region that holds it. dasmos gives each address one label.
-- **A name outside the ROM** is a global if it's in a `globals` range and no system set names its address:
-  the MOS's names for its vectors and pointers stay the MOS's. Where two names share an address, the one
-  the JSON's `memory_map` describes wins. The rest of `external_labels` (the hardware, the MOS's entry
-  points) are left to the MOS's set.
-- Constants and comments are never read.
-
-Its anchors come from the same chooser, with every statement of the ROM as one section and no stores,
-since nothing writes to a ROM. Every bank of every file under `public/roms/` that's a whole number of the
-ROM's size is another image: a region gets another anchor where one of them would hold all its anchors,
-and the importer fails if none tells them apart.
-
-The set isn't `system`: BASIC's workspace names then name BASIC's own code's operands, and the memory view
-while BASIC is paged in, but not another program's code. A game run from BASIC, with BASIC still paged in,
-keeps its own names for the zero page it shares with BASIC's in its code; in the memory view, an address
-the game's set and BASIC's both name, differently, shows neither, as the proposal's rule for two sets says.
-
-`check-memory.js` boots a title's disc, so it doesn't check a ROM's set; `tests/unit/test-symbol-sets.js`
-checks BASIC II's against the ROMs in `public/roms/`.

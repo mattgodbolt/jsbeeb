@@ -53,6 +53,12 @@ describe("assemblerOf", () => {
     it("refuses an assembler no importer reads", () => {
         expect(() => assemblerOf(config("BeebAsm"))).toThrow("demo's source.assembler is BeebAsm");
     });
+
+    it("refuses a config for an importer with no build", () => {
+        expect(() => assemblerOf({ ...config(undefined), importer: "acornaeology" })).toThrow(
+            "demo is for the acornaeology importer",
+        );
+    });
 });
 
 describe("importerOf", () => {

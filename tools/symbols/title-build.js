@@ -19,8 +19,13 @@ export const BuildUsage = `[--baron <path>] [--beebasm <path>] ${Py8disUsage}`;
 const Assemblers = [baron.Baron, beebasm.Beebasm];
 const Py8dis = "py8dis";
 
-/** The assembler a config's source is for; refuses one no importer reads. */
+/**
+ * The assembler a config's source is for; refuses one no importer reads, and a config for an importer
+ * that has no build, such as acornaeology's.
+ */
 export function assemblerOf(config) {
+    if (config.importer !== undefined)
+        throw new Error(`${config.id} is for the ${config.importer} importer, which these checks don't take`);
     const assembler = config.source.assembler ?? baron.Baron;
     if (!Assemblers.includes(assembler))
         throw new Error(
