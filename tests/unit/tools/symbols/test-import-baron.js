@@ -18,6 +18,7 @@ import {
 
 const ConfigsDir = new URL("../../../../symbols-src/", import.meta.url);
 const SetsDir = path.join(SymbolsDir, "sets");
+const AwaitingLicence = ["daredevil-demis"];
 
 const BytesWidth = 28;
 const hex4 = (address) => address.toString(16).toUpperCase().padStart(4, "0");
@@ -578,11 +579,14 @@ describe("writeSets", () => {
 });
 
 describe("the curator configs", () => {
-    // A config with no licence yet is ready but waiting on its source repository to give one.
-    const configs = readdirSync(ConfigsDir)
+    const all = readdirSync(ConfigsDir)
         .filter((name) => name.endsWith(".json"))
-        .map((name) => JSON.parse(readFileSync(new URL(name, ConfigsDir), "utf8")))
-        .filter(({ licence }) => licence !== undefined);
+        .map((name) => JSON.parse(readFileSync(new URL(name, ConfigsDir), "utf8")));
+    const configs = all.filter(({ id }) => !AwaitingLicence.includes(id));
+
+    it("give a licence, but for those waiting on their source repository to have one", () => {
+        expect(all.filter(({ licence }) => licence === undefined).map(({ id }) => id)).toEqual(AwaitingLicence);
+    });
 
     it("each have their sets shipped, made from the commit they name", () => {
         expect(configs.length).toBeGreaterThan(0);

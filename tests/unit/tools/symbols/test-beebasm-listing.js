@@ -122,6 +122,12 @@ describe("labelName", () => {
         expect(labelName("._3.ml", labelled).internal).toBe(true);
     });
 
+    it("marks a label in a named scope inside a made-up one", () => {
+        const nested = new Set([...labelled, "._0.x", ".fin._i_0.row"]);
+        expect(labelName("._0.x.y", nested).internal).toBe(true);
+        expect(labelName(".fin._i_0.row.n", nested).internal).toBe(true);
+    });
+
     it("keeps a label in a scope a label of the source's names, whatever that label looks like", () => {
         expect(labelName("._row_0.next", labelled).internal).toBe(false);
         expect(labelName("._private", labelled).internal).toBe(false);
