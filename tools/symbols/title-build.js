@@ -17,6 +17,7 @@ export const BuildOptions = { ...baron.BuildOptions, ...beebasm.BuildOptions, ..
 export const BuildUsage = `[--baron <path>] [--beebasm <path>] ${Py8disUsage}`;
 
 const Assemblers = [baron.Baron, beebasm.Beebasm];
+const Py8dis = "py8dis";
 
 /** The assembler a config's source is for; refuses one no importer reads. */
 export function assemblerOf(config) {
@@ -28,15 +29,23 @@ export function assemblerOf(config) {
     return assembler;
 }
 
+/** The importer for a config: py8dis's for one that names `py8dis`, else its assembler's. */
+export const importerOf = (config) => (config.py8dis ? Py8dis : assemblerOf(config));
+
+const Importers = {
+    [Py8dis]: (configPath, options) =>
+        withPy8disTitle(configPath, options, ({ config, dump }) => importPy8dis(config, dump)),
+    [beebasm.Beebasm]: (configPath, options) =>
+        withBeebasmTitle(configPath, options, ({ config, build, discFiles }) =>
+            importBeebasm(config, build, { discFiles }),
+        ),
+    [baron.Baron]: (configPath, options) =>
+        withBaronTitle(configPath, options, ({ config, build }) => importBaron(config, build)),
+};
+
 /** The title's sets as its importer makes them, with the importer's errors. */
 export function importTitle(configPath, options) {
-    const config = JSON.parse(readFileSync(configPath, "utf8"));
-    if (config.py8dis) return withPy8disTitle(configPath, options, ({ config, dump }) => importPy8dis(config, dump));
-    if (assemblerOf(config) === beebasm.Beebasm)
-        return withBeebasmTitle(configPath, options, ({ config, build, discFiles }) =>
-            importBeebasm(config, build, { discFiles }),
-        );
-    return withBaronTitle(configPath, options, ({ config, build }) => importBaron(config, build));
+    return Importers[importerOf(JSON.parse(readFileSync(configPath, "utf8")))](configPath, options);
 }
 
 /**

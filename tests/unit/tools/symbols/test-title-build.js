@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { environmentWithoutGit } from "../../../../tools/symbols/baron-build.js";
-import { assemblerOf, withTitleSource } from "../../../../tools/symbols/title-build.js";
+import { assemblerOf, importerOf, withTitleSource } from "../../../../tools/symbols/title-build.js";
 
 const IsolatedGitConfig = [
     "-c",
@@ -52,6 +52,14 @@ describe("assemblerOf", () => {
 
     it("refuses an assembler no importer reads", () => {
         expect(() => assemblerOf(config("BeebAsm"))).toThrow("demo's source.assembler is BeebAsm");
+    });
+});
+
+describe("importerOf", () => {
+    it("is py8dis's for a config that names py8dis, else its assembler's", () => {
+        expect(importerOf({ ...config(undefined), py8dis: { repository: "r", commit: "c" } })).toBe("py8dis");
+        expect(importerOf(config(undefined))).toBe("baron");
+        expect(importerOf(config("beebasm"))).toBe("beebasm");
     });
 });
 
