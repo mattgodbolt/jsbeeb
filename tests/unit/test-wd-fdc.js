@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
-import { Disc, DiscConfig, IbmDiscFormat } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { fake6502 } from "../../src/fake6502.js";
 
 const ControlRegister = 0;
@@ -401,6 +401,25 @@ describe("WD1770 FDC tests", () => {
             const { bytes, status } = runCommand(fdc, scheduler, ReadAddressCommand);
             expect(bytes.slice(0, 4)).toEqual([0, 0, 3, SectorLengthCode]);
             expect(status & StatusCrcError).toBe(0);
+        });
+    });
+
+    describe("an SSD's track skew", () => {
+        it("reaches the next track's first sector well within a revolution of this track's last", () => {
+            const SsdSectorsPerTrack = 10;
+            const disc = loadSsd(blankDisc(), new Uint8Array(2 * SsdSectorsPerTrack * SectorBytes), false, null);
+            const { scheduler, fdc } = makeFdc({ disc, control: ControlRunningDrive0Fm });
+            fdc.write(SectorRegister, SsdSectorsPerTrack - 1);
+            runCommand(fdc, scheduler, ReadSectorCommand & ~SpinUpWaitFlag);
+
+            const start = scheduler.epoch;
+            fdc.write(DataRegister, 1);
+            runCommand(fdc, scheduler, SeekCommand);
+            fdc.write(SectorRegister, 0);
+            const { status } = runCommand(fdc, scheduler, ReadSectorCommand | SettleFlag);
+
+            expect(status & StatusRecordNotFound).toBe(0);
+            expect(scheduler.epoch - start).toBeLessThan(DiscDrive.TicksPerRevolution / 2);
         });
     });
 
