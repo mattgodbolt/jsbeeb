@@ -34,7 +34,10 @@ const git = (dir, ...args) =>
  * Refuses a source directory that isn't the root of a git checkout of the config's commit with nothing
  * changed or added.
  */
-export function checkSourceCommit(config, sourceDir) {
+export const checkSourceCommit = (config, sourceDir) => checkCommit(config.source, sourceDir);
+
+/** Refuses a directory that isn't the root of a git checkout of `commit` with nothing changed or added. */
+export function checkCommit({ commit }, sourceDir) {
     let root;
     let head;
     let changes;
@@ -43,23 +46,22 @@ export function checkSourceCommit(config, sourceDir) {
         head = git(sourceDir, "rev-parse", "HEAD");
         changes = git(sourceDir, "status", "--porcelain");
     } catch (error) {
-        throw new Error(`${sourceDir} isn't in a git checkout, so nothing says it's ${config.source.commit}`, {
-            cause: error,
-        });
+        throw new Error(`${sourceDir} isn't in a git checkout, so nothing says it's ${commit}`, { cause: error });
     }
     if (realpathSync(root) !== realpathSync(sourceDir))
         throw new Error(`${sourceDir} isn't the root of its checkout, ${root}`);
-    if (head !== config.source.commit)
-        throw new Error(`The checkout ${sourceDir} is at ${head}, and the config names ${config.source.commit}`);
-    if (changes) throw new Error(`The checkout ${sourceDir} has changes, so it isn't ${config.source.commit}`);
+    if (head !== commit) throw new Error(`The checkout ${sourceDir} is at ${head}, and the config names ${commit}`);
+    if (changes) throw new Error(`The checkout ${sourceDir} has changes, so it isn't ${commit}`);
 }
 
 /**
  * Fetches just the config's commit of its repository into `dir`, a new directory, running none of the
  * user's git hooks there.
  */
-export function cloneSource(config, dir) {
-    const { repository, commit } = config.source;
+export const cloneSource = (config, dir) => cloneCommit(config.source, dir);
+
+/** Fetches just `commit` of `repository` into `dir`, a new directory, running none of the user's git hooks there. */
+export function cloneCommit({ repository, commit }, dir) {
     mkdirSync(dir, { recursive: true });
     try {
         git(dir, "init", "-q");
