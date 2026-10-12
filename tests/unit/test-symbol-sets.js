@@ -42,15 +42,28 @@ describe("symbol sets", () => {
                     minAnchors: 1,
                     anchors: [{ at: 0x2000, bytes: new Uint8Array([0xa9, 0x00, 0x8d, 0x01]) }],
                     symbols: new Map([[0x2000, "start"]]),
+                    scopes: [],
                 },
             ]);
         });
 
-        it("lets only a region's end be 0x10000", () => {
+        it("reads a region's scopes", () => {
+            const scopes = [{ start: "0x2010", end: "0x2080", symbols: { target_x: "0x70" } }];
+            const [main] = parseSet({ ...game, regions: { main: { ...game.regions.main, scopes } } }).regions;
+            expect(main.scopes).toEqual([{ start: 0x2010, end: 0x2080, symbols: new Map([[0x70, "target_x"]]) }]);
+        });
+
+        it("lets only a region's or a scope's end be 0x10000", () => {
             expect(parseSet({ ...game, regions: { top: { start: "0xff00", end: "0x10000" } } }).regions[0].end).toBe(
                 0x10000,
             );
             expect(() => parseSet({ ...game, globals: { past: "0x10000" } })).toThrow("global past");
+            const top = (scope) => ({
+                ...game,
+                regions: { top: { start: "0xff00", end: "0x10000", scopes: [scope] } },
+            });
+            expect(parseSet(top({ start: "0xff80", end: "0x10000" })).regions[0].scopes[0].end).toBe(0x10000);
+            expect(() => parseSet(top({ start: "0x10000", end: "0x10000" }))).toThrow("scope 0's start");
         });
 
         it.each([
@@ -61,6 +74,21 @@ describe("symbol sets", () => {
                 "anchor bytes that aren't whole bytes",
                 { regions: { r: { start: "0x2000", end: "0x2100", anchors: [{ at: "0x2000", bytes: "a90" }] } } },
                 "anchor 0's bytes",
+            ],
+            [
+                "a scope that ends before it starts",
+                { regions: { r: { start: "0x2000", end: "0x2100", scopes: [{ start: "0x2010", end: "0x2010" }] } } },
+                "scope 0 ends before it starts",
+            ],
+            [
+                "a scope starting before its region",
+                { regions: { r: { start: "0x2000", end: "0x2100", scopes: [{ start: "0x1fff", end: "0x2010" }] } } },
+                "isn't inside its region",
+            ],
+            [
+                "a scope ending after its region",
+                { regions: { r: { start: "0x2000", end: "0x2100", scopes: [{ start: "0x2010", end: "0x2101" }] } } },
+                "isn't inside its region",
             ],
             ["a minAnchors of 0", { regions: { r: { start: "0x2000", end: "0x2100", minAnchors: 0 } } }, "minAnchors"],
         ])("rejects %s", (_, change, message) => {

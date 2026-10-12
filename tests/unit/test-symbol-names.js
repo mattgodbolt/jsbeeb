@@ -40,6 +40,23 @@ describe("symbol names", () => {
             startup: region(0x1a00, 0x1b00, 0x1a00, { init: "0x1a00" }),
         },
     });
+    const overlaid = set({
+        title: "Overlaid",
+        globals: { work: "0x70" },
+        regions: {
+            code: {
+                ...region(0x2000, 0x2100, 0x2000, { aim: "0x2010", explode: "0x2080" }),
+                scopes: [
+                    { start: "0x2010", end: "0x2080", symbols: { target_x: "0x70", target_y: "0x71" } },
+                    {
+                        start: "0x2080",
+                        end: "0x20c0",
+                        symbols: { blast_x: "0x70", blast_entry: "0x2080", over_main: "0x1100" },
+                    },
+                ],
+            },
+        },
+    });
     const LoaderCode = 0x910;
     const GameCode = 0x1200;
     const MosCode = 0xe000;
@@ -47,7 +64,7 @@ describe("symbol names", () => {
 
     beforeEach(() => {
         memory = new Uint8Array(0x10000);
-        for (const at of [0xc000, 0x900, 0x1100, 0x1a00]) anchor(at);
+        for (const at of [0xc000, 0x900, 0x1100, 0x1a00, 0x2000]) anchor(at);
     });
 
     describe("matching", () => {
@@ -151,6 +168,38 @@ describe("symbol names", () => {
             expect(nameOf(namesFrom(mos, game).operand(UncoveredCode, 0x1180))).toBe("vdu_queue from MOS");
         });
 
+        it("take the names of the scope the instruction is in before any other", () => {
+            const names = namesFrom(mos, game, overlaid);
+            expect(nameOf(names.operand(0x2090, 0x2080))).toBe("blast_entry from Overlaid");
+            expect(nameOf(names.operand(0x20c0, 0x2080))).toBe("explode from Overlaid");
+            expect(nameOf(names.operand(0x2090, 0x1100))).toBe("over_main from Overlaid");
+            expect(nameOf(names.operand(0x20c0, 0x1100))).toBe("main_loop from Game");
+            expect(nameOf(names.operand(0x2020, 0x70))).toBe("target_x from Overlaid");
+            expect(nameOf(names.operand(0x2020, 0x71))).toBe("target_y from Overlaid");
+            expect(nameOf(names.operand(0x2090, 0x70))).toBe("blast_x from Overlaid");
+            expect(nameOf(names.operand(0x2090, 0x71))).toBeUndefined();
+            expect(nameOf(names.operand(0x20c0, 0x70))).toBe("work from Overlaid");
+            breakAnchor(0x2000);
+            expect(nameOf(namesFrom(mos, overlaid).operand(0x2020, 0x70))).toBe("scratch from MOS");
+        });
+
+        it("ignore a system set's scopes", () => {
+            const scopedMos = set({
+                title: "Scoped MOS",
+                system: true,
+                globals: { scratch: "0x70" },
+                regions: {
+                    rom: {
+                        ...region(0xc000, 0x10000, 0xc000),
+                        scopes: [{ start: "0xe000", end: "0xe100", symbols: { mos_temp: "0x70" } }],
+                    },
+                },
+            });
+            const names = namesFrom(scopedMos);
+            expect(nameOf(names.operand(MosCode, 0x70))).toBe("scratch from Scoped MOS");
+            expect(names.address(0x70, MosCode)?.name).toBe("scratch");
+        });
+
         it("take no system globals while no region of the system set matches", () => {
             breakAnchor(0xc000);
             expect(namesFrom(mos, game).operand(GameCode, 0x20e)).toBeUndefined();
@@ -184,7 +233,16 @@ describe("symbol names", () => {
             const names = namesFrom(mos, loader, game);
             expect(nameOf(names.address(0x70, GameCode))).toBe("lives from Game");
             expect(nameOf(names.address(0x70, LoaderCode))).toBe("pointer from Loader");
+            expect(nameOf(namesFrom(mos, game, overlaid).address(0x1100, 0x2090))).toBe("main_loop from Game");
             expect(nameOf(names.address(0x3000, GameCode))).toBe("screen from Game");
+        });
+
+        it("takes the name of the scope the CPU is in, over its set's global", () => {
+            const names = namesFrom(mos, loader, overlaid);
+            expect(nameOf(names.address(0x70, 0x2090))).toBe("blast_x from Overlaid");
+            expect(nameOf(names.address(0x70, 0x20c0))).toBe("work from Overlaid");
+            expect(nameOf(names.address(0x70, LoaderCode))).toBe("pointer from Loader");
+            expect(nameOf(namesFrom(mos, game, overlaid).address(0x1100, 0x2090))).toBe("main_loop from Game");
         });
 
         it("takes no name for a clash while the CPU is in the system set's code or no set's", () => {
