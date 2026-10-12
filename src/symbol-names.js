@@ -1,6 +1,7 @@
 /**
  * Which symbol sets match memory, and which name each address takes from them: the matching and
- * precedence rules of "Symbol sets" in docs/media-registry-proposal.md.
+ * precedence rules of "Symbol sets" in beeb-meta-data's proposal,
+ * https://github.com/mattgodbolt/beeb-meta-data/blob/main/docs/media-registry-proposal.md.
  *
  * @typedef {object} Anchor
  * @property {number} at

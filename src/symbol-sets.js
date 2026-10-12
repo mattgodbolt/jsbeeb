@@ -109,7 +109,7 @@ function checkFormat(json, what) {
 
 /**
  * A set file as the debugger uses it. Throws on anything it can't read; the build's checks are
- * stricter (tools/symbols/build-index.js).
+ * stricter (tools/symbols/build-index.js in https://github.com/mattgodbolt/beeb-meta-data).
  * @returns {SymbolSet}
  */
 export function parseSet(json) {
