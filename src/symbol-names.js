@@ -14,6 +14,13 @@
  * @property {number} minAnchors
  * @property {Anchor[]} anchors
  * @property {Map<number, string>} symbols - address to name
+ * @property {Scope[]} scopes
+ *
+ * @typedef {object} Scope - names an instruction in [start, end) takes before any other, for the zero page that
+ *     code shares with code that never runs beside it
+ * @property {number} start
+ * @property {number} end - exclusive
+ * @property {Map<number, string>} symbols - address to name
  *
  * @typedef {object} SymbolSet
  * @property {string} title
@@ -84,6 +91,7 @@ export class SymbolNames {
         const own = this._matchAt(at);
         if (!own) return this._regionName(target) ?? this._systemGlobal(target);
         return (
+            this._scopedName(own, at, target) ??
             this._regionName(target, (match) => match === own) ??
             this._globalOf(own.set, target) ??
             this._regionName(target, (match) => match !== own) ??
@@ -101,6 +109,8 @@ export class SymbolNames {
         const own = this._matchAt(address);
         if (own) return this._regionName(address, (match) => match === own);
         const running = this._matchAt(pc);
+        const scoped = running && this._scopedName(running, pc, address);
+        if (scoped) return scoped;
         const runningGlobal = running && !running.set.system ? this._globalOf(running.set, address) : undefined;
         if (runningGlobal) return runningGlobal;
         const named = this._matches
@@ -113,6 +123,17 @@ export class SymbolNames {
 
     _matchAt(address) {
         return this._matches.find(({ regions }) => regions.some((region) => contains(region, address)));
+    }
+
+    _scopedName(match, at, address) {
+        for (const region of match.regions) {
+            if (!contains(region, at)) continue;
+            for (const scope of region.scopes) {
+                const name = contains(scope, at) ? scope.symbols.get(address) : undefined;
+                if (name !== undefined) return { name, set: match.set };
+            }
+        }
+        return undefined;
     }
 
     _regionName(address, which = () => true) {

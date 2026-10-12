@@ -96,7 +96,17 @@ function parseRegion(name, region) {
     const minAnchors = region.minAnchors ?? 1;
     if (!Number.isInteger(minAnchors) || minAnchors < 1)
         throw new Error(`${what}'s minAnchors is ${minAnchors}, not a whole number of at least 1`);
-    return { name, start, end, minAnchors, anchors, symbols: parseNames(region.symbols, `${what}'s symbol`) };
+    const scopes = (region.scopes ?? []).map((scope, i) => parseScope(scope, `${what}'s scope ${i}`, start, end));
+    return { name, start, end, minAnchors, anchors, symbols: parseNames(region.symbols, `${what}'s symbol`), scopes };
+}
+
+/** @returns {import("./symbol-names.js").Scope} */
+function parseScope(scope, what, regionStart, regionEnd) {
+    const start = parseAddress(scope.start, `${what}'s start`);
+    const end = parseAddress(scope.end, `${what}'s end`, AddressSpace);
+    if (end <= start) throw new Error(`${what} ends before it starts`);
+    if (start < regionStart || end > regionEnd) throw new Error(`${what} isn't inside its region`);
+    return { start, end, symbols: parseNames(scope.symbols, `${what}'s symbol`) };
 }
 
 function parseRegions(regions) {
