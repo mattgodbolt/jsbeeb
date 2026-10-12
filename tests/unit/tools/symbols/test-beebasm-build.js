@@ -7,6 +7,7 @@ import {
     assemble,
     assignedNames,
     beebasmVersion,
+    definitionLines,
     memoryOperandNames,
     PrintPrefix,
     withBeebasmBuild,
@@ -71,6 +72,13 @@ describe("a beebasm build", () => {
         expect(made.dump).toContain("'.start':6400L");
         expect([...made.saved]).toEqual([["out/PROG", Buffer.from("ABC")]]);
         expect(made.operandNames).toEqual(new Set(["ptr"]));
+        expect(made.definitions).toEqual(
+            new Map([
+                ["ptr", ["src/main.asm#L1"]],
+                ["scoped", ["src/main.asm#L3"]],
+                ["start", ["src/main.asm#L5"]],
+            ]),
+        );
     });
 });
 
@@ -80,6 +88,26 @@ describe("assignedNames", () => {
             "ptr",
             "count",
             "max",
+        ]);
+    });
+});
+
+describe("definitionLines", () => {
+    it("finds each label and `=` name with its line, in every statement, outside strings and comments", () => {
+        const text = [
+            "ptr = &70 : .start LDA ptr",
+            '  PRINT "a:.b = 1" ; .commented = 2',
+            "\\ .old_label",
+            ".loop: count=3",
+            "LDA #':' : .after_char",
+            "IF x == 1",
+        ].join("\n");
+        expect(definitionLines(text)).toEqual([
+            ["ptr", 1],
+            ["start", 1],
+            ["loop", 4],
+            ["count", 4],
+            ["after_char", 5],
         ]);
     });
 });

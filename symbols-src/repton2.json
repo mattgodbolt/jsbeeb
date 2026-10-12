@@ -5,7 +5,8 @@
   "source": {
     "repository": "https://github.com/gfoot/repton2disassembly",
     "commit": "c5fed3739573c9c3e5c9b61070052c85c2bd3b8f",
-    "script": "repton2.py"
+    "script": "repton2.py",
+    "assembly": "repton2.s"
   },
   "py8dis": {
     "repository": "https://github.com/ZornsLemma/py8dis",

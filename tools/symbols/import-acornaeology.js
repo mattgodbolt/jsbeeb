@@ -8,7 +8,8 @@
  * Usage: node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json [--verbose]
  *            && node tools/symbols/build-index.js
  *
- * Fetches the JSON and the licence at the config's commit. Refuses to write the set if the JSON's
+ * Fetches the JSON and the licence at the config's commit, and the config's `home` page, whose anchors
+ * the names link to. Refuses to write the set if the JSON's
  * bytes aren't the ROM's, if a region can't be anchored, if its anchors all match another ROM in
  * public/roms/, or if the set fails the index's checks.
  */
@@ -28,6 +29,7 @@ const SchemaVersion = 4;
 const RomsDir = fileURLToPath(new URL("../../public/roms/", import.meta.url));
 const KeyHexDigits = 32;
 const AddressLimit = 0x10000;
+const AddressAnchor = /\bid="(addr-([0-9A-Fa-f]{4}))"/g;
 
 const hexAddress = (address) => `0x${address.toString(16).padStart(4, "0")}`;
 const hex = (address) => `&${address.toString(16).toUpperCase().padStart(4, "0")}`;
@@ -56,6 +58,14 @@ export function readDisassembly(json) {
         mapped: mapped.has(name),
     }));
     return { base: json.meta.load_addr, end: json.meta.end_addr, statements, labels, outside };
+}
+
+/**
+ * The anchors a disassembly's page has for addresses, `id="addr-800E"`, each id by its address.
+ * @returns {Map<number, string>}
+ */
+export function pageAnchors(html) {
+    return new Map([...html.matchAll(AddressAnchor)].map(([, id, digits]) => [parseInt(digits, 16), id]));
 }
 
 /** Every bank the ROM's size of the other images, placed where the ROM runs. */
@@ -108,9 +118,11 @@ const byAddress = (names) =>
  * @param {{name: string, bytes: Uint8Array}[]} options.otherRoms - images whose banks the anchors must tell apart
  * @param {Map<number, string>} options.systemGlobals - addresses the system sets name, which the set leaves to them
  * @param {string} options.notice
+ * @param {Map<number, string>} [options.anchors] - the ids the config's `home` page has for addresses
+ *     (pageAnchors), to link each name with one to it
  * @returns {{json: object, errors: string[], notes: string[], dropped: [string, number, string][]}}
  */
-export function importAcornaeology(config, disassembly, { rom, otherRoms, systemGlobals, notice }) {
+export function importAcornaeology(config, disassembly, { rom, otherRoms, systemGlobals, notice, anchors = null }) {
     const { base, end, statements, labels, outside } = disassembly;
     const errors = [];
     const notes = [];
@@ -162,6 +174,12 @@ export function importAcornaeology(config, disassembly, { rom, otherRoms, system
     for (const { address, name } of outside)
         if (!within(globalRanges, address)) dropped.push([name, address, "it's outside the globals' ranges"]);
 
+    const page = anchors && new URL(config.home);
+    const pageName = page && path.posix.basename(page.pathname);
+    const places = new Map();
+    if (anchors)
+        for (const [name, address] of [...globals, ...regions.flatMap((region) => [...region.symbols])])
+            if (anchors.has(address)) places.set(name, `${pageName}#${anchors.get(address)}`);
     const { repository, commit, disassembly: file } = config.source;
     const json = {
         format: Format,
@@ -170,6 +188,8 @@ export function importAcornaeology(config, disassembly, { rom, otherRoms, system
         source: `${repository}/blob/${commit}/${file}`,
         notice,
         madeFrom: [createHash("sha256").update(rom).digest("hex").slice(0, KeyHexDigits)],
+        ...(config.home !== undefined && { home: config.home }),
+        ...(anchors && { nameLink: `${new URL(".", page)}{place}` }),
         globals: byAddress(globals),
         regions: Object.fromEntries(
             regions.map((region) => [
@@ -186,6 +206,7 @@ export function importAcornaeology(config, disassembly, { rom, otherRoms, system
                 },
             ]),
         ),
+        ...(anchors && { places: Object.fromEntries([...places].sort(([a], [b]) => (a < b ? -1 : 1))) }),
     };
     return { json, errors, notes, dropped };
 }
@@ -224,9 +245,10 @@ async function main() {
     if (config.importer !== Importer) throw new Error(`${values.config} isn't a config for the ${Importer} importer`);
     const { repository, commit, disassembly: file, licenceFile } = config.source;
     const raw = `${repository.replace("https://github.com/", "https://raw.githubusercontent.com/")}/${commit}`;
-    const [disassemblyText, licence] = await Promise.all([
+    const [disassemblyText, licence, page] = await Promise.all([
         fetchText(`${raw}/${file}`),
         fetchText(`${raw}/${licenceFile}`),
+        config.home === undefined ? null : fetchText(config.home),
     ]);
     const disassembly = readDisassembly(JSON.parse(disassemblyText));
     const rom = readFileSync(path.join(RomsDir, config.rom));
@@ -236,6 +258,7 @@ async function main() {
         otherRoms: otherRomsThan(config.rom, rom.length),
         systemGlobals: systemGlobalsOf(),
         notice,
+        anchors: page === null ? null : pageAnchors(page),
     });
     const setFile = `sets/${config.id}.json`;
     const problems = [...errors, ...(json ? checkSet(json, { file: setFile, mosSets: readMosSets() }) : [])];

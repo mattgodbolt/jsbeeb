@@ -26,7 +26,7 @@ import { BuildOptions, BuildUsage, PrintPrefix, withBeebasmBuild } from "./beeba
 import { labelName, parseBeebasmListing, parseLabelDump } from "./beebasm-listing.js";
 import { readMosSets, SymbolsDir } from "./build-index.js";
 import { placedFiles } from "./placed-files.js";
-import { evaluate, setJson, writeTitle } from "./import-baron.js";
+import { evaluate, isOnGitHub, onePlaceEach, setJson, writeTitle } from "./import-baron.js";
 
 const AddressLimit = 0x10000;
 const OpcodeLdxImmediate = 0xa2;
@@ -104,7 +104,7 @@ export function savedStart(name, data, inMemory, labelAddresses) {
  * labels, every label, and the `=` names that hold numbers.
  * @param {ReturnType<typeof import("./beebasm-build.js").assemble>} build
  */
-export function beebasmBuild({ listing, dump, saved, names, operandNames }) {
+export function beebasmBuild({ listing, dump, saved, names, operandNames, definitions }) {
     const parsed = parseBeebasmListing(listing, PrintPrefix);
     const dumped = parseLabelDump(dump);
     if (dumped.length !== parsed.labels.length)
@@ -138,7 +138,7 @@ export function beebasmBuild({ listing, dump, saved, names, operandNames }) {
             return [file, savedFile(file, data, start, inMemory, listedBefore, statements)];
         }),
     );
-    return { files, labels, constants, operandNames };
+    return { files, labels, constants, operandNames, definitions };
 }
 
 /** One saved file: where it runs, its bytes, and its statements and labels. */
@@ -354,6 +354,11 @@ class Importer {
         const every = [...regions.flatMap((region) => [...region.symbols.keys()]), ...globals.keys()];
         const twice = [...new Set([...repeated, ...every.filter((name, i) => every.indexOf(name) !== i)])].sort();
         if (twice.length) throw new Error(`${spec.id}: names given twice: ${twice.join(", ")}`);
+        // A scoped name's label is written as its last part.
+        const definitions = new Map(
+            every.map((name) => [name, this.build.definitions.get(name.split(".").at(-1)) ?? []]),
+        );
+        const places = isOnGitHub(this.config) ? onePlaceEach(spec.id, every, definitions, this.errors) : null;
 
         const { stores } = storesIn(
             files.flatMap((file) => file.statements),
@@ -367,7 +372,7 @@ class Importer {
             this.notes.push(...notes);
             this.reasons.push(...reasons);
         }
-        return { json: setJson(this.config, spec, regions, globals), regions, dropped };
+        return { json: setJson(this.config, spec, regions, globals, places), regions, dropped };
     }
 }
 
