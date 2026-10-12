@@ -84,7 +84,7 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 // The pieces that exist before the machine: settings, screen, sound.
 // ------------------------------------------------------------------------
 
-const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl, document.baseURI) }) });
+const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }) });
 
 const gamepad = new GamePad();
 if (!window.isSecureContext)
