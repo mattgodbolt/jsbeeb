@@ -233,6 +233,7 @@ describe("symbol names", () => {
             const names = namesFrom(mos, loader, game);
             expect(nameOf(names.address(0x70, GameCode))).toBe("lives from Game");
             expect(nameOf(names.address(0x70, LoaderCode))).toBe("pointer from Loader");
+            expect(nameOf(namesFrom(mos, game, overlaid).address(0x1100, 0x2090))).toBe("main_loop from Game");
             expect(nameOf(names.address(0x3000, GameCode))).toBe("screen from Game");
         });
 
@@ -241,6 +242,7 @@ describe("symbol names", () => {
             expect(nameOf(names.address(0x70, 0x2090))).toBe("blast_x from Overlaid");
             expect(nameOf(names.address(0x70, 0x20c0))).toBe("work from Overlaid");
             expect(nameOf(names.address(0x70, LoaderCode))).toBe("pointer from Loader");
+            expect(nameOf(namesFrom(mos, game, overlaid).address(0x1100, 0x2090))).toBe("main_loop from Game");
         });
 
         it("takes no name for a clash while the CPU is in the system set's code or no set's", () => {

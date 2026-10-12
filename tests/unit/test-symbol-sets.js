@@ -58,6 +58,12 @@ describe("symbol sets", () => {
                 0x10000,
             );
             expect(() => parseSet({ ...game, globals: { past: "0x10000" } })).toThrow("global past");
+            const top = (scope) => ({
+                ...game,
+                regions: { top: { start: "0xff00", end: "0x10000", scopes: [scope] } },
+            });
+            expect(parseSet(top({ start: "0xff80", end: "0x10000" })).regions[0].scopes[0].end).toBe(0x10000);
+            expect(() => parseSet(top({ start: "0x10000", end: "0x10000" }))).toThrow("scope 0's start");
         });
 
         it.each([
