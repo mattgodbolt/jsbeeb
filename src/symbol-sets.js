@@ -62,7 +62,7 @@ export function nameUrl(set, name, address) {
     return complete && isHttps(url) ? url : undefined;
 }
 
-/** "0x1a2c" as a number; only a region's end can be 0x10000. */
+/** "0x1a2c" as a number; only a region's or a scope's end can be 0x10000. */
 export function parseAddress(text, what, limit = AddressSpace - 1) {
     const digits = /^0x([0-9a-f]{1,5})$/.exec(text)?.[1];
     const value = digits === undefined ? NaN : parseInt(digits, 16);

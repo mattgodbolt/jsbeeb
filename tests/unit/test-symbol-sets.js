@@ -53,7 +53,7 @@ describe("symbol sets", () => {
             expect(main.scopes).toEqual([{ start: 0x2010, end: 0x2080, symbols: new Map([[0x70, "target_x"]]) }]);
         });
 
-        it("lets only a region's end be 0x10000", () => {
+        it("lets only a region's or a scope's end be 0x10000", () => {
             expect(parseSet({ ...game, regions: { top: { start: "0xff00", end: "0x10000" } } }).regions[0].end).toBe(
                 0x10000,
             );
@@ -72,10 +72,15 @@ describe("symbol sets", () => {
             [
                 "a scope that ends before it starts",
                 { regions: { r: { start: "0x2000", end: "0x2100", scopes: [{ start: "0x2010", end: "0x2010" }] } } },
-                "scope 0 ends",
+                "scope 0 ends before it starts",
             ],
             [
-                "a scope outside its region",
+                "a scope starting before its region",
+                { regions: { r: { start: "0x2000", end: "0x2100", scopes: [{ start: "0x1fff", end: "0x2010" }] } } },
+                "isn't inside its region",
+            ],
+            [
+                "a scope ending after its region",
                 { regions: { r: { start: "0x2000", end: "0x2100", scopes: [{ start: "0x2010", end: "0x2101" }] } } },
                 "isn't inside its region",
             ],

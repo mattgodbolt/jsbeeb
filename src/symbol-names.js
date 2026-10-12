@@ -16,8 +16,8 @@
  * @property {Map<number, string>} symbols - address to name
  * @property {Scope[]} scopes
  *
- * @typedef {object} Scope - names an instruction in [start, end) takes before any other, for the zero page that
- *     code shares with code that never runs beside it
+ * @typedef {object} Scope - names for an operand of an instruction in [start, end), and for an address on its own
+ *     while the CPU is there; a system set's are ignored
  * @property {number} start
  * @property {number} end - exclusive
  * @property {Map<number, string>} symbols - address to name
@@ -126,6 +126,7 @@ export class SymbolNames {
     }
 
     _scopedName(match, at, address) {
+        if (match.set.system) return undefined;
         for (const region of match.regions) {
             if (!contains(region, at)) continue;
             for (const scope of region.scopes) {
