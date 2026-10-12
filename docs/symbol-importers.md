@@ -408,10 +408,10 @@ since nothing writes to a ROM. Every bank of every file under `public/roms/` tha
 ROM's size is another image: a region gets another anchor where one of them would hold all its anchors,
 and the importer fails if none tells them apart.
 
-The set isn't `system`: BASIC's workspace names then name BASIC's own code's operands, and the memory view
-while BASIC is paged in, but not another program's code. A game run from BASIC, with BASIC still paged in,
-keeps its own names for the zero page it shares with BASIC's in its code; in the memory view, an address
-the game's set and BASIC's both name, differently, shows neither, as the proposal's rule for two sets says.
+The set isn't `system`: BASIC's workspace names then name BASIC's own code's operands, but not another
+program's code. A game run from BASIC, with BASIC still paged in, keeps its own names for the zero page it
+shares with BASIC's in its code. An address shown on its own that the game's set and BASIC's both name,
+differently, takes the name from whichever set's code holds the PC, and neither while the MOS holds it.
 
 Neither check takes a ROM's config: `check-memory.js` boots a title's disc, with a `check` module of
 scenarios a ROM's config doesn't have, and `corpus-check.js` builds a title's source, so it refuses one. The

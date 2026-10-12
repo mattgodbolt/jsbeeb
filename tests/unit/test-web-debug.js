@@ -282,6 +282,43 @@ describe("Debugger", () => {
             expect(symbolsLine().querySelector("a")).toBeNull();
         });
 
+        it("names a clashing global in the address column after the set whose code the CPU is in", async () => {
+            const ClockCode = 0x4000;
+            const program = (title, start, bytes, globals) => {
+                const region = {
+                    start: `0x${start.toString(16)}`,
+                    end: `0x${(start + 0x10).toString(16)}`,
+                    anchors: [{ at: `0x${start.toString(16)}`, bytes }],
+                };
+                return [
+                    { url: `${title}.json`, regions: { code: region } },
+                    {
+                        ...files.get(`${BaseUrl}mos.json`),
+                        title,
+                        system: false,
+                        globals,
+                        regions: { code: { ...region, symbols: {} } },
+                    },
+                ];
+            };
+            const [gameEntry, game] = program("game", cpu.pc, "a941", { lives: "0x70" });
+            const [clockEntry, clock] = program("clock", ClockCode, "eaea", { ticks: "0x70" });
+            [0xea, 0xea].forEach((byte, i) => cpu.writemem(ClockCode + i, byte));
+            const programs = new Map([
+                [`${BaseUrl}index.json`, { format: 1, sets: [gameEntry, clockEntry] }],
+                [`${BaseUrl}game.json`, game],
+                [`${BaseUrl}clock.json`, clock],
+            ]);
+            load.mockImplementation(async (url) => structuredClone(programs.get(url)));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(symbolsLine().querySelectorAll(".symbol-set")).toHaveLength(2));
+            dbgr.updateDisassembly(0x70);
+            expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 lives");
+            cpu.pc = ClockCode;
+            dbgr.updateDisassembly(0x70);
+            expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 ticks");
+        });
+
         describe("with links to the author's site", () => {
             const PlaceUrl = "https://example.com/mos/blob/0123abc/mos.asm#L42";
 
