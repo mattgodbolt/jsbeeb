@@ -304,8 +304,9 @@ where pieces of it are `move()`d to run, and names addresses. `py8dis-dump.py` r
 at the config's commit, lets py8dis trace and classify the binary as it would to emit assembly, and prints
 what py8dis then holds instead of the assembly: each piece of the binary where it runs (the binary where it
 loads, less what moves, and each move where it lands), every instruction and data line in it with its bytes,
-and every name the script gave, with the move it was given in. So nothing reads py8dis's assembly back in,
-and the output format the script was written for doesn't matter.
+and every name the script gave, with the move it was given in. So the names and anchors never come from
+py8dis's assembly, and the output format the script was written for doesn't matter to them; only the links
+read the assembly the repository holds (`source.assembly` below).
 
 A py8dis title's config differs from a baron title's in these:
 
@@ -386,7 +387,7 @@ A config (`"importer": "acornaeology"`) has an `id`, which is also the set's fil
 - `home`: the disassembly's page on acornaeology's site. The importer fetches it, and each name whose
   address the page has an anchor for (`id="addr-800E"`) links there: its place is `2.html#addr-800E`, under
   the page's directory (`https://acornaeology.uk/bbc-basic/{place}`). The page has anchors only inside the
-  ROM, so the globals have no links.
+  ROM, so the globals have no links, and a name in the ROM it has no anchor for stops the import.
 
 ```sh
 node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json

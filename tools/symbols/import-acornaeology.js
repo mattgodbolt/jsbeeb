@@ -9,9 +9,9 @@
  *            && node tools/symbols/build-index.js
  *
  * Fetches the JSON and the licence at the config's commit, and the config's `home` page, whose anchors
- * the names link to. Refuses to write the set if the JSON's
- * bytes aren't the ROM's, if a region can't be anchored, if its anchors all match another ROM in
- * public/roms/, or if the set fails the index's checks.
+ * the names link to. Refuses to write the set if the JSON's bytes aren't the ROM's, if a region can't be
+ * anchored, if its anchors all match another ROM in public/roms/, if the page has no anchor for a name
+ * in the ROM, or if the set fails the index's checks.
  */
 
 import { createHash } from "node:crypto";
@@ -177,9 +177,12 @@ export function importAcornaeology(config, disassembly, { rom, otherRoms, system
     const page = anchors && new URL(config.home);
     const pageName = page && path.posix.basename(page.pathname);
     const places = new Map();
-    if (anchors)
+    if (anchors) {
         for (const [name, address] of [...globals, ...regions.flatMap((region) => [...region.symbols])])
             if (anchors.has(address)) places.set(name, `${pageName}#${anchors.get(address)}`);
+        const unanchored = regions.flatMap((region) => [...region.symbols.keys()]).filter((name) => !places.has(name));
+        if (unanchored.length) errors.push(`${config.home} has no anchor for ${unanchored.sort().join(", ")}`);
+    }
     const { repository, commit, disassembly: file } = config.source;
     const json = {
         format: Format,
