@@ -181,7 +181,8 @@ address inside a matching region of a non-system set. An instruction in one of a
 takes names from that set's matching regions, then its globals, then other sets' matching regions, then
 system globals if its set isn't the system set; an instruction outside every matching region takes names
 from matching regions, then system globals. An address shown on its own, such as a row of the memory
-view, takes only that region's names if it lies in a matching region. Otherwise it takes the global that
+view, takes only that region's names if it lies in a matching region. Otherwise it takes the global of
+the non-system set whose matching region holds the PC, if that set names it; failing that, the global that
 one non-system set with a matching region names, no name if two or more such sets name it differently, or
 a system global if none does. A breakpoint set by name only stops while its region matches or, for a
 global, while any region of its set does.

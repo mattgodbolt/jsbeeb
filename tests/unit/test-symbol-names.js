@@ -180,6 +180,25 @@ describe("symbol names", () => {
             expect(nameOf(namesFrom(mos, loader, game).address(0x70))).toBe("lives from Game");
         });
 
+        it("takes the global of the set whose code the CPU is in, over another set's", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(nameOf(names.address(0x70, GameCode))).toBe("lives from Game");
+            expect(nameOf(names.address(0x70, LoaderCode))).toBe("pointer from Loader");
+            expect(nameOf(names.address(0x3000, GameCode))).toBe("screen from Game");
+        });
+
+        it("takes no name for a clash while the CPU is in the system set's code or no set's", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(names.address(0x70, MosCode)).toBeUndefined();
+            expect(names.address(0x70, UncoveredCode)).toBeUndefined();
+        });
+
+        it("falls back to the other sets when the one the CPU is in doesn't name it", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(nameOf(names.address(0x2e00, GameCode))).toBe("catalogue from Loader");
+            expect(nameOf(names.address(0x20e, GameCode))).toBe("wrchv from MOS");
+        });
+
         it("takes a system global when no non-system set names it", () => {
             const names = namesFrom(mos, loader, game);
             expect(nameOf(names.address(0x20e))).toBe("wrchv from MOS");

@@ -92,11 +92,16 @@ export class SymbolNames {
 
     /**
      * The name for an address shown on its own, with no instruction to say whose it is.
+     * @param {number} address
+     * @param {number} pc - where the CPU is, whose set's globals win a clash
      * @returns {Named | undefined}
      */
-    address(address) {
+    address(address, pc) {
         const own = this._matchAt(address);
         if (own) return this._regionName(address, (match) => match === own);
+        const running = this._matchAt(pc);
+        const runningGlobal = running && !running.set.system ? this._globalOf(running.set, address) : undefined;
+        if (runningGlobal) return runningGlobal;
         const named = this._matches
             .filter(({ set }) => !set.system)
             .map(({ set }) => this._globalOf(set, address))
