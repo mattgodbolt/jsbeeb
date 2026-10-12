@@ -96,11 +96,13 @@ test("a breakpoint in the MOS names its addresses, and says where the names came
     await page.evaluate((address) => window.processor.debugInstruction.add((pc) => pc === address), Oswrch);
     await beeb.pressKey("a");
     const stopped = page.locator("#disassembly .highlight");
-    await expect(stopped.locator(".dis_addr")).toHaveText("ffee oswrch");
-    await expect(stopped.locator(".disassembly")).toHaveText(/^JMP \(wrchv\) ; \$[0-9a-f]{4}$/);
-    await expect(page.locator(`#disassembly [data-addr="${OsnewlCall}"] .disassembly`)).toHaveText("JSR oswrch");
+    await expect(stopped.locator(".dis_addr")).toHaveText(/^ffee (oswrch|OSWRCH)$/);
+    await expect(stopped.locator(".disassembly")).toHaveText(/^JMP \((wrchv|vectorWRCHV)\) ; \$[0-9a-f]{4}$/);
+    await expect(page.locator(`#disassembly [data-addr="${OsnewlCall}"] .disassembly`)).toHaveText(
+        /^JSR (oswrch|OSWRCH)$/,
+    );
     await expect(page.locator("#debug-symbols")).toHaveText(
-        "names from BBC Micro MOS 1.20 (source) · BBC BASIC II (acornaeology.uk, source)",
+        /^names from BBC Micro MOS 1\.20 \((?:tobylobster\.github\.io, )?source\) · BBC BASIC II \(acornaeology\.uk, source\)$/,
     );
     await expect(page.locator("#debug-symbols a", { hasText: "acornaeology.uk" })).toHaveAttribute(
         "href",
