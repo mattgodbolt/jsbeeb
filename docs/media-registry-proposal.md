@@ -149,12 +149,13 @@ and `nameLink`, a URL template for one name's place on the author's site, where 
 explained. The template's placeholders are `{name}`, `{addr}` (the name's address, four upper-case hex
 digits) and `{place}`, which comes from `places`, an object from a name to the path and fragment of its
 place, for sources where each name sits at its own file and line. A name `places` doesn't give has no link
-from a template with `{place}`. So a disassembly with an anchor per address (`#addr-{addr}`, or `{place}`
-with places such as `2.html#addr-800E` where, as on acornaeology's BASIC II page, only some addresses have
-one) and source at a pinned commit
-(`https://github.com/<owner>/<repo>/blob/<commit>/{place}`, with `places` such as `src/game.6502#L120`) link
-each name to where it's defined, and a plain text file with no anchors
-(`https://www.level7.org.uk/<path>.txt#:~:text={name}`) to the name's first appearance. `home` and
+from a template with `{place}`. So source at a pinned commit
+(`https://github.com/<owner>/<repo>/blob/<commit>/{place}`, with `places` such as `src/game.6502#L120`) links
+each name to where it's defined, a disassembly with an anchor per address
+(`https://example.org/disassembly.html#addr-{addr}`) to its address, and a plain text file with no anchors
+(`https://www.level7.org.uk/<path>.txt#:~:text={name}`) to the name's first appearance. acornaeology's BASIC
+II page anchors only the ROM's addresses, so that set uses `https://acornaeology.uk/bbc-basic/{place}` with
+`places` such as `2.html#addr-800E`, and its workspace names have no link. `home` and
 `nameLink` are https, and the template starts with its site, which no placeholder can change; the build
 takes a place only as a relative path, and optionally a fragment, with no `.` or `..` segments. The debugger links a name
 shown on its own to its place and says where that is beside a name in an operand, and shows `home` beside
