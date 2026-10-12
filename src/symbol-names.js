@@ -93,7 +93,7 @@ export class SymbolNames {
     /**
      * The name for an address shown on its own, with no instruction to say whose it is.
      * @param {number} address
-     * @param {number} pc - where the CPU is, whose set's globals win a clash
+     * @param {number} [pc] - where the CPU is, whose set's globals win a clash
      * @returns {Named | undefined}
      */
     address(address, pc) {
