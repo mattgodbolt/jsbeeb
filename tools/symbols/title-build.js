@@ -39,7 +39,9 @@ export const importerOf = (config) => (config.py8dis ? Py8dis : assemblerOf(conf
 
 const Importers = {
     [Py8dis]: (configPath, options) =>
-        withPy8disTitle(configPath, options, ({ config, dump }) => importPy8dis(config, dump)),
+        withPy8disTitle(configPath, options, ({ config, dump, definitions }) =>
+            importPy8dis(config, dump, definitions),
+        ),
     [beebasm.Beebasm]: (configPath, options) =>
         withBeebasmTitle(configPath, options, ({ config, build, discFiles }) =>
             importBeebasm(config, build, { discFiles }),

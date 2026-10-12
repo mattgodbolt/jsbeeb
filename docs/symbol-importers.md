@@ -111,8 +111,11 @@ scenario names to run only those, and `--shots DIR` to save the screenshots a sc
   can be cut with `from` and `to` as a baron region can. beebasm has no sections: a SAVE writes whatever is
   in memory between two addresses.
 - There's no `defines`, `stripScope`, `tableSizes`, `moves`, `globalsSections` or `leftToSystemSets` yet;
-  nothing needed them. Nor does the importer write `nameLink` or `places` yet
-  ([Links to the author](#links-to-the-author)).
+  nothing needed them.
+- **Each name's place**, for a repository on GitHub, is the line of a file beebasm INCLUDEd that defines
+  it, as a label (`.name`) or with `=`, outside strings and comments; a scoped name (`start.loop`) is found
+  by its last part. beebasm says nothing of lines, so the importer reads the sources for them, and a name
+  in a set that no line, or more than one, defines stops the import.
 
 ```sh
 node tools/symbols/import-beebasm.js --config symbols-src/nevryon.json
@@ -205,17 +208,17 @@ someone reading a name in the debugger is one click from the author's own explan
 
 - source on GitHub at a pinned commit: `places` from each name's file and line, and
   `https://github.com/<owner>/<repo>/blob/<commit>/{place}`;
-- a disassembly published with an anchor per address, such as acornaeology's (`#addr-800E`): a `nameLink`
-  with `{addr}`, and `home` for the disassembly's page;
+- a disassembly published with an anchor per address, such as acornaeology's (`#addr-800E`): `places`
+  from the anchors the page has, since it has none for the addresses outside the ROM, and `home` for the
+  page;
 - a plain text disassembly with no anchors, such as level7.org.uk's: a text fragment,
   `#:~:text={name}`, which takes a browser to the name's first appearance, and `home` for the page.
 
 Where the author has no site of their own (a name list kept inside a tool, like py8dis's `acorn.py` for the
 MOS), `source` is the link and the set has none of these.
 
-The py8dis, beebasm and acornaeology importers don't write `home`, `nameLink` or `places` yet, so the names
-of Repton 2, Nevryon, Daredevil Demis and BBC BASIC II have no links, though their sources are on GitHub
-(and BASIC II's disassembly is on acornaeology's site).
+The baron, beebasm and py8dis importers link to GitHub, and the acornaeology importer to acornaeology's
+page; each section says where it finds a name's place.
 
 ## Anchors
 
@@ -301,8 +304,9 @@ where pieces of it are `move()`d to run, and names addresses. `py8dis-dump.py` r
 at the config's commit, lets py8dis trace and classify the binary as it would to emit assembly, and prints
 what py8dis then holds instead of the assembly: each piece of the binary where it runs (the binary where it
 loads, less what moves, and each move where it lands), every instruction and data line in it with its bytes,
-and every name the script gave, with the move it was given in. So nothing reads py8dis's assembly back in,
-and the output format the script was written for doesn't matter.
+and every name the script gave, with the move it was given in. So the names and anchors never come from
+py8dis's assembly, and the output format the script was written for doesn't matter to them; only the links
+read the assembly the repository holds (`source.assembly` below).
 
 A py8dis title's config differs from a baron title's in these:
 
@@ -317,7 +321,10 @@ A py8dis title's config differs from a baron title's in these:
   instructions it traces (`boot_relocate_0380_loop + 3`). A table is the store's operand exactly, so
   `STA table+1,X` is `table + 1`. A move can name a copy loop's first instruction, as a baron one names its
   label; the loop is the one in the piece with an instruction there, or in any piece if none or several have one.
-- No `home`, `places` or `nameLink`: the importer writes no links yet ("Links to the author").
+- `source.assembly`: the assembly the repository holds, from its root (`repton2.s`), if it holds one. For
+  a repository on GitHub, each name links to the line of it that starts with the name, as a label (`name:`
+  or `.name`) or a constant (`name =`), and a name in a set that no line, or more than one, starts stops
+  the import.
 
 The importer runs it as
 
@@ -377,6 +384,10 @@ A config (`"importer": "acornaeology"`) has an `id`, which is also the set's fil
   proposal says.
 - `globals`: the ranges whose `external_labels` become the set's globals.
 - `bytesPerAnchor`, `spreadAnchors`: as for baron.
+- `home`: the disassembly's page on acornaeology's site. The importer fetches it, and each name whose
+  address the page has an anchor for (`id="addr-800E"`) links there: its place is `2.html#addr-800E`, under
+  the page's directory (`https://acornaeology.uk/bbc-basic/{place}`). The page has anchors only inside the
+  ROM, so the globals have no links, and a name in the ROM it has no anchor for stops the import.
 
 ```sh
 node tools/symbols/import-acornaeology.js --config symbols-src/bbc-basic-2.json

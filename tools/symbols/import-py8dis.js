@@ -22,16 +22,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { Format } from "../../src/symbol-sets.js";
 import { chooseAnchors, storesIn } from "./anchor-chooser.js";
 import { checkCommit, cloneCommit } from "./baron-build.js";
 import { SymbolsDir } from "./build-index.js";
-import { byAddress, evaluate, hexAddress, writeTitle } from "./import-baron.js";
+import { evaluate, isOnGitHub, onePlaceEach, setJson, writeTitle } from "./import-baron.js";
 
 const SetsDir = path.join(SymbolsDir, "sets");
 const DumpScript = fileURLToPath(new URL("py8dis-dump.py", import.meta.url));
 const Py8disPackage = "py8dis";
 const MaxOutput = 64 * 1024 * 1024;
+const Definition = /^(?:\.([A-Za-z_]\w*)|([A-Za-z_]\w*)(?::|[ \t]*=))/;
 
 export const Py8disOptions = {
     source: { type: "string" },
@@ -84,6 +84,23 @@ export function readDump(dump) {
     return { pieces, labels: dump.labels, names };
 }
 
+/**
+ * Every place (`<file>#L<line>`) each name is defined in an assembly py8dis wrote, which starts a label's
+ * line with it, as `.name` or `name:`, and a constant's as `name =`.
+ * @returns {Map<string, string[]>}
+ */
+export function assemblyDefinitions(file, text) {
+    const definitions = new Map();
+    text.split(/\r\n|\r|\n/).forEach((line, i) => {
+        const match = Definition.exec(line);
+        if (!match) return;
+        const name = match[1] ?? match[2];
+        if (!definitions.has(name)) definitions.set(name, []);
+        definitions.get(name).push(`${file}#L${i + 1}`);
+    });
+    return definitions;
+}
+
 /** Everything the binary puts in memory: each piece where it runs, and the binary where it loads. */
 function binaryImages(pieces) {
     const loaded = new Map();
@@ -104,9 +121,10 @@ function binaryImages(pieces) {
 }
 
 class Importer {
-    constructor(config, dump) {
+    constructor(config, dump, definitions) {
         this.config = config;
         this.dump = readDump(dump);
+        this.definitions = definitions;
         this.images = binaryImages(this.dump.pieces);
         this.errors = [];
         this.notes = [];
@@ -222,45 +240,24 @@ class Importer {
             this.notes.push(...notes);
             this.reasons.push(...reasons);
         }
-        return { json: this.json(spec, regions, globals), regions, dropped };
-    }
-
-    json(spec, regions, globals) {
-        const { config } = this;
-        return {
-            format: Format,
-            title: spec.title,
-            licence: config.licence,
-            source: `${config.source.repository}/tree/${config.source.commit}`,
-            ...(config.notice !== undefined && { notice: config.notice }),
-            ...(config.madeFrom !== undefined && { madeFrom: config.madeFrom }),
-            regions: Object.fromEntries(
-                regions.map((region) => [
-                    region.name,
-                    {
-                        start: hexAddress(region.start),
-                        end: hexAddress(region.end),
-                        minAnchors: region.anchors.length,
-                        anchors: region.anchors.map(({ at, data }) => ({
-                            at: hexAddress(at),
-                            bytes: Buffer.from(data).toString("hex"),
-                        })),
-                        symbols: byAddress(region.symbols),
-                    },
-                ]),
-            ),
-            globals: byAddress(globals),
-        };
+        const every = [...regions.flatMap((region) => [...region.symbols.keys()]), ...globals.keys()];
+        const places =
+            this.definitions && isOnGitHub(this.config)
+                ? onePlaceEach(spec.id, every, this.definitions, this.errors)
+                : null;
+        return { json: setJson(this.config, spec, regions, globals, places), regions, dropped };
     }
 }
 
 /**
- * A title's sets from its py8dis dump, as its config describes them.
+ * A title's sets from its py8dis dump, as its config describes them, each name linked to its place in
+ * `definitions` (from assemblyDefinitions) for a repository on GitHub.
+ * @param {Map<string, string[]> | null} [definitions]
  * @returns {{sets: {id: string, file: string, json: object, regions: object[], dropped: [string, number, string][]}[],
  *     errors: string[], notes: string[], reasons: string[]}}
  */
-export function importPy8dis(config, dump) {
-    const importer = new Importer(config, dump);
+export function importPy8dis(config, dump, definitions = null) {
+    const importer = new Importer(config, dump, definitions);
     const sets = config.sets.map((spec) => ({
         id: spec.id,
         file: `${config.id}-${spec.id}.json`,
@@ -293,7 +290,8 @@ export function runPy8dis(config, { sourceDir, py8disDir, python, workDir }) {
 }
 
 /**
- * Runs `use` with a curator's config and the dump of its title, made from the commits the config names.
+ * Runs `use` with a curator's config, the dump of its title, made from the commits the config names, and
+ * the definitions in the repository's assembly (`source.assembly`), null if the config names none.
  * @param {{source?: string, py8dis?: string, python?: string}} options - checkouts of the title's commit and
  *     py8dis's to use instead of fetching them, and the python to run (else PYTHON, else `python3`)
  */
@@ -309,7 +307,12 @@ export async function withPy8disTitle(configPath, options, use) {
         if (options.py8dis === undefined) cloneCommit(config.py8dis, py8disDir);
         checkCommit(config.py8dis, py8disDir);
         const dump = runPy8dis(config, { sourceDir, py8disDir, python, workDir: temp });
-        return await use({ config, dump, sourceDir });
+        const { assembly } = config.source;
+        const definitions =
+            assembly === undefined
+                ? null
+                : assemblyDefinitions(assembly, readFileSync(path.join(sourceDir, assembly), "latin1"));
+        return await use({ config, dump, definitions, sourceDir });
     } finally {
         rmSync(temp, { recursive: true, force: true });
     }
@@ -325,9 +328,9 @@ async function main() {
         },
     });
     if (!values.config) throw new Error(`Usage: import-py8dis.js --config <file> ${Py8disUsage}`);
-    return withPy8disTitle(values.config, values, ({ config, dump }) => {
+    return withPy8disTitle(values.config, values, ({ config, dump, definitions }) => {
         console.log(`Ran ${config.source.script} under py8dis ${config.py8dis.commit}`);
-        return writeTitle(config, importPy8dis(config, dump), values);
+        return writeTitle(config, importPy8dis(config, dump, definitions), values);
     });
 }
 

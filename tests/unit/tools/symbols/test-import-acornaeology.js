@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseSet } from "../../../../src/symbol-sets.js";
 import { regionMatches } from "../../../../src/symbol-names.js";
 import { checkSet, readMosSets, SymbolsDir } from "../../../../tools/symbols/build-index.js";
-import { importAcornaeology, readDisassembly } from "../../../../tools/symbols/import-acornaeology.js";
+import { importAcornaeology, pageAnchors, readDisassembly } from "../../../../tools/symbols/import-acornaeology.js";
 
 const ConfigsDir = new URL("../../../../symbols-src/", import.meta.url);
 const Base = 0x8000;
@@ -111,6 +111,18 @@ describe("readDisassembly", () => {
     });
 });
 
+describe("pageAnchors", () => {
+    it("takes each address's anchor id as the page writes it", () => {
+        const html = '<tr id="addr-800E"><td>.go</td></tr><a href="#addr-8010">x</a><p id="addr-00f2"></p>';
+        expect(pageAnchors(html)).toEqual(
+            new Map([
+                [0x800e, "addr-800E"],
+                [0x00f2, "addr-00f2"],
+            ]),
+        );
+    });
+});
+
 describe("importAcornaeology", () => {
     it("names each region's addresses from the labels in it", () => {
         const { json, errors } = imported();
@@ -172,6 +184,42 @@ describe("importAcornaeology", () => {
         const { json, errors } = imported({ rom });
         expect(json).toBeNull();
         expect(errors).toEqual(["DEMO.ROM is 128 bytes, the disassembly 256"]);
+    });
+
+    const linked = (anchorsHtml) => {
+        const json = disassemblyJson();
+        return importAcornaeology({ ...config, home: "https://example.com/demo/1.html" }, readDisassembly(json), {
+            rom: romOf(json),
+            otherRoms: [],
+            systemGlobals,
+            notice: "Notice",
+            anchors: pageAnchors(anchorsHtml),
+        });
+    };
+
+    it("links each name whose address has an anchor on the config's home page, and no other", () => {
+        const { json, errors } = linked('<tr id="addr-8000"></tr><tr id="addr-8082"></tr><tr id="addr-0000"></tr>');
+        expect(errors).toEqual([]);
+        expect(checkSet(json, { file: "sets/demo.json", mosSets: [] })).toEqual([]);
+        expect(json.home).toBe("https://example.com/demo/1.html");
+        expect(json.nameLink).toBe("https://example.com/demo/{place}");
+        expect(json.places).toEqual({
+            entry: "1.html#addr-8000",
+            second_half: "1.html#addr-8082",
+            zp_ptr: "1.html#addr-0000",
+        });
+    });
+
+    it("fails on a name in the ROM the page has no anchor for", () => {
+        expect(linked('<tr id="addr-8000"></tr>').errors).toEqual([
+            "https://example.com/demo/1.html has no anchor for second_half",
+        ]);
+    });
+
+    it("links no names without anchors", () => {
+        const { json } = imported();
+        expect(json.nameLink).toBeUndefined();
+        expect(json.places).toBeUndefined();
     });
 
     it("writes a set that passes the index's checks", () => {

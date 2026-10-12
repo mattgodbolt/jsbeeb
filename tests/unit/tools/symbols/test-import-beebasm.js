@@ -74,6 +74,16 @@ const made = (operandNames = ["ptr", "buf", "OSWRCH", "jump_to"]) => ({
     ]),
     names: ["ptr", "ALIAS", "buf", "jump_to", "OSWRCH", "KEY", "greeting", "blank"],
     operandNames: new Set(operandNames),
+    definitions: new Map([
+        ["start", ["src/prog.asm#L3"]],
+        ["loop", ["src/prog.asm#L6"]],
+        ["pad", ["src/prog.asm#L12"]],
+        ["block", ["src/prog.asm#L13"]],
+        ["text", ["src/prog.asm#L15"]],
+        ["work", ["src/prog.asm#L16"]],
+        ["ptr", ["src/zp.asm#L1"]],
+        ["buf", ["src/zp.asm#L2", "src/other.asm#L9"]],
+    ]),
 });
 
 const config = (regions = [{ name: "main", file: "PROG" }]) => ({
@@ -257,6 +267,48 @@ describe("importBeebasm", () => {
         expect(reasons).toEqual([expect.stringContaining("for disc d.ssd:$.PROG")]);
         const same = [{ name: "d.ssd:$.PROG", load: 0x1900, data: Uint8Array.from(prog) }];
         expect(importBeebasm(config(), beebasmBuild(made()), { discFiles: same, system }).reasons).toEqual([]);
+    });
+
+    describe("for a repository on GitHub", () => {
+        const onGitHub = {
+            ...config(),
+            source: { ...config().source, repository: "https://github.com/someone/demo" },
+        };
+        const placed = () => {
+            const build = beebasmBuild(made());
+            build.definitions.set("buf", ["src/zp.asm#L2"]);
+            return importBeebasm(onGitHub, build, { system });
+        };
+
+        it("links each name to the line that defines it, a scoped one by its label", () => {
+            const { sets, errors } = placed();
+            expect(errors).toEqual([]);
+            const [{ file, json }] = sets;
+            expect(checkSet(json, { file: `sets/${file}`, mosSets: readMosSets() })).toEqual([]);
+            expect(json.nameLink).toBe("https://github.com/someone/demo/blob/0123abc/{place}");
+            expect(json.places).toEqual({
+                block: "src/prog.asm#L13",
+                buf: "src/zp.asm#L2",
+                pad: "src/prog.asm#L12",
+                ptr: "src/zp.asm#L1",
+                start: "src/prog.asm#L3",
+                "start.loop": "src/prog.asm#L6",
+                text: "src/prog.asm#L15",
+                work: "src/prog.asm#L16",
+            });
+        });
+
+        it("fails a set with a name defined in more than one place", () => {
+            expect(importBeebasm(onGitHub, beebasmBuild(made()), { system }).errors).toEqual([
+                "prog: no one place to link for buf",
+            ]);
+        });
+    });
+
+    it("links no names for a repository not on GitHub", () => {
+        const { json } = imported().sets[0];
+        expect(json.nameLink).toBeUndefined();
+        expect(json.places).toBeUndefined();
     });
 
     it("makes no sets from a config with no licence", () => {

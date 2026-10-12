@@ -27,6 +27,9 @@ const GitDir = ".git";
 const Including = /^Including file (.*)$/gm;
 const SavingFile = /^Saving file '(.*)'$/gm;
 const Assignment = /(?:^|:)[ \t]*([A-Za-z_]\w*)[ \t]*=/gm;
+const QuotedOrCharacter = /"(?:[^"]|"")*"|'.'/g;
+const Comment = /[;\\].*$/;
+const Definition = /^[ \t]*(?:\.([A-Za-z_]\w*)|([A-Za-z_]\w*)[ \t]*=(?!=))/;
 const VersionLine = /^beebasm (\d+)\.(\d+)/;
 const UnwritableSave = /^Error: (.*): Could not open object file for writing\.$/m;
 const MemoryOperandName = new RegExp(
@@ -55,6 +58,24 @@ export function beebasmVersion(beebasm) {
 /** Every name a source assigns with `=`, in any scope: those not assigned at the top level are weeded out later. */
 export function assignedNames(text) {
     return [...text.matchAll(Assignment)].map(([, name]) => name);
+}
+
+/**
+ * Each label (`.name`) and `=` name a source defines, with the line it's on, from 1: every statement of a
+ * line, outside its strings and its comment.
+ * @returns {[string, number][]}
+ */
+export function definitionLines(text) {
+    return text.split(/\r\n|\r|\n/).flatMap((line, i) =>
+        line
+            .replace(QuotedOrCharacter, '""')
+            .replace(Comment, "")
+            .split(":")
+            .flatMap((statement) => {
+                const match = Definition.exec(statement);
+                return match ? [[match[1] ?? match[2], i + 1]] : [];
+            }),
+    );
 }
 
 /** Every name a source writes first in an instruction's operand, other than after `#`. */
@@ -123,8 +144,9 @@ function runWrapped(beebasm, runDir, buildDir, main, names) {
  * Assembles the config's main source (`source.assemble`) in `workDir`, a copy of the checkout, running
  * beebasm in `source.directory` (the root if it names none), as source INCLUDEs are found from there.
  * @returns {{listing: string, dump: string, saved: Map<string, Uint8Array>, names: string[],
- *     operandNames: Set<string>}} the listing, the label dump, each SAVEd file by the name its SAVE gave,
- *     the `=` names PRINTed, and the names the sources write as an instruction's memory operand
+ *     operandNames: Set<string>, definitions: Map<string, string[]>}} the listing, the label dump, each
+ *     SAVEd file by the name its SAVE gave, the `=` names PRINTed, the names the sources write as an
+ *     instruction's memory operand, and every place (`<file>#L<line>`, from the root) each name is defined
  */
 export function assemble(config, workDir, buildDir, beebasm) {
     const runDir = path.join(workDir, config.source.directory ?? ".");
@@ -133,6 +155,15 @@ export function assemble(config, workDir, buildDir, beebasm) {
     const first = runWrapped(beebasm, runDir, buildDir, main, []);
     const sources = new Set([...first.stderr.matchAll(Including)].map(([, file]) => path.resolve(runDir, file)));
     const texts = [...sources].map((file) => readFileSync(file, "latin1"));
+    const definitions = new Map();
+    [...sources].forEach((file, i) => {
+        const fromRoot = path.relative(workDir, file).split(path.sep);
+        if (fromRoot[0] === "..") return;
+        for (const [name, line] of definitionLines(texts[i])) {
+            if (!definitions.has(name)) definitions.set(name, []);
+            definitions.get(name).push(`${fromRoot.join("/")}#L${line}`);
+        }
+    });
     const names = [...new Set(texts.flatMap(assignedNames))];
     const { stdout, names: kept } = runWrapped(beebasm, runDir, buildDir, main, names);
     const saved = new Map();
@@ -146,6 +177,7 @@ export function assemble(config, workDir, buildDir, beebasm) {
         saved,
         names: kept,
         operandNames: new Set(texts.flatMap(memoryOperandNames)),
+        definitions,
     };
 }
 

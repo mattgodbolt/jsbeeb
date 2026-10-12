@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { checkSet } from "../../../../tools/symbols/build-index.js";
-import { importPy8dis, readDump } from "../../../../tools/symbols/import-py8dis.js";
+import { assemblyDefinitions, importPy8dis, readDump } from "../../../../tools/symbols/import-py8dis.js";
 
 const code = (at, bytes) => ({ at, bytes, code: true });
 const data = (at, bytes) => ({ at, bytes, code: false });
@@ -216,5 +216,66 @@ describe("importPy8dis", () => {
         expect(() => importPy8dis(config(), twice({ name: "bump", address: 0x2016, move: 0 }))).toThrow(
             "bump names two addresses",
         );
+    });
+});
+
+describe("assemblyDefinitions", () => {
+    it("finds each name that starts a line, as a label or a constant, with every line it's on", () => {
+        const text = [
+            "counter = $70",
+            "",
+            "    * = $2000",
+            "start:",
+            "    lda #$00 // a: b = c",
+            ".loop",
+            "    inx",
+            "start = loop+1",
+        ].join("\n");
+        expect(assemblyDefinitions("demo.s", text)).toEqual(
+            new Map([
+                ["counter", ["demo.s#L1"]],
+                ["start", ["demo.s#L4", "demo.s#L8"]],
+                ["loop", ["demo.s#L6"]],
+            ]),
+        );
+    });
+});
+
+describe("importPy8dis's links", () => {
+    const onGitHub = { ...config(), source: { ...config().source, repository: "https://github.com/someone/demo" } };
+    const assembly = ["counter = $70", "screen = $3000", "start:", "entry:", "loop:", "bump:", "table:"].join("\n");
+
+    it("links each name to its line in the repository's assembly, for a repository on GitHub", () => {
+        const { sets, errors } = importPy8dis(onGitHub, dump, assemblyDefinitions("demo.s", assembly));
+        expect(errors).toEqual([]);
+        const [{ file, json }] = sets;
+        expect(checkSet(json, { file: `sets/${file}`, mosSets: [] })).toEqual([]);
+        expect(json.nameLink).toBe("https://github.com/someone/demo/blob/0123abc/{place}");
+        expect(json.places).toEqual({
+            bump: "demo.s#L6",
+            counter: "demo.s#L1",
+            loop: "demo.s#L5",
+            screen: "demo.s#L2",
+            start: "demo.s#L3",
+            table: "demo.s#L7",
+        });
+    });
+
+    it("fails a set with a name the assembly doesn't define once", () => {
+        const definitions = assemblyDefinitions("demo.s", `${assembly}\nloop = start`);
+        definitions.delete("table");
+        expect(importPy8dis(onGitHub, dump, definitions).errors).toEqual([
+            "prog: no one place to link for loop, table",
+        ]);
+    });
+
+    it("links no names without an assembly, or for a repository not on GitHub", () => {
+        for (const json of [
+            importPy8dis(onGitHub, dump).sets[0].json,
+            importPy8dis(config(), dump, assemblyDefinitions("demo.s", assembly)).sets[0].json,
+        ]) {
+            expect(json.nameLink).toBeUndefined();
+            expect(json.places).toBeUndefined();
+        }
     });
 });

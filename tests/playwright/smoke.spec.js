@@ -100,7 +100,11 @@ test("a breakpoint in the MOS names its addresses, and says where the names came
     await expect(stopped.locator(".disassembly")).toHaveText(/^JMP \(wrchv\) ; \$[0-9a-f]{4}$/);
     await expect(page.locator(`#disassembly [data-addr="${OsnewlCall}"] .disassembly`)).toHaveText("JSR oswrch");
     await expect(page.locator("#debug-symbols")).toHaveText(
-        "names from BBC Micro MOS 1.20 (source) · BBC BASIC II (source)",
+        "names from BBC Micro MOS 1.20 (source) · BBC BASIC II (acornaeology.uk, source)",
+    );
+    await expect(page.locator("#debug-symbols a", { hasText: "acornaeology.uk" })).toHaveAttribute(
+        "href",
+        "https://acornaeology.uk/bbc-basic/2.html",
     );
 });
 

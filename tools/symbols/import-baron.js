@@ -205,6 +205,27 @@ export function placesBySource(dump) {
     );
 }
 
+/** Whether a title's repository is on GitHub, where `blob/<commit>/{place}` links a name to its line. */
+export const isOnGitHub = (config) => new URL(config.source.repository).hostname === GitHub;
+
+/**
+ * Each of `names` at the one place that defines it, from every place each is defined; a name defined
+ * nowhere, or in more than one place, is an error.
+ * @param {Map<string, string[]>} definitions
+ * @returns {Map<string, string>}
+ */
+export function onePlaceEach(id, names, definitions, errors) {
+    const places = new Map();
+    const unplaced = [];
+    for (const name of names) {
+        const defined = definitions.get(name) ?? [];
+        if (defined.length === 1) places.set(name, defined[0]);
+        else unplaced.push(name);
+    }
+    if (unplaced.length) errors.push(`${id}: no one place to link for ${unplaced.sort().join(", ")}`);
+    return places;
+}
+
 /** A listing's source file: the one whose name, less its extension, is the listing's. */
 function listingFile(symbols, name) {
     const keys = Object.keys(symbols).filter((key) => path.parse(key).name === name);
@@ -360,7 +381,7 @@ class Importer {
         );
         this.images = buildImages(build, programSources);
         this.osBlocks = new Map();
-        this.onGitHub = new URL(config.source.repository).hostname === GitHub;
+        this.onGitHub = isOnGitHub(config);
     }
 
     source(name) {

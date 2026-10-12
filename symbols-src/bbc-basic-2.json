@@ -9,6 +9,7 @@
     "disassembly": "versions/basic-2/output/basic-2.json",
     "licenceFile": "LICENSE"
   },
+  "home": "https://acornaeology.uk/bbc-basic/2.html",
   "rom": "BASIC.ROM",
   "globals": [{ "start": "0x0000", "end": "0x0800" }],
   "regions": [
