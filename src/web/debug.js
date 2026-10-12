@@ -419,7 +419,7 @@ export class Debugger {
             const dump = this._memoryView.dump(address, result[1]);
             const addrNode = elem.querySelector(".dis_addr");
             addrNode.innerHTML = labelHtml(address);
-            const named = this._names.address(address);
+            const named = this._names.address(address, this.cpu.pc);
             if (named) addrNode.append(" ", nameNode(named, address));
             elem.classList.toggle("current", address === this.cpu.pc);
             elem.classList.toggle("highlight", address === this.disassPc);

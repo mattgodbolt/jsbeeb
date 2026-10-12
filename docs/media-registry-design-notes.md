@@ -310,12 +310,16 @@ meet the loader's own return address. Code outside every matching region, such a
 gets no set's globals but the MOS's (below): whatever it does with zero page, it isn't any set's program
 doing it. The same goes for a short routine a program copies somewhere no anchor survives, such as page
 1, unless its set gives it a region it can match in. An address shown on its own has no instruction to go
-by. Inside a matching region it takes only that region's names. Outside every matching region it takes a
-global when one non-system set with a matching region names it, no name when two or more name it
-differently, and a system global (below) only when none does. That labels the object table once the
-start-up code has gone and leaves the stub's and the editor's zero page bare. It also means a loader left
-over a buffer the running program has taken shows the loader's names there, or none, not the program's
-global for the buffer. A region picked by hand counts as matching.
+by. Inside a matching region it takes only that region's names. Outside every matching region it takes the
+global of the non-system set whose matching region holds the PC, if that set names it, since there it's the
+running program's variable. Otherwise it takes a global when one non-system set with a matching region names
+it, no name when two or more name it differently, and a system global (below) only when none does. The PC
+settles the clashes every pairing of a program with BASIC II would otherwise have, since BASIC stays paged
+in and names much of zero page; it isn't trusted further than that, for the reasons above. That labels the
+object table once the start-up code has gone, and a buffer the running program took over from a loader left
+in memory, while the program holds the PC. While the MOS or uncovered code holds it, the stub's and the
+editor's zero page stay bare, and that buffer shows the loader's name or none. A region picked by hand
+counts as matching.
 
 Operands are named by what's in memory now, which has one known limit. According to the PIPELINE
 feedback, its game's `load_mission` writes an `RTI` to the MOS's NMI routine at `&0D00` after swapping
