@@ -47,7 +47,7 @@ import { startSessionFromUrl } from "./web/shared-session.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
 
-const SymbolsBaseUrl = "symbols/";
+const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
 
 installIcons();
 
