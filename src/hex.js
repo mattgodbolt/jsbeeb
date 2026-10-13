@@ -1,7 +1,9 @@
+const HexAddress = /^(?:\$|&|0x)?([0-9a-f]{1,4})$/i;
+
+/** @returns {number | undefined} */
 export function parseAddr(s) {
-    if (s[0] === "$" || s[0] === "&") return parseInt(s.substring(1), 16);
-    if (s.indexOf("0x") === 0) return parseInt(s.substring(2), 16);
-    return parseInt(s, 16);
+    const digits = HexAddress.exec(s)?.[1];
+    return digits === undefined ? undefined : parseInt(digits, 16);
 }
 
 export function hexbyte(value) {

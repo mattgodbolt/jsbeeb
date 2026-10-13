@@ -154,15 +154,22 @@ export class Debugger {
             this.updateDisassembly(this.disassPc);
         });
 
-        function setupGoto(form, func) {
+        const setupGoto = (form, func) => {
             const addr = form.querySelector(".goto-addr");
+            addr.addEventListener("input", () => addr.classList.remove("is-invalid"));
             form.addEventListener("submit", (e) => {
-                func(parseAddr(addr.value));
+                e.preventDefault();
+                const text = addr.value.trim();
+                const address = this._names.addressOf(text, this.cpu.pc) ?? parseAddr(text);
+                if (address === undefined) {
+                    addr.classList.add("is-invalid");
+                    return;
+                }
+                func(address);
                 addr.value = "";
                 addr.blur();
-                e.preventDefault();
             });
-        }
+        };
 
         setupGoto(document.getElementById("goto-mem-addr-form"), (address) => this._memoryView.update(address));
         setupGoto(document.getElementById("goto-dis-addr-form"), this.updateDisassembly.bind(this));

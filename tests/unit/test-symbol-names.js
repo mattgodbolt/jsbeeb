@@ -271,4 +271,43 @@ describe("symbol names", () => {
             expect(namesFrom(mos, loader, game).address(0x2e00)).toBeUndefined();
         });
     });
+
+    describe("a name's address", () => {
+        it("finds a global or a region's name in the sets that match", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(names.addressOf("catalogue")).toBe(0x2e00);
+            expect(names.addressOf("read_whole_run")).toBe(0x916);
+            expect(names.addressOf("oswrch")).toBe(0xffee);
+            expect(names.addressOf("wrchv")).toBe(0x20e);
+            expect(names.addressOf("nobody")).toBeUndefined();
+        });
+
+        it("finds nothing from a set or region that doesn't match", () => {
+            breakAnchor(0x900);
+            const names = namesFrom(mos, loader, game);
+            expect(names.addressOf("catalogue")).toBeUndefined();
+            expect(names.addressOf("read_whole_run")).toBeUndefined();
+            breakAnchor(0x1a00);
+            expect(namesFrom(mos, game).addressOf("init")).toBeUndefined();
+        });
+
+        it("finds a scope's name wherever the CPU is", () => {
+            const names = namesFrom(mos, overlaid);
+            expect(names.addressOf("blast_x", 0x2090)).toBe(0x70);
+            expect(names.addressOf("target_y", UncoveredCode)).toBe(0x71);
+        });
+
+        it("goes to the address shown by that name when two sets give it different addresses", () => {
+            const sequel = set({
+                title: "Sequel",
+                globals: { lives: "0x80" },
+                regions: { main: region(0x4000, 0x4100, 0x4000) },
+            });
+            anchor(0x4000);
+            const names = namesFrom(mos, game, sequel);
+            expect(names.addressOf("lives", GameCode)).toBe(0x70);
+            expect(names.addressOf("lives", 0x4010)).toBe(0x80);
+            expect(names.addressOf("lives")).toBe(0x70);
+        });
+    });
 });

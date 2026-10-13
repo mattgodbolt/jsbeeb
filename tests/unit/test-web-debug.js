@@ -73,6 +73,19 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000");
         });
 
+        it("stays put and marks the box when the text is neither a name nor an address", () => {
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.value = "monster_x";
+            box.form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+            expect(disRows().map((row) => row.querySelector(".dis_addr").textContent)).not.toContain("NaN");
+            expect(box.value).toBe("monster_x");
+            expect(box.classList.contains("is-invalid")).toBe(true);
+            box.dispatchEvent(new Event("input"));
+            expect(box.classList.contains("is-invalid")).toBe(false);
+        });
+
         it("walks instructions with the wheel and the j and k keys", () => {
             dbgr.debug(cpu.pc);
             const disass = document.getElementById("disassembly");
@@ -259,6 +272,29 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
             expect(currentRow().querySelector(".dis_addr .symbol").title).toBe("oswrch: $3000, from Test MOS");
             expect(code(0x3004).textContent).toBe("BNE oswrch");
+        });
+
+        it("goes to a name typed in either box, over reading it as hex", async () => {
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("mos.json")) json.regions.rom.symbols.fade = "0x3004";
+                return json;
+            });
+            const goTo = (formId, text) => {
+                const form = document.getElementById(formId);
+                form.querySelector(".goto-addr").value = text;
+                form.dispatchEvent(new Event("submit", { cancelable: true }));
+            };
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            goTo("goto-dis-addr-form", " oswrch ");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            goTo("goto-dis-addr-form", "fade");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3004 fade");
+            goTo("goto-dis-addr-form", "$fade");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            goTo("goto-mem-addr-form", "os_text_ptr");
+            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
         });
 
         it("still follows a named zero-page operand to the memory view", async () => {
