@@ -698,7 +698,8 @@ describe("MachineSession breakpoints in sideways ROM", () => {
 
     it("breaks on a read only while the bank it is given is paged in", async () => {
         const session = await sessionWithSpareRom();
-        const id = session.addBreakpoint("read", RomTypeByte, { bank: SpareBank });
+        const [dfsType] = session.readMemory(RomTypeByte, 1, { bank: DfsBank });
+        const id = session.addBreakpoint("read", RomTypeByte, { bank: DfsBank });
 
         await session.runFor(RunSecs * CyclesPerSecond);
 
@@ -706,10 +707,10 @@ describe("MachineSession breakpoints in sideways ROM", () => {
             id,
             type: "read",
             address: RomTypeByte,
-            bank: SpareBank,
-            value: ServiceRom[RomTypeByte - 0x8000],
+            bank: DfsBank,
+            value: dfsType,
         });
-        expect(pagedBank(session)).toBe(SpareBank);
+        expect(pagedBank(session)).toBe(DfsBank);
         session.destroy();
     });
 
