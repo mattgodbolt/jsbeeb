@@ -314,8 +314,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   `bitshifters:bs-paradroid.ssd`
 - `disc1=github:OWNER/REPO/PATH` - loads the disc at PATH in a public GitHub repo's default branch, e.g.
   `github:mattgodbolt/frogman/frogman_rebuilt.ssd`. `github:OWNER/REPO@REF/PATH` loads it from a branch, tag or
-  commit instead. The disc has to be committed to the repo; a release asset will not load. See
-  [docs/media-sources.md](docs/media-sources.md#github)
+  commit instead, and `@~latest` from the tag of the repo's latest release. The disc has to be committed to the
+  repo; a release asset will not load. See [docs/media-sources.md](docs/media-sources.md#github)
 - `drive0Tracks=40` / `drive0Tracks=80` - fixes drive 0's 40/80 track switch, as the switch on the back of a real
   drive did. `drive1Tracks` does the same for drive 1. Left alone, each drive follows whatever disc is loaded into it:
   a 40 track image is laid out the way a 40 track drive wrote it, on every other track of the surface, and the drive
