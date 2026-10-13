@@ -176,14 +176,17 @@ describe("Video6847 logical pixel grid", () => {
     });
 });
 
-describe("Video6847 snapshot", () => {
-    const VdgCyclesPerField = 263 * 229;
-    const VdgClockMhz = 3.638004;
-    const CpuCyclesPerField = VdgCyclesPerField / VdgClockMhz;
-    const FieldSyncFraction = 240 / 263;
-    const SnowAddr = 0x8123;
-    const GraphicsMode = 0xd0;
+const VdgLinesPerField = 263;
+const VdgCyclesPerLine = 229;
+const VdgClockMhz = 3.638004;
+const CpuCyclesPerLine = VdgCyclesPerLine / VdgClockMhz;
+const CpuCyclesPerField = VdgLinesPerField * CpuCyclesPerLine;
+const FieldSyncLine = 240;
+const MidPictureLine = 100;
+const SnowAddr = 0x8123;
+const GraphicsMode = 0xd0;
 
+describe("Video6847 snapshot", () => {
     function makeAtomVideo() {
         const video = new Video(false, new Uint32Array(1024 * 768), () => {}, { isAtom: true });
         const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
@@ -195,22 +198,63 @@ describe("Video6847 snapshot", () => {
         return { video, vblanks };
     }
 
-    it("carries on from within field sync exactly as the original does", () => {
-        const original = makeAtomVideo();
-        original.video.polltime(Math.floor(CpuCyclesPerField * (1 + FieldSyncFraction)));
-        original.video.video6847.cpuAddrAccess(SnowAddr);
+    // One CPU cycle at a time, as the CPU drives it, so snow reads can happen.
+    function runCpuCycles(video, cycles) {
+        for (let i = 0; i < cycles; i++) video.polltime(1);
+    }
 
+    function restoreInto(original) {
         const restored = makeAtomVideo();
         restored.video.restoreState(original.video.snapshotState());
-        expect(restored.video.video6847).toMatchObject({ inVSync: true, cpuAddr: SnowAddr, lastmode: GraphicsMode });
         restored.video.fb32.set(original.video.fb32);
         original.vblanks.length = 0;
+        return restored;
+    }
 
-        for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 1.5));
-
+    function expectSameFrom(original, restored) {
         expect(restored.video.video6847.snapshotState()).toEqual(original.video.video6847.snapshotState());
         expect(restored.vblanks).toEqual(original.vblanks);
         expect(restored.video.fb32).toEqual(original.video.fb32);
+    }
+
+    it("carries on mid-picture exactly as the original does, before the next field sync", () => {
+        const original = makeAtomVideo();
+        runCpuCycles(original.video, Math.floor(CpuCyclesPerField + CpuCyclesPerLine * (MidPictureLine + 0.4)));
+        original.video.video6847.cpuAddrAccess(SnowAddr);
+
+        const restored = restoreInto(original);
+        expect(restored.video.video6847).toMatchObject({ inVSync: false, cpuAddr: SnowAddr, lastmode: GraphicsMode });
+
+        for (const { video } of [original, restored]) runCpuCycles(video, Math.floor(CpuCyclesPerLine * 20));
+
+        expect(original.vblanks).toEqual([]);
+        expectSameFrom(original, restored);
+    });
+
+    it("carries on from within field sync into the next field exactly as the original does", () => {
+        const original = makeAtomVideo();
+        original.video.polltime(Math.floor(CpuCyclesPerField + CpuCyclesPerLine * FieldSyncLine));
+
+        const restored = restoreInto(original);
+        expect(restored.video.video6847.inVSync).toBe(true);
+
+        for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 0.5));
+
+        expect(original.vblanks).toEqual([false]);
+        expectSameFrom(original, restored);
+    });
+
+    it("restores a VDG saved before its first poll, which has no mode yet", () => {
+        const original = makeAtomVideo();
+        const restored = makeAtomVideo();
+        restored.video.polltime(Math.floor(CpuCyclesPerField * 0.6));
+        restored.video.restoreState(original.video.snapshotState());
+        restored.video.fb32.set(original.video.fb32);
+        restored.vblanks.length = 0;
+
+        for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 1.5));
+
+        expectSameFrom(original, restored);
     });
 
     it("leaves the VDG where it is when the snapshot predates its state", () => {
