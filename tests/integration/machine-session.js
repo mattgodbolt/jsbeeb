@@ -682,15 +682,35 @@ describe("MachineSession breakpoints in sideways ROM", () => {
     const RomTypeByte = 0x8006;
     const DfsBank = 14;
     const SpareBank = 4;
+    const HigherSpareBank = 5;
+    const ServiceWrite = 0x70;
     const RunSecs = 5;
     const RomselBankMask = 0x0f;
-    // A service ROM titled "T" whose service handler only returns.
-    const ServiceRom = [0, 0, 0, 0x4c, 0x0e, 0x80, 0x82, 0x0a, 0x01, 0x54, 0x00, 0x28, 0x43, 0x29, 0x60];
+    // A service ROM titled "T" whose service handler stores A at ServiceWrite and returns.
+    const ServiceRom = [
+        0,
+        0,
+        0,
+        0x4c,
+        0x0e,
+        0x80,
+        0x82,
+        0x0a,
+        0x01,
+        0x54,
+        0x00,
+        0x28,
+        0x43,
+        0x29,
+        0x85,
+        ServiceWrite,
+        0x60,
+    ];
 
     async function sessionWithSpareRom() {
         const session = new MachineSession("B-DFS1.2");
         await session.initialise();
-        session.writeMemory(0x8000, ServiceRom, { bank: SpareBank });
+        for (const bank of [SpareBank, HigherSpareBank]) session.writeMemory(0x8000, ServiceRom, { bank });
         return session;
     }
 
@@ -734,6 +754,17 @@ describe("MachineSession breakpoints in sideways ROM", () => {
             value: dfsType,
         });
         expect(pagedBank(session)).toBe(DfsBank);
+        session.destroy();
+    });
+
+    it("breaks on a write only while the bank it is given is paged in", async () => {
+        const session = await sessionWithSpareRom();
+        const id = session.addBreakpoint("write", ServiceWrite, { bank: SpareBank });
+
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(session.hitBreakpoint()).toMatchObject({ id, type: "write", address: ServiceWrite, bank: SpareBank });
+        expect(pagedBank(session)).toBe(SpareBank);
         session.destroy();
     });
 
