@@ -244,6 +244,18 @@ describe("MachineSession keyboard", () => {
         await pressRaw(BBC.RETURN);
         await session.runUntilPrompt();
     });
+
+    it("presses RETURN once for text that already ends in one", async () => {
+        const outputOf = async (text) => {
+            await session.type(text);
+            return (await session.runUntilPrompt()).elements.map((element) => element.text);
+        };
+        const expected = await outputOf("PRINT 6*7");
+
+        expect(await outputOf("PRINT 6*7\r")).toEqual(expected);
+        expect(await outputOf("PRINT 6*7\n")).toEqual(expected);
+        expect(await outputOf("PRINT 6*7\r\n")).toEqual(expected);
+    });
 });
 
 describe("MachineSession keyboard buffer", () => {

@@ -260,9 +260,12 @@ export class MachineSession {
     }
 
     /**
-     * Simulate keypresses.  Note: each character needs a short run to be
-     * picked up by the OS, so this is internally async and slow-ish (by
-     * emulated-time).
+     * Type `text`, then a RETURN unless it already ends in one, running the
+     * machine until the last key is up. That says nothing about the line
+     * itself: the run carries on past the RETURN, so a short command can start
+     * and finish before this returns, while a ROM that took over line input
+     * may not have read the line yet. Set a breakpoint beforehand to stop
+     * inside the command, or runUntilPrompt afterwards to wait for it.
      */
     async type(text) {
         await this._machine.type(text);
