@@ -82,9 +82,20 @@ has no `/` in it. The resolver loads `https://raw.githubusercontent.com/<owner>/
 as it would one from a URL. raw.githubusercontent.com sends `Access-Control-Allow-Origin: *`, and
 caches for five minutes, so a push takes up to that long to show.
 
+`@~latest` is the tag of the repo's latest GitHub Release:
+`github:mattgodbolt/chuckie-egg-2-beeb@~latest/chuckie-egg-2.ssd` follows releases rather than every
+push. The resolver asks `https://api.github.com/repos/<owner>/<repo>/releases/latest` (which sends
+`Access-Control-Allow-Origin: *`) for its `tag_name`, then loads the file committed at that tag as
+above. `~` cannot appear in a git ref name, so `~latest` cannot collide with a real branch or tag.
+The API skips drafts and prereleases, and a bare tag is not a Release; a Release with no assets is
+enough. Unauthenticated calls are limited to 60 an hour per IP, so the answer is kept for the rest
+of the session, one call per repo. If the call fails, the rate limit included, the resolver warns
+on the console and loads the default branch instead, for the rest of the session.
+
 A GitHub release asset cannot be loaded: its download is a redirect from github.com with no CORS
-header, so the browser refuses it, and the disc has to be committed to the repo instead. A GitHub
-Pages site does send the header, so a disc published there loads as a plain `https:` URL.
+header, so the browser refuses it, and the disc has to be committed to the repo instead (at the
+release's tag, for `@~latest`). A GitHub Pages site does send the header, so a disc published there
+loads as a plain `https:` URL.
 
 The media window lists the discs in `src/web/github-discs.json`, which is bundled into the page
 when it is built, so the list itself has nothing to fetch. Each entry has the Bitshifters
@@ -108,7 +119,8 @@ manifest's fields, with `repo` and `ref` in place of the site:
 - `ref` is optional. Without it the entry follows the default branch, so it always loads the
   latest build. The cost: a broken push breaks it until the next push fixes it, and a save state
   made with it stops restoring once a new build is pushed, because a state will not restore over
-  a disc that has changed since it was saved.
+  a disc that has changed since it was saved. `"ref": "~latest"` follows releases instead, with
+  the same cost at each new release.
 - `authors` is optional, and plain text.
 - `machine` is optional, and takes the names `MachineRequirements` knows, as the Bitshifters
   manifest's does.

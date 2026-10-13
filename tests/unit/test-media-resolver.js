@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createZipBlob } from "../../src/archive.js";
 import { MediaResolver, splitImage } from "../../src/media-resolver.js";
@@ -102,6 +102,68 @@ describe("MediaResolver", () => {
                 name: "side1.ssd",
                 data: bytes("one"),
                 ignored: ["side2.ssd"],
+            });
+        });
+
+        describe("at @~latest", () => {
+            const Api = "https://api.github.com/repos";
+            const release = (tag) => bytes(JSON.stringify({ tag_name: tag }));
+
+            afterEach(() => vi.restoreAllMocks());
+
+            it("loads the raw file at the latest release's tag, asking the API once per repo", async () => {
+                const { resolver, load } = make({
+                    [`${Api}/o/r/releases/latest`]: release("v1.2"),
+                    [`${Raw}/o/r/v1.2/game.ssd`]: bytes("game"),
+                    [`${Raw}/o/r/v1.2/other.ssd`]: bytes("other"),
+                });
+                expect(await resolver.resolve("disc", "github:o/r@~latest/game.ssd")).toEqual({
+                    name: "game.ssd",
+                    data: bytes("game"),
+                    ignored: [],
+                });
+                expect((await resolver.resolve("disc", "github:o/r@~latest/other.ssd")).data).toEqual(bytes("other"));
+                expect(load.mock.calls.map(([url]) => url)).toEqual([
+                    `${Api}/o/r/releases/latest`,
+                    `${Raw}/o/r/v1.2/game.ssd`,
+                    `${Raw}/o/r/v1.2/other.ssd`,
+                ]);
+            });
+
+            it("shares one API call between references resolved at once, and asks each repo apart", async () => {
+                const { resolver, load } = make({
+                    [`${Api}/o/r/releases/latest`]: release("v1"),
+                    [`${Api}/o/s/releases/latest`]: release("release/2"),
+                    [`${Raw}/o/r/v1/a.ssd`]: bytes("a"),
+                    [`${Raw}/o/r/v1/b.ssd`]: bytes("b"),
+                    [`${Raw}/o/s/release%2F2/c.ssd`]: bytes("c"),
+                });
+                const resolved = await Promise.all(
+                    ["o/r@~latest/a.ssd", "o/r@~latest/b.ssd", "o/s@~latest/c.ssd"].map((location) =>
+                        resolver.resolve("disc", `github:${location}`),
+                    ),
+                );
+                expect(resolved.map(({ data }) => data)).toEqual([bytes("a"), bytes("b"), bytes("c")]);
+                expect(load.mock.calls.filter(([url]) => url.startsWith(Api))).toHaveLength(2);
+            });
+
+            it("falls back to the default branch, with one warning, when the API will not say", async () => {
+                const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+                const { resolver, load } = make({ [`${Raw}/o/r/HEAD/game.ssd`]: bytes("head") });
+                expect((await resolver.resolve("disc", "github:o/r@~latest/game.ssd")).data).toEqual(bytes("head"));
+                expect((await resolver.resolve("disc", "github:o/r@~latest/game.ssd")).data).toEqual(bytes("head"));
+                expect(warn).toHaveBeenCalledOnce();
+                expect(warn.mock.calls[0][0]).toContain("o/r's latest release");
+                expect(load.mock.calls.filter(([url]) => url.startsWith(Api))).toHaveLength(1);
+            });
+
+            it("falls back to the default branch when the answer names no tag", async () => {
+                vi.spyOn(console, "warn").mockImplementation(() => {});
+                const { resolver } = make({
+                    [`${Api}/o/r/releases/latest`]: bytes(JSON.stringify({ message: "Not Found" })),
+                    [`${Raw}/o/r/HEAD/game.ssd`]: bytes("head"),
+                });
+                expect((await resolver.resolve("disc", "github:o/r@~latest/game.ssd")).data).toEqual(bytes("head"));
             });
         });
 

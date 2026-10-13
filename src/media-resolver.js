@@ -35,13 +35,19 @@ export const Schemas = Object.freeze({
 export const routeOf = (ref) => (Schemas[splitImage(ref).schema] ?? Schemas[""]).route;
 
 const GitHubRawBase = "https://raw.githubusercontent.com";
+const GitHubApiBase = "https://api.github.com";
 const GitHubDefaultRef = "HEAD";
+const GitHubLatestReleaseRef = "~latest";
 
-/** Where a `github:` reference's `<owner>/<repo>[@<ref>]/<path>` is served; no ref is the default branch. */
-function gitHubRawUrl(location) {
+/** Splits a `github:` reference's `<owner>/<repo>[@<ref>]/<path>`; no ref is the default branch. */
+function parseGitHubLocation(location) {
     const match = location.match(/^([^/@]+)\/([^/@]+)(?:@([^/]+))?\/(.+)$/);
     if (!match) throw new Error(`A github: reference is owner/repo/path or owner/repo@ref/path, not "${location}"`);
     const [, owner, repo, ref = GitHubDefaultRef, path] = match;
+    return { owner, repo, ref, path };
+}
+
+function gitHubRawUrl({ owner, repo, ref, path }) {
     return [GitHubRawBase, ...[owner, repo, ref, ...path.split("/")].map(encodeURIComponent)].join("/");
 }
 
@@ -68,6 +74,7 @@ export class MediaResolver {
     constructor({ load = loadData } = {}) {
         this.sources = {};
         this.load = load;
+        this._latestReleaseTags = new Map();
     }
 
     /** Registers the fetcher behind an archive schema; each archive registers as it is constructed. */
@@ -95,9 +102,37 @@ export class MediaResolver {
                 // The URL may end in query parameters, which would upset the extension check.
                 return openIfZip(new URL(ref).pathname.split("/").pop(), await this.load(ref));
             case "github":
-                return openIfZip(image.split("/").pop(), await this.load(gitHubRawUrl(image)));
+                return this.resolveGitHub(image);
             default:
                 return openIfZip(image, await this.load(`${folder}/${image}`));
+        }
+    }
+
+    async resolveGitHub(location) {
+        const parsed = parseGitHubLocation(location);
+        const ref = parsed.ref === GitHubLatestReleaseRef ? await this.latestReleaseTag(parsed) : parsed.ref;
+        return openIfZip(parsed.path.split("/").pop(), await this.load(gitHubRawUrl({ ...parsed, ref })));
+    }
+
+    /** The tag of a repo's latest release, asked once per repo per resolver; on any failure, the default branch. */
+    latestReleaseTag({ owner, repo }) {
+        const key = `${owner}/${repo}`;
+        if (!this._latestReleaseTags.has(key))
+            this._latestReleaseTags.set(key, this._fetchLatestReleaseTag(owner, repo));
+        return this._latestReleaseTags.get(key);
+    }
+
+    async _fetchLatestReleaseTag(owner, repo) {
+        const url = `${GitHubApiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/latest`;
+        try {
+            const { tag_name: tag } = JSON.parse(new TextDecoder().decode(await this.load(url)));
+            if (!tag) throw new Error("the release has no tag_name");
+            return tag;
+        } catch (error) {
+            console.warn(
+                `Couldn't find ${owner}/${repo}'s latest release, so loading its default branch: ${error.message}`,
+            );
+            return GitHubDefaultRef;
         }
     }
 
