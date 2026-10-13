@@ -51,6 +51,14 @@ describe("Debugger", () => {
             expect(dbgr.enabled()).toBe(false);
             expect(visible("debug")).toBe(false);
         });
+
+        it("give the keyboard back to the machine on leaving with a goto box focused", () => {
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
+            dbgr.hide();
+            expect(document.activeElement).not.toBe(box);
+        });
     });
 
     describe("the disassembly window", () => {
@@ -89,6 +97,18 @@ describe("Debugger", () => {
             box.value = " ";
             box.form.dispatchEvent(new Event("submit", { cancelable: true }));
             expect(box.classList.contains("is-invalid")).toBe(false);
+        });
+
+        it("leaves the memory view alone too when the text is neither a name nor an address", () => {
+            dbgr.debug(cpu.pc);
+            const form = document.getElementById("goto-mem-addr-form");
+            const box = form.querySelector(".goto-addr");
+            box.value = "$1234";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            box.value = "monster_x";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("1234");
+            expect(box.classList.contains("is-invalid")).toBe(true);
         });
 
         it("walks instructions with the wheel and the j and k keys", () => {
@@ -302,6 +322,10 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3004 fade");
             goTo("goto-dis-addr-form", "$fade");
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            goTo("goto-dis-addr-form", "FADE");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            goTo("goto-dis-addr-form", "OSWRCH");
+            expect(box.classList.contains("is-invalid")).toBe(true);
             goTo("goto-mem-addr-form", "os_text_ptr");
             expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
         });

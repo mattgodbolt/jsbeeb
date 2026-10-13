@@ -297,6 +297,25 @@ describe("symbol names", () => {
             expect(names.addressOf("target_y", UncoveredCode)).toBe(0x71);
         });
 
+        it("goes to the address of the scope the CPU is in when two scopes give a name different addresses", () => {
+            const routines = set({
+                title: "Routines",
+                regions: {
+                    code: {
+                        ...region(0x2000, 0x2100, 0x2000),
+                        scopes: [
+                            { start: "0x2010", end: "0x2080", symbols: { tmp: "0x70" } },
+                            { start: "0x2080", end: "0x20c0", symbols: { tmp: "0x72" } },
+                        ],
+                    },
+                },
+            });
+            const names = namesFrom(routines);
+            expect(names.addressOf("tmp", 0x2090)).toBe(0x72);
+            expect(names.addressOf("tmp", 0x2020)).toBe(0x70);
+            expect(names.addressOf("tmp", UncoveredCode)).toBe(0x70);
+        });
+
         it("finds no name from a system set's scopes, which are ignored", () => {
             const scopedMos = set({
                 title: "Scoped MOS",

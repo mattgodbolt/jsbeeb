@@ -409,6 +409,8 @@ export class Debugger {
             this.updatePrevMem();
         }
         this._enabled = e;
+        const focused = document.activeElement;
+        if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();
         for (const node of this.debugNodes) toggle(node, this._enabled);
     }
 
