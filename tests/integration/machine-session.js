@@ -683,6 +683,9 @@ describe("MachineSession breakpoints in sideways ROM", () => {
     const DfsBank = 14;
     const SpareBank = 4;
     const HigherSpareBank = 5;
+    const RomTitle = 0x8009;
+    // The MOS ignores a ROM identical to one in a higher bank.
+    const UnduplicatedTitle = 0x55;
     const ServiceWrite = 0x70;
     const RunSecs = 5;
     const RomselBankMask = 0x0f;
@@ -710,7 +713,9 @@ describe("MachineSession breakpoints in sideways ROM", () => {
     async function sessionWithSpareRom() {
         const session = new MachineSession("B-DFS1.2");
         await session.initialise();
-        for (const bank of [SpareBank, HigherSpareBank]) session.writeMemory(0x8000, ServiceRom, { bank });
+        session.writeMemory(0x8000, ServiceRom, { bank: SpareBank });
+        session.writeMemory(0x8000, ServiceRom, { bank: HigherSpareBank });
+        session.writeMemory(RomTitle, [UnduplicatedTitle], { bank: HigherSpareBank });
         return session;
     }
 
