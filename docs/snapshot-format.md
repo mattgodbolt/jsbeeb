@@ -262,7 +262,7 @@ Present only on the Atom. Atom snapshots written before it was saved lack it, an
 | `charTime`          | number  | VDG cycles left until the next character                                           |
 | `cpuAddr`           | number  | CPU's last memory access not yet seen by the VDG, read instead of `addr` for snow  |
 
-The pixel geometry (`pixelsPerChar`, `pixelsPerBit`, `bpp` and the lines per row) follows from `lastmode` and is recomputed on restore. The mode bits themselves are read from the PPIA's port A each time the VDG runs, so they are saved with the PPIA (`state.atomppia`).
+The pixel geometry (`pixelsPerChar`, `pixelsPerBit`, `bpp` and the lines per row) follows from `lastmode` and is recomputed on restore. The mode bits themselves are read from the PPIA's port A each time the VDG runs, so they are saved with the PPIA.
 
 ### Sound chip (`state.soundChip`)
 

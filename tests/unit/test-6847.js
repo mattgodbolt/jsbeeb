@@ -177,7 +177,11 @@ describe("Video6847 logical pixel grid", () => {
 });
 
 describe("Video6847 snapshot", () => {
-    const CpuCyclesPerField = 1e6 / 60;
+    const VdgCyclesPerField = 263 * 229;
+    const VdgClockMhz = 3.638004;
+    const CpuCyclesPerField = VdgCyclesPerField / VdgClockMhz;
+    const FieldSyncFraction = 240 / 263;
+    const SnowAddr = 0x8123;
     const GraphicsMode = 0xd0;
 
     function makeAtomVideo() {
@@ -191,12 +195,14 @@ describe("Video6847 snapshot", () => {
         return { video, vblanks };
     }
 
-    it("carries on mid-frame exactly as the original does", () => {
+    it("carries on from within field sync exactly as the original does", () => {
         const original = makeAtomVideo();
-        original.video.polltime(Math.floor(CpuCyclesPerField * 1.4));
+        original.video.polltime(Math.floor(CpuCyclesPerField * (1 + FieldSyncFraction)));
+        original.video.video6847.cpuAddrAccess(SnowAddr);
 
         const restored = makeAtomVideo();
         restored.video.restoreState(original.video.snapshotState());
+        expect(restored.video.video6847).toMatchObject({ inVSync: true, cpuAddr: SnowAddr, lastmode: GraphicsMode });
         restored.video.fb32.set(original.video.fb32);
         original.vblanks.length = 0;
 
