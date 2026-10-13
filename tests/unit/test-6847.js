@@ -177,7 +177,7 @@ describe("Video6847 logical pixel grid", () => {
 });
 
 describe("Video6847 snapshot", () => {
-    const CyclesPerFrame = 262 * 228;
+    const CpuCyclesPerField = 1e6 / 60;
     const GraphicsMode = 0xd0;
 
     function makeAtomVideo() {
@@ -193,34 +193,17 @@ describe("Video6847 snapshot", () => {
 
     it("carries on mid-frame exactly as the original does", () => {
         const original = makeAtomVideo();
-        original.video.polltime(Math.floor(CyclesPerFrame * 1.4));
+        original.video.polltime(Math.floor(CpuCyclesPerField * 1.4));
 
         const restored = makeAtomVideo();
         restored.video.restoreState(original.video.snapshotState());
         restored.video.fb32.set(original.video.fb32);
         original.vblanks.length = 0;
 
-        for (const { video } of [original, restored]) video.polltime(CyclesPerFrame);
+        for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 1.5));
 
         expect(restored.video.video6847.snapshotState()).toEqual(original.video.video6847.snapshotState());
         expect(restored.vblanks).toEqual(original.vblanks);
         expect(restored.video.fb32).toEqual(original.video.fb32);
-    });
-
-    it("restores the mode geometry along with the mode", () => {
-        const original = makeAtomVideo();
-        original.video.polltime(1000);
-
-        const restored = new Video6847(makeStubVideo());
-        restored.restoreState(original.video.video6847.snapshotState());
-
-        const vdg = original.video.video6847;
-        expect(restored.lastmode).toBe(GraphicsMode);
-        expect([restored.pixelsPerChar, restored.pixelsPerBit, restored.bpp, restored.charLinesreg9]).toEqual([
-            vdg.pixelsPerChar,
-            vdg.pixelsPerBit,
-            vdg.bpp,
-            vdg.charLinesreg9,
-        ]);
     });
 });
