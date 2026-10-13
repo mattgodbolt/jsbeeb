@@ -33,6 +33,7 @@ describe("Model", () => {
             "BBC B with 8271 (DFS 0.9)": "BBC B",
             "BBC B with 1770 (DFS)": "BBC B",
             "BBC B with 1770 (ADFS)": "BBC B",
+            "BBC B (stock)": "BBC B",
             "BBC Master 128 (DFS)": "Master 128",
             "BBC Master 128 (ADFS)": "Master 128",
             "BBC Master 128 (ANFS)": "Master 128",
@@ -57,6 +58,27 @@ describe("Model", () => {
         expect(beeb.stringToKeys("A")).toEqual([BBC.A]);
         expect(atom.pasteKeyDelayMs).toBeGreaterThan(beeb.pasteKeyDelayMs);
         expect([beeb.pasteReleaseGapMs, atom.pasteReleaseGapMs]).toEqual([0, 40]);
+    });
+
+    describe("the stock BBC B", () => {
+        const sidewaysByteAfterWrite = (modelName, bank) => {
+            const cpu = fake6502(findModel(modelName));
+            cpu.romSelect(bank);
+            cpu.writemem(0x8000, 0x42);
+            return cpu.readmem(0x8000);
+        };
+
+        it("is the default BBC B with no sideways RAM", () => {
+            const stock = findModel("B-stock");
+            expect(stock.os).toEqual(DefaultModel.os);
+            expect(stock.Fdc).toBe(DefaultModel.Fdc);
+            expect(stock.swram.some((isRam) => isRam)).toBe(false);
+        });
+
+        it("ignores a write to a bank the other BBC Bs fill with RAM", () => {
+            expect(sidewaysByteAfterWrite("B-DFS1.2", 4)).toBe(0x42);
+            expect(sidewaysByteAfterWrite("B-stock", 4)).not.toBe(0x42);
+        });
     });
 
     it("carries no per-session settings", () => {
