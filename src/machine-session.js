@@ -17,6 +17,7 @@ import { InstrumentedSoundChip, FakeSoundChip } from "./soundchip.js";
 // files relative to this package regardless of the calling process's cwd.
 const _jsbeebRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 import * as fdc from "./fdc.js";
+import { loadTapeFromData } from "./tapes.js";
 import { MediaResolver } from "./media-resolver.js";
 import { StairwayToHell } from "./sth.js";
 import { BitshiftersArchive } from "./bitshifters.js";
@@ -31,6 +32,11 @@ const FB_HEIGHT = 625;
 
 // Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
 const AccconShadowBit = 4;
+
+// Where the MOS keeps its read and write offsets into the keyboard buffer (buffer 0), which is empty when they
+// are equal.
+const KeyboardBufferOffsets = { read: 0x2d8, write: 0x2e1 };
+const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 
 // Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
@@ -62,6 +68,7 @@ export class MachineSession {
         // Create a real Video instance so we get pixel output
         const modelObj = findModel(modelName);
         this._isAtom = modelObj.isAtom;
+        this._keyboardBufferOffsets = modelObj.isMaster ? MasterKeyboardBufferOffsets : KeyboardBufferOffsets;
         this._video = new Video(
             modelObj.isMaster,
             this._fb32,
@@ -194,6 +201,13 @@ export class MachineSession {
     /** Drop any text from type() still to be delivered, and give the keyboard back. */
     cancelTyping() {
         this._machine.typist.cancel();
+    }
+
+    /** Empty the MOS's keyboard buffer; unlike OSBYTE 21, a soft key's expansion still to come is left. */
+    flushKeyboardBuffer() {
+        if (this._isAtom) throw new Error("flushKeyboardBuffer: the Atom's OS has no keyboard buffer");
+        const { read, write } = this._keyboardBufferOffsets;
+        this.writeMemory(read, this.readMemory(write, 1));
     }
 
     /** Release every key, and drop any typing still pending, so the keyboard is in a known state. */
@@ -421,6 +435,18 @@ export class MachineSession {
     loadDisc(imagePath) {
         const data = new Uint8Array(readFileSync(imagePath));
         this._machine.processor.fdc.loadDisc(0, fdc.discFor(imagePath, data));
+    }
+
+    /**
+     * Put a tape (a .uef, or a tapefile) in the cassette recorder, from a file,
+     * or from `data` already read with `name` for the messages, and press PLAY.
+     * The Atom's recorder has no relay, so its tape runs at once; another
+     * model's runs when the MOS starts the motor (`*TAPE` then `CHAIN""`, say).
+     */
+    async loadTape(name, data = new Uint8Array(readFileSync(name))) {
+        const { tapeInterface, model } = this._machine.processor;
+        tapeInterface.setTape(await loadTapeFromData(name, data, model));
+        tapeInterface.pressPlay();
     }
 
     /**

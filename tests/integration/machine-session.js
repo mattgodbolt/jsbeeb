@@ -8,6 +8,7 @@ import { RepoRoot } from "./helpers.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
+const CyclesPerSecond = 2000000;
 const BootTimeout = 60000;
 
 // A run stops at the instruction boundary after the paint, so cyclesRun lands
@@ -242,6 +243,42 @@ describe("MachineSession keyboard", () => {
         expect(session.heldKeys()).toEqual([]);
         await pressRaw(BBC.RETURN);
         await session.runUntilPrompt();
+    });
+});
+
+describe("MachineSession keyboard buffer", () => {
+    const AutorepeatFrames = 100;
+    const PastTheWait = 3 * CyclesPerSecond;
+    const ReportAfterWait =
+        'T%=TIME:REPEAT UNTIL TIME>T%+300:A$="":REPEAT K$=INKEY$(0):A$=A$+K$:UNTIL K$="":PRINT "<";A$;">"';
+
+    async function keysLeftAfterHolding(model, flush) {
+        const session = new MachineSession(model);
+        await session.initialise();
+        await session.boot(30);
+        await session.type(ReportAfterWait);
+        session.keyDownRaw(BBC.K1);
+        await session.runFrames(AutorepeatFrames);
+        session.keyUpRaw(BBC.K1);
+        if (flush) session.flushKeyboardBuffer();
+        await session.runFor(PastTheWait);
+        const { screenText } = session.drainOutput();
+        session.destroy();
+        return screenText.match(/<(\w*)>/)[1];
+    }
+
+    it.each(["B-DFS1.2", "Master"])(
+        "%s: a held key's autorepeats wait in the buffer until it is flushed",
+        async (model) => {
+            expect(await keysLeftAfterHolding(model, false)).toMatch(/^11+$/);
+            expect(await keysLeftAfterHolding(model, true)).toBe("");
+        },
+        BootTimeout,
+    );
+
+    it("refuses on the Atom, whose OS has no keyboard buffer", () => {
+        const session = new MachineSession("Atom");
+        expect(() => session.flushKeyboardBuffer()).toThrow(/Atom/);
     });
 });
 
@@ -480,6 +517,55 @@ describe("MachineSession snapshots", () => {
 
             expect((await other.runUntilPrompt(30)).screenText).toContain("1234");
             other.destroy();
+        },
+        BootTimeout,
+    );
+});
+
+describe("MachineSession tapes", () => {
+    const Welcome = path.join(RepoRoot, "public/tapes/Welcome.uef");
+    const LoadCycles = 10 * CyclesPerSecond;
+
+    async function firstProgramLoading(load) {
+        const session = new MachineSession("B-DFS1.2");
+        await session.initialise();
+        await session.boot(30);
+        await load(session);
+        await session.type("*TAPE");
+        await session.type('CHAIN""');
+        await session.runFor(LoadCycles);
+        const { screenText } = session.drainOutput();
+        session.destroy();
+        return screenText;
+    }
+
+    it(
+        "plays a tape from a file",
+        async () => {
+            expect(await firstProgramLoading((session) => session.loadTape(Welcome))).toMatch(/Loading\s+INTRO/);
+        },
+        BootTimeout,
+    );
+
+    it(
+        "plays a tape from bytes already read",
+        async () => {
+            const data = new Uint8Array(readFileSync(Welcome));
+            expect(await firstProgramLoading((session) => session.loadTape("welcome.uef", data))).toMatch(
+                /Loading\s+INTRO/,
+            );
+        },
+        BootTimeout,
+    );
+
+    it(
+        "runs an Atom's tape as soon as it is in, since its recorder has no relay",
+        async () => {
+            const session = new MachineSession("Atom-Tape");
+            await session.initialise();
+            await session.loadTape(Welcome);
+            expect(session._machine.processor.tapeInterface.tapeRunning).toBe(true);
+            session.destroy();
         },
         BootTimeout,
     );
