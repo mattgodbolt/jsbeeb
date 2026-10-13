@@ -373,7 +373,7 @@ export class Video6847 {
         this.inVSync = state.inVSync;
         this.lastmode = state.lastmode;
         // Before its first poll the VDG holds no mode, and that poll sets the geometry.
-        if (this.lastmode in this.modes) this.applyModeGeometry(this.lastmode);
+        if (Object.hasOwn(this.modes, this.lastmode)) this.applyModeGeometry(this.lastmode);
         this.dispEnabled = state.dispEnabled;
         this.bordercolour = state.bordercolour;
         this.vdg_cycles = state.vdgCycles;
