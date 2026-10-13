@@ -656,6 +656,7 @@ describe("MachineSession Econet", () => {
 
 describe("MachineSession breakpoints in sideways ROM", () => {
     const ServiceEntry = 0x8003;
+    const RomTypeByte = 0x8006;
     const DfsBank = 14;
     const SpareBank = 4;
     const RunSecs = 5;
@@ -672,24 +673,42 @@ describe("MachineSession breakpoints in sideways ROM", () => {
 
     const pagedBank = (session) => session.pagingState().romsel & RomselBankMask;
 
-    it("breaks in whichever bank is paged in, unless given one", async () => {
+    it("breaks in whichever bank is paged in when given none", async () => {
         const session = await sessionWithSpareRom();
-        const anyBank = session.addBreakpoint("execute", ServiceEntry);
-        await session.runFor(RunSecs * CyclesPerSecond);
-        expect(pagedBank(session)).toBe(DfsBank);
-        session.removeBreakpoint(anyBank);
+        session.addBreakpoint("execute", ServiceEntry);
 
-        const spareOnly = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(pagedBank(session)).toBe(DfsBank);
+        session.destroy();
+    });
+
+    it("breaks only while the bank it is given is paged in", async () => {
+        const session = await sessionWithSpareRom();
+        const id = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
+
         const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
 
         expect(completed).toBe(false);
-        expect(session.hitBreakpoint()).toEqual({
-            id: spareOnly,
-            type: "execute",
-            address: ServiceEntry,
-            bank: SpareBank,
-        });
+        expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: ServiceEntry, bank: SpareBank });
         expect(session.registers().pc).toBe(ServiceEntry);
+        expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("breaks on a read only while the bank it is given is paged in", async () => {
+        const session = await sessionWithSpareRom();
+        const id = session.addBreakpoint("read", RomTypeByte, { bank: SpareBank });
+
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(session.hitBreakpoint()).toEqual({
+            id,
+            type: "read",
+            address: RomTypeByte,
+            bank: SpareBank,
+            value: ServiceRom[RomTypeByte - 0x8000],
+        });
         expect(pagedBank(session)).toBe(SpareBank);
         session.destroy();
     });
