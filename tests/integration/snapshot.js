@@ -7,8 +7,9 @@ import { mode7Text } from "./helpers.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
-// CPU cycles: an arbitrary point after the program has drawn, and then about eighty lines of the 6847.
-const AtomCyclesBeforeSnapshot = 123457;
+const Clear4Mode = 0xf0;
+// CPU cycles: an arbitrary point in a field, and then about eighty lines of the 6847.
+const AtomCyclesBeforeSnapshot = 12345;
 const AtomCyclesAfterRestore = 5000;
 
 describe("save state round trip", () => {
@@ -56,8 +57,12 @@ describe("save state round trip", () => {
         await original.initialise();
         await original.runUntilInput();
         await original.type("CLEAR 4");
+        await original.runUntilInput();
         await original.type("F.I=0TO6143 STEP 7;I?#8000=I;N.");
+        await original.runUntilInput();
         await original.runFor(AtomCyclesBeforeSnapshot);
+        expect(original.processor.video.video6847.lastmode).toBe(Clear4Mode);
+        expect(original.readbyte(0x8000 + 700)).toBe(700 & 0xff);
 
         const restored = atom();
         await restored.initialise();
