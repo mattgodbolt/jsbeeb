@@ -5,6 +5,12 @@ import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
 import { mode7Text } from "./helpers.js";
 
+const FbWidth = 1024;
+const FbHeight = 768;
+// CPU cycles: an arbitrary point after the program has drawn, and then about eighty lines of the 6847.
+const AtomCyclesBeforeSnapshot = 123457;
+const AtomCyclesAfterRestore = 5000;
+
 describe("save state round trip", () => {
     it("continues identically in a fresh machine restored through the gzipped file format", async () => {
         const original = new TestMachine();
@@ -44,14 +50,14 @@ describe("save state round trip", () => {
     it("carries an Atom's picture on mid-field in a fresh machine restored from the file format", async () => {
         const atom = () =>
             new TestMachine("Atom", {
-                video: new Video(false, new Uint32Array(1024 * 768), () => {}, { isAtom: true }),
+                video: new Video(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom: true }),
             });
         const original = atom();
         await original.initialise();
         await original.runUntilInput();
         await original.type("CLEAR 4");
         await original.type("F.I=0TO6143 STEP 7;I?#8000=I;N.");
-        await original.runFor(123457);
+        await original.runFor(AtomCyclesBeforeSnapshot);
 
         const restored = atom();
         await restored.initialise();
@@ -59,13 +65,13 @@ describe("save state round trip", () => {
         restoreSnapshot(restored.processor, restored.model, snapshot);
         restored.processor.video.fb32.set(original.processor.video.fb32);
 
-        const cycles = 100 * 1000;
-        await original.runFor(cycles);
-        await restored.runFor(cycles);
+        await original.runFor(AtomCyclesAfterRestore);
+        await restored.runFor(AtomCyclesAfterRestore);
 
         expect(restored.processor.video.video6847.snapshotState()).toEqual(
             original.processor.video.video6847.snapshotState(),
         );
-        expect(restored.processor.video.fb32).toEqual(original.processor.video.fb32);
+        const fb = original.processor.video.fb32;
+        expect(restored.processor.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
     });
 });

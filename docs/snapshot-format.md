@@ -218,6 +218,7 @@ Contains ~40 scalar fields for display timing and rendering state, plus nested o
 | `ula`                    | object     | ULA/NULA state (see below)                                                  |
 | `crtc`                   | object     | CRTC state (`{ curReg }`)                                                   |
 | `teletext`               | object     | SAA5050 teletext chip state                                                 |
+| `video6847`              | object     | MC6847 VDG state, Atom only (see below)                                     |
 
 #### ULA (`state.video.ula`)
 
@@ -242,25 +243,25 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 
 Present only on the Atom. Atom snapshots written before it was saved lack it, and absent means the VDG keeps its current state, the same fallback as the teletext adaptor's, so it needed no format version bump.
 
-| Field               | Type    | Description                                                                        |
-| ------------------- | ------- | ---------------------------------------------------------------------------------- |
-| `horizCounter`      | number  | VDG cycle within the line, 0-228                                                   |
-| `vertCounter`       | number  | Line within the field, 0-262                                                       |
-| `scanlineCounter`   | number  | Scanline within the current row of the mode                                        |
-| `addr`              | number  | Next video memory address, as an offset from 0x8000                                |
-| `lineStartAddr`     | number  | Address the current row starts at                                                  |
-| `nextLineStartAddr` | number  | Address the next row starts at                                                     |
-| `bitmapX`           | number  | Framebuffer column being drawn                                                     |
-| `bitmapY`           | number  | Framebuffer row being drawn                                                        |
-| `frameCount`        | number  | Fields drawn, which picks the one in five that is painted                          |
-| `inHSync`           | boolean | Horizontal sync pending                                                            |
-| `inVSync`           | boolean | In field sync (FS low)                                                             |
-| `lastmode`          | number  | Mode the geometry was last set for (port A bits 4-7); `0xff` before the first poll |
-| `dispEnabled`       | number  | Horizontal, vertical and frame-skip display enable bits                            |
-| `bordercolour`      | number  | Border colour latched at the last field sync edge (0 black, 1 green or buff)       |
-| `vdgCycles`         | number  | VDG cycles owed but not yet run (float)                                            |
-| `charTime`          | number  | VDG cycles left until the next character                                           |
-| `cpuAddr`           | number  | CPU's last memory access not yet seen by the VDG, read instead of `addr` for snow  |
+| Field               | Type    | Description                                                                                              |
+| ------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `horizCounter`      | number  | VDG cycle within the line, 0-228                                                                         |
+| `vertCounter`       | number  | Line within the field, 0-262                                                                             |
+| `scanlineCounter`   | number  | Scanline within the current row of the mode                                                              |
+| `addr`              | number  | Next video memory address, as an offset from 0x8000                                                      |
+| `lineStartAddr`     | number  | Address the current row starts at                                                                        |
+| `nextLineStartAddr` | number  | Address the next row starts at                                                                           |
+| `bitmapX`           | number  | Framebuffer column being drawn                                                                           |
+| `bitmapY`           | number  | Framebuffer row being drawn                                                                              |
+| `frameCount`        | number  | Fields drawn, which picks the one in five that is painted                                                |
+| `inHSync`           | boolean | Horizontal sync pending                                                                                  |
+| `inVSync`           | boolean | In field sync (FS low)                                                                                   |
+| `lastmode`          | number  | Mode the geometry was last set for (port A bits 4-7, every text mode as 0); `0xff` before the first poll |
+| `dispEnabled`       | number  | Horizontal, vertical and frame-skip display enable bits                                                  |
+| `bordercolour`      | number  | Border colour latched at the last field sync edge (0 black, 1 green or buff)                             |
+| `vdgCycles`         | number  | VDG cycles owed but not yet run (float)                                                                  |
+| `charTime`          | number  | VDG cycles left until the next character                                                                 |
+| `cpuAddr`           | number  | CPU's last write to RAM not yet seen by the VDG, read instead of `addr` for snow                         |
 
 The pixel geometry (`pixelsPerChar`, `pixelsPerBit`, `bpp` and the lines per row) follows from `lastmode` and is recomputed on restore. The mode bits themselves are read from the PPIA's port A each time the VDG runs, so they are saved with the PPIA.
 

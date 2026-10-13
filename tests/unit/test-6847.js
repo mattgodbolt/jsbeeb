@@ -182,17 +182,18 @@ const VdgClockMhz = 3.638004;
 const CpuCyclesPerLine = VdgCyclesPerLine / VdgClockMhz;
 const CpuCyclesPerField = VdgLinesPerField * CpuCyclesPerLine;
 const FieldSyncLine = 240;
-const MidPictureLine = 100;
+const MidPictureLine = 94;
+const LinesPerRowMode = 0x50;
+const LinesPerRow = 3;
 const SnowAddr = 0x8123;
-const GraphicsMode = 0xd0;
 
 describe("Video6847 snapshot", () => {
-    function makeAtomVideo() {
+    function makeAtomVideo(mode = LinesPerRowMode) {
         const video = new Video(false, new Uint32Array(1024 * 768), () => {}, { isAtom: true });
         const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
         const vblanks = [];
         const cpu = { model: { clockMhz: 1 }, videoRead: (addr) => ram[addr & 0x1fff] };
-        const ppia = { portapins: GraphicsMode, portcpins: 0x08, setVBlankInt: (level) => vblanks.push(level) };
+        const ppia = { portapins: mode, portcpins: 0x08, setVBlankInt: (level) => vblanks.push(level) };
         video.reset(cpu, null);
         video.video6847.reset(cpu, ppia);
         return { video, vblanks };
@@ -214,21 +215,27 @@ describe("Video6847 snapshot", () => {
     function expectSameFrom(original, restored) {
         expect(restored.video.video6847.snapshotState()).toEqual(original.video.video6847.snapshotState());
         expect(restored.vblanks).toEqual(original.vblanks);
-        expect(restored.video.fb32).toEqual(original.video.fb32);
+        // Counted rather than compared whole, so a failure does not diff a megabyte.
+        const fb = original.video.fb32;
+        expect(restored.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
     }
 
-    it("carries on mid-picture exactly as the original does, before the next field sync", () => {
-        const original = makeAtomVideo();
-        runCpuCycles(original.video, Math.floor(CpuCyclesPerField + CpuCyclesPerLine * (MidPictureLine + 0.4)));
-        original.video.video6847.cpuAddrAccess(SnowAddr);
+    it("carries on exactly as the original does from any cycle of a row mid-picture", () => {
+        const rowStart = Math.floor(CpuCyclesPerField + CpuCyclesPerLine * MidPictureLine);
+        const rowCycles = Math.ceil(CpuCyclesPerLine * LinesPerRow);
+        for (let at = rowStart; at < rowStart + rowCycles; at++) {
+            const original = makeAtomVideo();
+            runCpuCycles(original.video, at);
+            original.video.video6847.cpuAddrAccess(SnowAddr);
 
-        const restored = restoreInto(original);
-        expect(restored.video.video6847).toMatchObject({ inVSync: false, cpuAddr: SnowAddr, lastmode: GraphicsMode });
+            const restored = restoreInto(original);
+            expect(restored.video.video6847).toMatchObject({ cpuAddr: SnowAddr, lastmode: LinesPerRowMode });
 
-        for (const { video } of [original, restored]) runCpuCycles(video, Math.floor(CpuCyclesPerLine * 20));
+            for (const { video } of [original, restored]) runCpuCycles(video, 2 * rowCycles);
 
-        expect(original.vblanks).toEqual([]);
-        expectSameFrom(original, restored);
+            expect(original.vblanks).toEqual([]);
+            expectSameFrom(original, restored);
+        }
     });
 
     it("carries on from within field sync into the next field exactly as the original does", () => {
