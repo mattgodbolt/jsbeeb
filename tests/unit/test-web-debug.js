@@ -51,6 +51,22 @@ describe("Debugger", () => {
             expect(dbgr.enabled()).toBe(false);
             expect(visible("debug")).toBe(false);
         });
+
+        it("give the keyboard back to the machine on leaving with a goto box focused", () => {
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
+            dbgr.hide();
+            expect(document.activeElement).not.toBe(box);
+        });
+
+        it("leave focus alone on leaving when it is elsewhere on the page", () => {
+            dbgr.debug(cpu.pc);
+            const elsewhere = document.body.appendChild(document.createElement("input"));
+            elsewhere.focus();
+            dbgr.hide();
+            expect(document.activeElement).toBe(elsewhere);
+        });
     });
 
     describe("the disassembly window", () => {
@@ -71,6 +87,36 @@ describe("Debugger", () => {
             form.querySelector(".goto-addr").value = "$3000";
             form.dispatchEvent(new Event("submit", { cancelable: true }));
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000");
+        });
+
+        it("stays put and marks the box when the text is neither a name nor an address", () => {
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
+            box.value = "monster_x";
+            box.form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+            expect(disRows().map((row) => row.querySelector(".dis_addr").textContent)).not.toContain("NaN");
+            expect(box.value).toBe("monster_x");
+            expect(box.classList.contains("is-invalid")).toBe(true);
+            expect(document.activeElement).toBe(box);
+            box.dispatchEvent(new Event("input"));
+            expect(box.classList.contains("is-invalid")).toBe(false);
+            box.value = " ";
+            box.form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(box.classList.contains("is-invalid")).toBe(false);
+        });
+
+        it("leaves the memory view alone too when the text is neither a name nor an address", () => {
+            dbgr.debug(cpu.pc);
+            const form = document.getElementById("goto-mem-addr-form");
+            const box = form.querySelector(".goto-addr");
+            box.value = "$1234";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            box.value = "monster_x";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("1234");
+            expect(box.classList.contains("is-invalid")).toBe(true);
         });
 
         it("walks instructions with the wheel and the j and k keys", () => {
@@ -259,6 +305,39 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
             expect(currentRow().querySelector(".dis_addr .symbol").title).toBe("oswrch: $3000, from Test MOS");
             expect(code(0x3004).textContent).toBe("BNE oswrch");
+        });
+
+        it("goes to a name typed in either box, over reading it as hex", async () => {
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("mos.json")) json.regions.rom.symbols.fade = "0x3004";
+                return json;
+            });
+            const goTo = (formId, text) => {
+                const form = document.getElementById(formId);
+                form.querySelector(".goto-addr").value = text;
+                form.dispatchEvent(new Event("submit", { cancelable: true }));
+            };
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
+            goTo("goto-dis-addr-form", " oswrch ");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            expect(box.value).toBe("");
+            expect(document.activeElement).not.toBe(box);
+            goTo("goto-dis-addr-form", "fade");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3004 fade");
+            goTo("goto-dis-addr-form", "$fade");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            goTo("goto-dis-addr-form", "FADE");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            goTo("goto-dis-addr-form", "OSWRCH");
+            expect(box.classList.contains("is-invalid")).toBe(true);
+            goTo("goto-dis-addr-form", "oswrch");
+            expect(box.classList.contains("is-invalid")).toBe(false);
+            goTo("goto-mem-addr-form", "os_text_ptr");
+            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
         });
 
         it("still follows a named zero-page operand to the memory view", async () => {

@@ -171,6 +171,12 @@ span.accesskey {
   max-width: 6em;
 }
 
+/* Bootstrap's warning icon would hide most of a box this narrow. */
+.goto-addr.is-invalid {
+  padding-right: 0.5rem;
+  background-image: none;
+}
+
 #leds {
   box-shadow: 3px 3px 5px #000;
   border-radius: 6px;

@@ -220,6 +220,23 @@ describe("KeyboardSetup", () => {
             expect(actions.openMedia).not.toHaveBeenCalled();
         });
 
+        it("leaves a debugger goto box its g, which elsewhere resumes the machine", () => {
+            domFromIndexHtml("debug");
+            const dbgr = { enabled: () => true, hide: vi.fn(), keyPress: vi.fn() };
+            new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr, keyLayout: "physical" });
+            const typeG = () => document.dispatchEvent(new KeyboardEvent("keypress", { key: "g", cancelable: true }));
+
+            document.querySelector("#goto-dis-addr-form .goto-addr").focus();
+            typeG();
+            expect(dbgr.hide).not.toHaveBeenCalled();
+            expect(actions.resume).not.toHaveBeenCalled();
+
+            document.activeElement.blur();
+            typeG();
+            expect(dbgr.hide).toHaveBeenCalled();
+            expect(actions.resume).toHaveBeenCalled();
+        });
+
         it("keeps a held shortcut's repeats out of the media window it just opened", () => {
             domFromIndexHtml("media-panel");
             document.getElementById("media-search").focus();

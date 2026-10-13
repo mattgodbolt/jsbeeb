@@ -27,6 +27,11 @@ describe("hex", () => {
             expect(parseAddr("0")).toBe(0);
             expect(parseAddr("FFFF")).toBe(0xffff);
         });
+
+        it("rejects anything that is not a 16-bit hex address", function () {
+            for (const text of ["", "monster_x", "12zz", "$", "&g", "0x", "10000", "$1 2", "-1"])
+                expect(parseAddr(text)).toBeUndefined();
+        });
     });
 
     describe("hexbyte", function () {

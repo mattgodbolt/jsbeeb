@@ -121,6 +121,28 @@ export class SymbolNames {
         return named[0] ?? this._systemGlobal(address);
     }
 
+    /**
+     * Where `name` is, preferring an address shown by that name while the CPU is at `pc`, and then
+     * the set whose code the CPU is in.
+     * @param {string} name
+     * @param {number} [pc]
+     * @returns {number | undefined}
+     */
+    addressOf(name, pc) {
+        const running = this._matchAt(pc);
+        const candidates = [running, ...this._matches.filter((match) => match !== running)]
+            .filter(Boolean)
+            .flatMap(({ set, regions }) => [
+                ...regions.flatMap((region) => [
+                    region.symbols,
+                    ...(set.system ? [] : region.scopes.map((scope) => scope.symbols)),
+                ]),
+                set.globals,
+            ])
+            .flatMap((symbols) => [...symbols].filter(([, named]) => named === name).map(([address]) => address));
+        return candidates.find((address) => this.address(address, pc)?.name === name) ?? candidates[0];
+    }
+
     _matchAt(address) {
         return this._matches.find(({ regions }) => regions.some((region) => contains(region, address)));
     }
