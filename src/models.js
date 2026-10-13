@@ -122,7 +122,6 @@ function atomModel({ name, synonyms, os, banks }) {
     });
 }
 
-// TODO(#1066) semi-bplus-style to get swram for exile hardcoded here
 const beebSwram = [
     true,
     true,
@@ -141,6 +140,7 @@ const beebSwram = [
     false,
     false,
 ];
+const noSwram = Array(16).fill(false);
 const masterSwram = [
     false,
     false,
@@ -205,6 +205,17 @@ export const allModels = [
         clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
+    }),
+    new Model({
+        name: "BBC B (stock)",
+        shortName: "BBC B",
+        synonyms: ["B-stock"],
+        os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        clockMhz: 2,
+        swram: noSwram,
+        fdc: NoiseAwareIntelFdc,
     }),
     new Model({
         name: "BBC Master 128 (DFS)",
