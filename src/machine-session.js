@@ -341,7 +341,9 @@ export class MachineSession {
     }
 
     /**
-     * Run until PC reaches targetAddr (like a breakpoint), or timeout.
+     * Run until PC reaches targetAddr (like a breakpoint), or throw after timeoutSecs of emulated time.
+     * @param {number} addr
+     * @param {number} [timeoutSecs=30]
      * @param {Object} [opts]
      * @param {number} [opts.bank] only stop while this sideways bank is paged in at &8000 to &BFFF
      */

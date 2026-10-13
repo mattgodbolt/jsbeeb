@@ -635,19 +635,19 @@ describe("MachineSession Econet", () => {
             const session = new MachineSession("Master", { econet: true });
             await session.initialise();
             await session.boot(30);
-            expect(await typeAll(session, ["*NET", "*I AM SYST", "*CAT"])).toContain("WELCOME");
+            expect(await typeAll(session, ["*NET", "*I AM SYST", "*CAT"])).toMatch(/Dir\. \$ .*Lib\. LIBRARY/);
             session.destroy();
         },
         BootTimeout,
     );
 
     it(
-        "answers to the station number it is given",
+        "answers to the web page's station number unless given one",
         async () => {
-            const session = new MachineSession("B-DFS1.2", { econet: true, stationId: 42 });
+            const session = new MachineSession("B-DFS1.2", { econet: true });
             await session.initialise();
             await session.boot(30);
-            expect(await typeAll(session, ["PRINT ?&FE18"])).toMatch(/^\s+42$/m);
+            expect(await typeAll(session, ["PRINT ?&FE18"])).toMatch(/^\s+101$/m);
             session.destroy();
         },
         BootTimeout,
@@ -667,6 +667,9 @@ describe("MachineSession Econet", () => {
     );
 
     it("refuses a station number it cannot be, or one without Econet", () => {
+        for (const stationId of [1, 253]) {
+            expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).not.toThrow();
+        }
         for (const stationId of [0, 254, 255, 1.5, "42"]) {
             expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).toThrow(/is not 1 to 253/);
         }
