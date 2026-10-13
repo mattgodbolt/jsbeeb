@@ -34,7 +34,7 @@ const FB_HEIGHT = 625;
 const AccconShadowBit = 4;
 
 // Where the MOS keeps its read and write offsets into the keyboard buffer (buffer 0), which is empty when they
-// are equal. MOS 3.20 has them a byte lower than 1.20.
+// are equal.
 const KeyboardBufferOffsets = { read: 0x2d8, write: 0x2e1 };
 const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 
@@ -203,10 +203,7 @@ export class MachineSession {
         this._machine.typist.cancel();
     }
 
-    /**
-     * Empty the MOS's keyboard buffer, as OSBYTE 21 with X=0 does: a key held
-     * long enough to autorepeat leaves the extras for the next read to find.
-     */
+    /** Empty the MOS's keyboard buffer; unlike OSBYTE 21, a soft key's expansion still to come is left. */
     flushKeyboardBuffer() {
         if (this._isAtom) throw new Error("flushKeyboardBuffer: the Atom's OS has no keyboard buffer");
         const { read, write } = this._keyboardBufferOffsets;
@@ -442,12 +439,14 @@ export class MachineSession {
 
     /**
      * Put a tape (a .uef, or a tapefile) in the cassette recorder, from a file,
-     * or from `data` already read with `name` for the messages. It plays when the
-     * machine starts the motor, after `*TAPE` and a `CHAIN""` or `*RUN`, say.
+     * or from `data` already read with `name` for the messages, and press PLAY.
+     * The Atom's recorder has no relay, so its tape runs at once; another
+     * model's runs when the MOS starts the motor (`*TAPE` then `CHAIN""`, say).
      */
     async loadTape(name, data = new Uint8Array(readFileSync(name))) {
-        const processor = this._machine.processor;
-        processor.tapeInterface.setTape(await loadTapeFromData(name, data, processor.model));
+        const { tapeInterface, model } = this._machine.processor;
+        tapeInterface.setTape(await loadTapeFromData(name, data, model));
+        tapeInterface.pressPlay();
     }
 
     /**
