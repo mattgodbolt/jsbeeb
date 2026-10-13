@@ -14,12 +14,12 @@ function econetFor(model, { econet, stationId }) {
         if (stationId !== undefined) throw new Error("A station number needs Econet fitted");
         return null;
     }
-    stationId ??= DefaultStationId;
-    if (!Number.isInteger(stationId) || stationId < 1 || stationId >= FileServerStationId)
+    const station = stationId ?? DefaultStationId;
+    if (!Number.isInteger(station) || station < 1 || station >= FileServerStationId)
         throw new Error(
-            `Station ${stationId} is not 1 to ${FileServerStationId - 1}; the file server is ${FileServerStationId}`,
+            `Station ${station} is not 1 to ${FileServerStationId - 1}; the file server is ${FileServerStationId}`,
         );
-    return new Econet(stationId, model.cyclesPerSecond);
+    return new Econet(station, model.cyclesPerSecond);
 }
 
 export function fake6502(model, opts = {}) {
