@@ -30,6 +30,7 @@ export function fake6502(model, opts = {}) {
             video: opts.video ?? (model.isAtom ? new FakeAtomVideo() : fakeVideo),
             soundChip: opts.soundChip ?? soundChip,
             econet,
+            model,
         }),
         config: machineSpec({
             tube: opts.tube ? tubeModelFor(model) : null,

@@ -623,6 +623,32 @@ describe("MachineSession disc images", () => {
     );
 });
 
+describe("MachineSession filing system", () => {
+    async function bootedText(modelName, opts) {
+        const session = new MachineSession(modelName, opts);
+        await session.initialise();
+        const { screenText } = await session.boot(30);
+        session.destroy();
+        return screenText;
+    }
+
+    it(
+        "boots a MasterADFS into ADFS",
+        async () => {
+            expect(await bootedText("MasterADFS")).toContain("Acorn ADFS");
+        },
+        BootTimeout,
+    );
+
+    it(
+        "boots a MasterANFS into ANFS, shown by its Econet banner",
+        async () => {
+            expect(await bootedText("MasterANFS", { econet: true })).toContain("Econet Station");
+        },
+        BootTimeout,
+    );
+});
+
 describe("MachineSession Econet", () => {
     async function typeAll(session, lines) {
         for (const line of lines) await session.type(line);

@@ -196,3 +196,14 @@ describe("fake6502 tube handling", () => {
         expect(nopsIn(1.6, 1000)).toBe(1600);
     });
 });
+
+describe("the filing system a model boots into", () => {
+    const FilingSystemRomAddress = 19;
+    const filingSystemOf = (modelName) => fake6502(findModel(modelName)).cmos.store[FilingSystemRomAddress] & 0x0f;
+
+    it("fits the filing system its model names", () => {
+        expect(filingSystemOf("Master")).toBe(9);
+        expect(filingSystemOf("MasterADFS")).toBe(13);
+        expect(filingSystemOf("MasterANFS")).toBe(8);
+    });
+});

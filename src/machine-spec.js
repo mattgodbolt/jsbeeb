@@ -44,8 +44,9 @@ export function machineSpec(overrides = {}) {
     });
 }
 
-/** Peripherals that go nowhere, for a machine run headless; `econet` is fitted if given. */
-export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip(), econet = null } = {}) {
+/** Peripherals that go nowhere, for a machine run headless; `econet` is fitted if given and a
+ * given `model` has its CMOS override applied. */
+export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip(), econet = null, model = null } = {}) {
     return {
         dbgr: { setCpu() {} },
         video,
@@ -53,7 +54,7 @@ export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip(
         ddNoise: new FakeDdNoise(),
         relayNoise: new FakeRelayNoise(),
         music5000: new FakeMusic5000(),
-        cmos: new Cmos(undefined, undefined, econet),
+        cmos: new Cmos(undefined, model?.cmosOverride, econet),
         econet,
     };
 }
