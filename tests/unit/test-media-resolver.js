@@ -130,6 +130,23 @@ describe("MediaResolver", () => {
                 ]);
             });
 
+            it("shares one API call between references resolved at once, and asks each repo apart", async () => {
+                const { resolver, load } = make({
+                    [`${Api}/o/r/releases/latest`]: release("v1"),
+                    [`${Api}/o/s/releases/latest`]: release("release/2"),
+                    [`${Raw}/o/r/v1/a.ssd`]: bytes("a"),
+                    [`${Raw}/o/r/v1/b.ssd`]: bytes("b"),
+                    [`${Raw}/o/s/release%2F2/c.ssd`]: bytes("c"),
+                });
+                const resolved = await Promise.all(
+                    ["o/r@~latest/a.ssd", "o/r@~latest/b.ssd", "o/s@~latest/c.ssd"].map((location) =>
+                        resolver.resolve("disc", `github:${location}`),
+                    ),
+                );
+                expect(resolved.map(({ data }) => data)).toEqual([bytes("a"), bytes("b"), bytes("c")]);
+                expect(load.mock.calls.filter(([url]) => url.startsWith(Api))).toHaveLength(2);
+            });
+
             it("falls back to the default branch, with one warning, when the API will not say", async () => {
                 const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
                 const { resolver, load } = make({ [`${Raw}/o/r/HEAD/game.ssd`]: bytes("head") });

@@ -90,7 +90,7 @@ above. `~` cannot appear in a git ref name, so `~latest` cannot collide with a r
 The API skips drafts and prereleases, and a bare tag is not a Release; a Release with no assets is
 enough. Unauthenticated calls are limited to 60 an hour per IP, so the answer is kept for the rest
 of the session, one call per repo. If the call fails, the rate limit included, the resolver warns
-on the console and loads the default branch instead.
+on the console and loads the default branch instead, for the rest of the session.
 
 A GitHub release asset cannot be loaded: its download is a redirect from github.com with no CORS
 header, so the browser refuses it, and the disc has to be committed to the repo instead (at the

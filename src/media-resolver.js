@@ -114,7 +114,7 @@ export class MediaResolver {
         return openIfZip(parsed.path.split("/").pop(), await this.load(gitHubRawUrl({ ...parsed, ref })));
     }
 
-    /** The tag of a repo's latest release, asked once per repo for the life of this resolver; on any failure, the default branch. */
+    /** The tag of a repo's latest release, asked once per repo per resolver; on any failure, the default branch. */
     latestReleaseTag({ owner, repo }) {
         const key = `${owner}/${repo}`;
         if (!this._latestReleaseTags.has(key))
