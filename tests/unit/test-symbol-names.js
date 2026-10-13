@@ -297,6 +297,20 @@ describe("symbol names", () => {
             expect(names.addressOf("target_y", UncoveredCode)).toBe(0x71);
         });
 
+        it("finds no name from a system set's scopes, which are ignored", () => {
+            const scopedMos = set({
+                title: "Scoped MOS",
+                system: true,
+                regions: {
+                    rom: {
+                        ...region(0xc000, 0x10000, 0xc000),
+                        scopes: [{ start: "0xc000", end: "0xc100", symbols: { vdu_temp: "0xda" } }],
+                    },
+                },
+            });
+            expect(namesFrom(scopedMos).addressOf("vdu_temp", 0xc010)).toBeUndefined();
+        });
+
         it("goes to the address shown by that name when two sets give it different addresses", () => {
             const sequel = set({
                 title: "Sequel",

@@ -9,8 +9,9 @@ const PasteBoxId = "paste-text";
 const SwitchKeys = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"];
 
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
-// Where keys are for the page, not the machine: the paste box, and the media window's controls.
-const KeyboardSinks = `#${PasteBoxId}, #media-panel`;
+// Where keys are for the page, not the machine: the paste box, the media window's controls, and
+// the debugger's goto boxes, where a name's g must not resume the machine.
+const KeyboardSinks = `#${PasteBoxId}, #media-panel, .goto-addr`;
 // The media window's own shortcuts have to answer from inside it, or it cannot be re-aimed from
 // the keyboard at all. The paste box keeps every key, because on a Mac Alt is Option and types
 // an accented character rather than nothing.

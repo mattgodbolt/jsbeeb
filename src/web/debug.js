@@ -160,6 +160,7 @@ export class Debugger {
             form.addEventListener("submit", (e) => {
                 e.preventDefault();
                 const text = addr.value.trim();
+                if (!text) return;
                 const address = this._names.addressOf(text, this.cpu.pc) ?? parseAddr(text);
                 if (address === undefined) {
                     addr.classList.add("is-invalid");

@@ -76,13 +76,18 @@ describe("Debugger", () => {
         it("stays put and marks the box when the text is neither a name nor an address", () => {
             dbgr.debug(cpu.pc);
             const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
             box.value = "monster_x";
             box.form.dispatchEvent(new Event("submit", { cancelable: true }));
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
             expect(disRows().map((row) => row.querySelector(".dis_addr").textContent)).not.toContain("NaN");
             expect(box.value).toBe("monster_x");
             expect(box.classList.contains("is-invalid")).toBe(true);
+            expect(document.activeElement).toBe(box);
             box.dispatchEvent(new Event("input"));
+            expect(box.classList.contains("is-invalid")).toBe(false);
+            box.value = " ";
+            box.form.dispatchEvent(new Event("submit", { cancelable: true }));
             expect(box.classList.contains("is-invalid")).toBe(false);
         });
 
@@ -287,8 +292,12 @@ describe("Debugger", () => {
             };
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
             goTo("goto-dis-addr-form", " oswrch ");
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            expect(box.value).toBe("");
+            expect(document.activeElement).not.toBe(box);
             goTo("goto-dis-addr-form", "fade");
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("3004 fade");
             goTo("goto-dis-addr-form", "$fade");
