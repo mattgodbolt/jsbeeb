@@ -245,6 +245,34 @@ describe("MachineSession keyboard", () => {
     });
 });
 
+describe("MachineSession keyboard buffer", () => {
+    const AutorepeatFrames = 100;
+    const ReportAfterWait = 'T%=TIME:REPEAT UNTIL TIME>T%+300:PRINT "<";INKEY$(0);">"';
+
+    async function keysLeftAfterHolding(model, flush) {
+        const session = new MachineSession(model);
+        await session.initialise();
+        await session.boot(30);
+        await session.type(ReportAfterWait);
+        session.keyDownRaw(BBC.K1);
+        await session.runFrames(AutorepeatFrames);
+        session.keyUpRaw(BBC.K1);
+        if (flush) session.flushKeyboardBuffer();
+        const { screenText } = await session.runUntilPrompt();
+        session.destroy();
+        return screenText.match(/<(\w*)>/)[1];
+    }
+
+    it.each(["B-DFS1.2", "Master"])(
+        "%s: a held key's autorepeats wait in the buffer until it is flushed",
+        async (model) => {
+            expect(await keysLeftAfterHolding(model, false)).toBe("1");
+            expect(await keysLeftAfterHolding(model, true)).toBe("");
+        },
+        BootTimeout,
+    );
+});
+
 describe("MachineSession keyboard on the Atom", () => {
     let session;
 
@@ -480,6 +508,43 @@ describe("MachineSession snapshots", () => {
 
             expect((await other.runUntilPrompt(30)).screenText).toContain("1234");
             other.destroy();
+        },
+        BootTimeout,
+    );
+});
+
+describe("MachineSession tapes", () => {
+    const Welcome = path.join(RepoRoot, "public/tapes/Welcome.uef");
+    const LoadCycles = 10 * 2000000;
+
+    async function firstProgramLoading(load) {
+        const session = new MachineSession("B-DFS1.2");
+        await session.initialise();
+        await session.boot(30);
+        await load(session);
+        await session.type("*TAPE");
+        await session.type('CHAIN""');
+        await session.runFor(LoadCycles);
+        const { screenText } = session.drainOutput();
+        session.destroy();
+        return screenText;
+    }
+
+    it(
+        "plays a tape from a file",
+        async () => {
+            expect(await firstProgramLoading((session) => session.loadTape(Welcome))).toMatch(/Loading\s+INTRO/);
+        },
+        BootTimeout,
+    );
+
+    it(
+        "plays a tape from bytes already read",
+        async () => {
+            const data = new Uint8Array(readFileSync(Welcome));
+            expect(await firstProgramLoading((session) => session.loadTape("welcome.uef", data))).toMatch(
+                /Loading\s+INTRO/,
+            );
         },
         BootTimeout,
     );
