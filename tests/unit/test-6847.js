@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Video6847 } from "../../src/6847.js";
+import { Video } from "../../src/video.js";
 import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 
@@ -172,5 +173,54 @@ describe("Video6847 logical pixel grid", () => {
         }
         expect(decodeLineGrid(video.lineGrid[1]).rendered).toBe(false);
         expect(decodeLineGrid(video.lineGrid[4]).rendered).toBe(false);
+    });
+});
+
+describe("Video6847 snapshot", () => {
+    const CyclesPerFrame = 262 * 228;
+    const GraphicsMode = 0xd0;
+
+    function makeAtomVideo() {
+        const video = new Video(false, new Uint32Array(1024 * 768), () => {}, { isAtom: true });
+        const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
+        const vblanks = [];
+        const cpu = { model: { clockMhz: 1 }, videoRead: (addr) => ram[addr & 0x1fff] };
+        const ppia = { portapins: GraphicsMode, portcpins: 0x08, setVBlankInt: (level) => vblanks.push(level) };
+        video.reset(cpu, null);
+        video.video6847.reset(cpu, ppia);
+        return { video, vblanks };
+    }
+
+    it("carries on mid-frame exactly as the original does", () => {
+        const original = makeAtomVideo();
+        original.video.polltime(Math.floor(CyclesPerFrame * 1.4));
+
+        const restored = makeAtomVideo();
+        restored.video.restoreState(original.video.snapshotState());
+        restored.video.fb32.set(original.video.fb32);
+        original.vblanks.length = 0;
+
+        for (const { video } of [original, restored]) video.polltime(CyclesPerFrame);
+
+        expect(restored.video.video6847.snapshotState()).toEqual(original.video.video6847.snapshotState());
+        expect(restored.vblanks).toEqual(original.vblanks);
+        expect(restored.video.fb32).toEqual(original.video.fb32);
+    });
+
+    it("restores the mode geometry along with the mode", () => {
+        const original = makeAtomVideo();
+        original.video.polltime(1000);
+
+        const restored = new Video6847(makeStubVideo());
+        restored.restoreState(original.video.video6847.snapshotState());
+
+        const vdg = original.video.video6847;
+        expect(restored.lastmode).toBe(GraphicsMode);
+        expect([restored.pixelsPerChar, restored.pixelsPerBit, restored.bpp, restored.charLinesreg9]).toEqual([
+            vdg.pixelsPerChar,
+            vdg.pixelsPerBit,
+            vdg.bpp,
+            vdg.charLinesreg9,
+        ]);
     });
 });

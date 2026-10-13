@@ -319,7 +319,15 @@ export class Video6847 {
         if (this.lastmode === mode) return;
 
         this.lastmode = mode;
+        this.applyModeGeometry(mode);
 
+        //NEED TO RESET THE LINE IF
+        //MODE SWITCH MID FRAME
+        this.scanlineCounter = 0;
+        this.lineStartAddr = this.nextLineStartAddr;
+    }
+
+    applyModeGeometry(mode) {
         this.pixelsPerChar = this.modes[mode][0]; // 8 pixels per element
         this.pixelsPerBit = this.bitmapPxPerPixel * this.modes[mode][1];
         let linesPerRow = this.modes[mode][2]; // move to reg9
@@ -327,11 +335,50 @@ export class Video6847 {
         this.updateLineGrid();
 
         this.charLinesreg9 = linesPerRow - 1; //2  - scanlines per char
+    }
 
-        //NEED TO RESET THE LINE IF
-        //MODE SWITCH MID FRAME
-        this.scanlineCounter = 0;
-        this.lineStartAddr = this.nextLineStartAddr;
+    snapshotState() {
+        return {
+            horizCounter: this.horizCounter,
+            vertCounter: this.vertCounter,
+            scanlineCounter: this.scanlineCounter,
+            addr: this.addr,
+            lineStartAddr: this.lineStartAddr,
+            nextLineStartAddr: this.nextLineStartAddr,
+            bitmapX: this.bitmapX,
+            bitmapY: this.bitmapY,
+            frameCount: this.frameCount,
+            inHSync: this.inHSync,
+            inVSync: this.inVSync,
+            lastmode: this.lastmode,
+            dispEnabled: this.dispEnabled,
+            bordercolour: this.bordercolour,
+            vdgCycles: this.vdg_cycles,
+            charTime: this.charTime,
+            cpuAddr: this.cpuAddr,
+        };
+    }
+
+    restoreState(state) {
+        this.horizCounter = state.horizCounter;
+        this.vertCounter = state.vertCounter;
+        this.scanlineCounter = state.scanlineCounter;
+        this.addr = state.addr;
+        this.lineStartAddr = state.lineStartAddr;
+        this.nextLineStartAddr = state.nextLineStartAddr;
+        this.bitmapX = state.bitmapX;
+        this.bitmapY = state.bitmapY;
+        this.frameCount = state.frameCount;
+        this.inHSync = state.inHSync;
+        this.inVSync = state.inVSync;
+        this.lastmode = state.lastmode;
+        // Before its first poll the VDG holds no mode, and that poll sets the geometry.
+        if (this.lastmode in this.modes) this.applyModeGeometry(this.lastmode);
+        this.dispEnabled = state.dispEnabled;
+        this.bordercolour = state.bordercolour;
+        this.vdg_cycles = state.vdgCycles;
+        this.charTime = state.charTime;
+        this.cpuAddr = state.cpuAddr;
     }
 
     // this is usually called from 'video' so 'this'
