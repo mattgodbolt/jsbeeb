@@ -61,23 +61,26 @@ describe("Model", () => {
     });
 
     describe("the stock BBC B", () => {
-        const sidewaysByteAfterWrite = (modelName, bank) => {
+        const sidewaysBytesAroundWrite = (modelName, bank) => {
             const cpu = fake6502(findModel(modelName));
             cpu.romSelect(bank);
-            cpu.writemem(0x8000, 0x42);
-            return cpu.readmem(0x8000);
+            const before = cpu.readmem(0x8000);
+            cpu.writemem(0x8000, before ^ 0xff);
+            return { before, after: cpu.readmem(0x8000) };
         };
 
         it("is the default BBC B with no sideways RAM", () => {
             const stock = findModel("B-stock");
-            expect(stock.os).toEqual(DefaultModel.os);
-            expect(stock.Fdc).toBe(DefaultModel.Fdc);
+            const allButNameAndRam = ({ name: _name, synonyms: _synonyms, swram: _swram, ...rest }) => rest;
+            expect(allButNameAndRam(stock)).toEqual(allButNameAndRam(DefaultModel));
             expect(stock.swram.some((isRam) => isRam)).toBe(false);
         });
 
         it("ignores a write to a bank the other BBC Bs fill with RAM", () => {
-            expect(sidewaysByteAfterWrite("B-DFS1.2", 4)).toBe(0x42);
-            expect(sidewaysByteAfterWrite("B-stock", 4)).not.toBe(0x42);
+            const ram = sidewaysBytesAroundWrite("B-DFS1.2", 4);
+            expect(ram.after).toBe(ram.before ^ 0xff);
+            const rom = sidewaysBytesAroundWrite("B-stock", 4);
+            expect(rom.after).toBe(rom.before);
         });
     });
 
