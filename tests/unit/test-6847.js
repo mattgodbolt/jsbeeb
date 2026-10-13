@@ -206,4 +206,15 @@ describe("Video6847 snapshot", () => {
         expect(restored.vblanks).toEqual(original.vblanks);
         expect(restored.video.fb32).toEqual(original.video.fb32);
     });
+
+    it("leaves the VDG where it is when the snapshot predates its state", () => {
+        const older = makeAtomVideo().video.snapshotState();
+        delete older.video6847;
+
+        const { video } = makeAtomVideo();
+        video.polltime(Math.floor(CpuCyclesPerField * 0.6));
+        const before = video.video6847.snapshotState();
+        video.restoreState(older);
+        expect(video.video6847.snapshotState()).toEqual(before);
+    });
 });
