@@ -653,3 +653,64 @@ describe("MachineSession Econet", () => {
         BootTimeout,
     );
 });
+
+describe("MachineSession breakpoints in sideways ROM", () => {
+    const ServiceEntry = 0x8003;
+    const DfsBank = 14;
+    const SpareBank = 4;
+    const RunSecs = 5;
+    const RomselBankMask = 0x0f;
+    // A service ROM titled "T" whose service handler only returns.
+    const ServiceRom = [0, 0, 0, 0x4c, 0x0e, 0x80, 0x82, 0x0a, 0x01, 0x54, 0x00, 0x28, 0x43, 0x29, 0x60];
+
+    async function sessionWithSpareRom() {
+        const session = new MachineSession("B-DFS1.2");
+        await session.initialise();
+        session.writeMemory(0x8000, ServiceRom, { bank: SpareBank });
+        return session;
+    }
+
+    const pagedBank = (session) => session.pagingState().romsel & RomselBankMask;
+
+    it("breaks in whichever bank is paged in, unless given one", async () => {
+        const session = await sessionWithSpareRom();
+        const anyBank = session.addBreakpoint("execute", ServiceEntry);
+        await session.runFor(RunSecs * CyclesPerSecond);
+        expect(pagedBank(session)).toBe(DfsBank);
+        session.removeBreakpoint(anyBank);
+
+        const spareOnly = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
+        const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(completed).toBe(false);
+        expect(session.hitBreakpoint()).toEqual({
+            id: spareOnly,
+            type: "execute",
+            address: ServiceEntry,
+            bank: SpareBank,
+        });
+        expect(session.registers().pc).toBe(ServiceEntry);
+        expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("runs until an address in the bank it is given", async () => {
+        const session = await sessionWithSpareRom();
+
+        await session.runUntilAddress(ServiceEntry, RunSecs, { bank: SpareBank });
+
+        expect(session.registers().pc).toBe(ServiceEntry);
+        expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("refuses a bank that does not exist", async () => {
+        const session = await sessionWithSpareRom();
+
+        expect(() => session.addBreakpoint("execute", ServiceEntry, { bank: 16 })).toThrow("Bank 16 is not 0 to 15");
+        await expect(session.runUntilAddress(ServiceEntry, RunSecs, { bank: -1 })).rejects.toThrow(
+            "Bank -1 is not 0 to 15",
+        );
+        session.destroy();
+    });
+});

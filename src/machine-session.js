@@ -342,9 +342,12 @@ export class MachineSession {
 
     /**
      * Run until PC reaches targetAddr (like a breakpoint), or timeout.
+     * @param {Object} [opts]
+     * @param {number} [opts.bank] only stop while this sideways bank is paged in at &8000 to &BFFF
      */
-    async runUntilAddress(addr, timeoutSecs = 30) {
-        await this._machine.runUntilAddress(addr, timeoutSecs);
+    async runUntilAddress(addr, timeoutSecs = 30, { bank } = {}) {
+        requireBank(bank);
+        await this._machine.runUntilAddress(addr, timeoutSecs, { bank });
     }
 
     /**
@@ -353,23 +356,27 @@ export class MachineSession {
      * When the hook fires, cpu.stop() halts the current runFor.
      * @param {"execute"|"read"|"write"} type
      * @param {number} address
+     * @param {Object} [opts]
+     * @param {number} [opts.bank] only break while this sideways bank is paged in at &8000 to &BFFF
      * @returns {number} breakpoint id
      */
-    addBreakpoint(type, address) {
-        const id = this._nextBreakpointId++;
+    addBreakpoint(type, address, { bank } = {}) {
+        requireBank(bank);
         const cpu = this._machine.processor;
-        const bp = { type, address, hit: false, id, value: undefined };
+        const inBank = () => bank === undefined || this._machine.pagedBank === bank;
+        const id = this._nextBreakpointId++;
+        const bp = { type, address, bank, hit: false, id, value: undefined };
 
         if (type === "execute") {
             bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address) {
+                if (pc === address && inBank()) {
                     bp.hit = true;
                     return true;
                 }
             });
         } else if (type === "read") {
             bp.hook = cpu.debugRead.add((addr, val) => {
-                if (addr === address) {
+                if (addr === address && inBank()) {
                     bp.hit = true;
                     bp.value = val;
                     return true;
@@ -377,7 +384,7 @@ export class MachineSession {
             });
         } else if (type === "write") {
             bp.hook = cpu.debugWrite.add((addr, val) => {
-                if (addr === address) {
+                if (addr === address && inBank()) {
                     bp.hit = true;
                     bp.value = val;
                     return true;
@@ -418,6 +425,7 @@ export class MachineSession {
         for (const bp of this._breakpoints.values()) {
             if (bp.hit) {
                 const result = { id: bp.id, type: bp.type, address: bp.address };
+                if (bp.bank !== undefined) result.bank = bp.bank;
                 if (bp.value !== undefined) result.value = bp.value;
                 return result;
             }
@@ -520,8 +528,7 @@ export class MachineSession {
     _withPaging({ bank, shadow }, fn) {
         const cpu = this._machine.processor;
         const { romsel, acccon } = cpu;
-        if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
-            throw new Error(`Bank ${bank} is not 0 to 15`);
+        requireBank(bank);
         if (shadow !== undefined && !cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
         try {
             if (bank !== undefined) cpu.romSelect(bank);
@@ -638,6 +645,12 @@ export class MachineSession {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Throws unless `bank`, if given, is a sideways bank. */
+function requireBank(bank) {
+    if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
+        throw new Error(`Bank ${bank} is not 0 to 15`);
+}
 
 /**
  * Reconstruct a flat text representation from the captured VDU elements.
