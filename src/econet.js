@@ -5,6 +5,7 @@
 const RetryTimeoutSecs = 0.5;
 
 export const DefaultStationId = 101;
+export const FileServerStationId = 254;
 export const MasterAnfsRom = "master/anfs-4.25.rom";
 
 // Econet support classes
@@ -66,7 +67,7 @@ export class Econet {
     constructor(stationId_, cyclesPerSecond) {
         // Config parameters
         this.TIME_BETWEEN_BYTES = 128;
-        this.SERVER_STATION_ID = 254;
+        this.SERVER_STATION_ID = FileServerStationId;
         this.retryCycles = (cyclesPerSecond * RetryTimeoutSecs) | 0;
 
         // 4-way handshake states

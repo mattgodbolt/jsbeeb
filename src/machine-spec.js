@@ -44,7 +44,7 @@ export function machineSpec(overrides = {}) {
     });
 }
 
-/** Peripherals that go nowhere, for a machine run headless, but for an `econet` if one is fitted. */
+/** Peripherals that go nowhere, for a machine run headless; `econet` is fitted if given. */
 export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip(), econet = null } = {}) {
     return {
         dbgr: { setCpu() {} },

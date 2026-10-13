@@ -51,7 +51,7 @@ export class MachineSession {
      * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
      * @param {boolean} [opts.econet] - fit Econet, with a file server on the network, and on a Master the ANFS
      *   ROM, as the web page does
-     * @param {number} [opts.stationId=101] - the Econet station number
+     * @param {number} [opts.stationId=101] - the Econet station number, 1 to 253
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
@@ -108,7 +108,7 @@ export class MachineSession {
         this._capture = new VduTextCapture((element) => this._pendingOutput.push(element), { isAtom: this._isAtom });
 
         // Breakpoint management, with persistent hooks that survive across run calls
-        this._breakpoints = new Map(); // id → { hook, type, address, hit }
+        this._breakpoints = new Map(); // id → { hook, type, address, bank, hit, value }
         this._nextBreakpointId = 1;
     }
 

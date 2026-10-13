@@ -4,14 +4,27 @@ import { FakeAtomVideo, FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
 import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
 import { machineSpec, nullIo } from "./machine-spec.js";
-import { DefaultStationId, Econet, MasterAnfsRom } from "./econet.js";
+import { DefaultStationId, Econet, FileServerStationId, MasterAnfsRom } from "./econet.js";
 
 const fakeVideo = new FakeVideo();
 const soundChip = new FakeSoundChip();
 
+function econetFor(model, { econet, stationId }) {
+    if (!econet) {
+        if (stationId !== undefined) throw new Error("A station number needs Econet fitted");
+        return null;
+    }
+    stationId ??= DefaultStationId;
+    if (!Number.isInteger(stationId) || stationId < 1 || stationId >= FileServerStationId)
+        throw new Error(
+            `Station ${stationId} is not 1 to ${FileServerStationId - 1}; the file server is ${FileServerStationId}`,
+        );
+    return new Econet(stationId, model.cyclesPerSecond);
+}
+
 export function fake6502(model, opts = {}) {
     model = model || TEST_6502;
-    const econet = opts.econet ? new Econet(opts.stationId ?? DefaultStationId, model.cyclesPerSecond) : null;
+    const econet = econetFor(model, opts);
     return new model.Cpu(model, {
         ...nullIo({
             video: opts.video ?? (model.isAtom ? new FakeAtomVideo() : fakeVideo),

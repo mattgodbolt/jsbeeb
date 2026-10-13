@@ -652,6 +652,26 @@ describe("MachineSession Econet", () => {
         },
         BootTimeout,
     );
+
+    it(
+        "keeps the station number it is given in a Master's CMOS",
+        async () => {
+            const session = new MachineSession("Master", { econet: true, stationId: 42 });
+            await session.initialise();
+            await session.boot(30);
+            const readCmosStation = ["A%=161", "X%=0", "PRINT (USR&FFF4 AND &FF0000) DIV &10000"];
+            expect(await typeAll(session, readCmosStation)).toMatch(/^\s+42$/m);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it("refuses a station number it cannot be, or one without Econet", () => {
+        for (const stationId of [0, 254, 255, 1.5, "42"]) {
+            expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).toThrow(/is not 1 to 253/);
+        }
+        expect(() => new MachineSession("B-DFS1.2", { stationId: 42 })).toThrow("A station number needs Econet fitted");
+    });
 });
 
 describe("MachineSession breakpoints in sideways ROM", () => {
