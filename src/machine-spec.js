@@ -44,8 +44,8 @@ export function machineSpec(overrides = {}) {
     });
 }
 
-/** Peripherals that go nowhere, for a machine run headless. */
-export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip() } = {}) {
+/** Peripherals that go nowhere, for a machine run headless, but for an `econet` if one is fitted. */
+export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip(), econet = null } = {}) {
     return {
         dbgr: { setCpu() {} },
         video,
@@ -53,7 +53,7 @@ export function nullIo({ video = new FakeVideo(), soundChip = new FakeSoundChip(
         ddNoise: new FakeDdNoise(),
         relayNoise: new FakeRelayNoise(),
         music5000: new FakeMusic5000(),
-        cmos: new Cmos(),
-        econet: null,
+        cmos: new Cmos(undefined, undefined, econet),
+        econet,
     };
 }

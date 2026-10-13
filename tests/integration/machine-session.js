@@ -622,3 +622,34 @@ describe("MachineSession disc images", () => {
         BootTimeout,
     );
 });
+
+describe("MachineSession Econet", () => {
+    async function typeAll(session, lines) {
+        for (const line of lines) await session.type(line);
+        return (await session.runUntilPrompt(30)).screenText;
+    }
+
+    it(
+        "logs a Master on to the file server through ANFS",
+        async () => {
+            const session = new MachineSession("Master", { econet: true });
+            await session.initialise();
+            await session.boot(30);
+            expect(await typeAll(session, ["*NET", "*I AM SYST", "*CAT"])).toContain("WELCOME");
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "answers to the station number it is given",
+        async () => {
+            const session = new MachineSession("B-DFS1.2", { econet: true, stationId: 42 });
+            await session.initialise();
+            await session.boot(30);
+            expect(await typeAll(session, ["PRINT ?&FE18"])).toMatch(/^\s+42$/m);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+});

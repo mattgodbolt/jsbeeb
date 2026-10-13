@@ -36,6 +36,7 @@ import { Settings } from "./web/settings.js";
 import { Config } from "./web/config.js";
 import { SpeechOutput } from "./web/speech-output.js";
 import { Printer } from "./printer.js";
+import { DefaultStationId } from "./econet.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
@@ -75,7 +76,7 @@ if (Array.isArray(parsedQuery.rom)) {
 
 const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 const noSeek = !!parsedQuery.noseek;
-const stationId = parsedQuery.stationId !== undefined ? parsedQuery.stationId : 101;
+const stationId = parsedQuery.stationId ?? DefaultStationId;
 
 const tryGl = parsedQuery.glEnabled ?? true;
 const lowLatency = parsedQuery.lowLatency ?? true;

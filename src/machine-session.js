@@ -49,6 +49,9 @@ export class MachineSession {
      * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      * @param {number} [opts.cpuMultiplier] - run the CPU this many times faster than the peripherals
      * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
+     * @param {boolean} [opts.econet] - fit Econet, with a file server on the network, and on a Master the ANFS
+     *   ROM, as the web page does
+     * @param {number} [opts.stationId=101] - the Econet station number
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
@@ -96,6 +99,8 @@ export class MachineSession {
             tube: opts.tube,
             cpuMultiplier: opts.cpuMultiplier,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
+            econet: opts.econet,
+            stationId: opts.stationId,
         });
 
         // Accumulated VDU text output, drained by callers

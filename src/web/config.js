@@ -1,6 +1,7 @@
 import { allModels, findModel, tubeModelFor } from "../models.js";
 import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { AudioOutputs } from "../audio-output.js";
+import { MasterAnfsRom } from "../econet.js";
 
 const round = (value) => Number(value.toFixed(2));
 
@@ -17,7 +18,7 @@ export function tubeCpuSpeedLabel(multiplier, model) {
  */
 export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor }) {
     return [
-        ...(hasEconet && model.isMaster ? ["master/anfs-4.25.rom"] : []),
+        ...(hasEconet && model.isMaster ? [MasterAnfsRom] : []),
         ...(hasMusic5000 ? ["ample.rom"] : []),
         ...(hasTeletextAdaptor ? ["ats-3.0.rom"] : []),
     ];

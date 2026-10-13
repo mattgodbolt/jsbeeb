@@ -4,6 +4,9 @@
 // How long a four-way handshake may stall before we resend.
 const RetryTimeoutSecs = 0.5;
 
+export const DefaultStationId = 101;
+export const MasterAnfsRom = "master/anfs-4.25.rom";
+
 // Econet support classes
 class ADLC {
     constructor() {
