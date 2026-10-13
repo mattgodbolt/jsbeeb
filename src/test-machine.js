@@ -13,6 +13,7 @@ import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 
 const MaxCyclesPerIter = 100 * 1000;
+const RomselBankMask = 0x0f;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HostKeyCodes = new Set(Object.values(keyCodes));
 
@@ -182,11 +183,20 @@ export class TestMachine {
         return this.runFor(10 * 1000);
     }
 
-    async runUntilAddress(targetAddr, secs) {
+    /** The sideways bank paged in at &8000 to &BFFF. */
+    get pagedBank() {
+        return this.processor.romsel & RomselBankMask;
+    }
+
+    /**
+     * Run until the PC reaches `targetAddr`, with sideways `bank` paged in if
+     * one is given, or throw after `secs` of emulated time.
+     */
+    async runUntilAddress(targetAddr, secs, { bank } = {}) {
         if (!secs) secs = 120;
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
-            if (addr === targetAddr) {
+            if (addr === targetAddr && (bank === undefined || this.pagedBank === bank)) {
                 hit = true;
                 return true;
             }
@@ -244,13 +254,15 @@ export class TestMachine {
     }
 
     /**
-     * Types the text and a RETURN at the machine, running the CPU until the
-     * last key is up. The keys arrive from the scheduler, so a breakpoint that
-     * stops the CPU part way leaves the rest to be typed when it runs again.
+     * Types the text at the machine, then a RETURN unless it already ends in
+     * one, running the CPU until the last key is up. The keys arrive from the
+     * scheduler, so a breakpoint that stops the CPU part way leaves the rest to
+     * be typed when it runs again.
      */
     async type(text) {
         const lines = text.replace(/\r\n?/g, "\n");
-        this.typist.type(this.model.stringToKeys(lines + "\n"), true);
+        const entered = lines.endsWith("\n") ? lines : `${lines}\n`;
+        this.typist.type(this.model.stringToKeys(entered), true);
         while (this.typist.isTyping) {
             const stopped = await this.runFor(MaxCyclesPerIter);
             if (stopped) break;

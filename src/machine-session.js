@@ -49,6 +49,9 @@ export class MachineSession {
      * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      * @param {number} [opts.cpuMultiplier] - run the CPU this many times faster than the peripherals
      * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
+     * @param {boolean} [opts.econet] - fit Econet, with a file server on the network, and on a Master the ANFS
+     *   ROM, as the web page does
+     * @param {number} [opts.stationId=101] - the Econet station number, 1 to 253
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
@@ -96,6 +99,8 @@ export class MachineSession {
             tube: opts.tube,
             cpuMultiplier: opts.cpuMultiplier,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
+            econet: opts.econet,
+            stationId: opts.stationId,
         });
 
         // Accumulated VDU text output, drained by callers
@@ -103,7 +108,7 @@ export class MachineSession {
         this._capture = new VduTextCapture((element) => this._pendingOutput.push(element), { isAtom: this._isAtom });
 
         // Breakpoint management, with persistent hooks that survive across run calls
-        this._breakpoints = new Map(); // id → { hook, type, address, hit }
+        this._breakpoints = new Map(); // id → { hook, type, address, bank, hit, value }
         this._nextBreakpointId = 1;
     }
 
@@ -260,9 +265,12 @@ export class MachineSession {
     }
 
     /**
-     * Simulate keypresses.  Note: each character needs a short run to be
-     * picked up by the OS, so this is internally async and slow-ish (by
-     * emulated-time).
+     * Type `text`, then a RETURN unless it already ends in one, running the
+     * machine until the last key is up. That says nothing about the line
+     * itself: the run carries on past the RETURN, so a short command can start
+     * and finish before this returns, while a ROM that took over line input
+     * may not have read the line yet. Set a breakpoint beforehand to stop
+     * inside the command, or runUntilPrompt afterwards to wait for it.
      */
     async type(text) {
         await this._machine.type(text);
@@ -333,10 +341,15 @@ export class MachineSession {
     }
 
     /**
-     * Run until PC reaches targetAddr (like a breakpoint), or timeout.
+     * Run until PC reaches targetAddr (like a breakpoint), or throw after timeoutSecs of emulated time.
+     * @param {number} addr
+     * @param {number} [timeoutSecs=30]
+     * @param {Object} [opts]
+     * @param {number} [opts.bank] only stop while this sideways bank is paged in at &8000 to &BFFF
      */
-    async runUntilAddress(addr, timeoutSecs = 30) {
-        await this._machine.runUntilAddress(addr, timeoutSecs);
+    async runUntilAddress(addr, timeoutSecs = 30, { bank } = {}) {
+        requireBank(bank);
+        await this._machine.runUntilAddress(addr, timeoutSecs, { bank });
     }
 
     /**
@@ -345,23 +358,27 @@ export class MachineSession {
      * When the hook fires, cpu.stop() halts the current runFor.
      * @param {"execute"|"read"|"write"} type
      * @param {number} address
+     * @param {Object} [opts]
+     * @param {number} [opts.bank] only break while this sideways bank is paged in at &8000 to &BFFF
      * @returns {number} breakpoint id
      */
-    addBreakpoint(type, address) {
-        const id = this._nextBreakpointId++;
+    addBreakpoint(type, address, { bank } = {}) {
+        requireBank(bank);
         const cpu = this._machine.processor;
-        const bp = { type, address, hit: false, id, value: undefined };
+        const inBank = () => bank === undefined || this._machine.pagedBank === bank;
+        const id = this._nextBreakpointId++;
+        const bp = { type, address, bank, hit: false, id, value: undefined };
 
         if (type === "execute") {
             bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address) {
+                if (pc === address && inBank()) {
                     bp.hit = true;
                     return true;
                 }
             });
         } else if (type === "read") {
             bp.hook = cpu.debugRead.add((addr, val) => {
-                if (addr === address) {
+                if (addr === address && inBank()) {
                     bp.hit = true;
                     bp.value = val;
                     return true;
@@ -369,7 +386,7 @@ export class MachineSession {
             });
         } else if (type === "write") {
             bp.hook = cpu.debugWrite.add((addr, val) => {
-                if (addr === address) {
+                if (addr === address && inBank()) {
                     bp.hit = true;
                     bp.value = val;
                     return true;
@@ -410,6 +427,7 @@ export class MachineSession {
         for (const bp of this._breakpoints.values()) {
             if (bp.hit) {
                 const result = { id: bp.id, type: bp.type, address: bp.address };
+                if (bp.bank !== undefined) result.bank = bp.bank;
                 if (bp.value !== undefined) result.value = bp.value;
                 return result;
             }
@@ -512,8 +530,7 @@ export class MachineSession {
     _withPaging({ bank, shadow }, fn) {
         const cpu = this._machine.processor;
         const { romsel, acccon } = cpu;
-        if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
-            throw new Error(`Bank ${bank} is not 0 to 15`);
+        requireBank(bank);
         if (shadow !== undefined && !cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
         try {
             if (bank !== undefined) cpu.romSelect(bank);
@@ -630,6 +647,12 @@ export class MachineSession {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Throws unless `bank`, if given, is a sideways bank. */
+function requireBank(bank) {
+    if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
+        throw new Error(`Bank ${bank} is not 0 to 15`);
+}
 
 /**
  * Reconstruct a flat text representation from the captured VDU elements.

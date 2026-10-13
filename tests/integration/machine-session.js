@@ -244,6 +244,18 @@ describe("MachineSession keyboard", () => {
         await pressRaw(BBC.RETURN);
         await session.runUntilPrompt();
     });
+
+    it("presses RETURN once for text that already ends in one", async () => {
+        const outputOf = async (text) => {
+            await session.type(text);
+            return (await session.runUntilPrompt()).elements.map((element) => element.text);
+        };
+        const expected = await outputOf("PRINT 6*7");
+
+        expect(await outputOf("PRINT 6*7\r")).toEqual(expected);
+        expect(await outputOf("PRINT 6*7\n")).toEqual(expected);
+        expect(await outputOf("PRINT 6*7\r\n")).toEqual(expected);
+    });
 });
 
 describe("MachineSession keyboard buffer", () => {
@@ -609,4 +621,175 @@ describe("MachineSession disc images", () => {
         },
         BootTimeout,
     );
+});
+
+describe("MachineSession Econet", () => {
+    async function typeAll(session, lines) {
+        for (const line of lines) await session.type(line);
+        return (await session.runUntilPrompt(30)).screenText;
+    }
+
+    it(
+        "logs a Master on to the file server through ANFS",
+        async () => {
+            const session = new MachineSession("Master", { econet: true });
+            await session.initialise();
+            await session.boot(30);
+            expect(await typeAll(session, ["*NET", "*I AM SYST", "*CAT"])).toMatch(/Dir\. \$ .*Lib\. LIBRARY/);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "answers to the web page's station number unless given one",
+        async () => {
+            const session = new MachineSession("B-DFS1.2", { econet: true });
+            await session.initialise();
+            await session.boot(30);
+            expect(await typeAll(session, ["PRINT ?&FE18"])).toMatch(/^\s+101$/m);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "keeps the station number it is given in a Master's CMOS",
+        async () => {
+            const session = new MachineSession("Master", { econet: true, stationId: 42 });
+            await session.initialise();
+            await session.boot(30);
+            const readCmosStation = ["A%=161", "X%=0", "PRINT (USR&FFF4 AND &FF0000) DIV &10000"];
+            expect(await typeAll(session, readCmosStation)).toMatch(/^\s+42$/m);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it("refuses a station number it cannot be, or one without Econet", () => {
+        for (const stationId of [1, 253]) {
+            expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).not.toThrow();
+        }
+        for (const stationId of [0, 254, 255, 1.5, "42"]) {
+            expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).toThrow(/is not 1 to 253/);
+        }
+        expect(() => new MachineSession("B-DFS1.2", { stationId: 42 })).toThrow("A station number needs Econet fitted");
+    });
+});
+
+describe("MachineSession breakpoints in sideways ROM", () => {
+    const ServiceEntry = 0x8003;
+    const RomTypeByte = 0x8006;
+    const DfsBank = 14;
+    const SpareBank = 4;
+    const HigherSpareBank = 5;
+    const RomTitle = 0x8009;
+    // The MOS ignores a ROM identical to one in a higher bank.
+    const UnduplicatedTitle = 0x55;
+    const ServiceWrite = 0x70;
+    const RunSecs = 5;
+    const RomselBankMask = 0x0f;
+    // A service ROM titled "T" whose service handler stores A at ServiceWrite and returns.
+    const ServiceRom = [
+        0,
+        0,
+        0,
+        0x4c,
+        0x0e,
+        0x80,
+        0x82,
+        0x0a,
+        0x01,
+        0x54,
+        0x00,
+        0x28,
+        0x43,
+        0x29,
+        0x85,
+        ServiceWrite,
+        0x60,
+    ];
+
+    async function sessionWithSpareRom() {
+        const session = new MachineSession("B-DFS1.2");
+        await session.initialise();
+        session.writeMemory(0x8000, ServiceRom, { bank: SpareBank });
+        session.writeMemory(0x8000, ServiceRom, { bank: HigherSpareBank });
+        session.writeMemory(RomTitle, [UnduplicatedTitle], { bank: HigherSpareBank });
+        return session;
+    }
+
+    const pagedBank = (session) => session.pagingState().romsel & RomselBankMask;
+
+    it("breaks in whichever bank is paged in when given none", async () => {
+        const session = await sessionWithSpareRom();
+        session.addBreakpoint("execute", ServiceEntry);
+
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(pagedBank(session)).toBe(DfsBank);
+        session.destroy();
+    });
+
+    it("breaks only while the bank it is given is paged in", async () => {
+        const session = await sessionWithSpareRom();
+        const id = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
+
+        const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(completed).toBe(false);
+        expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: ServiceEntry, bank: SpareBank });
+        expect(session.registers().pc).toBe(ServiceEntry);
+        expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("breaks on a read only while the bank it is given is paged in", async () => {
+        const session = await sessionWithSpareRom();
+        const [dfsType] = session.readMemory(RomTypeByte, 1, { bank: DfsBank });
+        const id = session.addBreakpoint("read", RomTypeByte, { bank: DfsBank });
+
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(session.hitBreakpoint()).toEqual({
+            id,
+            type: "read",
+            address: RomTypeByte,
+            bank: DfsBank,
+            value: dfsType,
+        });
+        expect(pagedBank(session)).toBe(DfsBank);
+        session.destroy();
+    });
+
+    it("breaks on a write only while the bank it is given is paged in", async () => {
+        const session = await sessionWithSpareRom();
+        const id = session.addBreakpoint("write", ServiceWrite, { bank: SpareBank });
+
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(session.hitBreakpoint()).toMatchObject({ id, type: "write", address: ServiceWrite, bank: SpareBank });
+        expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("runs until an address in the bank it is given", async () => {
+        const session = await sessionWithSpareRom();
+
+        await session.runUntilAddress(ServiceEntry, RunSecs, { bank: SpareBank });
+
+        expect(session.registers().pc).toBe(ServiceEntry);
+        expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("refuses a bank that does not exist", async () => {
+        const session = await sessionWithSpareRom();
+
+        expect(() => session.addBreakpoint("execute", ServiceEntry, { bank: 16 })).toThrow("Bank 16 is not 0 to 15");
+        await expect(session.runUntilAddress(ServiceEntry, RunSecs, { bank: -1 })).rejects.toThrow(
+            "Bank -1 is not 0 to 15",
+        );
+        session.destroy();
+    });
 });
