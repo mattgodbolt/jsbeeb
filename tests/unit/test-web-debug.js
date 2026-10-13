@@ -59,6 +59,14 @@ describe("Debugger", () => {
             dbgr.hide();
             expect(document.activeElement).not.toBe(box);
         });
+
+        it("leave focus alone on leaving when it is elsewhere on the page", () => {
+            dbgr.debug(cpu.pc);
+            const elsewhere = document.body.appendChild(document.createElement("input"));
+            elsewhere.focus();
+            dbgr.hide();
+            expect(document.activeElement).toBe(elsewhere);
+        });
     });
 
     describe("the disassembly window", () => {
