@@ -326,6 +326,8 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
             goTo("goto-dis-addr-form", "OSWRCH");
             expect(box.classList.contains("is-invalid")).toBe(true);
+            goTo("goto-dis-addr-form", "oswrch");
+            expect(box.classList.contains("is-invalid")).toBe(false);
             goTo("goto-mem-addr-form", "os_text_ptr");
             expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
         });

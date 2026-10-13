@@ -162,10 +162,8 @@ export class Debugger {
                 const text = addr.value.trim();
                 if (!text) return;
                 const address = this._names.addressOf(text, this.cpu.pc) ?? parseAddr(text);
-                if (address === undefined) {
-                    addr.classList.add("is-invalid");
-                    return;
-                }
+                addr.classList.toggle("is-invalid", address === undefined);
+                if (address === undefined) return;
                 func(address);
                 addr.value = "";
                 addr.blur();
