@@ -288,6 +288,19 @@ describe("symbol names", () => {
             expect(names.address(0xd1)).toBeUndefined();
         });
 
+        it("takes the workspace name of the system set the CPU is in, over a non-system set's global", () => {
+            const takeover = set({
+                title: "Takeover",
+                globals: { ship_x: "0xd1" },
+                regions: { main: region(0x4000, 0x4100, 0x4000) },
+            });
+            anchor(0x4000);
+            const names = namesFrom(mos, takeover);
+            expect(nameOf(names.address(0xd1, MosCode))).toBe("plot_mask from MOS");
+            expect(nameOf(names.address(0xd1, 0x4010))).toBe("ship_x from Takeover");
+            expect(nameOf(names.address(0xd1, UncoveredCode))).toBe("ship_x from Takeover");
+        });
+
         it("takes a non-system set's globals only while one of its regions matches", () => {
             breakAnchor(0x900);
             expect(namesFrom(mos, loader, game).address(0x2e00)).toBeUndefined();
