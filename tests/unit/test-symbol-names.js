@@ -25,6 +25,7 @@ describe("symbol names", () => {
         title: "MOS",
         system: true,
         globals: { scratch: "0x70", os_text_ptr: "0xf2", wrchv: "0x20e", vdu_queue: "0x1180" },
+        workspace: { plot_mask: "0xd1", vdu_buffer: "0x1190" },
         regions: { rom: region(0xc000, 0x10000, 0xc000, { oswrch: "0xffee" }) },
     });
     const loader = set({
@@ -200,6 +201,19 @@ describe("symbol names", () => {
             expect(names.address(0x70, MosCode)?.name).toBe("scratch");
         });
 
+        it("take the system set's workspace names only in the system set's own code", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(nameOf(names.operand(MosCode, 0xd1))).toBe("plot_mask from MOS");
+            expect(names.operand(UncoveredCode, 0xd1)).toBeUndefined();
+            expect(names.operand(GameCode, 0xd1)).toBeUndefined();
+        });
+
+        it("never take a workspace name inside a non-system set's matching region", () => {
+            expect(namesFrom(mos, game).operand(MosCode, 0x1190)).toBeUndefined();
+            breakAnchor(0x1100);
+            expect(nameOf(namesFrom(mos, game).operand(MosCode, 0x1190))).toBe("vdu_buffer from MOS");
+        });
+
         it("take no system globals while no region of the system set matches", () => {
             breakAnchor(0xc000);
             expect(namesFrom(mos, game).operand(GameCode, 0x20e)).toBeUndefined();
@@ -266,6 +280,14 @@ describe("symbol names", () => {
             expect(nameOf(namesFrom(mos, loader, game).address(0x70))).toBe("scratch from MOS");
         });
 
+        it("takes a workspace name only while the CPU is in its set's code", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(nameOf(names.address(0xd1, MosCode))).toBe("plot_mask from MOS");
+            expect(names.address(0xd1, UncoveredCode)).toBeUndefined();
+            expect(names.address(0xd1, GameCode)).toBeUndefined();
+            expect(names.address(0xd1)).toBeUndefined();
+        });
+
         it("takes a non-system set's globals only while one of its regions matches", () => {
             breakAnchor(0x900);
             expect(namesFrom(mos, loader, game).address(0x2e00)).toBeUndefined();
@@ -279,6 +301,7 @@ describe("symbol names", () => {
             expect(names.addressOf("read_whole_run")).toBe(0x916);
             expect(names.addressOf("oswrch")).toBe(0xffee);
             expect(names.addressOf("wrchv")).toBe(0x20e);
+            expect(names.addressOf("plot_mask", UncoveredCode)).toBe(0xd1);
             expect(names.addressOf("nobody")).toBeUndefined();
         });
 

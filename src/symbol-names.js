@@ -32,6 +32,8 @@
  * @property {Map<string, string>} places - name to what `nameLink`'s {place} becomes
  * @property {boolean} system
  * @property {Map<number, string>} globals - address to name
+ * @property {Map<number, string>} workspace - address to name, for the set's own code only: an operand of an
+ *     instruction in one of its matching regions, and an address on its own while the CPU is in one
  * @property {Region[]} regions
  *
  * @typedef {{set: SymbolSet, regions: Region[]}} Match - a set and those of its regions that match
@@ -94,6 +96,7 @@ export class SymbolNames {
             this._scopedName(own, at, target) ??
             this._regionName(target, (match) => match === own) ??
             this._globalOf(own.set, target) ??
+            this._workspaceOf(own.set, target) ??
             this._regionName(target, (match) => match !== own) ??
             (own.set.system ? undefined : this._systemGlobal(target))
         );
@@ -111,6 +114,8 @@ export class SymbolNames {
         const running = this._matchAt(pc);
         const scoped = running && this._scopedName(running, pc, address);
         if (scoped) return scoped;
+        const workspace = running && this._workspaceOf(running.set, address);
+        if (workspace) return workspace;
         const runningGlobal = running && !running.set.system ? this._globalOf(running.set, address) : undefined;
         if (runningGlobal) return runningGlobal;
         const named = this._matches
@@ -138,6 +143,7 @@ export class SymbolNames {
                     ...(set.system ? [] : region.scopes.map((scope) => scope.symbols)),
                 ]),
                 set.globals,
+                set.workspace,
             ])
             .flatMap((symbols) => [...symbols].filter(([, named]) => named === name).map(([address]) => address));
         return candidates.find((address) => this.address(address, pc)?.name === name) ?? candidates[0];
@@ -171,8 +177,16 @@ export class SymbolNames {
     }
 
     _globalOf(set, address) {
+        return this._namedBy(set, set.globals, address);
+    }
+
+    _workspaceOf(set, address) {
+        return this._namedBy(set, set.workspace, address);
+    }
+
+    _namedBy(set, names, address) {
         if (set.system && this._inNonSystemRegion(address)) return undefined;
-        const name = set.globals.get(address);
+        const name = names.get(address);
         return name === undefined ? undefined : { name, set };
     }
 

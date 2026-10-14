@@ -134,6 +134,7 @@ export function parseSet(json) {
         places: new Map(Object.entries(json.places ?? {})),
         system: json.system === true,
         globals: parseNames(json.globals, "global"),
+        workspace: parseNames(json.workspace, "workspace name"),
         regions: parseRegions(json.regions),
     };
 }

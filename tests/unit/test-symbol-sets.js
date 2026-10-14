@@ -31,9 +31,10 @@ const game = {
 describe("symbol sets", () => {
     describe("parsing", () => {
         it("reads a set's addresses, anchors and names", () => {
-            const parsed = parseSet({ ...game, system: true, globals: { lives: "0x70" } });
+            const parsed = parseSet({ ...game, system: true, globals: { lives: "0x70" }, workspace: { mask: "0xd1" } });
             expect(parsed.system).toBe(true);
             expect(parsed.globals).toEqual(new Map([[0x70, "lives"]]));
+            expect(parsed.workspace).toEqual(new Map([[0xd1, "mask"]]));
             expect(parsed.regions).toEqual([
                 {
                     name: "main",
@@ -69,6 +70,7 @@ describe("symbol sets", () => {
         it.each([
             ["another format", { format: 2 }, "format 2"],
             ["an address that isn't hex", { globals: { lives: "112" } }, "global lives"],
+            ["a workspace address that isn't hex", { workspace: { mask: "209" } }, "workspace name mask"],
             ["a region that ends before it starts", { regions: { r: { start: "0x2000", end: "0x2000" } } }, "ends"],
             [
                 "anchor bytes that aren't whole bytes",
