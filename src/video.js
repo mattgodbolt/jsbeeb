@@ -534,6 +534,7 @@ export class Video {
             ula: this.ula.snapshotState(),
             crtc: this.crtc.snapshotState(),
             teletext: this.teletext.snapshotState(),
+            ...(this.video6847 ? { video6847: this.video6847.snapshotState() } : {}),
         };
     }
 
@@ -597,6 +598,7 @@ export class Video {
         this.ula.restoreState(state.ula);
         this.crtc.restoreState(state.crtc);
         this.teletext.restoreState(state.teletext);
+        if (this.video6847 && state.video6847) this.video6847.restoreState(state.video6847);
         // Restore ulaPal after ULA restore, since ULA recomputation may overwrite it
         this.ulaPal.set(state.ulaPal);
     }

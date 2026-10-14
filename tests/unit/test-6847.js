@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Video6847 } from "../../src/6847.js";
+import { Video } from "../../src/video.js";
 import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 
@@ -172,5 +173,107 @@ describe("Video6847 logical pixel grid", () => {
         }
         expect(decodeLineGrid(video.lineGrid[1]).rendered).toBe(false);
         expect(decodeLineGrid(video.lineGrid[4]).rendered).toBe(false);
+    });
+});
+
+const FbWidth = 1024;
+const FbHeight = 768;
+const VdgLinesPerField = 263;
+const VdgCyclesPerLine = 229;
+const VdgClockMhz = 3.638004;
+const CpuCyclesPerLine = VdgCyclesPerLine / VdgClockMhz;
+const CpuCyclesPerField = VdgLinesPerField * CpuCyclesPerLine;
+const FieldSyncLine = 240;
+const MidPictureLine = 94;
+const LinesPerRowMode = 0x50;
+const LinesPerRow = 3;
+const SnowAddr = 0x8123;
+
+describe("Video6847 snapshot", () => {
+    function makeAtomVideo(mode = LinesPerRowMode) {
+        const video = new Video(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom: true });
+        const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
+        const vblanks = [];
+        const cpu = { model: { clockMhz: 1 }, videoRead: (addr) => ram[addr & 0x1fff] };
+        const ppia = { portapins: mode, portcpins: 0x08, setVBlankInt: (level) => vblanks.push(level) };
+        video.reset(cpu, null);
+        video.video6847.reset(cpu, ppia);
+        return { video, vblanks };
+    }
+
+    // One CPU cycle at a time, as the CPU drives it, so snow reads can happen.
+    function runCpuCycles(video, cycles) {
+        for (let i = 0; i < cycles; i++) video.polltime(1);
+    }
+
+    function restoreInto(original) {
+        const restored = makeAtomVideo();
+        restored.video.restoreState(original.video.snapshotState());
+        restored.video.fb32.set(original.video.fb32);
+        original.vblanks.length = 0;
+        return restored;
+    }
+
+    function expectSameFrom(original, restored) {
+        expect(restored.video.video6847.snapshotState()).toEqual(original.video.video6847.snapshotState());
+        expect(restored.vblanks).toEqual(original.vblanks);
+        // Counted rather than compared whole, so a failure does not diff a megabyte.
+        const fb = original.video.fb32;
+        expect(restored.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
+    }
+
+    it("carries on exactly as the original does from any cycle of a row mid-picture", () => {
+        const rowStart = Math.floor(CpuCyclesPerField + CpuCyclesPerLine * MidPictureLine);
+        const rowCycles = Math.ceil(CpuCyclesPerLine * LinesPerRow);
+        for (let at = rowStart; at < rowStart + rowCycles; at++) {
+            const original = makeAtomVideo();
+            runCpuCycles(original.video, at);
+            original.video.video6847.cpuAddrAccess(SnowAddr);
+
+            const restored = restoreInto(original);
+            expect(restored.video.video6847).toMatchObject({ cpuAddr: SnowAddr, lastmode: LinesPerRowMode });
+
+            for (const { video } of [original, restored]) runCpuCycles(video, 2 * rowCycles);
+
+            expect(original.vblanks).toEqual([]);
+            expectSameFrom(original, restored);
+        }
+    });
+
+    it("carries on from within field sync into the next field exactly as the original does", () => {
+        const original = makeAtomVideo();
+        original.video.polltime(Math.floor(CpuCyclesPerField + CpuCyclesPerLine * FieldSyncLine));
+
+        const restored = restoreInto(original);
+        expect(restored.video.video6847.inVSync).toBe(true);
+
+        for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 0.5));
+
+        expect(original.vblanks).toEqual([false]);
+        expectSameFrom(original, restored);
+    });
+
+    it("restores a VDG saved before its first poll, which has no mode yet", () => {
+        const original = makeAtomVideo();
+        const restored = makeAtomVideo();
+        restored.video.polltime(Math.floor(CpuCyclesPerField * 0.6));
+        restored.video.restoreState(original.video.snapshotState());
+        restored.video.fb32.set(original.video.fb32);
+        restored.vblanks.length = 0;
+
+        for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 1.5));
+
+        expectSameFrom(original, restored);
+    });
+
+    it("leaves the VDG where it is when the snapshot predates its state", () => {
+        const older = makeAtomVideo().video.snapshotState();
+        delete older.video6847;
+
+        const { video } = makeAtomVideo();
+        video.polltime(Math.floor(CpuCyclesPerField * 0.6));
+        const before = video.video6847.snapshotState();
+        video.restoreState(older);
+        expect(video.video6847.snapshotState()).toEqual(before);
     });
 });

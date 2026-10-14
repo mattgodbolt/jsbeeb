@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { TestMachine } from "../../src/test-machine.js";
+import { Video } from "../../src/video.js";
 import { mode7Text } from "./helpers.js";
+
+const FbWidth = 1024;
+const FbHeight = 768;
+const Clear4Mode = 0xf0;
+// CPU cycles: an arbitrary point in a field, and then about eighty lines of the 6847.
+const AtomCyclesBeforeSnapshot = 12345;
+const AtomCyclesAfterRestore = 5000;
 
 describe("save state round trip", () => {
     it("continues identically in a fresh machine restored through the gzipped file format", async () => {
@@ -38,5 +46,37 @@ describe("save state round trip", () => {
         for (const reg of ["pc", "a", "x", "y", "s"]) expect(restored.processor[reg]).toBe(original.processor[reg]);
         expect(mode7Text(restored)).toBe(mode7Text(original));
         expect(mode7Text(restored)).toContain("SNAPSHOT");
+    });
+
+    it("carries an Atom's picture on mid-field in a fresh machine restored from the file format", async () => {
+        const atom = () =>
+            new TestMachine("Atom", {
+                video: new Video(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom: true }),
+            });
+        const original = atom();
+        await original.initialise();
+        await original.runUntilInput();
+        await original.type("CLEAR 4");
+        await original.runUntilInput();
+        await original.type("F.I=0TO6143 STEP 7;I?#8000=I;N.");
+        await original.runUntilInput();
+        await original.runFor(AtomCyclesBeforeSnapshot);
+        expect(original.processor.video.video6847.lastmode).toBe(Clear4Mode);
+        expect(original.readbyte(0x8000 + 700)).toBe(700 & 0xff);
+
+        const restored = atom();
+        await restored.initialise();
+        const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(original.processor, original.model)));
+        restoreSnapshot(restored.processor, restored.model, snapshot);
+        restored.processor.video.fb32.set(original.processor.video.fb32);
+
+        await original.runFor(AtomCyclesAfterRestore);
+        await restored.runFor(AtomCyclesAfterRestore);
+
+        expect(restored.processor.video.video6847.snapshotState()).toEqual(
+            original.processor.video.video6847.snapshotState(),
+        );
+        const fb = original.processor.video.fb32;
+        expect(restored.processor.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
     });
 });
