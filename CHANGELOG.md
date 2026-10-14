@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.5.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.4.0...v2.5.0) (2026-10-14)
+
+
+### Features
+
+* a symbol set's region can name zero page differently in each of its routines ([#1260](https://github.com/mattgodbolt/jsbeeb/issues/1260)) ([9aa8be2](https://github.com/mattgodbolt/jsbeeb/commit/9aa8be27ad37c213d92bc42a914fac418f728cda))
+* add a stock BBC B model with no sideways RAM ([#1263](https://github.com/mattgodbolt/jsbeeb/issues/1263)) ([ee6c25c](https://github.com/mattgodbolt/jsbeeb/commit/ee6c25c26f2e6450ac833789d63bbe6affe9113e))
+* fetch symbol sets from beeb-meta-data's published copy at bbc.xania.org/meta/symbols/ ([#1246](https://github.com/mattgodbolt/jsbeeb/issues/1246)) ([341f39b](https://github.com/mattgodbolt/jsbeeb/commit/341f39bf1d7867e448f945ad5ed12507e2ba87ee))
+* github: references take @~latest for the tag of the repo's latest release ([#1264](https://github.com/mattgodbolt/jsbeeb/issues/1264)) ([5528eae](https://github.com/mattgodbolt/jsbeeb/commit/5528eaea3edd4c771f5a0b04df34bfb2a0764e8c))
+* link each symbol name in the debugger to where its author defines it ([#1239](https://github.com/mattgodbolt/jsbeeb/issues/1239)) ([3ce6788](https://github.com/mattgodbolt/jsbeeb/commit/3ce6788f79aa3bf4f3dbf5152a30ba68d805216b))
+* link Repton 2's, Nevryon's, Daredevil Demis's and BBC BASIC II's names to where their authors define them ([#1245](https://github.com/mattgodbolt/jsbeeb/issues/1245)) ([1807a63](https://github.com/mattgodbolt/jsbeeb/commit/1807a630c72edfc032c90984f2e0e1c5a713d8e4))
+* MachineSession can put a tape in, and flush the keyboard buffer ([#1261](https://github.com/mattgodbolt/jsbeeb/issues/1261)) ([819b5c0](https://github.com/mattgodbolt/jsbeeb/commit/819b5c0f87e94bcf00288a4a3340bb98c655a1df))
+* MachineSession fits Econet, breaks in a named sideways bank, and presses RETURN once ([#1266](https://github.com/mattgodbolt/jsbeeb/issues/1266)) ([99fbcc7](https://github.com/mattgodbolt/jsbeeb/commit/99fbcc72253e65d55bebed53e38538337fef4614))
+* name an address shown on its own after the program the CPU is running, when two sets name it differently ([#1244](https://github.com/mattgodbolt/jsbeeb/issues/1244)) ([f176c32](https://github.com/mattgodbolt/jsbeeb/commit/f176c329e203c5661b493d9bb2043e06acbe4370))
+* name BBC BASIC II's routines and workspace in the debugger, from acornaeology's disassembly ([#1238](https://github.com/mattgodbolt/jsbeeb/issues/1238)) ([e73baf9](https://github.com/mattgodbolt/jsbeeb/commit/e73baf95fa36714eb36d5eb06ee3f53c6220db03))
+* name Nevryon's and Daredevil Demis's routines in the debugger, from a beebasm importer for symbol sets ([#1242](https://github.com/mattgodbolt/jsbeeb/issues/1242)) ([a9711cc](https://github.com/mattgodbolt/jsbeeb/commit/a9711ccfb771a8738cf2c61f348cccf8c84ad3a4))
+* name Repton 2's addresses in the debugger, from George Foot's py8dis disassembly ([#1241](https://github.com/mattgodbolt/jsbeeb/issues/1241)) ([4a41c9d](https://github.com/mattgodbolt/jsbeeb/commit/4a41c9d24ef1bdeaa4c51f91448d4972b40f4bb1))
+* name Scorched Earth's code, tables and workspace in the debugger, from its baron source ([#1240](https://github.com/mattgodbolt/jsbeeb/issues/1240)) ([eab2ea7](https://github.com/mattgodbolt/jsbeeb/commit/eab2ea75f906e39139d3c0244df137a1abd97c52))
+
+
+### Bug Fixes
+
+* a headless machine applies its model's CMOS override ([#1269](https://github.com/mattgodbolt/jsbeeb/issues/1269)) ([6bd8670](https://github.com/mattgodbolt/jsbeeb/commit/6bd86707d255a871011655f3c1fd3ede32dc3260))
+* go to a symbol's name typed in the debugger's Addr or Mem addr box, and stay put on anything else ([#1265](https://github.com/mattgodbolt/jsbeeb/issues/1265)) ([19524f6](https://github.com/mattgodbolt/jsbeeb/commit/19524f618852138fef91898700ee2a4e1e5792cc))
+* save and restore the Atom's MC6847 video state in snapshots ([#1268](https://github.com/mattgodbolt/jsbeeb/issues/1268)) ([ba016b8](https://github.com/mattgodbolt/jsbeeb/commit/ba016b8a8437566904471cceda0e47e14f568bda))
+
 ## [2.4.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.3.2...v2.4.0) (2026-10-11)
 
 
