@@ -61,17 +61,15 @@ async function startSession() {
     return session;
 }
 
-// Returns the last render if none matched, so the comparison fails with pictures to look at.
 async function renderT8() {
     const columnsSeen = [];
-    let png;
     for (let start = 0; start < T8MaxStarts; start++) {
         const session = await startSession();
         try {
             await session.runFor(start * T8StartStepCycles);
             await session.type(`CHAIN "T8"`);
             await session.runFrames(RasterPageFrames);
-            png = await session.screenshotActive();
+            const png = await session.screenshotActive();
             const column = await firstBoxColumn(png);
             if (column === T8FirstBoxColumn) return png;
             columnsSeen.push(column);
@@ -79,8 +77,9 @@ async function renderT8() {
             session.destroy();
         }
     }
-    console.warn(`T8 never put its first box at column ${T8FirstBoxColumn}; columns seen: ${columnsSeen.join(", ")}`);
-    return png;
+    throw new Error(
+        `T8 never put its first box at column ${T8FirstBoxColumn} in ${T8MaxStarts} starts; columns seen: ${columnsSeen.join(", ")}`,
+    );
 }
 
 /** Renders one page of the test disc under jsbeeb and returns a PNG of the active display. */
