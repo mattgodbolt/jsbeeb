@@ -98,8 +98,8 @@ const FA_CREATE_ALWAYS = 8,
     FA_OPEN_ALWAYS = 16,
     ERROR_TOO_MANY_OPEN = 0x12,
     FILENUM_OFFSET = 0x20;
-// FatFs clips seeks to the space left and short-writes with FR_OK once the card is full.
-const EmulatedCardCapacity = 16 * 1024 * 1024;
+// Stands in for a full card, where FatFs clips seeks and short-writes with FR_OK; files already larger keep their size.
+const MaxGrowFileBytes = 16 * 1024 * 1024;
 
 // Simulate open modes
 const O_CREAT = 0x100,
@@ -208,6 +208,10 @@ class WFN {
     WFN_FileOpenWrite() {
         const res = this.fileOpen(FA_CREATE_NEW | FA_WRITE);
         this.mmc.WriteDataPort(STATUS_COMPLETE | res);
+    }
+
+    static sizeLimit(handle) {
+        return Math.max(MaxGrowFileBytes, handle.file.data.length);
     }
 
     handleOrAnswerInvalid() {
@@ -526,7 +530,7 @@ class WFN {
         const handle = this.handleOrAnswerInvalid();
         if (!handle) return;
         const [b0 = 0, b1 = 0, b2 = 0, b3 = 0] = this.globalData;
-        handle.pos = Math.min((b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0, EmulatedCardCapacity);
+        handle.pos = Math.min((b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0, WFN.sizeLimit(handle));
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
@@ -552,7 +556,7 @@ class WFN {
         if (this.globalAmount === 0) {
             this.globalAmount = 256;
         }
-        const end = Math.min(handle.pos + this.globalAmount, EmulatedCardCapacity);
+        const end = Math.min(handle.pos + this.globalAmount, WFN.sizeLimit(handle));
         const oldData = handle.file.data;
         const newData = new Uint8Array(Math.max(oldData.length, end));
         newData.set(oldData, 0);

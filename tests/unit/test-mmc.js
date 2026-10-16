@@ -123,7 +123,8 @@ describe("AtomMMC2 file handles", () => {
     const ErrorTooManyOpen = 0x12;
     const FrInvalidObject = 9;
     const FrNoFile = 4;
-    const CardCapacity = 16 * 1024 * 1024;
+    const GrowLimit = 16 * 1024 * 1024;
+    const ScratchHandle = 0;
     const AnyFreeHandle = 1;
 
     const fileCommand = (cmd, handle) => cmd | (handle << 5);
@@ -192,7 +193,6 @@ describe("AtomMMC2 file handles", () => {
 
     it("restarts the scratch handle at the beginning each time it is opened", () => {
         const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1, 2, 3]))]);
-        const ScratchHandle = 0;
         sendBytes(mmc, [...new TextEncoder().encode("A"), 0]);
         expect(command(mmc, fileCommand(CmdFileOpenRead, ScratchHandle))).toBe(StatusComplete);
         expect(readBytes(mmc, ScratchHandle, 2).bytes).toEqual([1, 2]);
@@ -274,12 +274,12 @@ describe("AtomMMC2 file handles", () => {
         expect(mmc.GetMMCData()[0].data).toEqual(new Uint8Array([1, 8, 9, 4, 5]));
     });
 
-    it("clips a seek past the card's capacity and short-writes there, as a full card does", () => {
+    it("stops a write growing a file past the limit, as a full card does", () => {
         const mmc = makeMmc([]);
         const a = open(mmc, "A", CmdFileOpenWrite);
         expect(seek(mmc, a, 0xffffffff)).toBe(StatusComplete);
         expect(writeBytes(mmc, a, [1])).toBe(StatusComplete);
-        expect(mmc.GetMMCData()[0].data.length).toBe(CardCapacity);
+        expect(mmc.GetMMCData()[0].data.length).toBe(GrowLimit);
     });
 
     it("treats seek bytes the Atom did not send as zero", () => {
@@ -302,5 +302,41 @@ describe("AtomMMC2 file handles", () => {
         mmc.reset(true);
         expect(readBytes(mmc, handles[0], 1).status).toBe(StatusComplete | FrInvalidObject);
         expect([open(mmc, "A"), open(mmc, "A"), open(mmc, "A")]).toEqual([1, 2, 3]);
+    });
+
+    it("reads, seeks and writes anywhere in a file already over the limit", () => {
+        const size = GrowLimit + 8;
+        const contents = new Uint8Array(size);
+        contents[size - 1] = 7;
+        const mmc = makeMmc([new WFNFile("/BIG", contents)]);
+        const a = open(mmc, "BIG", CmdFileOpenRead);
+        expect(seek(mmc, a, GrowLimit)).toBe(StatusComplete);
+        expect(readBytes(mmc, a, 8).bytes[7]).toBe(7);
+        expect(writeBytes(mmc, a, [1])).toBe(StatusComplete);
+        expect(seek(mmc, a, size - 2)).toBe(StatusComplete);
+        expect(writeBytes(mmc, a, [5])).toBe(StatusComplete);
+        const data = mmc.GetMMCData()[0].data;
+        expect(data.length).toBe(size);
+        expect(data[size - 2]).toBe(5);
+        expect(seek(mmc, a, 0xffffffff)).toBe(StatusComplete);
+        expect(writeBytes(mmc, a, [1])).toBe(StatusComplete);
+        expect(mmc.GetMMCData()[0].data.length).toBe(size);
+    });
+
+    it("keeps open handles across a soft reset", () => {
+        const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1, 2]))]);
+        const a = open(mmc, "A");
+        readBytes(mmc, a, 1);
+        mmc.reset(false);
+        expect(readBytes(mmc, a, 1).bytes).toEqual([2]);
+    });
+
+    it("closes the scratch handle when opening it fails", () => {
+        const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1]))]);
+        sendBytes(mmc, [...new TextEncoder().encode("A"), 0]);
+        command(mmc, fileCommand(CmdFileOpenRead, ScratchHandle));
+        sendBytes(mmc, [...new TextEncoder().encode("MISSING"), 0]);
+        expect(command(mmc, fileCommand(CmdFileOpenRead, ScratchHandle))).toBe(StatusComplete | FrNoFile);
+        expect(readBytes(mmc, ScratchHandle, 1).status).toBe(StatusComplete | FrInvalidObject);
     });
 });
