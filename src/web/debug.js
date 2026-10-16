@@ -147,8 +147,8 @@ export class Debugger {
         this._symbolSets = symbolSets;
         this._names = NoNames;
         this._symbolsLine = document.getElementById("debug-symbols");
-        this._credited = [];
-        toggle(this._symbolsLine, false);
+        this._credited = null;
+        toggle(this._symbolsLine, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
             if (!this._enabled) return;
             this._matchSymbols();
@@ -393,9 +393,9 @@ export class Debugger {
 
     _credit(shown) {
         const sets = this._names.sets.filter((set) => shown.has(set));
-        if (sets.length === this._credited.length && sets.every((set, i) => set === this._credited[i])) return;
+        if (this._credited?.length === sets.length && sets.every((set, i) => set === this._credited[i])) return;
         this._credited = sets;
-        toggle(this._symbolsLine, sets.length > 0);
+        this._symbolsLine.style.visibility = sets.length > 0 ? "" : "hidden";
         this._symbolsLine.replaceChildren(
             "names from ",
             ...sets.flatMap((set, i) => {
@@ -406,6 +406,7 @@ export class Debugger {
                 return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
             }),
         );
+        this._symbolsLine.title = this._symbolsLine.textContent;
     }
 
     enable(e) {

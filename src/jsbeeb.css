@@ -95,6 +95,14 @@ body {
   color: #aaaaaa;
 }
 
+#debug-symbols {
+  width: 0;
+  min-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #debug-symbols a {
   color: #aaaaff;
 }
