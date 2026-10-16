@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.5.0...v2.6.0) (2026-10-16)
+
+
+### Features
+
+* a system set's workspace names name only its own code ([#1271](https://github.com/mattgodbolt/jsbeeb/issues/1271)) ([caf50cd](https://github.com/mattgodbolt/jsbeeb/commit/caf50cd0fb18f5aeb7a30ffe317ecaaef2a4b86c))
+
 ## [2.5.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.4.0...v2.5.0) (2026-10-14)
 
 
