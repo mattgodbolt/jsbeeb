@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { MachineSession } from "../../src/machine-session.js";
+import { AutobootMaxFrames, MachineSession } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { RepoRoot } from "./helpers.js";
@@ -636,7 +636,6 @@ describe("MachineSession disc images", () => {
 describe("MachineSession autoboot", () => {
     const WelcomeBootMessage = "This message was automatically loaded.";
     const FramesToRunWelcomeBoot = 200;
-    const AutobootMaxFrames = 150;
     const DfsBank = 14;
     // In DFS 1.2, reached only once service call 3 has asked it to boot, and before it starts the drive.
     const DfsBootPathAddress = 0xb475;
@@ -728,6 +727,23 @@ describe("MachineSession autoboot", () => {
     );
 
     it(
+        "has a MasterADFS start drive 0 on a plain BREAK after *CAT, so the motor alone does not show a boot",
+        async () => {
+            const session = await freshSession("MasterADFS");
+            await session.loadDiscImage("Welcome.ssd");
+            await session.type("*CAT");
+            await session.runFrames();
+            let starts = 0;
+            driveZero(session).addEventListener("startSpinning", () => starts++);
+            session.reset(false);
+            await session.runFrames(FramesToRunWelcomeBoot);
+            expect(starts).toBeGreaterThan(0);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
         "throws on a B1770A, whose boot goes to ADFS without starting drive 0",
         async () => {
             const session = await freshSession("B1770A");
@@ -802,19 +818,31 @@ describe("MachineSession autoboot", () => {
         BootTimeout,
     );
 
-    it(
-        "stops at a breakpoint before the boot is asked for, with SHIFT let go",
-        async () => {
-            const session = await freshSession("B-DFS1.2");
-            const [low, high] = session.readMemory(ResetVector, 2);
-            session.addBreakpoint("execute", low | (high << 8));
-            expect(await session.bootDisc("Welcome.ssd")).toMatchObject({ bootRequested: false, completed: false });
-            expect(session.hitBreakpoint()).not.toBeNull();
-            expect(session.heldKeys()).toEqual([]);
-            session.destroy();
-        },
-        BootTimeout,
-    );
+    for (const [where, breakAt] of [
+        ["the reset", (session) => session.readMemory(ResetVector, 2).reduce((low, high) => low | (high << 8))],
+        ["the banner", () => Oswrch],
+    ]) {
+        for (const modelName of ["B-DFS1.2", "Master"]) {
+            it(
+                `stops a ${modelName} at a breakpoint in ${where}, before the boot is asked for, and running on does not boot`,
+                async () => {
+                    const session = await freshSession(modelName);
+                    session.addBreakpoint("execute", breakAt(session));
+                    expect(await session.bootDisc("Welcome.ssd")).toMatchObject({
+                        bootRequested: false,
+                        completed: false,
+                    });
+                    expect(session.hitBreakpoint()).not.toBeNull();
+                    expect(session.heldKeys()).toEqual([]);
+                    session.clearBreakpoints();
+                    await session.runFrames(FramesToRunWelcomeBoot);
+                    expect(session.drainOutput().screenText).not.toContain(WelcomeBootMessage);
+                    session.destroy();
+                },
+                BootTimeout,
+            );
+        }
+    }
 
     it(
         "stops at a breakpoint after the boot is asked for, and running on boots",
