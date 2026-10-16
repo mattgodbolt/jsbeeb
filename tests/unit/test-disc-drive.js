@@ -108,14 +108,13 @@ describe("Disc drive tests", function () {
         const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(Disc.createBlank());
         drive.startSpinning();
-        const cyclesPerSecond = 2 * 1000 * 1000;
-        scheduler.polltime(3 * cyclesPerSecond);
+        scheduler.polltime(3 * BbcCyclesPerSecond);
         let previousIndex = drive.indexPulse;
         let risingEdges = 0;
-        const cyclesPerIter = cyclesPerSecond / 60;
+        const cyclesPerIter = BbcCyclesPerSecond / 60;
         const rpm = 300;
         const testSeconds = 5;
-        for (let cycle = 0; cycle < testSeconds * cyclesPerSecond; cycle += cyclesPerIter) {
+        for (let cycle = 0; cycle < testSeconds * BbcCyclesPerSecond; cycle += cyclesPerIter) {
             scheduler.polltime(cyclesPerIter);
             if (drive.indexPulse && !previousIndex) risingEdges++;
             previousIndex = drive.indexPulse;

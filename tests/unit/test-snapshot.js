@@ -346,7 +346,11 @@ describe("Snapshot coordinator", () => {
     describe("WD1770 FDC snapshot", () => {
         it("should round-trip WD1770 state including BigInt markDetector", () => {
             const scheduler = new Scheduler();
-            const mockCpu = { model: { isMaster: true }, peripheralCyclesPerSecond: 2000000, setNmi: () => {} };
+            const mockCpu = {
+                model: { isMaster: true },
+                peripheralCyclesPerSecond: TEST_6502.cyclesPerSecond,
+                setNmi: () => {},
+            };
             const fdc = new WdFdc(mockCpu, scheduler, undefined, {});
 
             // Set markDetector to a non-zero BigInt to verify serialization
