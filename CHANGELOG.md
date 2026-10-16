@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.6.0...v2.6.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* ship the Econet file server's data and the teletext pages in the npm package ([#1278](https://github.com/mattgodbolt/jsbeeb/issues/1278)) ([2a8f993](https://github.com/mattgodbolt/jsbeeb/commit/2a8f9937cfb6dbcfa6a719e3f4b2aaf49e2e2dcb))
+
 ## [2.6.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.5.0...v2.6.0) (2026-10-16)
 
 
