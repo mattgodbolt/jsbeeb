@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { FakeAtomVideo, FakeVideo } from "../../src/video.js";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
@@ -344,6 +345,11 @@ describe("Display", () => {
 
     it("uses a fake video chip when asked", () => {
         const display = make({ fakeVideo: true });
-        expect(typeof display.video.polltime).toBe("function");
+        expect(display.video.constructor).toBe(FakeVideo);
+    });
+
+    it("gives an Atom the fake video chip with its field sync", () => {
+        const display = make({ fakeVideo: true, model: { isMaster: false, isAtom: true } });
+        expect(display.video).toBeInstanceOf(FakeAtomVideo);
     });
 });

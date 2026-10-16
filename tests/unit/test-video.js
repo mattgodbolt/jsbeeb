@@ -1635,6 +1635,20 @@ describe("FakeVideo", () => {
         expect(after[0].at).toBeLessThanOrEqual(Field - VSyncStart);
     });
 
+    it("catches up every field it was given at once, leaving no backlog", () => {
+        const fields = 3;
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        video.polltime(fields * Field + Step);
+        expect(sysvia.setVBlankInt.mock.calls.map(([level]) => level)).toEqual(
+            Array(fields).fill([true, false]).flat(),
+        );
+        const [start, end] = runAField(video, sysvia, Field, Step);
+        expect(start.at).toBeGreaterThanOrEqual(VSyncStart - 2 * Step);
+        expect(end.at).toBeGreaterThanOrEqual(Field - 2 * Step);
+    });
+
     it("carries on pulsing after restoring a snapshot that predates its field position", () => {
         const sysvia = { setVBlankInt: vi.fn() };
         const video = new FakeVideo();

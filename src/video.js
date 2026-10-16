@@ -1289,13 +1289,17 @@ export class FakeVideo {
 
     polltime(cycles) {
         this.cycles += cycles;
-        if (!this.inSync && this.cycles >= this.fieldCycles - this.syncCycles) {
-            this.inSync = true;
-            this.syncTarget.setVBlankInt(true);
-        } else if (this.inSync && this.cycles >= this.fieldCycles) {
-            this.inSync = false;
-            this.cycles -= this.fieldCycles;
-            this.syncTarget.setVBlankInt(false);
+        for (;;) {
+            if (!this.inSync && this.cycles >= this.fieldCycles - this.syncCycles) {
+                this.inSync = true;
+                this.syncTarget.setVBlankInt(true);
+            } else if (this.inSync && this.cycles >= this.fieldCycles) {
+                this.inSync = false;
+                this.cycles -= this.fieldCycles;
+                this.syncTarget.setVBlankInt(false);
+            } else {
+                return;
+            }
         }
     }
 
