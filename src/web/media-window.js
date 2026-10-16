@@ -654,7 +654,7 @@ export class MediaWindow {
 
     buildHeading(words) {
         const li = document.createElement("li");
-        li.className = "media-heading";
+        li.className = "media-heading small text-uppercase text-muted px-2 pt-2 pb-1";
         li.textContent = words;
         return li;
     }
