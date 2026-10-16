@@ -265,6 +265,15 @@ Present only on the Atom. Atom snapshots written before it was saved lack it, an
 
 The pixel geometry (`pixelsPerChar`, `pixelsPerBit`, `bpp` and the lines per row) follows from `lastmode` and is recomputed on restore. The mode bits themselves are read from the PPIA's port A each time the VDG runs, so they are saved with the PPIA.
 
+#### Fake video (`state.video` without a picture)
+
+A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option; `FakeAtomVideo` on the Atom) saves only where it is in the field instead of the fields above. Absent fields, as in snapshots written before it kept them, mean the start of a fresh field.
+
+| Field    | Type    | Description                                                                   |
+| -------- | ------- | ----------------------------------------------------------------------------- |
+| `cycles` | number  | Cycles into the current field (2MHz on the BBC, 1MHz on the Atom)             |
+| `inSync` | boolean | In the vsync pulse (the BBC's System VIA CA1) or the Atom's field sync (PPIA) |
+
 ### Sound chip (`state.soundChip`)
 
 | Field             | Type         | Description                                    |
