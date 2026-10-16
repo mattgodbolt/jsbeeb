@@ -11,6 +11,7 @@ import { noteEvent } from "./analytics.js";
 import { browserDiscNames, describeBrowserDisc, describeBuiltIn, describeSessionFile } from "./media-catalogue.js";
 
 const isTapeName = (name) => /\.uef$/i.test(name);
+const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
 
 /** The example discs that ship with jsbeeb. */
 export const BuiltInImages = [
@@ -70,17 +71,18 @@ export class MediaLoader extends EventTarget {
         this.slots = new MediaSlots({ loader: this, drives, processor, urlState });
         this.listers = new Map();
         this.describers = new Map();
-        /** Files opened this session, by name: the only media the URL cannot name. */
+        /** Files opened this session, by key: the only media the URL cannot name. */
         this.sessionFiles = new Map();
-        this.resolver.addSource("session", (name) => {
-            const file = this.sessionFiles.get(name);
-            if (!file) throw new Error(`${name} was not opened this session`);
-            return { name, data: file.data, ignored: [] };
+        this.nextSessionFileId = 1;
+        this.resolver.addSource("session", (key) => {
+            const file = this.sessionFiles.get(key);
+            if (!file) throw new Error(`${key} was not opened this session`);
+            return { name: file.name, data: file.data, ignored: [] };
         });
         this.addLister("builtin", () => BuiltInImages.map(describeBuiltIn));
         this.addLister("browser", () => browserDiscNames().map(describeBrowserDisc));
         this.addLister("session", () =>
-            [...this.sessionFiles].map(([name, file]) => describeSessionFile(name, file.kind)),
+            [...this.sessionFiles].map(([key, file]) => describeSessionFile(key, file.name, file.kind)),
         );
 
         document.getElementById("fs_load").addEventListener("change", async (evt) => {
@@ -186,10 +188,20 @@ export class MediaLoader extends EventTarget {
         this.urlState.set({ autoboot: on ? true : undefined });
     }
 
-    /** Keeps a file opened this session for the list, and says so with "files-changed". */
+    /**
+     * Keeps a file opened this session for the list, and says so with "files-changed".
+     * A file with the same name and bytes as one already kept is that one again.
+     *
+     * @returns {string} the `session:` reference the file is known by
+     */
     rememberFile(name, data, kind) {
-        this.sessionFiles.set(name, { data, kind });
+        for (const [key, file] of this.sessionFiles) {
+            if (file.name === name && file.kind === kind && sameBytes(file.data, data)) return `session:${key}`;
+        }
+        const key = `${this.nextSessionFileId++}/${name}`;
+        this.sessionFiles.set(key, { name, data, kind });
         this.dispatchEvent(new Event("files-changed"));
+        return `session:${key}`;
     }
 
     /** A disc image from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
@@ -197,15 +209,15 @@ export class MediaLoader extends EventTarget {
         const loadedDisc = disc.discFor(name, data, undefined, this.drives.layoutForDrive(driveIndex));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(data);
-        this.rememberFile(name, data, "disc");
-        this.slots.put(this.slots.drive(driveIndex), loadedDisc, `session:${name}`, { inUrl: false });
+        const ref = this.rememberFile(name, data, "disc");
+        this.slots.put(this.slots.drive(driveIndex), loadedDisc, ref, { inUrl: false });
     }
 
     /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
     async loadTapeFile(name, data) {
         const tape = await loadTapeFromData(name, data, this.model);
-        this.rememberFile(name, data, "tape");
-        this.slots.put(this.slots.deck, tape, `session:${name}`, { inUrl: false });
+        const ref = this.rememberFile(name, data, "tape");
+        this.slots.put(this.slots.deck, tape, ref, { inUrl: false });
     }
 
     async loadSCSIFile(file) {

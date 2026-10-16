@@ -187,8 +187,8 @@ export const describeBrowserDisc = (name) => ({
     savesChanges: true,
 });
 
-export const describeSessionFile = (name, kind) => ({
-    ref: `session:${name}`,
+export const describeSessionFile = (key, name, kind) => ({
+    ref: `session:${key}`,
     kind,
     title: name,
     publisher: "",

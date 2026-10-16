@@ -195,7 +195,11 @@ describe("the media catalogue", () => {
             false,
         );
         expect(describeBrowserDisc("saves.ssd")).toMatchObject({ ref: "local:saves.ssd", savesChanges: true });
-        expect(describeSessionFile("t.uef", "tape")).toMatchObject({ ref: "session:t.uef", kind: "tape" });
+        expect(describeSessionFile("3/t.uef", "t.uef", "tape")).toMatchObject({
+            ref: "session:3/t.uef",
+            title: "t.uef",
+            kind: "tape",
+        });
     });
 
     it("finds the discs held in the browser's storage, in order", () => {
