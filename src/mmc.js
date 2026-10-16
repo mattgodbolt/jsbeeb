@@ -92,7 +92,8 @@ const FR_OK = 0,
     FR_EXIST = 8,
     FR_NO_FILE = 4,
     FR_NO_PATH = 5,
-    FR_INVALID_NAME = 6;
+    FR_INVALID_NAME = 6,
+    FR_INVALID_OBJECT = 9;
 const FA_CREATE_ALWAYS = 8,
     FA_OPEN_ALWAYS = 16,
     ERROR_TOO_MANY_OPEN = 0x12,
@@ -174,7 +175,6 @@ class WFN {
         this.globalAmount = 0;
 
         this.fildata = new Array(4).fill(null);
-        this.fildataIndex = 0;
 
         this.openeddir = ""; // Directory requested when reading directories
         this.foldersSeen = []; // Folders seen when reading directories
@@ -183,7 +183,6 @@ class WFN {
         this.CWD = "";
 
         this.filenum = -1;
-        this.seekpos = 0;
         this.WildPattern = ".*"; // Default wildcard pattern (for regex not ATOM)
 
         /**
@@ -208,8 +207,16 @@ class WFN {
         this.mmc.WriteDataPort(STATUS_COMPLETE | res);
     }
 
+    // Reports FR_INVALID_OBJECT to the Atom when the command's handle is not open.
+    openHandle() {
+        const handle = this.fildata[this.filenum];
+        if (!handle) this.mmc.WriteDataPort(STATUS_COMPLETE | FR_INVALID_OBJECT);
+        return handle;
+    }
+
     WFN_FileClose() {
-        this.seekpos = 0;
+        if (!this.openHandle()) return;
+        this.fildata[this.filenum] = null;
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
@@ -514,48 +521,42 @@ class WFN {
     }
 
     WFN_FileSeek() {
-        this.seekpos =
-            this.globalData[0] | (this.globalData[1] << 8) | (this.globalData[2] << 16) | (this.globalData[3] << 24);
+        const handle = this.openHandle();
+        if (!handle) return;
+        handle.pos = new DataView(this.globalData.buffer, this.globalData.byteOffset).getUint32(0, true);
+        this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
     WFN_FileRead() {
+        const handle = this.openHandle();
+        if (!handle) return;
         if (this.globalAmount === 0) {
             this.globalAmount = 256;
         }
-        const read = Math.min(this.fildata[0].data.length, this.globalAmount);
-        const fildataEnd = this.fildataIndex + read;
-        const data = this.fildata[0].data.slice(this.fildataIndex, fildataEnd);
-        let ret = 0;
+        const data = handle.file.data.slice(handle.pos, handle.pos + this.globalAmount);
         this.globalData = data;
-        this.fildataIndex = fildataEnd;
-        if (this.filenum > 0 && ret === 0 && this.globalAmount !== read) {
+        handle.pos += data.length;
+        if (this.filenum > 0 && this.globalAmount !== data.length) {
             this.mmc.WriteDataPort(STATUS_EOF);
         } else {
-            this.mmc.WriteDataPort(STATUS_COMPLETE | ret);
+            this.mmc.WriteDataPort(STATUS_COMPLETE);
         }
     }
 
     WFN_FileWrite() {
+        const handle = this.openHandle();
+        if (!handle) return;
         if (this.globalAmount === 0) {
             this.globalAmount = 256;
         }
-        const wrote = this.globalAmount;
-        const fildataEnd = this.fildataIndex + wrote;
-
-        // append this.globalData to this.fildata[0] at this.fildataIndex
-        let oldData = this.fildata[0].data;
-        let newLength = Math.max(oldData.length, fildataEnd);
-        let newData = new Uint8Array(newLength);
+        const end = handle.pos + this.globalAmount;
+        const oldData = handle.file.data;
+        const newData = new Uint8Array(Math.max(oldData.length, end));
         newData.set(oldData, 0);
-        newData.set(this.globalData.slice(0, wrote), this.fildataIndex);
-        this.fildata[0].data = newData;
-
-        this.fildataIndex = fildataEnd;
-
-        // const res = this.f_write(fil, (void*)globalData, globalAmount, &written);
-
-        let res = 0; // always works !
-        this.mmc.WriteDataPort(STATUS_COMPLETE | res);
+        newData.set(this.globalData.slice(0, this.globalAmount), handle.pos);
+        handle.file.data = newData;
+        handle.pos = end;
+        this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
     WFN_ExecuteArbitrary() {}
@@ -618,10 +619,9 @@ class WFN {
         let fname = this.trimToFilename(this.globalData);
 
         if (this.filenum === 0) {
-            this.fildataIndex = 0; // FIXME(#1068) should be one for each fildata if going down this line!
             // The scratch file is fixed, so we are backwards compatible with 2.9 firmware
             let fopen = this.f_open(fname, mode);
-            if (fopen.error == FR_OK) this.fildata[0] = this.allfiles[fopen.fp];
+            this.fildata[0] = fopen.error == FR_OK ? { file: this.allfiles[fopen.fp], pos: 0 } : null;
             ret = fopen.error;
         } else {
             this.filenum = 0;
@@ -635,7 +635,7 @@ class WFN {
             if (this.filenum > 0) {
                 let fopen = this.f_open(fname, mode);
                 if (fopen.error == FR_OK) {
-                    this.fildata[this.filenum] = this.allfiles[fopen.fp];
+                    this.fildata[this.filenum] = { file: this.allfiles[fopen.fp], pos: 0 };
                     // No error, so update the return value to indicate the file num
                     ret = FILENUM_OFFSET | this.filenum;
                 }
@@ -789,7 +789,6 @@ export class AtomMMC2 {
             this.configByte = 0xff;
         }
         this.WFN.reset();
-        this.seekpos = 0;
     }
 
     /**
@@ -860,7 +859,6 @@ export class AtomMMC2 {
         this.lastaddr = CMD_REG; // address latch for reads
         this.byteValueLatch = 0;
         this.worker = null;
-        this.seekpos = 0;
         this.WildPattern = ".*";
         this.foldersSeen = [];
         this.dfn = 0;
