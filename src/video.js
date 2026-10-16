@@ -1278,16 +1278,13 @@ export class FakeVideo {
         this.regs = new Uint8Array(32);
         this.fieldCycles = BbcFieldCycles;
         this.syncCycles = BbcVSyncCycles;
-    }
-
-    reset(cpu, via) {
-        this.startField(via);
-    }
-
-    startField(syncTarget) {
-        this.syncTarget = syncTarget;
         this.cycles = 0;
         this.inSync = false;
+    }
+
+    // Like the CRTC, the field runs on through a reset, as the VIA keeps the sync level it last saw.
+    reset(cpu, via) {
+        this.syncTarget = via;
     }
 
     polltime(cycles) {
@@ -1328,6 +1325,6 @@ export class FakeAtomVideo extends FakeVideo {
     }
 
     reset(cpu) {
-        this.startField(cpu.atomppia);
+        this.syncTarget = cpu.atomppia;
     }
 }

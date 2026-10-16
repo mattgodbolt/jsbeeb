@@ -1609,6 +1609,32 @@ describe("FakeVideo", () => {
         expect(sysvia.setVBlankInt).toHaveBeenCalledTimes(4);
     });
 
+    it.each([
+        ["mid-field", Field / 2],
+        ["mid-pulse", VSyncStart + Step * 3],
+    ])("stays in step with the machine it was snapshotted from, %s", (_, runFirst) => {
+        const original = { video: new FakeVideo(), sysvia: { setVBlankInt: vi.fn() } };
+        original.video.reset({}, original.sysvia);
+        runAField(original.video, original.sysvia, runFirst, Step);
+        const restored = { video: new FakeVideo(), sysvia: { setVBlankInt: vi.fn() } };
+        restored.video.reset({}, restored.sysvia);
+        restored.video.restoreState(original.video.snapshotState());
+        const expected = runAField(original.video, original.sysvia, 2 * Field, Step);
+        expect(expected).toHaveLength(4);
+        expect(runAField(restored.video, restored.sysvia, 2 * Field, Step)).toEqual(expected);
+    });
+
+    it("keeps its field through a reset, so a reset mid-pulse still ends that pulse", () => {
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        const before = runAField(video, sysvia, VSyncStart + Step * 3, Step);
+        video.reset({}, sysvia);
+        const after = runAField(video, sysvia, Field, Step);
+        expect([...before, ...after].map(({ level }) => level)).toEqual([true, false, true]);
+        expect(after[0].at).toBeLessThanOrEqual(Field - VSyncStart);
+    });
+
     it("carries on pulsing after restoring a snapshot that predates its field position", () => {
         const sysvia = { setVBlankInt: vi.fn() };
         const video = new FakeVideo();
