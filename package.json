@@ -21,7 +21,9 @@
   },
   "files": [
     "src/",
-    "public/roms/"
+    "public/roms/",
+    "public/econet/",
+    "public/teletext/"
   ],
   "dependencies": {
     "@popperjs/core": "^2.11.8",

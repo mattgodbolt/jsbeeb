@@ -469,8 +469,8 @@ export class MachineSession {
 
     /**
      * Put a disc in a drive by any reference the web page's URL accepts: a bare
-     * name from the built-in discs, `sth:`, `hfe:` or `bitshifters:` for the archives, `github:`
-     * for a file in a GitHub repo, or a URL.
+     * name from the built-in discs (in a jsbeeb checkout; the npm package leaves them out),
+     * `sth:`, `hfe:` or `bitshifters:` for the archives, `github:` for a file in a GitHub repo, or a URL.
      * Returns the name of the image loaded and any others the archive held.
      */
     async loadDiscImage(ref, drive = 0) {
