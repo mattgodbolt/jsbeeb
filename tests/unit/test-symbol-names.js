@@ -222,8 +222,8 @@ describe("symbol names", () => {
 
         it("take a non-system set's workspace names only in that set's own code", () => {
             const names = namesFrom(mos, game, sidewaysRom);
+            expect(nameOf(names.operand(RomCode, 0x70))).toBe("net_tx_ptr from Sideways ROM");
             expect(nameOf(names.operand(RomCode, 0x1b80))).toBe("rom_buffer from Sideways ROM");
-            expect(nameOf(names.operand(RomCode, 0x8003))).toBe("service from Sideways ROM");
             expect(names.operand(GameCode, 0x1b80)).toBeUndefined();
             expect(names.operand(UncoveredCode, 0x1b80)).toBeUndefined();
             expect(nameOf(names.operand(GameCode, 0x70))).toBe("lives from Game");
