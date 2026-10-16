@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SoundChip, AtomSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
+import { SoundChip, AtomSoundChip, InstrumentedSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
 
 function makeSoundChip(onBuffer = () => {}) {
@@ -509,5 +509,22 @@ describe("SoundChip events", () => {
         const { chip: renderer } = makeAtomSoundChip();
         renderer.applyEvent(events[0]);
         expect(renderer.bitChange).toEqual([{ bit: 1, cycles: 10 + 0.5 * 1000000 }]);
+    });
+});
+
+describe("InstrumentedSoundChip capture", () => {
+    it("should stamp each captured write with the cycle it was made at", () => {
+        const scheduler = new Scheduler();
+        const chip = new InstrumentedSoundChip();
+        chip.setScheduler(scheduler);
+        chip.startCapture();
+        scheduler.polltime(1234);
+        chip.poke(0x8d);
+        scheduler.polltime(10);
+        chip.poke(0x07);
+        expect(chip.stopCapture()).toEqual([
+            { cycle: 1234, value: 0x8d },
+            { cycle: 1244, value: 0x07 },
+        ]);
     });
 });

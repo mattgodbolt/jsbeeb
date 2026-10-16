@@ -541,6 +541,10 @@ export class InstrumentedSoundChip extends SoundChip {
     }
 
     poke(value) {
+        // Bring _totalCycles up to now first: it only moves when the chip
+        // catches up, so without this each write would carry the time of the
+        // write before it.
+        this.catchUp();
         if (this._capturing) {
             this._capturedWrites.push({ cycle: this._totalCycles, value });
         }
