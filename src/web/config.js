@@ -1,14 +1,6 @@
-import { allModels, findModel, tubeModelFor } from "../models.js";
 import { getFilterForMode, persistenceSettings } from "./canvas.js";
-import { AudioOutputs } from "../audio-output.js";
 import { MasterAnfsRom } from "../econet.js";
-
-const round = (value) => Number(value.toFixed(2));
-
-/** @returns {string} the speed a multiplier gives this machine's co-processor, e.g. "1.6x (4.8MHz)". */
-export function tubeCpuSpeedLabel(multiplier, model) {
-    return `${round(multiplier)}x (${round(multiplier * tubeModelFor(model).clockMhz)}MHz)`;
-}
+import { ConfigForm, controlId, readoutId, renderConfigForm, settingFields, showValue } from "./config-form.js";
 
 /**
  * The sideways ROMs the optional fittings need, in the order they claim banks.
@@ -24,21 +16,9 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
-/** The settings the dialog presents as checkboxes. `enables` names a control only usable while ticked. */
-const CheckboxSettings = [
-    { id: "65c02", field: "coProcessor", restartRequired: true, enables: "tubeCpuMultiplier" },
-    { id: "hasTeletextAdaptor", field: "hasTeletextAdaptor", restartRequired: true },
-    { id: "hasEconet", field: "hasEconet", restartRequired: true },
-    { id: "hasMusic5000", field: "hasMusic5000", restartRequired: true },
-    { id: "mouseJoystickEnabled", field: "mouseJoystickEnabled" },
-    { id: "speechOutput", field: "speechOutput" },
-];
-
-/** The model is not a checkbox, but changing it needs a restart just the same. */
-const RestartRequiredFields = [
-    "model",
-    ...CheckboxSettings.filter((setting) => setting.restartRequired).map((setting) => setting.field),
-];
+const SettingFields = settingFields();
+const RestartRequiredFields = SettingFields.filter((field) => field.restart).map((field) => field.setting);
+const PersistenceField = ConfigForm.flat().find((field) => field.id === "persistence");
 
 /** @returns {boolean} whether any of the changed settings only take effect on a freshly built machine. */
 export function needsRestart(changed) {
@@ -63,25 +43,28 @@ export class Config extends EventTarget {
         // The setting the display in use declares, which is the mode asked for
         // unless that fell back; the page says which once the display exists.
         this.persistenceSetting = undefined;
+
+        const configuration = document.getElementById("configuration");
+        configuration
+            .querySelector(".modal-body")
+            .append(...renderConfigForm(ConfigForm, (field, value) => this.pick(field, value)));
+
         // Built before anything can change, so this is what the running machine was built with.
         this.runningSettings = this.proposedSettings();
         this.setModel(settings.model);
-        this.setKeyLayout(settings.keyLayout);
-        this.setMicrophoneChannel(settings.microphoneChannel);
-        this.setDisplayMode(settings.displayMode);
-        this.setAudioOutput(settings.audioOutput);
-        this.setSpeakerAmount(settings.speakerAmount);
-        settings.on("audioOutput", (audioOutput) => this.setAudioOutput(audioOutput));
-        settings.on("speakerAmount", (speakerAmount) => this.setSpeakerAmount(speakerAmount));
+        this.showSaved();
+        for (const field of SettingFields) {
+            settings.on(field.setting, () => {
+                showValue(field, this.saved(field.setting));
+                this.showDependents();
+            });
+        }
         settings.on("displayMode", (displayMode) => this.setDisplayMode(displayMode));
+        this.setDisplayMode(settings.displayMode);
 
-        const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
-            this.setDropdownText(settings.model.name);
-            this.setTubeCpuMultiplier(settings.tubeCpuMultiplier);
-            this.setCheckboxes(settings);
-            this.showRestartPending();
+            this.showSaved();
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
@@ -94,129 +77,60 @@ export class Config extends EventTarget {
                 this.dispatchEvent(new Event("restart-required"));
         });
 
-        const modelMenu = document.querySelector(".model-menu");
-        for (const model of allModels) {
-            if (model.synonyms.length === 0) continue; // skip non-selectable models (e.g. Tube65C02)
-            const li = document.createElement("li");
-            const a = document.createElement("a");
-            a.href = "#";
-            a.className = "dropdown-item";
-            a.dataset.target = model.synonyms[0];
-            a.textContent = model.name;
-            li.appendChild(a);
-            modelMenu.appendChild(li);
-        }
-        modelMenu.addEventListener("click", (e) => {
-            const link = e.target.closest("a[data-target]");
-            if (!link) return;
-            this.changed.model = link.dataset.target;
-            this.setDropdownText(link.textContent);
-            this.showTubeCpuMultiplier(
-                this.changed.tubeCpuMultiplier ?? this.settings.tubeCpuMultiplier,
-                findModel(link.dataset.target),
-            );
-            this.showRestartPending();
-        });
-
-        for (const { id, field, enables } of CheckboxSettings) {
-            document.getElementById(id).addEventListener("click", () => {
-                const checked = document.getElementById(id).checked;
-                this.changed[field] = checked;
-                if (enables) document.getElementById(enables).disabled = !checked;
-                this.showRestartPending();
-            });
-        }
-
-        document.getElementById("tubeCpuMultiplier").addEventListener("input", () => {
-            const val = parseFloat(document.getElementById("tubeCpuMultiplier").value);
-            this.showTubeCpuMultiplier(val);
-            this.changed.tubeCpuMultiplier = val;
-        });
-
-        for (const link of document.querySelectorAll(".keyboard-menu a")) {
-            link.addEventListener("click", (e) => {
-                e.preventDefault();
-                const keyLayout = e.currentTarget.dataset.target;
-                this.changed.keyLayout = keyLayout;
-                this.setKeyLayout(keyLayout);
-            });
-        }
-
-        for (const option of document.querySelectorAll(".mic-channel-option")) {
-            option.addEventListener("click", (e) => {
-                e.preventDefault();
-                const channelString = e.currentTarget.dataset.channel;
-                const channel = channelString === "" ? undefined : parseInt(channelString, 10);
-                this.changed.microphoneChannel = channel;
-                this.setMicrophoneChannel(channel);
-            });
-        }
-
-        for (const option of document.querySelectorAll(".audio-output-option")) {
-            option.addEventListener("click", (e) => {
-                e.preventDefault();
-                settings.set({ audioOutput: e.currentTarget.dataset.output });
-            });
-        }
-
-        document.getElementById("speakerAmountSetting").addEventListener("input", (e) => {
-            settings.set({ speakerAmount: parseFloat(e.currentTarget.value) });
-        });
-
-        document.getElementById("persistenceSetting").addEventListener("input", (e) => {
+        document.getElementById(controlId(PersistenceField)).addEventListener("input", (e) => {
             if (this.persistenceSetting) settings.set({ [this.persistenceSetting]: parseFloat(e.currentTarget.value) });
         });
         for (const { setting } of persistenceSettings()) settings.on(setting, () => this.setPersistenceSlider());
-
-        for (const option of document.querySelectorAll(".display-mode-option")) {
-            option.addEventListener("click", (e) => {
-                e.preventDefault();
-                settings.set({ displayMode: e.currentTarget.dataset.mode });
-            });
-        }
     }
 
-    /**
-     * The restart-required settings as they would be saved if the dialog were closed now, in the form the
-     * menu and the URL use: the model by synonym rather than resolved, the fittings as booleans.
-     */
+    /** A setting as saved, in the form the menu and the URL use: the model by synonym rather than resolved. */
+    saved(setting) {
+        return setting === "model" ? this.settings.model.synonyms[0] : this.settings[setting];
+    }
+
+    /** Every setting the dialog shows, as it would be saved if the dialog were closed now. */
     proposedSettings() {
-        const saved = (field) => (field === "model" ? this.settings.model.synonyms[0] : this.settings[field]);
-        return Object.fromEntries(RestartRequiredFields.map((field) => [field, this.changed[field] ?? saved(field)]));
+        return Object.fromEntries(
+            SettingFields.map(({ setting }) => [
+                setting,
+                setting in this.changed ? this.changed[setting] : this.saved(setting),
+            ]),
+        );
     }
 
-    showRestartPending() {
-        const pending = restartPending(this.proposedSettings(), this.runningSettings);
-        document.getElementById("restart-pending").classList.toggle("d-none", !pending);
-    }
-
-    /** Ticks the boxes named in `values`, leaving any the object does not mention alone. */
-    setCheckboxes(values) {
-        for (const { id, field, enables } of CheckboxSettings) {
-            if (values[field] === undefined) continue;
-            const checked = !!values[field];
-            document.getElementById(id).checked = checked;
-            if (enables) document.getElementById(enables).disabled = !checked;
+    pick(field, value) {
+        if (field.live) {
+            this.settings.set({ [field.setting]: value });
+            return;
         }
+        this.changed[field.setting] = value;
+        showValue(field, value);
+        this.showDependents();
     }
 
-    setAudioOutput(audioOutput) {
-        const option = document.querySelector(`.audio-output-option[data-output="${audioOutput}"]`);
-        for (const el of document.querySelectorAll(".audio-output-text")) el.textContent = option.textContent;
-        document.getElementById("speakerAmountSetting").disabled = audioOutput !== AudioOutputs.speaker;
+    showSaved() {
+        for (const field of SettingFields) showValue(field, this.saved(field.setting));
+        this.showDependents();
     }
-    setSpeakerAmount(speakerAmount) {
-        document.getElementById("speakerAmountSetting").value = speakerAmount;
-    }
-    setMicrophoneChannel(channel) {
-        const text = channel !== undefined ? `Channel ${channel}` : "Disabled";
-        for (const el of document.querySelectorAll(".mic-channel-text")) el.textContent = text;
+
+    /** The parts of the dialog that follow from the settings as they would be saved. */
+    showDependents() {
+        const proposed = this.proposedSettings();
+        for (const field of SettingFields) {
+            if (field.enabledWhen) document.getElementById(controlId(field)).disabled = !field.enabledWhen(proposed);
+            if (field.readout)
+                document.getElementById(readoutId(field)).textContent = field.readout(
+                    proposed[field.setting],
+                    proposed,
+                );
+        }
+        document
+            .getElementById("restart-pending")
+            .classList.toggle("d-none", !restartPending(proposed, this.runningSettings));
     }
 
     setDisplayMode(mode) {
-        const config = getFilterForMode(mode).getDisplayConfig();
-        for (const el of document.querySelectorAll(".display-mode-text")) el.textContent = config.name;
-        this.setPersistenceInUse(config.persistence?.setting);
+        this.setPersistenceInUse(getFilterForMode(mode).getDisplayConfig().persistence?.setting);
     }
 
     /** The slider edits the persistence of the display in use, and is disabled for one without it. */
@@ -226,15 +140,13 @@ export class Config extends EventTarget {
     }
 
     setPersistenceSlider() {
-        const slider = document.getElementById("persistenceSetting");
+        const slider = document.getElementById(controlId(PersistenceField));
         const afterglowMs = this.persistenceSetting ? this.settings[this.persistenceSetting] : 0;
         slider.disabled = !this.persistenceSetting;
         slider.value = afterglowMs;
-        document.getElementById("persistenceValue").textContent = !this.persistenceSetting
-            ? "not available"
-            : afterglowMs > 0
-              ? `${afterglowMs} ms`
-              : "none";
+        document.getElementById(readoutId(PersistenceField)).textContent = this.persistenceSetting
+            ? PersistenceField.readout(afterglowMs)
+            : "not available";
     }
 
     /** Names the running machine everywhere the page shows it. */
@@ -243,24 +155,5 @@ export class Config extends EventTarget {
         for (const el of document.querySelectorAll(".bbc-model-short")) el.textContent = model.shortName;
         const settingsLink = document.getElementById("model-settings");
         if (settingsLink) settingsLink.title = `${model.name}: emulation settings`;
-    }
-
-    setKeyLayout(keyLayout) {
-        const text = keyLayout[0].toUpperCase() + keyLayout.substring(1);
-        for (const el of document.querySelectorAll(".keyboard-layout")) el.textContent = text;
-    }
-
-    setTubeCpuMultiplier(value) {
-        document.getElementById("tubeCpuMultiplier").value = value;
-        this.showTubeCpuMultiplier(value);
-    }
-
-    showTubeCpuMultiplier(value, model = this.settings.model) {
-        document.getElementById("tubeCpuMultiplierValue").textContent = tubeCpuSpeedLabel(value, model);
-    }
-
-    setDropdownText(modelName) {
-        const el = document.querySelector("#bbc-model-dropdown .bbc-model");
-        if (el) el.textContent = modelName;
     }
 }
