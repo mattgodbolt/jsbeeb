@@ -2,6 +2,7 @@ import { FakeSoundChip, SoundChip, AtomSoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
+import { DefaultTargetLatencyMs } from "../audio-latency.js";
 import { createAudioContext } from "./audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "./dom-utils.js";
 import { toast } from "./toast.js";
@@ -15,7 +16,6 @@ const StallSpikeHeight = 20;
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
 const UnfocusedLatencyMs = 200;
-const DefaultLatencyMs = 20;
 
 export class AudioHandler {
     constructor({
@@ -33,7 +33,7 @@ export class AudioHandler {
     } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
-        this.audioLatencyMs = audioLatencyMs ?? DefaultLatencyMs;
+        this.audioLatencyMs = audioLatencyMs ?? DefaultTargetLatencyMs;
         this.windowFocused = document.hasFocus();
         this.warningNode = warningNode;
         this.noAudio = false;
