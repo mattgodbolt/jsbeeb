@@ -535,6 +535,7 @@ describe("MachineSession snapshots", () => {
 });
 
 describe("MachineSession tapes", () => {
+    afterEach(() => vi.restoreAllMocks());
     const Welcome = path.join(RepoRoot, "public/tapes/Welcome.uef");
     const LoadCycles = 10 * CyclesPerSecond;
 
@@ -581,6 +582,15 @@ describe("MachineSession tapes", () => {
         },
         BootTimeout,
     );
+
+    it("resolves an sth: tape from the archive's tape images", async () => {
+        const zip = readFileSync(path.join(RepoRoot, "tests/unit/zip/test-ssd.zip"));
+        const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(zip));
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        const session = new MachineSession("B-DFS1.2");
+        expect((await session.mediaResolver().resolve("tape", "sth:Acornsoft/Elite.zip")).name).toBe("test.ssd");
+        expect(fetch).toHaveBeenCalledWith("https://bbc.xania.org/archive/sth/tapeimages/Acornsoft/Elite.zip");
+    });
 });
 
 describe("MachineSession disc images", () => {
