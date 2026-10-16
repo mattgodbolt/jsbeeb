@@ -199,7 +199,11 @@ describe("the media catalogue", () => {
             ref: "session:3/t.uef",
             title: "t.uef",
             kind: "tape",
+            detail: "opened this session",
         });
+        expect(describeSessionFile("5/t.uef", "t.uef", "tape", { order: 3, count: 4 }).detail).toBe(
+            "opened this session, 3rd of 4",
+        );
     });
 
     it("finds the discs held in the browser's storage, in order", () => {

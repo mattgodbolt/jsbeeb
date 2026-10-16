@@ -239,6 +239,10 @@ describe("MediaLoader", () => {
             const { descriptors } = await media.listAll();
             const listed = descriptors.filter((d) => d.source === "session");
             expect(listed.map((d) => d.title)).toEqual(["game.ssd", "game.ssd"]);
+            expect(listed.map((d) => d.detail)).toEqual([
+                "opened this session, 1st of 2",
+                "opened this session, 2nd of 2",
+            ]);
             expect(new Set(listed.map((d) => d.ref)).size).toBe(2);
             expect(media.slots.drive(0).ref).toBe(listed[0].ref);
             expect(media.slots.drive(1).ref).toBe(listed[1].ref);
@@ -248,11 +252,15 @@ describe("MediaLoader", () => {
 
         it("lists a file opened twice once", async () => {
             const media = make();
+            const seen = vi.fn();
+            media.addEventListener("files-changed", seen);
             await media.openFile(fileFor("game.ssd", ssdImage()), 0);
             await media.openFile(fileFor("game.ssd", ssdImage()), 1);
+            expect(seen).toHaveBeenCalledTimes(1);
             const { descriptors } = await media.listAll();
             const listed = descriptors.filter((d) => d.source === "session");
             expect(listed).toHaveLength(1);
+            expect(listed[0].detail).toBe("opened this session");
             expect(media.slots.drive(0).ref).toBe(listed[0].ref);
             expect(media.slots.drive(1).ref).toBe(listed[0].ref);
         });

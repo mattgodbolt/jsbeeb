@@ -81,9 +81,15 @@ export class MediaLoader extends EventTarget {
         });
         this.addLister("builtin", () => BuiltInImages.map(describeBuiltIn));
         this.addLister("browser", () => browserDiscNames().map(describeBrowserDisc));
-        this.addLister("session", () =>
-            [...this.sessionFiles].map(([key, file]) => describeSessionFile(key, file.name, file.kind)),
-        );
+        this.addLister("session", () => {
+            const files = [...this.sessionFiles];
+            const alike = (file) => files.filter(([, other]) => other.name === file.name && other.kind === file.kind);
+            return files.map(([key, file]) => {
+                const sameName = alike(file);
+                const order = sameName.findIndex(([otherKey]) => otherKey === key) + 1;
+                return describeSessionFile(key, file.name, file.kind, { order, count: sameName.length });
+            });
+        });
 
         document.getElementById("fs_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;

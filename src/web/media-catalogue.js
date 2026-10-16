@@ -187,12 +187,23 @@ export const describeBrowserDisc = (name) => ({
     savesChanges: true,
 });
 
-export const describeSessionFile = (key, name, kind) => ({
+const OrdinalSuffixes = { one: "st", two: "nd", few: "rd", other: "th" };
+const englishOrdinals = new Intl.PluralRules("en", { type: "ordinal" });
+const ordinal = (n) => `${n}${OrdinalSuffixes[englishOrdinals.select(n)]}`;
+
+/**
+ * A file opened this session. `sameName` places it among the files of its kind opened under
+ * the same name, in the order they were opened, so that rows with one title can be told apart.
+ */
+export const describeSessionFile = (key, name, kind, sameName = { order: 1, count: 1 }) => ({
     ref: `session:${key}`,
     kind,
     title: name,
     publisher: "",
-    detail: "opened this session",
+    detail:
+        sameName.count > 1
+            ? `opened this session, ${ordinal(sameName.order)} of ${sameName.count}`
+            : "opened this session",
     source: "session",
     savesChanges: false,
 });
