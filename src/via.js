@@ -278,7 +278,7 @@ class Via {
                 if (!wasShifting && isShifting) this._splitT2ForShifting();
                 else if (wasShifting && !isShifting) this._joinT2FromShifting();
                 // T2 ticks once more before freezing, and resumes a tick late.
-                if (!wasShifting && !isShifting) {
+                if (!isShifting) {
                     const isCountingPulses = this._t2CountsPulses();
                     if (!wasCountingPulses && isCountingPulses) {
                         this.t2c -= 2;

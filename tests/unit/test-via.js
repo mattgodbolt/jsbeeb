@@ -761,6 +761,17 @@ describe("Via T2 toggling PB6 pulse counting", () => {
         expect([via.read(T2CH), via.read(T2CL)]).toEqual([0x00, 0xff]);
     });
 
+    it("should tick T2 once more as it freezes straight from shift mode under T2", () => {
+        via.write(ACR, AcrShiftOutFreeRunningT2);
+        start(0x80, 0x10);
+        runMicroseconds(10);
+        const running = (via.read(T2CH) << 8) | via.read(T2CL);
+        via.write(ACR, AcrT2CountsPb6);
+        expect((via.read(T2CH) << 8) | via.read(T2CL)).toBe(running - 1);
+        runMicroseconds(10);
+        expect((via.read(T2CH) << 8) | via.read(T2CL)).toBe(running - 1);
+    });
+
     it("should raise the T2 interrupt when the extra tick wraps the counter", () => {
         start(5, 0);
         runMicroseconds(6);
