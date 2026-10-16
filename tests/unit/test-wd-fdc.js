@@ -546,11 +546,11 @@ describe("WD1770 FDC tests", () => {
                 }
 
                 describe.each([
-                    ["seek", SeekCommand, 1],
-                    ["seek", SeekCommand, 0],
-                    ["step out", StepOutWithUpdateCommand, 1],
-                    ["restore", RestoreCommand, 1],
-                ])("a %s from track %i", (_, command, fromTrack) => {
+                    ["seek", 1, SeekCommand],
+                    ["seek", 0, SeekCommand],
+                    ["step out", 1, StepOutWithUpdateCommand],
+                    ["restore", 1, RestoreCommand],
+                ])("a %s from track %i", (_, fromTrack, command) => {
                     it.each([
                         [WdFdcVariant.wd1770, 30],
                         [WdFdcVariant.wd1772, 15],
