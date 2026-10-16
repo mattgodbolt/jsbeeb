@@ -644,6 +644,8 @@ describe("MachineSession autoboot", () => {
         return session;
     }
 
+    const driveZero = (session) => session._machine.processor.fdc.drives[0];
+
     for (const modelName of ["B-DFS1.2", "Master"]) {
         it(
             `boots the Welcome disc on a ${modelName} and lets go of SHIFT`,
@@ -651,6 +653,7 @@ describe("MachineSession autoboot", () => {
                 const session = await freshSession(modelName);
                 const booted = await session.bootDisc("Welcome.ssd");
                 expect(booted).toMatchObject({ name: "Welcome.ssd", ignored: [], completed: true });
+                expect(driveZero(session).spinning).toBe(true);
                 expect(session.heldKeys()).toEqual([]);
                 await session.runFrames(FramesToRunWelcomeBoot);
                 expect(session.drainOutput().screenText).toContain(WelcomeBootMessage);
@@ -658,7 +661,56 @@ describe("MachineSession autoboot", () => {
             },
             BootTimeout,
         );
+
+        it(
+            `leaves drive 0 alone on a ${modelName}'s plain reset with a disc in`,
+            async () => {
+                const session = await freshSession(modelName);
+                await session.loadDiscImage("Welcome.ssd");
+                let starts = 0;
+                driveZero(session).addEventListener("startSpinning", () => starts++);
+                session.reset(true);
+                await session.runFrames(FramesToRunWelcomeBoot);
+                expect(starts).toBe(0);
+                session.destroy();
+            },
+            BootTimeout,
+        );
     }
+
+    it(
+        "spins a MasterADFS's drive for the boot, though ADFS cannot boot a DFS disc",
+        async () => {
+            const session = await freshSession("MasterADFS");
+            expect(await session.bootDisc("Welcome.ssd")).toMatchObject({ completed: true });
+            await session.runFrames(FramesToRunWelcomeBoot);
+            expect(session.drainOutput().screenText).not.toContain(WelcomeBootMessage);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "throws on a B1770A, whose boot goes to ADFS without starting drive 0",
+        async () => {
+            const session = await freshSession("B1770A");
+            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow(/drive 0 did not start/);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "refuses while a key is held, before touching the drive",
+        async () => {
+            const session = await freshSession("B-DFS1.2");
+            session.keyDownRaw(BBC.CTRL);
+            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow("release the keys held first");
+            expect(driveZero(session).disc).toBeUndefined();
+            session.destroy();
+        },
+        BootTimeout,
+    );
 
     it(
         "boots a disc already in the drive with a soft reset",

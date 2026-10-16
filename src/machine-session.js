@@ -42,8 +42,12 @@ const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 const BackstopSecondsPerFrame = 0.1;
 
 const BootDrive = 0;
-// SHIFT is held until the boot drive's motor starts; a filing system that has not tried the disc by then never will.
+// Drive 0 starts 14 to 36 frames after SHIFT+BREAK on the DFS models.
 const AutobootMaxFrames = 150;
+// The MOS offers each sideways ROM its service calls at &8003 with the reason in A; reason 3 is auto-boot,
+// with Y zero when the MOS wants the filing system to boot.
+const ServiceEntry = 0x8003;
+const ServiceAutoboot = 3;
 
 export class MachineSession {
     /**
@@ -236,27 +240,40 @@ export class MachineSession {
     }
 
     /**
-     * SHIFT+BREAK: reset with SHIFT held, keeping it down until the filing
-     * system starts drive 0's motor to read the catalogue, then let it go.
-     * The boot is under way but not finished; run the machine on to see it.
+     * SHIFT+BREAK: reset with SHIFT held, keeping it down until the MOS has
+     * asked the filing system to boot and drive 0's motor has started, then
+     * let it go. The boot is under way but not finished; run the machine on
+     * to see it.
      *
-     * Throws if the drive is empty, on the Atom, or if the drive never
-     * starts, as when another filing system (Econet, say) takes the boot.
-     * `completed` is false if a breakpoint stopped the machine first.
+     * Throws if the drive is empty, a key is held, on the Atom, if the MOS
+     * did not ask for a boot, or if drive 0 never starts, as when Econet
+     * takes the boot. It cannot tell whether the filing system can read the
+     * disc: a DFS disc on a model whose boot goes to ADFS spins the drive and
+     * does not boot.
+     *
+     * `completed` is false if a breakpoint or the frame backstop stopped the
+     * machine first. SHIFT is released all the same, so running on is a plain
+     * BREAK's start; call autoboot again to boot.
      *
      * @param {Object} [opts]
      * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
      * @returns {Promise<{framesHeld: number, completed: boolean}>}
      */
     async autoboot({ hard = true } = {}) {
-        if (this._isAtom) throw new Error("autoboot: the Atom has no SHIFT+BREAK disc boot");
-        this._requireKeyboard();
+        this._requireAutoboot();
         const cpu = this._machine.processor;
         const drive = cpu.fdc.drives[BootDrive];
         if (!drive.disc) throw new Error(`autoboot: there is no disc in drive ${BootDrive}`);
 
+        let bootRequested;
         let driveStarted = false;
+        const serviceHook = cpu.debugInstruction.add((pc) => {
+            if (pc !== ServiceEntry || cpu.a !== ServiceAutoboot || bootRequested !== undefined) return;
+            bootRequested = cpu.y === 0;
+            if (!bootRequested) cpu.stop();
+        });
         const onStart = () => {
+            if (!bootRequested) return;
             driveStarted = true;
             cpu.stop();
         };
@@ -269,22 +286,31 @@ export class MachineSession {
         } finally {
             this._keyboard.keyUpRaw(cpu.model.keys.SHIFT);
             drive.removeEventListener("startSpinning", onStart);
+            serviceHook.remove();
         }
+        if (bootRequested === false) throw new Error("autoboot: the MOS did not ask the filing system to boot");
         if (!driveStarted && framesRun >= AutobootMaxFrames) {
-            throw new Error(
-                `autoboot: drive ${BootDrive} did not start within ${AutobootMaxFrames} frames of SHIFT+BREAK, ` +
-                    "so the disc was not booted",
-            );
+            const why = bootRequested ? `drive ${BootDrive} did not start` : "the MOS did not ask for a boot";
+            throw new Error(`autoboot: ${why} within ${AutobootMaxFrames} frames of SHIFT+BREAK`);
         }
         return { framesHeld: framesRun, completed: driveStarted };
     }
 
+    _requireAutoboot() {
+        if (this._isAtom) throw new Error("autoboot: the Atom has no SHIFT+BREAK disc boot");
+        this._requireKeyboard();
+        if (this.heldKeys().length) throw new Error("autoboot: release the keys held first");
+    }
+
     /**
-     * Put a disc in drive 0 by any reference loadDiscImage takes, and
-     * autoboot() it.
+     * Put a disc in drive 0 and autoboot() it.
+     * @param {string} ref - any reference loadDiscImage takes
+     * @param {Object} [opts]
+     * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
      * @returns {Promise<{name: string, ignored: string[], framesHeld: number, completed: boolean}>}
      */
     async bootDisc(ref, { hard = true } = {}) {
+        this._requireAutoboot();
         const { name, ignored } = await this.loadDiscImage(ref, BootDrive);
         return { name, ignored, ...(await this.autoboot({ hard })) };
     }
