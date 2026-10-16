@@ -405,7 +405,7 @@ describe("the Settings form", () => {
         expect(controls()).toEqual([
             {
                 id: "bbc-model-dropdown",
-                label: "Base model:",
+                label: "Base model:(including disk interface)",
                 type: "button",
                 value: "BBC Master 128 (DFS)",
                 disabled: false,
@@ -473,6 +473,55 @@ describe("the Settings form", () => {
         openDialog();
         closeDialog();
         expect(settings.urlState.url()).toBe(before);
+    });
+
+    it("saves nothing on closing after the afterglow is dragged, which is no setting of its own", () => {
+        const { settings } = configFrom("?displayMode=pal");
+        openDialog();
+        const slider = document.getElementById("persistence");
+        slider.value = 30;
+        slider.dispatchEvent(new Event("input"));
+        const dragged = settings.urlState.url();
+        closeDialog();
+        expect(settings.palPersistenceMs).toBe(30);
+        expect(settings.urlState.url()).toBe(dragged);
+        expect(dragged).not.toContain("undefined");
+    });
+
+    it("follows a saved-on-close setting changed elsewhere while the dialog is open", () => {
+        const { settings } = configFrom("");
+        openDialog();
+        settings.set({ microphoneChannel: 2, keyLayout: "gaming" });
+        expect(menuText("microphoneChannelDropdown")).toBe("Channel 2");
+        expect(menuText("keyLayoutDropdown")).toBe("Gaming");
+    });
+
+    it("keeps showing a pending pick, which is what closing saves, when its setting changes elsewhere", () => {
+        const { settings } = configFrom("");
+        openDialog();
+        document.querySelector('.microphone-channel-option[data-value="3"]').click();
+        settings.set({ microphoneChannel: 1 });
+        expect(menuText("microphoneChannelDropdown")).toBe("Channel 3");
+        closeDialog();
+        expect(settings.microphoneChannel).toBe(3);
+    });
+
+    it("shows on opening what was saved elsewhere while it was closed", () => {
+        const { settings } = configFrom("");
+        openDialog();
+        closeDialog();
+        settings.set({ microphoneChannel: 1, keyLayout: "natural" });
+        openDialog();
+        expect(menuText("microphoneChannelDropdown")).toBe("Channel 1");
+        expect(menuText("keyLayoutDropdown")).toBe("Natural");
+    });
+
+    it("names a model that has no synonym to pick it by", () => {
+        const { settings } = configFrom("?model=Tube65C02");
+        openDialog();
+        expect(menuText("bbc-model-dropdown")).toBe("Tube65C02");
+        closeDialog();
+        expect(settings.urlState.url()).toContain("model=Tube65C02");
     });
 
     it("shows a fresh page what the last one saved", () => {

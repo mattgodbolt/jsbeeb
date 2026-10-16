@@ -2517,10 +2517,10 @@ div.smoothie-chart-tooltip {
   }
 }
 
-.config-paragraph + .config-paragraph {
+.config-section {
   margin-top: 15px;
 }
 
-.config-paragraph > .row + .row {
+.config-section > .row + .row {
   margin-top: 10px;
 }

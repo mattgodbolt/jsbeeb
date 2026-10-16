@@ -1,6 +1,14 @@
 import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { MasterAnfsRom } from "../econet.js";
-import { ConfigForm, controlId, readoutId, renderConfigForm, settingFields, showValue } from "./config-form.js";
+import {
+    ConfigForm,
+    controlId,
+    PersistenceField,
+    readoutId,
+    renderConfigForm,
+    settingFields,
+    showValue,
+} from "./config-form.js";
 
 /**
  * The sideways ROMs the optional fittings need, in the order they claim banks.
@@ -18,7 +26,6 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
 
 const SettingFields = settingFields();
 const RestartRequiredFields = SettingFields.filter((field) => field.restart).map((field) => field.setting);
-const PersistenceField = ConfigForm.flat().find((field) => field.id === "persistence");
 
 /** @returns {boolean} whether any of the changed settings only take effect on a freshly built machine. */
 export function needsRestart(changed) {
@@ -55,7 +62,7 @@ export class Config extends EventTarget {
         this.showSaved();
         for (const field of SettingFields) {
             settings.on(field.setting, () => {
-                showValue(field, this.saved(field.setting));
+                showValue(field, this.proposedSettings()[field.setting]);
                 this.showDependents();
             });
         }
@@ -83,9 +90,13 @@ export class Config extends EventTarget {
         for (const { setting } of persistenceSettings()) settings.on(setting, () => this.setPersistenceSlider());
     }
 
-    /** A setting as saved, in the form the menu and the URL use: the model by synonym rather than resolved. */
+    /**
+     * A setting as saved, in the form the menu and the URL use: the model by synonym rather than resolved, or by name
+     * for one with no synonym to be picked by.
+     */
     saved(setting) {
-        return setting === "model" ? this.settings.model.synonyms[0] : this.settings[setting];
+        const { model } = this.settings;
+        return setting === "model" ? (model.synonyms[0] ?? model.name) : this.settings[setting];
     }
 
     /** Every setting the dialog shows, as it would be saved if the dialog were closed now. */
