@@ -1,6 +1,6 @@
 import * as canvasLib from "./canvas.js";
 import { MaxPersistenceMs, persistenceFromMs } from "./canvas.js";
-import { FakeVideo, Video } from "../video.js";
+import { FakeAtomVideo, FakeVideo, Video } from "../video.js";
 import { LineGridRows } from "../video-filters/pixel-grid.js";
 import { toast } from "./toast.js";
 
@@ -70,7 +70,9 @@ export class Display {
 
         const display = this;
         this.video = fakeVideo
-            ? new FakeVideo()
+            ? model.isAtom
+                ? new FakeAtomVideo()
+                : new FakeVideo()
             : new Video(
                   model.isMaster,
                   this.videoFb32,
