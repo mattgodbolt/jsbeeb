@@ -250,6 +250,20 @@ describe("the media catalogue", () => {
             expect(recent.rank(disc("sth:1.zip"))).toBe(-1);
         });
 
+        it("lets no number of files opened this session push out what is kept across visits", () => {
+            const stored = Array.from({ length: 8 }, (_, i) => disc(`sth:${i}.zip`));
+            window.localStorage.setItem("recentMedia", JSON.stringify(stored));
+            const recent = new RecentMedia();
+            recent.note("session:1/mine.ssd", "disc");
+            expect(new RecentMedia().entries).toEqual(stored);
+            for (let i = 2; i <= 9; ++i) recent.note(`session:${i}/mine.ssd`, "disc");
+            expect(new RecentMedia().entries).toEqual(stored);
+            expect(recent.rank(disc("session:9/mine.ssd"))).toBe(0);
+            expect(recent.rank(disc("session:2/mine.ssd"))).toBe(7);
+            expect(recent.rank(disc("session:1/mine.ssd"))).toBe(-1);
+            expect(recent.rank(disc("sth:0.zip"))).toBe(8);
+        });
+
         it("reads back no more than the eight newest, however many were stored", () => {
             const stored = Array.from({ length: 20 }, (_, i) => disc(`sth:${i}.zip`));
             window.localStorage.setItem("recentMedia", JSON.stringify(stored));

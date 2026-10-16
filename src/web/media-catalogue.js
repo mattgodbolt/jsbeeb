@@ -225,9 +225,9 @@ const sameEntry = (a, b) => a.ref === b.ref && a.kind === b.kind;
 const outlivesSession = ({ ref }) => !ref.startsWith("session:");
 
 /**
- * What was loaded most recently, newest first, by reference and kind. It is kept in the
- * browser's storage across visits, less the files opened this session, which no later visit
- * could load; storage that refuses only means the list does not outlive the page.
+ * What was loaded most recently, newest first, by reference and kind: up to eight that are kept
+ * in the browser's storage across visits, and up to eight files opened this session, which no
+ * later visit could load. Storage that refuses only means the list does not outlive the page.
  */
 export class RecentMedia {
     constructor(storage = () => window.localStorage) {
@@ -247,9 +247,12 @@ export class RecentMedia {
 
     note(ref, kind) {
         const entry = { ref, kind };
-        this.entries = [entry, ...this.entries.filter((other) => !sameEntry(other, entry))].slice(0, MaxRecent);
+        const newestFirst = [entry, ...this.entries.filter((other) => !sameEntry(other, entry))];
+        const kept = newestFirst.filter(outlivesSession).slice(0, MaxRecent);
+        const opened = newestFirst.filter((other) => !outlivesSession(other)).slice(0, MaxRecent);
+        this.entries = newestFirst.filter((other) => kept.includes(other) || opened.includes(other));
         try {
-            this.storage().setItem(RecentKey, JSON.stringify(this.entries.filter(outlivesSession)));
+            this.storage().setItem(RecentKey, JSON.stringify(kept));
         } catch (error) {
             console.warn("Could not keep the recently loaded media:", error);
         }
