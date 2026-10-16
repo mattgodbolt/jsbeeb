@@ -6,6 +6,8 @@ import { Scheduler } from "../../src/scheduler.js";
 
 const SectorsPerTrack = 10;
 const SectorSize = 256;
+const BbcCyclesPerSecond = 2 * 1000 * 1000;
+const AtomCyclesPerSecond = 1000 * 1000;
 
 function ssdDisc(numTracks, is40Track) {
     const config = new DiscConfig();
@@ -20,7 +22,7 @@ const fortyTrackDisc = () => ssdDisc(40, true);
 describe("Disc drive tests", function () {
     it("starts empty", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         expect(drive.trackLength).toBe(IbmDiscFormat.bytesPerTrack);
         expect(drive.disc).toBeFalsy();
         expect(drive.spinning).toBe(false);
@@ -31,14 +33,14 @@ describe("Disc drive tests", function () {
     });
     it("sets a disc", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         const disc = Disc.createBlank();
         drive.setDisc(disc);
         expect(drive.disc).toBe(disc);
     });
     it("calls back with pulses after spinning starts", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(0, Disc.createBlank());
         drive.setPulsesCallback(() => {
             expect.fail("no callbacks expected");
@@ -59,7 +61,7 @@ describe("Disc drive tests", function () {
     });
     it("generates quasi random pulses with a blank disc", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(Disc.createBlank());
         drive.getQuasiRandomPulses = () => {
             return 0xdeadbeef;
@@ -76,7 +78,7 @@ describe("Disc drive tests", function () {
     });
     it("makes quasi random pulses the FM decoder reads as clean data that changes over time", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         const first = IbmDiscFormat._2usPulsesToFm(drive.getQuasiRandomPulses());
         expect(first).toMatchObject({ clocks: 0xff, iffyPulses: false });
         const seen = new Set();
@@ -88,11 +90,11 @@ describe("Disc drive tests", function () {
     });
     it("asserts index all the time with no disc", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         expect(drive.indexPulse).toBe(true);
     });
     it("steps one track at a time for an 80 track disc", () => {
-        const drive = new DiscDrive(0, new Scheduler());
+        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
         drive.setDisc(eightyTrackDisc());
 
         drive.seekOneTrack(1);
@@ -103,7 +105,7 @@ describe("Disc drive tests", function () {
 
     it("asserts index periodically with a spinning disc", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(Disc.createBlank());
         drive.startSpinning();
         const cyclesPerSecond = 2 * 1000 * 1000;
@@ -127,7 +129,7 @@ describe("40 track discs", () => {
 
     /** @returns {DiscDrive} a drive with its 40/80 switch at 40, stepped `steps` times inwards. */
     function driveSteppedIn(disc, steps) {
-        const drive = new DiscDrive(0, new Scheduler());
+        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
         drive.setDisc(disc);
         drive.tracksPerStep = 2;
         for (let step = 0; step < steps; ++step) drive.seekOneTrack(1);
@@ -141,7 +143,7 @@ describe("40 track discs", () => {
     });
 
     it("single steps with its switch at 80", () => {
-        const drive = new DiscDrive(0, new Scheduler());
+        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
 
         drive.seekOneTrack(1);
@@ -171,7 +173,7 @@ describe("40 track discs", () => {
 
     it("leaves the neighbouring track alone with its switch at 80", () => {
         const disc = eightyTrackDisc();
-        const drive = new DiscDrive(0, new Scheduler());
+        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
         drive.setDisc(disc);
         drive.seekOneTrack(1);
         drive.seekOneTrack(1);
@@ -197,7 +199,7 @@ describe("40 track discs", () => {
     });
 
     it("refuses a switch position no drive has", () => {
-        const drive = new DiscDrive(0, new Scheduler());
+        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
 
         expect(() => (drive.tracksPerStep = 0)).toThrow(/one or two tracks/);
         expect(() => (drive.tracksPerStep = 3)).toThrow(/one or two tracks/);
@@ -291,7 +293,7 @@ describe("40 track discs", () => {
     });
 
     it("counts from where the head is, between the pitches of a switch made mid-surface", () => {
-        const drive = new DiscDrive(0, new Scheduler());
+        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
         drive.seekOneTrack(1);
         drive.tracksPerStep = 2;
@@ -311,7 +313,7 @@ describe("spindle motor", () => {
 
     it("comes up to speed over about half a second and stays there", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
         drive.startSpinning();
         expect(drive.speed).toBeLessThan(0.05);
@@ -325,7 +327,7 @@ describe("spindle motor", () => {
 
     it("turns the disc slowly at first, so the index comes round late", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
         drive.startSpinning();
         const started = scheduler.epoch;
@@ -333,13 +335,25 @@ describe("spindle motor", () => {
         const firstIndex = scheduler.epoch - started;
         scheduler.polltime(ms(3000));
         const atSpeed = revolutionFrom(drive, scheduler);
-        expect(firstIndex).toBeGreaterThan(DiscDrive.TicksPerRevolution * 1.2);
-        expect(atSpeed).toBeCloseTo(DiscDrive.TicksPerRevolution, -3);
+        expect(firstIndex).toBeGreaterThan(ms(200) * 1.2);
+        expect(atSpeed).toBe(ms(200));
+    });
+
+    it("turns at 300 rpm and spins up in the same time on the Atom's 1 MHz clock", () => {
+        const atomMs = (n) => n * 1000;
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler, AtomCyclesPerSecond);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        scheduler.polltime(atomMs(150));
+        expect(drive.speed).toBeCloseTo(0.63, 1);
+        scheduler.polltime(atomMs(3000));
+        expect(revolutionFrom(drive, scheduler)).toBe(atomMs(200));
     });
 
     it("keeps its speed through a stop and start at the same instant, and coasts through a longer one", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
         drive.startSpinning();
         scheduler.polltime(ms(3000));
@@ -355,13 +369,13 @@ describe("spindle motor", () => {
 
     it("carries its speed through a snapshot", () => {
         const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler);
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
         drive.startSpinning();
         scheduler.polltime(ms(150));
         const state = drive.snapshotState();
         expect(state.speed).toBeCloseTo(0.63, 1);
-        const restored = new DiscDrive(0, scheduler);
+        const restored = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         restored.setDisc(fortyTrackDisc());
         restored.restoreState(state);
         expect(restored.speed).toBeCloseTo(0.63, 1);
@@ -393,7 +407,10 @@ describe("drive noise", () => {
             seekEnd: (steps) => calls.push(`seek end after ${steps}`),
         };
         const scheduler = new Scheduler();
-        const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
+        const drives = [
+            new DiscDrive(0, scheduler, BbcCyclesPerSecond),
+            new DiscDrive(1, scheduler, BbcCyclesPerSecond),
+        ];
         attachDriveNoise(drives, ddNoise);
         return { drives, calls };
     }

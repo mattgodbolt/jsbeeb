@@ -4,6 +4,9 @@ import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { DiscDrive } from "../../src/disc-drive.js";
+import { findModel } from "../../src/models.js";
+
+const AtomModel = findModel("Atom");
 
 class FakeDrive {
     constructor() {
@@ -136,11 +139,12 @@ describe("Intel 8271 tests", function () {
 
         it("announces the steps its track register calls for, which the head takes wherever it is", () => {
             const scheduler = new Scheduler();
-            const drive = new DiscDrive(0, scheduler);
+            const cpu = fake6502();
+            const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
             const events = [];
             drive.addEventListener("seekStart", (event) => events.push([event.steps, event.stepMs]));
             drive.addEventListener("seekEnd", (event) => events.push(`end after ${event.steps}`));
-            const fdc = new IntelFdc(fake6502(), scheduler, [drive]);
+            const fdc = new IntelFdc(cpu, scheduler, [drive]);
             sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             sendCommand(fdc, seekCmd, 13);
@@ -168,6 +172,17 @@ describe("Intel 8271 tests", function () {
         });
     });
 
+    it("steps at the specified rate in milliseconds on the Atom's 1 MHz clock", () => {
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        const scheduler = new Scheduler();
+        const fdc = new IntelFdc(fake6502(AtomModel), scheduler, [new FakeDrive()]);
+        sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+        sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+        sendCommand(fdc, seekCmd, 2);
+        expect(scheduler.headroom()).toBe(24 * 1000);
+    });
+
     describe("head load", () => {
         const specifyCmd = 0x35;
         const initialisation = 0x0d;
@@ -190,10 +205,10 @@ describe("Intel 8271 tests", function () {
     describe("ready", () => {
         const ms = (n) => n * 2000;
 
-        function readyFdc() {
+        function readyFdc(cpu = fake6502()) {
             const fakeDrive = new FakeDrive();
             const scheduler = new Scheduler();
-            const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
+            const fdc = new IntelFdc(cpu, scheduler, [fakeDrive]);
             // As the DFS specifies: the head stays loaded for 12 revolutions after a command,
             // so reading the status does not deselect the drive.
             sendCommand(fdc, 0x35, 0x0d, 12, 10, 0xc8);
@@ -235,6 +250,18 @@ describe("Intel 8271 tests", function () {
             indexPulse();
             expect(ready()).toBe(true);
             scheduler.polltime(ms(300));
+            indexPulse();
+            expect(ready()).toBe(false);
+        });
+
+        it("drops after the same 262 ms on the Atom's 1 MHz clock", () => {
+            const atomMs = (n) => n * 1000;
+            const { scheduler, indexPulse, ready } = readyFdc(fake6502(AtomModel));
+            indexPulse();
+            scheduler.polltime(atomMs(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+            scheduler.polltime(atomMs(300));
             indexPulse();
             expect(ready()).toBe(false);
         });
