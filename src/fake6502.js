@@ -6,7 +6,6 @@ import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
 import { machineSpec, nullIo } from "./machine-spec.js";
 import { DefaultStationId, Econet, FileServerStationId, MasterAnfsRom } from "./econet.js";
 
-const fakeVideo = new FakeVideo();
 const soundChip = new FakeSoundChip();
 
 function econetFor(model, { econet, stationId }) {
@@ -27,7 +26,7 @@ export function fake6502(model, opts = {}) {
     const econet = econetFor(model, opts);
     return new model.Cpu(model, {
         ...nullIo({
-            video: opts.video ?? (model.isAtom ? new FakeAtomVideo() : fakeVideo),
+            video: opts.video ?? (model.isAtom ? new FakeAtomVideo() : new FakeVideo()),
             soundChip: opts.soundChip ?? soundChip,
             econet,
             model,

@@ -1253,6 +1253,12 @@ export class Video {
     }
 }
 
+// The MOS's default CRTC setup: 312.5 lines of 128 2MHz cycles per field, vsync two lines long.
+const BbcLineCycles = 128;
+const BbcFieldCycles = 312.5 * BbcLineCycles;
+const BbcVSyncCycles = 2 * BbcLineCycles;
+
+/** No picture, but the vsync pulse the System VIA sees once a field. */
 export class FakeVideo {
     constructor() {
         this.crtc = {
@@ -1270,19 +1276,42 @@ export class FakeVideo {
             disabled: false,
         };
         this.regs = new Uint8Array(32);
+        this.fieldCycles = BbcFieldCycles;
+        this.syncCycles = BbcVSyncCycles;
     }
 
-    reset() {}
+    reset(cpu, via) {
+        this.startField(via);
+    }
 
-    polltime() {}
+    startField(syncTarget) {
+        this.syncTarget = syncTarget;
+        this.cycles = 0;
+        this.inSync = false;
+    }
+
+    polltime(cycles) {
+        this.cycles += cycles;
+        if (!this.inSync && this.cycles >= this.fieldCycles - this.syncCycles) {
+            this.inSync = true;
+            this.syncTarget.setVBlankInt(true);
+        } else if (this.inSync && this.cycles >= this.fieldCycles) {
+            this.inSync = false;
+            this.cycles -= this.fieldCycles;
+            this.syncTarget.setVBlankInt(false);
+        }
+    }
 
     setScreenHwScroll() {}
 
     snapshotState() {
-        return {};
+        return { cycles: this.cycles, inSync: this.inSync };
     }
 
-    restoreState() {}
+    restoreState(state) {
+        this.cycles = state.cycles;
+        this.inSync = state.inSync;
+    }
 }
 
 // The 6847's field as the PPIA sees it: 262 lines at 60Hz, with field sync low
@@ -1292,21 +1321,13 @@ const AtomFlybackCycles = Math.round((AtomFieldCycles * 32) / 262);
 
 /** No picture, but the field sync the Atom ROM waits on before each keyboard scan. */
 export class FakeAtomVideo extends FakeVideo {
-    reset(cpu) {
-        this.ppia = cpu.atomppia;
-        this.cycles = 0;
-        this.inFlyback = false;
+    constructor() {
+        super();
+        this.fieldCycles = AtomFieldCycles;
+        this.syncCycles = AtomFlybackCycles;
     }
 
-    polltime(cycles) {
-        this.cycles += cycles;
-        if (!this.inFlyback && this.cycles >= AtomFieldCycles - AtomFlybackCycles) {
-            this.inFlyback = true;
-            this.ppia.setVBlankInt(1);
-        } else if (this.inFlyback && this.cycles >= AtomFieldCycles) {
-            this.inFlyback = false;
-            this.cycles -= AtomFieldCycles;
-            this.ppia.setVBlankInt(0);
-        }
+    reset(cpu) {
+        this.startField(cpu.atomppia);
     }
 }
