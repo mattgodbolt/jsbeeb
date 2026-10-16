@@ -345,7 +345,8 @@ export class MachineSession {
      * @param {number} addr
      * @param {number} [timeoutSecs=30]
      * @param {Object} [opts]
-     * @param {number} [opts.bank] only stop while this sideways bank is paged in at &8000 to &BFFF
+     * @param {number} [opts.bank] only stop while this sideways bank is paged in at `addr` (on a Master, not
+     *     while ANDY is paged over &8000 to &8FFF)
      */
     async runUntilAddress(addr, timeoutSecs = 30, { bank } = {}) {
         requireBank(bank);
@@ -359,7 +360,8 @@ export class MachineSession {
      * @param {"execute"|"read"|"write"} type
      * @param {number} address
      * @param {Object} [opts]
-     * @param {number} [opts.bank] only break while this sideways bank is paged in at &8000 to &BFFF
+     * @param {number} [opts.bank] only break while this sideways bank is paged in at `address` (on a Master,
+     *     not while ANDY is paged over &8000 to &8FFF)
      * @returns {number} breakpoint id
      */
     addBreakpoint(type, address, { bank } = {}) {

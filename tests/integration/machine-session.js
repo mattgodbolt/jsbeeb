@@ -863,6 +863,7 @@ describe("MachineSession bank breakpoints on a Master with ANDY paged in", () =>
                 "did not hit appropriate breakpoint in time",
             );
             expect(session.pagingState().romsel).toBe(RomselWithAndy);
+            expect(session.registers().pc).toBe(AndyLoop);
             session.destroy();
         },
         BootTimeout,
@@ -886,6 +887,22 @@ describe("MachineSession bank breakpoints on a Master with ANDY paged in", () =>
         async () => {
             const session = await sessionLooping(AndyLoop);
             session.addBreakpoint("execute", AndyLoop, { bank: SidewaysRamBank });
+
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+            expect(completed).toBe(true);
+            expect(session.hitBreakpoint()).toBeNull();
+            expect(session.registers().pc).toBe(AndyLoop);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "does not break on a read in ANDY given the bank",
+        async () => {
+            const session = await sessionLooping(AndyLoop);
+            session.addBreakpoint("read", AndyLoop + 1, { bank: SidewaysRamBank });
 
             const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
 
