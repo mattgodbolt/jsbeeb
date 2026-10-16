@@ -227,6 +227,13 @@ describe("MediaSlots", () => {
             expect(slots.holding("sth:Games/Elite.zip")).toBeNull();
         });
 
+        it("leaves what was loaded recently alone on an eject", async () => {
+            loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
+            await slots.load(slots.drive(0), elite);
+            slots.eject(slots.drive(0));
+            expect(slots.recent.entries).toEqual([{ ref: elite.ref, kind: "disc" }]);
+        });
+
         it("ejects the tape likewise", async () => {
             loader.loadTapeImage.mockResolvedValue({ name: "t.uef" });
             await slots.load(slots.deck, chuckie);

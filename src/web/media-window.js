@@ -671,11 +671,9 @@ export class MediaWindow {
         main.className = "media-row-main";
         const target = this.rowTarget(d);
         const targetName = target === "tape" ? "the cassette deck" : `drive ${target}`;
-        const label = [d.title, d.publisher, d.detail, sourceName(d.source), recent && "recently loaded"]
-            .filter(Boolean)
-            .join(", ");
+        const label = [d.title, d.publisher, d.detail, sourceName(d.source)].filter(Boolean).join(", ");
         main.title = `Load ${label} into ${targetName}`;
-        main.setAttribute("aria-label", main.title);
+        main.setAttribute("aria-label", recent ? `${main.title}, recently loaded` : main.title);
         const cell = (className, text) => {
             const span = document.createElement("span");
             span.className = className;
