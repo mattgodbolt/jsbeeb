@@ -1309,8 +1309,8 @@ export class FakeVideo {
     }
 
     restoreState(state) {
-        this.cycles = state.cycles;
-        this.inSync = state.inSync;
+        this.cycles = state.cycles ?? 0;
+        this.inSync = state.inSync ?? false;
     }
 }
 

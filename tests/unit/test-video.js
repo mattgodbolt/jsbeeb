@@ -1608,6 +1608,15 @@ describe("FakeVideo", () => {
         expect([start.level, end.level]).toEqual([true, false]);
         expect(sysvia.setVBlankInt).toHaveBeenCalledTimes(4);
     });
+
+    it("carries on pulsing after restoring a snapshot that predates its field position", () => {
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        video.restoreState({});
+        const [start, end] = runAField(video, sysvia, Field, Step);
+        expect([start.level, end.level]).toEqual([true, false]);
+    });
 });
 
 describe("FakeAtomVideo", () => {
