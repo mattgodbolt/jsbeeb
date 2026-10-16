@@ -610,7 +610,13 @@ export class MediaWindow {
             .filter((d) => list.kinds[d.kind] && (list.source === "all" || d.source === list.source))
             .filter((d) => matchesQuery(d, list.query))
             .sort(compareForQuery(list.query));
-        const rows = shown.slice(0, MaxRows).map((d) => this.buildRow(d));
+        const recent = list.query ? [] : this.recentAmong(shown);
+        const rest = shown.filter((d) => !recent.includes(d)).slice(0, MaxRows - recent.length);
+        const rows = [
+            ...(recent.length ? [this.buildHeading("Recently loaded"), ...recent.map((d) => this.buildRow(d))] : []),
+            ...(recent.length && rest.length ? [this.buildHeading("Everything else")] : []),
+            ...rest.map((d) => this.buildRow(d)),
+        ];
         const notices = list.failures.map((failure) => {
             const li = document.createElement("li");
             li.className = "notice";
@@ -633,6 +639,24 @@ export class MediaWindow {
                 ? `showing ${MaxRows} of ${shown.length}; keep typing to narrow it`
                 : `${shown.length} of ${list.descriptors.length}`
             : "";
+    }
+
+    /** The rows that were loaded lately, newest first, each reference once. */
+    recentAmong(shown) {
+        const { recent } = this.slots;
+        const ranked = new Map();
+        for (const d of shown) {
+            const rank = recent.rank(d);
+            if (rank >= 0 && !ranked.has(rank)) ranked.set(rank, d);
+        }
+        return [...ranked].sort(([a], [b]) => a - b).map(([, d]) => d);
+    }
+
+    buildHeading(words) {
+        const li = document.createElement("li");
+        li.className = "media-heading";
+        li.textContent = words;
+        return li;
     }
 
     buildRow(d) {

@@ -1,5 +1,5 @@
 import { reportLoadFailure } from "./reporting.js";
-import { sourceName } from "./media-catalogue.js";
+import { RecentMedia, sourceName } from "./media-catalogue.js";
 
 const DriveNames = ["drive 0", "drive 1"];
 
@@ -67,6 +67,7 @@ export class MediaSlots extends EventTarget {
         this.drives = drives;
         this.processor = processor;
         this.urlState = urlState;
+        this.recent = new RecentMedia();
         this.driveSlots = [0, 1].map((index) => new Slot(this, "disc", index));
         this.deck = new Slot(this, "tape", 0);
     }
@@ -150,6 +151,7 @@ export class MediaSlots extends EventTarget {
         else this.drives.eject(slot.index);
         slot.ref = media ? ref : undefined;
         slot.inUrl = inUrl;
+        if (slot.ref) this.recent.note(slot.ref, slot.kind);
         // A URL that already says as much is left alone, so a load it asked for makes no history.
         const named = inUrl ? slot.ref : undefined;
         if (slot.namedInUrl(this.urlState.params) !== named) this.urlState.set(slot.urlParams());

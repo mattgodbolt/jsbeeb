@@ -2199,6 +2199,15 @@ div.smoothie-chart-tooltip {
   font-size: 12.5px;
 }
 
+.media-list .media-heading {
+  padding: 6px 8px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #2a2e33;
+}
+
 .media-foot {
   display: flex;
   align-items: center;
