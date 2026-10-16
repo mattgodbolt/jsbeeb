@@ -485,6 +485,7 @@ export class MachineSession {
         if (!this._mediaResolver) {
             this._mediaResolver = new MediaResolver();
             this._mediaResolver.addSource("sth", (file) => new StairwayToHell().fetch(file));
+            this._mediaResolver.addSource("tapeSth", (file) => new StairwayToHell({ tapes: true }).fetch(file));
             this._mediaResolver.addSource("hfe", (path) => new BbcDiscArchive().fetch(path));
             this._mediaResolver.addSource("bitshifters", (path) => new BitshiftersArchive().fetch(path));
         }
