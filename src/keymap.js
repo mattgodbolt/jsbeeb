@@ -115,7 +115,7 @@ const IsLetter = /^[A-Za-z]$/;
 /** BBC keys that print the same thing either way, so holding one must not disturb shift. */
 const ShiftMakesNoDifference = new Set([BBC.SPACE]);
 
-/** Every character a keyboard might produce that a BBC or an Atom can print, for building the natural layout. */
+/** The characters a natural layout tries to bind, of which each machine takes those it can print. */
 export const PrintableCharacters = (() => {
     const chars = ["\u00a3"];
     for (let code = 32; code < 127; ++code) chars.push(String.fromCharCode(code));

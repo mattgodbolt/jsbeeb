@@ -102,7 +102,7 @@ export const ATOM = {
     REPT: [1, 6],
 };
 
-/** Characters the Atom prints with shift held. `!` to `)` are shift and the digit above them. */
+/** Characters the Atom prints with shift held. `!` to `)` are shift and the digit on the same key. */
 const ShiftedCharacters = {
     "!": ATOM.K1,
     '"': ATOM.K2,

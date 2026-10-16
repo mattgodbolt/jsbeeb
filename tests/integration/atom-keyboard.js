@@ -67,6 +67,12 @@ describe("Atom keyboard", () => {
         expect(output).toContain("99");
     });
 
+    it("pastes the characters shift makes on the Atom's symbol keys, with the lock off", async () => {
+        await bootAtom();
+        const output = await typeAndCapture('P."a@[\\]^`{|}~"', 3000000);
+        expect(output).toContain('"a@[\\]^`{|}~>');
+    });
+
     describe("in the natural layout", () => {
         // What `Keyboard` passes the PPIA for a printable key: the character, and the host's shift.
         async function press(char, hostShift) {
@@ -92,6 +98,17 @@ describe("Atom keyboard", () => {
             await press("a", true);
             await machine.runFor(500000);
             expect(machine.drainText()).toBe("@=Aa");
+        });
+
+        it("types the shifted brackets and bar as typed, with the lock either way", async () => {
+            await bootNatural();
+            await press("|", true);
+            await press("{", true);
+            await press(keyCodes.CAPSLOCK, false);
+            await press("}", true);
+            await press("a", false);
+            await machine.runFor(500000);
+            expect(machine.drainText()).toBe("|{}a");
         });
     });
 });

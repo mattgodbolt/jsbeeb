@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AtomPPIA } from "../../src/ppia.js";
+import { ATOM } from "../../src/keymap-atom.js";
+import { keyCodes } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
 
-function makePPIA() {
+function makePPIA(layout = "physical") {
     const scheduler = new Scheduler();
     const cpu = {
         pc: 0,
@@ -13,7 +15,7 @@ function makePPIA() {
             speakerGenerator: { mute() {}, pushBit() {} },
         },
     };
-    const ppia = new AtomPPIA(cpu, "physical", scheduler);
+    const ppia = new AtomPPIA(cpu, layout, scheduler);
     return { ppia, cpu, scheduler };
 }
 
@@ -322,5 +324,105 @@ describe("AtomPPIA", () => {
             expect(ppia2.latcha).toBe(0x42);
             expect(ppia2.keys[3][2]).toBe(1);
         });
+    });
+});
+
+describe("AtomPPIA natural keyboard shift override", () => {
+    let ppia;
+
+    beforeEach(() => {
+        ({ ppia } = makePPIA("natural"));
+    });
+
+    function atomKeyPressed(atomKey) {
+        return ppia.keys[atomKey[0]][atomKey[1]] === 1;
+    }
+
+    it("holds no Atom shift for a `@`, which the Atom prints unshifted", () => {
+        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
+        ppia.keyDown("@", true);
+
+        expect(atomKeyPressed(ATOM.AT)).toBe(true);
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
+    });
+
+    it("gives the shift key back when the character is released", () => {
+        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
+        ppia.keyDown("@", true);
+        ppia.keyUp("@");
+
+        expect(atomKeyPressed(ATOM.AT)).toBe(false);
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
+    });
+
+    it("keeps the shift suppressed when shift is let go first", () => {
+        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
+        ppia.keyDown("@", true);
+
+        ppia.keyUp(keyCodes.SHIFT_LEFT);
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
+
+        ppia.keyUp("@");
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
+    });
+
+    it("holds Atom shift for a `=`, which the Atom prints shifted", () => {
+        ppia.keyDown("=", false);
+
+        expect(atomKeyPressed(ATOM.MINUS_EQUALS)).toBe(true);
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
+    });
+
+    it("keeps the override while a plain key is pressed and released under it", () => {
+        ppia.keyDown("=", false);
+        ppia.keyDown("a", false);
+        ppia.keyUp("a");
+
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
+        ppia.keyUp("=");
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
+    });
+
+    it("leaves shift alone for the space bar, which prints the same either way", () => {
+        ppia.keyDown(" ", true);
+        ppia.keyDown(keyCodes.SHIFT_LEFT, true);
+
+        expect(atomKeyPressed(ATOM.SPACE)).toBe(true);
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
+    });
+
+    it("forgets the override when the keys are cleared", () => {
+        ppia.keyDown("=", false);
+        ppia.clearKeys();
+        ppia.keyDown("a", false);
+
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
+    });
+
+    it("leaves a shift held through the raw entry points alone", () => {
+        ppia.keyDownRaw(ATOM.SHIFT);
+        ppia.keyDown("a", false);
+
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
+    });
+
+    it("does not carry an override across a restore", () => {
+        const saved = ppia.snapshotState();
+        ppia.keyDown("=", false);
+        ppia.restoreState(saved);
+        ppia.keyDown("a", false);
+
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
+    });
+
+    it("takes a shift held in the restored matrix as the shift key", () => {
+        ppia.keyDown(keyCodes.SHIFT_LEFT, true);
+        const saved = ppia.snapshotState();
+        ppia.clearKeys();
+        ppia.restoreState(saved);
+        ppia.keyDown("@", true);
+        ppia.keyUp("@");
+
+        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
     });
 });
