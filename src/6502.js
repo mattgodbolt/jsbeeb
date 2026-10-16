@@ -679,6 +679,7 @@ export class Cpu6502 extends Base6502 {
             : new FakeTube();
         this.music5000PageSel = 0;
         this.econet = econet;
+        this.filestore = econet ? new Filestore(this, econet) : null;
 
         this.peripheralCycles = 0;
         this.videoCycles = 0;
@@ -1384,7 +1385,6 @@ export class Cpu6502 extends Base6502 {
         this.adconverter.reset();
 
         this.touchScreen.reset();
-        if (this.econet) this.filestore = new Filestore(this, this.econet);
     }
 
     // Universal CPU state reset. Shared by all machine types.
@@ -1594,6 +1594,7 @@ export class Cpu6502 extends Base6502 {
         if (this.hasTube) {
             await this.tube.loadOs();
         }
+        if (this.filestore) await this.filestore.load();
         this.reset(true);
         this.debugger.setCpu(this);
     }

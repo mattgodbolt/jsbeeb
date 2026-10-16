@@ -8,8 +8,9 @@ export class Filestore {
     constructor(cpu, econet) {
         this.cpu = cpu;
         this.econet = econet;
-        this.scsi = [];
-        this.l3fs = [];
+        this.scsi = new Uint8Array(0);
+        this.l3fs = new Uint8Array(0);
+        this.pristineDisc = new Uint8Array(0);
         this.pollCount = 0;
         this.ram = new Uint8Array((64 + 32) * 1024);
         this.emulationSpeed = 0;
@@ -304,17 +305,25 @@ export class Filestore {
         }
     }
 
-    /** Resolves once the filestore code and its disc are loaded and in place. */
-    async reset() {
-        console.log("Filestore: initialisation");
+    async load() {
+        [this.l3fs, this.pristineDisc] = await Promise.all([loadData("econet/L3FS.dat"), loadData("econet/scsi.dat")]);
+    }
 
-        const [code, disc] = await Promise.all([loadData("econet/L3FS.dat"), loadData("econet/scsi.dat")]);
-        this.l3fs = code;
-        this.ram.set(code, 0x400);
+    /** Restarts the file server on its pristine disc, once load() has resolved. */
+    reset() {
+        console.log("Filestore: initialisation");
+        this.ram.fill(0);
+        this.ram.set(this.l3fs, 0x400);
+        this.scsi = new Uint8Array(this.pristineDisc);
+        this.pollCount = 0;
+        this.emulationSpeed = 0;
+        this.logTemp = "";
+        this.X = this.Y = this.M = 0;
+        this.XPC = this.L = this.R = 0;
+        this.N = this.V = this.Z = this.C = this.F = 0;
         this.PC = 0x400;
         this.SP = 0xff;
         this.A = 1;
-        this.scsi = disc;
     }
 
     polltime(cycles) {
