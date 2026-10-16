@@ -42,7 +42,8 @@ const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 const BackstopSecondsPerFrame = 0.1;
 
 const BootDrive = 0;
-// Drive 0 starts 2 frames after a SHIFT+BREAK on the DFS models, and 15 (B) to 36 (Master) after a power-on one.
+// Drive 0 starts 2 frames after a soft autoboot on the DFS models, and 15 (B) to 36 (Master) after a power-on one;
+// four times the slowest leaves room for slower boot ROMs.
 export const AutobootMaxFrames = 150;
 // The MOS offers each sideways ROM its service calls at &8003 with the reason in A; reason 3 is auto-boot,
 // with Y zero when the MOS wants the filing system to boot.
@@ -253,8 +254,8 @@ export class MachineSession {
      * cannot tell whether the filing system can read the disc: a DFS disc on
      * a model whose boot goes to ADFS spins the drive and does not boot.
      *
-     * `completed` is false if a breakpoint or the frame backstop stopped the
-     * machine first, with SHIFT released all the same. Running on then boots
+     * `completed` is false if a breakpoint stopped the machine first, or the
+     * machine stopped painting frames, with SHIFT released all the same. Running on then boots
      * if `bootRequested` is true. False only means the MOS had not asked yet:
      * whether it still boots depends on when that MOS reads SHIFT, and on the
      * B and the Master, stopped as late as the banner, it does not.
