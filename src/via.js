@@ -277,13 +277,15 @@ class Via {
                 const isShifting = this._t2ClocksShifter();
                 if (!wasShifting && isShifting) this._splitT2ForShifting();
                 else if (wasShifting && !isShifting) this._joinT2FromShifting();
-                const isCountingPulses = this._t2CountsPulses();
                 // T2 ticks once more before freezing, and resumes a tick late.
-                if (!wasCountingPulses && isCountingPulses) {
-                    this.t2c -= 2;
-                    if (this.t2c < -2) this.t2c = this._handleT2c(this.t2c);
-                } else if (wasCountingPulses && !isCountingPulses) {
-                    this.t2c += 2;
+                if (!wasShifting && !isShifting) {
+                    const isCountingPulses = this._t2CountsPulses();
+                    if (!wasCountingPulses && isCountingPulses) {
+                        this.t2c -= 2;
+                        if (this.t2c < -2) this.t2c = this._handleT2c(this.t2c);
+                    } else if (wasCountingPulses && !isCountingPulses) {
+                        this.t2c += 2;
+                    }
                 }
                 this.updateNextTime();
                 break;
