@@ -361,6 +361,54 @@ describe("Debugger", () => {
             expect(symbolsLine().querySelector("a")).toBeNull();
         });
 
+        it("credits only the sets naming something in view, following the view as it moves", async () => {
+            const OtherAt = 0x5000;
+            const otherRegion = { start: "0x5000", end: "0x5100", anchors: [{ at: "0x5000", bytes: "eaea" }] };
+            [0xea, 0xea].forEach((byte, i) => cpu.writemem(OtherAt + i, byte));
+            const withOther = new Map([
+                ...files,
+                [
+                    `${BaseUrl}index.json`,
+                    {
+                        format: 1,
+                        sets: [
+                            ...files.get(`${BaseUrl}index.json`).sets,
+                            { url: "other.json", licence: "MIT", regions: { code: otherRegion } },
+                        ],
+                    },
+                ],
+                [
+                    `${BaseUrl}other.json`,
+                    {
+                        format: 1,
+                        title: "Other",
+                        licence: "MIT",
+                        source: "https://example.com/other.lst",
+                        regions: { code: { ...otherRegion, symbols: { start: "0x5000" } } },
+                    },
+                ],
+            ]);
+            load.mockImplementation(async (url) => structuredClone(withOther.get(url)));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            dbgr.updateDisassembly(OtherAt);
+            expect(symbolsLine().textContent).toBe("names from Other (source)");
+            dbgr.updateDisassembly(cpu.pc);
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            [0x4c, OtherAt & 0xff, OtherAt >> 8].forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
+            keyPress("n");
+            expect(code(0x2002).textContent).toBe("JMP start");
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source) · Other (source)");
+        });
+
+        it("hides the credit while nothing in view is named", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+            dbgr.updateDisassembly(0x8000);
+            expect(visible("debug-symbols")).toBe(false);
+        });
+
         it("names a clashing global in the address column after the set whose code the CPU is in", async () => {
             const ClockCode = 0x4000;
             const program = (title, start, bytes, globals) => {
@@ -390,9 +438,10 @@ describe("Debugger", () => {
             ]);
             load.mockImplementation(async (url) => structuredClone(programs.get(url)));
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(symbolsLine().querySelectorAll(".symbol-set")).toHaveLength(2));
-            dbgr.updateDisassembly(0x70);
-            expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 lives");
+            await vi.waitFor(() => {
+                dbgr.updateDisassembly(0x70);
+                expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 lives");
+            });
             cpu.pc = ClockCode;
             dbgr.updateDisassembly(0x70);
             expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 ticks");

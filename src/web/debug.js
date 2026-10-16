@@ -147,6 +147,7 @@ export class Debugger {
         this._symbolSets = symbolSets;
         this._names = NoNames;
         this._symbolsLine = document.getElementById("debug-symbols");
+        this._credited = [];
         toggle(this._symbolsLine, false);
         symbolSets?.addEventListener("loaded", () => {
             if (!this._enabled) return;
@@ -388,7 +389,12 @@ export class Debugger {
 
     _matchSymbols() {
         this._names = this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
-        const sets = this._names.sets;
+    }
+
+    _credit(shown) {
+        const sets = this._names.sets.filter((set) => shown.has(set));
+        if (sets.length === this._credited.length && sets.every((set, i) => set === this._credited[i])) return;
+        this._credited = sets;
         toggle(this._symbolsLine, sets.length > 0);
         this._symbolsLine.replaceChildren(
             "names from ",
@@ -421,6 +427,7 @@ export class Debugger {
         const elems = Array.from(this.disass.children).filter(
             (el) => el.style.display !== "none" && !el.classList.contains("template"),
         );
+        const shown = new Set();
 
         const updateDisElem = (elem, address) => {
             const result = this.disassemble(address);
@@ -428,7 +435,10 @@ export class Debugger {
             const addrNode = elem.querySelector(".dis_addr");
             addrNode.innerHTML = labelHtml(address);
             const named = this._names.address(address, this.cpu.pc);
-            if (named) addrNode.append(" ", nameNode(named, address));
+            if (named) {
+                addrNode.append(" ", nameNode(named, address));
+                shown.add(named.set);
+            }
             elem.classList.toggle("current", address === this.cpu.pc);
             elem.classList.toggle("highlight", address === this.disassPc);
             elem.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
@@ -438,7 +448,10 @@ export class Debugger {
             for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
-                if (operand) showName(ref, operand, target);
+                if (operand) {
+                    showName(ref, operand, target);
+                    shown.add(operand.set);
+                }
             }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
                 ref.addEventListener("click", (e) => this.memClick(e));
@@ -464,6 +477,7 @@ export class Debugger {
             address = this.prevInstruction(address);
             updateDisElem(elems[i], address);
         }
+        this._credit(shown);
     }
 
     prevInstruction(address) {
