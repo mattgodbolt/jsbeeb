@@ -829,3 +829,112 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         session.destroy();
     });
 });
+
+describe("MachineSession bank breakpoints on a Master with ANDY paged in", () => {
+    const SidewaysRamBank = 4;
+    const RomselWithAndy = 0x80 | SidewaysRamBank;
+    const CodeAddress = 0x2000;
+    const AndyLoop = 0x8000;
+    const BankLoop = 0x9000;
+    const RunSecs = 1;
+    const lo = (address) => address & 0xff;
+    const hi = (address) => address >> 8;
+
+    // Pages in ANDY over SidewaysRamBank, writes a JMP-to-self into ANDY, then jumps to `target`.
+    const pageAndyAndJumpTo = (target) => [
+        0x78,
+        0xa9,
+        RomselWithAndy,
+        0x8d,
+        0x30,
+        0xfe,
+        ...[0x4c, lo(AndyLoop), hi(AndyLoop)].flatMap((byte, i) => [0xa9, byte, 0x8d, lo(AndyLoop + i), hi(AndyLoop)]),
+        0x4c,
+        lo(target),
+        hi(target),
+    ];
+
+    async function sessionLooping(target) {
+        const session = new MachineSession("Master");
+        await session.initialise();
+        await session.boot(30);
+        session.writeMemory(BankLoop, [0x4c, lo(BankLoop), hi(BankLoop)], { bank: SidewaysRamBank });
+        session.writeMemory(CodeAddress, pageAndyAndJumpTo(target));
+        await session.type(`CALL &${CodeAddress.toString(16)}`);
+        return session;
+    }
+
+    it(
+        "does not count ANDY at &8000 to &8FFF as the bank",
+        async () => {
+            const session = await sessionLooping(AndyLoop);
+
+            await expect(session.runUntilAddress(AndyLoop, RunSecs, { bank: SidewaysRamBank })).rejects.toThrow(
+                "did not hit appropriate breakpoint in time",
+            );
+            expect(session.pagingState().romsel).toBe(RomselWithAndy);
+            expect(session.registers().pc).toBe(AndyLoop);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "still counts &9000 to &BFFF as the bank",
+        async () => {
+            const session = await sessionLooping(BankLoop);
+
+            await session.runUntilAddress(BankLoop, RunSecs, { bank: SidewaysRamBank });
+
+            expect(session.registers().pc).toBe(BankLoop);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "does not break in ANDY on a breakpoint given the bank",
+        async () => {
+            const session = await sessionLooping(AndyLoop);
+            session.addBreakpoint("execute", AndyLoop, { bank: SidewaysRamBank });
+
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+            expect(completed).toBe(true);
+            expect(session.hitBreakpoint()).toBeNull();
+            expect(session.registers().pc).toBe(AndyLoop);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "does not break on a read in ANDY given the bank",
+        async () => {
+            const session = await sessionLooping(AndyLoop);
+            session.addBreakpoint("read", AndyLoop + 1, { bank: SidewaysRamBank });
+
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+            expect(completed).toBe(true);
+            expect(session.hitBreakpoint()).toBeNull();
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "breaks above ANDY on a breakpoint given the bank",
+        async () => {
+            const session = await sessionLooping(BankLoop);
+            const id = session.addBreakpoint("execute", BankLoop, { bank: SidewaysRamBank });
+
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+            expect(completed).toBe(false);
+            expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: BankLoop, bank: SidewaysRamBank });
+            session.destroy();
+        },
+        BootTimeout,
+    );
+});

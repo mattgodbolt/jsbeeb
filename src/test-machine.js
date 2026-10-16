@@ -14,6 +14,9 @@ import { keyCodes } from "./keymap.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 const RomselBankMask = 0x0f;
+const RomselAndy = 0x80;
+const AndyStart = 0x8000;
+const AndyEnd = 0x9000;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HostKeyCodes = new Set(Object.values(keyCodes));
 
@@ -189,6 +192,16 @@ export class TestMachine {
     }
 
     /**
+     * Whether sideways `bank` is paged in and, at `address`, not hidden by
+     * the Master's ANDY RAM, which ROMSEL bit 7 pages over &8000 to &8FFF.
+     */
+    isBankPagedAt(bank, address) {
+        const andyPaged = this.model.isMaster && (this.processor.romsel & RomselAndy) !== 0;
+        if (andyPaged && address >= AndyStart && address < AndyEnd) return false;
+        return this.pagedBank === bank;
+    }
+
+    /**
      * Run until the PC reaches `targetAddr`, with sideways `bank` paged in if
      * one is given, or throw after `secs` of emulated time.
      */
@@ -196,7 +209,7 @@ export class TestMachine {
         if (!secs) secs = 120;
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
-            if (addr === targetAddr && (bank === undefined || this.pagedBank === bank)) {
+            if (addr === targetAddr && (bank === undefined || this.isBankPagedAt(bank, targetAddr))) {
                 hit = true;
                 return true;
             }
