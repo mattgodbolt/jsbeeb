@@ -42,7 +42,7 @@ const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 const BackstopSecondsPerFrame = 0.1;
 
 const BootDrive = 0;
-// Drive 0 starts 14 to 36 frames after SHIFT+BREAK on the DFS models.
+// Drive 0 starts 2 frames after a SHIFT+BREAK on the DFS models, and 15 (B) to 36 (Master) after a power-on one.
 const AutobootMaxFrames = 150;
 // The MOS offers each sideways ROM its service calls at &8003 with the reason in A; reason 3 is auto-boot,
 // with Y zero when the MOS wants the filing system to boot.
@@ -245,19 +245,21 @@ export class MachineSession {
      * let it go. The boot is under way but not finished; run the machine on
      * to see it.
      *
-     * Throws if the drive is empty, a key is held, on the Atom, if the MOS
-     * did not ask for a boot, or if drive 0 never starts, as when Econet
-     * takes the boot. It cannot tell whether the filing system can read the
-     * disc: a DFS disc on a model whose boot goes to ADFS spins the drive and
-     * does not boot.
+     * Throws if the drive is empty, a key or typing is pending, or on the
+     * Atom, all before the reset. After it, throws if the MOS did not ask for
+     * a boot, as on a machine configured to boot on a plain BREAK, where SHIFT
+     * stops it; or if drive 0 never starts, as when Econet takes the boot.
+     * Either way SHIFT is up and the machine is left where it stopped. It
+     * cannot tell whether the filing system can read the disc: a DFS disc on
+     * a model whose boot goes to ADFS spins the drive and does not boot.
      *
      * `completed` is false if a breakpoint or the frame backstop stopped the
-     * machine first. SHIFT is released all the same, so running on is a plain
-     * BREAK's start; call autoboot again to boot.
+     * machine first, with SHIFT released all the same. Running on then boots
+     * if `bootRequested` is true, and otherwise gives a plain BREAK's start.
      *
      * @param {Object} [opts]
      * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
-     * @returns {Promise<{framesHeld: number, completed: boolean}>}
+     * @returns {Promise<{framesHeld: number, bootRequested: boolean, completed: boolean}>}
      */
     async autoboot({ hard = true } = {}) {
         this._requireAutoboot();
@@ -267,33 +269,40 @@ export class MachineSession {
 
         let bootRequested;
         let driveStarted = false;
-        const serviceHook = cpu.debugInstruction.add((pc) => {
-            if (pc !== ServiceEntry || cpu.a !== ServiceAutoboot || bootRequested !== undefined) return;
-            bootRequested = cpu.y === 0;
-            if (!bootRequested) cpu.stop();
-        });
+        let framesRun;
         const onStart = () => {
             if (!bootRequested) return;
             driveStarted = true;
             cpu.stop();
         };
-        drive.addEventListener("startSpinning", onStart);
-        this._keyboard.keyDownRaw(cpu.model.keys.SHIFT);
-        let framesRun;
+        let serviceHook;
         try {
+            serviceHook = cpu.debugInstruction.add((pc) => {
+                if (pc !== ServiceEntry || cpu.a !== ServiceAutoboot || bootRequested !== undefined) return;
+                bootRequested = cpu.y === 0;
+                if (!bootRequested) cpu.stop();
+            });
+            drive.addEventListener("startSpinning", onStart);
+            this._keyboard.keyDownRaw(cpu.model.keys.SHIFT);
             this.reset(hard);
             ({ framesRun } = await this.runFrames(AutobootMaxFrames));
         } finally {
             this._keyboard.keyUpRaw(cpu.model.keys.SHIFT);
             drive.removeEventListener("startSpinning", onStart);
-            serviceHook.remove();
+            if (serviceHook) serviceHook.remove();
         }
-        if (bootRequested === false) throw new Error("autoboot: the MOS did not ask the filing system to boot");
+        if (bootRequested === false) {
+            throw new Error(
+                "autoboot: the MOS did not ask the filing system to boot; " +
+                    "a machine configured to boot on BREAK (*CONFIGURE BOOT, or a B's boot link) takes SHIFT to mean " +
+                    "do not boot",
+            );
+        }
         if (!driveStarted && framesRun >= AutobootMaxFrames) {
             const why = bootRequested ? `drive ${BootDrive} did not start` : "the MOS did not ask for a boot";
             throw new Error(`autoboot: ${why} within ${AutobootMaxFrames} frames of SHIFT+BREAK`);
         }
-        return { framesHeld: framesRun, completed: driveStarted };
+        return { framesHeld: framesRun, bootRequested: !!bootRequested, completed: driveStarted };
     }
 
     _requireAutoboot() {
@@ -307,7 +316,7 @@ export class MachineSession {
      * @param {string} ref - any reference loadDiscImage takes
      * @param {Object} [opts]
      * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
-     * @returns {Promise<{name: string, ignored: string[], framesHeld: number, completed: boolean}>}
+     * @returns {Promise<{name: string, ignored: string[], framesHeld: number, bootRequested: boolean, completed: boolean}>}
      */
     async bootDisc(ref, { hard = true } = {}) {
         this._requireAutoboot();
