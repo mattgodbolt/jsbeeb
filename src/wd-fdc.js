@@ -143,6 +143,7 @@ const TimerState = Object.freeze({
     settle: 2,
     seek: 3,
     done: 4,
+    verifySettle: 5,
 });
 
 /**
@@ -583,6 +584,10 @@ export class WdFdc {
             case TimerState.done:
                 this._doneTimer();
                 break;
+            case TimerState.verifySettle:
+                this._indexPulseCount = 0;
+                this._setState(State.searchId);
+                break;
             default:
                 throw new Error(`Unexpected timer state ${timerState}`);
         }
@@ -839,10 +844,13 @@ export class WdFdc {
         this._settleThenDispatch();
     }
 
+    _headSettleUs() {
+        return (this._is1772 ? Wd1772HeadSettleMs : Wd1770HeadSettleMs) * 1000;
+    }
+
     _settleThenDispatch() {
         if (this._isCommandSettle) {
-            const settleMs = this._is1772 ? Wd1772HeadSettleMs : Wd1770HeadSettleMs;
-            this._startTimer(TimerState.settle, settleMs * 1000);
+            this._startTimer(TimerState.settle, this._headSettleUs());
         } else {
             this._dispatchCommand();
         }
@@ -1144,8 +1152,7 @@ export class WdFdc {
     _checkVerify() {
         if (this._currentDrive) this._currentDrive.notifySeekEnd();
         if (this._isCommandVerify) {
-            this._indexPulseCount = 0;
-            this._setState(State.searchId);
+            this._startTimer(TimerState.verifySettle, this._headSettleUs());
         } else {
             this._commandDone(true);
         }

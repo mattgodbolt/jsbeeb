@@ -32,11 +32,13 @@ const AllFlagCombinations = [...Array(16).keys()];
 // revolutions of delay.
 const RestoreCommand = 0x08;
 const SeekCommand = 0x18;
+const StepOutWithUpdateCommand = 0x78;
 const ReadSectorCommand = 0x88;
 const ReadAddressCommand = 0xc8;
 const ReadTrackCommand = 0xe8;
 // The e flag adds the head settle delay.
 const SettleFlag = 0x04;
+const VerifyFlag = 0x04;
 const SpinUpWaitFlag = 0x08;
 
 const TicksPerMs = 2000;
@@ -530,6 +532,37 @@ describe("WD1770 FDC tests", () => {
                 });
                 expect(delay).toBeGreaterThan(15 * TicksPerMs - IdTicks);
                 expect(delay).toBeLessThan(15 * TicksPerMs + IdTicks);
+            });
+
+            describe("a type I verify", () => {
+                function toTrack0Ticks({ variant, fromTrack, command }) {
+                    const { scheduler, fdc } = makeFdc({ disc: discOfIds(), variant });
+                    runCommand(fdc, scheduler, ReadAddressSpinningUp);
+                    fdc.write(TrackRegister, 0);
+                    fdc.write(DataRegister, fromTrack);
+                    runCommand(fdc, scheduler, SeekCommand);
+                    fdc.write(DataRegister, 0);
+                    return runCommand(fdc, scheduler, command).ticks;
+                }
+
+                describe.each([
+                    ["seek", 1, SeekCommand],
+                    ["seek", 0, SeekCommand],
+                    ["step out", 1, StepOutWithUpdateCommand],
+                    ["restore", 1, RestoreCommand],
+                ])("a %s from track %i", (_, fromTrack, command) => {
+                    it.each([
+                        [WdFdcVariant.wd1770, 30],
+                        [WdFdcVariant.wd1772, 15],
+                    ])("on a %s waits %i ms before verifying", (variant, ms) => {
+                        const setup = { variant, fromTrack };
+                        const delay =
+                            toTrack0Ticks({ ...setup, command: command | VerifyFlag }) -
+                            toTrack0Ticks({ ...setup, command });
+                        expect(delay).toBeGreaterThan(ms * TicksPerMs);
+                        expect(delay).toBeLessThan(ms * TicksPerMs + 2 * IdTicks);
+                    });
+                });
             });
         });
 
