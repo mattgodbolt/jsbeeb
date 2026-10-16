@@ -33,6 +33,7 @@ class Model {
         cmosOverride,
         banks,
         clockMhz,
+        idleAddress,
     } = {}) {
         if (!(clockMhz > 0)) throw new Error(`Model ${name} has no clock speed`);
         this.name = name;
@@ -53,7 +54,7 @@ class Model {
         // Where the machine sits waiting for a key: BASIC's read loop, or on the Atom the kernel's
         // wait-for-key scan at $FEA7. The scan before it at $FE9F only checks every key is up, and a
         // 100 ms debounce delay follows, during which a key pressed is not seen.
-        this.idleAddress = this.isAtom ? 0xfea7 : isMaster ? 0xe7e6 : 0xe581;
+        this.idleAddress = idleAddress ?? (this.isAtom ? 0xfea7 : isMaster ? 0xe7e6 : 0xe581);
         // The Atom ROM polls its keyboard once per VSync, so pasted keys need longer apart.
         this.pasteKeyDelayMs = this.isAtom ? 80 : 50;
         // Two of those 60 Hz scans, 33 ms, with margin: the ROM wants a key seen up
@@ -215,6 +216,29 @@ export const allModels = [
         isMaster: false,
         clockMhz: 2,
         swram: noSwram,
+        fdc: NoiseAwareIntelFdc,
+    }),
+    new Model({
+        name: "BBC B (US)",
+        shortName: "BBC B",
+        synonyms: ["B-US"],
+        os: ["usmos.rom", "us/USBASIC.rom", "us/USDNFS.rom"],
+        idleAddress: 0xe556,
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        clockMhz: 2,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc,
+    }),
+    new Model({
+        name: "BBC B (German)",
+        shortName: "BBC B",
+        synonyms: ["B-German"],
+        os: ["deos.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        clockMhz: 2,
+        swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
     }),
     new Model({
