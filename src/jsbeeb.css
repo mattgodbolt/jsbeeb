@@ -95,12 +95,10 @@ body {
   color: #aaaaaa;
 }
 
+/* Wraps to the panel's width instead of setting it. */
 #debug-symbols {
   width: 0;
   min-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 #debug-symbols a {

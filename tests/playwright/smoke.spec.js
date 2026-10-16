@@ -34,6 +34,8 @@ const LaptopWidths = [993, 1024, 1280, 1400, 1440, 1512, 1536, 1600];
 const Oswrch = 0xffee;
 // osnewl's JSR oswrch, a few instructions above oswrch itself.
 const OsnewlCall = 0xffe9;
+const BasicOswrchCall = 0x8e33;
+const Unnamed = 0x3000;
 
 test("boots to the BASIC prompt with a working console surface", async ({ beeb, page }) => {
     await beeb.open();
@@ -102,12 +104,31 @@ test("a breakpoint in the MOS names its addresses, and says where the names came
         /^JSR (oswrch|OSWRCH)$/,
     );
     await expect(page.locator("#debug-symbols")).toHaveText(
+        /^names from BBC Micro MOS 1\.20 \((?:tobylobster\.github\.io, )?source\)$/,
+    );
+    const panelWidth = () => page.locator("#debug").evaluate((panel) => panel.getBoundingClientRect().width);
+    const goTo = async (address) => {
+        const box = page.locator("#goto-dis-addr-form .goto-addr");
+        await box.fill(`$${address.toString(16)}`);
+        await box.press("Enter");
+    };
+    await goTo(Unnamed);
+    await expect(page.locator("#debug-symbols")).toHaveCSS("visibility", "hidden");
+    const uncreditedWidth = await panelWidth();
+    await goTo(BasicOswrchCall);
+    await expect(page.locator(`#disassembly [data-addr="${BasicOswrchCall}"] .disassembly`)).toHaveText(
+        /^JSR (oswrch|OSWRCH)$/,
+    );
+    await expect(page.locator("#debug-symbols")).toHaveText(
         /^names from BBC Micro MOS 1\.20 \((?:tobylobster\.github\.io, )?source\) · BBC BASIC II \(acornaeology\.uk, source\)$/,
     );
     await expect(page.locator("#debug-symbols a", { hasText: "acornaeology.uk" })).toHaveAttribute(
         "href",
         "https://acornaeology.uk/bbc-basic/2.html",
     );
+    expect(await panelWidth()).toBe(uncreditedWidth);
+    await page.locator("#debug-symbols").evaluate((line) => line.append(" · a set with a long title".repeat(20)));
+    expect(await panelWidth()).toBe(uncreditedWidth);
 });
 
 test("a disc named in the URL is loaded and autobooted", async ({ beeb }) => {

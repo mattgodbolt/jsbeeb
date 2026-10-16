@@ -406,7 +406,6 @@ export class Debugger {
                 return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
             }),
         );
-        this._symbolsLine.title = this._symbolsLine.textContent;
     }
 
     enable(e) {
