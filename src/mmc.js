@@ -529,7 +529,7 @@ class WFN {
     WFN_FileSeek() {
         const handle = this.handleOrAnswerInvalid();
         if (!handle) return;
-        const [b0 = 0, b1 = 0, b2 = 0, b3 = 0] = this.globalData;
+        const [b0, b1, b2, b3] = this.globalData;
         handle.pos = Math.min((b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0, WFN.sizeLimit(handle));
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }

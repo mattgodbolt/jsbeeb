@@ -282,7 +282,7 @@ describe("AtomMMC2 file handles", () => {
         expect(mmc.GetMMCData()[0].data.length).toBe(GrowLimit);
     });
 
-    it("treats seek bytes the Atom did not send as zero", () => {
+    it("seeks to the start when the buffer holds only an empty read", () => {
         const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1, 2, 3]))]);
         const a = open(mmc, "A");
         readBytes(mmc, a, 3);
