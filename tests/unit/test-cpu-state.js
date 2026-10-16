@@ -6,6 +6,7 @@ import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { findModel, TEST_6502 } from "../../src/models.js";
+import { setNodeBasePath } from "../../src/loader.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
@@ -409,6 +410,37 @@ describe("Cpu6502 econet NMI line", () => {
 
         cpu.readDevice(StationIdRegister);
         expect(cpu.nmi).toBe(true);
+    });
+});
+
+describe("Cpu6502 file server", () => {
+    const MissingRoot = "/nonexistent-jsbeeb-root";
+
+    function makeEconetCpu() {
+        const econet = new Econet(1, TEST_6502.cyclesPerSecond);
+        return new TEST_6502.Cpu(TEST_6502, { ...nullIo(), econet, config: machineSpec() });
+    }
+
+    afterEach(() => setNodeBasePath(null));
+
+    it("fails to initialise when the file server's files are missing", async () => {
+        setNodeBasePath(MissingRoot);
+        await expect(makeEconetCpu().initialise()).rejects.toThrow(/L3FS\.dat|scsi\.dat/);
+    });
+
+    it("restarts the file server on a hard reset without loading anything", async () => {
+        const cpu = makeEconetCpu();
+        await cpu.initialise();
+        cpu.filestore.PC = 0x1234;
+        cpu.filestore.scsi[0] ^= 0xff;
+        const pristineFirstByte = cpu.filestore.scsi[0] ^ 0xff;
+
+        setNodeBasePath(MissingRoot);
+        cpu.reset(true);
+
+        expect(cpu.filestore.PC).toBe(0x400);
+        expect(cpu.filestore.ram[0x400]).toBe(cpu.filestore.l3fs[0]);
+        expect(cpu.filestore.scsi[0]).toBe(pristineFirstByte);
     });
 });
 
