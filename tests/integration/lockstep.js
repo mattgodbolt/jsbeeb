@@ -352,11 +352,18 @@ describe("lockstep sessions", () => {
             const { host, lockstep, commits } = await pair();
             const seconds = 3;
             const slicesPerSecond = 10;
+            const second = host.model.cyclesPerSecond;
+            const slice = second / slicesPerSecond;
+            const start = cycleCount(host.processor);
             // One slice spare: each hash is due a second after the commit that took the last one ended.
-            for (let i = 0; i < seconds * slicesPerSecond + 1; ++i) {
-                lockstep.execute(host.model.cyclesPerSecond / slicesPerSecond);
+            for (let i = 0; i < seconds * slicesPerSecond + 1; ++i) lockstep.execute(slice);
+            const hashedAt = commits.filter((commit) => commit.hash !== undefined).map((commit) => commit.upTo);
+            expect(hashedAt).toHaveLength(seconds);
+            const gaps = hashedAt.map((upTo, i) => upTo - (i === 0 ? start : hashedAt[i - 1]));
+            for (const gap of gaps) {
+                expect(gap).toBeGreaterThanOrEqual(second);
+                expect(gap).toBeLessThanOrEqual(second + slice + InstructionSlackCycles);
             }
-            expect(commits.filter((commit) => commit.hash !== undefined)).toHaveLength(seconds);
         });
 
         it("keeps a commit that ran no cycles, and its inputs", async () => {
