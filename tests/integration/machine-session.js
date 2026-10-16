@@ -880,4 +880,34 @@ describe("MachineSession bank breakpoints on a Master with ANDY paged in", () =>
         },
         BootTimeout,
     );
+
+    it(
+        "does not break in ANDY on a breakpoint given the bank",
+        async () => {
+            const session = await sessionLooping(AndyLoop);
+            session.addBreakpoint("execute", AndyLoop, { bank: SidewaysRamBank });
+
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+            expect(completed).toBe(true);
+            expect(session.hitBreakpoint()).toBeNull();
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "breaks above ANDY on a breakpoint given the bank",
+        async () => {
+            const session = await sessionLooping(BankLoop);
+            const id = session.addBreakpoint("execute", BankLoop, { bank: SidewaysRamBank });
+
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+
+            expect(completed).toBe(false);
+            expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: BankLoop, bank: SidewaysRamBank });
+            session.destroy();
+        },
+        BootTimeout,
+    );
 });

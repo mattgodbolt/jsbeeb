@@ -365,7 +365,7 @@ export class MachineSession {
     addBreakpoint(type, address, { bank } = {}) {
         requireBank(bank);
         const cpu = this._machine.processor;
-        const inBank = () => bank === undefined || this._machine.pagedBank === bank;
+        const inBank = () => bank === undefined || this._machine.isBankPagedAt(bank, address);
         const id = this._nextBreakpointId++;
         const bp = { type, address, bank, hit: false, id, value: undefined };
 
