@@ -30,11 +30,14 @@ async function runToField(session, field) {
 // to one of four cell positions, and that depends on disc timing. The reference has the first
 // box at this column; try start points until one puts it there.
 const T8FirstBoxColumn = 9.5;
-const T8StartStepCycles = 1000;
+// Prime, so that successive starts walk the poll phase rather than sitting on one column.
+const T8StartStepCycles = 2503;
 const T8MaxStarts = 32;
 const ScreenColumns = 40;
 
-const isRed = (data, i) => data[i] > 128 && data[i + 1] < 128 && data[i + 2] < 128;
+const ChannelMidpoint = 128;
+
+const isRed = (data, i) => data[i] > ChannelMidpoint && data[i + 1] < ChannelMidpoint && data[i + 2] < ChannelMidpoint;
 
 async function firstBoxColumn(png) {
     const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
@@ -46,7 +49,8 @@ async function firstBoxColumn(png) {
     while (fieldEnd > fieldStart && !redAt(fieldEnd - 1)) fieldEnd--;
     let boxStart = fieldStart;
     while (boxStart < fieldEnd && redAt(boxStart)) boxStart++;
-    return ((boxStart - fieldStart) * ScreenColumns) / (fieldEnd - fieldStart);
+    const column = ((boxStart - fieldStart) * ScreenColumns) / (fieldEnd - fieldStart);
+    return Math.round(column * 2) / 2;
 }
 
 async function startSession() {
@@ -57,20 +61,26 @@ async function startSession() {
     return session;
 }
 
+// Returns the last render if none matched, so the comparison fails with pictures to look at.
 async function renderT8() {
+    const columnsSeen = [];
+    let png;
     for (let start = 0; start < T8MaxStarts; start++) {
         const session = await startSession();
         try {
             await session.runFor(start * T8StartStepCycles);
             await session.type(`CHAIN "T8"`);
             await session.runFrames(RasterPageFrames);
-            const png = await session.screenshotActive();
-            if ((await firstBoxColumn(png)) === T8FirstBoxColumn) return png;
+            png = await session.screenshotActive();
+            const column = await firstBoxColumn(png);
+            if (column === T8FirstBoxColumn) return png;
+            columnsSeen.push(column);
         } finally {
             session.destroy();
         }
     }
-    throw new Error(`T8 never put its first box at column ${T8FirstBoxColumn} in ${T8MaxStarts} start points`);
+    console.warn(`T8 never put its first box at column ${T8FirstBoxColumn}; columns seen: ${columnsSeen.join(", ")}`);
+    return png;
 }
 
 /** Renders one page of the test disc under jsbeeb and returns a PNG of the active display. */
