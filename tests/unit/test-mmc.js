@@ -122,6 +122,8 @@ describe("AtomMMC2 file handles", () => {
     const FileNumOffset = 0x20;
     const ErrorTooManyOpen = 0x12;
     const FrInvalidObject = 9;
+    const FrNoFile = 4;
+    const CardCapacity = 16 * 1024 * 1024;
     const AnyFreeHandle = 1;
 
     const fileCommand = (cmd, handle) => cmd | (handle << 5);
@@ -261,5 +263,44 @@ describe("AtomMMC2 file handles", () => {
         expect(writeBytes(mmc, a, [1])).toBe(StatusComplete | FrInvalidObject);
         expect(seek(mmc, a, 0)).toBe(StatusComplete | FrInvalidObject);
         expect(close(mmc, a)).toBe(StatusComplete | FrInvalidObject);
+    });
+
+    it("overwrites the middle of a file at a seeked position", () => {
+        const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1, 2, 3, 4, 5]))]);
+        const a = open(mmc, "A");
+        seek(mmc, a, 1);
+        expect(writeBytes(mmc, a, [8, 9])).toBe(StatusComplete);
+        expect(readBytes(mmc, a, 2).bytes).toEqual([4, 5]);
+        expect(mmc.GetMMCData()[0].data).toEqual(new Uint8Array([1, 8, 9, 4, 5]));
+    });
+
+    it("clips a seek past the card's capacity and short-writes there, as a full card does", () => {
+        const mmc = makeMmc([]);
+        const a = open(mmc, "A", CmdFileOpenWrite);
+        expect(seek(mmc, a, 0xffffffff)).toBe(StatusComplete);
+        expect(writeBytes(mmc, a, [1])).toBe(StatusComplete);
+        expect(mmc.GetMMCData()[0].data.length).toBe(CardCapacity);
+    });
+
+    it("treats seek bytes the Atom did not send as zero", () => {
+        const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1, 2, 3]))]);
+        const a = open(mmc, "A");
+        readBytes(mmc, a, 3);
+        expect(readBytes(mmc, a, 1).status).toBe(StatusEof);
+        expect(command(mmc, fileCommand(CmdFileSeek, a))).toBe(StatusComplete);
+        expect(readBytes(mmc, a, 1).bytes).toEqual([1]);
+    });
+
+    it("answers a failed random-access open with the open's error", () => {
+        const mmc = makeMmc([]);
+        expect(open(mmc, "MISSING")).toBe(-(StatusComplete | FrNoFile));
+    });
+
+    it("closes every handle on a hard reset", () => {
+        const mmc = makeMmc([new WFNFile("/A", new Uint8Array([1]))]);
+        const handles = [open(mmc, "A"), open(mmc, "A"), open(mmc, "A")];
+        mmc.reset(true);
+        expect(readBytes(mmc, handles[0], 1).status).toBe(StatusComplete | FrInvalidObject);
+        expect([open(mmc, "A"), open(mmc, "A"), open(mmc, "A")]).toEqual([1, 2, 3]);
     });
 });

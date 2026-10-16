@@ -98,6 +98,9 @@ const FA_CREATE_ALWAYS = 8,
     FA_OPEN_ALWAYS = 16,
     ERROR_TOO_MANY_OPEN = 0x12,
     FILENUM_OFFSET = 0x20;
+// FatFs clips seeks to the space left and short-writes with FR_OK once the card is full.
+const EmulatedCardCapacity = 16 * 1024 * 1024;
+
 // Simulate open modes
 const O_CREAT = 0x100,
     O_RDWR = 0x2,
@@ -207,15 +210,14 @@ class WFN {
         this.mmc.WriteDataPort(STATUS_COMPLETE | res);
     }
 
-    // Reports FR_INVALID_OBJECT to the Atom when the command's handle is not open.
-    openHandle() {
+    handleOrAnswerInvalid() {
         const handle = this.fildata[this.filenum];
         if (!handle) this.mmc.WriteDataPort(STATUS_COMPLETE | FR_INVALID_OBJECT);
         return handle;
     }
 
     WFN_FileClose() {
-        if (!this.openHandle()) return;
+        if (!this.handleOrAnswerInvalid()) return;
         this.fildata[this.filenum] = null;
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
@@ -521,14 +523,15 @@ class WFN {
     }
 
     WFN_FileSeek() {
-        const handle = this.openHandle();
+        const handle = this.handleOrAnswerInvalid();
         if (!handle) return;
-        handle.pos = new DataView(this.globalData.buffer, this.globalData.byteOffset).getUint32(0, true);
+        const [b0 = 0, b1 = 0, b2 = 0, b3 = 0] = this.globalData;
+        handle.pos = Math.min((b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0, EmulatedCardCapacity);
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
     WFN_FileRead() {
-        const handle = this.openHandle();
+        const handle = this.handleOrAnswerInvalid();
         if (!handle) return;
         if (this.globalAmount === 0) {
             this.globalAmount = 256;
@@ -544,16 +547,16 @@ class WFN {
     }
 
     WFN_FileWrite() {
-        const handle = this.openHandle();
+        const handle = this.handleOrAnswerInvalid();
         if (!handle) return;
         if (this.globalAmount === 0) {
             this.globalAmount = 256;
         }
-        const end = handle.pos + this.globalAmount;
+        const end = Math.min(handle.pos + this.globalAmount, EmulatedCardCapacity);
         const oldData = handle.file.data;
         const newData = new Uint8Array(Math.max(oldData.length, end));
         newData.set(oldData, 0);
-        newData.set(this.globalData.slice(0, this.globalAmount), handle.pos);
+        newData.set(this.globalData.slice(0, end - handle.pos), handle.pos);
         handle.file.data = newData;
         handle.pos = end;
         this.mmc.WriteDataPort(STATUS_COMPLETE);
@@ -615,7 +618,7 @@ class WFN {
 
     fileOpen(mode) {
         if (!this.allfiles) return 4; // no file
-        let ret = 0;
+        let ret;
         let fname = this.trimToFilename(this.globalData);
 
         if (this.filenum === 0) {
@@ -638,6 +641,8 @@ class WFN {
                     this.fildata[this.filenum] = { file: this.allfiles[fopen.fp], pos: 0 };
                     // No error, so update the return value to indicate the file num
                     ret = FILENUM_OFFSET | this.filenum;
+                } else {
+                    ret = fopen.error;
                 }
             } else {
                 // All files are open, return too many open files
@@ -787,6 +792,7 @@ export class AtomMMC2 {
     reset(hard) {
         if (hard) {
             this.configByte = 0xff;
+            this.WFN.fildata.fill(null);
         }
         this.WFN.reset();
     }
