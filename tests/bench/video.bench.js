@@ -8,7 +8,10 @@ const FramesPerSecond = 50;
 const FbWidth = 1024;
 const FbHeight = 625;
 const PromptTimeoutSecs = 30;
-const ScreenFullOfText = "FOR I%=0 TO 2600:VDU 33+I% MOD 94:NEXT";
+const CharsToPrint = 2600;
+const ScreenFullOfText = `FOR I%=1 TO ${CharsToPrint}:VDU 33+I% MOD 94:NEXT`;
+const OsModeAddr = 0x355;
+const BasicIPercentAddr = 0x424;
 
 async function screenFullOfTextIn(mode) {
     const video = new Video(false, new Uint32Array(FbWidth * FbHeight), () => {});
@@ -17,6 +20,13 @@ async function screenFullOfTextIn(mode) {
     await machine.runUntilInput(PromptTimeoutSecs);
     await machine.type(`MODE ${mode}:${ScreenFullOfText}`);
     await machine.runUntilInput(PromptTimeoutSecs);
+    const modeSet = machine.readbyte(OsModeAddr);
+    const charsPrinted = machine.readword(BasicIPercentAddr) - 1;
+    if (modeSet !== mode || charsPrinted !== CharsToPrint) {
+        throw new Error(
+            `Setup for MODE ${mode} left MODE ${modeSet} with ${charsPrinted} of ${CharsToPrint} characters printed`,
+        );
+    }
     const cpu = machine.processor;
     const cyclesPerFrame = cpu.model.cyclesPerSecond / FramesPerSecond;
     return () => cpu.execute(cyclesPerFrame);
