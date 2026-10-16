@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaWindow, shortName } from "../../src/web/media-window.js";
-import { MachineRequirements, describeRef, sourceOf } from "../../src/web/media-catalogue.js";
+import { MachineRequirements, describeRef, describeSessionFile, sourceOf } from "../../src/web/media-catalogue.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { findModel } from "../../src/models.js";
 import { Schemas } from "../../src/media-resolver.js";
@@ -830,6 +830,18 @@ describe("MediaWindow", () => {
             await openWith([mine]);
             putDiscIn(1, discFor("mine.ssd", ssdImage()), "session:mine.ssd");
             expect(text(rows()[0].querySelector(".detail"))).toContain("in drive 1");
+        });
+
+        it("tells apart, to a screen reader too, two files opened under one name", async () => {
+            await openWith([
+                describeSessionFile("1/game.ssd", "game.ssd", "disc", { order: 1, count: 2 }),
+                describeSessionFile("2/game.ssd", "game.ssd", "disc", { order: 2, count: 2 }),
+            ]);
+            const labels = rows().map((row) => row.querySelector(".media-row-main").getAttribute("aria-label"));
+            expect(labels).toEqual([
+                "Load game.ssd, opened this session, 1st of 2, This session into drive 0",
+                "Load game.ssd, opened this session, 2nd of 2, This session into drive 0",
+            ]);
         });
 
         it("ignores a failure from a load the bay has since moved on from", async () => {

@@ -178,8 +178,9 @@ describe("MediaLoader", () => {
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
             expect(deps.urlState.params.disc2).toBeUndefined();
             const { descriptors } = await media.listAll();
-            expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:mine.ssd", kind: "disc" }));
-            const again = await media.loadDiscImage("session:mine.ssd");
+            const listed = descriptors.find((d) => d.source === "session");
+            expect(listed).toMatchObject({ title: "mine.ssd", kind: "disc" });
+            const again = await media.loadDiscImage(listed.ref);
             expect(again.name).toBe("mine.ssd");
             expect(again.originalImageData).toBeTruthy();
         });
@@ -196,7 +197,7 @@ describe("MediaLoader", () => {
             const media = make();
             await expect(media.openFile(fileFor("junk.uef", new Uint8Array(16)))).rejects.toThrow("not a UEF");
             const { descriptors } = await media.listAll();
-            expect(descriptors.map((d) => d.ref)).not.toContain("session:junk.uef");
+            expect(descriptors.filter((d) => d.source === "session")).toEqual([]);
         });
 
         it("opens a zipped tape as a tape, whatever the zip is called", async () => {
@@ -215,7 +216,9 @@ describe("MediaLoader", () => {
             );
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
             const { descriptors } = await media.listAll();
-            expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:Chuckie.uef", kind: "tape" }));
+            expect(descriptors).toContainEqual(
+                expect.objectContaining({ title: "Chuckie.uef", kind: "tape", source: "session" }),
+            );
         });
 
         it("keeps a file in the list after the disc made from it is ejected", async () => {
@@ -223,7 +226,43 @@ describe("MediaLoader", () => {
             await media.openFile(fileFor("mine.ssd", ssdImage()));
             media.slots.eject(media.slots.drive(0));
             const { descriptors } = await media.listAll();
-            expect(descriptors).toContainEqual(expect.objectContaining({ ref: "session:mine.ssd" }));
+            expect(descriptors).toContainEqual(expect.objectContaining({ title: "mine.ssd", source: "session" }));
+        });
+
+        it("keeps two different files with one name apart, each listed and loadable", async () => {
+            const first = ssdImage();
+            const second = ssdImage();
+            second[0] = 0x41;
+            const media = make();
+            await media.openFile(fileFor("game.ssd", first), 0);
+            await media.openFile(fileFor("game.ssd", second), 1);
+            const { descriptors } = await media.listAll();
+            const listed = descriptors.filter((d) => d.source === "session");
+            expect(listed.map((d) => d.title)).toEqual(["game.ssd", "game.ssd"]);
+            expect(listed.map((d) => d.detail)).toEqual([
+                "opened this session, 1st of 2",
+                "opened this session, 2nd of 2",
+            ]);
+            expect(new Set(listed.map((d) => d.ref)).size).toBe(2);
+            expect(media.slots.drive(0).ref).toBe(listed[0].ref);
+            expect(media.slots.drive(1).ref).toBe(listed[1].ref);
+            expect((await media.loadDiscImage(listed[0].ref)).originalImageData).toEqual(first);
+            expect((await media.loadDiscImage(listed[1].ref)).originalImageData).toEqual(second);
+        });
+
+        it("lists a file opened twice once", async () => {
+            const media = make();
+            const seen = vi.fn();
+            media.addEventListener("files-changed", seen);
+            await media.openFile(fileFor("game.ssd", ssdImage()), 0);
+            await media.openFile(fileFor("game.ssd", ssdImage()), 1);
+            expect(seen).toHaveBeenCalledTimes(1);
+            const { descriptors } = await media.listAll();
+            const listed = descriptors.filter((d) => d.source === "session");
+            expect(listed).toHaveLength(1);
+            expect(listed[0].detail).toBe("opened this session");
+            expect(media.slots.drive(0).ref).toBe(listed[0].ref);
+            expect(media.slots.drive(1).ref).toBe(listed[0].ref);
         });
 
         it("says when a reference names a file that was never opened", async () => {
