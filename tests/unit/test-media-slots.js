@@ -199,6 +199,12 @@ describe("MediaSlots", () => {
     });
 
     describe("putting in and taking out", () => {
+        it("leaves what was loaded recently alone when told the media is not a new load", () => {
+            slots.put(slots.drive(0), discFor("elite.ssd", ssdImage()), elite.ref, { recent: false });
+            expect(slots.recent.rank(elite)).toBe(-1);
+            expect(fdc.drives[0].disc).toBeTruthy();
+        });
+
         it("puts media that is to hand straight in, overtaking any load in flight", async () => {
             const pending = deferred();
             loader.loadDiscImage.mockReturnValue(pending.promise);

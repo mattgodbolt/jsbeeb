@@ -238,7 +238,7 @@ export class RecentMedia {
     read() {
         try {
             const entries = JSON.parse(this.storage().getItem(RecentKey) ?? "[]");
-            return Array.isArray(entries) ? entries.filter(outlivesSession) : [];
+            return Array.isArray(entries) ? entries.filter(outlivesSession).slice(0, MaxRecent) : [];
         } catch (error) {
             console.warn("Could not read the recently loaded media:", error);
             return [];

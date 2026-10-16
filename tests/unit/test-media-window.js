@@ -597,6 +597,11 @@ describe("MediaWindow", () => {
             await openWith([elite, chuckie, saves, zalaga]);
             expect(rowTitles()).toEqual(["saves.ssd", "Zalaga", "Elite"]);
             expect(headings()).toEqual(["Recently loaded", "Everything else"]);
+            for (const heading of document.querySelectorAll("#media-list .media-heading"))
+                expect(heading.getAttribute("aria-hidden")).toBe("true");
+            const labels = rows().map((row) => row.querySelector(".media-row-main").getAttribute("aria-label"));
+            expect(labels[1]).toBe("Load Zalaga, Acornsoft, D1S1 · 40 · v1, HFE archive, recently loaded into drive 0");
+            expect(labels[2]).not.toContain("recently loaded");
             const box = document.getElementById("media-search");
             box.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
             expect(document.activeElement).toBe(rows()[0].querySelector(".media-row-main"));

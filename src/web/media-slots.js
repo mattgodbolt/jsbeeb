@@ -132,10 +132,15 @@ export class MediaSlots extends EventTarget {
         return { media };
     }
 
-    /** Media that is already to hand goes straight in, overtaking any load still in flight. */
-    put(slot, media, ref, { inUrl = true } = {}) {
+    /**
+     * Media that is already to hand goes straight in, overtaking any load still in flight.
+     *
+     * @param {object} [options]
+     * @param {boolean} [options.recent] whether it counts as loaded recently; a restored state's media does not
+     */
+    put(slot, media, ref, { inUrl = true, recent = true } = {}) {
         slot.claim = {};
-        this.install(slot, media, ref, inUrl);
+        this.install(slot, media, ref, inUrl, recent);
     }
 
     eject(slot) {
@@ -143,7 +148,7 @@ export class MediaSlots extends EventTarget {
         this.install(slot, undefined, undefined, true);
     }
 
-    install(slot, media, ref, inUrl) {
+    install(slot, media, ref, inUrl, recent = true) {
         slot.busy = null;
         slot.failed = null;
         if (slot.isDeck) this.processor.tapeInterface.setTape(media);
@@ -151,7 +156,7 @@ export class MediaSlots extends EventTarget {
         else this.drives.eject(slot.index);
         slot.ref = media ? ref : undefined;
         slot.inUrl = inUrl;
-        if (slot.ref) this.recent.note(slot.ref, slot.kind);
+        if (recent && slot.ref) this.recent.note(slot.ref, slot.kind);
         // A URL that already says as much is left alone, so a load it asked for makes no history.
         const named = inUrl ? slot.ref : undefined;
         if (slot.namedInUrl(this.urlState.params) !== named) this.urlState.set(slot.urlParams());

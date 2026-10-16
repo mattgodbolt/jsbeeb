@@ -228,7 +228,7 @@ export class SnapshotUI {
             }
 
             // An embedded disc has no reference, which takes whatever the URL named before out of it.
-            this.slots.put(this.slots.drive(driveIndex), loadedDisc, savedMedia[discKey]);
+            this.slots.put(this.slots.drive(driveIndex), loadedDisc, savedMedia[discKey], { recent: false });
         }
     }
 }

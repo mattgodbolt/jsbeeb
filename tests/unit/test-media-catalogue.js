@@ -242,12 +242,18 @@ describe("the media catalogue", () => {
             expect(recent.rank(disc("sth:Both.zip"))).toBe(-1);
         });
 
-        it("keeps only a short list", () => {
+        it("keeps the eight newest", () => {
             const recent = new RecentMedia();
-            for (let i = 0; i < 20; ++i) recent.note(`sth:${i}.zip`, "disc");
-            expect(recent.rank(disc("sth:19.zip"))).toBe(0);
-            expect(recent.rank(disc("sth:0.zip"))).toBe(-1);
-            expect(recent.entries.length).toBeLessThan(20);
+            for (let i = 1; i <= 9; ++i) recent.note(`sth:${i}.zip`, "disc");
+            expect(recent.rank(disc("sth:9.zip"))).toBe(0);
+            expect(recent.rank(disc("sth:2.zip"))).toBe(7);
+            expect(recent.rank(disc("sth:1.zip"))).toBe(-1);
+        });
+
+        it("reads back no more than the eight newest, however many were stored", () => {
+            const stored = Array.from({ length: 20 }, (_, i) => disc(`sth:${i}.zip`));
+            window.localStorage.setItem("recentMedia", JSON.stringify(stored));
+            expect(new RecentMedia().entries).toEqual(stored.slice(0, 8));
         });
 
         it("remembers across visits, but not a file opened this session, which a later visit cannot load", () => {

@@ -613,7 +613,9 @@ export class MediaWindow {
         const recent = list.query ? [] : this.recentAmong(shown);
         const rest = shown.filter((d) => !recent.includes(d)).slice(0, MaxRows - recent.length);
         const rows = [
-            ...(recent.length ? [this.buildHeading("Recently loaded"), ...recent.map((d) => this.buildRow(d))] : []),
+            ...(recent.length
+                ? [this.buildHeading("Recently loaded"), ...recent.map((d) => this.buildRow(d, { recent: true }))]
+                : []),
             ...(recent.length && rest.length ? [this.buildHeading("Everything else")] : []),
             ...rest.map((d) => this.buildRow(d)),
         ];
@@ -652,14 +654,16 @@ export class MediaWindow {
         return [...ranked].sort(([a], [b]) => a - b).map(([, d]) => d);
     }
 
+    /** A heading for the eye only: each recent row's label says it was loaded recently. */
     buildHeading(words) {
         const li = document.createElement("li");
         li.className = "media-heading small text-uppercase text-muted px-2 pt-2 pb-1";
+        li.setAttribute("aria-hidden", "true");
         li.textContent = words;
         return li;
     }
 
-    buildRow(d) {
+    buildRow(d, { recent = false } = {}) {
         const li = document.createElement("li");
         li.className = "media-row";
         const main = document.createElement("button");
@@ -667,7 +671,9 @@ export class MediaWindow {
         main.className = "media-row-main";
         const target = this.rowTarget(d);
         const targetName = target === "tape" ? "the cassette deck" : `drive ${target}`;
-        const label = [d.title, d.publisher, d.detail, sourceName(d.source)].filter(Boolean).join(", ");
+        const label = [d.title, d.publisher, d.detail, sourceName(d.source), recent && "recently loaded"]
+            .filter(Boolean)
+            .join(", ");
         main.title = `Load ${label} into ${targetName}`;
         main.setAttribute("aria-label", main.title);
         const cell = (className, text) => {
