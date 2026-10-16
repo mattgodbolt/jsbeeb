@@ -12,6 +12,17 @@ export function tubeCpuSpeedLabel(multiplier, model) {
 const capitalise = (word) => word[0].toUpperCase() + word.substring(1);
 const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" : `Channel ${channel}`);
 
+export const PersistenceField = {
+    type: "range",
+    id: "persistence",
+    label: "Phosphor afterglow",
+    readout: (afterglowMs) => (afterglowMs > 0 ? `${afterglowMs} ms` : "none"),
+    min: 0,
+    max: MaxPersistenceMs,
+    step: 5,
+    title: "How long the last picture takes to fade under the next, in milliseconds: 0 is no afterglow",
+};
+
 /**
  * The Settings dialog's fields, top to bottom; an array is a section, set off from what is around it. A field shows one
  * setting (or none, for the afterglow slider, which edits whichever setting the display in use has), and is one of:
@@ -28,17 +39,6 @@ const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" :
  * is `live`; a `restart` field only takes effect on a freshly built machine. `enabledWhen(proposed)` greys a control out
  * unless the settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
  */
-export const PersistenceField = {
-    type: "range",
-    id: "persistence",
-    label: "Phosphor afterglow",
-    readout: (afterglowMs) => (afterglowMs > 0 ? `${afterglowMs} ms` : "none"),
-    min: 0,
-    max: MaxPersistenceMs,
-    step: 5,
-    title: "How long the last picture takes to fade under the next, in milliseconds: 0 is no afterglow",
-};
-
 export const ConfigForm = [
     {
         type: "menu",

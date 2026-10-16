@@ -399,7 +399,7 @@ describe("the Settings form", () => {
     beforeEach(() => domFromIndexHtml("configuration"));
     afterEach(teardownDom);
 
-    it("labels and shows every setting, each control in its own row", () => {
+    it("labels and shows every setting", () => {
         configFrom(Changed);
         openDialog();
         expect(controls()).toEqual([
