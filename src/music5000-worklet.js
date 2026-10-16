@@ -1,43 +1,23 @@
-/* global registerProcessor, AudioWorkletProcessor */
-const BUFFER_SIZE = 65536;
+/* global sampleRate, registerProcessor, AudioWorkletProcessor */
+import { StereoRing } from "./stereo-ring.js";
+
+const StartLatencyMs = 20;
+const MaxLatencyMs = 250;
+const FullScale = 32768;
+
+const framesFor = (ms) => Math.ceil((sampleRate * ms) / 1000);
 
 registerProcessor(
     "music5000",
     class extends AudioWorkletProcessor {
         constructor() {
             super();
-            this.port.onmessage = this.onmessage.bind(this);
-
-            this.sampleBuffer = new Float32Array(BUFFER_SIZE);
-            this.readPosition = 0;
-            this.writePosition = 0;
-        }
-
-        onmessage(event) {
-            // Receive a new 128-byte sample from the audio processor and write to the FIFO buffer
-            const { data } = event;
-            const sample = new Float32Array(data);
-
-            if (this.writePosition === BUFFER_SIZE) {
-                this.writePosition = 0;
-            }
-
-            for (let i = 0; i < data.length; i++) {
-                this.sampleBuffer[this.writePosition++] = sample[i] / 32768.0; // Conversion to a range -1 to +1
-            }
+            this.ring = new StereoRing(framesFor(MaxLatencyMs), framesFor(StartLatencyMs));
+            this.port.onmessage = (event) => this.ring.write(event.data, 1 / FullScale);
         }
 
         process(inputs, outputs) {
-            // Playback
-            if (this.readPosition === BUFFER_SIZE) {
-                this.readPosition = 0;
-            }
-
-            for (let i = 0; i < outputs[0][0].length; i++) {
-                outputs[0][0][i] = this.sampleBuffer[this.readPosition++];
-                outputs[0][1][i] = this.sampleBuffer[this.readPosition++];
-            }
-
+            this.ring.read(outputs[0][0], outputs[0][1]);
             return true;
         }
     },
