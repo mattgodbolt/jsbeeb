@@ -1,4 +1,11 @@
-import { detectKeyboardLayout, hostKeyCodes, keyCodes, userKeymap } from "./keymap.js";
+import {
+    characterBinder,
+    detectKeyboardLayout,
+    hostKeyCodes,
+    keyCodes,
+    PrintableCharacters,
+    userKeymap,
+} from "./keymap.js";
 
 // ATOM
 
@@ -95,114 +102,87 @@ export const ATOM = {
     REPT: [1, 6],
 };
 
+/** Characters the Atom prints with shift held. `!` to `)` are shift and the digit above them. */
+const ShiftedCharacters = {
+    "!": ATOM.K1,
+    '"': ATOM.K2,
+    "#": ATOM.K3,
+    $: ATOM.K4,
+    "%": ATOM.K5,
+    "&": ATOM.K6,
+    "'": ATOM.K7,
+    "(": ATOM.K8,
+    ")": ATOM.K9,
+    "=": ATOM.MINUS_EQUALS,
+    "+": ATOM.SEMICOLON_PLUS,
+    "*": ATOM.COLON_STAR,
+    "<": ATOM.COMMA_LESSTHAN,
+    ">": ATOM.PERIOD_GREATERTHAN,
+    "?": ATOM.SLASH_QUESTIONMARK,
+    "`": ATOM.AT,
+    "~": ATOM.UP_ARROW,
+    "{": ATOM.LEFT_SQUARE_BRACKET,
+    "|": ATOM.BACKSLASH,
+    "}": ATOM.RIGHT_SQUARE_BRACKET,
+};
+
+/** Characters the Atom prints without shift. */
+const UnshiftedCharacters = {
+    "\n": ATOM.RETURN,
+    "\t": ATOM.SPACE,
+    " ": ATOM.SPACE,
+    "-": ATOM.MINUS_EQUALS,
+    ":": ATOM.COLON_STAR,
+    ";": ATOM.SEMICOLON_PLUS,
+    ",": ATOM.COMMA_LESSTHAN,
+    ".": ATOM.PERIOD_GREATERTHAN,
+    "/": ATOM.SLASH_QUESTIONMARK,
+    "@": ATOM.AT,
+    "^": ATOM.UP_ARROW,
+    "[": ATOM.LEFT_SQUARE_BRACKET,
+    "\\": ATOM.BACKSLASH,
+    "]": ATOM.RIGHT_SQUARE_BRACKET,
+};
+
+const ShiftMakesNoDifference = new Set([ATOM.SPACE]);
+
+/**
+ * What a character costs on an Atom keyboard, as `bbcKeyForCharacter` does for the BBC. Only
+ * letters say which way the lock has to be; everything else prints the same either way, so
+ * leaves `upperCase` out.
+ *
+ * @param {string} char one character
+ * @returns {{key: [number, number], shift: boolean, upperCase?: boolean}|null} null if the Atom has no such character
+ */
+export function atomKeyForCharacter(char) {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) return { key: ATOM[char], shift: false, upperCase: true };
+    if (code >= 97 && code <= 122) return { key: ATOM[String.fromCharCode(code - 32)], shift: false, upperCase: false };
+    if (code >= 48 && code <= 57) return { key: ATOM["K" + char], shift: false };
+    const shifted = ShiftedCharacters[char];
+    if (shifted) return { key: shifted, shift: true };
+    const unshifted = UnshiftedCharacters[char];
+    if (unshifted) return { key: unshifted, shift: false };
+    return null;
+}
+
 export function stringToATOMKeys(str) {
     const array = [];
     let shiftState = false;
     let capsLockState = true;
-    for (let i = 0; i < str.length; ++i) {
-        const c = str.charCodeAt(i);
-        let charStr = str.charAt(i);
-        let atomKey = null;
-        let needsShift = false;
-        // Only letters care about caps lock state; non-letter characters
-        // leave it wherever it is to avoid unnecessary LOCK toggles.
-        let needsCapsLock = capsLockState;
-        if (c >= 65 && c <= 90) {
-            // A-Z
-            atomKey = ATOM[charStr];
-            needsCapsLock = true;
-        } else if (c >= 97 && c <= 122) {
-            // a-z (LOCK toggles the ROM's internal caps lock state)
-            charStr = String.fromCharCode(c - 32);
-            atomKey = ATOM[charStr];
-            needsCapsLock = false;
-        } else if (c >= 48 && c <= 57) {
-            // 0-9
-            atomKey = ATOM["K" + charStr];
-        } else if (c >= 33 && c <= 41) {
-            // ! to )
-            charStr = String.fromCharCode(c + 16);
-            atomKey = ATOM["K" + charStr];
-            needsShift = true;
-        } else {
-            switch (charStr) {
-                case "\n":
-                    atomKey = ATOM.RETURN;
-                    break;
-                case "\t":
-                    atomKey = ATOM.SPACE; // Atom has no TAB key
-                    break;
-                case " ":
-                    atomKey = ATOM.SPACE;
-                    break;
-                case "-":
-                    atomKey = ATOM.MINUS_EQUALS;
-                    break;
-                case "=":
-                    atomKey = ATOM.MINUS_EQUALS;
-                    needsShift = true;
-                    break;
-                case "\\":
-                    atomKey = ATOM.BACKSLASH;
-                    break;
-                case "@":
-                    atomKey = ATOM.AT;
-                    break;
-                case "[":
-                    atomKey = ATOM.LEFT_SQUARE_BRACKET;
-                    break;
-                case ";":
-                    atomKey = ATOM.SEMICOLON_PLUS;
-                    break;
-                case "+":
-                    atomKey = ATOM.SEMICOLON_PLUS;
-                    needsShift = true;
-                    break;
-                case ":":
-                    atomKey = ATOM.COLON_STAR;
-                    break;
-                case "*":
-                    atomKey = ATOM.COLON_STAR;
-                    needsShift = true;
-                    break;
-                case "]":
-                    atomKey = ATOM.RIGHT_SQUARE_BRACKET;
-                    break;
-                case ",":
-                    atomKey = ATOM.COMMA_LESSTHAN;
-                    break;
-                case "<":
-                    atomKey = ATOM.COMMA_LESSTHAN;
-                    needsShift = true;
-                    break;
-                case ".":
-                    atomKey = ATOM.PERIOD_GREATERTHAN;
-                    break;
-                case ">":
-                    atomKey = ATOM.PERIOD_GREATERTHAN;
-                    needsShift = true;
-                    break;
-                case "/":
-                    atomKey = ATOM.SLASH_QUESTIONMARK;
-                    break;
-                case "?":
-                    atomKey = ATOM.SLASH_QUESTIONMARK;
-                    needsShift = true;
-                    break;
-            }
-        }
+    for (const char of str) {
+        const needs = atomKeyForCharacter(char);
+        if (!needs) continue;
 
-        if (!atomKey) continue;
-
-        if ((needsShift && !shiftState) || (!needsShift && shiftState)) {
+        if (needs.shift !== shiftState) {
             array.push(ATOM.SHIFT);
-            shiftState = !shiftState;
+            shiftState = needs.shift;
         }
-        if ((needsCapsLock && !capsLockState) || (!needsCapsLock && capsLockState)) {
+        if (needs.upperCase !== undefined && needs.upperCase !== capsLockState) {
             array.push(ATOM.LOCK);
-            capsLockState = !capsLockState;
+            capsLockState = needs.upperCase;
         }
-        array.push(atomKey);
+        array.push(needs.key);
     }
 
     if (shiftState) array.push(ATOM.SHIFT);
@@ -310,63 +290,19 @@ export function getKeyMapAtom(keyLayout) {
     map(keyCodes.ALT_LEFT, ATOM.LOCK);
 
     if (keyLayout === "natural") {
-        // "natural" keyboard
-        // Like a PC/Mac keyboard
-
-        // US Keyboard: has Tilde on <Shift>BACK_QUOTE
-        map(keyCodes.BACK_QUOTE, ATOM.UP_ARROW); // ` on PC, § on Mac
-        map(keyCodes.APOSTROPHE, isUKlayout ? ATOM.AT : ATOM.K2, true);
-        map(keyCodes.K2, isUKlayout ? ATOM.K2 : ATOM.AT, true);
-
-        // 1st row
-        map(keyCodes.K3, ATOM.K3, true);
-        map(keyCodes.K6, ATOM.UP_ARROW, true);
-        map(keyCodes.K7, ATOM.K6, true);
-        map(keyCodes.K8, ATOM.COLON_STAR, true);
-        map(keyCodes.K9, ATOM.K8, true);
-        map(keyCodes.K0, ATOM.K9, true);
-
-        map(keyCodes.K2, ATOM.K2, false);
-        map(keyCodes.K3, ATOM.K3, false);
-        map(keyCodes.K6, ATOM.K6, false);
-        map(keyCodes.K7, ATOM.K7, false);
-        map(keyCodes.K8, ATOM.K8, false);
-        map(keyCodes.K9, ATOM.K9, false);
-        map(keyCodes.K0, ATOM.K0, false);
-
-        map(keyCodes.K1, ATOM.K1);
-        map(keyCodes.K4, ATOM.K4);
-        map(keyCodes.K5, ATOM.K5);
-
-        // 3rd row
-
-        map(keyCodes.MINUS, ATOM.MINUS_EQUALS);
-
-        // 2nd row
-        map(keyCodes.LEFT_SQUARE_BRACKET, ATOM.LEFT_SQUARE_BRACKET);
-
-        map(keyCodes.RIGHT_SQUARE_BRACKET, ATOM.RIGHT_SQUARE_BRACKET);
-
-        // 3rd row
-
-        map(keyCodes.SEMICOLON, ATOM.SEMICOLON_PLUS);
-
-        map(keyCodes.APOSTROPHE, ATOM.COLON_STAR, false);
-
-        map(keyCodes.EQUALS, ATOM.SEMICOLON_PLUS); // OK for <Shift> at least
+        // Keyed by the character the host keyboard produces, as the BBC's is in `getKeyMap`.
+        const mapCharacter = characterBinder(map, atomKeyForCharacter, ShiftMakesNoDifference);
+        for (const char of PrintableCharacters) mapCharacter(char, char);
 
         map(keyCodes.END, ATOM.COPY);
         map(keyCodes.HOME, ATOM.LOCK);
+        map(keyCodes.CAPSLOCK, ATOM.LOCK);
         map(keyCodes.F11, ATOM.COPY);
 
         map(keyCodes.CTRL_LEFT, ATOM.CTRL);
         map(keyCodes.CTRL_RIGHT, ATOM.CTRL);
         map(keyCodes.SHIFT_LEFT, ATOM.SHIFT);
         map(keyCodes.SHIFT_RIGHT, ATOM.SHIFT);
-
-        // The Atom has no `#` key, so both of the host's backslash keys go to the nearest.
-        map(keyCodes.BACKSLASH, ATOM.BACKSLASH);
-        map(keyCodes.INTL_BACKSLASH, ATOM.BACKSLASH);
     } else if (keyLayout === "gaming") {
         // gaming keyboard
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ATOM, getKeyMapAtom } from "../../src/keymap-atom.js";
+import { ATOM, atomKeyForCharacter, getKeyMapAtom } from "../../src/keymap-atom.js";
 import {
     BBC,
     bbcKeyForCharacter,
@@ -123,5 +123,86 @@ describe("User key mapping from KEY. URL parameters", function () {
         expect(warnings).toHaveLength(2);
         expect(userKeymap).toEqual([]);
         expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.RETURN);
+    });
+});
+
+describe("What a character costs on an Atom keyboard", function () {
+    it("puts the shifted characters on their unshifted key", function () {
+        expect(atomKeyForCharacter("!")).toEqual({ key: ATOM.K1, shift: true });
+        expect(atomKeyForCharacter("=")).toEqual({ key: ATOM.MINUS_EQUALS, shift: true });
+        expect(atomKeyForCharacter("|")).toEqual({ key: ATOM.BACKSLASH, shift: true });
+    });
+
+    it("knows the characters the Atom prints without shift, where a PC needs it", function () {
+        expect(atomKeyForCharacter("@")).toEqual({ key: ATOM.AT, shift: false });
+        expect(atomKeyForCharacter("^")).toEqual({ key: ATOM.UP_ARROW, shift: false });
+        expect(atomKeyForCharacter(":")).toEqual({ key: ATOM.COLON_STAR, shift: false });
+    });
+
+    it("asks for the lock only for letters", function () {
+        expect(atomKeyForCharacter("A")).toEqual({ key: ATOM.A, shift: false, upperCase: true });
+        expect(atomKeyForCharacter("a")).toEqual({ key: ATOM.A, shift: false, upperCase: false });
+        expect(atomKeyForCharacter("1")).toEqual({ key: ATOM.K1, shift: false });
+    });
+
+    it("has nothing for a character the Atom cannot print", function () {
+        expect(atomKeyForCharacter("_")).toBeNull();
+        expect(atomKeyForCharacter("\u00a3")).toBeNull();
+    });
+});
+
+describe("The Atom's key map", function () {
+    const Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    it("keys the natural layout by the character the host produced, in either case", function () {
+        const keyMap = getKeyMapAtom("natural");
+        for (const shiftDown of [false, true]) {
+            for (const letter of Letters) {
+                expect(keyMap[shiftDown][letter]).toEqual(ATOM[letter]);
+                expect(keyMap[shiftDown][letter.toLowerCase()]).toEqual(ATOM[letter]);
+            }
+        }
+        expect(keyMap[false]["2"]).toEqual(ATOM.K2);
+    });
+
+    it("holds the Atom's shift its own way where it disagrees with the host's", function () {
+        const keyMap = getKeyMapAtom("natural");
+        // US: shift and 2 for `@`, which the Atom prints without shift.
+        expect(keyMap[true]["@"]).toEqual([...ATOM.AT, false]);
+        expect(keyMap[false]["@"]).toEqual(ATOM.AT);
+        // US: `=` has a key of its own, where the Atom shifts `-`.
+        expect(keyMap[false]["="]).toEqual([...ATOM.MINUS_EQUALS, true]);
+        expect(keyMap[true]["="]).toEqual(ATOM.MINUS_EQUALS);
+    });
+
+    it("leaves the host's shift alone on space", function () {
+        const keyMap = getKeyMapAtom("natural");
+        expect(keyMap[true][" "]).toEqual(ATOM.SPACE);
+        expect(keyMap[false][" "]).toEqual(ATOM.SPACE);
+    });
+
+    it("puts the host's caps lock on the Atom's lock in the natural layout", function () {
+        expect(getKeyMapAtom("natural")[false][keyCodes.CAPSLOCK]).toEqual(ATOM.LOCK);
+    });
+
+    it("gives every letter its own key in each layout", function () {
+        for (const layout of ["physical", "gaming", "natural"]) {
+            const keyMap = getKeyMapAtom(layout);
+            for (const letter of Letters) expect(keyMap[false][`Key${letter}`]).toEqual(ATOM[letter]);
+        }
+    });
+
+    it("keeps the physical layout where a real Atom has its keys", function () {
+        const keyMap = getKeyMapAtom("physical");
+        expect(keyMap[false][keyCodes.K2]).toEqual(ATOM.K2);
+        expect(keyMap[false][keyCodes.EQUALS]).toEqual(ATOM.COLON_STAR);
+        expect(keyMap[false][keyCodes.LEFT_SQUARE_BRACKET]).toEqual(ATOM.AT);
+        expect(keyMap[false][keyCodes.SHIFT_LEFT]).toEqual(ATOM.CTRL);
+    });
+
+    it("keeps the gaming layout's digits and caps lock", function () {
+        const keyMap = getKeyMapAtom("gaming");
+        expect(keyMap[false][keyCodes.K0]).toEqual(ATOM.K0);
+        expect(keyMap[false][keyCodes.CAPSLOCK]).toEqual(ATOM.CTRL);
     });
 });

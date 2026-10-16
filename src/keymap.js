@@ -110,6 +110,41 @@ export const BBC = {
     NUMPADENTER: [12, 3],
 };
 
+const IsLetter = /^[A-Za-z]$/;
+
+/** BBC keys that print the same thing either way, so holding one must not disturb shift. */
+const ShiftMakesNoDifference = new Set([BBC.SPACE]);
+
+/** Every character a keyboard might produce that a BBC or an Atom can print, for building the natural layout. */
+export const PrintableCharacters = (() => {
+    const chars = ["\u00a3"];
+    for (let code = 32; code < 127; ++code) chars.push(String.fromCharCode(code));
+    return chars;
+})();
+
+/**
+ * How a natural layout binds a host key, a character or a position, to the key that makes `char`.
+ * The machine holds shift for a different set of characters than a PC does, so a key says which
+ * shift state it needs, as a third element, when that differs from the one being held.
+ *
+ * @param {Function} map binds (hostKey, colRow, shiftDown)
+ * @param {Function} keyForCharacter as `bbcKeyForCharacter`
+ * @param {Set} keysShiftLeavesAlone keys that print the same thing either way
+ * @returns {Function} binds (hostKey, char)
+ */
+export function characterBinder(map, keyForCharacter, keysShiftLeavesAlone) {
+    return (hostKey, char) => {
+        const needs = keyForCharacter(char);
+        if (!needs) return;
+        for (const shiftDown of [false, true]) {
+            // Overriding when the two already agree would take shift away from everything
+            // else held at the same time, and letters want the shift key as it is anyway.
+            const disagrees = needs.shift !== shiftDown && !IsLetter.test(char) && !keysShiftLeavesAlone.has(needs.key);
+            map(hostKey, disagrees ? [...needs.key, needs.shift] : needs.key, shiftDown);
+        }
+    };
+}
+
 /**
  * What a character costs on a BBC keyboard: which key, and whether shift is held while it is
  * pressed. `!` is shift and `1`; `^` is its own unshifted key. Lower case is the same key as
@@ -120,18 +155,6 @@ export const BBC = {
  * @param {string} char one character
  * @returns {{key: [number, number], shift: boolean, upperCase: boolean}|null} null if the BBC has no such character
  */
-const IsLetter = /^[A-Za-z]$/;
-
-/** BBC keys that print the same thing either way, so holding one must not disturb shift. */
-const ShiftMakesNoDifference = new Set([BBC.SPACE]);
-
-/** Every character a keyboard might produce that the BBC can print, for building the natural layout. */
-const PrintableCharacters = (() => {
-    const chars = ["\u00a3"];
-    for (let code = 32; code < 127; ++code) chars.push(String.fromCharCode(code));
-    return chars;
-})();
-
 export function bbcKeyForCharacter(char) {
     const code = char.charCodeAt(0);
     if (code >= 65 && code <= 90) return { key: BBC[char], shift: false, upperCase: true };
@@ -391,14 +414,6 @@ export function getKeyMap(keyLayout) {
     // shift not pressed
     keys2[false] = {};
 
-    // Create a key map entry that overrides the BBC SHIFT state while held.
-    // Used in natural keyboard for keys where the PC and BBC shift states
-    // differ for the same character (e.g. US Shift+6 = ^ needs BBC HAT_TILDE
-    // without shift, even though the physical shift key is held).
-    function withShiftOverride(bbcKey, bbcShift) {
-        return [bbcKey[0], bbcKey[1], bbcShift];
-    }
-
     // shiftDown MUST be true or false (not undefined)
     function doMap(s, colRow, shiftDown) {
         if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
@@ -494,19 +509,8 @@ export function getKeyMap(keyLayout) {
     if (keyLayout === "natural") {
         // Keyed by the character the host keyboard produces, not by where a key sits, so the
         // host's own layout never has to be guessed: press whatever gives a `@` and the BBC
-        // gets a `@`. The BBC holds shift for a different set of characters than a PC does,
-        // so a key says which shift state it needs when that differs from the one being held.
-        const mapCharacter = (hostKey, char) => {
-            const needs = bbcKeyForCharacter(char);
-            if (!needs) return;
-            for (const shiftDown of [false, true]) {
-                // Overriding when the two already agree would take shift away from everything
-                // else held at the same time, and letters want the shift key as it is anyway.
-                const disagrees =
-                    needs.shift !== shiftDown && !IsLetter.test(char) && !ShiftMakesNoDifference.has(needs.key);
-                map(hostKey, disagrees ? withShiftOverride(needs.key, needs.shift) : needs.key, shiftDown);
-            }
-        };
+        // gets a `@`.
+        const mapCharacter = characterBinder(map, bbcKeyForCharacter, ShiftMakesNoDifference);
 
         for (const char of PrintableCharacters) mapCharacter(char, char);
 

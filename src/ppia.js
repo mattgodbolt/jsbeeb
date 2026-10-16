@@ -1,4 +1,4 @@
-import { getKeyMapAtom } from "./keymap-atom.js";
+import { ATOM, getKeyMapAtom } from "./keymap-atom.js";
 
 // 8255 Programmable Peripheral Interface Adapter for the Acorn Atom.
 // Reference: http://mdfs.net/Docs/Comp/Acorn/Atom/atap25.htm
@@ -228,6 +228,8 @@ export class AtomPPIA extends PPIA {
         }
 
         this.setKeyLayout(initialLayout);
+        this.physicalShiftDown = false;
+        this.shiftOverride = null;
 
         this.keyboardEnabled = true;
         this.lastSpeakerBit = 0;
@@ -258,6 +260,8 @@ export class AtomPPIA extends PPIA {
                 this.keys[i][j] = 0;
             }
         }
+        this.physicalShiftDown = false;
+        this.shiftOverride = null;
         this.updateKeys();
     }
 
@@ -278,8 +282,19 @@ export class AtomPPIA extends PPIA {
         if (!this.keyboardEnabled) return;
         const colrow = this.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) return;
+        const [col, row, shiftOverride] = colrow;
+        const [shiftCol, shiftRow] = ATOM.SHIFT;
 
-        this.keys[colrow[0]][colrow[1]] = val;
+        this.keys[col][row] = val;
+        const isShiftKey = shiftOverride === undefined && col === shiftCol && row === shiftRow;
+        if (isShiftKey) this.physicalShiftDown = !!val;
+        if (shiftOverride !== undefined) this.shiftOverride = val ? shiftOverride : null;
+        // A key with a shift override holds the Atom's shift its own way while it is down; otherwise
+        // only the shift key moves it, which leaves a paste's raw shift alone.
+        if (isShiftKey || shiftOverride !== undefined || this.shiftOverride !== null) {
+            const shiftPressed = this.shiftOverride === null ? this.physicalShiftDown : this.shiftOverride;
+            this.keys[shiftCol][shiftRow] = shiftPressed ? 1 : 0;
+        }
         this.updateKeys();
     }
 
