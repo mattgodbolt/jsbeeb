@@ -1,13 +1,20 @@
 // Between a bursty producer and an audio worklet's steady reads: an underrun
-// plays silence and waits for startFrames again; a lapping writer drops the oldest.
+// plays silence and waits for targetFrames again; a lapping writer drops the oldest.
 export class StereoRing {
-    constructor(capacityFrames, startFrames) {
+    constructor(capacityFrames, { targetFrames, excessFrames, persistentExcessFrames }) {
         this.capacityFrames = capacityFrames;
-        this.startFrames = startFrames;
+        this.excessFrames = excessFrames;
+        this.persistentExcessFrames = persistentExcessFrames;
         this.frames = new Float32Array(capacityFrames * 2);
         this.readFrame = 0;
         this.occupancy = 0;
         this.running = false;
+        this.setTargetFrames(targetFrames);
+    }
+
+    setTargetFrames(targetFrames) {
+        this.targetFrames = targetFrames;
+        this.excessRunFrames = 0;
     }
 
     write(interleaved, scale = 1) {
@@ -23,7 +30,11 @@ export class StereoRing {
     }
 
     read(left, right) {
-        if (!this.running && this.occupancy >= this.startFrames) this._start();
+        if (!this.running) {
+            if (this.occupancy >= this.targetFrames) this._restart();
+        } else {
+            this._skipPersistentExcess(left.length);
+        }
         let played = 0;
         if (this.running) {
             played = Math.min(left.length, this.occupancy);
@@ -41,9 +52,16 @@ export class StereoRing {
 
     // A producer catching up after an underrun refills in one burst; the
     // excess goes here, where the output is already discontinuous.
-    _start() {
-        this._discard(this.occupancy - this.startFrames);
+    _restart() {
+        this._discard(Math.max(0, this.occupancy - this.targetFrames));
+        this.excessRunFrames = 0;
         this.running = true;
+    }
+
+    _skipPersistentExcess(frames) {
+        const excess = this.occupancy > this.targetFrames + this.excessFrames;
+        this.excessRunFrames = excess ? this.excessRunFrames + frames : 0;
+        if (this.excessRunFrames >= this.persistentExcessFrames) this._restart();
     }
 
     _discard(count) {

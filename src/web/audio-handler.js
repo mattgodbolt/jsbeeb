@@ -101,7 +101,10 @@ export class AudioHandler {
         context.audioWorklet
             .addModule(music5000WorkletUrl)
             .then(() => {
-                this._music5000workletnode = new AudioWorkletNode(context, "music5000", { outputChannelCount: [2] });
+                this._music5000workletnode = new AudioWorkletNode(context, "music5000", {
+                    outputChannelCount: [2],
+                    processorOptions: { targetLatencyMs: this._targetLatencyMs() },
+                });
                 this._music5000workletnode.connect(context.destination);
             })
             .catch((error) => {
@@ -188,7 +191,8 @@ export class AudioHandler {
     setWindowFocused(focused) {
         this.windowFocused = focused;
         const targetLatencyMs = this._targetLatencyMs();
-        this._jsAudioNode?.port.postMessage({ command: "setTargetLatency", targetLatencyMs });
+        for (const node of [this._jsAudioNode, this._music5000workletnode])
+            node?.port.postMessage({ command: "setTargetLatency", targetLatencyMs });
         return targetLatencyMs - this.audioLatencyMs;
     }
 
@@ -236,7 +240,8 @@ export class AudioHandler {
     }
 
     _onBufferMusic5000(buffer) {
-        if (this._music5000workletnode) this._music5000workletnode.port.postMessage(buffer);
+        if (this._music5000workletnode)
+            this._music5000workletnode.port.postMessage({ command: "samples", samples: buffer });
     }
 
     checkStatus() {
