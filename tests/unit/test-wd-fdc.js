@@ -37,6 +37,7 @@ const ReadAddressCommand = 0xc8;
 const ReadTrackCommand = 0xe8;
 // The e flag adds the head settle delay.
 const SettleFlag = 0x04;
+const VerifyFlag = 0x04;
 const SpinUpWaitFlag = 0x08;
 
 const TicksPerMs = 2000;
@@ -530,6 +531,31 @@ describe("WD1770 FDC tests", () => {
                 });
                 expect(delay).toBeGreaterThan(15 * TicksPerMs - IdTicks);
                 expect(delay).toBeLessThan(15 * TicksPerMs + IdTicks);
+            });
+            describe("a type I verify", () => {
+                function seekToTrack0Ticks({ variant, fromTrack, command }) {
+                    const { scheduler, fdc } = makeFdc({ disc: discOfIds(), variant });
+                    runCommand(fdc, scheduler, ReadAddressSpinningUp);
+                    fdc.write(TrackRegister, 0);
+                    fdc.write(DataRegister, fromTrack);
+                    runCommand(fdc, scheduler, SeekCommand);
+                    fdc.write(DataRegister, 0);
+                    return runCommand(fdc, scheduler, command).ticks;
+                }
+
+                it.each([
+                    [WdFdcVariant.wd1770, 1, 30],
+                    [WdFdcVariant.wd1770, 0, 30],
+                    [WdFdcVariant.wd1772, 1, 15],
+                    [WdFdcVariant.wd1772, 0, 15],
+                ])("a %s seeking from track %i waits %i ms before verifying", (variant, fromTrack, ms) => {
+                    const setup = { variant, fromTrack };
+                    const delay =
+                        seekToTrack0Ticks({ ...setup, command: SeekCommand | VerifyFlag }) -
+                        seekToTrack0Ticks({ ...setup, command: SeekCommand });
+                    expect(delay).toBeGreaterThan(ms * TicksPerMs);
+                    expect(delay).toBeLessThan(ms * TicksPerMs + 2 * IdTicks);
+                });
             });
         });
 
