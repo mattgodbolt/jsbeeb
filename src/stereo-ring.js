@@ -50,8 +50,8 @@ export class StereoRing {
         right.fill(0, played);
     }
 
-    // A producer catching up after an underrun refills in one burst; the
-    // excess goes here, where the output is already discontinuous.
+    // Trims to the target at a point where the output is already
+    // discontinuous: after an underrun, or when skipping a persistent excess.
     _restart() {
         this._discard(Math.max(0, this.occupancy - this.targetFrames));
         this.excessRunFrames = 0;

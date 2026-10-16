@@ -16,6 +16,9 @@ import { ExcessLeadMs, PersistentExcessSeconds, validTargetLatencyMs } from "../
 const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
+// At that authority, rate control would take half an hour to play off a second of excess lead, so a
+// persistent one is skipped instead; a fall in the target drains its excess well inside the time, as
+// the producer waits for it.
 
 const ResyncKinds = new Set(["state", "reset"]);
 const isResync = (event) => ResyncKinds.has(event.kind);
