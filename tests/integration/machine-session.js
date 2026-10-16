@@ -633,6 +633,89 @@ describe("MachineSession disc images", () => {
     );
 });
 
+describe("MachineSession autoboot", () => {
+    const WelcomeBootMessage = "This message was automatically loaded.";
+    const FramesToRunWelcomeBoot = 200;
+
+    async function freshSession(modelName, opts) {
+        const session = new MachineSession(modelName, opts);
+        await session.initialise();
+        await session.boot(30);
+        return session;
+    }
+
+    for (const modelName of ["B-DFS1.2", "Master"]) {
+        it(
+            `boots the Welcome disc on a ${modelName} and lets go of SHIFT`,
+            async () => {
+                const session = await freshSession(modelName);
+                const booted = await session.bootDisc("Welcome.ssd");
+                expect(booted).toMatchObject({ name: "Welcome.ssd", ignored: [], completed: true });
+                expect(session.heldKeys()).toEqual([]);
+                await session.runFrames(FramesToRunWelcomeBoot);
+                expect(session.drainOutput().screenText).toContain(WelcomeBootMessage);
+                session.destroy();
+            },
+            BootTimeout,
+        );
+    }
+
+    it(
+        "boots a disc already in the drive with a soft reset",
+        async () => {
+            const session = await freshSession("B-DFS1.2");
+            await session.loadDiscImage("Welcome.ssd");
+            expect((await session.autoboot({ hard: false })).completed).toBe(true);
+            await session.runFrames(FramesToRunWelcomeBoot);
+            expect(session.drainOutput().screenText).toContain(WelcomeBootMessage);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "refuses an empty drive",
+        async () => {
+            const session = await freshSession("B-DFS1.2");
+            await expect(session.autoboot()).rejects.toThrow("there is no disc in drive 0");
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "throws when the boot goes to another filing system and the drive never starts",
+        async () => {
+            const session = await freshSession("MasterANFS", { econet: true });
+            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow(/drive 0 did not start/);
+            expect(session.heldKeys()).toEqual([]);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it(
+        "stops at a breakpoint before the drive starts, with SHIFT let go",
+        async () => {
+            const session = await freshSession("B-DFS1.2");
+            const [low, high] = session.readMemory(0xfffc, 2);
+            session.addBreakpoint("execute", low | (high << 8));
+            expect(await session.bootDisc("Welcome.ssd")).toMatchObject({ completed: false });
+            expect(session.hitBreakpoint()).not.toBeNull();
+            expect(session.heldKeys()).toEqual([]);
+            session.destroy();
+        },
+        BootTimeout,
+    );
+
+    it("refuses on the Atom", async () => {
+        const session = new MachineSession("Atom");
+        await session.initialise();
+        await expect(session.autoboot()).rejects.toThrow("the Atom has no SHIFT+BREAK disc boot");
+        session.destroy();
+    });
+});
+
 describe("MachineSession filing system", () => {
     async function bootedText(modelName, opts) {
         const session = new MachineSession(modelName, opts);

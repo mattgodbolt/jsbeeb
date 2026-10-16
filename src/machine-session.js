@@ -41,11 +41,16 @@ const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 // Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
 
+const BootDrive = 0;
+// SHIFT is held until the boot drive's motor starts; a filing system that has not tried the disc by then never will.
+const AutobootMaxFrames = 150;
+
 export class MachineSession {
     /**
      * @param {string} modelName - e.g. "B-DFS1.2", "Master"
      * @param {Object} [opts]
-     * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to load on boot
+     * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to put in drive 0; it is loaded,
+     *   not booted, so follow with autoboot() to SHIFT+BREAK it
      * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      * @param {number} [opts.cpuMultiplier] - run the CPU this many times faster than the peripherals
      * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
@@ -228,6 +233,60 @@ export class MachineSession {
     reset(hard = true) {
         this._machine.processor.reset(hard);
         this._pendingOutput = [];
+    }
+
+    /**
+     * SHIFT+BREAK: reset with SHIFT held, keeping it down until the filing
+     * system starts drive 0's motor to read the catalogue, then let it go.
+     * The boot is under way but not finished; run the machine on to see it.
+     *
+     * Throws if the drive is empty, on the Atom, or if the drive never
+     * starts, as when another filing system (Econet, say) takes the boot.
+     * `completed` is false if a breakpoint stopped the machine first.
+     *
+     * @param {Object} [opts]
+     * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
+     * @returns {Promise<{framesHeld: number, completed: boolean}>}
+     */
+    async autoboot({ hard = true } = {}) {
+        if (this._isAtom) throw new Error("autoboot: the Atom has no SHIFT+BREAK disc boot");
+        this._requireKeyboard();
+        const cpu = this._machine.processor;
+        const drive = cpu.fdc.drives[BootDrive];
+        if (!drive.disc) throw new Error(`autoboot: there is no disc in drive ${BootDrive}`);
+
+        let driveStarted = false;
+        const onStart = () => {
+            driveStarted = true;
+            cpu.stop();
+        };
+        drive.addEventListener("startSpinning", onStart);
+        this._keyboard.keyDownRaw(cpu.model.keys.SHIFT);
+        let framesRun;
+        try {
+            this.reset(hard);
+            ({ framesRun } = await this.runFrames(AutobootMaxFrames));
+        } finally {
+            this._keyboard.keyUpRaw(cpu.model.keys.SHIFT);
+            drive.removeEventListener("startSpinning", onStart);
+        }
+        if (!driveStarted && framesRun >= AutobootMaxFrames) {
+            throw new Error(
+                `autoboot: drive ${BootDrive} did not start within ${AutobootMaxFrames} frames of SHIFT+BREAK, ` +
+                    "so the disc was not booted",
+            );
+        }
+        return { framesHeld: framesRun, completed: driveStarted };
+    }
+
+    /**
+     * Put a disc in drive 0 by any reference loadDiscImage takes, and
+     * autoboot() it.
+     * @returns {Promise<{name: string, ignored: string[], framesHeld: number, completed: boolean}>}
+     */
+    async bootDisc(ref, { hard = true } = {}) {
+        const { name, ignored } = await this.loadDiscImage(ref, BootDrive);
+        return { name, ignored, ...(await this.autoboot({ hard })) };
     }
 
     /**
