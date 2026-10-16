@@ -753,6 +753,16 @@ describe("Via T2 toggling PB6 pulse counting", () => {
         expect(via.read(T2CL)).toBe(frozen);
     });
 
+    it("should leave a running T2 alone when an ACR write keeps it timed", () => {
+        start(0, 0x10);
+        runMicroseconds(10);
+        const running = via.read(T2CL);
+        via.write(ACR, AcrT1Continuous);
+        expect(via.read(T2CL)).toBe(running);
+        runMicroseconds(1);
+        expect(via.read(T2CL)).toBe(running - 1);
+    });
+
     it("should keep a frozen count unchanged on entering shift mode under T2", () => {
         via.write(ACR, AcrT2CountsPb6);
         start(0xff, 0x00);

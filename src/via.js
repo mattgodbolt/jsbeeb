@@ -277,7 +277,7 @@ class Via {
                 const isShifting = this._t2ClocksShifter();
                 if (!wasShifting && isShifting) this._splitT2ForShifting();
                 else if (wasShifting && !isShifting) this._joinT2FromShifting();
-                // T2 ticks once more before freezing, and resumes a tick late.
+                // T2 ticks once more before freezing, and resumes a tick late. See beebjit via.c via_write_ACR.
                 if (!isShifting) {
                     const isCountingPulses = this._t2CountsPulses();
                     if (!wasCountingPulses && isCountingPulses) {
