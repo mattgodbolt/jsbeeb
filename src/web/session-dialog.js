@@ -5,6 +5,23 @@ import * as bootstrap from "bootstrap";
 
 import { roomFrom } from "./shared-session.js";
 
+// An Enter held on Start hosting repeats after the dialog has gone, and the machine, which never saw it go down,
+// would take each repeat as a fresh RETURN.
+function holdBackEnterRepeats() {
+    const done = new AbortController();
+    const options = { capture: true, signal: done.signal };
+    window.addEventListener(
+        "keydown",
+        (event) => {
+            if (event.key !== "Enter" || !event.repeat) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        },
+        options,
+    );
+    window.addEventListener("keyup", (event) => event.key === "Enter" && done.abort(), options);
+}
+
 export class SessionDialog {
     /**
      * @param {object} options
@@ -34,9 +51,19 @@ export class SessionDialog {
             if (this.session) this.session.panel.open();
             else bootstrap.Modal.getOrCreateInstance(dialog).show();
         });
-        hostButton.addEventListener("click", async () => {
+        // Hosting waits for the dialog to go, so the machine is no longer held for it.
+        hostButton.addEventListener("click", (event) => {
+            hostButton.disabled = joinButton.disabled = true;
+            if (event.detail === 0) holdBackEnterRepeats();
+            dialog.addEventListener(
+                "hidden.bs.modal",
+                async () => {
+                    this.session = await host(nameInput.value);
+                    hostButton.disabled = joinButton.disabled = false;
+                },
+                { once: true },
+            );
             bootstrap.Modal.getOrCreateInstance(dialog).hide();
-            this.session = await host(nameInput.value);
         });
         roomInput.addEventListener("input", () => roomInput.classList.remove("is-invalid"));
         dialog.querySelector(".session-join-form").addEventListener("submit", (event) => {

@@ -54,24 +54,86 @@ describe("SessionDialog", () => {
         expect(show).not.toHaveBeenCalled();
     });
 
-    it("hosts as the name given, and opens the pane next time", async () => {
+    const modalEvent = (name) => new Promise((resolve) => dialog().addEventListener(name, resolve, { once: true }));
+    const openDialog = async () => {
+        const opened = modalEvent("shown.bs.modal");
+        openIt();
+        await opened;
+    };
+    const startHosting = async (detail = 1) => {
+        const gone = modalEvent("hidden.bs.modal");
+        find(".session-host").dispatchEvent(new MouseEvent("click", { bubbles: true, detail }));
+        await gone;
+    };
+
+    it("hosts as the name given once the dialog has gone, and opens the pane next time", async () => {
         new SessionDialog({ session: null, refusal: null, host, join });
+        await openDialog();
         find(".session-name").value = "matt";
-        find(".session-host").click();
+        const gone = startHosting();
+        expect(host).not.toHaveBeenCalled();
+        await gone;
         expect(host).toHaveBeenCalledWith("matt");
         await hosted();
         openIt();
         expect(session.panel.open).toHaveBeenCalled();
     });
 
+    it("hosts once however often Start hosting is pressed", async () => {
+        new SessionDialog({ session: null, refusal: null, host, join });
+        await openDialog();
+        const gone = startHosting();
+        find(".session-host").click();
+        find(".session-host").click();
+        await gone;
+        await hosted();
+        expect(host).toHaveBeenCalledOnce();
+    });
+
     it("opens the dialog again after hosting came to nothing", async () => {
         host.mockResolvedValue(null);
         new SessionDialog({ session: null, refusal: null, host, join });
-        find(".session-host").click();
+        await openDialog();
+        await startHosting();
         await hosted();
+        expect(find(".session-host").disabled).toBe(false);
         const show = shown();
         openIt();
         expect(show).toHaveBeenCalled();
+    });
+
+    describe("an Enter held on Start hosting", () => {
+        const enter = (type, repeat = false) =>
+            document.dispatchEvent(new KeyboardEvent(type, { key: "Enter", repeat, bubbles: true, cancelable: true }));
+        let machineKeys;
+
+        beforeEach(() => {
+            machineKeys = vi.fn();
+            document.addEventListener("keydown", machineKeys);
+        });
+
+        afterEach(() => document.removeEventListener("keydown", machineKeys));
+
+        it("does not repeat into the machine, until it is let go", async () => {
+            new SessionDialog({ session: null, refusal: null, host, join });
+            await openDialog();
+            await startHosting(0);
+            enter("keydown", true);
+            enter("keydown", true);
+            expect(machineKeys).not.toHaveBeenCalled();
+            enter("keyup");
+            enter("keydown");
+            enter("keydown", true);
+            expect(machineKeys).toHaveBeenCalledTimes(2);
+        });
+
+        it("is no concern when the button was clicked", async () => {
+            new SessionDialog({ session: null, refusal: null, host, join });
+            await openDialog();
+            await startHosting(1);
+            enter("keydown", true);
+            expect(machineKeys).toHaveBeenCalledOnce();
+        });
     });
 
     it.each([
