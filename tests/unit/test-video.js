@@ -218,6 +218,20 @@ describe("Video", () => {
             const expectedAddr = (5 & 0x07) | (0x1234 << 3);
             expect(mockCpu.videoRead).toHaveBeenCalledWith(expectedAddr & 0x7fff);
         });
+
+        it("should fetch the field's own scanlines with interlace sync and video", () => {
+            video.ula.write(0, 0);
+            video.crtc.write(0, 8);
+            video.crtc.write(1, 3);
+            video.addr = 0x1234;
+            video.scanlineCounter = 4;
+
+            for (const field of [0, 1]) {
+                video.frameCount = field;
+                video.readVideoMem();
+                expect(mockCpu.videoRead).toHaveBeenLastCalledWith(((0x1234 << 3) | (4 + field)) & 0x7fff);
+            }
+        });
     });
 
     describe("Video mode rendering", () => {
@@ -1097,6 +1111,47 @@ describe("Video", () => {
 
         it("should leave no rows from an earlier field when fields stop alternating", () => {
             expect(rowsKeptFromEarlierField(1).kept).toEqual([false, false]);
+        });
+    });
+
+    // The detection loop of beebjit's isv_gfx_mode test.
+    describe("Interlace sync turned on during a vsync", () => {
+        const ClocksIntoVsync = 16;
+        const HalfLineClocks = ClocksPerScanline / 2;
+        const SettleFrames = 2;
+        const MeasuredFrames = 8;
+
+        // Per frame, the vsync edges in the half line after turning interlace sync on
+        // just after the vsync rises.
+        function vsyncEdgesAfterInterlaceOn() {
+            const edges = [];
+            const v = makeVideo(
+                () => {},
+                (level) => edges.push(level),
+            );
+            programStandardFrame(v);
+            const perFrame = [];
+            for (let frame = 0; frame < SettleFrames + MeasuredFrames; frame++) {
+                edges.length = 0;
+                for (let waited = 0; !edges.includes(true); waited++) {
+                    if (waited > 2 * ClocksPerFrame) throw new Error(`No vsync in frame ${frame}`);
+                    v.run(1);
+                }
+                v.run(ClocksIntoVsync);
+                edges.length = 0;
+                v.writeCrtc(8, 1);
+                v.run(HalfLineClocks);
+                perFrame.push([...edges]);
+                v.writeCrtc(8, 0);
+            }
+            return perFrame.slice(SettleFrames);
+        }
+
+        it("should drop the vsync and raise it again half a line late on alternate fields", () => {
+            const perFrame = vsyncEdgesAfterInterlaceOn();
+            const second = perFrame.filter((edges) => edges.length);
+            expect(second).toEqual(Array(MeasuredFrames / 2).fill([false, true]));
+            perFrame.slice(1).forEach((edges, i) => expect(edges.length).not.toBe(perFrame[i].length));
         });
     });
 
