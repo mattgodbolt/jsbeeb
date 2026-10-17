@@ -6,6 +6,7 @@ import fastForwardFill from "bootstrap-icons/icons/fast-forward-fill.svg?raw";
 import floppy from "bootstrap-icons/icons/floppy.svg?raw";
 import gear from "bootstrap-icons/icons/gear.svg?raw";
 import headphones from "bootstrap-icons/icons/headphones.svg?raw";
+import people from "bootstrap-icons/icons/people.svg?raw";
 import pauseFill from "bootstrap-icons/icons/pause-fill.svg?raw";
 import playFill from "bootstrap-icons/icons/play-fill.svg?raw";
 import soundwave from "bootstrap-icons/icons/soundwave.svg?raw";
@@ -25,6 +26,7 @@ const Icons = {
     gear,
     headphones,
     "pause-fill": pauseFill,
+    people,
     "play-fill": playFill,
     soundwave,
     stars,

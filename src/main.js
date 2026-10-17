@@ -44,7 +44,8 @@ import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
-import { startSessionFromUrl } from "./web/shared-session.js";
+import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
 
@@ -404,7 +405,13 @@ const startPromise = machine.start({
 
         loop.go();
         const rendezvous = createRendezvousClient();
-        startSessionFromUrl(parsedQuery, { processor, model, loop, keyboard, urlState, version, rendezvous });
+        const sessionContext = { processor, model, loop, keyboard, urlState, version, rendezvous };
+        new SessionDialog({
+            session: startSessionFromUrl(parsedQuery, sessionContext),
+            refusal: sessionRefusal(sessionContext),
+            host: (name) => hostSession(sessionContext, name),
+            join: (room, name) => window.location.assign(joinLink(room, name)),
+        });
     } catch (error) {
         console.error("Error initialising emulator:", error);
         modals.showError("initialising", error);

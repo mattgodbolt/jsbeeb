@@ -33,6 +33,44 @@ test("a guest joins a hosted session, and what either types reaches both machine
     }
 });
 
+test("the Session dialog hosts this machine, and a guest joins by pasting the link", async ({ browser, beeb }) => {
+    test.setTimeout(SessionTestTimeoutMs);
+    await beeb.open();
+    await beeb.expectScreenText("BASIC");
+    await beeb.disableAutoRepeat();
+    await typeLine(beeb, "A%=4321");
+    await beeb.page.click("#session-open");
+    await beeb.page.fill("#session-name", "matt");
+    await beeb.page.click(".session-host");
+    const link = beeb.page.locator("#session-pane .session-link");
+    await expect(link).toHaveText(/\?client=[a-z]+-[a-z]+-[a-z]+$/);
+
+    const guestContext = await browser.newContext();
+    const guest = new Beeb(await guestContext.newPage());
+    try {
+        await guest.open();
+        await guest.expectScreenText("BASIC");
+        await guest.page.click("#session-open");
+        await guest.page.fill("#session-name", "tom");
+        await guest.page.fill(".session-room", await link.textContent());
+        await guest.page.click(".session-join");
+        await expect(guest.page.locator("#session-pane .session-you")).toHaveText("You are tom", {
+            timeout: JoinTimeoutMs,
+        });
+        await guest.page.click("#session-open");
+        await expect(guest.page.locator("#session-pane")).toBeVisible({ timeout: JoinTimeoutMs });
+        await expect(guest.page.locator("#session-pane .session-control")).toHaveText("In control: matt", {
+            timeout: JoinTimeoutMs,
+        });
+
+        await typeLine(beeb, "PRINT A%");
+        await guest.expectScreenText("4321");
+        expect(guest.problems, "errors the guest's page logged").toEqual([]);
+    } finally {
+        await guestContext.close();
+    }
+});
+
 test("a guest takes control, both type, and the host takes it back", async ({ browser, beeb }) => {
     test.setTimeout(SessionTestTimeoutMs);
     const room = `e2e-control-${Date.now()}`;

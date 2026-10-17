@@ -10,9 +10,13 @@ import {
     SessionGuest,
     SessionHost,
     cleanName,
+    hostSession,
+    joinLink,
+    roomFrom,
     sessionInput,
     startSessionFromUrl,
 } from "../../src/web/shared-session.js";
+import { RendezvousError } from "../../src/web/rendezvous-client.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { LockstepHost, MaxGuestLagSeconds, stateHash } from "../../src/lockstep.js";
 import { AdcCentreValue } from "../../src/adc.js";
@@ -2193,6 +2197,32 @@ describe("startSessionFromUrl", () => {
         }
     });
 
+    it("returns the session it started, and nothing when none was asked for", () => {
+        hosts.push(startSessionFromUrl({ server: "here" }, fakeContext()));
+        expect(hosts[0]).toBeInstanceOf(SessionHost);
+        expect(startSessionFromUrl({}, fakeContext())).toBeNull();
+    });
+
+    it.each([
+        ["no such room", 404, `there's no room called "there"; check its name, or the host's page may have closed`],
+        ["too many joining", 429, "too many people are joining at once; try again in a moment"],
+        ["anything else", 500, "Rendezvous post offer failed with status 500"],
+    ])("says what went wrong in plain words for %s", async (_, status, why) => {
+        const postOffer = vi.fn(async () => {
+            throw new RendezvousError("Rendezvous post offer failed with status " + status, status);
+        });
+        await started({ client: "there" }, { rendezvous: { postOffer } });
+        expect(toastTexts()).toContain(`The session couldn't start: ${why}.`);
+    });
+
+    it("says when a room of the name asked for is already open", async () => {
+        const createRoom = vi.fn(async () => {
+            throw new RendezvousError("Rendezvous create room failed with status 409", 409);
+        });
+        await started({ server: "here" }, { rendezvous: { createRoom } });
+        expect(toastTexts()).toContain(`The session couldn't start: a room called "here" is already open.`);
+    });
+
     it.each([
         ["no session asked for", {}, {}],
         ["an Atom", { server: "here" }, { model: { isAtom: true } }],
@@ -2201,5 +2231,54 @@ describe("startSessionFromUrl", () => {
         const rendezvous = await started(params, contextOptions);
         expect(rendezvous.createRoom).not.toHaveBeenCalled();
         expect(peers).toEqual([]);
+    });
+});
+
+describe("hostSession", () => {
+    it("hosts a room with a name of its own, on the machine as it is", async () => {
+        showLights();
+        const context = fakeContext();
+        const host = hostSession(context, "matt");
+        hosts.push(host);
+        await settle();
+        expect(context.rendezvous.createRoom).toHaveBeenCalledWith(expect.stringMatching(/^[a-z]+-[a-z]+-[a-z]+$/));
+        expect(context.rendezvous.createRoom.mock.calls[0][0]).toBe(host.room);
+        expect(document.querySelector(".session-you").textContent).toBe("You are matt");
+        expect(document.querySelector(".session-link").textContent).toBe(joinLink(host.room));
+    });
+
+    it("refuses a machine that cannot take part, and starts nothing", async () => {
+        const context = fakeContext({ model: { isAtom: true } });
+        expect(hostSession(context, "matt")).toBeNull();
+        await settle();
+        expect(context.rendezvous.createRoom).not.toHaveBeenCalled();
+    });
+});
+
+describe("joinLink", () => {
+    afterEach(() => window.history.replaceState(null, "", "/"));
+
+    it("keeps nothing of this page's own query or fragment, and adds the name if there is one", () => {
+        window.history.replaceState(null, "", "/?model=Master&disc=elite.ssd#frag");
+        expect(joinLink("brave-owls-sing")).toBe(`${window.location.origin}/?client=brave-owls-sing`);
+        expect(joinLink("brave-owls-sing", "matt g")).toBe(
+            `${window.location.origin}/?client=brave-owls-sing&name=matt+g`,
+        );
+    });
+});
+
+describe("roomFrom", () => {
+    it.each([
+        ["a room's name", "brave-owls-sing", "brave-owls-sing"],
+        ["a name with spaces round it", "  Room_1 \n", "Room_1"],
+        ["a link to join", "https://bbc.xania.org/?client=brave-owls-sing", "brave-owls-sing"],
+        ["a host's own link", "http://localhost:5173/?server=brave-owls-sing&model=Master", "brave-owls-sing"],
+        ["nothing", "   ", null],
+        ["words with spaces", "brave owls sing", null],
+        ["a link with no room in it", "https://bbc.xania.org/?disc=elite.ssd", null],
+        ["a link to a room no rendezvous would take", "https://bbc.xania.org/?client=a/b", null],
+        ["a name too long for the rendezvous", "x".repeat(65), null],
+    ])("reads %s", (_, text, room) => {
+        expect(roomFrom(text)).toBe(room);
     });
 });
