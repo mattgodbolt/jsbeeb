@@ -157,9 +157,10 @@ export class TestMachine {
 
     async runUntilVblank() {
         let hit = false;
-        if (this.processor.isMaster) throw new Error("Not yet implemented");
+        const { vsyncAddress } = this.model;
+        if (vsyncAddress === null) throw new Error(`runUntilVblank does not know the ${this.model.name} OS`);
         const hook = this.processor.debugInstruction.add((addr) => {
-            if (addr === 0xdd15) {
+            if (addr === vsyncAddress) {
                 hit = true;
                 return true;
             }

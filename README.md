@@ -6,8 +6,8 @@
 [![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
 A BBC Micro and other 8-bit Acorn emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B
-(with sideways RAM), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card interface), along with a number of
-different peripherals.
+(with sideways RAM, and with the US or German MOS), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card
+interface), along with a number of different peripherals.
 
 ## Table of Contents
 
