@@ -288,6 +288,17 @@ describe("Keyboard", () => {
 
             expect(mockSysvia.keyDown).toHaveBeenCalledWith(code, false);
         });
+
+        test("gives a KEY. parameter for the keypad key its key, over Num Lock", () => {
+            userKeymap.push({ native: "NUMPAD1", key: "COPY" });
+            try {
+                keyboard.keyDown(keyEvent("Numpad1", keyCodes.END));
+
+                expect(mockSysvia.keyDown).toHaveBeenCalledWith("Numpad1", false);
+            } finally {
+                userKeymap.length = 0;
+            }
+        });
     });
 
     describe("when the input method takes a key", () => {
