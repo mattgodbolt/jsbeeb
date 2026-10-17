@@ -1053,13 +1053,8 @@ R% = R% + 1
 ENDPROC`);
         expectArray(testMachine, [1, 0, 255, 254, 253, 252]);
     });
-    // Disabled, @scarybeasts comments:
-    //  I fixed everything except VIA.T23, which doesn't seem important. It's tricky for code to really rely on T2
-    //  values after toggling ACR 0x20 because results will vary depending on what is attached and generating pulses
-    //  from external.
-    // @mattgodbolt notes; the "real BBC" values agree with my BBC Master, so seems good to fix.
-    // TODO(#1069) fix this eventually
-    it.skip("VIA.T23 - what values do we get freezing and starting T2?", async function () {
+    // The "real BBC" values agree with @mattgodbolt's BBC Master.
+    it("VIA.T23 - what values do we get freezing and starting T2?", async function () {
         const testMachine = await runViaProgram(`
 DIM MC% 100
 R% = ${resultAddress}

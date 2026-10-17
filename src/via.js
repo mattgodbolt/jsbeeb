@@ -90,6 +90,10 @@ class Via {
         return (this.acr & 0x1c) === 0x10;
     }
 
+    _t2CountsPulses() {
+        return !!(this.acr & 0x20) && !this._t2ClocksShifter();
+    }
+
     _t2ShiftPeriod() {
         return (this.t2l & 0x1fe) + 4;
     }
@@ -267,11 +271,22 @@ class Via {
 
             case ACR: {
                 const wasShifting = this._t2ClocksShifter();
+                const wasCountingPulses = this._t2CountsPulses();
                 this.acr = val;
                 if (this.justhit & 1 && !(val & 0x40)) this.t1hit = true;
                 const isShifting = this._t2ClocksShifter();
                 if (!wasShifting && isShifting) this._splitT2ForShifting();
                 else if (wasShifting && !isShifting) this._joinT2FromShifting();
+                // T2 ticks once more before freezing, and resumes a tick late. See beebjit via.c via_write_ACR.
+                if (!isShifting) {
+                    const isCountingPulses = this._t2CountsPulses();
+                    if (!wasCountingPulses && isCountingPulses) {
+                        this.t2c -= 2;
+                        if (this.t2c < -2) this.t2c = this._handleT2c(this.t2c);
+                    } else if (wasCountingPulses && !isCountingPulses) {
+                        this.t2c += 2;
+                    }
+                }
                 this.updateNextTime();
                 break;
             }
@@ -463,7 +478,7 @@ class Via {
         this.drivePortB();
         if (prevPb6 && !(this.portbpins & 0x40)) {
             // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
-            if (this.acr & 0x20 && !this._t2ClocksShifter()) {
+            if (this._t2CountsPulses()) {
                 this.t2c -= 2;
                 // Not clear what happens here. Docs say:
                 // "When the T2 counter reaches a count of zero, IFR5 is set and the counter continues to decrement with

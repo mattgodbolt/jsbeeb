@@ -695,3 +695,109 @@ describe("Via T2 clocking the shift register", () => {
         expect(via.read(T2CH)).toBe(99);
     });
 });
+
+describe("Via T2 toggling PB6 pulse counting", () => {
+    const T2CL = 0x8,
+        T2CH = 0x9,
+        ACR = 0xb,
+        IFR = 0xd;
+    const AcrT1Continuous = 0x40;
+    const AcrShiftOutFreeRunningT2 = 0x10;
+    const AcrT2CountsPb6 = 0x20;
+    const Timer2Int = 0x20;
+    const TicksPerMicrosecond = 2;
+
+    let via, scheduler;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        via = new UserVia(makeFakeCpu(), scheduler, false, makeFakeUserPortPeripheral());
+    });
+
+    function runMicroseconds(us) {
+        scheduler.polltime(us * TicksPerMicrosecond);
+    }
+
+    function start(low, high) {
+        via.write(T2CL, low);
+        via.write(T2CH, high);
+    }
+
+    it("should tick T2 once more as it freezes", () => {
+        start(0, 0x10);
+        runMicroseconds(10);
+        const running = via.read(T2CL);
+        via.write(ACR, AcrT2CountsPb6);
+        expect(via.read(T2CL)).toBe(running - 1);
+        runMicroseconds(10);
+        expect(via.read(T2CL)).toBe(running - 1);
+    });
+
+    it("should resume T2 a tick after leaving pulse counting", () => {
+        via.write(ACR, AcrT2CountsPb6);
+        start(0x80, 0x10);
+        const frozen = via.read(T2CL);
+        via.write(ACR, 0);
+        runMicroseconds(1);
+        expect(via.read(T2CL)).toBe(frozen);
+        runMicroseconds(1);
+        expect(via.read(T2CL)).toBe(frozen - 1);
+    });
+
+    it("should leave T2 alone when an ACR write keeps pulse counting", () => {
+        via.write(ACR, AcrT2CountsPb6);
+        start(0x80, 0x10);
+        const frozen = via.read(T2CL);
+        via.write(ACR, AcrT2CountsPb6 | AcrT1Continuous);
+        runMicroseconds(10);
+        expect(via.read(T2CL)).toBe(frozen);
+    });
+
+    it("should leave a running T2 alone when an ACR write keeps it timed", () => {
+        start(0, 0x10);
+        runMicroseconds(10);
+        const running = via.read(T2CL);
+        via.write(ACR, AcrT1Continuous);
+        expect(via.read(T2CL)).toBe(running);
+        runMicroseconds(1);
+        expect(via.read(T2CL)).toBe(running - 1);
+    });
+
+    it("should keep a frozen count unchanged on entering shift mode under T2", () => {
+        via.write(ACR, AcrT2CountsPb6);
+        start(0xff, 0x00);
+        expect([via.read(T2CH), via.read(T2CL)]).toEqual([0x00, 0xff]);
+        via.write(ACR, AcrT2CountsPb6 | AcrShiftOutFreeRunningT2);
+        expect([via.read(T2CH), via.read(T2CL)]).toEqual([0x00, 0xff]);
+    });
+
+    it("should tick T2 once more as it freezes straight from shift mode under T2", () => {
+        via.write(ACR, AcrShiftOutFreeRunningT2);
+        start(0x80, 0x10);
+        runMicroseconds(10);
+        const running = (via.read(T2CH) << 8) | via.read(T2CL);
+        via.write(ACR, AcrT2CountsPb6);
+        expect((via.read(T2CH) << 8) | via.read(T2CL)).toBe(running - 1);
+        runMicroseconds(10);
+        expect((via.read(T2CH) << 8) | via.read(T2CL)).toBe(running - 1);
+    });
+
+    it("should raise the T2 interrupt when the extra tick wraps the counter", () => {
+        start(5, 0);
+        runMicroseconds(6);
+        expect(via.read(T2CL)).toBe(0);
+        via.write(ACR, AcrT2CountsPb6);
+        expect(via.read(IFR) & Timer2Int).toBe(Timer2Int);
+        expect(via.read(T2CL)).toBe(0xff);
+    });
+
+    it("should not raise the T2 interrupt on the extra tick once T2 has already fired", () => {
+        start(5, 0);
+        runMicroseconds(7);
+        via.write(IFR, Timer2Int);
+        runMicroseconds(0xffff);
+        expect(via.read(T2CL)).toBe(0);
+        via.write(ACR, AcrT2CountsPb6);
+        expect(via.read(IFR) & Timer2Int).toBe(0);
+    });
+});
