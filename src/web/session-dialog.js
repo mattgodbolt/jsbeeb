@@ -46,14 +46,23 @@ export class SessionDialog {
         refusalText.hidden = !refusal;
         hostButton.disabled = joinButton.disabled = !!refusal;
 
+        this.hosting = false;
+        // Bootstrap ignores a hide while the dialog is still fading in, which would leave hosting waiting for
+        // whatever closed it later.
+        let shown = false;
+        dialog.addEventListener("shown.bs.modal", () => (shown = true));
+        dialog.addEventListener("hide.bs.modal", () => (shown = false));
+
         opener.addEventListener("click", (event) => {
             event.preventDefault();
             if (this.session) this.session.panel.open();
-            else bootstrap.Modal.getOrCreateInstance(dialog).show();
+            else if (!this.hosting) bootstrap.Modal.getOrCreateInstance(dialog).show();
         });
         // Hosting waits for the dialog to go, and for every other listener to its going (the page's hold on the
         // machine among them) to have run, so the machine is no longer held for it.
         hostButton.addEventListener("click", (event) => {
+            if (!shown) return;
+            this.hosting = true;
             hostButton.disabled = joinButton.disabled = true;
             if (event.detail === 0) holdBackEnterRepeats();
             dialog.addEventListener(
@@ -61,7 +70,8 @@ export class SessionDialog {
                 async () => {
                     await new Promise((resolve) => setTimeout(resolve));
                     this.session = await host(nameInput.value);
-                    hostButton.disabled = joinButton.disabled = false;
+                    this.hosting = false;
+                    if (!this.session) hostButton.disabled = joinButton.disabled = false;
                 },
                 { once: true },
             );

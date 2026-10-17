@@ -108,6 +108,57 @@ describe("SessionDialog", () => {
         expect(host).toHaveBeenCalledOnce();
     });
 
+    describe("while hosting is under way", () => {
+        let finish;
+
+        beforeEach(() => {
+            host.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+        });
+
+        it("opens nothing, then the pane once it has hosted", async () => {
+            new SessionDialog({ session: null, refusal: null, host, join });
+            await openDialog();
+            await startHosting();
+            await vi.waitFor(() => expect(host).toHaveBeenCalled());
+            const show = shown();
+            openIt();
+            expect(show).not.toHaveBeenCalled();
+            finish(session);
+            await hosted();
+            openIt();
+            expect(show).not.toHaveBeenCalled();
+            expect(session.panel.open).toHaveBeenCalled();
+            expect(find(".session-host").disabled).toBe(true);
+        });
+
+        it("opens the dialog again, ready to host, once it has come to nothing", async () => {
+            new SessionDialog({ session: null, refusal: null, host, join });
+            await openDialog();
+            await startHosting();
+            await vi.waitFor(() => expect(host).toHaveBeenCalled());
+            finish(null);
+            await hosted();
+            expect(find(".session-host").disabled).toBe(false);
+            const show = shown();
+            openIt();
+            expect(show).toHaveBeenCalled();
+        });
+    });
+
+    it("ignores Start hosting pressed while the dialog is still appearing", async () => {
+        new SessionDialog({ session: null, refusal: null, host, join });
+        const opened = modalEvent("shown.bs.modal");
+        openIt();
+        find(".session-host").click();
+        await opened;
+        const gone = modalEvent("hidden.bs.modal");
+        find(".btn-close").click();
+        await gone;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(host).not.toHaveBeenCalled();
+        expect(find(".session-host").disabled).toBe(false);
+    });
+
     it("opens the dialog again after hosting came to nothing", async () => {
         host.mockResolvedValue(null);
         new SessionDialog({ session: null, refusal: null, host, join });
