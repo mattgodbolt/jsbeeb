@@ -51,13 +51,15 @@ export class SessionDialog {
             if (this.session) this.session.panel.open();
             else bootstrap.Modal.getOrCreateInstance(dialog).show();
         });
-        // Hosting waits for the dialog to go, so the machine is no longer held for it.
+        // Hosting waits for the dialog to go, and for every other listener to its going (the page's hold on the
+        // machine among them) to have run, so the machine is no longer held for it.
         hostButton.addEventListener("click", (event) => {
             hostButton.disabled = joinButton.disabled = true;
             if (event.detail === 0) holdBackEnterRepeats();
             dialog.addEventListener(
                 "hidden.bs.modal",
                 async () => {
+                    await new Promise((resolve) => setTimeout(resolve));
                     this.session = await host(nameInput.value);
                     hostButton.disabled = joinButton.disabled = false;
                 },

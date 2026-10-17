@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Modals } from "../../src/web/modals.js";
 import { SessionDialog } from "../../src/web/session-dialog.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
@@ -30,6 +31,7 @@ describe("SessionDialog", () => {
     };
     // The dialog takes the session once the promise host returned has settled, a turn after it.
     const hosted = async () => {
+        await vi.waitFor(() => expect(host).toHaveBeenCalled());
         await host.mock.results[0].value;
         await Promise.resolve();
     };
@@ -73,10 +75,26 @@ describe("SessionDialog", () => {
         const gone = startHosting();
         expect(host).not.toHaveBeenCalled();
         await gone;
-        expect(host).toHaveBeenCalledWith("matt");
         await hosted();
+        expect(host).toHaveBeenCalledWith("matt");
         openIt();
         expect(session.panel.open).toHaveBeenCalled();
+    });
+
+    it("hosts once the page has let go of the machine it held for the dialog", async () => {
+        domFromIndexHtml("error-dialog", "are-you-sure");
+        const letGo = vi.fn();
+        new Modals({ loop: { pause: () => letGo } });
+        let heldWhenHosting;
+        host.mockImplementation(async () => {
+            heldWhenHosting = letGo.mock.calls.length === 0;
+            return session;
+        });
+        new SessionDialog({ session: null, refusal: null, host, join });
+        await openDialog();
+        await startHosting();
+        await hosted();
+        expect(heldWhenHosting).toBe(false);
     });
 
     it("hosts once however often Start hosting is pressed", async () => {
