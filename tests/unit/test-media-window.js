@@ -1151,6 +1151,7 @@ describe("MediaWindow", () => {
                 "Load it here",
             );
             expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(slots().recent.rank(paradroid)).toBe(0);
             row().click();
             await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
             await vi.waitFor(() => expect(window.isOpen).toBe(false));

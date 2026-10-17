@@ -169,8 +169,7 @@ export class Machine {
             return loading;
         }
 
-        // The slots report their own failures; the page's default disc is not named in the URL. None
-        // of these counts as loaded recently: they are the default, or the URL's media again on a reload.
+        // The slots report their own failures; the page's default disc is not named in the URL.
         const { slots } = media;
         if (discImage)
             startImageLoad(`disc ${discImage}`, () =>
