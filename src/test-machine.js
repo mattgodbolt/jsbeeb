@@ -171,8 +171,11 @@ export class TestMachine {
                 return true;
             }
         });
-        await this.runFor(10 * 1000 * 1000);
-        hook.remove();
+        try {
+            await this.runFor(10 * 1000 * 1000);
+        } finally {
+            hook.remove();
+        }
         assert(hit, "did not hit appropriate breakpoint in time");
     }
 
@@ -187,8 +190,11 @@ export class TestMachine {
                 return true;
             }
         });
-        await this.runFor(secs * this.model.cyclesPerSecond);
-        hook.remove();
+        try {
+            await this.runFor(secs * this.model.cyclesPerSecond);
+        } finally {
+            hook.remove();
+        }
         assert(hit, "did not hit appropriate breakpoint in time");
         return this.runFor(10 * 1000);
     }
@@ -225,8 +231,11 @@ export class TestMachine {
                 return true;
             }
         });
-        await this.runFor(secs * this.model.cyclesPerSecond);
-        hook.remove();
+        try {
+            await this.runFor(secs * this.model.cyclesPerSecond);
+        } finally {
+            hook.remove();
+        }
         assert(hit, "did not hit appropriate breakpoint in time");
     }
 

@@ -39,6 +39,7 @@ describe("TestMachine debug stops", () => {
     const LoopWithoutInterrupts = [0x78, 0x4c, LoopAddress & 0xff, LoopAddress >> 8]; // SEI, JMP &2001
     const ReturnAtOnce = [0xa9, 0x01, 0x60]; // LDA #1, RTS
     const JmpCycles = 3;
+    const CyclesPerInterlacedFrame = 40000;
 
     async function bootedMachine() {
         const machine = new TestMachine();
@@ -80,6 +81,19 @@ describe("TestMachine debug stops", () => {
         hook.remove();
 
         expect(await cyclesToRun(machine, 1000)).toBeLessThan(1010);
+    });
+
+    it("removes a run-until hook when the run throws", async () => {
+        const machine = await bootedMachine();
+        const [lo, hi] = [machine.readbyte(0x204), machine.readbyte(0x205)];
+        const irqHandler = lo | (hi << 8);
+        const failing = machine.processor.debugInstruction.add(() => {
+            throw new Error("hook failed");
+        });
+        await expect(machine.runUntilAddress(irqHandler, 1)).rejects.toThrow("hook failed");
+        failing.remove();
+
+        expect(await machine.runFor(CyclesPerInterlacedFrame)).toBe(false);
     });
 
     it("forgets the hooks called at a stop once the fast path has run", async () => {
