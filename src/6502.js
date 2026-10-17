@@ -1013,8 +1013,8 @@ export class Cpu6502 extends Base6502 {
     }
 
     /**
-     * What readDevice would return, without its side effects. Devices whose reads all have side effects show
-     * UnpeekableDevice, and VIA ports show their pins as last driven (see Via.peek).
+     * What readDevice would return, without its side effects. Devices whose reads have side effects show
+     * UnpeekableDevice instead, and VIA ports show their pins as last driven (see Via.peek).
      */
     peekDevice(addr) {
         if (this.model.isMaster && this.acccon & 0x40) {
@@ -1032,6 +1032,7 @@ export class Cpu6502 extends Base6502 {
                 break;
             case 0xfe00:
             case 0xfe04:
+                return this.crtc.read(addr);
             case 0xfe10:
             case 0xfe14:
                 return UnpeekableDevice;
@@ -1113,7 +1114,7 @@ export class Cpu6502 extends Base6502 {
 
         if (this.hasMusic5000) {
             if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr);
+                return this.music5000.read(this.music5000PageSel, addr) | 0;
             }
         }
 

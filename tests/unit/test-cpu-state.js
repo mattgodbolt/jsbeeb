@@ -4,6 +4,7 @@ import { NmiSource } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
+import { Music5000 } from "../../src/music5000.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { findModel, TEST_6502 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
@@ -573,14 +574,17 @@ describe("peeking at the hardware", () => {
     const Music5000PageSelect = 0xfcff;
     const Music5000WaveRamPage = 0x30;
     const JimStart = 0xfd00;
+    const Music5000WaveRamByte = JimStart + 0x12;
+    const WaveByte = 0xa5;
+    const CrtcAddress = 0xfe00;
+    const CrtcData = 0xfe01;
+    const CrtcStartAddressLow = 13;
+    const StartAddressLow = 0x34;
     const AtomFdcStart = 0x0a00;
     const AtomDevicesStart = 0xb000;
     const AtomDevicesEnd = 0xc000;
     const AtomUserViaOrb = 0xb800;
-    const BbcUnpeekable = [
-        [0xfe00, 0xfe08],
-        [0xfe10, 0xfe18],
-    ];
+    const BbcUnpeekable = [[0xfe10, 0xfe18]];
     const AtomUnpeekable = [
         [0xb000, 0xb008],
         [0xb400, 0xb410],
@@ -606,7 +610,7 @@ describe("peeking at the hardware", () => {
     }
 
     for (const name of ["B-DFS1.2", "B1770", "Master"]) {
-        it(`gives what a read gives at every I/O address but the CRTC and serial ULA on ${name}`, async () => {
+        it(`gives what a read gives at every I/O address but the serial ULA on ${name}`, async () => {
             const cpu = await bootedMachine(name);
             expect(peeksUnlikeReads(cpu, FredStart, SheilaEnd, BbcUnpeekable)).toEqual([]);
         });
@@ -651,11 +655,25 @@ describe("peeking at the hardware", () => {
         expect(cpu.readmem(EconetStationId)).toBe(cpu.econet.stationId);
     });
 
-    it("shows the Music 5000's page select and wave RAM", () => {
+    it("shows the CRTC's readable registers", () => {
+        const cpu = makeCpu();
+        cpu.writemem(CrtcAddress, CrtcStartAddressLow);
+        cpu.writemem(CrtcData, StartAddressLow);
+        expect(cpu.peekmem(CrtcData)).toBe(StartAddressLow);
+        expect(cpu.readmem(CrtcData)).toBe(StartAddressLow);
+    });
+
+    it("shows the Music 5000's page select and wave RAM as a read does", () => {
         const model = findModel("B-DFS1.2");
-        const cpu = new model.Cpu(model, { ...nullIo({ model }), config: machineSpec({ hasMusic5000: true }) });
+        const cpu = new model.Cpu(model, {
+            ...nullIo({ model }),
+            music5000: new Music5000(() => {}),
+            config: machineSpec({ hasMusic5000: true }),
+        });
         cpu.writemem(Music5000PageSelect, Music5000WaveRamPage);
+        cpu.writemem(Music5000WaveRamByte, WaveByte);
         expect(cpu.peekmem(Music5000PageSelect)).toBe(Music5000WaveRamPage);
+        expect(cpu.peekmem(Music5000WaveRamByte)).toBe(cpu.readmem(Music5000WaveRamByte));
         expect(peeksUnlikeReads(cpu, Music5000PageSelect, JimStart + 0x100)).toEqual([]);
     });
 
