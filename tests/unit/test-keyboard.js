@@ -254,6 +254,158 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyUp).toHaveBeenCalledTimes(2);
     });
 
+    describe.each(["physical", "natural", "gaming"])("the keypad in the %s layout", (layout) => {
+        beforeEach(() => {
+            keyboard.setKeyLayout(layout);
+            keyboard.setRunning(true);
+        });
+
+        test.each([
+            ["Numpad1", keyCodes.END],
+            ["Numpad7", keyCodes.HOME],
+            ["Numpad9", keyCodes.PAGEUP],
+            ["Numpad3", keyCodes.PAGEDOWN],
+            ["Numpad0", keyCodes.INSERT],
+            ["Numpad4", keyCodes.LEFT],
+            ["Numpad8", keyCodes.UP],
+            ["Numpad6", keyCodes.RIGHT],
+            ["Numpad2", keyCodes.DOWN],
+        ])("gives %s with Num Lock off what the main %s key gives", (code, key) => {
+            keyboard.keyDown(keyEvent(code, key));
+            keyboard.keyUp(keyEvent(code, "1"));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith(key, false);
+            expect(mockSysvia.keyUp).toHaveBeenCalledWith(key);
+        });
+
+        test.each([
+            ["Numpad1", "1"],
+            ["NumpadDecimal", "Delete"],
+            ["NumpadEnter", "Enter"],
+            ["Numpad5", "Clear"],
+        ])("keeps %s as the keypad's own key when it gives %s", (code, key) => {
+            keyboard.keyDown(keyEvent(code, key));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith(code, false);
+        });
+
+        test("gives a KEY. parameter for the keypad key its key, over Num Lock", () => {
+            userKeymap.push({ native: "NUMPAD1", key: "COPY" });
+            try {
+                keyboard.keyDown(keyEvent("Numpad1", keyCodes.END));
+
+                expect(mockSysvia.keyDown).toHaveBeenCalledWith("Numpad1", false);
+            } finally {
+                userKeymap.length = 0;
+            }
+        });
+    });
+
+    describe("a modifier whose key up was lost", () => {
+        beforeEach(() => keyboard.setRunning(true));
+
+        test.each([
+            ["shift", keyCodes.SHIFT_RIGHT, "Shift", "shiftKey"],
+            ["ctrl", keyCodes.CTRL_LEFT, "Control", "ctrlKey"],
+        ])("lets go of %s once a key event says it is up", (_, code, key, flag) => {
+            keyboard.keyDown(keyEvent(code, key, { [flag]: true }));
+            keyboard.keyDown(keyEvent(keyCodes.A, "a", { [flag]: true }));
+            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+
+            keyboard.keyUp(keyEvent(keyCodes.A, "a"));
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[code], [keyCodes.A]]);
+        });
+
+        test("lets go of ctrl when the next key comes down without it", () => {
+            keyboard.keyDown(keyEvent(keyCodes.CTRL_LEFT, "Control", { ctrlKey: true }));
+            keyboard.keyDown(keyEvent(keyCodes.A, "a"));
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.CTRL_LEFT]]);
+            expect(mockSysvia.keyDown).toHaveBeenLastCalledWith(keyCodes.A, false);
+        });
+
+        test("is not let go of by the other shift key's key up", () => {
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_RIGHT, "Shift", { shiftKey: true }));
+            keyboard.keyUp(keyEvent(keyCodes.SHIFT_RIGHT, "Shift"));
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.SHIFT_RIGHT]]);
+        });
+
+        test("changes nothing for the shift Windows lets go of around a keypad key with Num Lock on", () => {
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
+            keyboard.keyUp(keyEvent(keyCodes.SHIFT_LEFT, "Shift"));
+            keyboard.keyDown(keyEvent(keyCodes.NUMPAD1, keyCodes.END));
+            keyboard.keyUp(keyEvent(keyCodes.NUMPAD1, keyCodes.END));
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
+            keyboard.keyUp(keyEvent(keyCodes.SHIFT_LEFT, "Shift"));
+
+            expect(mockSysvia.keyDown.mock.calls).toEqual([
+                [keyCodes.SHIFT_LEFT, true],
+                [keyCodes.END, false],
+                [keyCodes.SHIFT_LEFT, true],
+            ]);
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.SHIFT_LEFT], [keyCodes.END], [keyCodes.SHIFT_LEFT]]);
+        });
+    });
+
+    describe("when the input method takes a key", () => {
+        const deadKey = (extra = {}) => keyEvent(keyCodes.APOSTROPHE, "Dead", { shiftKey: true, ...extra });
+        const composedEnter = () => keyEvent(keyCodes.ENTER, "Process", { keyCode: 229 });
+
+        beforeEach(() => keyboard.setRunning(true));
+
+        test("lets go of a dead key whose key up never arrives when the next key is composed", () => {
+            keyboard.keyDown(deadKey());
+            keyboard.keyDown(composedEnter());
+
+            expect(mockSysvia.keyDown.mock.calls).toEqual([[keyCodes.APOSTROPHE, true]]);
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE]]);
+        });
+
+        test.each([
+            ["as normal", "Dead"],
+            ["naming a different key", "\u00a8"],
+        ])("lets go of a dead key once, on its key up %s", (_, keyUpKey) => {
+            keyboard.keyDown(deadKey());
+            keyboard.keyUp(keyEvent(keyCodes.APOSTROPHE, keyUpKey));
+            keyboard.keyDown(composedEnter());
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE]]);
+        });
+
+        test("holds a dead key through its repeats", () => {
+            keyboard.keyDown(deadKey());
+            keyboard.keyDown(deadKey({ repeat: true }));
+            keyboard.keyDown(deadKey({ repeat: true }));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
+            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+        });
+
+        test("lets go of shift and the dead key when Linux sends no key ups at all", () => {
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
+            keyboard.keyDown(deadKey());
+            keyboard.keyDown(keyEvent(keyCodes.ENTER, "Process", { keyCode: 229, shiftKey: true }));
+            keyboard.keyDown(keyEvent(keyCodes.A, "a"));
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE], [keyCodes.SHIFT_LEFT]]);
+            expect(mockSysvia.keyDown).not.toHaveBeenCalledWith(keyCodes.ENTER, expect.anything());
+        });
+
+        test.each([
+            ["Process", { key: "Process", keyCode: 229 }],
+            ["keyCode 229", { key: "Enter", keyCode: 229 }],
+        ])("ignores a key the input method has composed into, by %s", (_, fields) => {
+            keyboard.keyDown(keyEvent(keyCodes.ENTER, fields.key, { keyCode: fields.keyCode }));
+            keyboard.keyUp(keyEvent(keyCodes.ENTER, "Enter"));
+
+            expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+        });
+    });
+
     test("keyCode is the physical position the event came from", () => {
         expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
         expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);

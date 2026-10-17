@@ -2,6 +2,24 @@ import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
+const InputMethodKeyCode = 229;
+const KeypadNavigationKeys = new Set([
+    keyCodes.END,
+    keyCodes.HOME,
+    keyCodes.PAGEUP,
+    keyCodes.PAGEDOWN,
+    keyCodes.INSERT,
+    keyCodes.LEFT,
+    keyCodes.UP,
+    keyCodes.RIGHT,
+    keyCodes.DOWN,
+]);
+const Modifiers = [
+    { codes: [keyCodes.SHIFT_LEFT, keyCodes.SHIFT_RIGHT], isDown: (evt) => evt.shiftKey },
+    { codes: [keyCodes.CTRL_LEFT, keyCodes.CTRL_RIGHT], isDown: (evt) => evt.ctrlKey },
+];
+
+const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMethodKeyCode;
 
 /**
  * @typedef {Object} KeyboardConfig
@@ -41,6 +59,7 @@ export class Keyboard extends EventTarget {
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
         this.releases = new Map();
+        this.heldDeadKeys = new Set();
     }
 
     /** Key presses and BREAK straight to the machine. */
@@ -76,17 +95,17 @@ export class Keyboard extends EventTarget {
     /**
      * How the emulated machine's key map names the key this event came from. The natural
      * layout is keyed by the character the host produced, so that what you type comes out
-     * right whatever layout the host keyboard is in; every other layout is by position.
+     * right whatever layout the host keyboard is in; every other layout is by position. A
+     * keypad key with Num Lock off is, in every layout, the navigation key it stands in for.
      * @param {KeyboardEvent} evt - The keyboard event
      * @returns {string}
      */
     _machineKey(evt) {
-        if (this.keyLayout !== "natural") return evt.code;
         // A `KEY.` parameter names a key by where it is, so it outranks what the key prints.
         if (isUserRemapped(evt.code)) return evt.code;
-        // The Master's keypad is a separate set of keys from the digits above the letters, and
-        // the characters cannot tell them apart.
-        if (evt.code?.startsWith("Numpad")) return evt.code;
+        // Even in the natural layout, a keypad key is the Master's keypad, not the character it types.
+        if (evt.code?.startsWith("Numpad")) return KeypadNavigationKeys.has(evt.key) ? evt.key : evt.code;
+        if (this.keyLayout !== "natural") return evt.code;
         return evt.key?.length === 1 ? evt.key : evt.code;
     }
 
@@ -191,6 +210,7 @@ export class Keyboard extends EventTarget {
      */
     keyDown(evt) {
         const code = this.keyCode(evt);
+        this._releaseKeysShownUp(evt, code);
         const stale = this.releases.get(code);
         if (evt.repeat && this._shortcutFor(evt, code)) {
             evt.preventDefault();
@@ -244,9 +264,34 @@ export class Keyboard extends EventTarget {
             return null;
         }
 
+        if (isComposing(evt)) return null;
         const machineKey = this._machineKey(evt);
         this.input.keyDown(machineKey, evt.shiftKey);
-        return () => this.input.keyUp(machineKey);
+        if (evt.key !== "Dead") return () => this.input.keyUp(machineKey);
+        this.heldDeadKeys.add(code);
+        return () => {
+            this.heldDeadKeys.delete(code);
+            this.input.keyUp(machineKey);
+        };
+    }
+
+    /**
+     * Lets go of held keys whose key up was lost, when this event shows they are up: a modifier
+     * the event says is not held, and, once the input method composes the next key (which is
+     * what Linux sends in place of a dead key's key up), any dead key.
+     */
+    _releaseKeysShownUp(evt, code) {
+        const up = [];
+        for (const { codes, isDown } of Modifiers) {
+            if (!isDown(evt) && !codes.includes(code)) up.push(...codes);
+        }
+        if (isComposing(evt)) up.push(...this.heldDeadKeys);
+        for (const heldCode of up) {
+            const release = this.releases.get(heldCode);
+            if (!release) continue;
+            this.releases.delete(heldCode);
+            release();
+        }
     }
 
     /**
@@ -255,6 +300,7 @@ export class Keyboard extends EventTarget {
      */
     keyUp(evt) {
         const code = this.keyCode(evt);
+        this._releaseKeysShownUp(evt, code);
         if (isMac && code === keyCodes.CAPSLOCK) {
             this._press(evt, code);
             return;
