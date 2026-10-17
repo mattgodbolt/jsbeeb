@@ -4,6 +4,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { DiscDrive } from "../../src/disc-drive.js";
+import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { findModel } from "../../src/models.js";
 
 const AtomModel = findModel("Atom");
@@ -361,6 +362,58 @@ describe("Intel 8271 tests", function () {
             sendCommand(fdc, writeRegCmd, mmioWrite, 0);
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             expect(ready()).toBe(false);
+        });
+    });
+
+    describe("peeking", () => {
+        const statusAddr = 0;
+        const resultAddr = 1;
+        const dataAddr = 4;
+        const needData = 0x04;
+        const modeRegister = 0x17;
+        const dfsMode = 0xc1;
+        const readDataCmd = (0x04 << 2) | driveSelect1 | 3;
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        const oneSectorOf256Bytes = 0x21;
+        const sectorByte = 0x5a;
+        const SectorBytes = 256;
+        const SectorsPerTrack = 10;
+        const pollTicks = 16;
+        const maxTicks = 2 * 1000 * 1000;
+
+        function fdcWithDisc() {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+            const data = new Uint8Array(2 * SectorsPerTrack * SectorBytes);
+            data.fill(sectorByte, 0, SectorBytes);
+            drive.setDisc(loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null));
+            const fdc = new IntelFdc(cpu, scheduler, [drive]);
+            sendCommand(fdc, writeRegCmd, modeRegister, dfsMode);
+            // As the DFS specifies, keeping the head loaded between commands.
+            sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            scheduler.polltime(maxTicks);
+            // The drive status is latched, so the second read is the one that sees it ready.
+            for (let i = 0; i < 2; ++i) {
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                fdc.read(resultAddr);
+            }
+            return { fdc, scheduler };
+        }
+
+        it("shows the data byte without lowering need-data, as reading it does", () => {
+            const { fdc, scheduler } = fdcWithDisc();
+            sendCommand(fdc, readDataCmd, 0, 0, oneSectorOf256Bytes);
+            for (let ticks = 0; !(fdc.peek(statusAddr) & needData) && ticks < maxTicks; ticks += pollTicks) {
+                scheduler.polltime(pollTicks);
+            }
+            expect(fdc.peek(statusAddr) & needData).toBe(needData);
+            expect(fdc.peek(dataAddr)).toBe(sectorByte);
+            expect(fdc.peek(statusAddr) & needData).toBe(needData);
+            expect(fdc.read(dataAddr)).toBe(sectorByte);
+            expect(fdc.peek(statusAddr) & needData).toBe(0);
         });
     });
 

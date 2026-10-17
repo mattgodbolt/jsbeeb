@@ -288,6 +288,25 @@ describe("WD1770 FDC tests", () => {
             expect(cpu.nmi).toBe(false);
         });
 
+        it("shows a sector's data byte without dropping DRQ, as reading it does", () => {
+            const data = sectorData();
+            const { scheduler, fdc } = makeFdc({ disc: mfmDiscWithSector({ data }) });
+            fdc.write(SectorRegister, 0);
+            fdc.write(CommandRegister, ReadSectorCommand);
+            for (
+                let ticks = 0;
+                !(fdc.peek(StatusRegister) & StatusDrq) && ticks < MaxCommandTicks;
+                ticks += PollTicks
+            ) {
+                scheduler.polltime(PollTicks);
+            }
+            expect(fdc.peek(StatusRegister) & StatusDrq).toBe(StatusDrq);
+            expect(fdc.peek(DataRegister)).toBe(data[0]);
+            expect(fdc.peek(StatusRegister) & StatusDrq).toBe(StatusDrq);
+            expect(fdc.read(DataRegister)).toBe(data[0]);
+            expect(fdc.peek(StatusRegister) & StatusDrq).toBe(0);
+        });
+
         it("shows the track, sector and data registers", () => {
             const { fdc } = makeFdc();
             fdc.write(TrackRegister, 12);
