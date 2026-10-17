@@ -8,6 +8,13 @@ async function openSessionFromMore(beeb) {
     await beeb.page.click("#session-open");
 }
 
+// Start hosting answers only once the dialog has finished appearing.
+async function openSessionDialog(beeb) {
+    await beeb.armModalShown("session-dialog");
+    await openSessionFromMore(beeb);
+    await beeb.expectModalShown();
+}
+
 async function typeLine(beeb, text) {
     for (const key of [...text, "Enter"]) await beeb.pressKey(key);
 }
@@ -50,7 +57,7 @@ test("Shared session in the More menu hosts this machine, paused or not, and a g
     const hostUrl = beeb.page.url();
     await beeb.page.click("#debug-pause");
     const pausedAt = await beeb.expectHeld();
-    await openSessionFromMore(beeb);
+    await openSessionDialog(beeb);
     await beeb.page.fill("#session-name", "matt");
     await beeb.page.click(".session-host");
     const link = beeb.page.locator("#session-pane .session-link");
@@ -63,7 +70,7 @@ test("Shared session in the More menu hosts this machine, paused or not, and a g
     try {
         await guest.open();
         await guest.expectScreenText("BASIC");
-        await openSessionFromMore(guest);
+        await openSessionDialog(guest);
         await guest.page.fill("#session-name", "tom");
         await guest.page.fill(".session-room", await link.textContent());
         await guest.page.click(".session-join");
@@ -82,6 +89,30 @@ test("Shared session in the More menu hosts this machine, paused or not, and a g
     } finally {
         await guestContext.close();
     }
+});
+
+test("a paused machine that could not host stays paused, and Shared session offers the dialog again", async ({
+    beeb,
+}) => {
+    await beeb.page.route("**/api/rendezvous/room/*", (route) =>
+        route.request().method() === "POST"
+            ? route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"down"}' })
+            : route.continue(),
+    );
+    await beeb.open();
+    await beeb.expectScreenText("BASIC");
+    await beeb.page.click("#debug-pause");
+    await beeb.expectHeld();
+    await openSessionDialog(beeb);
+    await beeb.page.click(".session-host");
+    await expect(beeb.page.locator(".toast")).toContainText("The session couldn't start");
+    await beeb.expectHeld();
+    await expect(beeb.page.locator("#session-panel")).toBeHidden();
+    await openSessionDialog(beeb);
+    await expect(beeb.page.locator(".session-host")).toBeEnabled();
+    const expected = (problem) => /status of 500|Rendezvous create room failed/.test(problem);
+    expect(beeb.problems.filter(expected)).not.toEqual([]);
+    beeb.problems = beeb.problems.filter((problem) => !expected(problem));
 });
 
 test("a guest takes control, both type, and the host takes it back", async ({ browser, beeb }) => {
