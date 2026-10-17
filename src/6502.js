@@ -19,6 +19,8 @@ function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
 
+const UnpeekableDevice = 0xff;
+
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
     fdc: 0x01,
@@ -1010,7 +1012,10 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    /** What readDevice would return, for the devices that can say without side effects; 0xff for the rest. */
+    /**
+     * What readDevice would return, without its side effects. Devices whose reads all have side effects show
+     * UnpeekableDevice, and VIA ports show their pins as last driven (see Via.peek).
+     */
     peekDevice(addr) {
         if (this.model.isMaster && this.acccon & 0x40) {
             return this.ramRomOs[this.osOffset + (addr & 0x3fff)];
@@ -1019,14 +1024,25 @@ export class Cpu6502 extends Base6502 {
         const isMaster = this.model.isMaster;
 
         switch (addr & ~0x0003) {
+            case 0xfc10:
+                if (this.hasTeletextAdaptor) return UnpeekableDevice;
+                break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
                 break;
+            case 0xfe00:
+            case 0xfe04:
+            case 0xfe10:
+            case 0xfe14:
+                return UnpeekableDevice;
             case 0xfe08:
             case 0xfe0c:
                 return this.acia.peek(addr);
             case 0xfe18:
                 return isMaster ? this.adconverter.peek(addr) : this.econetStationId();
+            case 0xfe20:
+                if (!isMaster) return UnpeekableDevice;
+                break;
             case 0xfe24:
             case 0xfe28:
                 if (isMaster) return this.fdc.peek(addr);
@@ -1039,6 +1055,9 @@ export class Cpu6502 extends Base6502 {
                 break;
             case 0xfe38:
                 if (isMaster) return this.econetStationId();
+                break;
+            case 0xfe3c:
+                if (isMaster) return UnpeekableDevice;
                 break;
             case 0xfe40:
             case 0xfe44:
@@ -1068,6 +1087,9 @@ export class Cpu6502 extends Base6502 {
             case 0xfe9c:
                 if (!isMaster) return this.fdc.peek(addr);
                 break;
+            case 0xfea0:
+                if (this.econet) return UnpeekableDevice;
+                break;
             case 0xfec0:
             case 0xfec4:
             case 0xfec8:
@@ -1078,8 +1100,25 @@ export class Cpu6502 extends Base6502 {
             case 0xfedc:
                 if (!isMaster) return this.adconverter.peek(addr);
                 break;
+            case 0xfee0:
+            case 0xfee4:
+            case 0xfee8:
+            case 0xfeec:
+            case 0xfef0:
+            case 0xfef4:
+            case 0xfef8:
+            case 0xfefc:
+                return this.hasTube ? UnpeekableDevice : this.tube.read(addr);
         }
-        return 0xff;
+
+        if (this.hasMusic5000) {
+            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
+                return this.music5000.read(this.music5000PageSel, addr);
+            }
+        }
+
+        if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
+        return addr >>> 8;
     }
 
     writemem(addr, b) {
@@ -1823,13 +1862,23 @@ export class AtomCpu6502 extends Cpu6502 {
             case 0x0a00:
             case 0x0a04:
                 return this.fdc.peek(addr);
+            case 0xb000:
+            case 0xb004:
+            case 0xb400:
+            case 0xb404:
+            case 0xb408:
+            case 0xb40c:
+                return UnpeekableDevice;
+            case 0xb008:
+            case 0xb00c:
+                return 0x00;
             case 0xb800:
             case 0xb804:
             case 0xb808:
             case 0xb80c:
                 return this.uservia.peek(addr);
         }
-        return 0xff;
+        return addr >>> 8;
     }
 
     writeDevice(addr, b) {
