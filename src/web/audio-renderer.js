@@ -10,9 +10,9 @@ import {
 } from "../audio-output.js";
 import { ExcessLeadMs, PersistentExcessSeconds, validTargetLatencyMs } from "../audio-latency.js";
 
-// Smoothing rejects the producer's per-tick bursts; proportional only, as
-// lead already integrates rate error; bending the rate by at most 0.05%
-// covers clock skew without audibly bending pitch.
+// Smoothing rejects the producer's per-tick bursts. Proportional only, as the
+// lead already integrates rate error. A change of rate of at most 0.05% covers
+// clock skew and is too small to hear as a change of pitch.
 const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
