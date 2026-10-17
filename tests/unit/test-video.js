@@ -218,6 +218,34 @@ describe("Video", () => {
             const expectedAddr = (5 & 0x07) | (0x1234 << 3);
             expect(mockCpu.videoRead).toHaveBeenCalledWith(expectedAddr & 0x7fff);
         });
+
+        it("should fetch the field's own scanlines with interlace sync and video", () => {
+            video.ula.write(0, 0);
+            video.crtc.write(0, 8);
+            video.crtc.write(1, 3);
+            video.addr = 0x1234;
+            video.scanlineCounter = 4;
+
+            for (const field of [0, 1]) {
+                video.frameCount = field;
+                video.readVideoMem();
+                expect(mockCpu.videoRead).toHaveBeenLastCalledWith(((0x1234 << 3) | (4 + field)) & 0x7fff);
+            }
+        });
+
+        // An R8 write part way through a row can leave an odd scanline count.
+        it("should set RA0 for the odd field without carrying into RA1", () => {
+            video.ula.write(0, 0);
+            video.crtc.write(0, 8);
+            video.crtc.write(1, 3);
+            video.addr = 0x1234;
+            video.scanlineCounter = 3;
+            video.frameCount = 1;
+
+            video.readVideoMem();
+
+            expect(mockCpu.videoRead).toHaveBeenLastCalledWith(((0x1234 << 3) | 3) & 0x7fff);
+        });
     });
 
     describe("Video mode rendering", () => {
@@ -411,8 +439,7 @@ describe("Video", () => {
             // Call endOfScanline
             video.endOfScanline();
 
-            // In interlaced mode with odd frame count, externalScanline is scanlineCounter + 1
-            // So even though scanlineCounter is now 2 (bit 0 = 0), externalScanline is 3 (bit 0 = 1)
+            // The odd field puts its parity on RA0, so scanlineCounter 2 is external row 3
             expect(mockTeletext.setRA0).toHaveBeenCalledWith(true);
         });
 
@@ -1100,6 +1127,110 @@ describe("Video", () => {
         });
     });
 
+    // The field detection loop of beebjit's isv_gfx_mode test.
+    describe("Interlace sync turned on during a vsync", () => {
+        const ClocksIntoVsync = 16;
+        const HalfLineClocks = ClocksPerScanline / 2;
+        const SettleFrames = 2;
+        const MeasuredFrames = 8;
+        const InterlacedFramePairClocks = 625 * ClocksPerScanline;
+
+        // Per frame, the vsync edges in the half line after turning interlace sync on
+        // just after the vsync rises.
+        function vsyncEdgesAfterInterlaceOn() {
+            const edges = [];
+            const v = makeVideo(
+                () => {},
+                (level) => edges.push(level),
+            );
+            programStandardFrame(v);
+            const perFrame = [];
+            for (let frame = 0; frame < SettleFrames + MeasuredFrames; frame++) {
+                edges.length = 0;
+                for (let waited = 0; !edges.includes(true); waited++) {
+                    if (waited > 2 * ClocksPerFrame) throw new Error(`No vsync in frame ${frame}`);
+                    v.run(1);
+                }
+                v.run(ClocksIntoVsync);
+                edges.length = 0;
+                v.writeCrtc(8, 1);
+                v.run(HalfLineClocks);
+                perFrame.push([...edges]);
+                v.writeCrtc(8, 0);
+            }
+            return perFrame.slice(SettleFrames);
+        }
+
+        it("should give isv_gfx_mode's loop a second vsync half a line late on alternate fields", () => {
+            const perFrame = vsyncEdgesAfterInterlaceOn();
+            const second = perFrame.filter((edges) => edges.length);
+            expect(second).toEqual(Array(MeasuredFrames / 2).fill([false, true]));
+            perFrame.slice(1).forEach((edges, i) => expect(edges.length).not.toBe(perFrame[i].length));
+        });
+
+        it("should raise the vsync once a field when interlace sync stays on", () => {
+            let rises = 0;
+            const v = makeVideo(
+                () => {},
+                (level) => {
+                    if (level) rises++;
+                },
+            );
+            programStandardFrame(v);
+            v.writeCrtc(8, 1);
+            v.run(SettleFrames * ClocksPerFrame);
+            rises = 0;
+
+            v.run((MeasuredFrames / 2) * InterlacedFramePairClocks);
+
+            expect(rises).toBe(MeasuredFrames);
+        });
+
+        // R7 written after half R0 starts only the line-start vsync, here timed to end on
+        // the first character of the next frame, as the field changes to select it.
+        it("should not pulse the vsync when a field change selects a line-start vsync as it ends", () => {
+            const R7Row = 16;
+            const Frames = 6;
+            const pulses = [];
+            let clocks = 0;
+            let roseAt = null;
+            const v = makeVideo(
+                () => {},
+                (level) => {
+                    if (level) roseAt = clocks;
+                    else pulses.push(clocks - roseAt);
+                },
+            );
+            v.writeCrtc(0, 127);
+            v.writeCrtc(1, 80);
+            v.writeCrtc(2, 98);
+            v.writeCrtc(3, 0x64);
+            v.writeCrtc(4, 20);
+            v.writeCrtc(5, 0);
+            v.writeCrtc(6, 10);
+            v.writeCrtc(7, 0x7f);
+            v.writeCrtc(8, 1);
+            v.writeCrtc(9, 0);
+            const runUntil = (condition) => {
+                for (let waited = 0; !condition(); waited++) {
+                    if (waited > 2 * ClocksPerFrame) throw new Error("Never reached the row");
+                    v.run(1);
+                    clocks++;
+                }
+            };
+            const { video } = v;
+            for (let frame = 0; frame < Frames; frame++) {
+                runUntil(() => video.vertCounter === R7Row && video.horizCounter > HalfLineClocks);
+                v.writeCrtc(7, R7Row);
+                runUntil(() => video.vertCounter === R7Row + 2);
+                v.writeCrtc(7, 0x7f);
+            }
+
+            expect(pulses.length).toBeGreaterThan(0);
+            expect(Math.min(...pulses)).toBeGreaterThan(ClocksPerScanline);
+        });
+    });
+
     describe("PAL line phase", () => {
         // The field parity bookkeeping takes a frame or two to settle after
         // the registers change, as it does on a mode change.
@@ -1443,6 +1574,64 @@ describe("Video", () => {
             expect(v2.subcarrierPhase).toBe(0.125);
             expect(v2.phaseBaseEven).toBe(0.375);
             expect(v2.phaseBaseOdd).toBe(0.625);
+        });
+
+        it("should carry on from a half-line vsync the way the original does", () => {
+            const SnapshotDelayClocks = (7 * ClocksPerScanline) / 4;
+            const ComparedClocks = ClocksPerFrame / 2;
+            function recording() {
+                const run = { clocks: 0, edges: [] };
+                run.v = makeVideo(
+                    () => {},
+                    (level) => run.edges.push([level, run.clocks]),
+                );
+                run.tick = (count) => {
+                    for (let i = 0; i < count; i++) {
+                        run.v.run(1);
+                        run.clocks++;
+                    }
+                };
+                return run;
+            }
+
+            const original = recording();
+            programStandardFrame(original.v);
+            original.v.writeCrtc(8, 1);
+            original.tick(2 * ClocksPerFrame);
+
+            const sourcesAtSnapshot = [];
+            for (let field = 0; field < 2; field++) {
+                original.edges = [];
+                while (!original.edges.some(([level]) => level)) original.tick(1);
+                original.tick(SnapshotDelayClocks);
+                const snapshot = original.v.video.snapshotState();
+                sourcesAtSnapshot.push([snapshot.inLineVSync, snapshot.inHalfLineVSync]);
+
+                const restored = recording();
+                restored.v.video.restoreState(snapshot);
+                original.edges = [];
+                original.clocks = 0;
+                original.tick(ComparedClocks);
+                restored.tick(ComparedClocks);
+
+                expect(original.edges.length).toBeGreaterThan(0);
+                expect(restored.edges).toEqual(original.edges);
+            }
+            expect(sourcesAtSnapshot).toContainEqual([false, true]);
+        });
+
+        it("should take both vsync sources from the output for a snapshot without them", () => {
+            const v = makeRealVideo();
+            v.inVSync = true;
+            v.hadVSyncThisRow = true;
+            const { inLineVSync, inHalfLineVSync, hadHalfLineVSyncThisRow, ...older } = v.snapshotState();
+            expect([inLineVSync, inHalfLineVSync, hadHalfLineVSyncThisRow]).toEqual([false, false, false]);
+
+            const v2 = makeRealVideo();
+            v2.restoreState(older);
+
+            expect([v2.inVSync, v2.inLineVSync, v2.inHalfLineVSync]).toEqual([true, true, true]);
+            expect([v2.hadVSyncThisRow, v2.hadHalfLineVSyncThisRow]).toEqual([true, true]);
         });
 
         it("should paint afresh after a restore", () => {

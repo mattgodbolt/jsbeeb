@@ -290,6 +290,7 @@ class Crtc {
                     break;
                 case 8: {
                     this.video.interlacedSyncAndVideo = (val & 3) === 3;
+                    this.video.updateVSync();
                     const skew = (val & 0x30) >>> 4;
                     if (skew < 3) {
                         this.video.displayEnableSkew = skew;
@@ -379,7 +380,10 @@ export class Video {
         this.firstScanline = true;
         this.inHSync = false;
         this.inVSync = false;
+        this.inLineVSync = false;
+        this.inHalfLineVSync = false;
         this.hadVSyncThisRow = false;
+        this.hadHalfLineVSyncThisRow = false;
         this.checkVertAdjust = false;
         this.endOfMainLatched = false;
         this.endOfVertAdjustLatched = false;
@@ -497,7 +501,10 @@ export class Video {
             firstScanline: this.firstScanline,
             inHSync: this.inHSync,
             inVSync: this.inVSync,
+            inLineVSync: this.inLineVSync,
+            inHalfLineVSync: this.inHalfLineVSync,
             hadVSyncThisRow: this.hadVSyncThisRow,
+            hadHalfLineVSyncThisRow: this.hadHalfLineVSyncThisRow,
             checkVertAdjust: this.checkVertAdjust,
             endOfMainLatched: this.endOfMainLatched,
             endOfVertAdjustLatched: this.endOfVertAdjustLatched,
@@ -556,7 +563,10 @@ export class Video {
         this.firstScanline = state.firstScanline;
         this.inHSync = state.inHSync;
         this.inVSync = state.inVSync;
+        this.inLineVSync = state.inLineVSync ?? state.inVSync;
+        this.inHalfLineVSync = state.inHalfLineVSync ?? state.inVSync;
         this.hadVSyncThisRow = state.hadVSyncThisRow;
+        this.hadHalfLineVSyncThisRow = state.hadHalfLineVSyncThisRow ?? state.hadVSyncThisRow;
         // The next paint replaces the picture rather than following on from it.
         this.paintsAfresh = true;
         this.checkVertAdjust = state.checkVertAdjust;
@@ -822,7 +832,7 @@ export class Video {
         } else {
             // Emulate IC32/IC39 address translation: adjust MA11..MA8 on overflow before composing the DRAM address.
             const ma = this.addr & 0x1fff;
-            const raLow = this.scanlineCounter & 0x07;
+            const raLow = this.externalRowAddress() & 0x07;
             let adjustedHigh = (ma >>> 8) & 0x0f;
             if (ma & 0x1000) {
                 adjustedHigh = (adjustedHigh - this.screenSubtract) & 0x0f;
@@ -830,6 +840,57 @@ export class Video {
             const hiResAddr = ((adjustedHigh << 11) | ((ma & 0xff) << 3) | raLow) & 0x7fff;
             return this.cpu.videoRead(hiResAddr);
         }
+    }
+
+    clockVSync(r7Hit) {
+        // Half-line interlace timing is shown nicely in figure 13 here:
+        // http://bitsavers.trailing-edge.com/components/motorola/_dataSheets/6845.pdf
+        // Essentially, on even frames, vsync raise / lower triggers at
+        // the mid-scanline, and then a dummy scanline is also added
+        // at the end of vertical adjust.
+        // Without interlace, frames are 312 scanlines. With interlace,
+        // both odd and even frames are 312.5 scanlines.
+        // The chip runs both vsyncs all the time and muxes one to the pin,
+        // so changing R8 can switch between them mid-pulse:
+        // https://stardot.org.uk/forums/viewtopic.php?p=358225#p358225
+        const halfR0Hit = this.horizCounter === (this.regs[0] + 1) >>> 1;
+
+        // A vsync will initiate at any character and scanline position,
+        // provided there isn't one in progress and provided there
+        // wasn't already one in this character row.
+        // This is an interesting finding, on a real model B.
+        // One further emulated quirk is that in the corner case of a
+        // vsync ending and starting at the same time, the vsync
+        // pulse continues uninterrupted. The vsync pulse counter will
+        // continue counting up and wrap at 16.
+        const lineVSyncEnding = this.inLineVSync && this.vpulseCounter === this.vpulseWidth;
+        if (lineVSyncEnding) this.inLineVSync = false;
+        if (r7Hit && !this.inLineVSync && !this.hadVSyncThisRow) {
+            this.inLineVSync = true;
+            if (!lineVSyncEnding) {
+                this.hadVSyncThisRow = true;
+                this.vpulseCounter = 0;
+            }
+        }
+        if (halfR0Hit) {
+            const halfLineVSyncEnding = this.inHalfLineVSync && this.vpulseCounter === this.vpulseWidth;
+            if (halfLineVSyncEnding) this.inHalfLineVSync = false;
+            if (r7Hit && !this.inHalfLineVSync && !this.hadHalfLineVSyncThisRow) {
+                this.inHalfLineVSync = true;
+                if (!halfLineVSyncEnding) this.hadHalfLineVSyncThisRow = true;
+            }
+        }
+        // Also picks up a change of field, which can switch sources without either changing.
+        this.updateVSync();
+    }
+
+    updateVSync() {
+        const vsync = this.regs[8] & 1 && this.doEvenFrameLogic ? this.inHalfLineVSync : this.inLineVSync;
+        if (vsync === this.inVSync) return;
+        this.inVSync = vsync;
+        if (vsync) this.flyback();
+        this.sysvia.setVBlankInt(vsync);
+        this.teletext.setDEW(vsync);
     }
 
     endOfFrame() {
@@ -848,6 +909,7 @@ export class Video {
 
         this.scanlineCounter = 0;
         this.hadVSyncThisRow = false;
+        this.hadHalfLineVSyncThisRow = false;
         this.dispEnableSet(SCANLINEDISPENABLE);
         this.cursorOn = false;
         this.cursorOff = false;
@@ -947,13 +1009,13 @@ export class Video {
 
         // The teletext SAA5050 chip has its CRS pin connected to RA0, so
         // we need to update it.
-        // The external RA0 value is modified in "interlace sync and video"
-        // mode to be odd for odd interlace frames.
-        let externalScanline = this.scanlineCounter;
-        if (this.interlacedSyncAndVideo && this.frameCount & 1) {
-            externalScanline++;
-        }
-        this.teletext.setRA0(!!(externalScanline & 1));
+        this.teletext.setRA0(!!(this.externalRowAddress() & 1));
+    }
+
+    // In "interlace sync and video" mode the RA pins carry the odd
+    // scanlines on odd interlace frames.
+    externalRowAddress() {
+        return this.interlacedSyncAndVideo ? this.scanlineCounter | (this.frameCount & 1) : this.scanlineCounter;
     }
 
     handleHSync() {
@@ -1054,46 +1116,8 @@ export class Video {
             }
 
             // Handle VSync.
-            // Half-line interlace timing is shown nicely in figure 13 here:
-            // http://bitsavers.trailing-edge.com/components/motorola/_dataSheets/6845.pdf
-            // Essentially, on even frames, vsync raise / lower triggers at
-            // the mid-scanline, and then a dummy scanline is also added
-            // at the end of vertical adjust.
-            // Without interlace, frames are 312 scanlines. With interlace,
-            // both odd and even frames are 312.5 scanlines.
-            const isInterlace = !!(this.regs[8] & 1);
-            const halfR0Hit = this.horizCounter === (this.regs[0] + 1) >>> 1;
-            const isVsyncPoint = !isInterlace || !this.doEvenFrameLogic || halfR0Hit;
-            let vSyncEnding = false;
-            let vSyncStarting = false;
-            if (this.inVSync && this.vpulseCounter === this.vpulseWidth && isVsyncPoint) {
-                vSyncEnding = true;
-                this.inVSync = false;
-            }
-            if (this.vertCounter === this.regs[7] && !this.inVSync && !this.hadVSyncThisRow && isVsyncPoint) {
-                vSyncStarting = true;
-                this.inVSync = true;
-            }
-
-            // A vsync will initiate at any character and scanline position,
-            // provided there isn't one in progress and provided there
-            // wasn't already one in this character row.
-            // This is an interesting finding, on a real model B.
-            // One further emulated quirk is that in the corner case of a
-            // vsync ending and starting at the same time, the vsync
-            // pulse continues uninterrupted. The vsync pulse counter will
-            // continue counting up and wrap at 16.
-            if (vSyncStarting && !vSyncEnding) {
-                this.hadVSyncThisRow = true;
-                this.vpulseCounter = 0;
-
-                this.flyback();
-            }
-
-            if (vSyncStarting || vSyncEnding) {
-                this.sysvia.setVBlankInt(this.inVSync);
-                this.teletext.setDEW(this.inVSync);
-            }
+            const r7Hit = this.vertCounter === this.regs[7];
+            if (r7Hit || this.inLineVSync || this.inHalfLineVSync) this.clockVSync(r7Hit);
 
             // TODO(#876) this will be cleaner if we rework skew to have fetch
             // independent from render.
