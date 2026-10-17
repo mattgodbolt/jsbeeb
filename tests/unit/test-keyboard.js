@@ -667,6 +667,19 @@ describe("Keyboard Atom adapter", () => {
         expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith("KeyA");
     });
 
+    test("sends the PPIA the character the host produced in the natural layout", () => {
+        keyboard.setKeyLayout("natural");
+        keyboard.keyDown({
+            code: "Digit2",
+            key: "@",
+            shiftKey: true,
+            altKey: false,
+            ctrlKey: false,
+            preventDefault: vi.fn(),
+        });
+        expect(mockAtomPPIA.keyDown).toHaveBeenCalledWith("@", true);
+    });
+
     test("setKeyLayout hands the layout to the processor", () => {
         keyboard.setKeyLayout("natural");
         expect(mockProcessor.setKeyLayout).toHaveBeenCalledWith("natural");

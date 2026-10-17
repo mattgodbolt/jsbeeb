@@ -133,6 +133,10 @@ most keyboards cannot type a `£` at all, so the key that would print a backtick
 instead. And the Master's numeric keypad is a separate set of keys from the digits above the
 letters, which the characters cannot tell apart, so the keypad goes by position.
 
+The Atom's natural layout works the same way, except that the Atom has a backtick (shift and `@`),
+so the backtick key gives one rather than a `£`. The Atom has no `£` at all, so typing one does
+nothing, and caps lock is the Atom's `LOCK`.
+
 **Gaming** moves the BBC keys that a PC keyboard handles badly. Its main job is the BBC's `CAPS LOCK`
 and `CTRL`, which sit side by side and which many games use for left and right: Zalaga and Hunchback
 both do. On a PC those two are a row apart and diagonal, so this layout puts them on the left `Ctrl`
