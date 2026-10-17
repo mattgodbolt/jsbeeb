@@ -1576,19 +1576,48 @@ describe("Video", () => {
             expect(v2.phaseBaseOdd).toBe(0.625);
         });
 
-        it("should restore each vsync source apart from the output", () => {
-            const v = makeRealVideo();
-            v.inVSync = true;
-            v.inLineVSync = false;
-            v.inHalfLineVSync = true;
-            v.hadVSyncThisRow = true;
-            v.hadHalfLineVSyncThisRow = true;
+        it("should carry on from a half-line vsync the way the original does", () => {
+            const SnapshotDelayClocks = (7 * ClocksPerScanline) / 4;
+            const ComparedClocks = ClocksPerFrame / 2;
+            function recording() {
+                const run = { clocks: 0, edges: [] };
+                run.v = makeVideo(
+                    () => {},
+                    (level) => run.edges.push([level, run.clocks]),
+                );
+                run.tick = (count) => {
+                    for (let i = 0; i < count; i++) {
+                        run.v.run(1);
+                        run.clocks++;
+                    }
+                };
+                return run;
+            }
 
-            const v2 = makeRealVideo();
-            v2.restoreState(v.snapshotState());
+            const original = recording();
+            programStandardFrame(original.v);
+            original.v.writeCrtc(8, 1);
+            original.tick(2 * ClocksPerFrame);
 
-            expect([v2.inVSync, v2.inLineVSync, v2.inHalfLineVSync]).toEqual([true, false, true]);
-            expect([v2.hadVSyncThisRow, v2.hadHalfLineVSyncThisRow]).toEqual([true, true]);
+            const sourcesAtSnapshot = [];
+            for (let field = 0; field < 2; field++) {
+                original.edges = [];
+                while (!original.edges.some(([level]) => level)) original.tick(1);
+                original.tick(SnapshotDelayClocks);
+                const snapshot = original.v.video.snapshotState();
+                sourcesAtSnapshot.push([snapshot.inLineVSync, snapshot.inHalfLineVSync]);
+
+                const restored = recording();
+                restored.v.video.restoreState(snapshot);
+                original.edges = [];
+                original.clocks = 0;
+                original.tick(ComparedClocks);
+                restored.tick(ComparedClocks);
+
+                expect(original.edges.length).toBeGreaterThan(0);
+                expect(restored.edges).toEqual(original.edges);
+            }
+            expect(sourcesAtSnapshot).toContainEqual([false, true]);
         });
 
         it("should take both vsync sources from the output for a snapshot without them", () => {
