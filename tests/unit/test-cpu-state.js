@@ -554,3 +554,66 @@ describe("the chips a machine names", () => {
         expect(cpu.tapeInterface).toBe(cpu.atomppia);
     });
 });
+
+describe("peeking at the hardware", () => {
+    const BootCycles = 1000 * 1000;
+    const PeekedCycles = 100 * 1000;
+    const SheilaStart = 0xfe00;
+    const SheilaEnd = 0xff00;
+    const SysViaBase = 0xfe40;
+    const SysViaIer = 0xfe4e;
+    const ViaRegisterCount = 16;
+    const FdcResult = 0xfe81;
+    const MasterAcccon = 0xfe34;
+    const AtomUserViaIer = 0xb80e;
+
+    async function bootedMachine(name) {
+        const cpu = fake6502(findModel(name));
+        await cpu.initialise();
+        cpu.execute(BootCycles);
+        return cpu;
+    }
+
+    it("shows the system VIA's registers on a B", async () => {
+        const cpu = await bootedMachine("B-DFS1.2");
+        const peeked = cpu.peekmem(SysViaIer);
+        expect(peeked).not.toBe(0xff);
+        expect(peeked).toBe(cpu.readmem(SysViaIer));
+    });
+
+    it("leaves the 8271's result and its interrupt for the CPU", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        sendSeekToMissingDrive(cpu.fdc);
+        const peeked = cpu.peekmem(FdcResult);
+        expect(cpu.nmi).toBe(true);
+        expect(cpu.readmem(FdcResult)).toBe(peeked);
+        expect(cpu.nmi).toBe(false);
+    });
+
+    it("shows ACCCON on a Master", async () => {
+        const cpu = await bootedMachine("Master");
+        expect(cpu.peekmem(MasterAcccon)).toBe(cpu.readmem(MasterAcccon));
+    });
+
+    it("shows the user VIA on an Atom", async () => {
+        const cpu = await bootedMachine("Atom");
+        expect(cpu.peekmem(AtomUserViaIer)).toBe(cpu.readmem(AtomUserViaIer));
+    });
+
+    it("runs a B identically with every device peeked between instructions", async () => {
+        const [peeked, untouched] = await Promise.all([bootedMachine("B-DFS1.2"), bootedMachine("B-DFS1.2")]);
+        const end = peeked.currentCycles + PeekedCycles;
+        while (peeked.currentCycles < end) {
+            peeked.execute(1);
+            for (let addr = SheilaStart; addr < SheilaEnd; ++addr) peeked.peekmem(addr);
+        }
+        untouched.execute(end - untouched.currentCycles);
+
+        const state = (cpu) => ({
+            registers: [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte(), cpu.currentCycles],
+            ram: cpu.ramRomOs.slice(0, 0x8000),
+            sysvia: Array.from({ length: ViaRegisterCount }, (_, reg) => cpu.readmem(SysViaBase + reg)),
+        });
+        expect(state(peeked)).toEqual(state(untouched));
+    });
+});

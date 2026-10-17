@@ -353,6 +353,24 @@ export class WdFdc {
 
     /**
      * @param {Number} addr hardware address
+     * @returns {Number} what read() would return, without clearing INTRQ or DRQ
+     */
+    peek(addr) {
+        switch (this._remapAddr(addr)) {
+            case 4:
+                return this._statusRegister;
+            case 5:
+                return this._trackRegister;
+            case 6:
+                return this._sectorRegister;
+            case 7:
+                return this._dataRegister;
+        }
+        return 0xfe;
+    }
+
+    /**
+     * @param {Number} addr hardware address
      * @param {Number} val byte to write
      */
     write(addr, val) {

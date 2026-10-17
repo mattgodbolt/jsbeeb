@@ -115,27 +115,31 @@ export class Acia extends EventTarget {
             this.hadDcdHigh = false;
             this.updateIrq();
             return this.dr;
-        } else {
-            let result = (this.sr & 0x7f) | (this.sr & this.cr & 0x80);
-            if (this.txIrq()) result |= 0x80;
-            // MC6850: "A low CTS indicates that there is a Clear-to-Send
-            // from the modem. In the high state, the Transmit Data Register
-            // Empty bit is inhibited".
-            if (result & 0x08) {
-                result &= ~0x02;
-            }
-
-            // MC6850: "It remains high after the DCD input is returned low
-            // until cleared by first reading the Status Register and then
-            // the Data Register".
-            // Testing on a real machine shows that only the Data Register
-            // read matters, and clears the "saw DCD high" condition.
-            if (this.hadDcdHigh) {
-                result |= 0x04;
-            }
-
-            return result;
         }
+        return this.peek(addr);
+    }
+
+    peek(addr) {
+        if (addr & 1) return this.dr;
+        let result = (this.sr & 0x7f) | (this.sr & this.cr & 0x80);
+        if (this.txIrq()) result |= 0x80;
+        // MC6850: "A low CTS indicates that there is a Clear-to-Send
+        // from the modem. In the high state, the Transmit Data Register
+        // Empty bit is inhibited".
+        if (result & 0x08) {
+            result &= ~0x02;
+        }
+
+        // MC6850: "It remains high after the DCD input is returned low
+        // until cleared by first reading the Status Register and then
+        // the Data Register".
+        // Testing on a real machine shows that only the Data Register
+        // read matters, and clears the "saw DCD high" condition.
+        if (this.hadDcdHigh) {
+            result |= 0x04;
+        }
+
+        return result;
     }
 
     write(addr, val) {

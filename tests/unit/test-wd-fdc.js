@@ -278,6 +278,25 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
+    describe("peeking", () => {
+        it("shows the status without clearing the interrupt, as reading it does", () => {
+            const { cpu, fdc } = makeFdc();
+            fdc.write(CommandRegister, ForceInterrupt | 0x08);
+            const status = fdc.peek(StatusRegister);
+            expect(cpu.nmi).toBe(true);
+            expect(fdc.read(StatusRegister)).toBe(status);
+            expect(cpu.nmi).toBe(false);
+        });
+
+        it("shows the track, sector and data registers", () => {
+            const { fdc } = makeFdc();
+            fdc.write(TrackRegister, 12);
+            fdc.write(SectorRegister, 3);
+            fdc.write(DataRegister, 0x5a);
+            expect([fdc.peek(TrackRegister), fdc.peek(SectorRegister), fdc.peek(DataRegister)]).toEqual([12, 3, 0x5a]);
+        });
+    });
+
     describe("seek noise", () => {
         /** What the drive is told: each seek's tracks and rate, and "end" when the head stops. */
         const seekNoises = (drive) => {

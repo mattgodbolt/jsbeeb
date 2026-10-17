@@ -379,21 +379,46 @@ class Via {
                 this.updateIFR();
             /* falls through */
             case ORAnh:
-                // Reading ORA reads pin levels regardless of DDRA.
-                // Of the various 6522 datasheets, this one is clear:
-                // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
-                if (this.acr & 1) {
-                    return this.ira;
-                }
-                this.recalculatePortAPins();
-                return this.portapins;
-
-            case ORB: {
+                if (!(this.acr & 1)) this.recalculatePortAPins();
+                break;
+            case ORB:
                 this.ifr &= ~INT_CB1;
                 if ((this.pcr & 0xa0) !== 0x20) this.ifr &= ~INT_CB2;
                 this.updateIFR();
-
                 this.recalculatePortBPins();
+                break;
+            case T1CL:
+                if (!(this.justhit & 1)) {
+                    this.ifr &= ~TIMER1INT;
+                    this.updateIFR();
+                }
+                break;
+            case T2CL:
+                if (!(this.justhit & 2)) {
+                    this.ifr &= ~TIMER2INT;
+                    this.updateIFR();
+                }
+                break;
+        }
+        return this._registerValue(addr);
+    }
+
+    /** Reads a register as the CPU would, without clearing flags or driving the ports: the pins are as last driven. */
+    peek(addr) {
+        this._catchUp();
+        return this._registerValue(addr);
+    }
+
+    _registerValue(addr) {
+        switch (addr & 0xf) {
+            case ORA:
+            case ORAnh:
+                // Reading ORA reads pin levels regardless of DDRA.
+                // Of the various 6522 datasheets, this one is clear:
+                // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
+                return this.acr & 1 ? this.ira : this.portapins;
+
+            case ORB: {
                 let temp = this.orb & this.ddrb;
                 if (this.acr & 2) temp |= this.irb & ~this.ddrb;
                 else temp |= this.portbpins & ~this.ddrb;
@@ -414,28 +439,15 @@ class Via {
                 return ((this.t1l & 0x1fe) >>> 1) & 0xff;
             case T1LH:
                 return (this.t1l >>> 9) & 0xff;
-
             case T1CL:
-                if (!(this.justhit & 1)) {
-                    this.ifr &= ~TIMER1INT;
-                    this.updateIFR();
-                }
                 return ((this.t1c + 1) >>> 1) & 0xff;
-
             case T1CH:
                 return ((this.t1c + 1) >>> 9) & 0xff;
-
             case T2CL:
-                if (!(this.justhit & 2)) {
-                    this.ifr &= ~TIMER2INT;
-                    this.updateIFR();
-                }
                 return ((this.t2c + 1) >>> 1) & 0xff;
-
             case T2CH:
                 if (this._t2ClocksShifter()) return this.t2High;
                 return ((this.t2c + 1) >>> 9) & 0xff;
-
             case SR:
                 return this.sr;
             case ACR:

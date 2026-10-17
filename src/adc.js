@@ -152,6 +152,10 @@ export class Adc {
         return 0x40;
     }
 
+    peek(addr) {
+        return this.read(addr);
+    }
+
     /**
      * Write to the ADC control register
      * @param {number} addr - The address to write to
