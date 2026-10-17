@@ -224,6 +224,49 @@ describe("MachineSession watching execution", () => {
         expect(pcs).toEqual(ProgramPcs);
     });
 
+    it("removes a watcher that removes itself at the address it was added stopped at", async () => {
+        const handler = irqHandler();
+        await session.runUntilAddress(handler);
+        const pcs = [];
+        const remove = session.onExecute((pc) => {
+            pcs.push(pc);
+            if (pc === handler) remove();
+        });
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(pcs).toEqual([handler]);
+    });
+
+    it("reports the restored pc once, and not the one the machine was stopped at before", async () => {
+        await stopAtProgramStart();
+        const state = session.snapshot();
+        session.addBreakpoint("execute", ProgramPcs[2]);
+        await session.runFor(CyclesPerInterlacedFrame);
+        session.clearBreakpoints();
+        const pcs = [];
+        const remove = session.onExecute((pc) => {
+            if (pc >= ProgramAddress && pc < ProgramAddress + Program.length) pcs.push(pc);
+        });
+
+        session.restore(state);
+        await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(pcs).toEqual(ProgramPcs);
+    });
+
+    it("propagates an exception from a watcher out of the run and still removes it", async () => {
+        const remove = session.onExecute(() => {
+            throw new Error("watcher failed");
+        });
+
+        await expect(session.runFor(CyclesPerInterlacedFrame)).rejects.toThrow("watcher failed");
+        remove();
+
+        expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(true);
+    });
+
     it("lets a breakpoint fire at the address where a watcher removes itself", async () => {
         const handler = irqHandler();
         const id = session.addBreakpoint("execute", handler);
@@ -239,6 +282,21 @@ describe("MachineSession watching execution", () => {
         expect(result.completed).toBe(false);
         expect(session.hitBreakpoint().id).toBe(id);
         expect(session.elapsedCycles).toBe(removedAt);
+    });
+
+    it("does not report the address it was added stopped at once reset moves the pc", async () => {
+        const handler = irqHandler();
+        await session.runUntilAddress(handler);
+        const pcs = [];
+        const remove = session.onExecute((pc) => pcs.push(pc));
+
+        session.reset();
+        await session.runFor(100);
+        remove();
+
+        const [lo, hi] = session.readMemory(0xfffc, 2);
+        expect(pcs[0]).toBe(lo | (hi << 8));
+        expect(pcs).not.toContain(handler);
     });
 });
 

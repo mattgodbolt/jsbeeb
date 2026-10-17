@@ -240,6 +240,7 @@ export class MachineSession {
      * @param {boolean} [hard=true] - true for power-on reset, false for soft reset
      */
     reset(hard = true) {
+        this._settleUnhookedReports();
         this._machine.processor.reset(hard);
         this._pendingOutput = [];
     }
@@ -355,7 +356,9 @@ export class MachineSession {
      * does across a hard reset.
      */
     restore(state) {
+        this._settleUnhookedReports();
         this._machine.restore(state.machine);
+        this._markUnhookedReports();
         this._pendingOutput = state.pendingOutput.map((element) => ({ ...element }));
         this._capture.restore(state.capture);
     }
@@ -505,17 +508,16 @@ export class MachineSession {
 
     /**
      * Call `fn(pc)` just before each instruction on the host CPU runs, so an instruction the machine stops at is
-     * reported before it executes, until the returned function is called. Watching never stops the machine.
+     * reported before it executes, until the returned function is called. Watching never stops the machine; an
+     * exception from `fn` propagates out of the run. Once the last watcher removes itself from inside `fn`, the
+     * session keeps an empty hook until a remover is next called outside one.
      * @param {function(number): *} fn - its return value is ignored
      * @returns {function(): void} removes the watcher
      */
     onExecute(fn) {
-        const watcher = (pc) => fn(pc);
+        const watcher = { fn, unhookedPc: this._unhookedPc() };
         this._executeWatchers.add(watcher);
         if (!this._executeHook) this._installExecuteHook();
-        const { breakpointResume, pc } = this._machine.processor;
-        // Resuming from a debug stop runs the stopped-at instruction without calling any hook.
-        if (breakpointResume) watcher(pc);
         return () => {
             this._executeWatchers.delete(watcher);
             // Removing a CPU hook from inside the hook loop would skip the hook after it.
@@ -523,12 +525,42 @@ export class MachineSession {
         };
     }
 
+    /** The pc of the instruction the CPU will next run without calling any hook, as it does resuming from a stop. */
+    _unhookedPc() {
+        const cpu = this._machine.processor;
+        return cpu.breakpointResume ? cpu.pc : undefined;
+    }
+
+    _reportUnhooked(watcher) {
+        const pc = watcher.unhookedPc;
+        if (pc === undefined) return;
+        watcher.unhookedPc = undefined;
+        watcher.fn(pc);
+    }
+
+    /** Call before moving the pc: reports unhooked instructions that ran, and drops those that never will. */
+    _settleUnhookedReports() {
+        const ran = !this._machine.processor.breakpointResume;
+        for (const watcher of this._executeWatchers) {
+            if (ran) this._reportUnhooked(watcher);
+            else watcher.unhookedPc = undefined;
+        }
+    }
+
+    _markUnhookedReports() {
+        const pc = this._unhookedPc();
+        for (const watcher of this._executeWatchers) watcher.unhookedPc = pc;
+    }
+
     _installExecuteHook() {
         const { debugInstruction } = this._machine.processor;
         this._executeHook = debugInstruction.add((pc) => {
             this._dispatchingExecute = true;
             try {
-                for (const watcher of this._executeWatchers) watcher(pc);
+                for (const watcher of this._executeWatchers) {
+                    this._reportUnhooked(watcher);
+                    if (this._executeWatchers.has(watcher)) watcher.fn(pc);
+                }
             } finally {
                 this._dispatchingExecute = false;
             }
