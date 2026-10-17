@@ -1,16 +1,5 @@
-import { allModels, findModel, tubeModelFor } from "../models.js";
-import { AudioOutputs } from "../audio-output.js";
-import { getFilterForMode, MaxPersistenceMs } from "./canvas.js";
-
-const round = (value) => Number(value.toFixed(2));
-
-/** @returns {string} the speed a multiplier gives this machine's co-processor, e.g. "1.6x (4.8MHz)". */
-export function tubeCpuSpeedLabel(multiplier, model) {
-    return `${round(multiplier)}x (${round(multiplier * tubeModelFor(model).clockMhz)}MHz)`;
-}
-
-const capitalise = (word) => word[0].toUpperCase() + word.substring(1);
-const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" : `Channel ${channel}`);
+import { MaxPersistenceMs } from "./canvas.js";
+import { settingField } from "./parameters.js";
 
 export const PersistenceField = {
     type: "range",
@@ -24,140 +13,26 @@ export const PersistenceField = {
 };
 
 /**
- * The Settings dialog's fields, top to bottom; an array is a section, set off from what is around it. A field shows one
- * setting (or none, for the afterglow slider, which edits whichever setting the display in use has), and is one of:
- *
- * - `menu`: a dropdown of `options` ({value, text}); the button names the value with `describe`, or the option's text.
- *   The options carry their value as `data-<attribute>`, by default `data-value`. `status` is the id of a line under
- *   the menu for others to fill in.
- * - `check`: a checkbox under a `heading`, with its `hint` beside it.
- * - `range`: a slider over `min`..`max` by `step`, with a `readout(value, proposed)` beside its label if it has one.
- * - `group`: a label beside a column of `fields`, each a check or a range.
- *
- * A menu's or a group's `hint` is set small under its label. A field's control has its setting as its id, with
- * "Dropdown" after it for a menu, unless `id` says otherwise. Changes are saved when the dialog closes, unless the field
- * is `live`; a `restart` field only takes effect on a freshly built machine. `enabledWhen(proposed)` greys a control out
- * unless the settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
+ * The Settings dialog's fields, top to bottom; an array is a section, set off from what is around it. Each field is a
+ * parameter's own `field`, or the afterglow slider, which edits whichever setting the display in use has; a `group` is
+ * a `label`, with a small `hint` under it, beside a column of `fields`, each a check or a range.
  */
 export const ConfigForm = [
-    {
-        type: "menu",
-        setting: "model",
-        id: "bbc-model-dropdown",
-        attribute: "target",
-        label: "Base model",
-        hint: "(including disk interface)",
-        restart: true,
-        describe: (model) => findModel(model).name,
-        options: allModels
-            .filter((model) => model.synonyms.length > 0)
-            .map((model) => ({ value: model.synonyms[0], text: model.name })),
-    },
-    {
-        type: "menu",
-        setting: "keyLayout",
-        label: "Keyboard layout",
-        describe: capitalise,
-        options: [
-            { value: "physical", text: "Physical: '*' is next to Enter/Return" },
-            { value: "natural", text: "Natural: you get the character you type" },
-            { value: "gaming", text: "Gaming: handy for games like Zalaga" },
-        ],
-    },
-    [
-        {
-            type: "menu",
-            setting: "displayMode",
-            label: "Display mode",
-            live: true,
-            describe: (mode) => getFilterForMode(mode).getDisplayConfig().name,
-            options: [
-                { value: "rgb", text: "RGB Monitor" },
-                { value: "pal", text: "PAL TV" },
-                { value: "xbr", text: "Smoothed (xBR)" },
-            ],
-        },
-        PersistenceField,
-    ],
+    settingField("model"),
+    settingField("keyLayout"),
+    [settingField("displayMode"), PersistenceField],
     {
         type: "group",
         label: "Additional peripherals",
         hint: "(some combinations may cause compatibility issues)",
-        fields: [
-            { type: "check", setting: "coProcessor", label: "65c02 co-processor", restart: true },
-            {
-                type: "range",
-                setting: "tubeCpuMultiplier",
-                label: "Tube CPU",
-                readout: (multiplier, { model }) => tubeCpuSpeedLabel(multiplier, findModel(model)),
-                enabledWhen: ({ coProcessor }) => coProcessor,
-                min: 1,
-                max: 8,
-                step: 0.05,
-            },
-            { type: "check", setting: "hasMusic5000", label: "Music 5000 synthesiser", restart: true },
-            { type: "check", setting: "hasTeletextAdaptor", label: "Teletext adaptor", restart: true },
-            { type: "check", setting: "hasEconet", label: "Econet with file server", restart: true },
-        ],
+        fields: ["coProcessor", "tubeCpuMultiplier", "hasMusic5000", "hasTeletextAdaptor", "hasEconet"].map(
+            settingField,
+        ),
     },
-    [
-        {
-            type: "menu",
-            setting: "audioOutput",
-            attribute: "output",
-            label: "Sound output",
-            live: true,
-            options: [
-                { value: AudioOutputs.speaker, text: "Internal speaker" },
-                { value: AudioOutputs.board, text: "Line out" },
-                { value: AudioOutputs.off, text: "Unfiltered" },
-            ],
-        },
-        {
-            type: "range",
-            setting: "speakerAmount",
-            label: "Speaker character",
-            live: true,
-            enabledWhen: ({ audioOutput }) => audioOutput === AudioOutputs.speaker,
-            min: 0,
-            max: 1,
-            step: 0.05,
-            title: "How much of the speaker's character to apply: 0 is the board's output alone",
-        },
-    ],
-    [
-        {
-            type: "menu",
-            setting: "microphoneChannel",
-            label: "Microphone channel",
-            describe: microphoneChannelText,
-            options: [undefined, 0, 1, 2, 3].map((channel) => ({
-                value: channel,
-                text: microphoneChannelText(channel),
-            })),
-            status: "micPermissionStatus",
-        },
-    ],
-    [
-        {
-            type: "check",
-            setting: "mouseJoystickEnabled",
-            heading: "Mouse joystick",
-            label: "Enable mouse as analogue joystick",
-            hint: "Maps mouse position on BBC display to channels 0 (X) and 1 (Y)",
-        },
-    ],
-    [
-        {
-            type: "check",
-            setting: "speechOutput",
-            heading: "Text-to-Speech",
-            label: "Speak RS-423 serial output (`*FX3,1`)",
-            hint:
-                "Speaks text sent to the RS-423 port via the browser's Web Speech API. " +
-                "Use `*FX3,1` to enable serial output in BBC programs.",
-        },
-    ],
+    [settingField("audioOutput"), settingField("speakerAmount")],
+    [settingField("microphoneChannel")],
+    [settingField("mouseJoystickEnabled")],
+    [settingField("speechOutput")],
 ];
 
 /** @returns {object[]} every field in the form that shows a setting, sections and groups flattened. */

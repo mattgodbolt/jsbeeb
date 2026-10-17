@@ -394,20 +394,36 @@ export class IntelFdc {
      * @returns {Number} byte at the given hardware address
      */
     read(addr) {
+        const value = this.peek(addr);
         switch (addr & 0x07) {
-            case Address.status:
-                return this._status;
-            case Address.result: {
-                const result = this._result;
+            case Address.result:
                 this._resultConsumed();
                 this._statusLower(StatusFlag.nmi);
-                return result;
-            }
+                break;
             case Address.data:
             case Address.data + 1:
             case Address.data + 2:
             case Address.data + 3:
                 this._statusLower(StatusFlag.needData | StatusFlag.nmi);
+                break;
+        }
+        return value;
+    }
+
+    /**
+     * @param {Number} addr hardware address
+     * @returns {Number} what read() would return, without consuming the result or data
+     */
+    peek(addr) {
+        switch (addr & 0x07) {
+            case Address.status:
+                return this._status;
+            case Address.result:
+                return this._result;
+            case Address.data:
+            case Address.data + 1:
+            case Address.data + 2:
+            case Address.data + 3:
                 return this._regs[Registers.internalData];
             // Register address 2 and 3 are not documented as having anything
             // wired up for reading, BUT on a model B, they appear to give the MSB and

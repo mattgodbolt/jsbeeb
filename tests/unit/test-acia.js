@@ -11,6 +11,7 @@ const EightBitsOneStopNoParity = 0x14;
 const SevenBitsTwoStopEvenParity = 0x00;
 const TransmitInterruptEnable = 0x20;
 const Tdre = 0x02;
+const Rdrf = 0x01;
 
 function createScheduledAcia(scheduler, cr, transmitRate, model = BbcModel) {
     const cpu = { interrupt: 0, model };
@@ -160,6 +161,18 @@ describe("Acia", () => {
             expect(notices).toHaveLength(1);
             expect(notices[0].quietKey).toBe("quietSerialOverrun");
             expect(acia.read(0) & 0x20).toBe(0x20);
+        });
+    });
+
+    describe("peeking", () => {
+        it("shows the received byte without clearing receive-full", () => {
+            const acia = createMockAcia();
+            acia.receive(0x41);
+            expect(acia.peek(1)).toBe(0x41);
+            expect(acia.peek(0)).toBe(acia.read(0));
+            expect(acia.peek(0) & Rdrf).toBe(Rdrf);
+            acia.read(1);
+            expect(acia.peek(0) & Rdrf).toBe(0);
         });
     });
 

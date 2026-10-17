@@ -1,7 +1,7 @@
 import { satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
-import { StartupActionParams } from "./url-state.js";
+import { StartupActionParams } from "./parameters.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 

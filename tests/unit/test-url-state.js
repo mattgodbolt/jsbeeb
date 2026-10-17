@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { UrlState, UrlParamTypes } from "../../src/web/url-state.js";
+import { UrlState } from "../../src/web/url-state.js";
+import { UrlParamTypes } from "../../src/web/parameters.js";
 import { ParamTypes } from "../../src/url-params.js";
 
 const location = (search, hash = "") => ({ origin: "https://bbc.example", pathname: "/play", search, hash });
@@ -96,9 +97,17 @@ describe("UrlState", () => {
         expect(state.url()).toContain("tape=sth:Chuckie.zip");
     });
 
-    it("types every parameter it lists", () => {
-        for (const [name, type] of Object.entries(UrlParamTypes)) {
-            expect(Object.values(ParamTypes), name).toContain(type);
-        }
+    it("gives back every parameter it lists as it was given", () => {
+        const samples = {
+            [ParamTypes.STRING]: (name) => `${name}=sth:Elite.zip`,
+            [ParamTypes.ARRAY]: (name) => `${name}=a.rom&${name}=b.rom`,
+            [ParamTypes.INT]: (name) => `${name}=3`,
+            [ParamTypes.FLOAT]: (name) => `${name}=0.25`,
+            [ParamTypes.BOOL]: (name) => name,
+        };
+        const query = Object.entries(UrlParamTypes)
+            .map(([name, type]) => samples[type](name))
+            .join("&");
+        expect(new UrlState(location(`?${query}`), history).url()).toBe(`https://bbc.example/play?${query}`);
     });
 });

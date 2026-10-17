@@ -278,6 +278,44 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
+    describe("peeking", () => {
+        it("shows the status without clearing the interrupt, as reading it does", () => {
+            const { cpu, fdc } = makeFdc();
+            fdc.write(CommandRegister, ForceInterrupt | 0x08);
+            const status = fdc.peek(StatusRegister);
+            expect(cpu.nmi).toBe(true);
+            expect(fdc.read(StatusRegister)).toBe(status);
+            expect(cpu.nmi).toBe(false);
+        });
+
+        it("shows a sector's data byte without dropping DRQ, as reading it does", () => {
+            const data = sectorData();
+            const { scheduler, fdc } = makeFdc({ disc: mfmDiscWithSector({ data }) });
+            fdc.write(SectorRegister, 0);
+            fdc.write(CommandRegister, ReadSectorCommand);
+            for (
+                let ticks = 0;
+                !(fdc.peek(StatusRegister) & StatusDrq) && ticks < MaxCommandTicks;
+                ticks += PollTicks
+            ) {
+                scheduler.polltime(PollTicks);
+            }
+            expect(fdc.peek(StatusRegister) & StatusDrq).toBe(StatusDrq);
+            expect(fdc.peek(DataRegister)).toBe(data[0]);
+            expect(fdc.peek(StatusRegister) & StatusDrq).toBe(StatusDrq);
+            expect(fdc.read(DataRegister)).toBe(data[0]);
+            expect(fdc.peek(StatusRegister) & StatusDrq).toBe(0);
+        });
+
+        it("shows the track, sector and data registers", () => {
+            const { fdc } = makeFdc();
+            fdc.write(TrackRegister, 12);
+            fdc.write(SectorRegister, 3);
+            fdc.write(DataRegister, 0x5a);
+            expect([fdc.peek(TrackRegister), fdc.peek(SectorRegister), fdc.peek(DataRegister)]).toEqual([12, 3, 0x5a]);
+        });
+    });
+
     describe("seek noise", () => {
         /** What the drive is told: each seek's tracks and rate, and "end" when the head stops. */
         const seekNoises = (drive) => {

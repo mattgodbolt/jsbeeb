@@ -1,76 +1,9 @@
-import { buildUrlFromParams, ParamTypes, parseQueryString } from "../url-params.js";
+import { buildUrlFromParams, parseQueryString } from "../url-params.js";
 import { debounce } from "../debounce.js";
+import { UrlParamTypes } from "./parameters.js";
 
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
 const UrlSettleMs = 300;
-
-/** The parameters that have the page do something once it is up, rather than describe it. */
-const StartupActionTypes = {
-    autoboot: ParamTypes.BOOL,
-    autochain: ParamTypes.BOOL,
-    autorun: ParamTypes.BOOL,
-    autotype: ParamTypes.STRING,
-    loadBasic: ParamTypes.STRING,
-    embedBasic: ParamTypes.STRING,
-    patch: ParamTypes.STRING,
-};
-
-export const StartupActionParams = Object.keys(StartupActionTypes);
-
-/** How each parameter the page understands is parsed and written back. */
-export const UrlParamTypes = {
-    ...StartupActionTypes,
-
-    // Array parameters
-    rom: ParamTypes.ARRAY,
-
-    // Boolean parameters
-    embed: ParamTypes.BOOL,
-    fasttape: ParamTypes.BOOL,
-    noseek: ParamTypes.BOOL,
-    hasMusic5000: ParamTypes.BOOL,
-    hasTeletextAdaptor: ParamTypes.BOOL,
-    hasEconet: ParamTypes.BOOL,
-    glEnabled: ParamTypes.BOOL,
-    lowLatency: ParamTypes.BOOL,
-    fakeVideo: ParamTypes.BOOL,
-    logFdcCommands: ParamTypes.BOOL,
-    logFdcStateChanges: ParamTypes.BOOL,
-    coProcessor: ParamTypes.BOOL,
-    mouseJoystickEnabled: ParamTypes.BOOL,
-    speechOutput: ParamTypes.BOOL,
-    audioDebug: ParamTypes.BOOL,
-
-    // Numeric parameters
-    stationId: ParamTypes.INT,
-    frameSkip: ParamTypes.INT,
-    videoCyclesBatch: ParamTypes.INT,
-    audiofilterfreq: ParamTypes.FLOAT,
-    audiofilterq: ParamTypes.FLOAT,
-    speakerAmount: ParamTypes.FLOAT,
-    palPersistenceMs: ParamTypes.FLOAT,
-    rgbPersistenceMs: ParamTypes.FLOAT,
-    audioLatencyMs: ParamTypes.FLOAT,
-    cpuMultiplier: ParamTypes.FLOAT,
-    tubeCpuMultiplier: ParamTypes.FLOAT,
-    microphoneChannel: ParamTypes.INT,
-
-    // String parameters (these are the default but listed for clarity)
-    model: ParamTypes.STRING,
-    disc: ParamTypes.STRING,
-    disc1: ParamTypes.STRING,
-    disc2: ParamTypes.STRING,
-    tape: ParamTypes.STRING,
-    mmc: ParamTypes.STRING,
-    keyLayout: ParamTypes.STRING,
-    displayMode: ParamTypes.STRING,
-    audioOutput: ParamTypes.STRING,
-    drive0Tracks: ParamTypes.STRING,
-    drive1Tracks: ParamTypes.STRING,
-    sbLeft: ParamTypes.STRING,
-    sbRight: ParamTypes.STRING,
-    sbBottom: ParamTypes.STRING,
-};
 
 /**
  * The page's settings as carried in its URL. `params` is the one parsed

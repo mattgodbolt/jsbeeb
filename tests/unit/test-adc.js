@@ -86,6 +86,16 @@ describe("ADC", () => {
         });
     });
 
+    describe("Peeking registers", () => {
+        it("gives what a read gives for every register after a conversion", () => {
+            const RegisterCount = 4;
+            adc.write(0, 0x01);
+            adc.onComplete();
+            for (let reg = 0; reg < RegisterCount; ++reg) expect(adc.peek(reg)).toBe(adc.read(reg));
+            expect(adc.peek(1)).not.toBe(0);
+        });
+    });
+
     describe("Reading registers", () => {
         it("should read status register (addr 0)", () => {
             adc.status = 0x42;
