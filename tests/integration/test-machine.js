@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TestMachine } from "../../src/test-machine.js";
+import { MaxCyclesPerIter, TestMachine } from "../../src/test-machine.js";
 import { mode7Text } from "./helpers.js";
 
 describe("TestMachine", () => {
@@ -38,8 +38,16 @@ describe("TestMachine debug stops", () => {
     const LoopAddress = ProgramAddress + 1;
     const LoopWithoutInterrupts = [0x78, 0x4c, LoopAddress & 0xff, LoopAddress >> 8]; // SEI, JMP &2001
     const ReturnAtOnce = [0xa9, 0x01, 0x60]; // LDA #1, RTS
+    const FlagAddress = 0x70;
+    const SpinAddress = ProgramAddress + 5;
+    // LDA &70, BEQ &2000, SEI, JMP &2005
+    const WaitForFlagThenSpin = [0xa5, FlagAddress, 0xf0, 0xfc, 0x78, 0x4c, SpinAddress & 0xff, SpinAddress >> 8];
     const JmpCycles = 3;
     const CyclesPerInterlacedFrame = 40000;
+    const ShortRunCycles = 1000;
+    // The most cycles a run can overrun its target by: the instruction that crosses it.
+    const MaxOverrunCycles = 10;
+    const IrqVector = 0x204;
 
     async function bootedMachine() {
         const machine = new TestMachine();
@@ -48,11 +56,15 @@ describe("TestMachine debug stops", () => {
         return machine;
     }
 
+    function writeBytes(machine, address, bytes) {
+        bytes.forEach((byte, i) => machine.writebyte(address + i, byte));
+    }
+
     async function stopAt(machine, program, address) {
         const hook = machine.processor.debugInstruction.add((pc) => pc === address);
-        program.forEach((byte, i) => machine.writebyte(ProgramAddress + i, byte));
+        writeBytes(machine, ProgramAddress, program);
         await machine.type(`CALL &${ProgramAddress.toString(16)}`);
-        if (machine.processor.pc !== address) await machine.runFor(40000);
+        if (machine.processor.pc !== address) await machine.runFor(CyclesPerInterlacedFrame);
         expect(machine.processor.pc).toBe(address);
         return hook;
     }
@@ -63,49 +75,82 @@ describe("TestMachine debug stops", () => {
         return machine.elapsedCycles - before;
     }
 
-    it("does not count the address it is stopped at as reached again", async () => {
-        const machine = await bootedMachine();
-        (await stopAt(machine, ReturnAtOnce, ProgramAddress)).remove();
+    describe("started at their own address, the run-until helpers wait for the next visit", () => {
+        it("runUntilAddress", async () => {
+            const machine = await bootedMachine();
+            (await stopAt(machine, ReturnAtOnce, ProgramAddress)).remove();
 
-        await expect(machine.runUntilAddress(ProgramAddress, 1)).rejects.toThrow("did not hit");
+            await expect(machine.runUntilAddress(ProgramAddress, 1)).rejects.toThrow("did not hit");
+        });
+
+        it("runUntilVblank", async () => {
+            const machine = await bootedMachine();
+            machine.writebyte(FlagAddress, 0);
+            (await stopAt(machine, WaitForFlagThenSpin, ProgramAddress)).remove();
+            await machine.runUntilVblank();
+
+            machine.writebyte(FlagAddress, 1);
+
+            await expect(machine.runUntilVblank()).rejects.toThrow("did not hit");
+        });
+    });
+
+    describe("a run-until helper removes its hook when the run throws", () => {
+        it.each([
+            [
+                "runUntilAddress",
+                (machine) =>
+                    machine.runUntilAddress(machine.readbyte(IrqVector) | (machine.readbyte(IrqVector + 1) << 8), 1),
+            ],
+            ["runUntilVblank", (machine) => machine.runUntilVblank()],
+            ["runUntilInput", (machine) => machine.runUntilInput(1)],
+        ])("%s", async (_name, runUntil) => {
+            const machine = await bootedMachine();
+            const failing = machine.processor.debugInstruction.add(() => {
+                throw new Error("hook failed");
+            });
+            await expect(runUntil(machine)).rejects.toThrow("hook failed");
+            failing.remove();
+
+            expect(await machine.runFor(2 * CyclesPerInterlacedFrame)).toBe(false);
+        });
     });
 
     it("rejects, and leaves no unspent cycles, when a hook throws after the first slice", async () => {
         const machine = await bootedMachine();
         const start = machine.elapsedCycles;
         const hook = machine.processor.debugInstruction.add(() => {
-            if (machine.elapsedCycles - start > 150000) throw new Error("hook failed late");
+            if (machine.elapsedCycles - start > MaxCyclesPerIter * 1.5) throw new Error("hook failed late");
         });
 
-        await expect(machine.runFor(300000)).rejects.toThrow("hook failed late");
+        await expect(machine.runFor(MaxCyclesPerIter * 3)).rejects.toThrow("hook failed late");
         hook.remove();
 
-        expect(await cyclesToRun(machine, 1000)).toBeLessThan(1010);
+        expect(await cyclesToRun(machine, ShortRunCycles)).toBeLessThan(ShortRunCycles + MaxOverrunCycles);
     });
 
-    it("removes a run-until hook when the run throws", async () => {
-        const machine = await bootedMachine();
-        const [lo, hi] = [machine.readbyte(0x204), machine.readbyte(0x205)];
-        const irqHandler = lo | (hi << 8);
-        const failing = machine.processor.debugInstruction.add(() => {
-            throw new Error("hook failed");
+    describe("a hook called at a stop, removed and added back", () => {
+        it("stops again once the fast path has run", async () => {
+            const machine = await bootedMachine();
+            const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
+            hook.remove();
+            await cyclesToRun(machine, ShortRunCycles);
+
+            machine.processor.debugInstruction.add(hook);
+
+            expect(await cyclesToRun(machine, ShortRunCycles)).toBe(0);
         });
-        await expect(machine.runUntilAddress(irqHandler, 1)).rejects.toThrow("hook failed");
-        failing.remove();
 
-        expect(await machine.runFor(CyclesPerInterlacedFrame)).toBe(false);
-    });
+        it("does not stop again when the fast path ran nothing", async () => {
+            const machine = await bootedMachine();
+            const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
+            hook.remove();
+            machine.processor.execute(0);
 
-    it("forgets the hooks called at a stop once the fast path has run", async () => {
-        const machine = await bootedMachine();
-        const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
-        hook.remove();
-        await cyclesToRun(machine, 1000);
+            machine.processor.debugInstruction.add(hook);
 
-        machine.processor.debugInstruction.add(hook);
-        const ran = await cyclesToRun(machine, 1000);
-
-        expect(ran).toBe(0);
+            expect(await cyclesToRun(machine, ShortRunCycles)).toBe(JmpCycles);
+        });
     });
 
     it("keeps the hooks called at a stop across an execute that runs nothing", async () => {
@@ -113,8 +158,7 @@ describe("TestMachine debug stops", () => {
         await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
 
         machine.processor.execute(0);
-        const ran = await cyclesToRun(machine, 1000);
 
-        expect(ran).toBe(JmpCycles);
+        expect(await cyclesToRun(machine, ShortRunCycles)).toBe(JmpCycles);
     });
 });

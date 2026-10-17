@@ -12,7 +12,7 @@ import { setNodeBasePath } from "./loader.js";
 import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 
-const MaxCyclesPerIter = 100 * 1000;
+export const MaxCyclesPerIter = 100 * 1000;
 const RomselBankMask = 0x0f;
 const RomselAndy = 0x80;
 const AndyStart = 0x8000;
@@ -121,7 +121,8 @@ export class TestMachine {
 
     /**
      * Run for `cycles` emulated cycles, or until something stops the CPU.
-     * Resolves true if it was stopped short.
+     * Resolves true if it was stopped short. Rejects if a hook or device throws,
+     * leaving the cycle target where the run stopped.
      */
     runFor(cycles) {
         let left = cycles;
