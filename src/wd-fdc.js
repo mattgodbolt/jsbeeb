@@ -328,25 +328,35 @@ export class WdFdc {
      * @returns {Number} byte at the given hardware address
      */
     read(addr) {
+        const value = this.peek(addr);
         switch (this._remapAddr(addr)) {
             case 4:
                 // Reading status register clears INTRQ.
                 this._setIntRq(false);
+                break;
+            case 7:
+                if (this._commandType === 2 || this._commandType === 3) {
+                    this._setDrq(false);
+                }
+                break;
+        }
+        return value;
+    }
+
+    /**
+     * @param {Number} addr hardware address
+     * @returns {Number} what read() would return, without clearing INTRQ or DRQ
+     */
+    peek(addr) {
+        switch (this._remapAddr(addr)) {
+            case 4:
                 return this._statusRegister;
             case 5:
                 return this._trackRegister;
             case 6:
                 return this._sectorRegister;
             case 7:
-                if (this._commandType === 2 || this._commandType === 3) {
-                    this._setDrq(false);
-                }
                 return this._dataRegister;
-            case 0:
-            case 1:
-            case 2:
-            case 3:
-                break;
         }
         return 0xfe;
     }

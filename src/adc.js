@@ -139,6 +139,15 @@ export class Adc {
      * @returns {number} The value at the address
      */
     read(addr) {
+        return this.peek(addr);
+    }
+
+    /**
+     * Read from the ADC registers without side effects; reading the ADC has none, so read() is this
+     * @param {number} addr - The address to read from
+     * @returns {number} The value at the address
+     */
+    peek(addr) {
         switch (addr & 3) {
             case 0:
                 return this.status;

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { FakeVideo } from "../../src/video.js";
+import { hexbyte } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
@@ -183,6 +184,15 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             gotoMem("$1234");
             expect(changed()).toBe(false);
+        });
+
+        it("shows the hardware registers it can read without disturbing them", () => {
+            const SysViaIer = 0xfe4e;
+            dbgr.debug(cpu.pc);
+            const form = document.getElementById("goto-mem-addr-form");
+            form.querySelector(".goto-addr").value = "$FE4E";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe(hexbyte(cpu.readmem(SysViaIer)));
         });
 
         it("scrolls a row per wheel notch and a screenful on U", () => {

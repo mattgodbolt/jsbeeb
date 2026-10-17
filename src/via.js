@@ -29,6 +29,9 @@ const ORB = 0x0,
 // Figures 3-4 and 3-6 of https://6502.org/documents/datasheets/wdc/wdc_w65c22s_mar_2004.pdf
 const PulseWidthCycles = 2;
 
+// Reset makes every pin an input, and undriven inputs float high.
+const IdlePins = 0xff;
+
 class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
@@ -53,8 +56,8 @@ class Via {
         this.t1hit = false;
         this.t2hit = false;
         this.t2High = 0;
-        this.portapins = 0;
-        this.portbpins = 0;
+        this.portapins = IdlePins;
+        this.portbpins = IdlePins;
         this.ca1 = false;
         this.ca2 = false;
         this.cb1 = false;
@@ -81,6 +84,7 @@ class Via {
         this.acr = this.pcr = 0;
         this.t2High = 0;
         this.t1_pb7 = 1;
+        this.portapins = this.portbpins = IdlePins;
         this.ca2PulseTask.cancel();
         this.cb2PulseTask.cancel();
         this.updateNextTime();
@@ -379,21 +383,46 @@ class Via {
                 this.updateIFR();
             /* falls through */
             case ORAnh:
-                // Reading ORA reads pin levels regardless of DDRA.
-                // Of the various 6522 datasheets, this one is clear:
-                // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
-                if (this.acr & 1) {
-                    return this.ira;
-                }
-                this.recalculatePortAPins();
-                return this.portapins;
-
-            case ORB: {
+                if (!(this.acr & 1)) this.recalculatePortAPins();
+                break;
+            case ORB:
                 this.ifr &= ~INT_CB1;
                 if ((this.pcr & 0xa0) !== 0x20) this.ifr &= ~INT_CB2;
                 this.updateIFR();
-
                 this.recalculatePortBPins();
+                break;
+            case T1CL:
+                if (!(this.justhit & 1)) {
+                    this.ifr &= ~TIMER1INT;
+                    this.updateIFR();
+                }
+                break;
+            case T2CL:
+                if (!(this.justhit & 2)) {
+                    this.ifr &= ~TIMER2INT;
+                    this.updateIFR();
+                }
+                break;
+        }
+        return this._registerValue(addr);
+    }
+
+    /** Reads a register as the CPU would, without clearing flags or driving the ports: the pins are as last driven. */
+    peek(addr) {
+        this._catchUp();
+        return this._registerValue(addr);
+    }
+
+    _registerValue(addr) {
+        switch (addr & 0xf) {
+            case ORA:
+            case ORAnh:
+                // Reading ORA reads pin levels regardless of DDRA.
+                // Of the various 6522 datasheets, this one is clear:
+                // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
+                return this.acr & 1 ? this.ira : this.portapins;
+
+            case ORB: {
                 let temp = this.orb & this.ddrb;
                 if (this.acr & 2) temp |= this.irb & ~this.ddrb;
                 else temp |= this.portbpins & ~this.ddrb;
@@ -416,20 +445,12 @@ class Via {
                 return (this.t1l >>> 9) & 0xff;
 
             case T1CL:
-                if (!(this.justhit & 1)) {
-                    this.ifr &= ~TIMER1INT;
-                    this.updateIFR();
-                }
                 return ((this.t1c + 1) >>> 1) & 0xff;
 
             case T1CH:
                 return ((this.t1c + 1) >>> 9) & 0xff;
 
             case T2CL:
-                if (!(this.justhit & 2)) {
-                    this.ifr &= ~TIMER2INT;
-                    this.updateIFR();
-                }
                 return ((this.t2c + 1) >>> 1) & 0xff;
 
             case T2CH:

@@ -4,9 +4,11 @@ import { NmiSource } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
+import { Music5000 } from "../../src/music5000.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { findModel, TEST_6502 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
+import { hexbyte, hexword } from "../../src/hex.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
@@ -552,5 +554,143 @@ describe("the chips a machine names", () => {
         const cpu = fake6502(findModel("Atom"));
         expect(cpu.keyboardInterface).toBe(cpu.atomppia);
         expect(cpu.tapeInterface).toBe(cpu.atomppia);
+    });
+});
+
+describe("peeking at the hardware", () => {
+    const BootCycles = 1000 * 1000;
+    const PeekedCycles = 100 * 1000;
+    const FredStart = 0xfc00;
+    const SheilaStart = 0xfe00;
+    const SheilaEnd = 0xff00;
+    const SysViaBase = 0xfe40;
+    const SysViaIer = 0xfe4e;
+    const UserViaOrb = 0xfe60;
+    const ViaRegisterCount = 16;
+    const FdcResult = 0xfe81;
+    const Acccon = 0xfe34;
+    const AccconTst = 0x40;
+    const EconetStationId = 0xfe18;
+    const Music5000PageSelect = 0xfcff;
+    const Music5000WaveRamPage = 0x30;
+    const JimStart = 0xfd00;
+    const Music5000WaveRamByte = JimStart + 0x12;
+    const WaveByte = 0xa5;
+    const CrtcAddress = 0xfe00;
+    const CrtcData = 0xfe01;
+    const CrtcStartAddressLow = 13;
+    const StartAddressLow = 0x34;
+    const AtomFdcStart = 0x0a00;
+    const AtomDevicesStart = 0xb000;
+    const AtomDevicesEnd = 0xc000;
+    const AtomUserViaOrb = 0xb800;
+    const BbcUnpeekable = [[0xfe10, 0xfe18]];
+    const AtomUnpeekable = [
+        [0xb000, 0xb008],
+        [0xb400, 0xb410],
+    ];
+
+    async function bootedMachine(name) {
+        const cpu = fake6502(findModel(name));
+        await cpu.initialise();
+        cpu.execute(BootCycles);
+        return cpu;
+    }
+
+    // Each address is peeked before it is read, so a read's side effects can only show at later addresses.
+    function peeksUnlikeReads(cpu, from, to, unpeekable = []) {
+        const mismatches = [];
+        for (let addr = from; addr < to; ++addr) {
+            if (unpeekable.some(([start, end]) => addr >= start && addr < end)) continue;
+            const peeked = cpu.peekmem(addr);
+            const read = cpu.readmem(addr);
+            if (peeked !== read) mismatches.push(`${hexword(addr)}: peeked ${hexbyte(peeked)}, read ${hexbyte(read)}`);
+        }
+        return mismatches;
+    }
+
+    for (const name of ["B-DFS1.2", "B1770", "Master"]) {
+        it(`gives what a read gives at every I/O address but the serial ULA on ${name}`, async () => {
+            const cpu = await bootedMachine(name);
+            expect(peeksUnlikeReads(cpu, FredStart, SheilaEnd, BbcUnpeekable)).toEqual([]);
+        });
+    }
+
+    it("gives what a read gives at every I/O address but the PPIA and MMC on an Atom", async () => {
+        const cpu = await bootedMachine("Atom");
+        expect(peeksUnlikeReads(cpu, AtomFdcStart, AtomFdcStart + 0x100)).toEqual([]);
+        expect(peeksUnlikeReads(cpu, AtomDevicesStart, AtomDevicesEnd, AtomUnpeekable)).toEqual([]);
+    });
+
+    it("shows an idle user port as the next read would on a freshly reset machine", async () => {
+        for (const [name, orb] of [
+            ["B-DFS1.2", UserViaOrb],
+            ["Atom", AtomUserViaOrb],
+        ]) {
+            const cpu = fake6502(findModel(name));
+            await cpu.initialise();
+            expect(cpu.peekmem(orb)).toBe(cpu.readmem(orb));
+        }
+    });
+
+    it("leaves the 8271's result and its interrupt for the CPU", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        sendSeekToMissingDrive(cpu.fdc);
+        const peeked = cpu.peekmem(FdcResult);
+        expect(cpu.nmi).toBe(true);
+        expect(cpu.readmem(FdcResult)).toBe(peeked);
+        expect(cpu.nmi).toBe(false);
+    });
+
+    it("shows the MOS through SHEILA while ACCCON's TST bit is set", async () => {
+        const cpu = await bootedMachine("Master");
+        cpu.writemem(Acccon, cpu.readmem(Acccon) | AccconTst);
+        expect(cpu.peekmem(SysViaIer)).toBe(cpu.ramRomOs[cpu.osOffset + (SysViaIer & 0x3fff)]);
+        expect(cpu.peekmem(SysViaIer)).toBe(cpu.readmem(SysViaIer));
+    });
+
+    it("shows the Econet station ID", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { econet: true });
+        expect(cpu.peekmem(EconetStationId)).toBe(cpu.econet.stationId);
+        expect(cpu.readmem(EconetStationId)).toBe(cpu.econet.stationId);
+    });
+
+    it("shows the CRTC's readable registers", () => {
+        const cpu = makeCpu();
+        cpu.writemem(CrtcAddress, CrtcStartAddressLow);
+        cpu.writemem(CrtcData, StartAddressLow);
+        expect(cpu.peekmem(CrtcData)).toBe(StartAddressLow);
+        expect(cpu.readmem(CrtcData)).toBe(StartAddressLow);
+    });
+
+    it("shows the Music 5000's page select and wave RAM as a read does", () => {
+        const model = findModel("B-DFS1.2");
+        const cpu = new model.Cpu(model, {
+            ...nullIo({ model }),
+            music5000: new Music5000(() => {}),
+            config: machineSpec({ hasMusic5000: true }),
+        });
+        cpu.writemem(Music5000PageSelect, Music5000WaveRamPage);
+        cpu.writemem(Music5000WaveRamByte, WaveByte);
+        expect(cpu.peekmem(Music5000PageSelect)).toBe(Music5000WaveRamPage);
+        expect(cpu.peekmem(Music5000WaveRamByte)).toBe(cpu.readmem(Music5000WaveRamByte));
+        expect(peeksUnlikeReads(cpu, Music5000PageSelect, JimStart + 0x100)).toEqual([]);
+    });
+
+    it("runs a B identically with every device peeked between instructions", async () => {
+        const [peeked, untouched] = await Promise.all([bootedMachine("B-DFS1.2"), bootedMachine("B-DFS1.2")]);
+        const end = peeked.currentCycles + PeekedCycles;
+        while (peeked.currentCycles < end) {
+            peeked.execute(1);
+            for (let addr = SheilaStart; addr < SheilaEnd; ++addr) peeked.peekmem(addr);
+        }
+        untouched.execute(end - untouched.currentCycles);
+
+        const state = (cpu) => ({
+            registers: [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte(), cpu.currentCycles],
+            ram: cpu.ramRomOs.slice(0, 0x8000),
+            sysvia: Array.from({ length: ViaRegisterCount }, (_, reg) => cpu.readmem(SysViaBase + reg)),
+        });
+        expect(state(peeked)).toEqual(state(untouched));
     });
 });

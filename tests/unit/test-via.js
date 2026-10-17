@@ -723,6 +723,19 @@ describe("Via T2 toggling PB6 pulse counting", () => {
         via.write(T2CH, high);
     }
 
+    it("should count PB6 held low from power-on as one pulse at the first look at the port", () => {
+        const ORB = 0x0;
+        const Pb6 = 0x40;
+        via = new UserVia(makeFakeCpu(), scheduler, false, { read: () => 0xff & ~Pb6, write: () => {} });
+        via.write(ACR, AcrT2CountsPb6);
+        start(0x80, 0x10);
+        const frozen = via.read(T2CL);
+        via.read(ORB);
+        expect(via.read(T2CL)).toBe(frozen - 1);
+        via.read(ORB);
+        expect(via.read(T2CL)).toBe(frozen - 1);
+    });
+
     it("should tick T2 once more as it freezes", () => {
         start(0, 0x10);
         runMicroseconds(10);
@@ -799,5 +812,83 @@ describe("Via T2 toggling PB6 pulse counting", () => {
         expect(via.read(T2CL)).toBe(0);
         via.write(ACR, AcrT2CountsPb6);
         expect(via.read(IFR) & Timer2Int).toBe(0);
+    });
+});
+
+describe("Via peek", () => {
+    const ORB = 0x0,
+        ORA = 0x1,
+        DDRB = 0x2,
+        DDRA = 0x3,
+        T1CL = 0x4,
+        T1CH = 0x5,
+        ACR = 0xb,
+        PCR = 0xc,
+        IFR = 0xd,
+        IER = 0xe;
+    const RegisterCount = 16;
+    const PcrCa1Cb1RisingEdge = 0x11;
+    const AcrT1Continuous = 0x40;
+    const Timer1Int = 0x40;
+    const Ca1Int = 0x02;
+    const Cb1Int = 0x10;
+    const TicksPerMicrosecond = 2;
+
+    let via, scheduler, cpu;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+        via = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        via.reset();
+        via.write(IER, 0x80 | Timer1Int | Ca1Int | Cb1Int);
+        via.write(ACR, AcrT1Continuous);
+        via.write(PCR, PcrCa1Cb1RisingEdge);
+        via.write(T1CL, 20);
+        via.write(T1CH, 0);
+    });
+
+    function runMicroseconds(us) {
+        scheduler.polltime(us * TicksPerMicrosecond);
+    }
+
+    it("gives what the next read of each register gives", () => {
+        via.write(DDRA, 0x0f);
+        via.write(ORA, 0x5a);
+        via.write(DDRB, 0xf0);
+        via.write(ORB, 0xa5);
+        runMicroseconds(37);
+        via.setca1(true);
+        for (let reg = 0; reg < RegisterCount; ++reg) {
+            const peeked = via.peek(reg);
+            expect(via.read(reg)).toBe(peeked);
+        }
+    });
+
+    it("sees the timer count up to the moment it is asked", () => {
+        runMicroseconds(5);
+        expect(via.peek(T1CL)).toBe(via.read(T1CL));
+    });
+
+    it("leaves the timer interrupt raised when peeking the timer", () => {
+        runMicroseconds(25);
+        expect(via.peek(T1CL)).toBe(via.read(T1CL));
+        runMicroseconds(25);
+        via.peek(T1CL);
+        expect(via.peek(IFR) & Timer1Int).toBe(Timer1Int);
+        expect(cpu.interrupt).toBeTruthy();
+        via.read(T1CL);
+        expect(via.peek(IFR) & Timer1Int).toBe(0);
+    });
+
+    it("leaves the port interrupts raised when peeking the ports", () => {
+        via.setca1(true);
+        via.setcb1(true);
+        via.peek(ORA);
+        via.peek(ORB);
+        expect(via.peek(IFR) & (Ca1Int | Cb1Int)).toBe(Ca1Int | Cb1Int);
+        via.read(ORA);
+        via.read(ORB);
+        expect(via.peek(IFR) & (Ca1Int | Cb1Int)).toBe(0);
     });
 });
