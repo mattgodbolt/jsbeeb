@@ -31,7 +31,7 @@ describe("Keyboard mapping", function () {
     });
 });
 
-describe("What a character costs on a BBC keyboard", function () {
+describe("How a BBC keyboard types a character", function () {
     it("puts the shifted characters on their unshifted key", function () {
         expect(bbcKeyForCharacter("!")).toEqual({ key: BBC.K1, shift: true, upperCase: true });
         expect(bbcKeyForCharacter("*")).toEqual({ key: BBC.COLON_STAR, shift: true, upperCase: true });
@@ -126,7 +126,7 @@ describe("User key mapping from KEY. URL parameters", function () {
     });
 });
 
-describe("What a character costs on an Atom keyboard", function () {
+describe("How an Atom keyboard types a character", function () {
     it("puts the shifted characters on their unshifted key", function () {
         expect(atomKeyForCharacter("!")).toEqual({ key: ATOM.K1, shift: true });
         expect(atomKeyForCharacter("=")).toEqual({ key: ATOM.MINUS_EQUALS, shift: true });

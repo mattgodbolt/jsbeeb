@@ -146,7 +146,7 @@ export function characterBinder(map, keyForCharacter, keysShiftLeavesAlone) {
 }
 
 /**
- * What a character costs on a BBC keyboard: which key, and whether shift is held while it is
+ * How a BBC keyboard types a character: which key, and whether shift is held while it is
  * pressed. `!` is shift and `1`; `^` is its own unshifted key. Lower case is the same key as
  * upper with the caps lock the other way, which `upperCase` says.
  *

@@ -147,7 +147,7 @@ const UnshiftedCharacters = {
 const ShiftMakesNoDifference = new Set([ATOM.SPACE]);
 
 /**
- * What a character costs on an Atom keyboard, as `bbcKeyForCharacter` does for the BBC. Only
+ * How an Atom keyboard types a character, as `bbcKeyForCharacter` does for the BBC. Only
  * letters say which way the lock has to be; everything else prints the same either way, so
  * leaves `upperCase` out.
  *
