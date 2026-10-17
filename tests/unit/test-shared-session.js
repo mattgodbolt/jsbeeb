@@ -2235,21 +2235,62 @@ describe("startSessionFromUrl", () => {
 });
 
 describe("hostSession", () => {
-    it("hosts a room with a name of its own, on the machine as it is", async () => {
+    afterEach(() => window.history.replaceState(null, "", "/"));
+
+    const taken = () => new RendezvousError("Rendezvous create room failed with status 409", 409);
+
+    it("hosts a room with a name of its own, on the machine as it is, leaving the URL alone", async () => {
         showLights();
+        window.history.replaceState(null, "", "/?model=Master#frag");
+        const before = window.location.href;
         const context = fakeContext();
-        const host = hostSession(context, "matt");
+        const host = await hostSession(context, "matt");
         hosts.push(host);
         await settle();
+        expect(context.rendezvous.createRoom).toHaveBeenCalledOnce();
         expect(context.rendezvous.createRoom).toHaveBeenCalledWith(expect.stringMatching(/^[a-z]+-[a-z]+-[a-z]+$/));
         expect(context.rendezvous.createRoom.mock.calls[0][0]).toBe(host.room);
         expect(document.querySelector(".session-you").textContent).toBe("You are matt");
         expect(document.querySelector(".session-link").textContent).toBe(joinLink(host.room));
+        expect(window.location.href).toBe(before);
+    });
+
+    it("tries another name when the one it made up is taken", async () => {
+        showLights();
+        const createRoom = vi.fn(async () => "secret").mockRejectedValueOnce(taken());
+        const host = await hostSession(fakeContext({ rendezvous: { createRoom } }), "matt");
+        hosts.push(host);
+        await settle();
+        expect(createRoom).toHaveBeenCalledTimes(2);
+        expect(createRoom.mock.calls[1][0]).toBe(host.room);
+        expect(createRoom.mock.calls[0][0]).not.toBe(host.room);
+        expect(document.getElementById("session-panel").hidden).toBe(false);
+    });
+
+    it.each([
+        ["every name it tries is taken", () => taken(), 3],
+        ["the rendezvous fails", () => new RendezvousError("Rendezvous create room failed with status 500", 500), 1],
+        ["the network fails", () => new TypeError("Failed to fetch"), 1],
+    ])("leaves the page with no session at all when %s", async (_, error, tries) => {
+        showLights();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const createRoom = vi.fn(async () => {
+            throw error();
+        });
+        const context = fakeContext({ rendezvous: { createRoom } });
+        expect(await hostSession(context, "matt")).toBeNull();
+        await settle();
+        expect(createRoom).toHaveBeenCalledTimes(tries);
+        expect(document.getElementById("session-panel").hidden).toBe(true);
+        expect(document.getElementById("session-pane").hidden).toBe(true);
+        expect(context.loop.setLockstep).not.toHaveBeenCalled();
+        expect(toastTexts()).toHaveLength(1);
+        expect(toastTexts()[0]).toMatch(/^The session couldn't start: /);
     });
 
     it("refuses a machine that cannot take part, and starts nothing", async () => {
         const context = fakeContext({ model: { isAtom: true } });
-        expect(hostSession(context, "matt")).toBeNull();
+        expect(await hostSession(context, "matt")).toBeNull();
         await settle();
         expect(context.rendezvous.createRoom).not.toHaveBeenCalled();
     });

@@ -50,6 +50,8 @@ const RoomTaken = 409;
 const TooManyOffers = 429;
 // The rendezvous's own rule for an ID.
 const RoomName = /^[A-Za-z0-9_-]{1,64}$/;
+// A generated room's name is three words; one taken already is a rare clash, and another name will do.
+const MaxRoomNameTries = 3;
 // Keys are stamped with a round trip not yet measured as this.
 const UnmeasuredRttMs = 200;
 // A guest in control that sends no commit for this long has stalled, or its connection has, and the host takes
@@ -272,10 +274,11 @@ export class SessionHost {
         this.showStatus();
     }
 
-    async start() {
+    /** @param {string} [secret] the room's, if it has been made already */
+    async start(secret) {
         const { processor, loop, keyboard, rendezvous } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
-        this.secret = await rendezvous.createRoom(this.room);
+        this.secret = secret ?? (await rendezvous.createRoom(this.room));
         this.sequence();
         loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
@@ -1449,7 +1452,7 @@ function startFailure(error, room) {
  * @param {SessionContext} context
  * @returns {SessionHost|SessionGuest|null} the session, or null if this machine cannot take part in one
  */
-function startSession(context, { host, room, name }) {
+function startSession(context, { host, room, name, secret }) {
     const refusal = sessionRefusal(context);
     if (refusal) {
         notify(refusal);
@@ -1457,15 +1460,38 @@ function startSession(context, { host, room, name }) {
     }
     const cleanedName = cleanName(name) ?? randomName();
     const session = host ? new SessionHost(context, room, cleanedName) : new SessionGuest(context, room, cleanedName);
-    session.start().catch((error) => {
+    session.start(secret).catch((error) => {
         notify(`The session couldn't start: ${startFailure(error, room)}.`);
         console.error(error);
     });
     return session;
 }
 
-/** Hosts a room with a name of its own on the machine as it is. */
-export const hostSession = (context, name) => startSession(context, { host: true, room: randomName(), name });
+/**
+ * Hosts a room with a name of its own on the machine as it is. The room is made first, so a page that could not
+ * make one is left as it was, with nothing of a session about it.
+ * @param {SessionContext} context
+ * @returns {Promise<SessionHost|null>} the session, or null if there is none
+ */
+export async function hostSession(context, name) {
+    const refusal = sessionRefusal(context);
+    if (refusal) {
+        notify(refusal);
+        return null;
+    }
+    for (let tries = 1; ; ++tries) {
+        const room = randomName();
+        try {
+            const secret = await context.rendezvous.createRoom(room);
+            return startSession(context, { host: true, room, name, secret });
+        } catch (error) {
+            if (error.status === RoomTaken && tries < MaxRoomNameTries) continue;
+            notify(`The session couldn't start: ${startFailure(error, room)}.`);
+            console.error(error);
+            return null;
+        }
+    }
+}
 
 /**
  * Starts the session the URL asks for, if any.

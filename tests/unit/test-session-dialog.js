@@ -12,7 +12,7 @@ describe("SessionDialog", () => {
     beforeEach(() => {
         domFromIndexHtml("session-open", "session-dialog");
         session = { panel: { open: vi.fn() } };
-        host = vi.fn(() => session);
+        host = vi.fn(async () => session);
         join = vi.fn();
     });
 
@@ -27,6 +27,11 @@ describe("SessionDialog", () => {
         const show = vi.fn();
         dialog().addEventListener("show.bs.modal", show);
         return show;
+    };
+    // The dialog takes the session once the promise host returned has settled, a turn after it.
+    const hosted = async () => {
+        await host.mock.results[0].value;
+        await Promise.resolve();
     };
     const openIt = () => document.getElementById("session-open").click();
     const submitJoin = (text) => {
@@ -49,13 +54,24 @@ describe("SessionDialog", () => {
         expect(show).not.toHaveBeenCalled();
     });
 
-    it("hosts as the name given, and opens the pane next time", () => {
+    it("hosts as the name given, and opens the pane next time", async () => {
         new SessionDialog({ session: null, refusal: null, host, join });
         find(".session-name").value = "matt";
         find(".session-host").click();
         expect(host).toHaveBeenCalledWith("matt");
+        await hosted();
         openIt();
         expect(session.panel.open).toHaveBeenCalled();
+    });
+
+    it("opens the dialog again after hosting came to nothing", async () => {
+        host.mockResolvedValue(null);
+        new SessionDialog({ session: null, refusal: null, host, join });
+        find(".session-host").click();
+        await hosted();
+        const show = shown();
+        openIt();
+        expect(show).toHaveBeenCalled();
     });
 
     it.each([

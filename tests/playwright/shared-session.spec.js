@@ -47,11 +47,13 @@ test("Shared session in the More menu hosts this machine, and a guest joins by p
     await beeb.expectScreenText("BASIC");
     await beeb.disableAutoRepeat();
     await typeLine(beeb, "A%=4321");
+    const hostUrl = beeb.page.url();
     await openSessionFromMore(beeb);
     await beeb.page.fill("#session-name", "matt");
     await beeb.page.click(".session-host");
     const link = beeb.page.locator("#session-pane .session-link");
     await expect(link).toHaveText(/\?client=[a-z]+-[a-z]+-[a-z]+$/);
+    expect(beeb.page.url()).toBe(hostUrl);
 
     const guestContext = await browser.newContext();
     const guest = new Beeb(await guestContext.newPage());

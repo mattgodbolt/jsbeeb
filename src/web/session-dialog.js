@@ -10,7 +10,8 @@ export class SessionDialog {
      * @param {object} options
      * @param {{panel: import("./session-panel.js").SessionPanel}|null} options.session the page's session, if any
      * @param {string|null} options.refusal why this machine cannot take part in a session, if it cannot
-     * @param {function(string): object} options.host hosts as the given name, returning the session
+     * @param {function(string): Promise<object|null>} options.host hosts as the given name, resolving to the session,
+     * or null if there is none
      * @param {function(string, string): void} options.join joins the given room as the given name
      */
     constructor(
@@ -33,9 +34,9 @@ export class SessionDialog {
             if (this.session) this.session.panel.open();
             else bootstrap.Modal.getOrCreateInstance(dialog).show();
         });
-        hostButton.addEventListener("click", () => {
+        hostButton.addEventListener("click", async () => {
             bootstrap.Modal.getOrCreateInstance(dialog).hide();
-            this.session = host(nameInput.value);
+            this.session = await host(nameInput.value);
         });
         roomInput.addEventListener("input", () => roomInput.classList.remove("is-invalid"));
         dialog.querySelector(".session-join-form").addEventListener("submit", (event) => {
