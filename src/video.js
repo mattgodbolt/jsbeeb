@@ -864,11 +864,9 @@ export class Video {
         // pulse continues uninterrupted. The vsync pulse counter will
         // continue counting up and wrap at 16.
         const lineVSyncEnding = this.inLineVSync && this.vpulseCounter === this.vpulseWidth;
-        let vSyncSourceChanged = lineVSyncEnding;
         if (lineVSyncEnding) this.inLineVSync = false;
         if (r7Hit && !this.inLineVSync && !this.hadVSyncThisRow) {
             this.inLineVSync = true;
-            vSyncSourceChanged = true;
             if (!lineVSyncEnding) {
                 this.hadVSyncThisRow = true;
                 this.vpulseCounter = 0;
@@ -876,17 +874,14 @@ export class Video {
         }
         if (halfR0Hit) {
             const halfLineVSyncEnding = this.inHalfLineVSync && this.vpulseCounter === this.vpulseWidth;
-            if (halfLineVSyncEnding) {
-                this.inHalfLineVSync = false;
-                vSyncSourceChanged = true;
-            }
+            if (halfLineVSyncEnding) this.inHalfLineVSync = false;
             if (r7Hit && !this.inHalfLineVSync && !this.hadHalfLineVSyncThisRow) {
                 this.inHalfLineVSync = true;
-                vSyncSourceChanged = true;
                 if (!halfLineVSyncEnding) this.hadHalfLineVSyncThisRow = true;
             }
         }
-        if (vSyncSourceChanged) this.updateVSync();
+        // Also picks up a change of field, which can switch sources without either changing.
+        this.updateVSync();
     }
 
     updateVSync() {
@@ -907,7 +902,6 @@ export class Video {
         const cursorFlash = (this.regs[10] & 0x60) >>> 5;
         this.cursorOnThisFrame = cursorFlash === 0 || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         this.doEvenFrameLogic = !(this.frameCount & 1);
-        this.updateVSync();
     }
 
     endOfCharacterLine() {

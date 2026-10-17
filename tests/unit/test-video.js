@@ -1185,6 +1185,50 @@ describe("Video", () => {
 
             expect(rises).toBe(MeasuredFrames);
         });
+
+        // R7 written after half R0 starts only the line-start vsync, here timed to end on
+        // the first character of the next frame, as the field changes to select it.
+        it("should not pulse the vsync when a field change selects a line-start vsync as it ends", () => {
+            const R7Row = 16;
+            const Frames = 6;
+            const pulses = [];
+            let clocks = 0;
+            let roseAt = null;
+            const v = makeVideo(
+                () => {},
+                (level) => {
+                    if (level) roseAt = clocks;
+                    else pulses.push(clocks - roseAt);
+                },
+            );
+            v.writeCrtc(0, 127);
+            v.writeCrtc(1, 80);
+            v.writeCrtc(2, 98);
+            v.writeCrtc(3, 0x64);
+            v.writeCrtc(4, 20);
+            v.writeCrtc(5, 0);
+            v.writeCrtc(6, 10);
+            v.writeCrtc(7, 0x7f);
+            v.writeCrtc(8, 1);
+            v.writeCrtc(9, 0);
+            const runUntil = (condition) => {
+                for (let waited = 0; !condition(); waited++) {
+                    if (waited > 2 * ClocksPerFrame) throw new Error("Never reached the row");
+                    v.run(1);
+                    clocks++;
+                }
+            };
+            const { video } = v;
+            for (let frame = 0; frame < Frames; frame++) {
+                runUntil(() => video.vertCounter === R7Row && video.horizCounter > HalfLineClocks);
+                v.writeCrtc(7, R7Row);
+                runUntil(() => video.vertCounter === R7Row + 2);
+                v.writeCrtc(7, 0x7f);
+            }
+
+            expect(pulses.length).toBeGreaterThan(0);
+            expect(Math.min(...pulses)).toBeGreaterThan(ClocksPerScanline);
+        });
     });
 
     describe("PAL line phase", () => {
