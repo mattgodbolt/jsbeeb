@@ -317,6 +317,14 @@ describe("Keyboard", () => {
             expect(mockSysvia.keyUp.mock.calls).toEqual([[code], [keyCodes.A]]);
         });
 
+        test("lets go of ctrl when the next key comes down without it", () => {
+            keyboard.keyDown(keyEvent(keyCodes.CTRL_LEFT, "Control", { ctrlKey: true }));
+            keyboard.keyDown(keyEvent(keyCodes.A, "a"));
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.CTRL_LEFT]]);
+            expect(mockSysvia.keyDown).toHaveBeenLastCalledWith(keyCodes.A, false);
+        });
+
         test("is not let go of by the other shift key's key up", () => {
             keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
             keyboard.keyDown(keyEvent(keyCodes.SHIFT_RIGHT, "Shift", { shiftKey: true }));
