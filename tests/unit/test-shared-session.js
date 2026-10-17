@@ -2322,6 +2322,8 @@ describe("roomFrom", () => {
         ["a room's name", "brave-owls-sing", "brave-owls-sing"],
         ["a name with spaces round it", "  Room_1 \n", "Room_1"],
         ["a link to join", "https://bbc.xania.org/?client=brave-owls-sing", "brave-owls-sing"],
+        ["a link without its scheme", "bbc.xania.org/?client=brave-owls-sing", "brave-owls-sing"],
+        ["a name in capitals, as a URL can host", "Brave-Owls", "Brave-Owls"],
         ["a host's own link", "http://localhost:5173/?server=brave-owls-sing&model=Master", "brave-owls-sing"],
         ["nothing", "   ", null],
         ["words with spaces", "brave owls sing", null],

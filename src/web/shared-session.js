@@ -1391,16 +1391,19 @@ export function joinLink(room, name) {
     return link.toString();
 }
 
-/** The room in `text`, which is a room's name or a link to it, or null if it holds neither. */
+function parsedUrl(text) {
+    try {
+        return new URL(text);
+    } catch {
+        return null;
+    }
+}
+
+/** The room in `text`, which is a room's name or a link to it (with or without its scheme), or null if neither. */
 export function roomFrom(text) {
     const trimmed = text.trim();
-    let room = trimmed;
-    try {
-        const params = new URL(trimmed).searchParams;
-        room = params.get("client") ?? params.get("server") ?? "";
-    } catch {
-        // Not a link, so the room's name itself.
-    }
+    const link = parsedUrl(trimmed) ?? (trimmed.includes("?") ? parsedUrl(`https://${trimmed}`) : null);
+    const room = link ? (link.searchParams.get("client") ?? link.searchParams.get("server") ?? "") : trimmed;
     return RoomName.test(room) ? room : null;
 }
 
