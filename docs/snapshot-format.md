@@ -215,8 +215,9 @@ Contains ~40 scalar fields for display timing and rendering state, plus nested o
 | `scanlineCounter`         | number     | Scanline within character row                                                  |
 | `addr`                    | number     | Current CRTC memory address                                                    |
 | `lineStartAddr`           | number     | Line start address (maback)                                                    |
-| `inVSync`                 | boolean    | Vsync output to the System VIA's CA1                                           |
+| `inVSync`                 | boolean    | Vsync output, to the System VIA's CA1 and the SAA5050's DEW                    |
 | `inLineVSync`             | boolean    | Vsync timed from the start of the line. Absent means `inVSync`                 |
+| `hadVSyncThisRow`         | boolean    | The line-start vsync has started in this row                                   |
 | `inHalfLineVSync`         | boolean    | Vsync timed from half R0, for the even interlace field. Absent means `inVSync` |
 | `hadHalfLineVSyncThisRow` | boolean    | The half-line vsync has started in this row. Absent means `hadVSyncThisRow`    |
 | `ula`                     | object     | ULA/NULA state (see below)                                                     |
