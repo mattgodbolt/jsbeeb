@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.7.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.6.1...v2.7.0) (2026-10-17)
+
+
+### Features
+
+* MachineSession can autoboot a disc, and says when it didn't ([#1295](https://github.com/mattgodbolt/jsbeeb/issues/1295)) ([928ce8e](https://github.com/mattgodbolt/jsbeeb/commit/928ce8ecaa03a4d7056236d143f0b5716d522edf))
+* the media window lists recently loaded discs and tapes first ([#1299](https://github.com/mattgodbolt/jsbeeb/issues/1299)) ([cc7f918](https://github.com/mattgodbolt/jsbeeb/commit/cc7f91868401f42581dfaa0b626c9dde54903c7d))
+* US and German Model Bs, for the MOS ROMs that shipped unused ([#1288](https://github.com/mattgodbolt/jsbeeb/issues/1288)) ([fb84003](https://github.com/mattgodbolt/jsbeeb/commit/fb840033cbb3d76bff648163394d53c8cb674821))
+
+
+### Bug Fixes
+
+* a sideways bank's breakpoint no longer stops in a Master's ANDY RAM ([#1283](https://github.com/mattgodbolt/jsbeeb/issues/1283)) ([40e5579](https://github.com/mattgodbolt/jsbeeb/commit/40e55796780f1d454fb6ee71a3060740f2e7a264))
+* a WD1770 type I verify waits for the head to settle ([#1287](https://github.com/mattgodbolt/jsbeeb/issues/1287)) ([7148a51](https://github.com/mattgodbolt/jsbeeb/commit/7148a51803b2ecca65863e3dce8a4905f4542ec2))
+* AtoMMC keeps a file position per handle, and frees a handle on close ([#1290](https://github.com/mattgodbolt/jsbeeb/issues/1290)) ([08ce02d](https://github.com/mattgodbolt/jsbeeb/commit/08ce02df6891464c659c8ed4dfb2684dc8780a1c))
+* dead keys and keypad navigation keys after the keyboard rework ([#1303](https://github.com/mattgodbolt/jsbeeb/issues/1303)) ([af631cb](https://github.com/mattgodbolt/jsbeeb/commit/af631cb4ca6126287bf4294e7ef6f1870251afd8))
+* disc timing follows the machine's clock, so the Atom's disc turns at full speed ([#1298](https://github.com/mattgodbolt/jsbeeb/issues/1298)) ([ba2082f](https://github.com/mattgodbolt/jsbeeb/commit/ba2082feadc4dd3cbafd3d0d9c004ea8c70e5352))
+* freeze and restart VIA T2 a tick late when toggling pulse counting ([#1291](https://github.com/mattgodbolt/jsbeeb/issues/1291)) ([5d1f647](https://github.com/mattgodbolt/jsbeeb/commit/5d1f647821054093b32d5ea783c81576607be188))
+* let MachineSession resolve sth: tapes ([#1280](https://github.com/mattgodbolt/jsbeeb/issues/1280)) ([20c2d6c](https://github.com/mattgodbolt/jsbeeb/commit/20c2d6cc6861a2137419ec605b74f9195982ec41)), closes [#1272](https://github.com/mattgodbolt/jsbeeb/issues/1272)
+* load the Econet file server's files once, when the machine initialises ([#1281](https://github.com/mattgodbolt/jsbeeb/issues/1281)) ([327a32b](https://github.com/mattgodbolt/jsbeeb/commit/327a32b3a55c1628ef995274145d33479d66b9a8))
+* TestMachine's fake video raises vsync, so code that waits for it returns ([#1294](https://github.com/mattgodbolt/jsbeeb/issues/1294)) ([5cb8880](https://github.com/mattgodbolt/jsbeeb/commit/5cb888014cb5fdcea3534c50f866111eebcd54b9))
+* the Atom's keys work again in the natural layout, keyed by character ([#1293](https://github.com/mattgodbolt/jsbeeb/issues/1293)) ([65eff91](https://github.com/mattgodbolt/jsbeeb/commit/65eff9100dd260c4dad310690628b182483b942c))
+* the debugger credits only the symbol sets naming what it shows ([#1289](https://github.com/mattgodbolt/jsbeeb/issues/1289)) ([bdae6b1](https://github.com/mattgodbolt/jsbeeb/commit/bdae6b138cd7e872ddc51036e2b4495e82d06312))
+* the Music 5000 keeps to the main sound's latency target, and goes quiet instead of replaying stale audio ([#1286](https://github.com/mattgodbolt/jsbeeb/issues/1286)) ([fbf5003](https://github.com/mattgodbolt/jsbeeb/commit/fbf50039784ae692e5c919945554dab0dfe8a9f7))
+* two files opened with one name stay two entries in the media window ([#1285](https://github.com/mattgodbolt/jsbeeb/issues/1285)) ([3fd1c19](https://github.com/mattgodbolt/jsbeeb/commit/3fd1c1931f88c60d9aa7e95eacea9cb839564135))
+
 ## [2.6.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.6.0...v2.6.1) (2026-10-16)
 
 
