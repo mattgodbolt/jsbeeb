@@ -293,12 +293,12 @@ describe("Settings", () => {
             expect(settings.model).toBe(DefaultModel);
         });
 
-        it("forgets a stored setting that is cleared", () => {
+        it("forgets a stored setting that is cleared, leaving it at its default", () => {
             window.localStorage.keyLayout = "natural";
             const settings = make();
             settings.set({ keyLayout: undefined });
             expect(window.localStorage.keyLayout).toBeUndefined();
-            expect(settings.keyLayout).toBeUndefined();
+            expect(settings.keyLayout).toBe("physical");
         });
 
         it("clears a setting given undefined", () => {
