@@ -42,6 +42,7 @@ const VerifyFlag = 0x04;
 const SpinUpWaitFlag = 0x08;
 
 const TicksPerMs = 2000;
+const RevolutionTicks = 200 * TicksPerMs;
 const DoneTimerTicks = 64;
 // Long enough to reach the drive's first pulse callback and to outlast the 32us the controller
 // takes to report a command as complete, but still well inside a seek's first step.
@@ -50,7 +51,7 @@ const MfmByteTicks = 64;
 // Well inside the 32us an MFM byte takes, so no byte is lost between polls.
 const PollTicks = 16;
 // A type II command gives up after five revolutions, so a command still busy after ten has hung.
-const MaxCommandTicks = 10 * DiscDrive.TicksPerRevolution;
+const MaxCommandTicks = 10 * RevolutionTicks;
 
 const IdMark = IbmDiscFormat.idMarkDataPattern;
 const DataMark = IbmDiscFormat.dataMarkDataPattern;
@@ -81,7 +82,10 @@ function makeFdc({
 } = {}) {
     const cpu = fake6502();
     const scheduler = new Scheduler();
-    const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
+    const drives = [
+        new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond),
+        new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
+    ];
     if (disc) drives[0].setDisc(disc);
     const fdc = new WdFdc(cpu, scheduler, drives, {}, variant);
     fdc.write(controlRegister, control);
@@ -421,7 +425,7 @@ describe("WD1770 FDC tests", () => {
             const { status } = runCommand(fdc, scheduler, ReadSectorCommand | SettleFlag);
 
             expect(status & StatusRecordNotFound).toBe(0);
-            expect(scheduler.epoch - start).toBeLessThan(DiscDrive.TicksPerRevolution / 2);
+            expect(scheduler.epoch - start).toBeLessThan(RevolutionTicks / 2);
         });
     });
 

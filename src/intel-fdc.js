@@ -201,7 +201,8 @@ const ParamAccept = Object.freeze({
  * makes a selected drive ready on the second index pulse after selection and drops it as soon
  * as 8192 counts of a 31.25 kHz clock pass without one: 262 ms, a disc below about 230 rpm.
  */
-const ReadyTimeoutTicks = 8192 * 64;
+const ReadyTimeoutCounts = 8192;
+const ReadyClockHz = 31250;
 const ReadyIndexPulses = 2;
 
 /**
@@ -300,7 +301,13 @@ export class IntelFdc {
     constructor(cpu, scheduler, drives, debugFlags) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
-        else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
+        else
+            this._drives = [
+                new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond),
+                new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
+            ];
+        this._cyclesPerMs = cpu.peripheralCyclesPerSecond / 1000;
+        this._readyTimeoutTicks = (ReadyTimeoutCounts * cpu.peripheralCyclesPerSecond) / ReadyClockHz;
         /** @type {BaseDiscDrive} */
         this._currentDrive = null;
         this._scheduler = scheduler;
@@ -525,7 +532,7 @@ export class IntelFdc {
     }
 
     get _indexPulsesStopped() {
-        return this._scheduler.epoch - this._lastIndexEpoch >= ReadyTimeoutTicks;
+        return this._scheduler.epoch - this._lastIndexEpoch >= this._readyTimeoutTicks;
     }
 
     /** The Beeb's ready latch as it stands, which the timeout clears without waiting for a pulse. */
@@ -1395,7 +1402,7 @@ export class IntelFdc {
     _setTimerMs(state, timerMs) {
         this._timerTask.cancel();
         this._timerState = state;
-        this._timerTask.schedule(timerMs * 2000);
+        this._timerTask.schedule(timerMs * this._cyclesPerMs);
     }
 
     _startIndexPulseTimeout() {

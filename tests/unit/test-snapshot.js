@@ -346,7 +346,11 @@ describe("Snapshot coordinator", () => {
     describe("WD1770 FDC snapshot", () => {
         it("should round-trip WD1770 state including BigInt markDetector", () => {
             const scheduler = new Scheduler();
-            const mockCpu = { model: { isMaster: true }, setNmi: () => {} };
+            const mockCpu = {
+                model: { isMaster: true },
+                peripheralCyclesPerSecond: TEST_6502.cyclesPerSecond,
+                setNmi: () => {},
+            };
             const fdc = new WdFdc(mockCpu, scheduler, undefined, {});
 
             // Set markDetector to a non-zero BigInt to verify serialization
@@ -373,14 +377,14 @@ describe("Snapshot coordinator", () => {
     describe("DiscDrive snapshot", () => {
         it("should round-trip drive state", () => {
             const scheduler = new Scheduler();
-            const drive = new DiscDrive(0, scheduler);
+            const drive = new DiscDrive(0, scheduler, TEST_6502.cyclesPerSecond);
 
             const state = drive.snapshotState();
             expect(state.track).toBe(0);
             expect(state.spinning).toBe(false);
             expect(state.disc).toBeNull();
 
-            const drive2 = new DiscDrive(1, scheduler);
+            const drive2 = new DiscDrive(1, scheduler, TEST_6502.cyclesPerSecond);
             drive2.restoreState(state);
 
             expect(drive2.track).toBe(0);
@@ -389,7 +393,7 @@ describe("Snapshot coordinator", () => {
 
         it("should round-trip drive state with disc loaded", () => {
             const scheduler = new Scheduler();
-            const drive = new DiscDrive(0, scheduler);
+            const drive = new DiscDrive(0, scheduler, TEST_6502.cyclesPerSecond);
 
             const disc = new Disc(true, new DiscConfig(), "test-drive");
             const ssdData = new Uint8Array(256 * 10);
@@ -402,7 +406,7 @@ describe("Snapshot coordinator", () => {
             expect(state.disc.tracksUsed).toBeGreaterThan(0);
 
             // Restore into a new drive with a fresh disc
-            const drive2 = new DiscDrive(1, scheduler);
+            const drive2 = new DiscDrive(1, scheduler, TEST_6502.cyclesPerSecond);
             const disc2 = new Disc(true, new DiscConfig(), "test-drive2");
             loadSsd(disc2, new Uint8Array(256 * 10), false);
             drive2.setDisc(disc2);

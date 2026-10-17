@@ -7,13 +7,14 @@ import { Disc } from "./disc.js";
 import { IbmDiscFormat } from "./disc.js";
 
 const SpinDebounceMs = 2;
+const RevolutionMs = 200;
 /**
  * The spindle motor of a 5.25" drive reaches speed about half a second after it starts (drive
  * sheets give 400 to 500 ms) and coasts to a stop over a second or so: time constants of the
- * exponentials below, in cycles. The disc never quite stands still here, or the pulses would.
+ * exponentials below. The disc never quite stands still here, or the pulses would.
  */
-const SpinUpTicks = 150 * 2000;
-const SpinDownTicks = 1000 * 2000;
+const SpinUpMs = 150;
+const SpinDownMs = 1000;
 const LeastSpeed = 0.02;
 const AtSpeed = 0.9999;
 
@@ -192,11 +193,6 @@ export class BaseDiscDrive extends EventTarget {
 }
 
 export class DiscDrive extends BaseDiscDrive {
-    static get TicksPerRevolution() {
-        // 300 rpm
-        return 400000;
-    }
-
     // scarybeast's Chinon drive holds the index pulse low for about 4ms. */
     static get DiscIndexMs() {
         return 4;
@@ -207,10 +203,15 @@ export class DiscDrive extends BaseDiscDrive {
      *
      * @param {Number} id which drive id this is (0 or 1)
      * @param {Scheduler} scheduler scheduler to register callbacks etc
+     * @param {Number} cyclesPerSecond the rate the scheduler advances at
      */
-    constructor(id, scheduler) {
+    constructor(id, scheduler, cyclesPerSecond) {
         super();
         this._scheduler = scheduler;
+        const cyclesPerMs = cyclesPerSecond / 1000;
+        this._ticksPerRevolution = RevolutionMs * cyclesPerMs;
+        this._spinUpTicks = SpinUpMs * cyclesPerMs;
+        this._spinDownTicks = SpinDownMs * cyclesPerMs;
         /** @type {Disc|undefined} */
         this._disc = undefined;
         // Two for a drive whose 40/80 switch is set to 40, which reaches a 48 tpi format by
@@ -300,8 +301,8 @@ export class DiscDrive extends BaseDiscDrive {
     get speed() {
         const elapsed = this._scheduler.epoch - this._speedEpoch;
         const speed = this._spinning
-            ? 1 - (1 - this._speedThen) * Math.exp(-elapsed / SpinUpTicks)
-            : this._speedThen * Math.exp(-elapsed / SpinDownTicks);
+            ? 1 - (1 - this._speedThen) * Math.exp(-elapsed / this._spinUpTicks)
+            : this._speedThen * Math.exp(-elapsed / this._spinDownTicks);
         return speed > AtSpeed ? 1 : Math.max(LeastSpeed, speed);
     }
 
@@ -332,7 +333,7 @@ export class DiscDrive extends BaseDiscDrive {
     }
 
     get positionTime() {
-        return (this.positionFraction * DiscDrive.TicksPerRevolution) | 0;
+        return (this.positionFraction * this._ticksPerRevolution) | 0;
     }
 
     /**
@@ -400,7 +401,7 @@ export class DiscDrive extends BaseDiscDrive {
         // With no disc loaded the drive asserts the index all the time.
         if (!this.disc) return true;
         // The 8271 datasheet says that the index pulse must be held for over 0.5us. Most drives are in the millisecond range.
-        return this._headPosition < (this.trackLength * DiscDrive.DiscIndexMs) / 200;
+        return this._headPosition < (this.trackLength * DiscDrive.DiscIndexMs) / RevolutionMs;
     }
 
     writePulses(pulses) {

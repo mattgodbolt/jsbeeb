@@ -170,7 +170,12 @@ export class WdFdc {
     constructor(cpu, scheduler, drives, debugFlags, variant = WdFdcVariant.wd1770) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
-        else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
+        else
+            this._drives = [
+                new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond),
+                new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
+            ];
+        this._cyclesPerUs = cpu.peripheralCyclesPerSecond / 1000000;
 
         this._isMaster = cpu.model.isMaster;
         this._is1772 = variant === WdFdcVariant.wd1772;
@@ -1128,7 +1133,7 @@ export class WdFdc {
         this._timerTask.cancel();
         this._timerState = timerState;
         this._setState(State.timerWait);
-        this._timerTask.schedule(waitUs * 2);
+        this._timerTask.schedule(waitUs * this._cyclesPerUs);
     }
 
     _commandDone(doRaiseIntRq) {
