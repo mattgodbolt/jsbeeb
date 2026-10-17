@@ -29,6 +29,9 @@ const ORB = 0x0,
 // Figures 3-4 and 3-6 of https://6502.org/documents/datasheets/wdc/wdc_w65c22s_mar_2004.pdf
 const PulseWidthCycles = 2;
 
+// Reset makes every pin an input, and undriven inputs float high.
+const IdlePins = 0xff;
+
 class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
@@ -53,8 +56,8 @@ class Via {
         this.t1hit = false;
         this.t2hit = false;
         this.t2High = 0;
-        this.portapins = 0;
-        this.portbpins = 0;
+        this.portapins = IdlePins;
+        this.portbpins = IdlePins;
         this.ca1 = false;
         this.ca2 = false;
         this.cb1 = false;
@@ -81,6 +84,7 @@ class Via {
         this.acr = this.pcr = 0;
         this.t2High = 0;
         this.t1_pb7 = 1;
+        this.portapins = this.portbpins = IdlePins;
         this.ca2PulseTask.cancel();
         this.cb2PulseTask.cancel();
         this.updateNextTime();
@@ -439,15 +443,20 @@ class Via {
                 return ((this.t1l & 0x1fe) >>> 1) & 0xff;
             case T1LH:
                 return (this.t1l >>> 9) & 0xff;
+
             case T1CL:
                 return ((this.t1c + 1) >>> 1) & 0xff;
+
             case T1CH:
                 return ((this.t1c + 1) >>> 9) & 0xff;
+
             case T2CL:
                 return ((this.t2c + 1) >>> 1) & 0xff;
+
             case T2CH:
                 if (this._t2ClocksShifter()) return this.t2High;
                 return ((this.t2c + 1) >>> 9) & 0xff;
+
             case SR:
                 return this.sr;
             case ACR:
