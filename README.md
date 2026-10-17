@@ -71,6 +71,8 @@ names are what you'd expect, but note:
 
 - `ENTER` (the BBC's `RETURN` key is called `ENTER` on the host side)
 - `K0` to `K9` for the number keys, `NUMPAD0` to `NUMPAD9` for the keypad
+- with Num Lock off, a keypad key counts as the key it stands in for: keypad `1` is `END`, so `KEY.END` covers
+  both. A `KEY.NUMPAD1` still wins for that key
 - `SHIFT_LEFT` / `SHIFT_RIGHT`, `CTRL_LEFT` / `CTRL_RIGHT`, `ALT_LEFT` / `ALT_RIGHT` to distinguish the two of each.
   Plain `SHIFT`, `CTRL` and `ALT` map both sides at once
 - `WINDOWS` and `WINDOWS_RIGHT` for the Windows or Command keys, and `CLEAR` for the key an Apple
@@ -131,7 +133,8 @@ unshifted on a BBC and `"` is shifted, and you do not have to know that.
 Two keys are exceptions, because characters alone cannot settle them. The BBC has no backtick and
 most keyboards cannot type a `£` at all, so the key that would print a backtick gives a `£`
 instead. And the Master's numeric keypad is a separate set of keys from the digits above the
-letters, which the characters cannot tell apart, so the keypad goes by position.
+letters, which the characters cannot tell apart, so the keypad goes by position. With Num Lock
+off it is the arrows, `End` and the rest instead, as in every layout.
 
 **Gaming** moves the BBC keys that a PC keyboard handles badly. Its main job is the BBC's `CAPS LOCK`
 and `CTRL`, which sit side by side and which many games use for left and right: Zalaga and Hunchback
