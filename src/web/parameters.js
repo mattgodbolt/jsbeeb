@@ -16,8 +16,8 @@ const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" :
 /**
  * Every parameter the page understands, with all it is: its URL `type`, and whether it is a `startupAction` (has the
  * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
- * as in the URL) or `slid` (changed live as a slider moves, so a burst of changes makes one history entry). A parameter the Settings
- * dialog shows has its `field` there, one of:
+ * as in the URL) or `slid` (changed live as a slider moves, so a burst of changes makes one history entry). A
+ * parameter the Settings dialog shows has its `field` there, one of:
  *
  * - `menu`: a dropdown of `options` ({value, text}); the button names the value with `describe`, or the option's text.
  *   The options carry their value as `data-<attribute>`, by default `data-value`. `status` is the id of a line under
