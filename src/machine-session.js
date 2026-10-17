@@ -502,7 +502,8 @@ export class MachineSession {
     /**
      * Call `fn(pc)` just before each instruction on the host CPU runs, so an instruction the machine stops at is
      * reported before it executes, until the returned function is called. Watching never stops the machine; an
-     * exception from `fn` propagates out of the run.
+     * exception from `fn` propagates out of the run, and hooks that saw that instruction see it again on the
+     * next run.
      * @param {function(number): *} fn - its return value is ignored
      * @returns {function(): void} removes the watcher
      */

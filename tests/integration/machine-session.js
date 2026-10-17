@@ -284,6 +284,21 @@ describe("MachineSession watching execution", () => {
         expect(session.elapsedCycles).toBe(removedAt);
     });
 
+    it("lets a breakpoint added after a watcher fire where the watcher removes itself", async () => {
+        await stopAtProgramStart();
+        const remove = session.onExecute((pc) => {
+            if (pc === ProgramPcs[2]) remove();
+        });
+        const id = session.addBreakpoint("execute", ProgramPcs[2]);
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result.completed).toBe(false);
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.clearBreakpoints();
+        await session.runFor(CyclesPerInterlacedFrame);
+    });
+
     it("does not stop again at the breakpoint it resumes from", async () => {
         await stopAtProgramStart(Program, { keepBreakpoint: true });
 
@@ -350,6 +365,24 @@ describe("MachineSession watching execution", () => {
         const [lo, hi] = session.readMemory(0xfffc, 2);
         expect(pcs[0]).toBe(lo | (hi << 8));
         expect(pcs).not.toContain(handler);
+    });
+});
+
+describe("MachineSession breakpoints across a reset", () => {
+    it("stops again at the reset address after a reset while stopped there", async () => {
+        const session = new MachineSession("B-DFS1.2");
+        await session.initialise();
+        const [lo, hi] = session.readMemory(0xfffc, 2);
+        const id = session.addBreakpoint("execute", lo | (hi << 8));
+        expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(false);
+        session.resetBreakpointHits();
+
+        session.reset();
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result).toEqual({ completed: false, cyclesRun: 0 });
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.destroy();
     });
 });
 
