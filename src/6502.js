@@ -579,6 +579,7 @@ class DebugHook {
         this.cpu = cpu;
         this.functionName = functionName;
         this.handlers = [];
+        this.calledAtLastStop = [];
     }
 
     add(handler) {
@@ -592,7 +593,10 @@ class DebugHook {
                 for (let i = 0; i < handlers.length; ++i) {
                     if (handlers[i].apply(handlers[i], arguments)) stop = true;
                 }
-                if (stop) self.cpu.stop();
+                if (stop) {
+                    self.calledAtLastStop = handlers;
+                    self.cpu.stop();
+                }
                 return stop;
             };
         }
@@ -1542,7 +1546,7 @@ export class Cpu6502 extends Base6502 {
                 if (calledAtStop) {
                     this.debugInstruction.callExcept(calledAtStop, this.pc, opcode);
                 } else if (this._debugInstruction(this.pc, opcode)) {
-                    this.hooksCalledAtStop = new Set(this.debugInstruction.handlers);
+                    this.hooksCalledAtStop = new Set(this.debugInstruction.calledAtLastStop);
                     return false;
                 }
             }

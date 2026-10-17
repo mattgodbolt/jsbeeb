@@ -299,6 +299,59 @@ describe("MachineSession watching execution", () => {
         await session.runFor(CyclesPerInterlacedFrame);
     });
 
+    it("can call a remover twice", async () => {
+        const remove = session.onExecute(() => {});
+        remove();
+
+        expect(() => remove()).not.toThrow();
+    });
+
+    it("offers the resumed instruction to a watcher added at the stop, after another removed itself", async () => {
+        await stopAtProgramStart();
+        const pcs = [];
+        let removeAdded;
+        const removeFirst = session.onExecute((pc) => {
+            if (pc === ProgramPcs[2]) removeFirst();
+        });
+        const removeAdder = session.onExecute((pc) => {
+            if (pc !== ProgramPcs[2]) return;
+            removeAdder();
+            removeAdded = session.onExecute((seen) => pcs.push(seen));
+        });
+        session.addBreakpoint("execute", ProgramPcs[2]);
+
+        expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(false);
+        session.clearBreakpoints();
+        await session.runFor(10);
+        removeAdded();
+
+        expect(pcs[0]).toBe(ProgramPcs[2]);
+    });
+
+    it.each([
+        ["a frame painted", () => session.runFrames(1)],
+        [
+            "a write breakpoint",
+            async () => {
+                session.addBreakpoint("write", 0x70);
+                session.writeMemory(ProgramAddress, [0x85, 0x70, 0x60]); // STA &70, RTS
+                await session.type(`CALL &${ProgramAddress.toString(16)}`);
+                if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+                expect(session.hitBreakpoint().type).toBe("write");
+            },
+        ],
+    ])("stops at once for a breakpoint added where %s stopped it", async (_name, stop) => {
+        await stop();
+        session.clearBreakpoints();
+        session.resetBreakpointHits();
+        const id = session.addBreakpoint("execute", session.registers().pc);
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result).toEqual({ completed: false, cyclesRun: 0 });
+        expect(session.hitBreakpoint().id).toBe(id);
+    });
+
     it("does not stop again at the breakpoint it resumes from", async () => {
         await stopAtProgramStart(Program, { keepBreakpoint: true });
 

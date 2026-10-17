@@ -389,7 +389,7 @@ export class MachineSession {
     /**
      * Run for an exact number of emulated CPU cycles, or until something stops
      * the CPU first: a breakpoint, or the paint runFrames stops at. `completed`
-     * is false if it was stopped short.
+     * is false if it was stopped short. Rejects if a hook or device throws.
      * @returns {Promise<{cyclesRun: number, completed: boolean}>}
      */
     async runFor(cycles) {
@@ -511,7 +511,11 @@ export class MachineSession {
         const hook = this._machine.processor.debugInstruction.add((pc) => {
             fn(pc);
         });
-        return () => hook.remove();
+        let removed = false;
+        return () => {
+            if (!removed) hook.remove();
+            removed = true;
+        };
     }
 
     /**
