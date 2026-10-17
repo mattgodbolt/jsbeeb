@@ -470,7 +470,7 @@ export class MachineSession {
 
         if (type === "execute") {
             bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address && inBank()) {
+                if (pc === address && inBank() && !cpu.resumingFromStop) {
                     bp.hit = true;
                     return true;
                 }

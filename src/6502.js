@@ -616,10 +616,15 @@ class DebugHook {
         this.cpu[this.functionName] = null;
     }
 
-    /** Calls the handlers not in `called`, ignoring any request to stop. */
+    /** Calls the handlers not in `called`, with `cpu.resumingFromStop` set, ignoring any request to stop. */
     callExcept(called, ...args) {
-        for (const handler of this.handlers) {
-            if (!called.has(handler)) handler.apply(handler, args);
+        this.cpu.resumingFromStop = true;
+        try {
+            for (const handler of this.handlers) {
+                if (!called.has(handler)) handler.apply(handler, args);
+            }
+        } finally {
+            this.cpu.resumingFromStop = false;
         }
     }
 }
@@ -695,6 +700,8 @@ export class Cpu6502 extends Base6502 {
         this.is1MHzAccess = this.buildIs1MHzAccess();
 
         this._debugRead = this._debugWrite = this._debugInstruction = null;
+        this.hooksCalledAtStop = null;
+        this.resumingFromStop = false;
         this.debugInstruction = new DebugHook(this, "_debugInstruction");
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
@@ -1523,7 +1530,8 @@ export class Cpu6502 extends Base6502 {
     }
 
     executeInternal() {
-        // The instruction a debug stop halted before runs first on resume; each hook sees it once either way.
+        // Each instruction hook sees the instruction a debug stop halted before once, at the stop or on resume,
+        // and none stops the machine at it again.
         let calledAtStop = this.hooksCalledAtStop;
         this.hooksCalledAtStop = null;
         while (!this.halted && this.currentCycles < this.targetCycles) {

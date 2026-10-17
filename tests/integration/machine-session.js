@@ -310,6 +310,16 @@ describe("MachineSession watching execution", () => {
         expect(session.hitBreakpoint()).toBe(null);
     });
 
+    it("does not stop or record a hit for a breakpoint added at the address it is stopped at", async () => {
+        await stopAtProgramStart();
+        session.addBreakpoint("execute", ProgramAddress);
+
+        const resumed = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(resumed.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBe(null);
+    });
+
     it("fires a write breakpoint on the instruction an execute breakpoint stopped at", async () => {
         const StoreAddress = 0x70;
         const storeProgram = [0xa9, 0x2a, 0x85, StoreAddress, 0x60]; // LDA #42, STA &70, RTS
