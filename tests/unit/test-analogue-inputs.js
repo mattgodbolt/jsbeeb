@@ -11,7 +11,8 @@ describe("AnalogueInputs", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        domFromIndexHtml("cub-monitor", "micPermissionStatus");
+        domFromIndexHtml("cub-monitor");
+        document.body.append(Object.assign(document.createElement("div"), { id: "micPermissionStatus" }));
         channels = {};
         deps = {
             processor: {

@@ -2516,3 +2516,11 @@ div.smoothie-chart-tooltip {
     grid-row: 1 / span 3;
   }
 }
+
+.config-section {
+  margin-top: 15px;
+}
+
+.config-section > .row + .row {
+  margin-top: 10px;
+}

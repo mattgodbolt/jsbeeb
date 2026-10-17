@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { Config, fittedRoms, needsRestart, restartPending, tubeCpuSpeedLabel } from "../../src/web/config.js";
+import { Config, fittedRoms, needsRestart, restartPending } from "../../src/web/config.js";
+import { tubeCpuSpeedLabel } from "../../src/web/config-form.js";
 import { allModels, findModel } from "../../src/models.js";
 import { Settings } from "../../src/web/settings.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
+
+const menuText = (id) => document.getElementById(id).textContent.trim();
 
 describe("fittedRoms", () => {
     const master = findModel("Master");
@@ -118,7 +121,7 @@ describe("Config", () => {
     const dialog = () => document.getElementById("configuration");
     const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
     const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
-    const modelDropdownText = () => document.querySelector("#bbc-model-dropdown .bbc-model").textContent;
+    const modelDropdownText = () => menuText("bbc-model-dropdown");
     const restartPendingShown = () => !document.getElementById("restart-pending").classList.contains("d-none");
     const clickModel = (synonym) => document.querySelector(`.model-menu a[data-target="${synonym}"]`).click();
     const tubeSlider = () => document.getElementById("tubeCpuMultiplier");
@@ -233,9 +236,9 @@ describe("Config", () => {
     describe("the co-processor controls", () => {
         it("only lets the tube speed be set while the co-processor is ticked", () => {
             openDialog();
-            document.getElementById("65c02").click();
+            document.getElementById("coProcessor").click();
             expect(tubeSlider().disabled).toBe(false);
-            document.getElementById("65c02").click();
+            document.getElementById("coProcessor").click();
             expect(tubeSlider().disabled).toBe(true);
         });
 
@@ -257,24 +260,24 @@ describe("Config", () => {
     describe("the dropdown pickers", () => {
         it("saves a keyboard layout and shows it capitalised", () => {
             openDialog();
-            document.querySelector('.keyboard-menu a[data-target="natural"]').click();
-            expect(document.querySelector(".keyboard-layout").textContent).toBe("Natural");
+            document.querySelector('.key-layout-menu a[data-value="natural"]').click();
+            expect(menuText("keyLayoutDropdown")).toBe("Natural");
             closeDialog();
             expect(settings.keyLayout).toBe("natural");
         });
 
         it("saves a microphone channel", () => {
             openDialog();
-            document.querySelector('.mic-channel-option[data-channel="2"]').click();
-            expect(document.querySelector(".mic-channel-text").textContent).toBe("Channel 2");
+            document.querySelector('.microphone-channel-option[data-value="2"]').click();
+            expect(menuText("microphoneChannelDropdown")).toBe("Channel 2");
             closeDialog();
             expect(settings.microphoneChannel).toBe(2);
         });
 
         it("saves disabling the microphone as a change, not an omission", () => {
             openDialog();
-            document.querySelector('.mic-channel-option[data-channel=""]').click();
-            expect(document.querySelector(".mic-channel-text").textContent).toBe("Disabled");
+            document.querySelector('.microphone-channel-option[data-value=""]').click();
+            expect(menuText("microphoneChannelDropdown")).toBe("Disabled");
             closeDialog();
             expect(lastSaved()).toStrictEqual({ microphoneChannel: undefined });
         });
@@ -285,28 +288,28 @@ describe("Config", () => {
             openDialog();
             document.querySelector('.audio-output-option[data-output="board"]').click();
             expect(settings.audioOutput).toBe("board");
-            expect(document.querySelector(".audio-output-text").textContent).toBe("Line out");
-            expect(document.getElementById("speakerAmountSetting").disabled).toBe(true);
+            expect(menuText("audioOutputDropdown")).toBe("Line out");
+            expect(document.getElementById("speakerAmount").disabled).toBe(true);
             closeDialog();
             expect(changed).toHaveBeenCalledTimes(1);
         });
 
         it("sets a display mode at once and shows its name", () => {
             openDialog();
-            document.querySelector('.display-mode-option[data-mode="pal"]').click();
+            document.querySelector('.display-mode-option[data-value="pal"]').click();
             expect(settings.displayMode).toBe("pal");
-            expect(document.querySelector(".display-mode-text").textContent).toBe("PAL TV");
+            expect(menuText("displayModeDropdown")).toBe("PAL TV");
         });
 
         it("sets a dragged speaker amount at once", () => {
-            const slider = document.getElementById("speakerAmountSetting");
+            const slider = document.getElementById("speakerAmount");
             slider.value = 0.5;
             slider.dispatchEvent(new Event("input"));
             expect(settings.speakerAmount).toBe(0.5);
         });
 
         it("gives the persistence slider to the showing display, and no display without one", () => {
-            const slider = document.getElementById("persistenceSetting");
+            const slider = document.getElementById("persistence");
             const readout = () => document.getElementById("persistenceValue").textContent;
             settings.set({ displayMode: "pal" });
             expect(slider.disabled).toBe(false);
@@ -331,7 +334,7 @@ describe("Config", () => {
         });
 
         it("gives the slider to the display actually in use when the one asked for fell back", () => {
-            const slider = document.getElementById("persistenceSetting");
+            const slider = document.getElementById("persistence");
             settings.set({ displayMode: "pal" });
             config.setPersistenceInUse("rgbPersistenceMs");
             expect(slider.value).toBe("25");
@@ -343,9 +346,9 @@ describe("Config", () => {
 
         it("follows a live setting changed elsewhere", () => {
             settings.set({ audioOutput: "off", displayMode: "xbr", speakerAmount: 0.25 });
-            expect(document.querySelector(".audio-output-text").textContent).toBe("Unfiltered");
-            expect(document.querySelector(".display-mode-text").textContent).toBe("Smoothed (xBR)");
-            expect(document.getElementById("speakerAmountSetting").value).toBe("0.25");
+            expect(menuText("audioOutputDropdown")).toBe("Unfiltered");
+            expect(menuText("displayModeDropdown")).toBe("Smoothed (xBR)");
+            expect(document.getElementById("speakerAmount").value).toBe("0.25");
         });
     });
 
@@ -363,5 +366,188 @@ describe("Config", () => {
             openDialog();
             expect(modelDropdownText()).toBe(findModel("Master").name);
         });
+    });
+});
+
+describe("the Settings form", () => {
+    const Changed =
+        "?model=Master&keyLayout=natural&displayMode=pal&coProcessor=true&tubeCpuMultiplier=2&hasEconet=true" +
+        "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&speechOutput=true";
+
+    const dialog = () => document.getElementById("configuration");
+    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
+    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
+    const shown = (control) =>
+        control.type === "checkbox"
+            ? control.checked
+            : control.type === "range"
+              ? control.value
+              : control.textContent.trim();
+    const controls = () =>
+        [...dialog().querySelectorAll(".modal-body button, .modal-body input")].map((control) => ({
+            id: control.id,
+            label: control.labels[0].textContent,
+            type: control.type,
+            value: shown(control),
+            disabled: control.disabled,
+        }));
+    const configFrom = (search) => {
+        const settings = new Settings({ urlState: fakeUrlState(search) });
+        return { settings, config: new Config(settings) };
+    };
+
+    beforeEach(() => domFromIndexHtml("configuration"));
+    afterEach(teardownDom);
+
+    it("labels and shows every setting", () => {
+        configFrom(Changed);
+        openDialog();
+        expect(controls()).toEqual([
+            {
+                id: "bbc-model-dropdown",
+                label: "Base model:(including disk interface)",
+                type: "button",
+                value: "BBC Master 128 (DFS)",
+                disabled: false,
+            },
+            { id: "keyLayoutDropdown", label: "Keyboard layout:", type: "button", value: "Natural", disabled: false },
+            { id: "displayModeDropdown", label: "Display mode:", type: "button", value: "PAL TV", disabled: false },
+            { id: "persistence", label: "Phosphor afterglow: 40 ms", type: "range", value: "40", disabled: false },
+            { id: "coProcessor", label: "65c02 co-processor", type: "checkbox", value: true, disabled: false },
+            { id: "tubeCpuMultiplier", label: "Tube CPU: 2x (8MHz)", type: "range", value: "2", disabled: false },
+            { id: "hasMusic5000", label: "Music 5000 synthesiser", type: "checkbox", value: false, disabled: false },
+            { id: "hasTeletextAdaptor", label: "Teletext adaptor", type: "checkbox", value: false, disabled: false },
+            { id: "hasEconet", label: "Econet with file server", type: "checkbox", value: true, disabled: false },
+            { id: "audioOutputDropdown", label: "Sound output:", type: "button", value: "Line out", disabled: false },
+            { id: "speakerAmount", label: "Speaker character:", type: "range", value: "0.5", disabled: true },
+            {
+                id: "microphoneChannelDropdown",
+                label: "Microphone channel:",
+                type: "button",
+                value: "Channel 1",
+                disabled: false,
+            },
+            {
+                id: "mouseJoystickEnabled",
+                label: "Enable mouse as analogue joystick",
+                type: "checkbox",
+                value: true,
+                disabled: false,
+            },
+            {
+                id: "speechOutput",
+                label: "Speak RS-423 serial output (*FX3,1)",
+                type: "checkbox",
+                value: true,
+                disabled: false,
+            },
+        ]);
+    });
+
+    it("gives every menu its options, each carrying the value it picks", () => {
+        configFrom("");
+        const menu = (id) =>
+            [...document.getElementById(id).nextElementSibling.querySelectorAll("a")].map((link) => ({
+                text: link.textContent,
+                data: { ...link.dataset },
+            }));
+        expect(menu("keyLayoutDropdown").map(({ data }) => data.value)).toEqual(["physical", "natural", "gaming"]);
+        expect(menu("displayModeDropdown").map(({ data }) => data.value)).toEqual(["rgb", "pal", "xbr"]);
+        expect(menu("audioOutputDropdown")).toEqual([
+            { text: "Internal speaker", data: { output: "speaker" } },
+            { text: "Line out", data: { output: "board" } },
+            { text: "Unfiltered", data: { output: "off" } },
+        ]);
+        expect(menu("microphoneChannelDropdown").map(({ text }) => text)).toEqual([
+            "Disabled",
+            "Channel 0",
+            "Channel 1",
+            "Channel 2",
+            "Channel 3",
+        ]);
+    });
+
+    it("leaves the URL as it found it when the dialog is opened and closed untouched", () => {
+        const { settings } = configFrom(Changed);
+        const before = settings.urlState.url();
+        openDialog();
+        closeDialog();
+        expect(settings.urlState.url()).toBe(before);
+    });
+
+    it("saves nothing on closing after the afterglow is dragged, which is no setting of its own", () => {
+        const { settings } = configFrom("?displayMode=pal");
+        openDialog();
+        const slider = document.getElementById("persistence");
+        slider.value = 30;
+        slider.dispatchEvent(new Event("input"));
+        const dragged = settings.urlState.url();
+        closeDialog();
+        expect(settings.palPersistenceMs).toBe(30);
+        expect(settings.urlState.url()).toBe(dragged);
+        expect(dragged).not.toContain("undefined");
+    });
+
+    it("follows a saved-on-close setting changed elsewhere while the dialog is open", () => {
+        const { settings } = configFrom("");
+        openDialog();
+        settings.set({ microphoneChannel: 2, keyLayout: "gaming" });
+        expect(menuText("microphoneChannelDropdown")).toBe("Channel 2");
+        expect(menuText("keyLayoutDropdown")).toBe("Gaming");
+    });
+
+    it("keeps showing a pending pick, which is what closing saves, when its setting changes elsewhere", () => {
+        const { settings } = configFrom("");
+        openDialog();
+        document.querySelector('.microphone-channel-option[data-value="3"]').click();
+        settings.set({ microphoneChannel: 1 });
+        expect(menuText("microphoneChannelDropdown")).toBe("Channel 3");
+        closeDialog();
+        expect(settings.microphoneChannel).toBe(3);
+    });
+
+    it("shows on opening what was saved elsewhere while it was closed", () => {
+        const { settings } = configFrom("");
+        openDialog();
+        closeDialog();
+        settings.set({ microphoneChannel: 1, keyLayout: "natural" });
+        openDialog();
+        expect(menuText("microphoneChannelDropdown")).toBe("Channel 1");
+        expect(menuText("keyLayoutDropdown")).toBe("Natural");
+    });
+
+    it("names a model that has no synonym to pick it by", () => {
+        const { settings } = configFrom("?model=Tube65C02");
+        openDialog();
+        expect(menuText("bbc-model-dropdown")).toBe("Tube65C02");
+        closeDialog();
+        expect(settings.urlState.url()).toContain("model=Tube65C02");
+    });
+
+    it("shows a fresh page what the last one saved", () => {
+        const { settings } = configFrom("?model=B-DFS1.2");
+        openDialog();
+        document.querySelector('.model-menu a[data-target="Master"]').click();
+        document.querySelector('.key-layout-menu a[data-value="natural"]').click();
+        document.querySelector('.microphone-channel-option[data-value="1"]').click();
+        for (const id of ["coProcessor", "hasEconet", "mouseJoystickEnabled", "speechOutput"])
+            document.getElementById(id).click();
+        const tube = document.getElementById("tubeCpuMultiplier");
+        tube.value = 2;
+        tube.dispatchEvent(new Event("input"));
+        document.querySelector('.display-mode-option[data-value="pal"]').click();
+        document.querySelector('.audio-output-option[data-output="board"]').click();
+        const speaker = document.getElementById("speakerAmount");
+        speaker.value = 0.5;
+        speaker.dispatchEvent(new Event("input"));
+        closeDialog();
+        const picked = controls();
+
+        const search = new URL(settings.urlState.url()).search;
+        document.body.innerHTML = "";
+        domFromIndexHtml("configuration");
+        configFrom(search);
+        openDialog();
+        expect(controls()).toEqual(picked);
     });
 });
