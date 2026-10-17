@@ -12,7 +12,7 @@ import { setNodeBasePath } from "./loader.js";
 import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 
-const MaxCyclesPerIter = 100 * 1000;
+export const MaxCyclesPerIter = 100 * 1000;
 const RomselBankMask = 0x0f;
 const RomselAndy = 0x80;
 const AndyStart = 0x8000;
@@ -121,17 +121,24 @@ export class TestMachine {
 
     /**
      * Run for `cycles` emulated cycles, or until something stops the CPU.
-     * Resolves true if it was stopped short.
+     * Resolves true if it was stopped short. Rejects if a hook or device throws,
+     * leaving the cycle target where the run stopped.
      */
     runFor(cycles) {
         let left = cycles;
         let stopped = false;
         const cpu = this.processor;
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const runAnIter = () => {
                 const todo = Math.max(0, Math.min(left, MaxCyclesPerIter));
                 if (todo) {
-                    stopped = !cpu.execute(todo);
+                    try {
+                        stopped = !cpu.execute(todo);
+                    } catch (e) {
+                        cpu.targetCycles = cpu.currentCycles;
+                        reject(e);
+                        return;
+                    }
                     left -= todo;
                 }
                 // execute() adds each request to a running targetCycles, so budget
@@ -160,13 +167,16 @@ export class TestMachine {
         const { vsyncAddress } = this.model;
         if (vsyncAddress === null) throw new Error(`runUntilVblank does not know the ${this.model.name} OS`);
         const hook = this.processor.debugInstruction.add((addr) => {
-            if (addr === vsyncAddress) {
+            if (!this.processor.resumingFromStop && addr === vsyncAddress) {
                 hit = true;
                 return true;
             }
         });
-        await this.runFor(10 * 1000 * 1000);
-        hook.remove();
+        try {
+            await this.runFor(10 * 1000 * 1000);
+        } finally {
+            hook.remove();
+        }
         assert(hit, "did not hit appropriate breakpoint in time");
     }
 
@@ -176,13 +186,16 @@ export class TestMachine {
         const idleAddr = this.model.idleAddress;
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
-            if (addr === idleAddr) {
+            if (!this.processor.resumingFromStop && addr === idleAddr) {
                 hit = true;
                 return true;
             }
         });
-        await this.runFor(secs * this.model.cyclesPerSecond);
-        hook.remove();
+        try {
+            await this.runFor(secs * this.model.cyclesPerSecond);
+        } finally {
+            hook.remove();
+        }
         assert(hit, "did not hit appropriate breakpoint in time");
         return this.runFor(10 * 1000);
     }
@@ -210,13 +223,20 @@ export class TestMachine {
         if (!secs) secs = 120;
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
-            if (addr === targetAddr && (bank === undefined || this.isBankPagedAt(bank, targetAddr))) {
+            if (
+                !this.processor.resumingFromStop &&
+                addr === targetAddr &&
+                (bank === undefined || this.isBankPagedAt(bank, targetAddr))
+            ) {
                 hit = true;
                 return true;
             }
         });
-        await this.runFor(secs * this.model.cyclesPerSecond);
-        hook.remove();
+        try {
+            await this.runFor(secs * this.model.cyclesPerSecond);
+        } finally {
+            hook.remove();
+        }
         assert(hit, "did not hit appropriate breakpoint in time");
     }
 
