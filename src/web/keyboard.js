@@ -4,6 +4,17 @@ import { Typist } from "../typist.js";
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 const TapLengthMs = 100;
 const InputMethodKeyCode = 229;
+const KeypadNavigationKeys = new Set([
+    keyCodes.END,
+    keyCodes.HOME,
+    keyCodes.PAGEUP,
+    keyCodes.PAGEDOWN,
+    keyCodes.INSERT,
+    keyCodes.LEFT,
+    keyCodes.UP,
+    keyCodes.RIGHT,
+    keyCodes.DOWN,
+]);
 
 /**
  * @typedef {Object} KeyboardConfig
@@ -78,17 +89,18 @@ export class Keyboard extends EventTarget {
     /**
      * How the emulated machine's key map names the key this event came from. The natural
      * layout is keyed by the character the host produced, so that what you type comes out
-     * right whatever layout the host keyboard is in; every other layout is by position.
+     * right whatever layout the host keyboard is in; every other layout is by position. A
+     * keypad key with Num Lock off is, in every layout, the navigation key it stands in for.
      * @param {KeyboardEvent} evt - The keyboard event
      * @returns {string}
      */
     _machineKey(evt) {
-        if (this.keyLayout !== "natural") return evt.code;
         // A `KEY.` parameter names a key by where it is, so it outranks what the key prints.
         if (isUserRemapped(evt.code)) return evt.code;
         // The Master's keypad is a separate set of keys from the digits above the letters, and
         // the characters cannot tell them apart.
-        if (evt.code?.startsWith("Numpad")) return evt.code;
+        if (evt.code?.startsWith("Numpad")) return KeypadNavigationKeys.has(evt.key) ? evt.key : evt.code;
+        if (this.keyLayout !== "natural") return evt.code;
         return evt.key?.length === 1 ? evt.key : evt.code;
     }
 

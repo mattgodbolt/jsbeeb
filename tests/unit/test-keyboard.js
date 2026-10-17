@@ -254,6 +254,42 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyUp).toHaveBeenCalledTimes(2);
     });
 
+    describe.each(["physical", "natural", "gaming"])("the keypad in the %s layout", (layout) => {
+        beforeEach(() => {
+            keyboard.setKeyLayout(layout);
+            keyboard.setRunning(true);
+        });
+
+        test.each([
+            ["Numpad1", keyCodes.END],
+            ["Numpad7", keyCodes.HOME],
+            ["Numpad9", keyCodes.PAGEUP],
+            ["Numpad3", keyCodes.PAGEDOWN],
+            ["Numpad0", keyCodes.INSERT],
+            ["Numpad4", keyCodes.LEFT],
+            ["Numpad8", keyCodes.UP],
+            ["Numpad6", keyCodes.RIGHT],
+            ["Numpad2", keyCodes.DOWN],
+        ])("gives %s with Num Lock off what the main %s key gives", (code, key) => {
+            keyboard.keyDown(keyEvent(code, key));
+            keyboard.keyUp(keyEvent(code, "1"));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith(key, false);
+            expect(mockSysvia.keyUp).toHaveBeenCalledWith(key);
+        });
+
+        test.each([
+            ["Numpad1", "1"],
+            ["NumpadDecimal", "Delete"],
+            ["NumpadEnter", "Enter"],
+            ["Numpad5", "Clear"],
+        ])("keeps %s as the keypad's own key when it gives %s", (code, key) => {
+            keyboard.keyDown(keyEvent(code, key));
+
+            expect(mockSysvia.keyDown).toHaveBeenCalledWith(code, false);
+        });
+    });
+
     describe("when the input method takes a key", () => {
         const TapLength = 100;
         const deadKey = (extra) => keyEvent(keyCodes.APOSTROPHE, "Dead", { shiftKey: true, ...extra });
