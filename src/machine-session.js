@@ -500,6 +500,27 @@ export class MachineSession {
     }
 
     /**
+     * Call `fn(pc)` before each instruction runs, without ever stopping the machine, until the returned
+     * function is called. Runs take the CPU's slower debug path while any watcher is registered.
+     * @param {function(number): *} fn - its return value is ignored
+     * @returns {function(): void} removes the watcher
+     */
+    onExecute(fn) {
+        const { debugInstruction } = this._machine.processor;
+        const hook = debugInstruction.add((pc) => {
+            fn(pc);
+        });
+        // Resuming from a breakpoint skips every hook for the instruction it stopped at, so the watcher must
+        // run before any breakpoint that could stop there.
+        for (const bp of this._breakpoints.values()) {
+            if (bp.type !== "execute") continue;
+            bp.hook.remove();
+            debugInstruction.add(bp.hook);
+        }
+        return () => hook.remove();
+    }
+
+    /**
      * Remove a breakpoint by id.
      */
     removeBreakpoint(id) {

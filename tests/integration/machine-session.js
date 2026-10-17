@@ -145,6 +145,55 @@ describe("MachineSession running for cycles", () => {
     });
 });
 
+describe("MachineSession watching execution", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    function irqHandler() {
+        const [lo, hi] = session.readMemory(0x204, 2);
+        return lo | (hi << 8);
+    }
+
+    it("reports every instruction run without stopping", async () => {
+        const seen = new Set();
+        const remove = session.onExecute((pc) => seen.add(pc));
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(result.completed).toBe(true);
+        expect(seen.has(irqHandler())).toBe(true);
+    });
+
+    it("stops reporting once removed", async () => {
+        const seen = new Set();
+        session.onExecute((pc) => seen.add(pc))();
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(seen.size).toBe(0);
+    });
+
+    it("reports the instruction a breakpoint added earlier stops at", async () => {
+        const handler = irqHandler();
+        const id = session.addBreakpoint("execute", handler);
+        const seen = new Set();
+        const remove = session.onExecute((pc) => seen.add(pc));
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+        session.removeBreakpoint(id);
+
+        expect(result.completed).toBe(false);
+        expect(seen.has(handler)).toBe(true);
+    });
+});
+
 describe("MachineSession keyboard", () => {
     let session;
     const HoldCycles = 200000; // a tenth of a second, several OS keyboard scans
