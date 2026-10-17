@@ -11,14 +11,11 @@ import {
 import { ExcessLeadMs, PersistentExcessSeconds, validTargetLatencyMs } from "../audio-latency.js";
 
 // Smoothing rejects the producer's per-tick bursts; proportional only, as
-// lead already integrates rate error; 0.05% authority covers clock skew
-// without audibly bending pitch.
+// lead already integrates rate error; bending the rate by at most 0.05%
+// covers clock skew without audibly bending pitch.
 const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
-// At that authority, rate control would take half an hour to play off a second of excess lead, so a
-// persistent one is skipped instead; a fall in the target drains its excess well inside the time, as
-// the producer waits for it.
 
 const ResyncKinds = new Set(["state", "reset"]);
 const isResync = (event) => ResyncKinds.has(event.kind);
@@ -221,6 +218,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         }
     }
 
+    // Rate control, held to MaxAdjustFraction, would take half an hour to play off a second of excess
+    // lead; a fall in the target drains its excess well inside PersistentExcessSeconds, as the producer
+    // waits for it.
     _skipPersistentExcess(dtSeconds) {
         const excess = this.upTo - this.clock > this.targetLeadCycles + this.excessLeadCycles;
         this.excessSeconds = excess ? this.excessSeconds + dtSeconds : 0;
