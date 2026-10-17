@@ -169,20 +169,19 @@ export class Machine {
             return loading;
         }
 
-        // The slots report their own failures; the page's default disc is not named in the URL.
+        // The slots report their own failures; the page's default disc is not named in the URL. None
+        // of these counts as loaded recently: they are the default, or the URL's media again on a reload.
         const { slots } = media;
         if (discImage)
             startImageLoad(`disc ${discImage}`, () =>
-                slots.load(slots.drive(0), describeRef(discImage, "disc"), {
-                    inUrl: discImageInUrl,
-                    recent: discImageInUrl,
-                }),
+                slots.load(slots.drive(0), describeRef(discImage, "disc"), { inUrl: discImageInUrl, recent: false }),
             );
         if (secondDiscImage)
             startImageLoad(`disc ${secondDiscImage}`, () =>
-                slots.load(slots.drive(1), describeRef(secondDiscImage, "disc")),
+                slots.load(slots.drive(1), describeRef(secondDiscImage, "disc"), { recent: false }),
             );
-        if (tape) startImageLoad(`tape ${tape}`, () => slots.load(slots.deck, describeRef(tape, "tape")));
+        if (tape)
+            startImageLoad(`tape ${tape}`, () => slots.load(slots.deck, describeRef(tape, "tape"), { recent: false }));
 
         if (mmcImage && this.model.isAtom) {
             startImageLoad(`MMC image ${mmcImage}`, async () => processor.atommc.SetMMCData(await LoadSD(mmcImage)));

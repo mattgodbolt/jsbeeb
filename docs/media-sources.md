@@ -39,7 +39,8 @@ metadata (the authors' own releases, the flux captures), then the sources withou
 With the search box empty, the window lists what was loaded most recently first, under a heading.
 `RecentMedia` in `media-catalogue.js` keeps the eight newest references in the browser's storage,
 and up to eight files opened this session alongside them for the visit; `MediaSlots` notes every
-load, but not a restored state's media.
+load, but not a restored state's media or what the page starts with (the default disc, or what the
+URL names). A disc that needs another machine is noted before the page reloads as that machine.
 
 ## Schemas and routes
 

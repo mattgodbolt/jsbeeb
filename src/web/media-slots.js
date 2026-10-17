@@ -98,7 +98,7 @@ export class MediaSlots extends EventTarget {
      * @param {object} [options]
      * @param {Function} [options.fetch] async, returning `{ media, ref }`; a failure of it is not kept for a retry
      * @param {boolean} [options.inUrl] whether the URL names what was loaded; a file opened this session never is
-     * @param {boolean} [options.recent] whether it counts as loaded recently; the page's default disc does not
+     * @param {boolean} [options.recent] whether it counts as loaded recently; what a page starts with does not
      * @returns {Promise<"loaded"|"overtaken"|"failed"|"nothing">}
      */
     async load(slot, descriptor, { fetch, inUrl, recent = true } = {}) {

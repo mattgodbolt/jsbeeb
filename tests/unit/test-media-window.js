@@ -1134,6 +1134,7 @@ describe("MediaWindow", () => {
             expect(sessionStorage.getItem("jsbeeb-pending-switch")).toBe("Switched to a BBC Master 128 for Paradroid");
             expect(confirm).not.toHaveBeenCalled();
             expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(slots().recent.rank(paradroid)).toBe(0);
         });
 
         it("asks when the disc is only to be loaded: yes switches with no boot, no loads it here", async () => {

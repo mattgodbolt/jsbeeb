@@ -775,8 +775,13 @@ export class MediaWindow {
         boot = boot && driveIndex === 0;
         const slot = this.slots.drive(driveIndex);
         const bootsOnLoad = () => boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
-        if (!this.machineSwitch.satisfies(d) && (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() })))
+        if (
+            !this.machineSwitch.satisfies(d) &&
+            (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() }))
+        ) {
+            this.slots.recent.note(d.ref, "disc");
             return;
+        }
         if ((await this.slots.load(slot, d)) !== "loaded") return;
         // The tick is read now, not before the wait, in case it was changed meanwhile.
         if (bootsOnLoad()) {
