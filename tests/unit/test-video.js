@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
     FakeAtomVideo,
+    FakeVideo,
     Video,
     HDISPENABLE,
     VDISPENABLE,
@@ -1572,28 +1573,106 @@ describe("Video", () => {
     });
 });
 
+const runAField = (video, target, field, step) => {
+    const edges = [];
+    let polled = 0;
+    target.setVBlankInt.mockImplementation((level) => edges.push({ level, at: polled }));
+    for (; polled < field; polled += step) video.polltime(step);
+    return edges;
+};
+
+describe("FakeVideo", () => {
+    const Field = 40000;
+    const VSyncStart = Field - 2 * 128;
+    const Step = 7;
+
+    it("pulses the System VIA's vsync once a field, for two lines", () => {
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        const [start, end] = runAField(video, sysvia, Field, Step);
+        expect(start.level).toBe(true);
+        expect(start.at).toBeGreaterThanOrEqual(VSyncStart - Step);
+        expect(start.at).toBeLessThanOrEqual(VSyncStart);
+        expect(end.level).toBe(false);
+        expect(end.at).toBeGreaterThanOrEqual(Field - Step);
+        expect(end.at).toBeLessThanOrEqual(Field);
+    });
+
+    it("keeps the same period field after field", () => {
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        runAField(video, sysvia, Field, Step);
+        const [start, end] = runAField(video, sysvia, Field, Step);
+        expect([start.level, end.level]).toEqual([true, false]);
+        expect(sysvia.setVBlankInt).toHaveBeenCalledTimes(4);
+    });
+
+    it.each([
+        ["mid-field", Field / 2],
+        ["mid-pulse", VSyncStart + Step * 3],
+    ])("stays in step with the machine it was snapshotted from, %s", (_, runFirst) => {
+        const original = { video: new FakeVideo(), sysvia: { setVBlankInt: vi.fn() } };
+        original.video.reset({}, original.sysvia);
+        runAField(original.video, original.sysvia, runFirst, Step);
+        const restored = { video: new FakeVideo(), sysvia: { setVBlankInt: vi.fn() } };
+        restored.video.reset({}, restored.sysvia);
+        restored.video.restoreState(original.video.snapshotState());
+        const expected = runAField(original.video, original.sysvia, 2 * Field, Step);
+        expect(expected).toHaveLength(4);
+        expect(runAField(restored.video, restored.sysvia, 2 * Field, Step)).toEqual(expected);
+    });
+
+    it("keeps its field through a reset, so a reset mid-pulse still ends that pulse", () => {
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        const before = runAField(video, sysvia, VSyncStart + Step * 3, Step);
+        video.reset({}, sysvia);
+        const after = runAField(video, sysvia, Field, Step);
+        expect([...before, ...after].map(({ level }) => level)).toEqual([true, false, true]);
+        expect(after[0].at).toBeLessThanOrEqual(Field - VSyncStart);
+    });
+
+    it("catches up every field it was given at once, leaving no backlog", () => {
+        const fields = 3;
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        video.polltime(fields * Field + Step);
+        expect(sysvia.setVBlankInt.mock.calls.map(([level]) => level)).toEqual(
+            Array(fields).fill([true, false]).flat(),
+        );
+        const [start, end] = runAField(video, sysvia, Field, Step);
+        expect(start.at).toBeGreaterThanOrEqual(VSyncStart - 2 * Step);
+        expect(end.at).toBeGreaterThanOrEqual(Field - 2 * Step);
+    });
+
+    it("carries on pulsing after restoring a snapshot that predates its field position", () => {
+        const sysvia = { setVBlankInt: vi.fn() };
+        const video = new FakeVideo();
+        video.reset({}, sysvia);
+        video.restoreState({});
+        const [start, end] = runAField(video, sysvia, Field, Step);
+        expect([start.level, end.level]).toEqual([true, false]);
+    });
+});
+
 describe("FakeAtomVideo", () => {
     const Field = 16667;
     const FlybackStart = Field - (Field * 32) / 262;
     const Step = 7;
 
-    const runAField = (video, ppia) => {
-        const edges = [];
-        let polled = 0;
-        ppia.setVBlankInt.mockImplementation((level) => edges.push({ level, at: polled }));
-        for (; polled < Field; polled += Step) video.polltime(Step);
-        return edges;
-    };
-
     it("pulses the PPIA's field sync once a field, low for the flyback lines", () => {
         const ppia = { setVBlankInt: vi.fn() };
         const video = new FakeAtomVideo();
         video.reset({ atomppia: ppia });
-        const [start, end] = runAField(video, ppia);
-        expect(start.level).toBe(1);
+        const [start, end] = runAField(video, ppia, Field, Step);
+        expect(start.level).toBe(true);
         expect(start.at).toBeGreaterThanOrEqual(FlybackStart - Step);
         expect(start.at).toBeLessThanOrEqual(FlybackStart);
-        expect(end.level).toBe(0);
+        expect(end.level).toBe(false);
         expect(end.at).toBeGreaterThanOrEqual(Field - Step);
         expect(end.at).toBeLessThanOrEqual(Field);
     });
@@ -1602,9 +1681,9 @@ describe("FakeAtomVideo", () => {
         const ppia = { setVBlankInt: vi.fn() };
         const video = new FakeAtomVideo();
         video.reset({ atomppia: ppia });
-        runAField(video, ppia);
-        const [start, end] = runAField(video, ppia);
-        expect([start.level, end.level]).toEqual([1, 0]);
+        runAField(video, ppia, Field, Step);
+        const [start, end] = runAField(video, ppia, Field, Step);
+        expect([start.level, end.level]).toEqual([true, false]);
         expect(ppia.setVBlankInt).toHaveBeenCalledTimes(4);
     });
 });

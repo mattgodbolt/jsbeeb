@@ -107,11 +107,15 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, gue
     const guests = [];
     let step = 0;
     let jumps = 0;
+    const hashedAt = [];
+    let corruptedAt;
+    let guestResetFrom;
     const queue = (guest, message) => guest.inbox.push({ due: step + random(MaxDelaySteps), message });
     const resync = (guest) => queue(guest, { snapshot: wireSnapshot(lockstep) });
     const lockstep = hosting(
         host,
         (commit) => {
+            if (commit.hash !== undefined) hashedAt.push(commit.upTo);
             for (const guest of guests) queue(guest, { commit: JSON.stringify(commit) });
         },
         () => {
@@ -145,12 +149,16 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, gue
             guests.push(guest);
         }
         if (step === corruptAt) {
+            corruptedAt = cycleCount(guests[0].machine.processor);
             for (let offset = 0; offset < ScribbleBytes; ++offset) {
                 guests[0].machine.processor.writemem(ScribbleAt + offset, Scribble);
             }
         }
         if (step === resetAt) host.processor.reset(true);
-        if (step === guestResetAt) guests[0].machine.processor.reset(true);
+        if (step === guestResetAt) {
+            guestResetFrom = cycleCount(guests[0].machine.processor);
+            guests[0].machine.processor.reset(true);
+        }
         const input = typed[step];
         if (input) lockstep.input(input);
         lockstep.execute(step % EmptySliceEvery === 0 ? 0 : random(MaxStepCycles));
@@ -163,7 +171,15 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, gue
         deliver(guest, Infinity);
         while (guest.lockstep.behind() > 0) guest.lockstep.execute(MaxStepCycles);
     }
-    return { host, guests, jumps, desyncs: guests.flatMap((guest) => guest.desyncs) };
+    return {
+        host,
+        guests,
+        jumps,
+        desyncs: guests.flatMap((guest) => guest.desyncs),
+        hashedAt,
+        corruptedAt,
+        guestResetFrom,
+    };
 }
 
 function expectIdentical(host, guests) {
@@ -215,7 +231,7 @@ describe("lockstep sessions", () => {
 
     it("brings back a guest that drifted, every guest after the host is reset, and a guest that reset itself", async () => {
         const afterReset = 300;
-        const { host, guests, jumps, desyncs } = await runSession({
+        const { host, guests, jumps, desyncs, hashedAt, corruptedAt, guestResetFrom } = await runSession({
             model: "B-DFS1.2",
             inputs: [...Array(afterReset).fill(null), ...typing("PRINT 67-25\n")],
             joinAt: [0, 20],
@@ -226,7 +242,11 @@ describe("lockstep sessions", () => {
         });
         expect(jumps).toBe(1);
         // Each is put right by the one resync it asks for, and the host's reset needs none.
-        expect(desyncs).toEqual(["state differs at cycle 2617151", "its machine moved from 1455645 by itself"]);
+        const firstHashAfterCorruption = hashedAt.find((upTo) => upTo > corruptedAt);
+        expect(desyncs).toEqual([
+            `state differs at cycle ${firstHashAfterCorruption}`,
+            `its machine moved from ${guestResetFrom} by itself`,
+        ]);
         expect(mode7Text(host)).toContain("42");
         expectIdentical(host, guests);
     });
@@ -332,10 +352,18 @@ describe("lockstep sessions", () => {
             const { host, lockstep, commits } = await pair();
             const seconds = 3;
             const slicesPerSecond = 10;
-            for (let i = 0; i < seconds * slicesPerSecond; ++i) {
-                lockstep.execute(host.model.cyclesPerSecond / slicesPerSecond);
+            const second = host.model.cyclesPerSecond;
+            const slice = second / slicesPerSecond;
+            const start = cycleCount(host.processor);
+            // One slice spare: each hash is due a second after the commit that took the last one ended.
+            for (let i = 0; i < seconds * slicesPerSecond + 1; ++i) lockstep.execute(slice);
+            const hashedAt = commits.filter((commit) => commit.hash !== undefined).map((commit) => commit.upTo);
+            expect(hashedAt).toHaveLength(seconds);
+            const gaps = hashedAt.map((upTo, i) => upTo - (i === 0 ? start : hashedAt[i - 1]));
+            for (const gap of gaps) {
+                expect(gap).toBeGreaterThanOrEqual(second);
+                expect(gap).toBeLessThanOrEqual(second + slice + InstructionSlackCycles);
             }
-            expect(commits.filter((commit) => commit.hash !== undefined)).toHaveLength(seconds);
         });
 
         it("keeps a commit that ran no cycles, and its inputs", async () => {
