@@ -120,6 +120,10 @@ export class MachineSession {
         // Breakpoint management, with persistent hooks that survive across run calls
         this._breakpoints = new Map(); // id → { hook, type, address, bank, hit, value }
         this._nextBreakpointId = 1;
+
+        this._executeWatchers = new Set();
+        this._executeHook = null;
+        this._dispatchingExecute = false;
     }
 
     /** Load ROMs and hardware; call once before anything else */
@@ -500,24 +504,48 @@ export class MachineSession {
     }
 
     /**
-     * Call `fn(pc)` before each instruction runs, without ever stopping the machine, until the returned
-     * function is called. Runs take the CPU's slower debug path while any watcher is registered.
+     * Call `fn(pc)` just before each instruction on the host CPU runs, so an instruction the machine stops at is
+     * reported before it executes, until the returned function is called. Watching never stops the machine.
      * @param {function(number): *} fn - its return value is ignored
      * @returns {function(): void} removes the watcher
      */
     onExecute(fn) {
+        const watcher = (pc) => fn(pc);
+        this._executeWatchers.add(watcher);
+        if (!this._executeHook) this._installExecuteHook();
+        const { breakpointResume, pc } = this._machine.processor;
+        // Resuming from a debug stop runs the stopped-at instruction without calling any hook.
+        if (breakpointResume) watcher(pc);
+        return () => {
+            this._executeWatchers.delete(watcher);
+            // Removing a CPU hook from inside the hook loop would skip the hook after it.
+            if (this._executeWatchers.size === 0 && !this._dispatchingExecute) this._uninstallExecuteHook();
+        };
+    }
+
+    _installExecuteHook() {
         const { debugInstruction } = this._machine.processor;
-        const hook = debugInstruction.add((pc) => {
-            fn(pc);
+        this._executeHook = debugInstruction.add((pc) => {
+            this._dispatchingExecute = true;
+            try {
+                for (const watcher of this._executeWatchers) watcher(pc);
+            } finally {
+                this._dispatchingExecute = false;
+            }
+            return false;
         });
-        // Resuming from a breakpoint skips every hook for the instruction it stopped at, so the watcher must
-        // run before any breakpoint that could stop there.
+        // A breakpoint that stops ahead of the watchers hides its instruction from them for good.
         for (const bp of this._breakpoints.values()) {
             if (bp.type !== "execute") continue;
             bp.hook.remove();
             debugInstruction.add(bp.hook);
         }
-        return () => hook.remove();
+    }
+
+    _uninstallExecuteHook() {
+        if (!this._executeHook) return;
+        this._executeHook.remove();
+        this._executeHook = null;
     }
 
     /**

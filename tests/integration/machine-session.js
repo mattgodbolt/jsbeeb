@@ -146,6 +146,9 @@ describe("MachineSession running for cycles", () => {
 });
 
 describe("MachineSession watching execution", () => {
+    const ProgramAddress = 0x2000;
+    const Program = [0xa9, 0x01, 0xa2, 0x02, 0xa0, 0x03, 0x60]; // LDA #1, LDX #2, LDY #3, RTS
+    const ProgramPcs = [0x2000, 0x2002, 0x2004, 0x2006];
     let session;
 
     beforeAll(async () => {
@@ -154,20 +157,33 @@ describe("MachineSession watching execution", () => {
 
     afterAll(() => session.destroy());
 
+    afterEach(() => {
+        session.clearBreakpoints();
+        session.resetBreakpointHits();
+    });
+
     function irqHandler() {
         const [lo, hi] = session.readMemory(0x204, 2);
         return lo | (hi << 8);
     }
 
-    it("reports every instruction run without stopping", async () => {
-        const seen = new Set();
-        const remove = session.onExecute((pc) => seen.add(pc));
+    async function stopAtProgramStart() {
+        session.writeMemory(ProgramAddress, Program);
+        const id = session.addBreakpoint("execute", ProgramAddress);
+        await session.type(`CALL &${ProgramAddress.toString(16)}`);
+        if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.removeBreakpoint(id);
+        session.resetBreakpointHits();
+    }
+
+    it("keeps running whatever the watcher returns", async () => {
+        const remove = session.onExecute(() => true);
 
         const result = await session.runFor(CyclesPerInterlacedFrame);
         remove();
 
         expect(result.completed).toBe(true);
-        expect(seen.has(irqHandler())).toBe(true);
     });
 
     it("stops reporting once removed", async () => {
@@ -179,18 +195,50 @@ describe("MachineSession watching execution", () => {
         expect(seen.size).toBe(0);
     });
 
-    it("reports the instruction a breakpoint added earlier stops at", async () => {
+    it("reports the address runUntilAddress stopped at to a watcher added after", async () => {
+        const handler = irqHandler();
+        await session.runUntilAddress(handler);
+        const pcs = [];
+        const remove = session.onExecute((pc) => pcs.push(pc));
+
+        await session.runFor(10);
+        remove();
+
+        expect(pcs[0]).toBe(handler);
+    });
+
+    it("reports each instruction once across a breakpoint stop and resume", async () => {
+        await stopAtProgramStart();
+        const pcs = [];
+        const remove = session.onExecute((pc) => {
+            if (pc >= ProgramAddress && pc < ProgramAddress + Program.length) pcs.push(pc);
+        });
+        session.addBreakpoint("execute", ProgramPcs[2]);
+
+        const stopped = await session.runFor(CyclesPerInterlacedFrame);
+        session.clearBreakpoints();
+        await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(stopped.completed).toBe(false);
+        expect(pcs).toEqual(ProgramPcs);
+    });
+
+    it("lets a breakpoint fire at the address where a watcher removes itself", async () => {
         const handler = irqHandler();
         const id = session.addBreakpoint("execute", handler);
-        const seen = new Set();
-        const remove = session.onExecute((pc) => seen.add(pc));
+        let removedAt;
+        const remove = session.onExecute((pc) => {
+            if (pc !== handler) return;
+            removedAt = session.elapsedCycles;
+            remove();
+        });
 
         const result = await session.runFor(CyclesPerInterlacedFrame);
-        remove();
-        session.removeBreakpoint(id);
 
         expect(result.completed).toBe(false);
-        expect(seen.has(handler)).toBe(true);
+        expect(session.hitBreakpoint().id).toBe(id);
+        expect(session.elapsedCycles).toBe(removedAt);
     });
 });
 
