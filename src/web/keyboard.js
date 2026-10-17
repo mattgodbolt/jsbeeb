@@ -97,8 +97,7 @@ export class Keyboard extends EventTarget {
     _machineKey(evt) {
         // A `KEY.` parameter names a key by where it is, so it outranks what the key prints.
         if (isUserRemapped(evt.code)) return evt.code;
-        // The Master's keypad is a separate set of keys from the digits above the letters, and
-        // the characters cannot tell them apart.
+        // Even in the natural layout, a keypad key is the Master's keypad, not the character it types.
         if (evt.code?.startsWith("Numpad")) return KeypadNavigationKeys.has(evt.key) ? evt.key : evt.code;
         if (this.keyLayout !== "natural") return evt.code;
         return evt.key?.length === 1 ? evt.key : evt.code;
