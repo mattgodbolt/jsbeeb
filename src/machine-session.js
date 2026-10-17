@@ -41,11 +41,21 @@ const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 // Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
 
+const BootDrive = 0;
+// Drive 0 starts 2 frames after a soft autoboot on the DFS models, and 15 (B) to 36 (Master) after a power-on one;
+// four times the slowest leaves room for slower boot ROMs.
+export const AutobootMaxFrames = 150;
+// The MOS offers each sideways ROM its service calls at &8003 with the reason in A; reason 3 is auto-boot,
+// with Y zero when the MOS wants the filing system to boot.
+const ServiceEntry = 0x8003;
+const ServiceAutoboot = 3;
+
 export class MachineSession {
     /**
      * @param {string} modelName - e.g. "B-DFS1.2", "Master"
      * @param {Object} [opts]
-     * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to load on boot
+     * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to put in drive 0; it is loaded,
+     *   not booted, so follow with autoboot() to SHIFT+BREAK it
      * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      * @param {number} [opts.cpuMultiplier] - run the CPU this many times faster than the peripherals
      * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
@@ -228,6 +238,93 @@ export class MachineSession {
     reset(hard = true) {
         this._machine.processor.reset(hard);
         this._pendingOutput = [];
+    }
+
+    /**
+     * SHIFT+BREAK: reset with SHIFT held, keeping it down until the MOS has
+     * asked the filing system to boot and drive 0's motor has started, then
+     * let it go. The boot is under way but not finished; run the machine on
+     * to see it.
+     *
+     * Throws if the drive is empty, a key or typing is pending, or on the
+     * Atom, all before the reset. After it, throws if the MOS did not ask for
+     * a boot, as on a machine configured to boot on a plain BREAK, where SHIFT
+     * stops it; or if drive 0 never starts, as when Econet takes the boot.
+     * Either way SHIFT is up and the machine is left where it stopped. It
+     * cannot tell whether the filing system can read the disc: a DFS disc on
+     * a model whose boot goes to ADFS spins the drive and does not boot.
+     *
+     * `completed` is false if a breakpoint stopped the machine first, or the
+     * machine stopped painting frames, with SHIFT released all the same. Running on then boots
+     * if `bootRequested` is true. False only means the MOS had not asked yet:
+     * whether it still boots depends on when that MOS reads SHIFT, and on the
+     * B and the Master, stopped as late as the banner, it does not.
+     *
+     * @param {Object} [opts]
+     * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
+     * @returns {Promise<{framesHeld: number, bootRequested: boolean, completed: boolean}>}
+     */
+    async autoboot({ hard = true } = {}) {
+        this._requireAutoboot();
+        const cpu = this._machine.processor;
+        const drive = cpu.fdc.drives[BootDrive];
+        if (!drive.disc) throw new Error(`autoboot: there is no disc in drive ${BootDrive}`);
+
+        let bootRequested;
+        let driveStarted = false;
+        let framesRun;
+        const onStart = () => {
+            if (!bootRequested) return;
+            driveStarted = true;
+            cpu.stop();
+        };
+        let serviceHook;
+        try {
+            serviceHook = cpu.debugInstruction.add((pc) => {
+                if (pc !== ServiceEntry || cpu.a !== ServiceAutoboot || bootRequested !== undefined) return;
+                bootRequested = cpu.y === 0;
+                if (!bootRequested) cpu.stop();
+            });
+            drive.addEventListener("startSpinning", onStart);
+            this._keyboard.keyDownRaw(cpu.model.keys.SHIFT);
+            this.reset(hard);
+            ({ framesRun } = await this.runFrames(AutobootMaxFrames));
+        } finally {
+            this._keyboard.keyUpRaw(cpu.model.keys.SHIFT);
+            drive.removeEventListener("startSpinning", onStart);
+            if (serviceHook) serviceHook.remove();
+        }
+        if (bootRequested === false) {
+            throw new Error(
+                "autoboot: the MOS did not ask the filing system to boot; " +
+                    "a machine configured to boot on BREAK (*CONFIGURE BOOT, or a B's boot link) takes SHIFT to mean " +
+                    "do not boot",
+            );
+        }
+        if (!driveStarted && framesRun >= AutobootMaxFrames) {
+            const why = bootRequested ? `drive ${BootDrive} did not start` : "the MOS did not ask for a boot";
+            throw new Error(`autoboot: ${why} within ${AutobootMaxFrames} frames of SHIFT+BREAK`);
+        }
+        return { framesHeld: framesRun, bootRequested: !!bootRequested, completed: driveStarted };
+    }
+
+    _requireAutoboot() {
+        if (this._isAtom) throw new Error("autoboot: the Atom has no SHIFT+BREAK disc boot");
+        this._requireKeyboard();
+        if (this.heldKeys().length) throw new Error("autoboot: release the keys held first");
+    }
+
+    /**
+     * Put a disc in drive 0 and autoboot() it.
+     * @param {string} ref - any reference loadDiscImage takes
+     * @param {Object} [opts]
+     * @param {boolean} [opts.hard=true] - power-on reset rather than BREAK
+     * @returns {Promise<{name: string, ignored: string[], framesHeld: number, bootRequested: boolean, completed: boolean}>}
+     */
+    async bootDisc(ref, { hard = true } = {}) {
+        this._requireAutoboot();
+        const { name, ignored } = await this.loadDiscImage(ref, BootDrive);
+        return { name, ignored, ...(await this.autoboot({ hard })) };
     }
 
     /**
