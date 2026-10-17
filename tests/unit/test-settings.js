@@ -133,7 +133,7 @@ describe("Settings", () => {
             ]);
         });
 
-        it("lets only the sliders' settings settle", () => {
+        it("lets only the settings sliders change live settle", () => {
             const settings = make();
             const settled = [];
             for (const [name, value] of Object.entries({
