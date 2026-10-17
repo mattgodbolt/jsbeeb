@@ -1524,7 +1524,7 @@ export class Cpu6502 extends Base6502 {
         if (this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite) {
             return this.executeInternal();
         } else {
-            this.hooksCalledAtStop = null;
+            if (this.currentCycles < this.targetCycles) this.hooksCalledAtStop = null;
             return this.executeInternalFast();
         }
     }
@@ -1533,7 +1533,6 @@ export class Cpu6502 extends Base6502 {
         // Each instruction hook sees the instruction a debug stop halted before once, at the stop or on resume,
         // and none stops the machine at it again.
         let calledAtStop = this.hooksCalledAtStop;
-        this.hooksCalledAtStop = null;
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
             this.oldPcArray[this.oldPcIndex] = this.pc;
@@ -1547,7 +1546,7 @@ export class Cpu6502 extends Base6502 {
                     return false;
                 }
             }
-            calledAtStop = null;
+            if (calledAtStop) calledAtStop = this.hooksCalledAtStop = null;
             this.incpc();
             this.runner.run(opcode);
             this.oldAArray[this.oldPcIndex] = this.a;
