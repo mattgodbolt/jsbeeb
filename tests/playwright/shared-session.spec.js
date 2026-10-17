@@ -3,6 +3,11 @@ import { expect, test, Beeb } from "./fixtures.js";
 const JoinTimeoutMs = 45000;
 const SessionTestTimeoutMs = 120000;
 
+async function openSessionFromMore(beeb) {
+    await beeb.page.click("#navbarMore");
+    await beeb.page.click("#session-open");
+}
+
 async function typeLine(beeb, text) {
     for (const key of [...text, "Enter"]) await beeb.pressKey(key);
 }
@@ -33,13 +38,16 @@ test("a guest joins a hosted session, and what either types reaches both machine
     }
 });
 
-test("the Session dialog hosts this machine, and a guest joins by pasting the link", async ({ browser, beeb }) => {
+test("Shared session in the More menu hosts this machine, and a guest joins by pasting the link", async ({
+    browser,
+    beeb,
+}) => {
     test.setTimeout(SessionTestTimeoutMs);
     await beeb.open();
     await beeb.expectScreenText("BASIC");
     await beeb.disableAutoRepeat();
     await typeLine(beeb, "A%=4321");
-    await beeb.page.click("#session-open");
+    await openSessionFromMore(beeb);
     await beeb.page.fill("#session-name", "matt");
     await beeb.page.click(".session-host");
     const link = beeb.page.locator("#session-pane .session-link");
@@ -50,14 +58,14 @@ test("the Session dialog hosts this machine, and a guest joins by pasting the li
     try {
         await guest.open();
         await guest.expectScreenText("BASIC");
-        await guest.page.click("#session-open");
+        await openSessionFromMore(guest);
         await guest.page.fill("#session-name", "tom");
         await guest.page.fill(".session-room", await link.textContent());
         await guest.page.click(".session-join");
         await expect(guest.page.locator("#session-pane .session-you")).toHaveText("You are tom", {
             timeout: JoinTimeoutMs,
         });
-        await guest.page.click("#session-open");
+        await openSessionFromMore(guest);
         await expect(guest.page.locator("#session-pane")).toBeVisible({ timeout: JoinTimeoutMs });
         await expect(guest.page.locator("#session-pane .session-control")).toHaveText("In control: matt", {
             timeout: JoinTimeoutMs,

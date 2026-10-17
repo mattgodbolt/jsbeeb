@@ -194,10 +194,10 @@ directly, a hosted TURN service is the next step, and one of the relays above is
 
 The smallest session worth having, on the machines in the scope above, built in `src/lockstep.js` (the
 protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`. `?server=<room>` hosts and
-`?client=<room>` joins. The Session item in the top bar does either without editing the URL: Start hosting
+`?client=<room>` joins. Shared session in the More menu does either without editing the URL: Start hosting
 hosts the machine as it is, in a room with a generated name and without touching the URL, so a reload ends the
-session; Join takes a room's name or the link and goes to its `?client=` URL. While a session is going, the item
-opens the session pane instead. To try it: `npm start`, then host in one window and join from another, side by
+session; Join takes a room's name or the link and goes to its `?client=` URL. While a session is going, it opens
+the session pane instead. To try it: `npm start`, then host in one window and join from another, side by
 side rather than as tabs. The first target is
 [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth): a B, keyboard only, turn-based and hot-seat
 for two to six, so lag barely matters and a shared keyboard is how it is meant to be played.
@@ -237,7 +237,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   owns the function's shape and ignores its code; `deploy-jsbeeb` may update the code, and the deploy job does
   so before the S3 sync, as it already uploads assets before the HTML that names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
-- **Names:** `?name=`, or the name in the Session dialog, says what to call you; without it you get a random one.
+- **Names:** `?name=`, or the name in the Shared session dialog, says what to call you; without it you get a random one.
   A guest says its name as it connects and the host gives its own in the welcome.
 - **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the host
   and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than 100 ms
@@ -280,7 +280,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A host that hosted with `?server=` keeps it in its URL when it reloads; the room is deleted as the page goes,
   but if that is lost the reload is refused until the room expires, and a new name is the way out.
 - A page takes part in one session. There is no way to leave or end one but closing the page, and once one has
-  ended (a guest's host went, say), the Session item still opens its pane rather than hosting again.
+  ended (a guest's host went, say), Shared session in the More menu still opens its pane rather than hosting
+  again.
 
 ### What is left for v0
 
