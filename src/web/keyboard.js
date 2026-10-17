@@ -2,6 +2,8 @@ import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
+const TapLengthMs = 100;
+const InputMethodKeyCode = 229;
 
 /**
  * @typedef {Object} KeyboardConfig
@@ -244,9 +246,21 @@ export class Keyboard extends EventTarget {
             return null;
         }
 
+        // The input method owns these presses, and their key ups often never arrive.
+        if (evt.key === "Process" || evt.keyCode === InputMethodKeyCode) return null;
         const machineKey = this._machineKey(evt);
+        if (evt.key === "Dead") {
+            this._tap(machineKey, evt.shiftKey);
+            return null;
+        }
         this.input.keyDown(machineKey, evt.shiftKey);
         return () => this.input.keyUp(machineKey);
+    }
+
+    _tap(machineKey, shiftKey) {
+        const input = this.input;
+        input.keyDown(machineKey, shiftKey);
+        setTimeout(() => input.keyUp(machineKey), TapLengthMs);
     }
 
     /**
@@ -270,14 +284,9 @@ export class Keyboard extends EventTarget {
      * Special handling for Mac's Caps Lock key behavior
      */
     handleMacCapsLock() {
-        const CAPS_LOCK_DELAY = 100;
-
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-        this.input.keyDown(keyCodes.CAPSLOCK);
-
-        // Simulate a key release after a short delay
-        setTimeout(() => this.input.keyUp(keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
+        this._tap(keyCodes.CAPSLOCK, false);
 
         if (this.saidCapsLockIsTapped) return;
         this.saidCapsLockIsTapped = true;

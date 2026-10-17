@@ -1,4 +1,4 @@
-import { expect, describe, test, beforeEach, vi } from "vitest";
+import { expect, describe, test, beforeEach, afterEach, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
@@ -252,6 +252,54 @@ describe("Keyboard", () => {
 
         expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
         expect(mockSysvia.keyUp).toHaveBeenCalledTimes(2);
+    });
+
+    describe("when the input method takes a key", () => {
+        const TapLength = 100;
+        const deadKey = (extra) => keyEvent(keyCodes.APOSTROPHE, "Dead", { shiftKey: true, ...extra });
+
+        beforeEach(() => {
+            vi.useFakeTimers();
+            keyboard.setRunning(true);
+        });
+        afterEach(() => vi.useRealTimers());
+
+        test.each([
+            ["never arrives", null],
+            ["names a different key", "\u00a8"],
+            ["arrives as normal", "Dead"],
+        ])("taps a dead key whose key up %s", (_, keyUpKey) => {
+            keyboard.keyDown(deadKey());
+            if (keyUpKey) keyboard.keyUp(keyEvent(keyCodes.APOSTROPHE, keyUpKey));
+            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(TapLength);
+
+            expect(mockSysvia.keyDown.mock.calls).toEqual([[keyCodes.APOSTROPHE, true]]);
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE]]);
+        });
+
+        test("releases a tapped key on the machine it was pressed on", () => {
+            keyboard.keyDown(deadKey());
+            const input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
+            keyboard.setInput(input);
+
+            vi.advanceTimersByTime(TapLength);
+
+            expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.APOSTROPHE);
+            expect(input.keyUp).not.toHaveBeenCalled();
+        });
+
+        test.each([
+            ["Process", { key: "Process", keyCode: 229 }],
+            ["keyCode 229", { key: "Enter", keyCode: 229 }],
+        ])("ignores a key the input method has composed into, by %s", (_, fields) => {
+            keyboard.keyDown(keyEvent(keyCodes.ENTER, fields.key, { keyCode: fields.keyCode }));
+            keyboard.keyUp(keyEvent(keyCodes.ENTER, "Enter"));
+
+            expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+        });
     });
 
     test("keyCode is the physical position the event came from", () => {
@@ -604,7 +652,7 @@ describe("Keyboard", () => {
         keyboard.handleMacCapsLock();
         keyboard.handleMacCapsLock();
 
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.CAPSLOCK);
+        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.CAPSLOCK, false);
         expect(notices).toHaveLength(1);
         expect(notices[0].message).toContain("caps lock");
         expect(notices[0].quietKey).toBe("warnedAboutRubbishMacs");
