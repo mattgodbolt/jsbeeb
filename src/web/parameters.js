@@ -16,6 +16,8 @@ const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" :
 const AfterglowDefaults = Object.fromEntries(persistenceSettings().map(({ setting, default: ms }) => [setting, ms]));
 const clampAfterglow = (ms) => Math.min(MaxPersistenceMs, Math.max(0, ms));
 
+export const DisplaySection = "display";
+
 const Peripherals = { label: "Additional peripherals", hint: "(some combinations may cause compatibility issues)" };
 
 /**
@@ -23,10 +25,10 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
  * as in the URL) or `slid` (changed live as a slider moves, so a burst of changes makes one history entry).
  *
- * A parameter with a `default` is a setting, which Settings takes from the URL, then from storage if it is stored,
- * then the default. A value is used if it suits its type (a string that is not empty, a finite number) and `valid`
- * allows it; `fromUrl` adjusts one from the URL, and `fit` brings any value into range. A setting cleared is back at
- * its default.
+ * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
+ * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
+ * the value is then used if it suits its type (a string that is not empty, a finite number) and `valid` allows it;
+ * `fit` brings whichever value is used into range. A setting cleared is back at its default.
  *
  * A setting the Settings dialog shows has its `field` there; the dialog lists them in the order they are declared
  * here. A field in a `section` is set off with the others in it, and one in a `group` sits in a column beside the
@@ -44,7 +46,7 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
  */
 export const Parameters = {
-    // The Settings dialog's, top to bottom
+    // Shown in the Settings dialog, top to bottom
     model: {
         type: ParamTypes.STRING,
         field: {
@@ -82,7 +84,7 @@ export const Parameters = {
         default: "rgb",
         field: {
             type: "menu",
-            section: "display",
+            section: DisplaySection,
             label: "Display mode",
             live: true,
             describe: (mode) => getFilterForMode(mode).getDisplayConfig().name,
@@ -203,7 +205,7 @@ export const Parameters = {
         },
     },
 
-    // Edited by the dialog's afterglow slider, whichever the display in use has
+    // Each display's afterglow
     palPersistenceMs: {
         type: ParamTypes.FLOAT,
         stored: true,

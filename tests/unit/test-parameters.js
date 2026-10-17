@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Parameters, tubeCpuSpeedLabel, UrlParamTypes, urlParamTypes } from "../../src/web/parameters.js";
+import {
+    DisplaySection,
+    Parameters,
+    tubeCpuSpeedLabel,
+    UrlParamTypes,
+    urlParamTypes,
+} from "../../src/web/parameters.js";
 import { configForm } from "../../src/web/config-form.js";
 import { Settings } from "../../src/web/settings.js";
 import { Config } from "../../src/web/config.js";
@@ -67,9 +73,11 @@ describe("Parameters", () => {
                 type: ParamTypes.STRING,
                 stored: true,
                 default: "amber",
+                fromUrl: (tint) => tint.toLowerCase(),
+                valid: (tint) => ["amber", "green"].includes(tint),
                 field: {
                     type: "menu",
-                    section: "display",
+                    section: DisplaySection,
                     label: "Screen tint",
                     options: [
                         { value: "amber", text: "Amber" },
@@ -77,6 +85,8 @@ describe("Parameters", () => {
                     ],
                 },
             },
+            scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
+            tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
         };
         const urlStateFor = (search) =>
             new UrlState(
@@ -91,10 +101,21 @@ describe("Parameters", () => {
             expect(settingsFor("?screenTint=green").screenTint).toBe("green");
         });
 
+        it("is adjusted from the URL before it is checked", () => {
+            expect(settingsFor("?screenTint=Green").screenTint).toBe("green");
+            expect(settingsFor("?screenTint=Blue").screenTint).toBe("amber");
+        });
+
         it("is stored and read back", () => {
             settingsFor("").set({ screenTint: "green" });
             expect(window.localStorage.screenTint).toBe("green");
             expect(settingsFor("").screenTint).toBe("green");
+        });
+
+        it("reads a stored checkbox and number back as what was stored, not the default", () => {
+            settingsFor("").set({ scanlines: false, tintLevel: 5 });
+            expect(window.localStorage.scanlines).toBe("false");
+            expect(settingsFor("")).toMatchObject({ scanlines: false, tintLevel: 5 });
         });
 
         it("round-trips through the URL", () => {

@@ -1,10 +1,10 @@
 import { MaxPersistenceMs } from "./canvas.js";
-import { Parameters } from "./parameters.js";
+import { DisplaySection, Parameters } from "./parameters.js";
 
 export const PersistenceField = {
     type: "range",
     id: "persistence",
-    section: "display",
+    section: DisplaySection,
     label: "Phosphor afterglow",
     readout: (afterglowMs) => (afterglowMs > 0 ? `${afterglowMs} ms` : "none"),
     min: 0,

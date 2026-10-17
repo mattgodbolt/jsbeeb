@@ -18,18 +18,15 @@ const suitsType = {
     [ParamTypes.BOOL]: (value) => typeof value === "boolean",
 };
 
-const usable = (parameter, value) => suitsType[parameter.type](value) && (!parameter.valid || parameter.valid(value));
-
 /** @returns {*} a setting's value as the URL, browser storage and its default give it, in that order of preference. */
 function resolve(name, parameter, params) {
-    const fit = parameter.fit ?? ((value) => value);
-    const fromUrl = params[name];
-    if (usable(parameter, fromUrl)) return fit(parameter.fromUrl ? parameter.fromUrl(fromUrl) : fromUrl);
-    if (parameter.stored) {
-        const stored = fromStorage[parameter.type](window.localStorage[name]);
-        if (usable(parameter, stored)) return fit(stored);
-    }
-    return fit(parameter.default);
+    const { type, valid, fromUrl = (value) => value, fit = (value) => value } = parameter;
+    const usable = (value) => suitsType[type](value) && (!valid || valid(value));
+    const candidates = [];
+    if (suitsType[type](params[name])) candidates.push(fromUrl(params[name]));
+    if (parameter.stored) candidates.push(fromStorage[type](window.localStorage[name]));
+    const value = candidates.find(usable);
+    return fit(value === undefined ? parameter.default : value);
 }
 
 /** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
@@ -89,6 +86,7 @@ export class Settings extends EventTarget {
     /** Adopts `changes` (an undefined value clears a setting), persists them and tells the subscribers. */
     set(changes) {
         for (const [name, value] of Object.entries(changes)) {
+            if (!(name in this.parameters)) throw new Error(`There is no setting called "${name}"`);
             const { fit } = this.parameters[name];
             if (fit && value !== undefined) changes[name] = fit(value);
         }

@@ -280,6 +280,10 @@ describe("Settings", () => {
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
         });
 
+        it("refuses a setting it does not have, naming it", () => {
+            expect(() => make().set({ keyLayuot: "natural" })).toThrow('no setting called "keyLayuot"');
+        });
+
         it("resolves a model by name and puts the name in the URL", () => {
             const settings = make();
             settings.set({ model: "Master" });
