@@ -203,6 +203,29 @@ describe("AudioHandler", () => {
             expect(contexts[1].options).toEqual({ sampleRate: 46875 });
         });
 
+        it("gives the Music 5000 worklet the latency target, and its changes, along with the main one", async () => {
+            vi.spyOn(document, "hasFocus").mockReturnValue(true);
+            const handler = makeHandler({ hasMusic5000: true, audioLatencyMs: 40 });
+            await vi.waitFor(() => expect(handler._music5000workletnode).not.toBeNull());
+
+            handler.setWindowFocused(false);
+
+            expect(handler._music5000workletnode.options.processorOptions).toEqual({ targetLatencyMs: 40 });
+            expect(handler._music5000workletnode.port.posted).toEqual([
+                { command: "setTargetLatency", targetLatencyMs: 200 },
+            ]);
+        });
+
+        it("ships Music 5000 blocks to its worklet as samples", async () => {
+            const handler = makeHandler({ hasMusic5000: true });
+            await vi.waitFor(() => expect(handler._music5000workletnode).not.toBeNull());
+            const block = new Float64Array(256);
+
+            handler._onBufferMusic5000(block);
+
+            expect(handler._music5000workletnode.port.posted).toEqual([{ command: "samples", samples: block }]);
+        });
+
         it("fades the warning out once the audio is running again", () => {
             const handler = makeHandler();
 

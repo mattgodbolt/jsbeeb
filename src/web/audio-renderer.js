@@ -8,22 +8,14 @@ import {
     ResamplerTaps,
     outputStages,
 } from "../audio-output.js";
+import { ExcessLeadMs, PersistentExcessSeconds, validTargetLatencyMs } from "../audio-latency.js";
 
-const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
-const MaxTargetLatencyMs = 250;
-
-// Smoothing rejects the producer's per-tick bursts; proportional only, as
-// lead already integrates rate error; 0.05% authority covers clock skew
-// without audibly bending pitch.
+// Smoothing rejects the producer's per-tick bursts. Proportional only, as the
+// lead already integrates rate error. A change of rate of at most 0.05% covers
+// clock skew and is too small to hear as a change of pitch.
 const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
-
-// A lead kept this far past the target for this long is skipped back to it. Rate control would take half
-// an hour to play off a second; a fall in the target drains its excess well inside the time, as the
-// producer waits for it.
-const ExcessLeadMs = 50;
-const PersistentExcessSeconds = 0.5;
 
 const ResyncKinds = new Set(["state", "reset"]);
 const isResync = (event) => ResyncKinds.has(event.kind);
@@ -95,8 +87,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     setTargetLatency(ms) {
-        const valid = Number.isFinite(ms) && ms > 0;
-        this.targetLatencyMs = valid ? Math.min(ms, MaxTargetLatencyMs) : DefaultTargetLatencyMs;
+        this.targetLatencyMs = validTargetLatencyMs(ms);
         this.targetLeadCycles = this._cycles(this.targetLatencyMs);
         this.smoothedLeadError = 0;
         this.excessSeconds = 0;
@@ -227,6 +218,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         }
     }
 
+    // Rate control, held to MaxAdjustFraction, would take half an hour to play off a second of excess
+    // lead; a fall in the target drains its excess well inside PersistentExcessSeconds, as the producer
+    // waits for it.
     _skipPersistentExcess(dtSeconds) {
         const excess = this.upTo - this.clock > this.targetLeadCycles + this.excessLeadCycles;
         this.excessSeconds = excess ? this.excessSeconds + dtSeconds : 0;

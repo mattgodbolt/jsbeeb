@@ -2,6 +2,7 @@ import { FakeSoundChip, SoundChip, AtomSoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
+import { DefaultTargetLatencyMs } from "../audio-latency.js";
 import { createAudioContext } from "./audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "./dom-utils.js";
 import { toast } from "./toast.js";
@@ -15,7 +16,6 @@ const StallSpikeHeight = 20;
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
 const UnfocusedLatencyMs = 200;
-const DefaultLatencyMs = 20;
 
 export class AudioHandler {
     constructor({
@@ -33,7 +33,7 @@ export class AudioHandler {
     } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
-        this.audioLatencyMs = audioLatencyMs ?? DefaultLatencyMs;
+        this.audioLatencyMs = audioLatencyMs ?? DefaultTargetLatencyMs;
         this.windowFocused = document.hasFocus();
         this.warningNode = warningNode;
         this.noAudio = false;
@@ -101,7 +101,10 @@ export class AudioHandler {
         context.audioWorklet
             .addModule(music5000WorkletUrl)
             .then(() => {
-                this._music5000workletnode = new AudioWorkletNode(context, "music5000", { outputChannelCount: [2] });
+                this._music5000workletnode = new AudioWorkletNode(context, "music5000", {
+                    outputChannelCount: [2],
+                    processorOptions: { targetLatencyMs: this._targetLatencyMs() },
+                });
                 this._music5000workletnode.connect(context.destination);
             })
             .catch((error) => {
@@ -188,7 +191,8 @@ export class AudioHandler {
     setWindowFocused(focused) {
         this.windowFocused = focused;
         const targetLatencyMs = this._targetLatencyMs();
-        this._jsAudioNode?.port.postMessage({ command: "setTargetLatency", targetLatencyMs });
+        for (const node of [this._jsAudioNode, this._music5000workletnode])
+            node?.port.postMessage({ command: "setTargetLatency", targetLatencyMs });
         return targetLatencyMs - this.audioLatencyMs;
     }
 
@@ -236,7 +240,8 @@ export class AudioHandler {
     }
 
     _onBufferMusic5000(buffer) {
-        if (this._music5000workletnode) this._music5000workletnode.port.postMessage(buffer);
+        if (this._music5000workletnode)
+            this._music5000workletnode.port.postMessage({ command: "samples", samples: buffer });
     }
 
     checkStatus() {
