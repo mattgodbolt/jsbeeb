@@ -104,6 +104,54 @@ describe("Settings", () => {
             expect(urlState.params.hasMusic5000).toBe(true);
         });
 
+        it("remembers in storage the key layout, the display and the sound, and nothing else", () => {
+            const settings = make();
+            settings.set({
+                model: "Master",
+                keyLayout: "natural",
+                displayMode: "pal",
+                audioOutput: "board",
+                speakerAmount: 0.5,
+                palPersistenceMs: 60,
+                rgbPersistenceMs: 30,
+                coProcessor: true,
+                tubeCpuMultiplier: 2,
+                hasEconet: true,
+                hasMusic5000: true,
+                hasTeletextAdaptor: true,
+                mouseJoystickEnabled: true,
+                speechOutput: true,
+                microphoneChannel: 1,
+            });
+            expect(Object.keys(window.localStorage).sort()).toEqual([
+                "audioOutput",
+                "displayMode",
+                "keyLayout",
+                "palPersistenceMs",
+                "rgbPersistenceMs",
+                "speakerAmount",
+            ]);
+        });
+
+        it("lets only the settings sliders change live settle", () => {
+            const settings = make();
+            const settled = [];
+            for (const [name, value] of Object.entries({
+                speakerAmount: 0.5,
+                palPersistenceMs: 60,
+                rgbPersistenceMs: 30,
+                tubeCpuMultiplier: 2,
+                displayMode: "pal",
+                coProcessor: true,
+            })) {
+                urlState.updateUrl.mockClear();
+                settings.set({ [name]: value });
+                if (urlState.updateUrl.mock.calls.length === 0) settled.push(name);
+                vi.advanceTimersByTime(300);
+            }
+            expect(settled).toEqual(["speakerAmount", "palPersistenceMs", "rgbPersistenceMs"]);
+        });
+
         it("keeps an afterglow set live within what a display can show, everywhere it goes", () => {
             const settings = make();
             settings.set({ palPersistenceMs: 5000 });

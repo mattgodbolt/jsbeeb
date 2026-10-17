@@ -4,15 +4,7 @@ import { guessModelFromHostname } from "../url-params.js";
 import { fittedRoms } from "./config.js";
 import { MaxPersistenceMs, persistenceSettings } from "./canvas.js";
 import { toast } from "./toast.js";
-
-// Kept in browser storage for next time, as well as in the URL.
-const StoredSettings = ["keyLayout", "displayMode", "audioOutput", "speakerAmount"];
-// Set by sliders, so a burst of changes makes one history entry.
-const SlidSettings = ["speakerAmount"];
-for (const { setting } of persistenceSettings()) {
-    StoredSettings.push(setting);
-    SlidSettings.push(setting);
-}
+import { SlidParams, StoredParams } from "./parameters.js";
 
 const storedNumber = (params, name, fallback) =>
     [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
@@ -97,11 +89,11 @@ export class Settings extends EventTarget {
             if (name === "model") this[name] = findModel(value) ?? this.model;
             else if (value === undefined && PersistenceDefaults.has(name)) this[name] = PersistenceDefaults.get(name);
             else this[name] = value;
-            if (!StoredSettings.includes(name)) continue;
+            if (!StoredParams.includes(name)) continue;
             if (value === undefined) window.localStorage.removeItem(name);
             else window.localStorage[name] = value;
         }
-        this.urlState.set(changes, { settle: Object.keys(changes).some((name) => SlidSettings.includes(name)) });
+        this.urlState.set(changes, { settle: Object.keys(changes).some((name) => SlidParams.includes(name)) });
         for (const name of Object.keys(changes)) this.dispatchEvent(new Event(name));
         this.dispatchEvent(new CustomEvent("change", { detail: changes }));
     }
