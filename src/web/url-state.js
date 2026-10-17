@@ -1,84 +1,9 @@
-import { buildUrlFromParams, ParamTypes, parseQueryString } from "../url-params.js";
+import { buildUrlFromParams, parseQueryString } from "../url-params.js";
 import { debounce } from "../debounce.js";
+import { UrlParamTypes } from "./parameters.js";
 
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
 const UrlSettleMs = 300;
-
-/**
- * Every parameter the page understands: how it is parsed and written back, and
- * what else it is. A `startupAction` has the page do something once it is up,
- * rather than describe it; a `stored` one is kept in browser storage for next
- * time as well as in the URL; a `slid` one is set by a slider, so a burst of
- * changes makes one history entry.
- */
-export const UrlParams = {
-    // Startup actions
-    autoboot: { type: ParamTypes.BOOL, startupAction: true },
-    autochain: { type: ParamTypes.BOOL, startupAction: true },
-    autorun: { type: ParamTypes.BOOL, startupAction: true },
-    autotype: { type: ParamTypes.STRING, startupAction: true },
-    loadBasic: { type: ParamTypes.STRING, startupAction: true },
-    embedBasic: { type: ParamTypes.STRING, startupAction: true },
-    patch: { type: ParamTypes.STRING, startupAction: true },
-
-    // Array parameters
-    rom: { type: ParamTypes.ARRAY },
-
-    // Boolean parameters
-    embed: { type: ParamTypes.BOOL },
-    fasttape: { type: ParamTypes.BOOL },
-    noseek: { type: ParamTypes.BOOL },
-    hasMusic5000: { type: ParamTypes.BOOL },
-    hasTeletextAdaptor: { type: ParamTypes.BOOL },
-    hasEconet: { type: ParamTypes.BOOL },
-    glEnabled: { type: ParamTypes.BOOL },
-    lowLatency: { type: ParamTypes.BOOL },
-    fakeVideo: { type: ParamTypes.BOOL },
-    logFdcCommands: { type: ParamTypes.BOOL },
-    logFdcStateChanges: { type: ParamTypes.BOOL },
-    coProcessor: { type: ParamTypes.BOOL },
-    mouseJoystickEnabled: { type: ParamTypes.BOOL },
-    speechOutput: { type: ParamTypes.BOOL },
-    audioDebug: { type: ParamTypes.BOOL },
-
-    // Numeric parameters
-    stationId: { type: ParamTypes.INT },
-    frameSkip: { type: ParamTypes.INT },
-    videoCyclesBatch: { type: ParamTypes.INT },
-    audiofilterfreq: { type: ParamTypes.FLOAT },
-    audiofilterq: { type: ParamTypes.FLOAT },
-    speakerAmount: { type: ParamTypes.FLOAT, stored: true, slid: true },
-    palPersistenceMs: { type: ParamTypes.FLOAT, stored: true, slid: true },
-    rgbPersistenceMs: { type: ParamTypes.FLOAT, stored: true, slid: true },
-    audioLatencyMs: { type: ParamTypes.FLOAT },
-    cpuMultiplier: { type: ParamTypes.FLOAT },
-    tubeCpuMultiplier: { type: ParamTypes.FLOAT },
-    microphoneChannel: { type: ParamTypes.INT },
-
-    // String parameters (these are the default but listed for clarity)
-    model: { type: ParamTypes.STRING },
-    disc: { type: ParamTypes.STRING },
-    disc1: { type: ParamTypes.STRING },
-    disc2: { type: ParamTypes.STRING },
-    tape: { type: ParamTypes.STRING },
-    mmc: { type: ParamTypes.STRING },
-    keyLayout: { type: ParamTypes.STRING, stored: true },
-    displayMode: { type: ParamTypes.STRING, stored: true },
-    audioOutput: { type: ParamTypes.STRING, stored: true },
-    drive0Tracks: { type: ParamTypes.STRING },
-    drive1Tracks: { type: ParamTypes.STRING },
-    sbLeft: { type: ParamTypes.STRING },
-    sbRight: { type: ParamTypes.STRING },
-    sbBottom: { type: ParamTypes.STRING },
-};
-
-export const UrlParamTypes = Object.fromEntries(Object.entries(UrlParams).map(([name, { type }]) => [name, type]));
-
-const paramsThatAre = (property) => Object.keys(UrlParams).filter((name) => UrlParams[name][property]);
-
-export const StartupActionParams = paramsThatAre("startupAction");
-export const StoredParams = paramsThatAre("stored");
-export const SlidParams = paramsThatAre("slid");
 
 /**
  * The page's settings as carried in its URL. `params` is the one parsed

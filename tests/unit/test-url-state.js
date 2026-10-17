@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SlidParams, StoredParams, UrlState, UrlParamTypes } from "../../src/web/url-state.js";
+import { UrlState } from "../../src/web/url-state.js";
+import { UrlParamTypes } from "../../src/web/parameters.js";
 import { ParamTypes } from "../../src/url-params.js";
-import { persistenceSettings } from "../../src/web/canvas.js";
 
 const location = (search, hash = "") => ({ origin: "https://bbc.example", pathname: "/play", search, hash });
 
@@ -95,20 +95,6 @@ describe("UrlState", () => {
         params.tape = "sth:Chuckie.zip";
         expect(state.params).toBe(params);
         expect(state.url()).toContain("tape=sth:Chuckie.zip");
-    });
-
-    it("types every parameter it lists", () => {
-        for (const [name, type] of Object.entries(UrlParamTypes)) {
-            expect(Object.values(ParamTypes), name).toContain(type);
-        }
-    });
-
-    it("declares each display's afterglow a remembered slider setting", () => {
-        for (const { setting } of persistenceSettings()) {
-            expect(UrlParamTypes[setting], setting).toBe(ParamTypes.FLOAT);
-            expect(StoredParams, setting).toContain(setting);
-            expect(SlidParams, setting).toContain(setting);
-        }
     });
 
     it("gives back every parameter it lists as it was given", () => {

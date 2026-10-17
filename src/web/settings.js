@@ -4,7 +4,7 @@ import { guessModelFromHostname } from "../url-params.js";
 import { fittedRoms } from "./config.js";
 import { MaxPersistenceMs, persistenceSettings } from "./canvas.js";
 import { toast } from "./toast.js";
-import { SlidParams, StoredParams } from "./url-state.js";
+import { SlidParams, StoredParams } from "./parameters.js";
 
 const storedNumber = (params, name, fallback) =>
     [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
