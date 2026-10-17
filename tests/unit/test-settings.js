@@ -31,6 +31,93 @@ describe("Settings", () => {
             expect(settings.tubeCpuMultiplier).toBe(1);
         });
 
+        it("starts every setting at its default given nothing", () => {
+            expect(make()).toMatchObject({
+                model: DefaultModel,
+                keyLayout: "physical",
+                tubeCpuMultiplier: 1,
+                microphoneChannel: undefined,
+                coProcessor: false,
+                hasEconet: false,
+                hasMusic5000: false,
+                hasTeletextAdaptor: false,
+                mouseJoystickEnabled: false,
+                speechOutput: false,
+                displayMode: "rgb",
+                audioOutput: "speaker",
+                speakerAmount: 1,
+                palPersistenceMs: 40,
+                rgbPersistenceMs: 25,
+            });
+        });
+
+        it("reads every setting from the URL", () => {
+            urlState = fakeUrlState(
+                "?keyLayout=Natural&tubeCpuMultiplier=2.5&microphoneChannel=2&coProcessor&hasEconet&hasMusic5000" +
+                    "&hasTeletextAdaptor&mouseJoystickEnabled&speechOutput&displayMode=xbr&audioOutput=off" +
+                    "&speakerAmount=0&palPersistenceMs=0&rgbPersistenceMs=100",
+            );
+            expect(make()).toMatchObject({
+                keyLayout: "natural",
+                tubeCpuMultiplier: 2.5,
+                microphoneChannel: 2,
+                coProcessor: true,
+                hasEconet: true,
+                hasMusic5000: true,
+                hasTeletextAdaptor: true,
+                mouseJoystickEnabled: true,
+                speechOutput: true,
+                displayMode: "xbr",
+                audioOutput: "off",
+                speakerAmount: 0,
+                palPersistenceMs: 0,
+                rgbPersistenceMs: 100,
+            });
+        });
+
+        it("reads only the stored settings back from storage", () => {
+            const stored = {
+                keyLayout: "gaming",
+                displayMode: "pal",
+                audioOutput: "off",
+                speakerAmount: "0",
+                palPersistenceMs: "10",
+                rgbPersistenceMs: "20",
+                tubeCpuMultiplier: "2",
+                microphoneChannel: "1",
+                coProcessor: "true",
+                speechOutput: "true",
+            };
+            for (const [name, value] of Object.entries(stored)) window.localStorage[name] = value;
+            expect(make()).toMatchObject({
+                keyLayout: "gaming",
+                displayMode: "pal",
+                audioOutput: "off",
+                speakerAmount: 0,
+                palPersistenceMs: 10,
+                rgbPersistenceMs: 20,
+                tubeCpuMultiplier: 1,
+                microphoneChannel: undefined,
+                coProcessor: false,
+                speechOutput: false,
+            });
+        });
+
+        it("prefers a usable URL value to storage, and storage to an unusable one", () => {
+            for (const [name, value] of Object.entries({ keyLayout: "gaming", displayMode: "pal", audioOutput: "off" }))
+                window.localStorage[name] = value;
+            urlState = fakeUrlState("?keyLayout&displayMode=&audioOutput=loud&tubeCpuMultiplier=0&hasEconet=false");
+            expect(make()).toMatchObject({
+                keyLayout: "gaming",
+                displayMode: "pal",
+                audioOutput: "off",
+                tubeCpuMultiplier: 1,
+                hasEconet: false,
+            });
+            urlState = fakeUrlState("?keyLayout=natural&displayMode=xbr&audioOutput=board");
+            expect(make()).toMatchObject({ keyLayout: "natural", displayMode: "xbr", audioOutput: "board" });
+        });
+
         it("ignores nonsense from storage", () => {
             window.localStorage.audioOutput = "sideways";
             window.localStorage.speakerAmount = "loud";
