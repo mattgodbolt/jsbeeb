@@ -14,6 +14,12 @@ const KeypadNavigationKeys = new Set([
     keyCodes.RIGHT,
     keyCodes.DOWN,
 ]);
+const Modifiers = [
+    { codes: [keyCodes.SHIFT_LEFT, keyCodes.SHIFT_RIGHT], isDown: (evt) => evt.shiftKey },
+    { codes: [keyCodes.CTRL_LEFT, keyCodes.CTRL_RIGHT], isDown: (evt) => evt.ctrlKey },
+];
+
+const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMethodKeyCode;
 
 /**
  * @typedef {Object} KeyboardConfig
@@ -204,6 +210,7 @@ export class Keyboard extends EventTarget {
      */
     keyDown(evt) {
         const code = this.keyCode(evt);
+        this._releaseKeysShownUp(evt, code);
         const stale = this.releases.get(code);
         if (evt.repeat && this._shortcutFor(evt, code)) {
             evt.preventDefault();
@@ -257,11 +264,7 @@ export class Keyboard extends EventTarget {
             return null;
         }
 
-        // The input method owns this press, and Linux sends it in place of the dead key's key up.
-        if (evt.key === "Process" || evt.keyCode === InputMethodKeyCode) {
-            this._releaseDeadKeys();
-            return null;
-        }
+        if (isComposing(evt)) return null;
         const machineKey = this._machineKey(evt);
         this.input.keyDown(machineKey, evt.shiftKey);
         if (evt.key !== "Dead") return () => this.input.keyUp(machineKey);
@@ -272,10 +275,21 @@ export class Keyboard extends EventTarget {
         };
     }
 
-    _releaseDeadKeys() {
-        for (const code of this.heldDeadKeys) {
-            const release = this.releases.get(code);
-            this.releases.delete(code);
+    /**
+     * Lets go of held keys whose key up was lost, when this event shows they are up: a modifier
+     * the event says is not held, and, once the input method composes the next key (which is
+     * what Linux sends in place of a dead key's key up), any dead key.
+     */
+    _releaseKeysShownUp(evt, code) {
+        const up = [];
+        for (const { codes, isDown } of Modifiers) {
+            if (!isDown(evt) && !codes.includes(code)) up.push(...codes);
+        }
+        if (isComposing(evt)) up.push(...this.heldDeadKeys);
+        for (const heldCode of up) {
+            const release = this.releases.get(heldCode);
+            if (!release) continue;
+            this.releases.delete(heldCode);
             release();
         }
     }
@@ -286,6 +300,7 @@ export class Keyboard extends EventTarget {
      */
     keyUp(evt) {
         const code = this.keyCode(evt);
+        this._releaseKeysShownUp(evt, code);
         if (isMac && code === keyCodes.CAPSLOCK) {
             this._press(evt, code);
             return;
