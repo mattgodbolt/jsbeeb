@@ -723,6 +723,19 @@ describe("Via T2 toggling PB6 pulse counting", () => {
         via.write(T2CH, high);
     }
 
+    it("should count PB6 held low from power-on as one pulse at the first look at the port", () => {
+        const ORB = 0x0;
+        const Pb6 = 0x40;
+        via = new UserVia(makeFakeCpu(), scheduler, false, { read: () => 0xff & ~Pb6, write: () => {} });
+        via.write(ACR, AcrT2CountsPb6);
+        start(0x80, 0x10);
+        const frozen = via.read(T2CL);
+        via.read(ORB);
+        expect(via.read(T2CL)).toBe(frozen - 1);
+        via.read(ORB);
+        expect(via.read(T2CL)).toBe(frozen - 1);
+    });
+
     it("should tick T2 once more as it freezes", () => {
         start(0, 0x10);
         runMicroseconds(10);
