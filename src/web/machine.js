@@ -173,7 +173,10 @@ export class Machine {
         const { slots } = media;
         if (discImage)
             startImageLoad(`disc ${discImage}`, () =>
-                slots.load(slots.drive(0), describeRef(discImage, "disc"), { inUrl: discImageInUrl }),
+                slots.load(slots.drive(0), describeRef(discImage, "disc"), {
+                    inUrl: discImageInUrl,
+                    recent: discImageInUrl,
+                }),
             );
         if (secondDiscImage)
             startImageLoad(`disc ${secondDiscImage}`, () =>

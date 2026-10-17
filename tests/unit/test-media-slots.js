@@ -186,6 +186,12 @@ describe("MediaSlots", () => {
             expect(slots.recent.rank(elite)).toBe(-1);
         });
 
+        it("leaves what was loaded recently alone when told the load is not a new one", async () => {
+            loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
+            expect(await slots.load(slots.drive(0), elite, { recent: false })).toBe("loaded");
+            expect(slots.recent.rank(elite)).toBe(-1);
+        });
+
         it("fails a disc load, in words, on a machine with no drives", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             const drives = new Drives({ fdc: undefined, driveTracks: [DriveTracks.auto, DriveTracks.auto], urlState });

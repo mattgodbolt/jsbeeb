@@ -98,9 +98,10 @@ export class MediaSlots extends EventTarget {
      * @param {object} [options]
      * @param {Function} [options.fetch] async, returning `{ media, ref }`; a failure of it is not kept for a retry
      * @param {boolean} [options.inUrl] whether the URL names what was loaded; a file opened this session never is
+     * @param {boolean} [options.recent] whether it counts as loaded recently; the page's default disc does not
      * @returns {Promise<"loaded"|"overtaken"|"failed"|"nothing">}
      */
-    async load(slot, descriptor, { fetch, inUrl } = {}) {
+    async load(slot, descriptor, { fetch, inUrl, recent = true } = {}) {
         const claim = (slot.claim = {});
         slot.busy = descriptor;
         slot.failed = null;
@@ -113,7 +114,7 @@ export class MediaSlots extends EventTarget {
                 this.changed(slot);
                 return "nothing";
             }
-            this.install(slot, media, ref, inUrl ?? descriptor.source !== "session");
+            this.install(slot, media, ref, inUrl ?? descriptor.source !== "session", recent);
             return "loaded";
         } catch (error) {
             if (slot.claim !== claim) return "overtaken";
