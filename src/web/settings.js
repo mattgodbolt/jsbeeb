@@ -1,16 +1,33 @@
 import { DefaultModel, findModel } from "../models.js";
-import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
-import { guessModelFromHostname } from "../url-params.js";
+import { guessModelFromHostname, ParamTypes } from "../url-params.js";
 import { fittedRoms } from "./config.js";
-import { MaxPersistenceMs, persistenceSettings } from "./canvas.js";
 import { toast } from "./toast.js";
-import { SlidParams, StoredParams } from "./parameters.js";
+import { Parameters } from "./parameters.js";
 
-const storedNumber = (params, name, fallback) =>
-    [params[name], parseFloat(window.localStorage[name])].find(Number.isFinite) ?? fallback;
+const fromStorage = {
+    [ParamTypes.STRING]: (stored) => stored,
+    [ParamTypes.INT]: (stored) => parseInt(stored, 10),
+    [ParamTypes.FLOAT]: (stored) => parseFloat(stored),
+    [ParamTypes.BOOL]: (stored) => (stored === undefined ? undefined : stored === "true"),
+};
 
-const PersistenceDefaults = new Map(persistenceSettings().map(({ setting, default: fallback }) => [setting, fallback]));
-const clampPersistence = (value) => Math.min(MaxPersistenceMs, Math.max(0, value));
+const suitsType = {
+    [ParamTypes.STRING]: (value) => typeof value === "string" && value !== "",
+    [ParamTypes.INT]: Number.isFinite,
+    [ParamTypes.FLOAT]: Number.isFinite,
+    [ParamTypes.BOOL]: (value) => typeof value === "boolean",
+};
+
+/** @returns {*} a setting's value as the URL, browser storage and its default give it, in that order of preference. */
+function resolve(name, parameter, params) {
+    const { type, valid, fromUrl = (value) => value, fit = (value) => value } = parameter;
+    const usable = (value) => suitsType[type](value) && (!valid || valid(value));
+    const candidates = [];
+    if (suitsType[type](params[name])) candidates.push(fromUrl(params[name]));
+    if (parameter.stored) candidates.push(fromStorage[type](window.localStorage[name]));
+    const value = candidates.find(usable);
+    return fit(value === undefined ? parameter.default : value);
+}
 
 /** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
 export function mapLegacyModels(parsedQuery) {
@@ -38,9 +55,10 @@ export function mapLegacyModels(parsedQuery) {
  * carrying them all; whatever a setting reaches subscribes with on().
  */
 export class Settings extends EventTarget {
-    constructor({ urlState }) {
+    constructor({ urlState, parameters = Parameters }) {
         super();
         this.urlState = urlState;
+        this.parameters = parameters;
         const params = urlState.params;
         mapLegacyModels(params);
 
@@ -52,22 +70,8 @@ export class Settings extends EventTarget {
             });
             this.model = DefaultModel;
         }
-        this.keyLayout =
-            (params.keyLayout && `${params.keyLayout}`.toLowerCase()) || window.localStorage.keyLayout || "physical";
-        this.tubeCpuMultiplier = params.tubeCpuMultiplier || 1;
-        this.microphoneChannel = params.microphoneChannel;
-        this.coProcessor = !!params.coProcessor;
-        this.hasEconet = !!params.hasEconet;
-        this.hasMusic5000 = !!params.hasMusic5000;
-        this.hasTeletextAdaptor = !!params.hasTeletextAdaptor;
-        this.mouseJoystickEnabled = !!params.mouseJoystickEnabled;
-        this.speechOutput = !!params.speechOutput;
-        this.displayMode = params.displayMode || window.localStorage.displayMode || "rgb";
-        this.audioOutput =
-            [params.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
-        this.speakerAmount = storedNumber(params, "speakerAmount", 1);
-        for (const { setting, default: fallback } of persistenceSettings())
-            this[setting] = clampPersistence(storedNumber(params, setting, fallback));
+        for (const [name, parameter] of Object.entries(parameters))
+            if ("default" in parameter) this[name] = resolve(name, parameter, params);
     }
 
     get extraRoms() {
@@ -81,19 +85,21 @@ export class Settings extends EventTarget {
 
     /** Adopts `changes` (an undefined value clears a setting), persists them and tells the subscribers. */
     set(changes) {
-        for (const name of Object.keys(changes))
-            if (PersistenceDefaults.has(name) && changes[name] !== undefined)
-                changes[name] = clampPersistence(changes[name]);
         for (const [name, value] of Object.entries(changes)) {
-            // A cleared persistence is back at its display's default, though nothing remembers it.
+            if (!(name in this.parameters)) throw new Error(`There is no setting called "${name}"`);
+            const { fit } = this.parameters[name];
+            if (fit && value !== undefined) changes[name] = fit(value);
+        }
+        for (const [name, value] of Object.entries(changes)) {
+            const parameter = this.parameters[name];
             if (name === "model") this[name] = findModel(value) ?? this.model;
-            else if (value === undefined && PersistenceDefaults.has(name)) this[name] = PersistenceDefaults.get(name);
-            else this[name] = value;
-            if (!StoredParams.includes(name)) continue;
+            else this[name] = value === undefined ? parameter.default : value;
+            if (!parameter.stored) continue;
             if (value === undefined) window.localStorage.removeItem(name);
             else window.localStorage[name] = value;
         }
-        this.urlState.set(changes, { settle: Object.keys(changes).some((name) => SlidParams.includes(name)) });
+        const slid = Object.keys(changes).some((name) => this.parameters[name].slid);
+        this.urlState.set(changes, { settle: slid });
         for (const name of Object.keys(changes)) this.dispatchEvent(new Event(name));
         this.dispatchEvent(new CustomEvent("change", { detail: changes }));
     }

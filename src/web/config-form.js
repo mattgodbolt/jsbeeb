@@ -1,9 +1,10 @@
 import { MaxPersistenceMs } from "./canvas.js";
-import { settingField } from "./parameters.js";
+import { DisplaySection, Parameters } from "./parameters.js";
 
 export const PersistenceField = {
     type: "range",
     id: "persistence",
+    section: DisplaySection,
     label: "Phosphor afterglow",
     readout: (afterglowMs) => (afterglowMs > 0 ? `${afterglowMs} ms` : "none"),
     min: 0,
@@ -13,30 +14,37 @@ export const PersistenceField = {
 };
 
 /**
- * The Settings dialog's fields, top to bottom; an array is a section, set off from what is around it. Each field is a
- * parameter's own `field`, or the afterglow slider, which edits whichever setting the display in use has; a `group` is
- * a `label`, with a small `hint` under it, beside a column of `fields`, each a check or a range.
+ * The Settings dialog's fields, top to bottom, as the parameters declare them, then the afterglow slider, which edits
+ * whichever setting the display in use has; an array is a section, set off from what is around it, and a `group` a
+ * label beside a column of fields.
+ *
+ * @returns {Array<object|object[]>}
  */
-export const ConfigForm = [
-    settingField("model"),
-    settingField("keyLayout"),
-    [settingField("displayMode"), PersistenceField],
-    {
-        type: "group",
-        label: "Additional peripherals",
-        hint: "(some combinations may cause compatibility issues)",
-        fields: ["coProcessor", "tubeCpuMultiplier", "hasMusic5000", "hasTeletextAdaptor", "hasEconet"].map(
-            settingField,
-        ),
-    },
-    [settingField("audioOutput"), settingField("speakerAmount")],
-    [settingField("microphoneChannel")],
-    [settingField("mouseJoystickEnabled")],
-    [settingField("speechOutput")],
-];
+export function configForm(parameters = Parameters) {
+    const fields = Object.entries(parameters)
+        .filter(([, { field }]) => field)
+        .map(([setting, { field }]) => ({ setting, ...field }));
+    const form = [];
+    const places = new Map();
+    for (const field of [...fields, PersistenceField]) {
+        const place = field.group ?? field.section;
+        if (place === undefined) {
+            form.push(field);
+            continue;
+        }
+        if (!places.has(place)) {
+            const container = field.group ? { type: "group", ...field.group, fields: [] } : [];
+            places.set(place, container);
+            form.push(container);
+        }
+        const container = places.get(place);
+        (Array.isArray(container) ? container : container.fields).push(field);
+    }
+    return form;
+}
 
 /** @returns {object[]} every field in the form that shows a setting, sections and groups flattened. */
-export function settingFields(form = ConfigForm) {
+export function settingFields(form) {
     return form
         .flat()
         .flatMap((field) => (field.type === "group" ? field.fields : [field]))
