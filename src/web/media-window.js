@@ -610,7 +610,15 @@ export class MediaWindow {
             .filter((d) => list.kinds[d.kind] && (list.source === "all" || d.source === list.source))
             .filter((d) => matchesQuery(d, list.query))
             .sort(compareForQuery(list.query));
-        const rows = shown.slice(0, MaxRows).map((d) => this.buildRow(d));
+        const recent = list.query ? [] : this.recentAmong(shown);
+        const rest = shown.filter((d) => !recent.includes(d)).slice(0, MaxRows - recent.length);
+        const rows = [
+            ...(recent.length
+                ? [this.buildHeading("Recently loaded"), ...recent.map((d) => this.buildRow(d, { recent: true }))]
+                : []),
+            ...(recent.length && rest.length ? [this.buildHeading("Everything else")] : []),
+            ...rest.map((d) => this.buildRow(d)),
+        ];
         const notices = list.failures.map((failure) => {
             const li = document.createElement("li");
             li.className = "notice";
@@ -635,7 +643,27 @@ export class MediaWindow {
             : "";
     }
 
-    buildRow(d) {
+    /** The rows that were loaded lately, newest first, each reference once. */
+    recentAmong(shown) {
+        const { recent } = this.slots;
+        const ranked = new Map();
+        for (const d of shown) {
+            const rank = recent.rank(d);
+            if (rank >= 0 && !ranked.has(rank)) ranked.set(rank, d);
+        }
+        return [...ranked].sort(([a], [b]) => a - b).map(([, d]) => d);
+    }
+
+    /** A heading for the eye only: each recent row's label says it was loaded recently. */
+    buildHeading(words) {
+        const li = document.createElement("li");
+        li.className = "media-heading small text-uppercase text-muted px-2 pt-2 pb-1";
+        li.setAttribute("aria-hidden", "true");
+        li.textContent = words;
+        return li;
+    }
+
+    buildRow(d, { recent = false } = {}) {
         const li = document.createElement("li");
         li.className = "media-row";
         const main = document.createElement("button");
@@ -645,7 +673,7 @@ export class MediaWindow {
         const targetName = target === "tape" ? "the cassette deck" : `drive ${target}`;
         const label = [d.title, d.publisher, d.detail, sourceName(d.source)].filter(Boolean).join(", ");
         main.title = `Load ${label} into ${targetName}`;
-        main.setAttribute("aria-label", main.title);
+        main.setAttribute("aria-label", recent ? `${main.title}, recently loaded` : main.title);
         const cell = (className, text) => {
             const span = document.createElement("span");
             span.className = className;
@@ -747,8 +775,13 @@ export class MediaWindow {
         boot = boot && driveIndex === 0;
         const slot = this.slots.drive(driveIndex);
         const bootsOnLoad = () => boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
-        if (!this.machineSwitch.satisfies(d) && (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() })))
+        if (
+            !this.machineSwitch.satisfies(d) &&
+            (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() }))
+        ) {
+            this.slots.recent.note(d.ref, "disc");
             return;
+        }
         if ((await this.slots.load(slot, d)) !== "loaded") return;
         // The tick is read now, not before the wait, in case it was changed meanwhile.
         if (bootsOnLoad()) {

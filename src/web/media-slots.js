@@ -1,5 +1,5 @@
 import { reportLoadFailure } from "./reporting.js";
-import { sourceName } from "./media-catalogue.js";
+import { RecentMedia, sourceName } from "./media-catalogue.js";
 
 const DriveNames = ["drive 0", "drive 1"];
 
@@ -67,6 +67,7 @@ export class MediaSlots extends EventTarget {
         this.drives = drives;
         this.processor = processor;
         this.urlState = urlState;
+        this.recent = new RecentMedia();
         this.driveSlots = [0, 1].map((index) => new Slot(this, "disc", index));
         this.deck = new Slot(this, "tape", 0);
     }
@@ -97,9 +98,10 @@ export class MediaSlots extends EventTarget {
      * @param {object} [options]
      * @param {Function} [options.fetch] async, returning `{ media, ref }`; a failure of it is not kept for a retry
      * @param {boolean} [options.inUrl] whether the URL names what was loaded; a file opened this session never is
+     * @param {boolean} [options.recent] whether it counts as loaded recently; what a page starts with does not
      * @returns {Promise<"loaded"|"overtaken"|"failed"|"nothing">}
      */
-    async load(slot, descriptor, { fetch, inUrl } = {}) {
+    async load(slot, descriptor, { fetch, inUrl, recent = true } = {}) {
         const claim = (slot.claim = {});
         slot.busy = descriptor;
         slot.failed = null;
@@ -112,7 +114,7 @@ export class MediaSlots extends EventTarget {
                 this.changed(slot);
                 return "nothing";
             }
-            this.install(slot, media, ref, inUrl ?? descriptor.source !== "session");
+            this.install(slot, media, ref, inUrl ?? descriptor.source !== "session", recent);
             return "loaded";
         } catch (error) {
             if (slot.claim !== claim) return "overtaken";
@@ -131,10 +133,15 @@ export class MediaSlots extends EventTarget {
         return { media };
     }
 
-    /** Media that is already to hand goes straight in, overtaking any load still in flight. */
-    put(slot, media, ref, { inUrl = true } = {}) {
+    /**
+     * Media that is already to hand goes straight in, overtaking any load still in flight.
+     *
+     * @param {object} [options]
+     * @param {boolean} [options.recent] whether it counts as loaded recently; a restored state's media does not
+     */
+    put(slot, media, ref, { inUrl = true, recent = true } = {}) {
         slot.claim = {};
-        this.install(slot, media, ref, inUrl);
+        this.install(slot, media, ref, inUrl, recent);
     }
 
     eject(slot) {
@@ -142,7 +149,7 @@ export class MediaSlots extends EventTarget {
         this.install(slot, undefined, undefined, true);
     }
 
-    install(slot, media, ref, inUrl) {
+    install(slot, media, ref, inUrl, recent = true) {
         slot.busy = null;
         slot.failed = null;
         if (slot.isDeck) this.processor.tapeInterface.setTape(media);
@@ -150,6 +157,7 @@ export class MediaSlots extends EventTarget {
         else this.drives.eject(slot.index);
         slot.ref = media ? ref : undefined;
         slot.inUrl = inUrl;
+        if (recent && slot.ref) this.recent.note(slot.ref, slot.kind);
         // A URL that already says as much is left alone, so a load it asked for makes no history.
         const named = inUrl ? slot.ref : undefined;
         if (slot.namedInUrl(this.urlState.params) !== named) this.urlState.set(slot.urlParams());

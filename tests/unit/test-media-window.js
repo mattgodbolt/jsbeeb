@@ -587,6 +587,52 @@ describe("MediaWindow", () => {
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:A.hfe", "auto");
         });
 
+        it("puts what was loaded most recently first, under a heading, until something is typed", async () => {
+            const zalaga = { ...elite, ref: "hfe:Z.hfe", title: "Zalaga" };
+            const headings = () => [...document.querySelectorAll("#media-list .media-heading")].map(text);
+            putDiscIn(1, discFor("Z.ssd", ssdImage()), zalaga.ref);
+            putTapeIn({ name: "chuckie.uef" }, chuckie.ref);
+            putDiscIn(1, discFor("saves.ssd", ssdImage()), saves.ref);
+            deps.media.loadDiscImage.mockResolvedValue(discFor("saves.ssd", ssdImage()));
+            await openWith([elite, chuckie, saves, zalaga]);
+            expect(rowTitles()).toEqual(["saves.ssd", "Zalaga", "Elite"]);
+            expect(headings()).toEqual(["Recently loaded", "Everything else"]);
+            for (const heading of document.querySelectorAll("#media-list .media-heading"))
+                expect(heading.getAttribute("aria-hidden")).toBe("true");
+            const mains = rows().map((row) => row.querySelector(".media-row-main"));
+            expect(mains[1].getAttribute("aria-label")).toBe(
+                "Load Zalaga, Acornsoft, D1S1 · 40 · v1, HFE archive into drive 0, recently loaded",
+            );
+            expect(mains[1].title).toBe("Load Zalaga, Acornsoft, D1S1 · 40 · v1, HFE archive into drive 0");
+            expect(mains[2].getAttribute("aria-label")).not.toContain("recently loaded");
+            const box = document.getElementById("media-search");
+            const press = (key) =>
+                document.activeElement.dispatchEvent(
+                    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+                );
+            box.focus();
+            press("ArrowDown");
+            expect(document.activeElement).toBe(rows()[0].querySelector(".media-row-main"));
+            press("ArrowDown");
+            press("ArrowDown");
+            expect(text(document.activeElement.querySelector(".title"))).toBe("Elite");
+            press("ArrowUp");
+            expect(text(document.activeElement.querySelector(".title"))).toBe("Zalaga");
+            search("s");
+            expect(rowTitles()).toEqual(["saves.ssd", "Elite", "Zalaga"]);
+            expect(headings()).toEqual([]);
+            search("");
+            box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+            await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith("local:saves.ssd", "auto"));
+        });
+
+        it("has no heading when nothing shown was loaded recently", async () => {
+            putTapeIn({ name: "chuckie.uef" }, chuckie.ref);
+            await openWith([elite, chuckie, saves]);
+            expect(rowTitles()).toEqual(["Elite", "saves.ssd"]);
+            expect(document.querySelector("#media-list .media-heading")).toBeNull();
+        });
+
         it("falls back to every source when the chosen one is no longer listed", async () => {
             await openWith([elite, saves]);
             document.querySelector('#media-chips .media-chip[title^="Discs kept in this browser"]').click();
@@ -997,7 +1043,8 @@ describe("MediaWindow", () => {
             await vi.waitFor(() => expect(fdc.drives[0].disc === loaded).toBe(true));
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("gd:abc/mine.ssd", "auto");
             expect(panel().hidden).toBe(false);
-            expect(text(rows()[1].querySelector(".detail"))).toContain("in drive 0");
+            expect(rowTitles()[0]).toBe("mine.ssd");
+            expect(text(rows()[0].querySelector(".detail"))).toContain("in drive 0");
         });
 
         it("stays open, with no toast, when a save state could not be restored", async () => {
@@ -1087,6 +1134,7 @@ describe("MediaWindow", () => {
             expect(sessionStorage.getItem("jsbeeb-pending-switch")).toBe("Switched to a BBC Master 128 for Paradroid");
             expect(confirm).not.toHaveBeenCalled();
             expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(slots().recent.rank(paradroid)).toBe(0);
         });
 
         it("asks when the disc is only to be loaded: yes switches with no boot, no loads it here", async () => {
@@ -1103,6 +1151,7 @@ describe("MediaWindow", () => {
                 "Load it here",
             );
             expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(slots().recent.rank(paradroid)).toBe(0);
             row().click();
             await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
             await vi.waitFor(() => expect(window.isOpen).toBe(false));

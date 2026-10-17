@@ -218,6 +218,52 @@ export function browserDiscNames(storage = window.localStorage) {
     return names.sort();
 }
 
+const RecentKey = "recentMedia";
+const MaxRecent = 8;
+
+const sameEntry = (a, b) => a.ref === b.ref && a.kind === b.kind;
+const outlivesSession = ({ ref }) => !ref.startsWith("session:");
+
+/**
+ * What was loaded most recently, newest first, by reference and kind: up to eight that are kept
+ * in the browser's storage across visits, and up to eight files opened this session, which no
+ * later visit could load. Storage that refuses only means the list does not outlive the page.
+ */
+export class RecentMedia {
+    constructor(storage = () => window.localStorage) {
+        this.storage = storage;
+        this.entries = this.read();
+    }
+
+    read() {
+        try {
+            const entries = JSON.parse(this.storage().getItem(RecentKey) ?? "[]");
+            return Array.isArray(entries) ? entries.filter(outlivesSession).slice(0, MaxRecent) : [];
+        } catch (error) {
+            console.warn("Could not read the recently loaded media:", error);
+            return [];
+        }
+    }
+
+    note(ref, kind) {
+        const entry = { ref, kind };
+        const newestFirst = [entry, ...this.entries.filter((other) => !sameEntry(other, entry))];
+        const kept = newestFirst.filter(outlivesSession).slice(0, MaxRecent);
+        const opened = newestFirst.filter((other) => !outlivesSession(other)).slice(0, MaxRecent);
+        this.entries = newestFirst.filter((other) => kept.includes(other) || opened.includes(other));
+        try {
+            this.storage().setItem(RecentKey, JSON.stringify(kept));
+        } catch (error) {
+            console.warn("Could not keep the recently loaded media:", error);
+        }
+    }
+
+    /** Where a descriptor stands in the list, newest at 0, or -1 when it was not loaded recently. */
+    rank(descriptor) {
+        return this.entries.findIndex((entry) => sameEntry(entry, descriptor));
+    }
+}
+
 // How well one word of a query fits a descriptor: the title itself, a word of the title, somewhere
 // in the title, or only in the publisher or detail. Zero is no fit.
 const WholeTitle = 8;

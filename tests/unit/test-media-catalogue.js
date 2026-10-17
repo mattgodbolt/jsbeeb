@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     MachineRequirements,
+    RecentMedia,
     browserDiscNames,
     describeBitshiftersEntry,
     describeBrowserDisc,
@@ -211,6 +212,94 @@ describe("the media catalogue", () => {
         window.localStorage.setItem("disc_apple.ssd", "");
         window.localStorage.setItem("quietDiscNotSaved", "1");
         expect(browserDiscNames()).toEqual(["apple.ssd", "zebra.ssd"]);
+    });
+
+    describe("what was loaded recently", () => {
+        const disc = (ref) => ({ ref, kind: "disc" });
+        beforeEach(() => vi.spyOn(console, "warn").mockImplementation(() => {}));
+        afterEach(() => vi.restoreAllMocks());
+        const refusing = () => ({
+            getItem: vi.fn(() => {
+                throw new Error("SecurityError");
+            }),
+            setItem: vi.fn(() => {
+                throw new Error("QuotaExceededError");
+            }),
+        });
+
+        it("ranks the newest first, moving one loaded again to the front", () => {
+            const recent = new RecentMedia();
+            for (const ref of ["sth:A.zip", "sth:B.zip", "sth:A.zip"]) recent.note(ref, "disc");
+            expect(recent.rank(disc("sth:A.zip"))).toBe(0);
+            expect(recent.rank(disc("sth:B.zip"))).toBe(1);
+            expect(recent.rank(disc("sth:C.zip"))).toBe(-1);
+        });
+
+        it("tells a tape from a disc with the same reference", () => {
+            const recent = new RecentMedia();
+            recent.note("sth:Both.zip", "tape");
+            expect(recent.rank({ ref: "sth:Both.zip", kind: "tape" })).toBe(0);
+            expect(recent.rank(disc("sth:Both.zip"))).toBe(-1);
+        });
+
+        it("keeps the eight newest", () => {
+            const recent = new RecentMedia();
+            for (let i = 1; i <= 9; ++i) recent.note(`sth:${i}.zip`, "disc");
+            expect(recent.rank(disc("sth:9.zip"))).toBe(0);
+            expect(recent.rank(disc("sth:2.zip"))).toBe(7);
+            expect(recent.rank(disc("sth:1.zip"))).toBe(-1);
+        });
+
+        it("lets no number of files opened this session push out what is kept across visits", () => {
+            const stored = Array.from({ length: 8 }, (_, i) => disc(`sth:${i}.zip`));
+            window.localStorage.setItem("recentMedia", JSON.stringify(stored));
+            const recent = new RecentMedia();
+            recent.note("session:1/mine.ssd", "disc");
+            expect(new RecentMedia().entries).toEqual(stored);
+            for (let i = 2; i <= 9; ++i) recent.note(`session:${i}/mine.ssd`, "disc");
+            expect(new RecentMedia().entries).toEqual(stored);
+            expect(recent.rank(disc("session:9/mine.ssd"))).toBe(0);
+            expect(recent.rank(disc("session:2/mine.ssd"))).toBe(7);
+            expect(recent.rank(disc("session:1/mine.ssd"))).toBe(-1);
+            expect(recent.rank(disc("sth:0.zip"))).toBe(8);
+        });
+
+        it("reads back no more than the eight newest, however many were stored", () => {
+            const stored = Array.from({ length: 20 }, (_, i) => disc(`sth:${i}.zip`));
+            window.localStorage.setItem("recentMedia", JSON.stringify(stored));
+            expect(new RecentMedia().entries).toEqual(stored.slice(0, 8));
+        });
+
+        it("remembers across visits, but not a file opened this session, which a later visit cannot load", () => {
+            const before = new RecentMedia();
+            before.note("sth:A.zip", "disc");
+            before.note("session:1/mine.ssd", "disc");
+            expect(before.rank(disc("session:1/mine.ssd"))).toBe(0);
+            const after = new RecentMedia();
+            expect(after.entries).toEqual([disc("sth:A.zip")]);
+        });
+
+        it("starts empty from storage that refuses or holds something else", () => {
+            expect(new RecentMedia(refusing).entries).toEqual([]);
+            window.localStorage.setItem("recentMedia", "{not json");
+            expect(new RecentMedia().entries).toEqual([]);
+            window.localStorage.setItem("recentMedia", '{"ref":"sth:A.zip"}');
+            expect(new RecentMedia().entries).toEqual([]);
+        });
+
+        it("still ranks what was loaded when storage will not keep it", () => {
+            const recent = new RecentMedia(refusing);
+            recent.note("sth:A.zip", "disc");
+            expect(recent.rank(disc("sth:A.zip"))).toBe(0);
+        });
+
+        it("still ranks what was loaded when there is no storage at all", () => {
+            const recent = new RecentMedia(() => {
+                throw new Error("SecurityError");
+            });
+            recent.note("sth:A.zip", "disc");
+            expect(recent.rank(disc("sth:A.zip"))).toBe(0);
+        });
     });
 
     describe("ordering the list", () => {

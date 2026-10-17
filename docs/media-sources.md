@@ -36,6 +36,13 @@ The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 which orders sources holding the same title: the user's own discs first, then the sources with
 metadata (the authors' own releases, the flux captures), then the sources without.
 
+With the search box empty, the window lists what was loaded most recently first, under a heading.
+`RecentMedia` in `media-catalogue.js` keeps the eight newest references in the browser's storage,
+and up to eight files opened this session alongside them for the visit; `MediaSlots` notes every
+load, but not a restored state's media or what the page starts with (the default disc, or what the
+URL names). The media window notes a disc that needs another machine before the page reloads as
+that machine, and a load the user asks for again (Retry, or connecting Google Drive) counts.
+
 ## Schemas and routes
 
 `Schemas` in `src/media-resolver.js` maps every prefix a reference can start with to how it is

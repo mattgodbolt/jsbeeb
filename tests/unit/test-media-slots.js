@@ -174,6 +174,24 @@ describe("MediaSlots", () => {
             expect(urlState.params.disc1).toBe("gd:xyz/fresh.ssd");
         });
 
+        it("notes what went in each slot as loaded recently, but not a load that failed", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            loader.loadTapeImage.mockResolvedValue({ name: "chuckie.uef" });
+            await slots.load(slots.deck, chuckie);
+            slots.put(slots.drive(1), discFor("mine.ssd", ssdImage()), opened.ref, { inUrl: false });
+            loader.loadDiscImage.mockRejectedValue(new Error("Not found"));
+            await slots.load(slots.drive(0), elite);
+            expect(slots.recent.rank(opened)).toBe(0);
+            expect(slots.recent.rank(chuckie)).toBe(1);
+            expect(slots.recent.rank(elite)).toBe(-1);
+        });
+
+        it("leaves what was loaded recently alone when told the load is not a new one", async () => {
+            loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
+            expect(await slots.load(slots.drive(0), elite, { recent: false })).toBe("loaded");
+            expect(slots.recent.rank(elite)).toBe(-1);
+        });
+
         it("fails a disc load, in words, on a machine with no drives", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             const drives = new Drives({ fdc: undefined, driveTracks: [DriveTracks.auto, DriveTracks.auto], urlState });
@@ -187,6 +205,12 @@ describe("MediaSlots", () => {
     });
 
     describe("putting in and taking out", () => {
+        it("leaves what was loaded recently alone when told the media is not a new load", () => {
+            slots.put(slots.drive(0), discFor("elite.ssd", ssdImage()), elite.ref, { recent: false });
+            expect(slots.recent.rank(elite)).toBe(-1);
+            expect(fdc.drives[0].disc).toBeTruthy();
+        });
+
         it("puts media that is to hand straight in, overtaking any load in flight", async () => {
             const pending = deferred();
             loader.loadDiscImage.mockReturnValue(pending.promise);
@@ -207,6 +231,13 @@ describe("MediaSlots", () => {
             expect(slots.drive(0).ref).toBeUndefined();
             expect(urlState.params).toEqual({});
             expect(slots.holding("sth:Games/Elite.zip")).toBeNull();
+        });
+
+        it("leaves what was loaded recently alone on an eject", async () => {
+            loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
+            await slots.load(slots.drive(0), elite);
+            slots.eject(slots.drive(0));
+            expect(slots.recent.entries).toEqual([{ ref: elite.ref, kind: "disc" }]);
         });
 
         it("ejects the tape likewise", async () => {

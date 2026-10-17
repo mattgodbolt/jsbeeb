@@ -146,10 +146,24 @@ describe("Machine", () => {
             expect(load).toHaveBeenCalledWith(
                 "drive 0",
                 expect.objectContaining({ ref: "elite.ssd", kind: "disc", title: "elite.ssd" }),
-                { inUrl: false },
+                { inUrl: false, recent: false },
             );
-            expect(load).toHaveBeenCalledWith("drive 1", expect.objectContaining({ ref: "sth:B.zip", source: "sth" }));
-            expect(load).toHaveBeenCalledWith("the deck", expect.objectContaining({ ref: "t.uef", kind: "tape" }));
+            expect(load).toHaveBeenCalledWith("drive 1", expect.objectContaining({ ref: "sth:B.zip", source: "sth" }), {
+                recent: false,
+            });
+            expect(load).toHaveBeenCalledWith("the deck", expect.objectContaining({ ref: "t.uef", kind: "tape" }), {
+                recent: false,
+            });
+        });
+
+        it("counts nothing a page starts with as loaded recently, even what the URL names", async () => {
+            const machine = make();
+            const started = startDeps();
+            await machine.start({ ...started, discImage: "chuckie.ssd", discImageInUrl: true });
+            expect(started.media.slots.load).toHaveBeenCalledWith("drive 0", expect.anything(), {
+                inUrl: true,
+                recent: false,
+            });
         });
 
         it("finishes booting whatever became of an image", async () => {
