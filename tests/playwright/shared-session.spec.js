@@ -38,7 +38,7 @@ test("a guest joins a hosted session, and what either types reaches both machine
     }
 });
 
-test("Shared session in the More menu hosts this machine, and a guest joins by pasting the link", async ({
+test("Shared session in the More menu hosts this machine, paused or not, and a guest joins by pasting the link", async ({
     browser,
     beeb,
 }) => {
@@ -48,12 +48,15 @@ test("Shared session in the More menu hosts this machine, and a guest joins by p
     await beeb.disableAutoRepeat();
     await typeLine(beeb, "A%=4321");
     const hostUrl = beeb.page.url();
+    await beeb.page.click("#debug-pause");
+    const pausedAt = await beeb.expectHeld();
     await openSessionFromMore(beeb);
     await beeb.page.fill("#session-name", "matt");
     await beeb.page.click(".session-host");
     const link = beeb.page.locator("#session-pane .session-link");
     await expect(link).toHaveText(/\?client=[a-z]+-[a-z]+-[a-z]+$/);
     expect(beeb.page.url()).toBe(hostUrl);
+    await beeb.expectRunningPast(pausedAt);
 
     const guestContext = await browser.newContext();
     const guest = new Beeb(await guestContext.newPage());

@@ -409,7 +409,10 @@ const startPromise = machine.start({
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
             refusal: sessionRefusal(sessionContext),
-            host: (name) => hostSession(sessionContext, name),
+            host: (name) => {
+                if (!loop.isRunning()) runControls.resume();
+                return hostSession(sessionContext, name);
+            },
             join: (room, name) => window.location.assign(joinLink(room, name)),
         });
     } catch (error) {
