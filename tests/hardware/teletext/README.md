@@ -41,7 +41,9 @@ The same disc runs under jsbeeb, so a photograph can be held against the emulato
     node tests/hardware/teletext/capture-refs.js
 
 writes `t1.png` to `t8.png` into the `refs` directory beside the script, whatever directory you run
-it from. Committed copies are already there.
+it from. Committed copies are already there. T8 is captured with its first box at column 9.5, the
+committed reference's phase; if a rendering change means no start lands it there, the script stops
+after T7 and says which columns it saw.
 
 ## Photographing a page
 
