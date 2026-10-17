@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.7.0...v2.8.0) (2026-10-17)
+
+
+### Features
+
+* the debugger shows device registers without disturbing them ([#1309](https://github.com/mattgodbolt/jsbeeb/issues/1309)) ([2967de3](https://github.com/mattgodbolt/jsbeeb/commit/2967de3d9d0cc255d26e46c1bda63231b04eab55))
+
+
+### Bug Fixes
+
+* a second vsync and odd-field fetches in the 6845's interlace modes ([#1312](https://github.com/mattgodbolt/jsbeeb/issues/1312)) ([723b4ad](https://github.com/mattgodbolt/jsbeeb/commit/723b4adb1a7ae690675981ec6b02b561bc67071f))
+
 ## [2.7.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.6.1...v2.7.0) (2026-10-17)
 
 
