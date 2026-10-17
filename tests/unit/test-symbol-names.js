@@ -58,14 +58,20 @@ describe("symbol names", () => {
             },
         },
     });
+    const sidewaysRom = set({
+        title: "Sideways ROM",
+        workspace: { net_tx_ptr: "0x70", rom_buffer: "0x1b80" },
+        regions: { rom: region(0x8000, 0xc000, 0x8000, { service: "0x8003" }) },
+    });
     const LoaderCode = 0x910;
     const GameCode = 0x1200;
     const MosCode = 0xe000;
+    const RomCode = 0x8100;
     const UncoveredCode = 0x5000;
 
     beforeEach(() => {
         memory = new Uint8Array(0x10000);
-        for (const at of [0xc000, 0x900, 0x1100, 0x1a00, 0x2000]) anchor(at);
+        for (const at of [0xc000, 0x900, 0x1100, 0x1a00, 0x2000, 0x8000]) anchor(at);
     });
 
     describe("matching", () => {
@@ -214,6 +220,16 @@ describe("symbol names", () => {
             expect(nameOf(namesFrom(mos, game).operand(MosCode, 0x1190))).toBe("vdu_buffer from MOS");
         });
 
+        it("take a non-system set's workspace names only in that set's own code", () => {
+            const names = namesFrom(mos, game, sidewaysRom);
+            expect(nameOf(names.operand(RomCode, 0x70))).toBe("net_tx_ptr from Sideways ROM");
+            expect(nameOf(names.operand(RomCode, 0x1b80))).toBe("rom_buffer from Sideways ROM");
+            expect(names.operand(GameCode, 0x1b80)).toBeUndefined();
+            expect(names.operand(UncoveredCode, 0x1b80)).toBeUndefined();
+            expect(nameOf(names.operand(GameCode, 0x70))).toBe("lives from Game");
+            expect(nameOf(names.operand(UncoveredCode, 0x70))).toBe("scratch from MOS");
+        });
+
         it("take no system globals while no region of the system set matches", () => {
             breakAnchor(0xc000);
             expect(namesFrom(mos, game).operand(GameCode, 0x20e)).toBeUndefined();
@@ -299,6 +315,17 @@ describe("symbol names", () => {
             expect(nameOf(names.address(0xd1, MosCode))).toBe("plot_mask from MOS");
             expect(nameOf(names.address(0xd1, 0x4010))).toBe("ship_x from Takeover");
             expect(nameOf(names.address(0xd1, UncoveredCode))).toBe("ship_x from Takeover");
+        });
+
+        it("takes a non-system set's workspace name only while the CPU is in its code, not while it merely matches", () => {
+            const names = namesFrom(mos, game, sidewaysRom);
+            expect(nameOf(names.address(0x70, RomCode))).toBe("net_tx_ptr from Sideways ROM");
+            expect(nameOf(names.address(0x1b80, RomCode))).toBe("rom_buffer from Sideways ROM");
+            expect(nameOf(names.address(0x70, GameCode))).toBe("lives from Game");
+            expect(nameOf(names.address(0x70, UncoveredCode))).toBe("lives from Game");
+            expect(nameOf(names.address(0x70))).toBe("lives from Game");
+            expect(names.address(0x1b80, GameCode)).toBeUndefined();
+            expect(names.address(0x1b80)).toBeUndefined();
         });
 
         it("takes a non-system set's globals only while one of its regions matches", () => {
