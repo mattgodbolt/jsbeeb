@@ -265,6 +265,7 @@ describe("Debugger", () => {
         const rowAt = (address) => disRows().find((row) => Number(row.dataset.addr) === address);
         const code = (address) => rowAt(address).querySelector(".disassembly");
         const symbolsLine = () => document.getElementById("debug-symbols");
+        const credited = () => symbolsLine().style.visibility !== "hidden";
 
         beforeEach(() => {
             [0x20, 0x00, 0x30, 0x8d, 0x40, 0xfe, 0xb1, 0xf2, 0x6c, 0x0e, 0x02, 0xa5, 0xf2].forEach((byte, i) =>
@@ -281,7 +282,7 @@ describe("Debugger", () => {
         it("names operands once the sets that match have arrived, and says where the names came from", async () => {
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR $3000");
-            expect(visible("debug-symbols")).toBe(false);
+            expect(credited()).toBe(false);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             expect(code(0x2005).textContent).toBe("STA system_via_register_b");
             expect(code(0x2008).textContent).toMatch(/^LDA \(os_text_ptr\),Y ; \$[0-9a-f]{4} \+ Y$/);
@@ -289,7 +290,7 @@ describe("Debugger", () => {
             expect(code(0x200d).textContent).toBe("LDA os_text_ptr");
             expect(code(0x2000).textContent).toBe("LDA #$41");
             expect(code(0x2002).querySelector(".instr_instr_ref").title).toBe("oswrch: $3000, from Test MOS");
-            expect(visible("debug-symbols")).toBe(true);
+            expect(credited()).toBe(true);
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
@@ -356,9 +357,66 @@ describe("Debugger", () => {
                 return json;
             });
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+            await vi.waitFor(() => expect(credited()).toBe(true));
             expect(symbolsLine().textContent).toBe("names from Test MOS (javascript:alert(1))");
             expect(symbolsLine().querySelector("a")).toBeNull();
+        });
+
+        it("credits only the sets naming something in view, following the view as it moves", async () => {
+            const OtherAt = 0x5000;
+            const otherRegion = { start: "0x5000", end: "0x5100", anchors: [{ at: "0x5000", bytes: "eaea" }] };
+            [0xea, 0xea].forEach((byte, i) => cpu.writemem(OtherAt + i, byte));
+            const withOther = new Map([
+                ...files,
+                [
+                    `${BaseUrl}index.json`,
+                    {
+                        format: 1,
+                        sets: [
+                            ...files.get(`${BaseUrl}index.json`).sets,
+                            { url: "other.json", licence: "MIT", regions: { code: otherRegion } },
+                        ],
+                    },
+                ],
+                [
+                    `${BaseUrl}other.json`,
+                    {
+                        format: 1,
+                        title: "Other",
+                        licence: "MIT",
+                        source: "https://example.com/other.lst",
+                        regions: { code: { ...otherRegion, symbols: { start: "0x5000" } } },
+                    },
+                ],
+            ]);
+            load.mockImplementation(async (url) => structuredClone(withOther.get(url)));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => {
+                dbgr.updateDisassembly(OtherAt);
+                expect(symbolsLine().textContent).toBe("names from Other (source)");
+            });
+            dbgr.updateDisassembly(cpu.pc);
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            [0x4c, OtherAt & 0xff, OtherAt >> 8].forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
+            keyPress("n");
+            expect(code(0x2002).textContent).toBe("JMP start");
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source) · Other (source)");
+        });
+
+        it("leaves the credit as it is while the view moves among the same sets' names", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            const source = symbolsLine().querySelector("a");
+            keyPress("j");
+            expect(symbolsLine().querySelector("a")).toBe(source);
+        });
+
+        it("keeps the credit's line, hidden, while nothing in view is named", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            dbgr.updateDisassembly(0x8000);
+            expect(credited()).toBe(false);
+            expect(visible("debug-symbols")).toBe(true);
         });
 
         it("names a clashing global in the address column after the set whose code the CPU is in", async () => {
@@ -390,9 +448,10 @@ describe("Debugger", () => {
             ]);
             load.mockImplementation(async (url) => structuredClone(programs.get(url)));
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(symbolsLine().querySelectorAll(".symbol-set")).toHaveLength(2));
-            dbgr.updateDisassembly(0x70);
-            expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 lives");
+            await vi.waitFor(() => {
+                dbgr.updateDisassembly(0x70);
+                expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 lives");
+            });
             cpu.pc = ClockCode;
             dbgr.updateDisassembly(0x70);
             expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 ticks");
@@ -453,13 +512,13 @@ describe("Debugger", () => {
                     return json;
                 });
                 dbgr.debug(cpu.pc);
-                await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+                await vi.waitFor(() => expect(credited()).toBe(true));
                 expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             });
 
             it("links the author's page, by its site's name, beside the source", async () => {
                 dbgr.debug(cpu.pc);
-                await vi.waitFor(() => expect(visible("debug-symbols")).toBe(true));
+                await vi.waitFor(() => expect(credited()).toBe(true));
                 expect(symbolsLine().textContent).toBe("names from Test MOS (example.com, source)");
                 expect([...symbolsLine().querySelectorAll("a")].map((a) => a.href)).toEqual([
                     "https://www.example.com/mos/",
@@ -475,7 +534,7 @@ describe("Debugger", () => {
             cpu.writemem(OswrchAt + 3, 0xea);
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR $3000");
-            expect(visible("debug-symbols")).toBe(false);
+            expect(credited()).toBe(false);
         });
 
         it("keeps plain addresses and a working debugger when the index can't be fetched", async () => {
@@ -484,7 +543,7 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(console.warn).toHaveBeenCalled());
             expect(code(0x2002).textContent).toBe("JSR $3000");
-            expect(visible("debug-symbols")).toBe(false);
+            expect(credited()).toBe(false);
             keyPress("n");
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
         });

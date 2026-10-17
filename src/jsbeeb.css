@@ -95,6 +95,12 @@ body {
   color: #aaaaaa;
 }
 
+/* Wraps to the panel's width instead of setting it. */
+#debug-symbols {
+  width: 0;
+  min-width: 100%;
+}
+
 #debug-symbols a {
   color: #aaaaff;
 }
