@@ -842,6 +842,53 @@ export class Video {
         }
     }
 
+    clockVSync(r7Hit) {
+        // Half-line interlace timing is shown nicely in figure 13 here:
+        // http://bitsavers.trailing-edge.com/components/motorola/_dataSheets/6845.pdf
+        // Essentially, on even frames, vsync raise / lower triggers at
+        // the mid-scanline, and then a dummy scanline is also added
+        // at the end of vertical adjust.
+        // Without interlace, frames are 312 scanlines. With interlace,
+        // both odd and even frames are 312.5 scanlines.
+        // The chip runs both vsyncs all the time and muxes one to the pin,
+        // so changing R8 can switch between them mid-pulse:
+        // https://stardot.org.uk/forums/viewtopic.php?p=358225#p358225
+        const halfR0Hit = this.horizCounter === (this.regs[0] + 1) >>> 1;
+
+        // A vsync will initiate at any character and scanline position,
+        // provided there isn't one in progress and provided there
+        // wasn't already one in this character row.
+        // This is an interesting finding, on a real model B.
+        // One further emulated quirk is that in the corner case of a
+        // vsync ending and starting at the same time, the vsync
+        // pulse continues uninterrupted. The vsync pulse counter will
+        // continue counting up and wrap at 16.
+        const lineVSyncEnding = this.inLineVSync && this.vpulseCounter === this.vpulseWidth;
+        let vSyncSourceChanged = lineVSyncEnding;
+        if (lineVSyncEnding) this.inLineVSync = false;
+        if (r7Hit && !this.inLineVSync && !this.hadVSyncThisRow) {
+            this.inLineVSync = true;
+            vSyncSourceChanged = true;
+            if (!lineVSyncEnding) {
+                this.hadVSyncThisRow = true;
+                this.vpulseCounter = 0;
+            }
+        }
+        if (halfR0Hit) {
+            const halfLineVSyncEnding = this.inHalfLineVSync && this.vpulseCounter === this.vpulseWidth;
+            if (halfLineVSyncEnding) {
+                this.inHalfLineVSync = false;
+                vSyncSourceChanged = true;
+            }
+            if (r7Hit && !this.inHalfLineVSync && !this.hadHalfLineVSyncThisRow) {
+                this.inHalfLineVSync = true;
+                vSyncSourceChanged = true;
+                if (!halfLineVSyncEnding) this.hadHalfLineVSyncThisRow = true;
+            }
+        }
+        if (vSyncSourceChanged) this.updateVSync();
+    }
+
     updateVSync() {
         const vsync = this.regs[8] & 1 && this.doEvenFrameLogic ? this.inHalfLineVSync : this.inLineVSync;
         if (vsync === this.inVSync) return;
@@ -860,6 +907,7 @@ export class Video {
         const cursorFlash = (this.regs[10] & 0x60) >>> 5;
         this.cursorOnThisFrame = cursorFlash === 0 || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         this.doEvenFrameLogic = !(this.frameCount & 1);
+        this.updateVSync();
     }
 
     endOfCharacterLine() {
@@ -1074,45 +1122,8 @@ export class Video {
             }
 
             // Handle VSync.
-            // Half-line interlace timing is shown nicely in figure 13 here:
-            // http://bitsavers.trailing-edge.com/components/motorola/_dataSheets/6845.pdf
-            // Essentially, on even frames, vsync raise / lower triggers at
-            // the mid-scanline, and then a dummy scanline is also added
-            // at the end of vertical adjust.
-            // Without interlace, frames are 312 scanlines. With interlace,
-            // both odd and even frames are 312.5 scanlines.
-            // The chip runs both vsyncs all the time and muxes one to the pin,
-            // so changing R8 can switch between them mid-pulse:
-            // https://stardot.org.uk/forums/viewtopic.php?p=358225#p358225
-            const halfR0Hit = this.horizCounter === (this.regs[0] + 1) >>> 1;
             const r7Hit = this.vertCounter === this.regs[7];
-
-            // A vsync will initiate at any character and scanline position,
-            // provided there isn't one in progress and provided there
-            // wasn't already one in this character row.
-            // This is an interesting finding, on a real model B.
-            // One further emulated quirk is that in the corner case of a
-            // vsync ending and starting at the same time, the vsync
-            // pulse continues uninterrupted. The vsync pulse counter will
-            // continue counting up and wrap at 16.
-            const lineVSyncEnding = this.inLineVSync && this.vpulseCounter === this.vpulseWidth;
-            if (lineVSyncEnding) this.inLineVSync = false;
-            if (r7Hit && !this.inLineVSync && !this.hadVSyncThisRow) {
-                this.inLineVSync = true;
-                if (!lineVSyncEnding) {
-                    this.hadVSyncThisRow = true;
-                    this.vpulseCounter = 0;
-                }
-            }
-            if (halfR0Hit) {
-                const halfLineVSyncEnding = this.inHalfLineVSync && this.vpulseCounter === this.vpulseWidth;
-                if (halfLineVSyncEnding) this.inHalfLineVSync = false;
-                if (r7Hit && !this.inHalfLineVSync && !this.hadHalfLineVSyncThisRow) {
-                    this.inHalfLineVSync = true;
-                    if (!halfLineVSyncEnding) this.hadHalfLineVSyncThisRow = true;
-                }
-            }
-            this.updateVSync();
+            if (r7Hit || this.inLineVSync || this.inHalfLineVSync) this.clockVSync(r7Hit);
 
             // TODO(#876) this will be cleaner if we rework skew to have fetch
             // independent from render.
