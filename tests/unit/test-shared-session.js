@@ -2206,6 +2206,7 @@ describe("startSessionFromUrl", () => {
     it.each([
         ["no such room", 404, `there's no room called "there"; check its name, or the host's page may have closed`],
         ["too many joining", 429, "too many people are joining at once; try again in a moment"],
+        ["an offer already waiting", 409, "this page is already waiting to join; reload it to try again"],
         ["anything else", 500, "Rendezvous post offer failed with status 500"],
     ])("says what went wrong in plain words for %s", async (_, status, why) => {
         const postOffer = vi.fn(async () => {
@@ -2213,6 +2214,14 @@ describe("startSessionFromUrl", () => {
         });
         await started({ client: "there" }, { rendezvous: { postOffer } });
         expect(toastTexts()).toContain(`The session couldn't start: ${why}.`);
+    });
+
+    it("says when there is no rendezvous to host with", async () => {
+        const createRoom = vi.fn(async () => {
+            throw new RendezvousError("Rendezvous create room failed with status 404", 404);
+        });
+        await started({ server: "here" }, { rendezvous: { createRoom } });
+        expect(toastTexts()).toContain("The session couldn't start: the shared session service isn't available here.");
     });
 
     it("says when a room of the name asked for is already open", async () => {

@@ -1439,11 +1439,17 @@ export function sessionRefusal({ model, processor }) {
     return null;
 }
 
-function startFailure(error, room) {
-    if (error.status === RoomGone)
-        return `there's no room called "${room}"; check its name, or the host's page may have closed`;
-    if (error.status === TooManyOffers) return "too many people are joining at once; try again in a moment";
-    if (error.status === RoomTaken) return `a room called "${room}" is already open`;
+// What the rendezvous's refusals mean to a host, which only ever makes its room, and to a guest, which looks for one.
+function startFailure(error, room, host) {
+    if (host) {
+        if (error.status === RoomGone) return "the shared session service isn't available here";
+        if (error.status === RoomTaken) return `a room called "${room}" is already open`;
+    } else {
+        if (error.status === RoomGone)
+            return `there's no room called "${room}"; check its name, or the host's page may have closed`;
+        if (error.status === TooManyOffers) return "too many people are joining at once; try again in a moment";
+        if (error.status === RoomTaken) return "this page is already waiting to join; reload it to try again";
+    }
     return error.message;
 }
 
@@ -1461,7 +1467,7 @@ function startSession(context, { host, room, name, secret }) {
     const cleanedName = cleanName(name) ?? randomName();
     const session = host ? new SessionHost(context, room, cleanedName) : new SessionGuest(context, room, cleanedName);
     session.start(secret).catch((error) => {
-        notify(`The session couldn't start: ${startFailure(error, room)}.`);
+        notify(`The session couldn't start: ${startFailure(error, room, host)}.`);
         console.error(error);
     });
     return session;
@@ -1486,7 +1492,7 @@ export async function hostSession(context, name) {
             return startSession(context, { host: true, room, name, secret });
         } catch (error) {
             if (error.status === RoomTaken && tries < MaxRoomNameTries) continue;
-            notify(`The session couldn't start: ${startFailure(error, room)}.`);
+            notify(`The session couldn't start: ${startFailure(error, room, true)}.`);
             console.error(error);
             return null;
         }
