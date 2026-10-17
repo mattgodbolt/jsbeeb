@@ -1,4 +1,4 @@
-// The way into a shared session from the top bar: a dialog to host on the machine as it is, or to join
+// The way into a shared session from the More menu: a dialog to host on the machine as it is, or to join
 // someone else's room, and once a session is going, its pane.
 
 import * as bootstrap from "bootstrap";
