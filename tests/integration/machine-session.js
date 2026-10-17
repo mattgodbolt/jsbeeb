@@ -167,13 +167,13 @@ describe("MachineSession watching execution", () => {
         return lo | (hi << 8);
     }
 
-    async function stopAtProgramStart() {
-        session.writeMemory(ProgramAddress, Program);
+    async function stopAtProgramStart(program = Program, { keepBreakpoint = false } = {}) {
+        session.writeMemory(ProgramAddress, program);
         const id = session.addBreakpoint("execute", ProgramAddress);
         await session.type(`CALL &${ProgramAddress.toString(16)}`);
         if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
         expect(session.hitBreakpoint().id).toBe(id);
-        session.removeBreakpoint(id);
+        if (!keepBreakpoint) session.removeBreakpoint(id);
         session.resetBreakpointHits();
     }
 
@@ -282,6 +282,49 @@ describe("MachineSession watching execution", () => {
         expect(result.completed).toBe(false);
         expect(session.hitBreakpoint().id).toBe(id);
         expect(session.elapsedCycles).toBe(removedAt);
+    });
+
+    it("does not stop again at the breakpoint it resumes from", async () => {
+        await stopAtProgramStart(Program, { keepBreakpoint: true });
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBe(null);
+    });
+
+    it("stops once for two breakpoints at one address, and records both", async () => {
+        await stopAtProgramStart();
+        const first = session.addBreakpoint("execute", ProgramPcs[2]);
+        const second = session.addBreakpoint("execute", ProgramPcs[2]);
+
+        const stopped = await session.runFor(CyclesPerInterlacedFrame);
+        session.removeBreakpoint(first);
+        const alsoHit = session.hitBreakpoint();
+        session.resetBreakpointHits();
+        const resumed = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(stopped.completed).toBe(false);
+        expect(alsoHit.id).toBe(second);
+        expect(resumed.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBe(null);
+    });
+
+    it("fires a write breakpoint on the instruction an execute breakpoint stopped at", async () => {
+        const StoreAddress = 0x70;
+        const storeProgram = [0xa9, 0x2a, 0x85, StoreAddress, 0x60]; // LDA #42, STA &70, RTS
+        await stopAtProgramStart(storeProgram);
+        const execute = session.addBreakpoint("execute", ProgramAddress + 2);
+        const write = session.addBreakpoint("write", StoreAddress);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+        const atStore = session.hitBreakpoint();
+        session.resetBreakpointHits();
+        await session.runFor(CyclesPerInterlacedFrame);
+        const afterStore = session.hitBreakpoint();
+
+        expect(atStore.id).toBe(execute);
+        expect(afterStore).toEqual({ id: write, type: "write", address: StoreAddress, value: 42 });
     });
 
     it("does not report the address it was added stopped at once reset moves the pc", async () => {
