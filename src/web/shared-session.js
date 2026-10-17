@@ -46,6 +46,12 @@ const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
 const ToastTitle = "Shared session";
 const RoomGone = 404;
+const RoomTaken = 409;
+const TooManyOffers = 429;
+// The rendezvous's own rule for an ID.
+const RoomName = /^[A-Za-z0-9_-]{1,64}$/;
+// A generated room's name is three words; one taken already is a rare clash, and another name will do.
+const MaxRoomNameTries = 3;
 // Keys are stamped with a round trip not yet measured as this.
 const UnmeasuredRttMs = 200;
 // A guest in control that sends no commit for this long has stalled, or its connection has, and the host takes
@@ -268,10 +274,11 @@ export class SessionHost {
         this.showStatus();
     }
 
-    async start() {
+    /** @param {string} [secret] the room's, if it has been made already */
+    async start(secret) {
         const { processor, loop, keyboard, rendezvous } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
-        this.secret = await rendezvous.createRoom(this.room);
+        this.secret = secret ?? (await rendezvous.createRoom(this.room));
         this.sequence();
         loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
@@ -1374,11 +1381,30 @@ function cleanRoster(guests) {
     }));
 }
 
-function joinLink(room) {
+/** The address that joins `room`, as `name` if one is given. */
+export function joinLink(room, name) {
     const link = new URL(window.location.href);
-    link.search = `?client=${encodeURIComponent(room)}`;
+    link.search = "";
     link.hash = "";
+    link.searchParams.set("client", room);
+    if (name) link.searchParams.set("name", name);
     return link.toString();
+}
+
+function parsedUrl(text) {
+    try {
+        return new URL(text);
+    } catch {
+        return null;
+    }
+}
+
+/** The room in `text`, which is a room's name or a link to it (with or without its scheme), or null if neither. */
+export function roomFrom(text) {
+    const trimmed = text.trim();
+    const link = parsedUrl(trimmed) ?? (trimmed.includes("?") ? parsedUrl(`https://${trimmed}`) : null);
+    const room = link ? (link.searchParams.get("client") ?? link.searchParams.get("server") ?? "") : trimmed;
+    return RoomName.test(room) ? room : null;
 }
 
 async function copyJoinLink(room) {
@@ -1409,23 +1435,79 @@ function saveReport(session) {
     downloadBlob(blob, `jsbeeb-session-${report.role}-${stamp}.json`);
 }
 
+/** Why this machine cannot host or join a session, or null if it can. */
+export function sessionRefusal({ model, processor }) {
+    if (model.isAtom || processor.hasTube)
+        return "Shared sessions need a BBC Model B or Master, without a second processor.";
+    return null;
+}
+
+// What the rendezvous's refusals mean to a host, which only ever makes its room, and to a guest, which looks for one.
+function startFailure(error, room, host) {
+    if (host) {
+        if (error.status === RoomGone) return "the shared session service isn't available here";
+        if (error.status === RoomTaken) return `a room called "${room}" is already open`;
+    } else {
+        if (error.status === RoomGone)
+            return `there's no room called "${room}"; check its name, or the host's page may have closed`;
+        if (error.status === TooManyOffers) return "too many people are joining at once; try again in a moment";
+        if (error.status === RoomTaken) return "this page is already waiting to join; reload it to try again";
+    }
+    return error.message;
+}
+
+/**
+ * Hosts `room`, or joins it as a guest, on this page's machine.
+ * @param {SessionContext} context
+ * @returns {SessionHost|SessionGuest|null} the session, or null if this machine cannot take part in one
+ */
+function startSession(context, { host, room, name, secret }) {
+    const refusal = sessionRefusal(context);
+    if (refusal) {
+        notify(refusal);
+        return null;
+    }
+    const cleanedName = cleanName(name) ?? randomName();
+    const session = host ? new SessionHost(context, room, cleanedName) : new SessionGuest(context, room, cleanedName);
+    session.start(secret).catch((error) => {
+        notify(`The session couldn't start: ${startFailure(error, room, host)}.`);
+        console.error(error);
+    });
+    return session;
+}
+
+/**
+ * Hosts a room with a name of its own on the machine as it is. The room is made first, so a page that could not
+ * make one is left as it was, with nothing of a session about it.
+ * @param {SessionContext} context
+ * @returns {Promise<SessionHost|null>} the session, or null if there is none
+ */
+export async function hostSession(context, name) {
+    const refusal = sessionRefusal(context);
+    if (refusal) {
+        notify(refusal);
+        return null;
+    }
+    for (let tries = 1; ; ++tries) {
+        const room = randomName();
+        try {
+            const secret = await context.rendezvous.createRoom(room);
+            return startSession(context, { host: true, room, name, secret });
+        } catch (error) {
+            if (error.status === RoomTaken && tries < MaxRoomNameTries) continue;
+            notify(`The session couldn't start: ${startFailure(error, room, true)}.`);
+            console.error(error);
+            return null;
+        }
+    }
+}
+
 /**
  * Starts the session the URL asks for, if any.
  * @param {SessionContext} context
+ * @returns {SessionHost|SessionGuest|null}
  */
 export function startSessionFromUrl(params, context) {
-    if (!params.server && !params.client) return;
-    const { model, processor } = context;
-    if (model.isAtom || processor.hasTube) {
-        notify("Shared sessions need a BBC Model B or Master, without a second processor.");
-        return;
-    }
-    const name = cleanName(params.name) ?? randomName();
-    const session = params.server
-        ? new SessionHost(context, params.server, name)
-        : new SessionGuest(context, params.client, name);
-    session.start().catch((error) => {
-        notify(`The session couldn't start: ${error.message}`);
-        console.error(error);
-    });
+    if (!params.server && !params.client) return null;
+    return startSession(context, { host: !!params.server, room: params.server || params.client, name: params.name });
 }

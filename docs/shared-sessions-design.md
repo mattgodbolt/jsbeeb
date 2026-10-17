@@ -194,9 +194,11 @@ directly, a hosted TURN service is the next step, and one of the relays above is
 
 The smallest session worth having, on the machines in the scope above, built in `src/lockstep.js` (the
 protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`. `?server=<room>` hosts and
-`?client=<room>` joins. There is no share UI yet, so the host picks the room's name and sends the link round
-itself. To try it: `npm start`, then the host's URL with whatever else you want (a disc, a model, `autoboot`) in
-one window and the guest's in another, side by side rather than as tabs. The first target is
+`?client=<room>` joins. Shared session in the More menu does either without editing the URL: Start hosting
+hosts the machine as it is, in a room with a generated name and without touching the URL, so a reload ends the
+session; Join takes a room's name or the link and goes to its `?client=` URL. While a session is going, it opens
+the session pane instead. To try it: `npm start`, then host in one window and join from another, side by
+side rather than as tabs. The first target is
 [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth): a B, keyboard only, turn-based and hot-seat
 for two to six, so lag barely matters and a shared keyboard is how it is meant to be played.
 
@@ -235,8 +237,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   owns the function's shape and ignores its code; `deploy-jsbeeb` may update the code, and the deploy job does
   so before the S3 sync, as it already uploads assets before the HTML that names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
-- **Names:** `?name=` says what to call you; without it you get a random one. A guest says its name as it
-  connects and the host gives its own in the welcome.
+- **Names:** `?name=`, or the name in the Shared session dialog, says what to call you; without it you get a random one.
+  A guest says its name as it connects and the host gives its own in the welcome.
 - **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the host
   and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than 100 ms
   behind or stutters, or for the second after it desynced, red once it falls silent or leaves, each named in its
@@ -275,8 +277,11 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - A hidden host runs the session slowly (about a tenth of real speed, by the reasoning in challenge 6; not
   measured). A guest's keys still go in on the cycles they were stamped with, but the host takes about ten times
   as long to reach them, so a guest's keys take seconds to appear, as everything else does.
-- A host that reloads keeps `?server=` in its URL; the room is deleted as the page goes, but if that is lost
-  the reload is refused until the room expires, and a new name is the way out.
+- A host that hosted with `?server=` keeps it in its URL when it reloads; the room is deleted as the page goes,
+  but if that is lost the reload is refused until the room expires, and a new name is the way out.
+- A page takes part in one session. There is no way to leave or end one but closing the page, and once one has
+  ended (a guest's host went, say), Shared session in the More menu still opens its pane rather than hosting
+  again.
 
 ### What is left for v0
 
@@ -286,7 +291,6 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   device state.
 - A build ID in place of the package version.
 - Blocking in a session what bypasses it, and refusing configurations outside the scope.
-- A share UI that generates the room's name.
 
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
 snapshot links; the pulled inputs (ADC sources, gamepads, the mouse, the switches) through the session, with
