@@ -248,7 +248,7 @@ function parsed(data) {
  * @typedef {object} SessionContext
  * @property {object} processor
  * @property {object} model
- * @property {object} takenFromHost - the page's takenFromHostValues, as its machine was built with them
+ * @property {object} takenFromHost - the page's takenFromHostValues, as its start gave them
  * @property {import("./emulation-loop.js").EmulationLoop} loop
  * @property {import("./keyboard.js").Keyboard} keyboard
  * @property {import("./url-state.js").UrlState} urlState

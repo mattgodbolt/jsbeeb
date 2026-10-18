@@ -334,6 +334,7 @@ describe("the settings a session guest takes from its host", () => {
 
     it("refuses a host's value this page would not take from its own URL", () => {
         expect(readTakenFromHost({ tubeCpuMultiplier: 0 })).toBeNull();
+        expect(readTakenFromHost({ stationId: 1e21 })).toBeNull();
         expect(readTakenFromHost({ tubeCpuMultiplier: 2 })).toMatchObject({ tubeCpuMultiplier: 2 });
     });
 

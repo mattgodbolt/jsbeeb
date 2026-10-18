@@ -1,4 +1,4 @@
-import { ParamTypes } from "../url-params.js";
+import { buildUrlFromParams, ParamTypes, parseQueryString } from "../url-params.js";
 import { allModels, findModel, tubeModelFor } from "../models.js";
 import { AudioOutputs, DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { getFilterForMode, MaxPersistenceMs, persistenceSettings } from "./canvas.js";
@@ -385,8 +385,17 @@ export function takenFromHostValues(settings, params, parameters = Parameters) {
     );
 }
 
-const acceptable = ({ valid, fit }, value) =>
-    value === undefined || ((!valid || valid(value)) && (!fit || fit(value) === value));
+const sameValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+function survivesUrl(name, type, value) {
+    const typeOf = () => type;
+    const url = buildUrlFromParams("", { [name]: value }, typeOf);
+    return sameValue(usableAs[type](parseQueryString(url.substring(1), typeOf)[name]), value);
+}
+
+const acceptable = (name, { type, valid, fit }, value) =>
+    value === undefined ||
+    ((!valid || valid(value)) && (!fit || fit(value) === value) && survivesUrl(name, type, value));
 
 /**
  * @returns {object|null} the values of the parameters a session guest takes from its host, as the host `sent` them in
@@ -399,13 +408,12 @@ export function readTakenFromHost(sent, parameters = Parameters) {
         usableAs[parameter.type](sent?.[name]) ?? parameter.default,
         parameter,
     ]);
-    if (!entries.every(([, value, parameter]) => acceptable(parameter, value))) return null;
+    if (!entries.every(([name, value, parameter]) => acceptable(name, parameter, value))) return null;
     return Object.fromEntries(entries.map(([name, value]) => [name, value]));
 }
 
 /** @returns {boolean} whether this page's `own` takenFromHostValues are the `host`'s. */
-export const matchesHost = (host, own) =>
-    Object.keys(host).every((name) => JSON.stringify(host[name] ?? null) === JSON.stringify(own[name] ?? null));
+export const matchesHost = (host, own) => Object.keys(host).every((name) => sameValue(host[name], own[name]));
 
 /**
  * Puts each parameter in `params` that a family applies into effect.
