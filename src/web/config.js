@@ -1,7 +1,7 @@
 import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { MasterAnfsRom } from "../econet.js";
 import {
-    ConfigForm,
+    configForm,
     controlId,
     PersistenceField,
     readoutId,
@@ -9,6 +9,7 @@ import {
     settingFields,
     showValue,
 } from "./config-form.js";
+import { Parameters } from "./parameters.js";
 
 /**
  * The sideways ROMs the optional fittings need, in the order they claim banks.
@@ -24,17 +25,16 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
-const SettingFields = settingFields();
-const RestartRequiredFields = SettingFields.filter((field) => field.restart).map((field) => field.setting);
+const restartRequired = (parameters) => Object.keys(parameters).filter((name) => parameters[name].field?.restart);
 
 /** @returns {boolean} whether any of the changed settings only take effect on a freshly built machine. */
-export function needsRestart(changed) {
-    return RestartRequiredFields.some((field) => field in changed);
+export function needsRestart(changed, parameters = Parameters) {
+    return restartRequired(parameters).some((name) => name in changed);
 }
 
 /** @returns {boolean} whether the saved settings differ from those the running machine was built with. */
-export function restartPending(settings, running) {
-    return RestartRequiredFields.some((field) => settings[field] !== running[field]);
+export function restartPending(settings, running, parameters = Parameters) {
+    return restartRequired(parameters).some((name) => settings[name] !== running[name]);
 }
 
 /**
@@ -51,16 +51,18 @@ export class Config extends EventTarget {
         // unless that fell back; the page says which once the display exists.
         this.persistenceSetting = undefined;
 
+        const form = configForm(settings.parameters);
+        this.fields = settingFields(form);
         const configuration = document.getElementById("configuration");
         configuration
             .querySelector(".modal-body")
-            .append(...renderConfigForm(ConfigForm, (field, value) => this.pick(field, value)));
+            .append(...renderConfigForm(form, (field, value) => this.pick(field, value)));
 
         // Built before anything can change, so this is what the running machine was built with.
         this.runningSettings = this.proposedSettings();
         this.setModel(settings.model);
         this.showSaved();
-        for (const field of SettingFields) {
+        for (const field of this.fields) {
             settings.on(field.setting, () => {
                 showValue(field, this.proposedSettings()[field.setting]);
                 this.showDependents();
@@ -80,7 +82,10 @@ export class Config extends EventTarget {
             if (Object.keys(changed).length === 0) return;
             settings.set(changed);
             // changed records which controls were touched, so a value in it can be what is already running.
-            if (needsRestart(changed) && restartPending(this.proposedSettings(), this.runningSettings))
+            if (
+                needsRestart(changed, settings.parameters) &&
+                restartPending(this.proposedSettings(), this.runningSettings, settings.parameters)
+            )
                 this.dispatchEvent(new Event("restart-required"));
         });
 
@@ -102,7 +107,7 @@ export class Config extends EventTarget {
     /** Every setting the dialog shows, as it would be saved if the dialog were closed now. */
     proposedSettings() {
         return Object.fromEntries(
-            SettingFields.map(({ setting }) => [
+            this.fields.map(({ setting }) => [
                 setting,
                 setting in this.changed ? this.changed[setting] : this.saved(setting),
             ]),
@@ -120,14 +125,14 @@ export class Config extends EventTarget {
     }
 
     showSaved() {
-        for (const field of SettingFields) showValue(field, this.saved(field.setting));
+        for (const field of this.fields) showValue(field, this.saved(field.setting));
         this.showDependents();
     }
 
     /** The parts of the dialog that follow from the settings as they would be saved. */
     showDependents() {
         const proposed = this.proposedSettings();
-        for (const field of SettingFields) {
+        for (const field of this.fields) {
             if (field.enabledWhen) document.getElementById(controlId(field)).disabled = !field.enabledWhen(proposed);
             if (field.readout)
                 document.getElementById(readoutId(field)).textContent = field.readout(
@@ -137,7 +142,7 @@ export class Config extends EventTarget {
         }
         document
             .getElementById("restart-pending")
-            .classList.toggle("d-none", !restartPending(proposed, this.runningSettings));
+            .classList.toggle("d-none", !restartPending(proposed, this.runningSettings, this.settings.parameters));
     }
 
     setDisplayMode(mode) {
