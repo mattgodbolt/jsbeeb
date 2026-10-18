@@ -4,7 +4,7 @@
 // in CLAUDE.md, under test:same-answer.
 
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -187,6 +187,12 @@ export async function checkHashes({ frames, workloads }, names, hashesOf = workl
 async function check(names) {
     const { lines, failures } = await checkHashes(JSON.parse(readFileSync(HashesPath, "utf8")), names);
     for (const line of lines) console.log(line);
+    if (process.env.GITHUB_STEP_SUMMARY) {
+        appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            `# Same-answer check\n\n${lines.map((line) => `- ${line}`).join("\n")}\n`,
+        );
+    }
     return failures ? 1 : 0;
 }
 
