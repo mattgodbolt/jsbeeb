@@ -23,7 +23,7 @@ function resolve(name, parameter, params) {
     const { type, valid, fromUrl = (value) => value, fit = (value) => value } = parameter;
     const usable = (value) => suitsType[type](value) && (!valid || valid(value));
     const candidates = [];
-    if (suitsType[type](params[name])) candidates.push(fromUrl(params[name]));
+    if (!parameter.notInUrl && suitsType[type](params[name])) candidates.push(fromUrl(params[name]));
     if (parameter.stored) candidates.push(fromStorage[type](window.localStorage[name]));
     const value = candidates.find(usable);
     return fit(value === undefined ? parameter.default : value);
@@ -104,7 +104,8 @@ export class Settings extends EventTarget {
             else window.localStorage[name] = value;
         }
         const slid = Object.keys(changes).some((name) => this.parameters[name].slid);
-        this.urlState.set(changes, { settle: slid });
+        const urlChanges = Object.entries(changes).filter(([name]) => !this.parameters[name].notInUrl);
+        this.urlState.set(Object.fromEntries(urlChanges), { settle: slid });
         for (const name of Object.keys(changes)) this.dispatchEvent(new Event(name));
         this.dispatchEvent(new CustomEvent("change", { detail: changes }));
     }

@@ -309,6 +309,7 @@ const mediaWindow = new MediaWindow({
     autoboot: () => autoBoot.boot(),
     driveSource: googleDriveSource,
     machineSwitch,
+    settings,
 });
 
 const layout = new Layout({

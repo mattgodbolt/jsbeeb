@@ -31,9 +31,9 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
 /**
  * Every parameter the page understands, with all it is: its URL `type`, and whether it is a `startupAction` (has the
  * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
- * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry) or
- * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
- * page joining a shared session keeps its own).
+ * as in the URL), `notInUrl` (stored, and never read from the URL or written to it), `slid` (changed live as a slider
+ * moves, so a burst of changes makes one history entry) or `localToPage` (changes only this page's picture, sound, key
+ * mapping or logging, never what the machine does, so a page joining a shared session keeps its own).
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
  * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
@@ -242,6 +242,9 @@ export const Parameters = {
         fit: clampAfterglow,
     },
 
+    // Whether a plain click or Enter in the media window boots what it puts in drive 0
+    mediaAutoboot: { type: ParamTypes.BOOL, stored: true, notInUrl: true, default: true },
+
     // Startup actions
     autoboot: { type: ParamTypes.BOOL, startupAction: true },
     autochain: { type: ParamTypes.BOOL, startupAction: true },
@@ -294,7 +297,11 @@ export const Parameters = {
 
 /** @returns {Object.<string, string>} each parameter's URL type, as the URL parser takes them. */
 export const urlParamTypes = (parameters) =>
-    Object.fromEntries(Object.entries(parameters).map(([name, { type }]) => [name, type]));
+    Object.fromEntries(
+        Object.entries(parameters)
+            .filter(([, { notInUrl }]) => !notInUrl)
+            .map(([name, { type }]) => [name, type]),
+    );
 
 export const UrlParamTypes = urlParamTypes(Parameters);
 
