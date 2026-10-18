@@ -4,12 +4,7 @@ import { Sources } from "./media-catalogue.js";
 const MaxErrorLabelLength = 100;
 const QuotedText = /"[^"]*"|'[^']*'|`[^`]*`|“[^”]*”|‘[^’]*’/g;
 const Addresses = /\b[a-z][a-z0-9+.-]*:\/\/\S+|\b(?:data|blob|file):\S+/gi;
-const PeerBuckets = [
-    { most: 0, label: "0" },
-    { most: 1, label: "1" },
-    { most: 2, label: "2" },
-    { most: 4, label: "3-4" },
-];
+const PeerBucketTops = [0, 1, 2, 4];
 
 const schemaOf = (ref) => {
     const { schema } = splitImage(ref);
@@ -48,5 +43,10 @@ export function errorLabel(message) {
 
 /** A count of people, in buckets coarse enough that no session stands out by it. */
 export function countBucket(count) {
-    return PeerBuckets.find(({ most }) => count <= most)?.label ?? "5+";
+    let bottom = 0;
+    for (const top of PeerBucketTops) {
+        if (count <= top) return bottom === top ? `${top}` : `${bottom}-${top}`;
+        bottom = top + 1;
+    }
+    return `${bottom}+`;
 }
