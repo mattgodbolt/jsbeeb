@@ -52,6 +52,20 @@ describe("benchmark workloads", () => {
         await expect(restoring).rejects.toThrow(/"elite" is not running: the reset vector at &FFFC did not change/);
     });
 
+    it("refuses a disc that is not the one the workload was made with", async () => {
+        const restoring = restoreAltered("elite", (workload) => {
+            workload.snapshot.media.disc1Crc32 += 1;
+        });
+        await expect(restoring).rejects.toThrow(/discs\/elite.ssd is not the disc the workload was made with/);
+    });
+
+    it("refuses a machine of another model before touching its drives", async () => {
+        const { cpu } = await benchmarkMachine("master-shadow");
+        const disc = cpu.fdc.drives[0].disc;
+        await expect(restoreWorkload(cpu, await readWorkload("elite"))).rejects.toThrow(/Model mismatch/);
+        expect(cpu.fdc.drives[0].disc).toBe(disc);
+    });
+
     it("refuses a machine that would leave the fast path", async () => {
         const restoring = restoreAltered("elite", (workload, machine) => {
             machine.processor.debugInstruction.add(() => false);

@@ -1,7 +1,7 @@
-import { ungzip } from "./archive.js";
+import { crc32, ungzip } from "./archive.js";
 import * as fdc from "./fdc.js";
 import { loadData } from "./loader.js";
-import { restoreSnapshot, snapshotFromJSON } from "./snapshot.js";
+import { assertSnapshotFits, restoreSnapshot, snapshotFromJSON } from "./snapshot.js";
 
 /** Where the workloads live, under `public/` and so served next to the page. */
 export const WorkloadsDir = "benchmarks";
@@ -12,9 +12,7 @@ const HexRadix = 16;
 /** The checks run the restored machine this long to see its program move, then restore it again. */
 export const CheckCycles = 1000 * 1000;
 
-const GzipMagic = [0x1f, 0x8b];
-
-const isGzip = (bytes) => GzipMagic.every((byte, index) => bytes[index] === byte);
+const AllBits = 0xff;
 const hex = (value) => `&${value.toString(HexRadix).toUpperCase()}`;
 
 /**
@@ -39,10 +37,8 @@ export async function readWorkload(name) {
         const known = workloads.map((candidate) => candidate.name).join(", ");
         throw new Error(`No benchmark workload "${name}"; the workloads are ${known}`);
     }
-    const bytes = await loadData(`${WorkloadsDir}/${workload.snapshot}`);
-    // A server that sends the file with Content-Encoding: gzip has the browser unzip it on the way in.
-    const json = isGzip(bytes) ? await ungzip(bytes) : bytes;
-    const snapshot = snapshotFromJSON(new TextDecoder().decode(json));
+    const compressed = await loadData(`${WorkloadsDir}/${workload.snapshot}`);
+    const snapshot = snapshotFromJSON(new TextDecoder().decode(await ungzip(compressed)));
     return { ...workload, snapshot };
 }
 
@@ -53,21 +49,31 @@ export function assertFastPath(cpu) {
     }
 }
 
+const newDisc = ({ name, data, layout }) => fdc.discFor(name, data, undefined, layout);
+
 // The snapshot names its discs as built-in ones, served from discs/, as a state saved from a default boot does.
-// A drive it names no disc for is emptied, whatever the page had put in it.
-async function loadDiscs(cpu, media = {}) {
-    for (const [drive, key] of DiscKeys.entries()) {
+async function readDiscImages(media = {}) {
+    const images = [];
+    for (const key of DiscKeys) {
         const name = media[key];
         if (!name) {
-            cpu.fdc.loadDisc(drive, null);
+            images.push(null);
             continue;
         }
-        const disc = fdc.discFor(name, await fdc.load(`discs/${name}`), undefined, media[`${key}Layout`]);
-        if (disc.originalImageCrc32 !== media[`${key}Crc32`]) {
+        const data = await fdc.load(`discs/${name}`);
+        if (crc32(data) !== media[`${key}Crc32`]) {
             throw new Error(`discs/${name} is not the disc the workload was made with`);
         }
-        cpu.fdc.loadDisc(drive, disc);
+        images.push({ name, data, layout: media[`${key}Layout`] });
     }
+    return images;
+}
+
+// A fresh disc each time, so nothing written to one carries into the next restore; a drive the snapshot
+// names no disc for is emptied, whatever the page had put in it.
+function restoreWithDiscs(cpu, snapshot, discImages) {
+    for (const [drive, image] of discImages.entries()) cpu.fdc.loadDisc(drive, image && newDisc(image));
+    restoreSnapshot(cpu, cpu.model, snapshot);
 }
 
 /**
@@ -77,7 +83,7 @@ async function loadDiscs(cpu, media = {}) {
  * @param {object} workload
  */
 export function checkWorkload(cpu, workload) {
-    for (const { address, value, mask = 0xff, what } of workload.checks.bytes) {
+    for (const { address, value, mask = AllBits, what } of workload.checks.bytes) {
         const found = cpu.readmem(address) & mask;
         if (found !== value) {
             throw new Error(
@@ -100,8 +106,10 @@ function advancingBytes(cpu, { address, length }) {
  * @param {object} workload from readWorkload
  */
 export async function restoreWorkload(cpu, workload) {
-    await loadDiscs(cpu, workload.snapshot.media);
-    restoreSnapshot(cpu, cpu.model, workload.snapshot);
+    const { snapshot } = workload;
+    assertSnapshotFits(cpu, cpu.model, snapshot);
+    const discImages = await readDiscImages(snapshot.media);
+    restoreWithDiscs(cpu, snapshot, discImages);
     assertFastPath(cpu);
     checkWorkload(cpu, workload);
     const { advancing } = workload.checks;
@@ -114,5 +122,5 @@ export async function restoreWorkload(cpu, workload) {
                 `did not change in ${CheckCycles} cycles`,
         );
     }
-    restoreSnapshot(cpu, cpu.model, workload.snapshot);
+    restoreWithDiscs(cpu, snapshot, discImages);
 }

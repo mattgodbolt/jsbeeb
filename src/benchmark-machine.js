@@ -8,7 +8,7 @@ import { FakeVideo, Video } from "./video.js";
 
 const FbWidth = 1024;
 const FbHeight = 625;
-// The Master's clock otherwise reads the host's, and a workload has to run the same every time.
+// The Master's clock otherwise reads the host's time and zone, and a workload has to run the same everywhere.
 const FixedClockMs = Date.UTC(2026, 0, 1);
 
 /**
@@ -25,6 +25,7 @@ export async function newBenchmarkMachine(model, { fakeVideo = false } = {}) {
     const machine = new TestMachine(model, { video, soundChip });
     await machine.initialise();
     machine.processor.cmos.now = () => FixedClockMs;
+    machine.processor.cmos.utc = true;
     return machine;
 }
 

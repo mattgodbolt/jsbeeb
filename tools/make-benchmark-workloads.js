@@ -34,6 +34,7 @@ const VduStatusShadow = 0x10;
 const EliteQQ11View = 0x87;
 const EliteMcntMainLoopCounter = 0x8a;
 const EliteQQ12Docked = 0x8e;
+const ShiftHoldSecs = 1;
 const EliteBootSecs = 12;
 const EliteTitleSecs = 2;
 const EliteLaunchSecs = 8;
@@ -80,7 +81,7 @@ const Workloads = [
         async build(machine) {
             const media = await insertBuiltInDisc(machine, "elite.ssd");
             machine.processor.sysvia.keyDownRaw(BBC.SHIFT);
-            await machine.runFor(seconds(machine, 1));
+            await machine.runFor(seconds(machine, ShiftHoldSecs));
             machine.processor.sysvia.keyUpRaw(BBC.SHIFT);
             await machine.runFor(seconds(machine, EliteBootSecs));
             await pressKey(machine, BBC.N);

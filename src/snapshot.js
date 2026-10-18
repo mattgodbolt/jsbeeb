@@ -95,13 +95,13 @@ export function createSnapshot(cpu, model, media) {
 }
 
 /**
- * Restore emulator state from a snapshot.
+ * Throws unless the snapshot is one restoreSnapshot can put into this machine: a known format and version,
+ * the same model and the same co-processor.
  * @param {import('./6502.js').Cpu6502} cpu
  * @param {object} model - the current model definition
  * @param {object} snapshot
- * @throws {Error} if the model doesn't match
  */
-export function restoreSnapshot(cpu, model, snapshot) {
+export function assertSnapshotFits(cpu, model, snapshot) {
     if (snapshot.format !== SnapshotFormat) {
         throw new Error(`Unknown snapshot format: ${snapshot.format}`);
     }
@@ -118,6 +118,17 @@ export function restoreSnapshot(cpu, model, snapshot) {
                 `but this machine is ${fitted(cpu.hasTube)}`,
         );
     }
+}
+
+/**
+ * Restore emulator state from a snapshot.
+ * @param {import('./6502.js').Cpu6502} cpu
+ * @param {object} model - the current model definition
+ * @param {object} snapshot
+ * @throws {Error} if the snapshot does not fit the machine (see assertSnapshotFits)
+ */
+export function restoreSnapshot(cpu, model, snapshot) {
+    assertSnapshotFits(cpu, model, snapshot);
     cpu.restoreState(snapshot.state);
 }
 
