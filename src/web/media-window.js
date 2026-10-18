@@ -13,7 +13,8 @@ import {
 import { errorText, reportLoadFailure } from "./reporting.js";
 import { guessDiscTypeFromName } from "../fdc.js";
 import { toast } from "./toast.js";
-import { mediaLabel, noteEvent } from "./analytics.js";
+import { noteEvent } from "./analytics.js";
+import { mediaLabel } from "./analytics-filters.js";
 
 const CounterDigits = 3;
 const CounterDivisions = 10 ** CounterDigits;

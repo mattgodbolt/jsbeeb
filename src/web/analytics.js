@@ -1,54 +1,29 @@
 import { runningInNode } from "../loader.js";
-import { Schemas, splitImage } from "../media-resolver.js";
-import { Sources } from "./media-catalogue.js";
-import { Parameters } from "./parameters.js";
+import { buildUrlFromParams, parseLocationParams } from "../url-params.js";
+import { Parameters, UrlParamTypes } from "./parameters.js";
 
 /*global gtag*/
 const MeasurementId = "G-Z9ZN3S7XRE";
-const Redacted = "redacted";
+
+const analyticsFilter = (key) => (Object.hasOwn(Parameters, key) ? Parameters[key].analyticsFilter : undefined);
 
 /**
- * How analytics may name a media reference: whole when anyone could name it (a catalogue entry, a
- * built-in disc, a public URL), and only by its source when it is the user's own.
- */
-export function mediaLabel(ref) {
-    if (!ref) return ref;
-    const { schema } = splitImage(ref);
-    const known = Schemas[schema] ?? Schemas[""];
-    const personal = known.source ? Sources[known.source]?.personal : known.personal;
-    return personal ? (known.source ?? schema) : ref;
-}
-
-function analyticsParams(params) {
-    return params
-        .split("&")
-        .map((part) => {
-            const [rawKey, ...rest] = part.split("=");
-            const key = decodeURIComponent(rawKey);
-            const parameter = Object.hasOwn(Parameters, key) ? Parameters[key] : undefined;
-            if (!rest.length || !parameter) return part;
-            if (parameter.personal) return `${rawKey}=${Redacted}`;
-            if (!parameter.mediaRef) return part;
-            const ref = decodeURIComponent(rest.join("="));
-            const label = mediaLabel(ref);
-            return label === ref ? part : `${rawKey}=${encodeURIComponent(label)}`;
-        })
-        .join("&");
-}
-
-/**
- * `href` with its parameters as the `Parameters` table lets analytics see them, in the query and after the hash; with
- * none at all when they cannot be decoded.
+ * `href` with each parameter put through its `analyticsFilter`, read and written as the page reads and writes its own
+ * URL; with no parameters at all when they cannot be decoded.
  */
 export function analyticsLocation(href) {
     if (!href) return href;
     const url = new URL(href);
+    const page = url.origin + url.pathname;
     try {
-        if (url.search) url.search = analyticsParams(url.search.substring(1));
-        if (url.hash) url.hash = analyticsParams(url.hash.substring(1));
-        return url.href;
+        const params = parseLocationParams(url, UrlParamTypes);
+        for (const [key, value] of Object.entries(params)) {
+            const filter = analyticsFilter(key);
+            if (filter && value !== null) params[key] = Array.isArray(value) ? value.map(filter) : filter(value);
+        }
+        return buildUrlFromParams(page, params, UrlParamTypes);
     } catch {
-        return url.origin + url.pathname;
+        return page;
     }
 }
 

@@ -1,4 +1,4 @@
-import { buildUrlFromParams, parseQueryString } from "../url-params.js";
+import { buildUrlFromParams, parseLocationParams } from "../url-params.js";
 import { debounce } from "../debounce.js";
 import { UrlParamTypes } from "./parameters.js";
 import { noteLocation } from "./analytics.js";
@@ -16,9 +16,7 @@ export class UrlState {
         this.history = history;
         this.paramTypes = paramTypes;
         this.baseUrl = location.origin + location.pathname;
-        // Parameters may be given after the hash as well as in the query.
-        const queryString = location.search.substring(1) + "&" + location.hash.substring(1);
-        this.params = parseQueryString(queryString, paramTypes);
+        this.params = parseLocationParams(location, paramTypes);
         this.updateUrlOnceSettled = debounce(() => this.updateUrl(), UrlSettleMs);
     }
 

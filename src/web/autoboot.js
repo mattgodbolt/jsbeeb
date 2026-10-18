@@ -1,6 +1,7 @@
 import * as tokeniser from "../basic-tokenise.js";
 import { installBasic } from "../basic-loader.js";
-import { mediaLabel, noteEvent } from "./analytics.js";
+import { noteEvent } from "./analytics.js";
+import { mediaLabel } from "./analytics-filters.js";
 import { BBC } from "../keymap.js";
 
 /** Booting and typing for the machine at startup: shift-break, *TAPE incantations and BASIC programs. */
