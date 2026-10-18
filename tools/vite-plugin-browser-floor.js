@@ -81,6 +81,6 @@ export function browserFloorPlugin(measurementId = process.env.GA_MEASUREMENT_ID
     };
     return {
         name: "browser-floor",
-        transformIndexHtml: () => [{ tag: "script", children: FloorScript, injectTo: "head-prepend" }, message],
+        transformIndexHtml: () => [{ tag: "script", children: FloorScript, injectTo: "head" }, message],
     };
 }

@@ -31,29 +31,32 @@ describe("floorText", () => {
 describe("browserFloorPlugin", () => {
     let server;
 
-    const pageWith = async (measurementId) => {
+    const htmlWith = async (measurementId) => {
         server = await createServer({
             configFile: false,
             logLevel: "silent",
             plugins: [browserFloorPlugin(measurementId)],
             server: { middlewareMode: true, hmr: false, ws: false },
         });
-        const html = await server.transformIndexHtml("/index.html", IndexHtml);
-        return new JSDOM(html).window.document;
+        return server.transformIndexHtml("/index.html", IndexHtml);
     };
+    const pageWith = async (measurementId) => new JSDOM(await htmlWith(measurementId)).window.document;
 
     afterEach(async () => {
         await server?.close();
         server = undefined;
     });
 
-    it("runs the check before the module bundle", async () => {
-        const page = await pageWith(undefined);
-        const scripts = [...page.querySelectorAll("script")];
-        const check = scripts.findIndex((script) => script.textContent === FloorScript);
-        expect(check).toBeGreaterThan(-1);
-        expect(scripts[check].type).toBe("");
-        expect(check).toBeLessThan(scripts.findIndex((script) => script.type === "module"));
+    it("puts the check in the head as a classic script", async () => {
+        const check = [...(await pageWith(undefined)).head.querySelectorAll("script")].find(
+            (script) => script.textContent === FloorScript,
+        );
+        expect(check.type).toBe("");
+    });
+
+    // The HTML spec looks for the charset declaration in the first 1024 bytes.
+    it("leaves the charset declaration where the browser looks for it", async () => {
+        expect((await htmlWith(undefined)).indexOf("<meta charset")).toBeLessThan(1024);
     });
 
     it("puts a hidden message with the versions from package.json's browserslist and a way to get in touch", async () => {

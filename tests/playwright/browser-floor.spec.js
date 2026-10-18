@@ -44,17 +44,22 @@ test("a browser missing a floor feature is told what is needed, and the emulator
     await expect(message).toBeHidden();
 });
 
-test("a bundle that fails to parse leaves the message, and its own page_view, instead of a blank page", async ({
-    page,
-}) => {
-    // Not the fixture's beeb, which fails a test whose page throws.
-    const beeb = new Beeb(page);
+const breakBundle = async (page) => {
     const html = await (await page.request.get("./")).text();
     const bundle = html.match(ModuleScriptSrc)[1].replace(/^\.\//, "/");
     await page.route(
         (url) => url.pathname.endsWith(bundle),
         (route) => route.fulfill({ contentType: "text/javascript", body: "const unparseable = ;" }),
     );
+};
+
+// These use a Beeb of their own rather than the fixture's, which fails a test whose page throws.
+
+test("a bundle that fails to parse leaves the message, and its own page_view, instead of a blank page", async ({
+    page,
+}) => {
+    const beeb = new Beeb(page);
+    await breakBundle(page);
     await beeb.open("./?disc1=elite");
     await expect(page.locator("#browser-floor")).toBeVisible();
     expect(await unsupportedBrowserEvents(page)).toEqual([
@@ -63,4 +68,29 @@ test("a bundle that fails to parse leaves the message, and its own page_view, in
     const [config] = await analyticsCalls(page, "config");
     expect(config[1]).toBe("G-E2ETEST");
     expect(config[2].page_location).not.toContain("?");
+});
+
+test("a browser below the floor that cannot parse the bundle either is reported by the missing feature", async ({
+    page,
+}) => {
+    const beeb = new Beeb(page);
+    await page.addInitScript(() => delete window.CompressionStream);
+    await breakBundle(page);
+    await beeb.open();
+    await expect(page.locator("#browser-floor")).toBeVisible();
+    expect(await unsupportedBrowserEvents(page)).toEqual([
+        ["event", "unsupported_browser", { reason: "CompressionStream" }],
+    ]);
+});
+
+test("an error from another site's script shows no message", async ({ page }) => {
+    const beeb = new Beeb(page);
+    await page.route(/^https:\/\/www\.googletagmanager\.com\//, (route) =>
+        route.fulfill({ contentType: "text/javascript", body: 'throw new Error("from Google");' }),
+    );
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    expect(beeb.problems).not.toEqual([]);
+    await expect(page.locator("#browser-floor")).toBeHidden();
+    expect(await unsupportedBrowserEvents(page)).toEqual([]);
 });

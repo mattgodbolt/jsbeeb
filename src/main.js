@@ -461,5 +461,5 @@ electron({
     },
 });
 
-// From here on an uncaught error is not a failed start; see tools/vite-plugin-browser-floor.js.
+// From here on an uncaught error is not a failed start; see src/browser-floor.js.
 window.jsbeebStartupFinished?.();

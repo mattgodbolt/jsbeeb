@@ -2,8 +2,8 @@
 // tools/vite-plugin-browser-floor.js puts it in the head and the message it shows in the body.
 (function () {
     var StartupFailed = "startup_failed";
-    // Between them these three set the floor in package.json's browserslist: color-mix() arrived last in
-    // Chrome and Edge (111), toSorted in Firefox (115) and CompressionStream in Safari (16.4).
+    // Between them these set package.json's browserslist floor: each is the last of the three to arrive in one of
+    // Chromium, Gecko and WebKit.
     var FloorFeatures = [
         [
             "color-mix",
@@ -26,7 +26,7 @@
     ];
     // Edge's agent string also says Chrome, and Chrome's also says Safari, so the order matters.
     var Browsers = [
-        ["Edge", /Edg\/(\d+)/],
+        ["Edge", /Edge?\/(\d+)/],
         ["Firefox", /Firefox\/(\d+)/],
         ["Chrome", /Chrome\/(\d+)/],
         ["Safari", /Version\/(\d+(?:\.\d+)?).*Safari/],
@@ -94,6 +94,11 @@
         });
     }
 
+    // Below the floor the bundle usually fails to parse too, which is reported before DOMContentLoaded; the
+    // feature is checked first so that it, not the parse error, is what gets reported.
+    var missing = missingFeature();
+    if (missing) show(missing);
+
     function onError(event) {
         if (event.filename && event.filename.indexOf(pageDirectory) === 0) show(StartupFailed);
     }
@@ -102,8 +107,4 @@
     window.jsbeebStartupFinished = function () {
         window.removeEventListener("error", onError);
     };
-    document.addEventListener("DOMContentLoaded", function () {
-        var missing = missingFeature();
-        if (missing) show(missing);
-    });
 })();
