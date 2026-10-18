@@ -102,13 +102,16 @@ export function noteError(where, error, { file, line, column } = {}) {
     });
 }
 
-/** Notes how the machine started: every parameter declared `reportedAtStart`, and what the page `found`. */
-export function noteMachineStart(settings, params, found) {
+/**
+ * Notes how the machine started: every parameter declared `reportedAtStart` as it is now, and what the page `found`,
+ * once `audio` resolves to how the sound came up.
+ */
+export async function noteMachineStart(settings, params, found, audio) {
     const reported = Object.entries(Parameters)
         .filter(([, parameter]) => parameter.reportedAtStart)
         .map(([name, { type }]) => {
             const value = settings.value(name) ?? params[name];
             return [name, type === ParamTypes.BOOL ? !!value : value];
         });
-    note("machine_start", { ...Object.fromEntries(reported), ...found });
+    note("machine_start", { ...Object.fromEntries(reported), ...found, audio: await audio });
 }

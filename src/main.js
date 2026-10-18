@@ -386,8 +386,12 @@ const startPromise = machine.start({
         machineSwitch.announce();
         await startPromise;
         if (await switchForBootDisc(await bootDisc)) return;
-        const found = { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer };
-        audioHandler.ready.then((audio) => noteMachineStart(settings, parsedQuery, { ...found, audio }));
+        noteMachineStart(
+            settings,
+            parsedQuery,
+            { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
+            audioHandler.ready,
+        );
 
         switch (needsAutoboot) {
             case "boot":

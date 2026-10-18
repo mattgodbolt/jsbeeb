@@ -274,8 +274,8 @@ describe("analytics", () => {
                 it("sends each reportedAtStart parameter as it is set, with what the page found", async () => {
                     const { noteMachineStart } = await loadWithMeasurementId(measurementId);
                     const settings = { value: (name) => ({ model: "Master", keyLayout: "natural" })[name] };
-                    noteMachineStart(settings, { embed: true }, { boot_mode: "boot", renderer: "webgl", audio: "ok" });
-                    noteMachineStart(settings, {}, { boot_mode: "none" });
+                    await noteMachineStart(settings, { embed: true }, { boot_mode: "boot", renderer: "webgl" }, "ok");
+                    await noteMachineStart(settings, {}, { boot_mode: "none" }, undefined);
                     expect(sent("machine_start")).toEqual([
                         {
                             model: "Master",
@@ -286,6 +286,32 @@ describe("analytics", () => {
                             audio: "ok",
                         },
                         { model: "Master", keyLayout: "natural", embed: false, boot_mode: "none" },
+                    ]);
+                });
+
+                it("waits for the sound, reporting the settings as they were when it was asked", async () => {
+                    const { noteMachineStart } = await loadWithMeasurementId(measurementId);
+                    const now = { model: "Master", keyLayout: "physical" };
+                    let soundUp;
+                    const noted = noteMachineStart(
+                        { value: (name) => now[name] },
+                        {},
+                        { boot_mode: "none" },
+                        new Promise((resolve) => (soundUp = resolve)),
+                    );
+                    now.keyLayout = "natural";
+                    await Promise.resolve();
+                    expect(sent("machine_start")).toEqual([]);
+                    soundUp("unavailable");
+                    await noted;
+                    expect(sent("machine_start")).toEqual([
+                        {
+                            model: "Master",
+                            keyLayout: "physical",
+                            embed: false,
+                            boot_mode: "none",
+                            audio: "unavailable",
+                        },
                     ]);
                 });
             });
