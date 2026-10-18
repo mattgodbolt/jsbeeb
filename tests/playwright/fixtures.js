@@ -4,6 +4,9 @@ const ScreenBase = 0x7c00;
 const ScreenBytes = 1000;
 const BootTimeoutMs = 30000;
 const KeyHoldMs = 120;
+// The OS scans the keyboard every 10 ms and can miss a release shorter than two scans, so the next press of the
+// same key would be lost.
+const KeyReleaseMs = 50;
 // OSBYTE &C4's variable, which *FX11 sets; zero turns auto-repeat off.
 const AutoRepeatDelayAddress = 0x254;
 // test:e2e builds with a dummy measurement id. An empty gtag.js leaves the stub's dataLayer for the tests to read
@@ -75,11 +78,12 @@ export class Beeb {
             .toBeGreaterThan(cycles);
     }
 
-    /** Held long enough for the OS to scan the matrix and see it down. */
+    /** Held, then let go, long enough for the OS's scans of the matrix to see both. */
     async pressKey(key) {
         await this.page.keyboard.down(key);
         await this.page.waitForTimeout(KeyHoldMs);
         await this.page.keyboard.up(key);
+        await this.page.waitForTimeout(KeyReleaseMs);
     }
 
     disableAutoRepeat() {
