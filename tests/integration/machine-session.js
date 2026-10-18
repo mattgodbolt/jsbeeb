@@ -1496,3 +1496,36 @@ describe("MachineSession bank breakpoints on a Master with ANDY paged in", () =>
         BootTimeout,
     );
 });
+
+describe("MachineSession VideoNuLA", () => {
+    async function videoAfterNulaPaletteModeOn(opts) {
+        const session = new MachineSession("B-DFS1.2", opts);
+        await session.initialise();
+        await session.boot(30);
+        await session.type("?&FE22=&11");
+        await session.runUntilPrompt();
+        const { video } = session.snapshot({ includeRoms: false }).machine;
+        session.destroy();
+        return video;
+    }
+
+    it(
+        "has a stock video ULA unless one is asked for",
+        async () => {
+            const video = await videoAfterNulaPaletteModeOn();
+            expect(video.ulactrl).toBe(0x11);
+            expect(video.ula.paletteMode).toBe(0);
+        },
+        BootTimeout,
+    );
+
+    it(
+        "fits a VideoNuLA when asked",
+        async () => {
+            const video = await videoAfterNulaPaletteModeOn({ hasVideoNula: true });
+            expect(video.ulactrl).not.toBe(0x11);
+            expect(video.ula.paletteMode).toBe(1);
+        },
+        BootTimeout,
+    );
+});

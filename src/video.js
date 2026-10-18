@@ -41,8 +41,9 @@ export const LineCountPeriod = 2500;
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
 class Ula {
-    constructor(video) {
+    constructor(video, hasVideoNula) {
         this.video = video;
+        this.hasVideoNula = hasVideoNula;
         // NULA state
         this.collook = new Uint32Array(16);
         this.flash = new Uint8Array(8);
@@ -51,7 +52,8 @@ class Ula {
         this.paletteMode = 0;
         this.horizontalOffset = 0;
         this.leftBlank = 0;
-        this.disabled = false;
+        // A stock ULA decodes only A0, so &FE22/&FE23 alias &FE20/&FE21 just as a disabled NULA's do.
+        this.disabled = !hasVideoNula;
         this.attributeMode = 0;
         this.attributeText = 0;
         this.reset();
@@ -117,6 +119,10 @@ class Ula {
     }
 
     restoreState(state) {
+        if (!this.hasVideoNula) {
+            this._recomputeUlaPal(!!(this.video.ulactrl & 1));
+            return;
+        }
         this.collook.set(state.collook);
         this.flash.set(state.flash);
         this.paletteWriteFlag = state.paletteWriteFlag;
@@ -347,7 +353,7 @@ function table4bppOffset(ulamode, byte) {
 ////////////////////
 // The video class
 export class Video {
-    constructor(isMaster, fb32_param, paint_ext_param, { isAtom = false } = {}) {
+    constructor(isMaster, fb32_param, paint_ext_param, { isAtom = false, hasVideoNula = false } = {}) {
         this.isMaster = isMaster;
         this.fb32 = makeFast32(fb32_param);
         this.collook = makeFast32(
@@ -468,7 +474,7 @@ export class Video {
         })();
 
         this.crtc = new Crtc(this);
-        this.ula = new Ula(this);
+        this.ula = new Ula(this, hasVideoNula);
 
         // Atom: attach the MC6847 VDG and use its polltime
         this.video6847 = null;
@@ -609,8 +615,9 @@ export class Video {
         this.crtc.restoreState(state.crtc);
         this.teletext.restoreState(state.teletext);
         if (this.video6847 && state.video6847) this.video6847.restoreState(state.video6847);
-        // Restore ulaPal after ULA restore, since ULA recomputation may overwrite it
-        this.ulaPal.set(state.ulaPal);
+        // Restore ulaPal after ULA restore, since ULA recomputation may overwrite it. A stock ULA keeps
+        // its recomputation, as one saved with a NULA fitted may hold NULA colours.
+        if (this.ula.hasVideoNula) this.ulaPal.set(state.ulaPal);
     }
 
     reset(cpu, via) {

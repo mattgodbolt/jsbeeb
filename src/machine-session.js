@@ -59,6 +59,7 @@ export class MachineSession {
      * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      * @param {number} [opts.cpuMultiplier] - run the CPU this many times faster than the peripherals
      * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
+     * @param {boolean} [opts.hasVideoNula] - fit a VideoNuLA in place of the video ULA
      * @param {boolean} [opts.econet] - fit Econet, with a file server on the network, and on a Master the ANFS
      *   ROM, as the web page does
      * @param {number} [opts.stationId=101] - the Econet station number, 1 to 253
@@ -94,7 +95,7 @@ export class MachineSession {
                 this._frameCount++;
                 if (this._frameCount >= this._stopAtFrame) this._machine.processor.stop();
             },
-            { isAtom: modelObj.isAtom },
+            { isAtom: modelObj.isAtom, hasVideoNula: opts.hasVideoNula },
         );
 
         // Use a real (instrumented) sound chip so we can read registers and capture writes.

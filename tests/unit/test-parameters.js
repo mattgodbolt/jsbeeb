@@ -105,6 +105,7 @@ describe("Parameters", () => {
                     "hasMusic5000",
                     "hasTeletextAdaptor",
                     "hasEconet",
+                    "hasVideoNula",
                 ],
             },
             ["audioOutput", "speakerAmount"],

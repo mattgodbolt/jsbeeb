@@ -146,6 +146,7 @@ const display = new Display({
     tryGl,
     lowLatency,
     fakeVideo: parsedQuery.fakeVideo !== undefined,
+    hasVideoNula: settings.hasVideoNula,
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
 const video = display.video;

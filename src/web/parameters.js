@@ -154,6 +154,17 @@ export const Parameters = {
         default: false,
         field: { type: "check", group: Peripherals, label: "Econet with file server", restart: true },
     },
+    hasVideoNula: {
+        type: ParamTypes.BOOL,
+        default: false,
+        field: {
+            type: "check",
+            group: Peripherals,
+            label: "VideoNuLA (4096-colour palette)",
+            restart: true,
+            enabledWhen: ({ model }) => !findModel(model).isAtom,
+        },
+    },
     audioOutput: {
         type: ParamTypes.STRING,
         localToPage: true,
