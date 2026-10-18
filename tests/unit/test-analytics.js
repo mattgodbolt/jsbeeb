@@ -210,6 +210,7 @@ describe("analytics", () => {
                 ["a b", '"a b"'],
                 ['a"b', '"a\\"b"'],
                 ["a=b", '"a=b"'],
+                ["a\nb", '"a\\nb"'],
                 ["", '""'],
             ])("quotes %j in the log line so it reads as one value", async (value, logged) => {
                 const { note } = await loadWithMeasurementId(measurementId);
