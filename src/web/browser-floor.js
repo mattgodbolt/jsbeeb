@@ -1,8 +1,10 @@
 /* exported browserFloor */
 // ES5, as it runs exactly where the bundle's syntax does not. tools/vite-plugin-browser-floor.js passes the floors.
 function browserFloor(config) {
-    // Edge's agent string also says Chrome, and Chrome's also says Safari, so the order matters.
+    // Every iOS browser is Safari's engine at the iOS version, Edge's agent string also says Chrome, and Android
+    // WebView's also says Version/, so the order matters.
     var Browsers = [
+        ["Safari", /OS (\d+)_(\d+)(?:_\d+)? like Mac OS X/],
         ["Edge", /Edg[eA]?\/(\d+)/],
         ["Firefox", /Firefox\/(\d+)/],
         ["Chrome", /Chrome\/(\d+)/],
@@ -37,10 +39,11 @@ function browserFloor(config) {
 
     for (var i = 0; i < Browsers.length && !browser; ++i) {
         var match = Browsers[i][1].exec(navigator.userAgent);
+        var version = match && match.slice(1).join(".");
         var floor = config.floors[Browsers[i][0]];
-        if (match) browser = Browsers[i][0] + " " + match[1];
+        if (match) browser = Browsers[i][0] + " " + version;
         var text = "You're using " + browser + ". jsbeeb needs " + Browsers[i][0] + " " + floor + " or newer.";
-        if (match && parseFloat(match[1]) < parseFloat(floor)) show("below_floor", text);
+        if (match && parseFloat(version) < parseFloat(floor)) show("below_floor", text);
     }
 
     function onError(event) {
@@ -49,7 +52,5 @@ function browserFloor(config) {
         show("startup_failed", "jsbeeb didn't start" + where + ". It supports " + config.supported + " and newer.");
     }
     window.addEventListener("error", onError);
-    window.jsbeebStartupFinished = function () {
-        window.removeEventListener("error", onError);
-    };
+    window.jsbeebStartupFinished = window.removeEventListener.bind(window, "error", onError);
 }

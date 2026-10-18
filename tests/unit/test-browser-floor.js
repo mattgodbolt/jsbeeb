@@ -132,6 +132,44 @@ describe("the browser floor check", () => {
         expect(textOf(window)).toMatch(new RegExp(`^You're using ${name}\\. jsbeeb needs ${name.split(" ")[0]} `));
     });
 
+    describe("a browser at or above its floor", () => {
+        const floors = browserFloors();
+        it.each([
+            [
+                "Chrome",
+                `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/${floors.Chrome}.0.0.0 Safari/537.36`,
+            ],
+            [
+                "Edge",
+                `Mozilla/5.0 (Windows NT 10.0) Chrome/${floors.Edge}.0.0.0 Safari/537.36 Edg/${floors.Edge}.0.0.0`,
+            ],
+            [
+                "Firefox",
+                `Mozilla/5.0 (X11; Linux x86_64; rv:${floors.Firefox}.0) Gecko/20100101 Firefox/${floors.Firefox}.0`,
+            ],
+            ["Safari", `Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/${floors.Safari} Safari/605.1.15`],
+            [
+                "Edge on iOS",
+                `Mozilla/5.0 (iPhone; CPU iPhone OS ${floors.Safari.replace(".", "_")} like Mac OS X) Version/16.0 EdgiOS/119.0 Mobile/15E148 Safari/605.1.15`,
+            ],
+            [
+                "Android WebView",
+                "Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36 Version/4.0 Chrome/120.0.0.0 Mobile Safari/537.36",
+            ],
+        ])("leaves %s alone", async (_name, userAgent) => {
+            const window = await open({ userAgent });
+            expect(messageOf(window).hidden).toBe(true);
+        });
+    });
+
+    it("judges any browser on iOS by the iOS version, Safari's engine", async () => {
+        const window = await open({
+            userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 15_2_1 like Mac OS X) Version/15.0 EdgiOS/119.0 Mobile/15E148 Safari/605.1.15",
+        });
+        expect(textOf(window)).toMatch(/^You're using Safari 15\.2\. jsbeeb needs Safari /);
+    });
+
     describe("an uncaught error before startup finishes", () => {
         it("names the browser and every supported version when it comes from the page's own scripts", async () => {
             const window = await open();
