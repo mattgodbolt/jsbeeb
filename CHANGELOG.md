@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.9.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.8.0...v2.9.0) (2026-10-18)
+
+
+### Features
+
+* send the first batch of analytics events and list them in the Privacy Policy ([#1330](https://github.com/mattgodbolt/jsbeeb/issues/1330)) ([947dd08](https://github.com/mattgodbolt/jsbeeb/commit/947dd089477fc19c9800d846e64e4b9a31367789))
+* tell a browser below the supported floor what jsbeeb needs ([#1333](https://github.com/mattgodbolt/jsbeeb/issues/1333)) ([05d6f98](https://github.com/mattgodbolt/jsbeeb/commit/05d6f986bf29177bb95b2d5dc92f547049753064))
+* the media window boots by default, with Shift to load without booting ([#1332](https://github.com/mattgodbolt/jsbeeb/issues/1332)) ([67306be](https://github.com/mattgodbolt/jsbeeb/commit/67306be359adcd40d61a43dad0b182613bbc9d86))
+
+
+### Bug Fixes
+
+* declare the URL parameter families in the Parameters table, so gp. mappings work in any case ([#1348](https://github.com/mattgodbolt/jsbeeb/issues/1348)) ([2443ade](https://github.com/mattgodbolt/jsbeeb/commit/2443ade6f0fda28a74919b1ace59352c11168305))
+* line up every label and lamp in the lights bar ([#1349](https://github.com/mattgodbolt/jsbeeb/issues/1349)) ([e5ce232](https://github.com/mattgodbolt/jsbeeb/commit/e5ce232e6c3ac6b32577acd556efb887f25a947b))
+
+
+### Performance Improvements
+
+* name the generated opcode functions so profiles can read them ([#1351](https://github.com/mattgodbolt/jsbeeb/issues/1351)) ([653e0a4](https://github.com/mattgodbolt/jsbeeb/commit/653e0a42ab1306259cb717fb9454373bee3cddd9))
+
 ## [2.8.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.7.0...v2.8.0) (2026-10-18)
 
 

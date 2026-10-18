@@ -30,6 +30,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   restores one by name, in Node or the page, and checks it is running what its name says
 - `node tools/node-ab.js <A> <B> [workload ...]` - Whether B is faster than A in Node, with a confidence interval,
   from fresh processes alternating between two refs or checkouts; see `docs/benchmarking.md`
+- `npm run test:same-answer` - Run each benchmark workload for 100 frames and compare hashes of its state (framebuffer,
+  registers, memory, cycles, sound, peripherals) against `tests/same-answer-hashes.json`, naming the parts that
+  differ; `-- --record` rewrites the file after an intended change. A few seconds, for an optimisation's inner loop:
+  it covers only what the workloads run and says what changed, not why, so the full suites still run before a change
+  is done
 - `vitest run tests/unit/test-archive.js` - Run a single test file
 
 ### Code Coverage

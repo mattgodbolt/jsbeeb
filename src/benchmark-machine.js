@@ -12,16 +12,16 @@ const FbHeight = 625;
 const FixedClockMs = Date.UTC(2026, 0, 1);
 
 /**
- * A machine with the real Video (or FakeVideo) and the main thread's SoundChip, its sound events dropped,
- * where the page would hand them to the audio worklet.
+ * A machine with the real Video (or FakeVideo) and the main thread's SoundChip, its sound events going to
+ * `onSoundEvent` (dropped by default) where the page would hand them to the audio worklet.
  * @param {string} model
- * @param {{fakeVideo?: boolean}} [options]
+ * @param {{fakeVideo?: boolean, onSoundEvent?: function(object): void}} [options]
  * @returns {Promise<TestMachine>}
  */
-export async function newBenchmarkMachine(model, { fakeVideo = false } = {}) {
+export async function newBenchmarkMachine(model, { fakeVideo = false, onSoundEvent = () => {} } = {}) {
     const { isMaster } = findModel(model);
     const video = fakeVideo ? new FakeVideo() : new Video(isMaster, new Uint32Array(FbWidth * FbHeight), () => {});
-    const soundChip = new SoundChip(null, { onEvent: () => {} });
+    const soundChip = new SoundChip(null, { onEvent: onSoundEvent });
     const machine = new TestMachine(model, { video, soundChip });
     await machine.initialise();
     machine.processor.cmos.now = () => FixedClockMs;
@@ -38,7 +38,8 @@ export async function listBenchmarkWorkloads() {
 /**
  * A fresh machine running the named workload, restored and checked by restoreWorkload.
  * @param {string} name
- * @param {{fakeVideo?: boolean}} [options] fakeVideo measures the CPU and peripherals without rendering
+ * @param {{fakeVideo?: boolean, onSoundEvent?: function(object): void}} [options] see newBenchmarkMachine;
+ *     fakeVideo measures the CPU and peripherals without rendering
  * @returns {Promise<{machine: TestMachine, cpu: import('./6502.js').Cpu6502, workload: object}>}
  */
 export async function benchmarkMachine(name, options) {

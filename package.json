@@ -7,7 +7,7 @@
   "name": "jsbeeb",
   "description": "Emulate a BBC Micro",
   "repository": "git@github.com:mattgodbolt/jsbeeb.git",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "//engines": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
     "node": ">=24.15.0"
@@ -108,6 +108,7 @@
     "test:integration": "vitest run --silent=true tests/integration",
     "test:cpu": "node tests/test-suite.js",
     "test:shader": "vitest run --silent=true tests/shader",
+    "test:same-answer": "node tools/same-answer.js",
     "coverage:unit": "vitest run tests/unit --coverage",
     "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rl domFromIndexHtml tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
