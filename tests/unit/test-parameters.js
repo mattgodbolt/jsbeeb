@@ -20,7 +20,7 @@ import { UrlState } from "../../src/web/url-state.js";
 import { ParamTypes } from "../../src/url-params.js";
 import { MaxPersistenceMs, persistenceSettings } from "../../src/web/canvas.js";
 import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
 
 describe("Parameters", () => {
     afterEach(teardownDom);
@@ -307,6 +307,29 @@ describe("the settings a session guest takes from its host", () => {
             expect(Parameters[name].localToPage, name).toBeFalsy();
             expect(Parameters[name].stored, name).toBeFalsy();
         }
+    });
+
+    it("never default to true, since a URL cannot say a BOOL is false", () => {
+        for (const name of takenNames) expect(Parameters[name].default, name).not.toBe(true);
+    });
+
+    const otherValue = (name) =>
+        ({ [ParamTypes.BOOL]: true, [ParamTypes.INT]: 7, [ParamTypes.FLOAT]: 2.5 })[Parameters[name].type];
+
+    it.each(takenNames)("brings a page reloaded with the host's %s to the host's", (name) => {
+        const host = takenFromHostValues(new Settings({ urlState: fakeUrlState(`?${name}=${otherValue(name)}`) }), {
+            [name]: otherValue(name),
+        });
+        const guest = fakeUrlState("");
+        const reloaded = fakeUrlState(new URL(guest.urlWith(readTakenFromHost(host))).search);
+        const settings = new Settings({ urlState: reloaded });
+        expect(takenFromHostValues(settings, reloaded.params)).toEqual(host);
+        expect(matchesHost(readTakenFromHost(host), takenFromHostValues(settings, reloaded.params))).toBe(true);
+    });
+
+    it("refuses a host's value this page would not take from its own URL", () => {
+        expect(readTakenFromHost({ tubeCpuMultiplier: 0 })).toBeNull();
+        expect(readTakenFromHost({ tubeCpuMultiplier: 2 })).toMatchObject({ tubeCpuMultiplier: 2 });
     });
 
     it("carries one marked in any table, with nothing else to change", () => {

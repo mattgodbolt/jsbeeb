@@ -373,8 +373,8 @@ const usableAs = {
 };
 
 /**
- * @returns {object} the value of every parameter a session guest takes from its host, as this page's machine was built
- * with it: a setting's from `settings`, any other's from the page's parsed URL `params`
+ * @returns {object} the value of every parameter a session guest takes from its host, as this page's start gave it: a
+ * setting's from `settings`, any other's from the page's parsed URL `params`, absent if the URL has none
  */
 export function takenFromHostValues(settings, params, parameters = Parameters) {
     return Object.fromEntries(
@@ -385,14 +385,22 @@ export function takenFromHostValues(settings, params, parameters = Parameters) {
     );
 }
 
+const acceptable = ({ valid, fit }, value) =>
+    value === undefined || ((!valid || valid(value)) && (!fit || fit(value) === value));
+
 /**
- * @returns {object} the values of the parameters a session guest takes from its host, as the host `sent` them in its
- * welcome; one its parameter's type cannot take counts as none.
+ * @returns {object|null} the values of the parameters a session guest takes from its host, as the host `sent` them in
+ * its welcome, or null if one is a value this page would not take from its own URL, so reloading with it could never
+ * match; one its parameter's type cannot take counts as none.
  */
 export function readTakenFromHost(sent, parameters = Parameters) {
-    return Object.fromEntries(
-        takenFromHostEntries(parameters).map(([name, { type }]) => [name, usableAs[type](sent?.[name])]),
-    );
+    const entries = takenFromHostEntries(parameters).map(([name, parameter]) => [
+        name,
+        usableAs[parameter.type](sent?.[name]),
+        parameter,
+    ]);
+    if (!entries.every(([, value, parameter]) => acceptable(parameter, value))) return null;
+    return Object.fromEntries(entries.map(([name, value]) => [name, value]));
 }
 
 /** @returns {boolean} whether this page's `own` takenFromHostValues are the `host`'s. */

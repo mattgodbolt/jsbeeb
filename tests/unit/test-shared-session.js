@@ -2235,6 +2235,10 @@ describe("SessionGuest", () => {
         ["a welcome from another version", { type: "welcome", model: "BBC B with 8271 (DFS 1.2)", version: "0.9" }],
         ["a welcome with no machine in it", { type: "welcome", model: 42, version: "1.0" }],
         ["a welcome naming no machine there is", { type: "welcome", model: "Nonesuch", version: "1.0" }],
+        [
+            "a welcome with a setting no page would take",
+            welcomeAs({ takenFromHost: { ...StockTakenFromHost, tubeCpuMultiplier: 0 } }),
+        ],
         ["a message that is not an object", null],
     ])("leaves the session on %s", async (_, body) => {
         const { context, channel } = await joining();

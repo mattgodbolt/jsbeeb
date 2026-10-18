@@ -1301,6 +1301,10 @@ export class SessionGuest {
             );
             return;
         }
+        if (!hostValues) {
+            this.fail(SessionFailures.protocol, "the host's machine has a setting this page cannot take");
+            return;
+        }
         if (!isSameModel(model, this.context.model.name) || !matchesHost(hostValues, this.context.takenFromHost)) {
             this.send({ type: "bye" });
             this.left = true;

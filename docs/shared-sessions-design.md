@@ -127,10 +127,10 @@ Ranked by how much they would bite.
    (`src/filestore.js:84`) is the same problem, later, with Econet.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
-   ROMs (`?rom=`) all change behaviour. With the starting scope the session description is just the model, and a
-   session refuses to start if any of these differs from the default; a joiner adopts the model the way a
-   cross-model snapshot load already reloads the page as the right machine (`src/web/snapshot-ui.js:132`). Each
-   option joins the description as it is supported. The emulator itself must match too: every merge to main is
+   ROMs (`?rom=`) all change behaviour. A joiner adopts the host's model, and every setting the Parameters table
+   marks `takenFromHost`, by reloading as the host's machine, the way a cross-model snapshot load reloads the page
+   as the right machine (`src/web/snapshot-ui.js:132`); the ROMs come with the snapshot, which carries every
+   sideways bank. The emulator itself must match too: every merge to main is
    live within minutes, and a host who loaded the page this morning may be running different code from a guest
    who opened the link just now. The description should carry the build (commit and build time); a guest on
    another build is refused rather than failing hash after hash, and whichever side is older is told to reload,
@@ -211,8 +211,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   `gd:` discs need no fetching; each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
   so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
   connect is told "couldn't connect directly". The host and each guest see each other's public IP address. A
-  guest whose model, or any setting its Parameters entry marks `takenFromHost` (the fittings, the CPU and video
-  speed knobs, the Econet station), differs from the host's reloads as the host's machine before it joins: the
+  guest whose model, or any setting its Parameters entry marks `takenFromHost`, differs from the host's reloads as the host's machine before it joins: the
   host's welcome carries every such setting, so a new one is its one declaration. One on another jsbeeb version is
   turned away. When the host leaves, each guest's machine carries on as a local one, with its own CMOS and clock back.
   The host takes only keys, resync requests, goodbyes, one name and its summaries from a guest, rate-limits its
