@@ -41,9 +41,10 @@ export const LineCountPeriod = 2500;
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
 class Ula {
-    constructor(video, hasVideoNula) {
+    constructor(video, hasVideoNula, onMissingVideoNula) {
         this.video = video;
         this.hasVideoNula = hasVideoNula;
+        this.onMissingVideoNula = hasVideoNula ? null : onMissingVideoNula;
         // NULA state
         this.collook = new Uint32Array(16);
         this.flash = new Uint8Array(8);
@@ -83,6 +84,11 @@ class Ula {
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
         if (reg >= 2 && this.disabled) {
+            if (this.onMissingVideoNula) {
+                const notify = this.onMissingVideoNula;
+                this.onMissingVideoNula = null;
+                notify();
+            }
             reg &= ~2;
         }
 
@@ -353,7 +359,12 @@ function table4bppOffset(ulamode, byte) {
 ////////////////////
 // The video class
 export class Video {
-    constructor(isMaster, fb32_param, paint_ext_param, { isAtom = false, hasVideoNula = false } = {}) {
+    constructor(
+        isMaster,
+        fb32_param,
+        paint_ext_param,
+        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null } = {},
+    ) {
         this.isMaster = isMaster;
         this.fb32 = makeFast32(fb32_param);
         this.collook = makeFast32(
@@ -474,7 +485,7 @@ export class Video {
         })();
 
         this.crtc = new Crtc(this);
-        this.ula = new Ula(this, hasVideoNula);
+        this.ula = new Ula(this, hasVideoNula, onMissingVideoNula);
 
         // Atom: attach the MC6847 VDG and use its polltime
         this.video6847 = null;

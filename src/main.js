@@ -49,7 +49,8 @@ import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./we
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
-import { configureAnalytics, noteError, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
+import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
+import { offerVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
@@ -151,6 +152,17 @@ const display = new Display({
     lowLatency,
     fakeVideo: !!parsedQuery.fakeVideo,
     hasVideoNula,
+    // Raised mid-instruction, so the page answers once the emulator has let go.
+    onMissingVideoNula: () =>
+        setTimeout(() =>
+            offerVideoNula({
+                inSession: !!loop.lockstep,
+                fit: () => {
+                    settings.set({ hasVideoNula: true });
+                    window.location.reload();
+                },
+            }),
+        ),
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
 const video = display.video;
@@ -266,7 +278,7 @@ new HfeSource({ media });
 new BitshiftersSource({ media });
 new GitHubSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
-const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
+const machineSwitch = new MachineSwitch({ model, processor, fitted: takenFromHost, urlState, modals });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -395,6 +407,7 @@ async function startAsTheUrlAsks() {
         { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
         audioHandler.ready,
     );
+    if (hasVideoNula) noteFeature(VideoNulaFeature, "fitted");
 
     switch (needsAutoboot) {
         case "boot":

@@ -506,3 +506,17 @@ test("a link that boots a disc on the GitHub list comes up on the machine the li
     await page.click('#media-chips .media-chip[title^="Games and demos from their authors"]');
     await expect(page.locator("#media-list .media-row .media-source").first()).toHaveText("GitHub");
 });
+
+test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit one restarts with one", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open(`?autotype=${encodeURIComponent("?&FE23=&0F:?&FE23=&00\n")}`);
+    const notice = page.locator(".toast", { hasText: "VideoNuLA" });
+    await expect(notice).toContainText("This program tried to use a VideoNuLA, which isn't fitted.");
+    await notice.locator(".toast-action").click();
+    await expect(page).toHaveURL(/hasVideoNula/);
+    await beeb.expectScreenText("BASIC");
+    expect(await page.evaluate(() => window.processor.video.ula.hasVideoNula)).toBe(true);
+    expect(beeb.problems).toEqual([]);
+});

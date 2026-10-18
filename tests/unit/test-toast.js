@@ -104,4 +104,16 @@ describe("toast", () => {
 
         expect(toasts()).toHaveLength(1);
     });
+
+    it("offers its one action as a button, and no button without one", () => {
+        const run = vi.fn();
+        const offering = toast("Something to do.", { action: { label: "Do it", run } });
+        const plain = toast("Nothing to do.");
+
+        offering.querySelector(".toast-action").click();
+
+        expect(offering.querySelector(".toast-action").textContent).toBe("Do it");
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(plain.querySelector(".toast-action").hidden).toBe(true);
+    });
 });

@@ -37,7 +37,8 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
  * page joining a shared session keeps its own) or `takenFromHost` (changes what the emulated machine does, so a page
  * joining a shared session must run with the host's value, and reloads with it if its own differs). The model is taken
- * from the host too, by code of its own.
+ * from the host too, by code of its own. A BOOL setting that fits something a disc may need is `neededAs` the name a
+ * media source's `needs` list gives it, which is also what the user is told the disc needs.
  *
  * A family is an entry for every parameter whose name starts with its `prefix`, in any case, or is one of its `names`;
  * the entry's own key is not a parameter. Its `apply(member, value, context)` puts one of them into effect, given the
@@ -164,6 +165,7 @@ export const Parameters = {
     hasVideoNula: {
         type: ParamTypes.BOOL,
         takenFromHost: true,
+        neededAs: "VideoNuLA",
         default: false,
         field: {
             type: "check",

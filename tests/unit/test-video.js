@@ -741,6 +741,25 @@ describe("Video", () => {
             expect(video.ulactrl).toBe(NulaHorizontalOffsetOne);
         });
 
+        it("tells whoever asked, once, when software first writes to the missing NuLA", () => {
+            const onMissingVideoNula = vi.fn();
+            video = makeMockedVideo({ onMissingVideoNula });
+            video.ula.write(0, 0x08);
+            video.ula.write(1, 0x17);
+            expect(onMissingVideoNula).not.toHaveBeenCalled();
+            video.ula.write(3, 0x17);
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(onMissingVideoNula).toHaveBeenCalledTimes(1);
+        });
+
+        it("tells nobody when a fitted NULA that software disabled is written to", () => {
+            const onMissingVideoNula = vi.fn();
+            video = makeMockedVideo({ hasVideoNula: true, onMissingVideoNula });
+            video.ula.write(2, NulaDisable);
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(onMissingVideoNula).not.toHaveBeenCalled();
+        });
+
         it("starts a fitted NULA enabled, taking &FE22 as its own until disabled", () => {
             video = makeMockedVideo({ hasVideoNula: true });
             video.ula.write(0, 0x08);
