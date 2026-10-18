@@ -200,12 +200,21 @@ describe("analytics", () => {
                 expect(gtag).toHaveBeenCalledWith("event", "category", { type: "type", count: 0 });
             });
 
-            it("logs what it sends as one line of text, quoting the values that would not read as one word", async () => {
+            it("logs what it sends as one line of text, leaving out the parameters that are undefined", async () => {
                 const { note } = await loadWithMeasurementId(measurementId);
-                note("js_error", { where: "loop", message: 'bad "x"', file_line: undefined, label: "", count: 0 });
-                expect(console.log).toHaveBeenCalledWith(
-                    'event noted: js_error where=loop message="bad \\"x\\"" label="" count=0',
-                );
+                note("category", { type: "type", label: undefined, count: 0, embed: false });
+                expect(console.log).toHaveBeenCalledWith("event noted: category type=type count=0 embed=false");
+            });
+
+            it.each([
+                ["a b", '"a b"'],
+                ['a"b', '"a\\"b"'],
+                ["a=b", '"a=b"'],
+                ["", '""'],
+            ])("quotes %j in the log line so it reads as one value", async (value, logged) => {
+                const { note } = await loadWithMeasurementId(measurementId);
+                note("category", { label: value });
+                expect(console.log).toHaveBeenCalledWith(`event noted: category label=${logged}`);
             });
 
             const sent = (name) =>
