@@ -586,26 +586,23 @@ class DebugHook {
     }
 
     add(handler) {
-        const self = this;
         this.handlers.push(handler);
         if (!this.cpu[this.functionName]) {
-            this.cpu[this.functionName] = function () {
+            this.cpu[this.functionName] = (...args) => {
                 // remove() replaces the array, so a handler removing itself cannot make the loop skip the next one.
-                const handlers = self.handlers;
+                const handlers = this.handlers;
                 let stop = false;
-                for (let i = 0; i < handlers.length; ++i) {
-                    if (handlers[i].apply(handlers[i], arguments)) stop = true;
+                for (const h of handlers) {
+                    if (h.apply(h, args)) stop = true;
                 }
                 if (stop) {
-                    if (self.remembersStop) self.calledAtStop = new Set(handlers);
-                    self.cpu.stop();
+                    if (this.remembersStop) this.calledAtStop = new Set(handlers);
+                    this.cpu.stop();
                 }
                 return stop;
             };
         }
-        handler.remove = function () {
-            self.remove(handler);
-        };
+        handler.remove = () => this.remove(handler);
         return handler;
     }
 
