@@ -581,7 +581,7 @@ class DebugHook {
         this.cpu = cpu;
         this.functionName = functionName;
         this.handlers = [];
-        this.calledAtLastStop = [];
+        this.calledAtStop = null;
     }
 
     add(handler) {
@@ -596,7 +596,7 @@ class DebugHook {
                     if (handlers[i].apply(handlers[i], arguments)) stop = true;
                 }
                 if (stop) {
-                    self.calledAtLastStop = handlers;
+                    self.calledAtStop = new Set(handlers);
                     self.cpu.stop();
                 }
                 return stop;
@@ -622,8 +622,17 @@ class DebugHook {
         this.cpu[this.functionName] = null;
     }
 
-    /** Calls the handlers not in `called`, with `cpu.resumingFromStop` set, ignoring any request to stop. */
-    callExcept(called, ...args) {
+    get stopped() {
+        return this.calledAtStop !== null;
+    }
+
+    forgetStop() {
+        this.calledAtStop = null;
+    }
+
+    /** Calls the handlers not called at the stop, with `cpu.resumingFromStop` set, ignoring any request to stop. */
+    callRemaining(...args) {
+        const called = this.calledAtStop;
         this.cpu.resumingFromStop = true;
         try {
             for (const handler of this.handlers) {
@@ -706,7 +715,6 @@ export class Cpu6502 extends Base6502 {
         this.is1MHzAccess = this.buildIs1MHzAccess();
 
         this._debugRead = this._debugWrite = this._debugInstruction = null;
-        this.hooksCalledAtStop = null;
         this.resumingFromStop = false;
         this.debugInstruction = new DebugHook(this, "_debugInstruction");
         this.debugRead = new DebugHook(this, "_debugRead");
@@ -1534,7 +1542,7 @@ export class Cpu6502 extends Base6502 {
         this._nmiEdge = false;
         this._nmiSources = 0;
         this.halted = false;
-        this.hooksCalledAtStop = null;
+        this.debugInstruction.forgetStop();
         this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
@@ -1643,7 +1651,7 @@ export class Cpu6502 extends Base6502 {
         if (this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite) {
             return this.executeInternal();
         } else {
-            if (this.currentCycles < this.targetCycles) this.hooksCalledAtStop = null;
+            if (this.currentCycles < this.targetCycles) this.debugInstruction.forgetStop();
             return this.executeInternalFast();
         }
     }
@@ -1651,21 +1659,23 @@ export class Cpu6502 extends Base6502 {
     executeInternal() {
         // Each instruction hook sees the instruction a debug stop halted before once, at the stop or on resume,
         // and none stops the machine at it again.
-        let calledAtStop = this.hooksCalledAtStop;
+        let resuming = this.debugInstruction.stopped;
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
             this.oldPcArray[this.oldPcIndex] = this.pc;
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
             if (this._debugInstruction) {
-                if (calledAtStop) {
-                    this.debugInstruction.callExcept(calledAtStop, this.pc, opcode);
+                if (resuming) {
+                    this.debugInstruction.callRemaining(this.pc, opcode);
                 } else if (this._debugInstruction(this.pc, opcode)) {
-                    this.hooksCalledAtStop = new Set(this.debugInstruction.calledAtLastStop);
                     return false;
                 }
             }
-            if (calledAtStop) calledAtStop = this.hooksCalledAtStop = null;
+            if (resuming) {
+                this.debugInstruction.forgetStop();
+                resuming = false;
+            }
             this.incpc();
             this.runner.run(opcode);
             this.oldAArray[this.oldPcIndex] = this.a;
