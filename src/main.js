@@ -49,12 +49,10 @@ import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./we
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
-import { configureAnalytics, noteError, noteMachineStart } from "./web/analytics.js";
+import { configureAnalytics, noteError, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
+import { BenchmarkPage } from "./web/benchmark-page.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
-
-configureAnalytics();
-installIcons();
 
 // ------------------------------------------------------------------------
 // What the URL asked for.
@@ -62,6 +60,11 @@ installIcons();
 
 const urlState = new UrlState(window.location, window.history);
 const parsedQuery = urlState.params;
+
+const benchmarkPage = parsedQuery.benchmark ? new BenchmarkPage(parsedQuery.benchmark) : null;
+if (benchmarkPage) silenceAnalytics();
+configureAnalytics();
+installIcons();
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 
 let discImage = BuiltInImages[0].file;
@@ -382,43 +385,62 @@ const startPromise = machine.start({
     basicNeedsRun,
 });
 
+/** @returns {Promise<boolean>} false when the page is reloading as the machine its boot disc needs */
+async function startAsTheUrlAsks() {
+    if (await switchForBootDisc(await bootDisc)) return false;
+    noteMachineStart(
+        settings,
+        parsedQuery,
+        { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
+        audioHandler.ready,
+    );
+
+    switch (needsAutoboot) {
+        case "boot":
+            autoBoot.boot();
+            break;
+        case "type":
+            autoBoot.type(autoType);
+            break;
+        case "chain":
+            autoBoot.chainTape();
+            break;
+        case "run":
+            autoBoot.runTape();
+            break;
+        default:
+            break;
+    }
+
+    if (parsedQuery.patch) {
+        dbgr.setPatch(parsedQuery.patch);
+    }
+
+    // Restore the state a cross-model reload stashed, if there is one.
+    await snapshots.restorePendingState();
+
+    if (!dbgr.enabled()) loop.go();
+    return true;
+}
+
 (async () => {
     try {
         machineSwitch.announce();
         await startPromise;
-        if (await switchForBootDisc(await bootDisc)) return;
-        noteMachineStart(
-            settings,
-            parsedQuery,
-            { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
-            audioHandler.ready,
-        );
-
-        switch (needsAutoboot) {
-            case "boot":
-                autoBoot.boot();
-                break;
-            case "type":
-                autoBoot.type(autoType);
-                break;
-            case "chain":
-                autoBoot.chainTape();
-                break;
-            case "run":
-                autoBoot.runTape();
-                break;
-            default:
-                break;
-        }
-
-        if (parsedQuery.patch) {
-            dbgr.setPatch(parsedQuery.patch);
-        }
-
-        // Restore the state a cross-model reload stashed, if there is one.
-        await snapshots.restorePendingState();
-
-        if (!dbgr.enabled()) loop.go();
+        if (benchmarkPage) {
+            const commit = import.meta.env.JSBEEB_COMMIT;
+            await benchmarkPage.run({
+                processor,
+                display,
+                audioHandler,
+                slots: media.slots,
+                loop,
+                modals,
+                parsedQuery,
+                commit,
+                version,
+            });
+        } else if (!(await startAsTheUrlAsks())) return;
         const rendezvous = createRendezvousClient();
         const sessionContext = {
             processor,
@@ -442,6 +464,7 @@ const startPromise = machine.start({
         });
     } catch (error) {
         console.error("Error initialising emulator:", error);
+        benchmarkPage?.fail(error);
         noteError("startup", error);
         modals.showError("initialising", error);
     }

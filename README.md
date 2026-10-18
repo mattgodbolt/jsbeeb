@@ -394,6 +394,16 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `rom` - load the given URL or path as an extra ROM. If a URL is provided, that URL must allow cross-site requests.
   Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom`
   file assumed to be within.
+- `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in
+  `public/benchmarks/workloads.json`, on the model it names there (e.g. `benchmark=elite`, or
+  `benchmark=master-shadow&model=Master`) instead of starting as usual. It runs the workload unthrottled from its
+  snapshot, warms up, then times ten emulated seconds three ways: a normal run with the copy and present, the video
+  chip with nothing painted, and the CPU with fake video. A dialog shows one line with every figure to paste;
+  `window.jsbeebBenchmark` holds the same for scripts, and its `done` resolves when the run ends. Nothing is sent to
+  Google Analytics. After a successful run the machine carries on with the workload once the dialog is closed; after a
+  failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
+  refused alongside it, as they change what is measured, and so is a machine with a Music 5000, teletext adaptor or
+  Econet fitted.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.

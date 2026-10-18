@@ -269,6 +269,7 @@ export const Parameters = {
     loadBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: mediaLabel },
     embedBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
     patch: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
+    benchmark: { type: ParamTypes.STRING, startupAction: true },
 
     // Array parameters
     rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },

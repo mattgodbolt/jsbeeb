@@ -28,6 +28,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run benchmark:workloads` - Rebuild the workload snapshots in `public/benchmarks` from a boot and scripted
   input (`tools/make-benchmark-workloads.js`); `-- --check` compares instead of writing. `src/benchmark-workloads.js`
   restores one by name, in Node or the page, and checks it is running what its name says
+- `npm run test:same-answer` - Run each benchmark workload for 100 frames and compare hashes of its state (framebuffer,
+  registers, memory, cycles, sound, peripherals) against `tests/same-answer-hashes.json`, naming the parts that
+  differ; `-- --record` rewrites the file after an intended change. A few seconds, for an optimisation's inner loop:
+  it covers only what the workloads run and says what changed, not why, so the full suites still run before a change
+  is done
 - `vitest run tests/unit/test-archive.js` - Run a single test file
 
 ### Code Coverage
