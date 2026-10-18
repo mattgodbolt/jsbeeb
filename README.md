@@ -9,6 +9,9 @@ A BBC Micro and other 8-bit Acorn emulator written in JavaScript and running in 
 (with sideways RAM, and with the US or German MOS), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card
 interface), along with a number of different peripherals.
 
+jsbeeb supports the browser versions listed under `browserslist` in [package.json](package.json), which we review
+each year against the site's visitors.
+
 ## Table of Contents
 
 - [Keyboard Mappings](#keyboard-mappings)
