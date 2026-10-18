@@ -63,6 +63,8 @@ jobs:
         env:
           VITEST_JOB_SUMMARY_TITLE: Shader tests
         run: npm run test:shader
+      - name: Built scripts parse at the browser floor
+        run: npm run test:dist-syntax
       - name: End-to-end tests
         run: |
           echo "# End-to-end tests" >> "$GITHUB_STEP_SUMMARY"

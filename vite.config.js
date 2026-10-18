@@ -1,3 +1,4 @@
+import browserslistToEsbuild from "browserslist-to-esbuild";
 import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 import { rendezvousPlugin } from "./rendezvous/vite-plugin.js";
@@ -14,6 +15,7 @@ export default defineConfig({
     base: "./", // Use relative paths for Electron compatibility
     plugins: [firShaderPlugin(), rendezvousPlugin(), analyticsPlugin()],
     build: {
+        target: browserslistToEsbuild(),
         sourcemap: true,
         // Prevent inlining; we don't want any worklets/audio workers to be inlined as that doesn't work.
         assetsInlineLimit: 0,
