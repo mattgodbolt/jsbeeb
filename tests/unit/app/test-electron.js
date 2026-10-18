@@ -77,6 +77,13 @@ describe("the Electron hooks", () => {
         );
     });
 
+    it("saves a changed setting for the next launch's query, leaving out what the URL never carries", () => {
+        const settings = new EventTarget();
+        initialise({ ...deps, settings });
+        settings.dispatchEvent(new CustomEvent("change", { detail: { displayMode: "pal", mediaAutoboot: false } }));
+        expect(api.saveSettings).toHaveBeenCalledWith({ displayMode: "pal" });
+    });
+
     it("saves what a slot is known by as a setting once it settles", () => {
         initialise(deps);
         const slot = { busy: null, urlParams: () => ({ disc: undefined, disc1: "file:///discs/b.ssd" }) };

@@ -809,8 +809,71 @@ describe("MediaWindow", () => {
                 expect(urlState.params.autoboot).toBeUndefined();
             });
 
+            it.each([
+                [false, true],
+                [true, false],
+            ])("retries a failed load (Shift %s) as it was asked for, booting %s", async (shiftKey, boots) => {
+                vi.spyOn(console, "error").mockImplementation(() => {});
+                deps.media.loadDiscImage.mockRejectedValueOnce(new Error("HTTP 404"));
+                await openWith([elite]);
+                const row = rows()[0].querySelector(".media-row-main");
+                if (shiftKey) shiftClick(row);
+                else row.click();
+                await vi.waitFor(() => expect(bay(0).querySelector(".bay-retry").hidden).toBe(false));
+                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+                bay(0).querySelector(".bay-retry").click();
+                await vi.waitFor(() => expect(bay(0).dataset.state).toBe("loaded"));
+                expect(deps.autoboot).toHaveBeenCalledTimes(boots ? 1 : 0);
+                expect(urlState.params.autoboot).toBe(boots ? true : undefined);
+            });
+
+            it.each([
+                ["without autoboot", false],
+                ["with autoboot", true],
+            ])("retries a link's failed load for a link %s, booting %s", async (_, boots) => {
+                if (boots) urlState.set({ autoboot: true });
+                await failedStartupLoad("sth:A/elite.zip");
+                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+                await openWith([elite]);
+                bay(0).querySelector(".bay-retry").click();
+                await vi.waitFor(() => expect(bay(0).dataset.state).toBe("loaded"));
+                expect(deps.autoboot).toHaveBeenCalledTimes(boots ? 1 : 0);
+            });
+
+            it.each([
+                ["without autoboot", false],
+                ["with autoboot", true],
+            ])("fills drive 0 from Google Drive once connected for a link %s, booting %s", async (_, boots) => {
+                if (boots) urlState.set({ autoboot: true });
+                const mine = { ...elite, ref: "gd:abc/mine.ssd", title: "mine.ssd", source: "gdrive" };
+                await failedStartupLoad("gd:abc/mine.ssd");
+                deps.media.loadDiscImage.mockResolvedValue(discFor("mine.ssd", ssdImage()));
+                await openWith([elite]);
+                deps.media.listAll.mockResolvedValue({ descriptors: [elite, mine], failures: [] });
+                document.getElementById("media-connect-drive").click();
+                await vi.waitFor(() => expect(bay(0).dataset.state).toBe("loaded"));
+                expect(deps.autoboot).toHaveBeenCalledTimes(boots ? 1 : 0);
+            });
+
+            it("describes Enter by the row it takes, not only by where the list is aimed", async () => {
+                await openWith([elite, chuckie]);
+                document.querySelector('#media-into [data-target="tape"]').click();
+                [...document.querySelectorAll("#media-chips .media-chip")]
+                    .find((chip) => text(chip) === "Discs")
+                    .click();
+                search("elite");
+                expect(hint()).toEqual(["Enter boots from drive 0", "Shift+Enter loads without booting", "Esc closes"]);
+                document.querySelector('#media-into [data-target="0"]').click();
+                [...document.querySelectorAll("#media-chips .media-chip")]
+                    .find((chip) => text(chip) === "Tapes")
+                    .click();
+                search("chuckie");
+                expect(hint()).toEqual(["Enter loads into the deck", "Esc closes"]);
+            });
+
             it("does not boot a blank disc made in this browser", async () => {
                 deps.media.loadDiscImage.mockResolvedValue(discFor("blank.ssd", ssdImage()));
+                urlState.set({ autoboot: true });
                 await openWith();
                 document.getElementById("media-new-disc").click();
                 document.getElementById("media-new-disc-name").value = "blank";
@@ -1509,6 +1572,7 @@ describe("MediaWindow", () => {
             deps.driveSource.connected = true;
             const created = discFor("fresh.ssd", ssdImage());
             deps.driveSource.createBlank.mockResolvedValue({ ref: "gd:xyz/fresh.ssd", disc: created });
+            urlState.set({ autoboot: true });
             await openWith();
             expect(document.getElementById("media-connect-drive").hidden).toBe(true);
             document.getElementById("media-new-disc").click();
@@ -1519,6 +1583,8 @@ describe("MediaWindow", () => {
             expect(deps.driveSource.createBlank).toHaveBeenCalledWith("fresh.ssd", "auto");
             expect(urlState.params.disc1).toBe("gd:xyz/fresh.ssd");
             expect(panel().hidden).toBe(true);
+            expect(deps.processor.reset).not.toHaveBeenCalled();
+            expect(urlState.params.autoboot).toBeUndefined();
         });
 
         it("leaves the drive empty, with nothing to retry, when Google Drive cannot make the disc", async () => {

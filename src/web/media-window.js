@@ -107,6 +107,7 @@ export class MediaWindow {
         this.counterBase = 0;
         this.lastCounter = null;
         this.target = 0;
+        this.asked = [null, null];
 
         for (const opener of document.querySelectorAll(".media-window-open"))
             opener.addEventListener("click", (e) => {
@@ -337,7 +338,10 @@ export class MediaWindow {
         bay.hide.title = `Fold drive ${driveIndex} away`;
         bay.hide.addEventListener("click", () => this.showDrive(false));
         bay.retry.addEventListener("click", () =>
-            this.loadDisc(driveIndex, this.slots.drive(driveIndex).failed.descriptor, { entry: "retry" }),
+            this.loadDisc(driveIndex, this.slots.drive(driveIndex).failed.descriptor, {
+                ...this.askedOf(driveIndex),
+                entry: "retry",
+            }),
         );
         section
             .querySelector(".bay-save-ssd")
@@ -474,7 +478,6 @@ export class MediaWindow {
         list.autoboot.checked = this.settings.mediaAutoboot;
         list.autoboot.addEventListener("change", () => {
             this.settings.set({ mediaAutoboot: list.autoboot.checked ? undefined : false });
-            this.renderHint();
             this.renderList();
         });
         list.newDisc.addEventListener("click", () => this.showDiscForm({ copyFrom: null }));
@@ -550,15 +553,16 @@ export class MediaWindow {
             button.classList.toggle("active", aimed);
             button.setAttribute("aria-pressed", String(aimed));
         }
-        this.renderHint();
         this.renderChips();
         this.renderList();
     }
 
-    /** What the keys do where the list is aimed. */
+    /** What the keys do to the row Enter takes, or where the list is aimed when there is none. */
     renderHint() {
+        const first = this.list.rows.querySelector(".media-row-main")?.descriptor;
+        const target = first ? this.rowTarget(first) : this.target;
         this.list.hint.replaceChildren(
-            ...[...hintKeys(this.target, this.settings.mediaAutoboot), ["Esc", "closes"]].map(([key, what]) => {
+            ...[...hintKeys(target, this.settings.mediaAutoboot), ["Esc", "closes"]].map(([key, what]) => {
                 const span = document.createElement("span");
                 const kbd = document.createElement("kbd");
                 kbd.textContent = key;
@@ -665,6 +669,7 @@ export class MediaWindow {
             notices.push(li);
         }
         list.rows.replaceChildren(...notices, ...rows);
+        this.renderHint();
         list.count.textContent = list.loaded
             ? shown.length > MaxRows
                 ? `showing ${MaxRows} of ${shown.length}; keep typing to narrow it`
@@ -800,11 +805,7 @@ export class MediaWindow {
             const wanted = slot.failed?.descriptor;
             if (slot.media || slot.busy || wanted?.source !== "gdrive") continue;
             const listed = descriptors.find((d) => d.ref === wanted.ref) ?? wanted;
-            await this.loadDisc(slot.index, listed, {
-                boot: this.media.params.autoboot !== undefined,
-                stayOpen: true,
-                entry: "retry",
-            });
+            await this.loadDisc(slot.index, listed, { ...this.askedOf(slot.index), stayOpen: true, entry: "retry" });
         }
     }
 
@@ -824,10 +825,21 @@ export class MediaWindow {
             this.slots.recent.note(d.ref, "disc");
             return;
         }
-        if ((await this.slots.load(slot, d, { entry })) !== "loaded") return;
+        const asked = (this.asked[driveIndex] = { shift, boot });
+        const outcome = await this.slots.load(slot, d, { entry });
+        if (outcome !== "failed" && this.asked[driveIndex] === asked) this.asked[driveIndex] = null;
+        if (outcome !== "loaded") return;
         // The tick is read now, not before the wait, in case it was changed meanwhile.
         this.loaded(driveIndex, bootsOnLoad());
         if (!stayOpen) this.close();
+    }
+
+    /**
+     * A retry asks for what the failed load asked for; a load the window did not ask for, as a link's
+     * was, boots as the URL says.
+     */
+    askedOf(driveIndex) {
+        return this.asked[driveIndex] ?? { boot: this.media.params.autoboot !== undefined };
     }
 
     /** Boots what has just gone into drive 0 if it is to, and has the URL say whether a link to it boots. */
