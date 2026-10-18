@@ -1736,19 +1736,44 @@ describe("Video", () => {
             expect(v2.crtc.curReg).toBe(12);
         });
 
-        it("should snapshot and restore palette", () => {
-            const v = makeRealVideo();
+        it.each([
+            ["a stock ULA", {}],
+            ["a VideoNuLA", { hasVideoNula: true }],
+        ])("should snapshot and restore the palette of %s", (_, options) => {
+            const v = makeRealVideo(options);
             v.ula.write(1, 0x0a);
             v.ula.write(1, 0x55);
 
             const snapshot = v.snapshotState();
-            const v2 = makeRealVideo();
+            const v2 = makeRealVideo(options);
             v2.restoreState(snapshot);
 
             expect(v2.ulaPal).toEqual(v.ulaPal);
             expect(v2.ulaPal[0]).not.toBe(v2.ulaPal[5]);
             expect(v2.actualPal[0]).toBe(0x0a);
             expect(v2.actualPal[5]).toBe(0x05);
+        });
+
+        it("restores the saved palette as it is onto a VideoNuLA", () => {
+            const v = makeRealVideo({ hasVideoNula: true });
+            const snapshot = v.snapshotState();
+            snapshot.ulaPal[3] = 0xff123456;
+
+            const v2 = makeRealVideo({ hasVideoNula: true });
+            v2.restoreState(snapshot);
+
+            expect(v2.ulaPal[3]).toBe(0xff123456);
+        });
+
+        it("restores a state saved without a VideoNuLA onto one as a disabled NULA", () => {
+            const stock = makeRealVideo();
+            const fitted = makeRealVideo({ hasVideoNula: true });
+
+            fitted.restoreState(stock.snapshotState());
+
+            expect(fitted.ula.disabled).toBe(true);
+            fitted.ula.write(2, 0x1c);
+            expect(fitted.ulactrl).toBe(0x1c);
         });
 
         it("should snapshot and restore ULA NULA state", () => {

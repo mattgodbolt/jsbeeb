@@ -232,10 +232,11 @@ function fakeProcessor({ cycles = 1000 } = {}) {
     return processor;
 }
 
-function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {} } = {}) {
+function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {}, hasVideoNula = false } = {}) {
     return {
         processor,
         model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
+        hasVideoNula,
         loop: { setLockstep: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         urlState: { urlWith: vi.fn(() => "about:blank") },
@@ -412,6 +413,7 @@ describe("SessionHost", () => {
         expect(channel.messages()[0]).toEqual({
             type: "welcome",
             model: "BBC B with 8271 (DFS 1.2)",
+            hasVideoNula: false,
             version: "1.0",
             name: host.name,
         });
@@ -1550,8 +1552,8 @@ describe("SessionGuest", () => {
         ];
     }
 
-    async function joining(rendezvous) {
-        const context = fakeContext({ rendezvous });
+    async function joining(contextOptions) {
+        const context = fakeContext(contextOptions);
         const guest = new SessionGuest(context, "room");
         await guest.start();
         const channel = peers[0].channel;
@@ -2233,6 +2235,21 @@ describe("SessionGuest", () => {
         channel.emit("message", message({ type: "welcome", model: "BBC Master 128 (DFS)", version: "1.0" }));
         expect(context.urlState.urlWith).toHaveBeenCalledWith(
             expect.objectContaining({ model: "BBC Master 128 (DFS)" }),
+        );
+        expect(channel.messages().at(-1)).toEqual({ type: "bye" });
+    });
+
+    it.each([
+        ["fits a VideoNuLA", false, true],
+        ["takes out a VideoNuLA", true, false],
+    ])("%s to match the host's machine", async (_, guestHasVideoNula, hostHasVideoNula) => {
+        const { context, channel } = await joining({ hasVideoNula: guestHasVideoNula });
+        channel.emit(
+            "message",
+            message({ type: "welcome", model: "B-DFS1.2", hasVideoNula: hostHasVideoNula, version: "1.0" }),
+        );
+        expect(context.urlState.urlWith).toHaveBeenCalledWith(
+            expect.objectContaining({ model: "B-DFS1.2", hasVideoNula: hostHasVideoNula }),
         );
         expect(channel.messages().at(-1)).toEqual({ type: "bye" });
     });

@@ -52,7 +52,7 @@ class Ula {
         this.paletteMode = 0;
         this.horizontalOffset = 0;
         this.leftBlank = 0;
-        // A stock ULA decodes only A0, so &FE22/&FE23 alias &FE20/&FE21 just as a disabled NULA's do.
+        // A stock ULA decodes only A0.
         this.disabled = !hasVideoNula;
         this.attributeMode = 0;
         this.attributeText = 0;

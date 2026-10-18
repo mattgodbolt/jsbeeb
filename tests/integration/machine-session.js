@@ -1498,6 +1498,9 @@ describe("MachineSession bank breakpoints on a Master with ANDY paged in", () =>
 });
 
 describe("MachineSession VideoNuLA", () => {
+    const Mode7UlaControl = 0x4a;
+    const UlaFlashBit = 0x01;
+
     async function videoAfterNulaPaletteModeOn(opts) {
         const session = new MachineSession("B-DFS1.2", opts);
         await session.initialise();
@@ -1523,7 +1526,7 @@ describe("MachineSession VideoNuLA", () => {
         "fits a VideoNuLA when asked",
         async () => {
             const video = await videoAfterNulaPaletteModeOn({ hasVideoNula: true });
-            expect(video.ulactrl).not.toBe(0x11);
+            expect(video.ulactrl & ~UlaFlashBit).toBe(Mode7UlaControl);
             expect(video.ula.paletteMode).toBe(1);
         },
         BootTimeout,

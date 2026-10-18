@@ -420,7 +420,16 @@ const startPromise = machine.start({
 
         if (!dbgr.enabled()) loop.go();
         const rendezvous = createRendezvousClient();
-        const sessionContext = { processor, model, loop, keyboard, urlState, version, rendezvous };
+        const sessionContext = {
+            processor,
+            model,
+            hasVideoNula: settings.hasVideoNula,
+            loop,
+            keyboard,
+            urlState,
+            version,
+            rendezvous,
+        };
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
             refusal: sessionRefusal(sessionContext),
