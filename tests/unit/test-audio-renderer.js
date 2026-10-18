@@ -409,11 +409,13 @@ describe("SoundChipProcessor rendering", () => {
         producer.chip.restoreState(restoredState);
         producer.flush();
         proc.onMessage({ command: "setEnabled", enabled: true });
-        simulate(proc, producer, (proc.targetLatencyMs + TickMs) / 1000, { tickMs: TickMs });
+        const waiting = simulate(proc, producer, (proc.targetLatencyMs + TickMs) / 1000, { tickMs: TickMs });
         expect(proc.stalled).toBe(false);
         const { output } = simulate(proc, producer, 0.1, { tickMs: TickMs });
-        expect(goertzelAmplitude(output, AliasToneHz, OutputRate)).toBeGreaterThan(0.1);
-        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(0.01);
+        for (const heard of [waiting.output, output]) {
+            expect(goertzelAmplitude(heard, AliasToneHz, OutputRate)).toBeGreaterThan(0.1);
+            expect(goertzelAmplitude(heard, ToneHz, OutputRate)).toBeLessThan(0.01);
+        }
     });
 
     it("should keep the writes that follow a restore in the same batch", () => {
