@@ -114,6 +114,41 @@ test("a breakpoint in the MOS names its addresses, and says where the names came
     expect(await panelWidth()).toBe(uncreditedWidth);
 });
 
+test("a state saved at a breakpoint loads paused there in the debugger, and one continue runs past it", async ({
+    beeb,
+    page,
+}) => {
+    const pc = () => page.evaluate(() => window.processor.pc);
+    const stoppedAtOswrch = page.locator("#disassembly .highlight .dis_addr");
+    const loadAndContinue = async (file) => {
+        await page.setInputFiles("#load-state", file);
+        await expect(page.locator("#debug-play")).toBeEnabled();
+        await expect(stoppedAtOswrch).toHaveText(/^ffee /);
+        expect(await pc()).toBe(Oswrch);
+        const loaded = await beeb.expectHeld();
+        await page.click("#debug-play");
+        await beeb.expectRunningPast(loaded);
+        await expect.poll(pc).not.toBe(Oswrch);
+    };
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.evaluate((address) => {
+        window.e2eBreakpoint = window.processor.debugInstruction.add((at) => at === address);
+    }, Oswrch);
+    await beeb.pressKey("a");
+    await expect(stoppedAtOswrch).toHaveText(/^ffee /);
+    const download = page.waitForEvent("download");
+    await page.locator("#save-state").dispatchEvent("click");
+    const saved = await (await download).path();
+
+    await loadAndContinue(saved);
+
+    await page.evaluate(() => window.e2eBreakpoint.remove());
+    await expect(page.locator("#debug-pause")).toBeEnabled();
+
+    await loadAndContinue(saved);
+});
+
 test("a disc named in the URL is loaded and autobooted", async ({ beeb }) => {
     await beeb.open("?disc=elite.ssd&autoboot");
     await beeb.expectDrive0("elite.ssd");

@@ -1362,6 +1362,7 @@ export class Cpu6502 extends Base6502 {
             nmiEdge: this._nmiEdge,
             halted: this.halted,
             takeInt: this.takeInt,
+            stoppedAtBreakpoint: this.debugInstruction.stopped,
             // Memory control
             romsel: this.romsel,
             acccon: this.acccon,
@@ -1408,7 +1409,8 @@ export class Cpu6502 extends Base6502 {
         this._nmiSources = 0;
         this.halted = state.halted;
         this.takeInt = state.takeInt;
-        this.debugInstruction.forgetStop();
+        if (state.stoppedAtBreakpoint) this.debugInstruction.rememberUnseenStop();
+        else this.debugInstruction.forgetStop();
 
         // 3. Memory
         this.ramRomOs.set(state.ram);

@@ -405,7 +405,7 @@ const startPromise = machine.start({
         // Restore the state a cross-model reload stashed, if there is one.
         await snapshots.restorePendingState();
 
-        loop.go();
+        if (!dbgr.enabled()) loop.go();
         const rendezvous = createRendezvousClient();
         const sessionContext = { processor, model, loop, keyboard, urlState, version, rendezvous };
         new SessionDialog({

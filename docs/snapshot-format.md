@@ -110,33 +110,36 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 
 ### CPU (`state.*`)
 
-| Field              | Type       | Description                                                                                       |
-| ------------------ | ---------- | ------------------------------------------------------------------------------------------------- |
-| `a`                | number     | Accumulator (0-255)                                                                               |
-| `x`                | number     | X register (0-255)                                                                                |
-| `y`                | number     | Y register (0-255)                                                                                |
-| `s`                | number     | Stack pointer (0-255)                                                                             |
-| `pc`               | number     | Program counter (0-65535)                                                                         |
-| `p`                | number     | Processor flags byte (bits 4-5 always set)                                                        |
-| `nmiLevel`         | boolean    | NMI line level, the OR of every device's line (see below)                                         |
-| `nmiEdge`          | boolean    | NMI edge detected (pending)                                                                       |
-| `halted`           | boolean    | CPU halted state                                                                                  |
-| `takeInt`          | boolean    | Interrupt pending                                                                                 |
-| `romsel`           | number     | ROM bank select register (&FE30)                                                                  |
-| `acccon`           | number     | ACCCON register (&FE34, Master only)                                                              |
-| `videoDisplayPage` | number     | Video display page offset (0 or 0x8000)                                                           |
-| `currentCycles`    | number     | Current cycle counter                                                                             |
-| `targetCycles`     | number     | Target cycle counter                                                                              |
-| `cycleSeconds`     | number     | Elapsed seconds (float)                                                                           |
-| `peripheralCycles` | number     | Peripheral cycle accumulator                                                                      |
-| `videoCycles`      | number     | Video cycle accumulator                                                                           |
-| `music5000PageSel` | number     | Music 5000 page select                                                                            |
-| `ram`              | Uint8Array | RAM contents (128KB, excludes ROMs)                                                               |
-| `roms`             | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em. |
+| Field                 | Type       | Description                                                                                                   |
+| --------------------- | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `a`                   | number     | Accumulator (0-255)                                                                                           |
+| `x`                   | number     | X register (0-255)                                                                                            |
+| `y`                   | number     | Y register (0-255)                                                                                            |
+| `s`                   | number     | Stack pointer (0-255)                                                                                         |
+| `pc`                  | number     | Program counter (0-65535)                                                                                     |
+| `p`                   | number     | Processor flags byte (bits 4-5 always set)                                                                    |
+| `nmiLevel`            | boolean    | NMI line level, the OR of every device's line (see below)                                                     |
+| `nmiEdge`             | boolean    | NMI edge detected (pending)                                                                                   |
+| `halted`              | boolean    | CPU halted state                                                                                              |
+| `takeInt`             | boolean    | Interrupt pending                                                                                             |
+| `stoppedAtBreakpoint` | boolean    | _(Optional)_ An instruction hook (an execute breakpoint, a run-until) stopped the machine at `pc` (see below) |
+| `romsel`              | number     | ROM bank select register (&FE30)                                                                              |
+| `acccon`              | number     | ACCCON register (&FE34, Master only)                                                                          |
+| `videoDisplayPage`    | number     | Video display page offset (0 or 0x8000)                                                                       |
+| `currentCycles`       | number     | Current cycle counter                                                                                         |
+| `targetCycles`        | number     | Target cycle counter                                                                                          |
+| `cycleSeconds`        | number     | Elapsed seconds (float)                                                                                       |
+| `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                  |
+| `videoCycles`         | number     | Video cycle accumulator                                                                                       |
+| `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
+| `ram`                 | Uint8Array | RAM contents (128KB, excludes ROMs)                                                                           |
+| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em.             |
 
 **Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
 
 The NMI level is rebuilt the same way: the CPU clears every device's line and each device re-drives its own, the FDC from its restored registers and econet from its live state (econet state itself is not saved). `nmiLevel` is read back only when the snapshot carries no FDC state (v1 and imported snapshots), where it stands in for the disc controller's line. `nmiEdge` is applied after the devices have re-driven their lines, so a line coming back up on restore is not mistaken for a fresh edge.
+
+A state restored with `stoppedAtBreakpoint` set is stopped where it was saved: the next run executes the instruction at `pc` without any breakpoint stopping there again, and every instruction hook, including one added since, is still called for it. The browser loads such a state into the debugger, paused at `pc`. Older snapshots and the b-em and BeebEm imports lack the field, and absent means false (no stop, so a breakpoint at `pc` fires at once), so it needed no format version bump.
 
 ### Scheduler (`state.scheduler`)
 
