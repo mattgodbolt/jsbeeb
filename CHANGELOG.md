@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.8.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.7.0...v2.8.0) (2026-10-18)
+
+
+### Features
+
+* a state saved at a breakpoint loads paused there, and a restored machine no longer skips a breakpoint at its pc ([#1318](https://github.com/mattgodbolt/jsbeeb/issues/1318)) ([d87c418](https://github.com/mattgodbolt/jsbeeb/commit/d87c4182bc51fce86b9a1a79a1449ee2cd771d88))
+* group the More menu and drop the Owlet promo from the bar ([#1319](https://github.com/mattgodbolt/jsbeeb/issues/1319)) ([8713440](https://github.com/mattgodbolt/jsbeeb/commit/87134408abcdc4de08b9d38f46c6d5d90b388ae1))
+* host and join a shared session from the More menu ([#1316](https://github.com/mattgodbolt/jsbeeb/issues/1316)) ([1a8969b](https://github.com/mattgodbolt/jsbeeb/commit/1a8969b8d514c913d2bb9063703f2163b37838c8))
+* MachineSession.onExecute watches execution, and debug hooks see the instruction a stop resumes at ([#1315](https://github.com/mattgodbolt/jsbeeb/issues/1315)) ([1d718e7](https://github.com/mattgodbolt/jsbeeb/commit/1d718e7b9d34d3747d458d58b78cbfef29242091))
+* the debugger shows device registers without disturbing them ([#1309](https://github.com/mattgodbolt/jsbeeb/issues/1309)) ([2967de3](https://github.com/mattgodbolt/jsbeeb/commit/2967de3d9d0cc255d26e46c1bda63231b04eab55))
+
+
+### Bug Fixes
+
+* a guest that joins from the dialog keeps its page's own settings ([#1317](https://github.com/mattgodbolt/jsbeeb/issues/1317)) ([4598fe0](https://github.com/mattgodbolt/jsbeeb/commit/4598fe048720fcb7c87a1706776d082fee04b370))
+* a second vsync and odd-field fetches in the 6845's interlace modes ([#1312](https://github.com/mattgodbolt/jsbeeb/issues/1312)) ([723b4ad](https://github.com/mattgodbolt/jsbeeb/commit/723b4adb1a7ae690675981ec6b02b561bc67071f))
+* keep the user's own disc names and session details out of analytics ([#1323](https://github.com/mattgodbolt/jsbeeb/issues/1323)) ([7a638a9](https://github.com/mattgodbolt/jsbeeb/commit/7a638a9c8f0589d44f696565399146a437f499ff))
+* only the deployed site loads Google Analytics ([#1328](https://github.com/mattgodbolt/jsbeeb/issues/1328)) ([f5e1362](https://github.com/mattgodbolt/jsbeeb/commit/f5e1362bd76195f0c28b226e392b19187298b68e))
+
 ## [2.7.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.6.1...v2.7.0) (2026-10-17)
 
 
