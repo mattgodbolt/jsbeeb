@@ -125,9 +125,9 @@ describe("parseOptions", () => {
         [["a", "b", "--min-pairs", "2.5"], "--min-pairs takes a whole number"],
         [["a", "b", "--horizon", "x"], "--horizon takes a percentage above 0"],
         [["a", "b", "--horizon", "0"], "--horizon takes a percentage above 0"],
-        [["a", "b", "--measure-secs", "1.234"], "--measure-secs takes seconds in whole 10 ms ticks"],
-        [["a", "b", "--measure-secs", "0"], "--measure-secs takes seconds in whole 10 ms ticks"],
-        [["a", "b", "--warmup-secs=-1"], "--warmup-secs takes seconds in whole 10 ms ticks"],
+        [["a", "b", "--measure-secs", "1.234"], "--measure-secs takes seconds in whole"],
+        [["a", "b", "--measure-secs", "0"], "--measure-secs takes seconds in whole"],
+        [["a", "b", "--warmup-secs=-1"], "--warmup-secs takes seconds in whole"],
     ])("refuses %j before anything runs", (args, message) => {
         expect(() => parseOptions(args)).toThrow(message);
     });

@@ -30,8 +30,8 @@ CPU and peripherals without rendering video; the difference from a run without i
 
 Each sample is a fresh Node process, so no side inherits the other's type feedback or compiled code. It
 restores the workload from its side's checkout, runs `--warmup-secs` emulated seconds (5) for the JIT tiers to
-settle, then times `--measure-secs` (10) in 10 ms slices of emulated time, the size of the page's tick
-(`TickMs` in `src/web/emulation-loop.js`), since `execute()`'s exit deopts and the slice size changes what is
+settle, then times `--measure-secs` (10) in slices of emulated time the size of the page's tick
+(`TickMs` in `src/emulation-tick.js`), since `execute()`'s exit deopts and the slice size changes what is
 measured. Both sides run on the runner's own Node, whatever version each side's `package.json` asks for, so the
 comparison is of the code and not of two engines. The version goes on every result line and in the JSON
 (`node`): results from different Node versions are not comparable, nor are results from different machines.

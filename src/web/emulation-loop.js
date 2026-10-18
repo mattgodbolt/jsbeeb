@@ -1,10 +1,6 @@
+import { TickMs } from "../emulation-tick.js";
 import { noteError } from "./analytics.js";
 import { toast } from "./toast.js";
-
-// The machine runs in short slices of real time on a timer, whatever the
-// display is doing (issue #885). Audio gains most from the fine grain: its
-// queue need only cover a slice.
-export const TickMs = 10;
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
 

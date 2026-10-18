@@ -1,12 +1,11 @@
 import { test } from "vitest";
 
 import { benchmarkMachine, listBenchmarkWorkloads } from "../../src/benchmark-machine.js";
+import { TickMs } from "../../src/emulation-tick.js";
 import { isSameModel } from "../../src/snapshot.js";
 
 // An iteration runs a million cycles, so the hz column Vitest prints reads as virtual MHz.
 const CyclesPerIteration = 1000 * 1000;
-// TickMs in src/web/emulation-loop.js: execute()'s exit deopts, so the slice size counts.
-const BrowserTickMs = 10;
 const MsPerSecond = 1000;
 
 /**
@@ -21,7 +20,7 @@ export async function benchWorkloadsOf(model, { fakeVideo }) {
     for (const { name } of workloads) {
         test(`${name}, ${what}`, async ({ bench }) => {
             const { cpu } = await benchmarkMachine(name, { fakeVideo });
-            const tickCycles = (cpu.model.cyclesPerSecond * BrowserTickMs) / MsPerSecond;
+            const tickCycles = (cpu.model.cyclesPerSecond * TickMs) / MsPerSecond;
             await bench(name, () => {
                 for (let run = 0; run < CyclesPerIteration; run += tickCycles) cpu.execute(tickCycles);
             }).run();

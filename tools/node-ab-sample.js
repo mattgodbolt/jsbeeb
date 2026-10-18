@@ -6,13 +6,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { TickMs } from "../src/emulation-tick.js";
 import { median } from "./ab-stats.js";
 
-// TickMs in src/web/emulation-loop.js, which Node cannot import (it reaches bootstrap and Vite's .glsl imports).
-// execute()'s exit deopts, so the slice size counts.
-const BrowserTickMs = 10;
 const MsPerSecond = 1000;
-export const SlicesPerSecond = MsPerSecond / BrowserTickMs;
+export const SlicesPerSecond = MsPerSecond / TickMs;
 
 /**
  * Runs `measureSecs` emulated seconds in browser-tick slices after `warmupSecs` of the same, timing each slice.
@@ -22,7 +20,7 @@ export const SlicesPerSecond = MsPerSecond / BrowserTickMs;
  */
 export function timeSlices(cpu, { warmupSecs, measureSecs }) {
     const { cyclesPerSecond } = cpu.model;
-    const sliceCycles = Math.round((cyclesPerSecond * BrowserTickMs) / MsPerSecond);
+    const sliceCycles = Math.round((cyclesPerSecond * TickMs) / MsPerSecond);
     const warmupSlices = Math.round(warmupSecs * SlicesPerSecond);
     for (let slice = 0; slice < warmupSlices; slice++) cpu.execute(sliceCycles);
     const slices = Math.round(measureSecs * SlicesPerSecond);

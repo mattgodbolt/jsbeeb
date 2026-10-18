@@ -19,6 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { TickMs } from "../src/emulation-tick.js";
 import { describeComparison, FewestDecisivePairs, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
 import { SlicesPerSecond } from "./node-ab-sample.js";
 
@@ -58,7 +59,7 @@ Options:
   --max-pairs N         the most pairs taken per workload, at least ${FewestDecisivePairs} (default ${Defaults["max-pairs"]})
   --horizon P           stop once the 99% interval lies within P% of 1, or excludes 1 (default ${Defaults.horizon})
   --warmup-secs S       emulated seconds run before timing (default ${Defaults["warmup-secs"]})
-  --measure-secs S      emulated seconds timed, in 10 ms browser-tick slices (default ${Defaults["measure-secs"]})
+  --measure-secs S      emulated seconds timed, in ${TickMs} ms browser-tick slices (default ${Defaults["measure-secs"]})
   --statistic median|total
                         a sample's throughput from its median slice, or from the total time (default
                         ${Defaults.statistic}); see docs/benchmarking.md
@@ -83,7 +84,7 @@ function wholeSlices(options, name, least) {
     const exact = Number(options[name]) * SlicesPerSecond;
     const slices = Math.round(exact);
     if (!(Math.abs(exact - slices) < SliceTolerance) || slices < least) {
-        throw new Error(`--${name} takes seconds in whole 10 ms ticks, not "${options[name]}"`);
+        throw new Error(`--${name} takes seconds in whole ${TickMs} ms ticks, not "${options[name]}"`);
     }
     return slices / SlicesPerSecond;
 }
