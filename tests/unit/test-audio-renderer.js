@@ -390,26 +390,43 @@ describe("SoundChipProcessor rendering", () => {
 
     it("should play a state restored while paused straight away, not hold the old one for the rewound time", () => {
         const RewoundMs = 3000;
+        const TickMs = 10;
         const proc = new SoundChipProcessor(BoardOutput);
         const producer = makeProducer(proc);
-        const silentState = producer.chip.snapshotState();
+        producer.poke(...toneWrites(AliasTonePeriod));
+        const restoredState = producer.chip.snapshotState();
         producer.advance(RewoundMs);
         producer.poke(...ToneOn);
         producer.advance(proc.targetLatencyMs);
         producer.flush();
-        simulate(proc, producer, 0.2);
+        simulate(proc, producer, 0.2, { tickMs: TickMs });
         mute(proc);
         producer.flush();
         simulate(proc, producer, 0.2, { ticking: () => false });
         expect(proc.stalled).toBe(true);
 
         producer.chip.scheduler.epoch -= RewoundMs * CyclesPerMs;
-        producer.chip.restoreState(silentState);
-        proc.onMessage({ command: "setEnabled", enabled: true });
+        producer.chip.restoreState(restoredState);
         producer.flush();
-        const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.25 });
+        proc.onMessage({ command: "setEnabled", enabled: true });
+        simulate(proc, producer, (proc.targetLatencyMs + TickMs) / 1000, { tickMs: TickMs });
         expect(proc.stalled).toBe(false);
-        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(1e-3);
+        const { output } = simulate(proc, producer, 0.1, { tickMs: TickMs });
+        expect(goertzelAmplitude(output, AliasToneHz, OutputRate)).toBeGreaterThan(0.1);
+        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(0.01);
+    });
+
+    it("should keep the writes that follow a restore in the same batch", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = startedWithTone(proc);
+        const silentState = makeProducer(proc).chip.snapshotState();
+        producer.chip.restoreState(silentState);
+        producer.poke(...toneWrites(AliasTonePeriod));
+        producer.advance(proc.targetLatencyMs);
+        producer.flush();
+        const { output } = simulate(proc, producer, 0.2, { collectAfter: 0.05 });
+        expect(goertzelAmplitude(output, AliasToneHz, OutputRate)).toBeGreaterThan(0.1);
+        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(0.01);
     });
 });
 
