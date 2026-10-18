@@ -252,6 +252,11 @@ jsbeeb uses Node.js and vite to afford simple and standard web development tooli
 without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the
 site to make it smaller and faster to load when it's deployed to [https://bbc.xania.org](https://bbc.xania.org).
 
+Google Analytics is only on the deployed site: the deploy job builds with `GA_MEASUREMENT_ID` set from the repository
+variable of that name, and every other build (`npm start`, a clone's own build, the tests and the desktop app) has no
+analytics on the page and sends nothing. `npm run test:e2e` builds with a dummy id and answers Google's requests
+itself, so it can check what the page would send.
+
 ## Running as a Desktop Application
 
 jsbeeb can also run as a standalone desktop application using Electron. Prebuilt packages (Debian/Ubuntu `.deb`,

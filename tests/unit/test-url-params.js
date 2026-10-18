@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 
 import {
     parseQueryString,
+    parseLocationParams,
     buildUrlFromParams,
     processInputParams,
     processAutobootParams,
@@ -136,6 +137,17 @@ describe("URL Parameters", () => {
                 speed: 4,
                 volume: 0.8,
                 debug: true,
+            });
+        });
+    });
+
+    describe("parseLocationParams", () => {
+        it("reads the parameters in the query and after the hash", () => {
+            const location = new URL("https://bbc.example/?disc=elite.ssd&autoboot#frameSkip=2");
+            expect(parseLocationParams(location, { autoboot: ParamTypes.BOOL, frameSkip: ParamTypes.INT })).toEqual({
+                disc: "elite.ssd",
+                autoboot: true,
+                frameSkip: 2,
             });
         });
     });

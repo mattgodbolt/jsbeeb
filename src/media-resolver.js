@@ -11,7 +11,8 @@ export function splitImage(image) {
 /**
  * Every schema a reference can start with: how it is served (`route`) and where the page says it
  * came from, as a media-catalogue source key (`source`) or as words (`phrase`). A reference
- * with no schema is a bare name from the built-in folder.
+ * with no schema is a bare name from the built-in folder. A schema with no source is `personal`
+ * when what it names is the user's own, as a source in media-catalogue's `Sources` is.
  */
 export const Schemas = Object.freeze({
     "": { route: "folder", source: "builtin" },
@@ -24,11 +25,11 @@ export const Schemas = Object.freeze({
     local: { route: "browser", source: "browser" },
     "!": { route: "browser", source: "browser" },
     session: { route: "session", source: "session" },
-    data: { route: "zipped-inline", phrase: "the URL" },
-    b64data: { route: "inline", phrase: "the URL" },
+    data: { route: "zipped-inline", phrase: "the URL", personal: true },
+    b64data: { route: "inline", phrase: "the URL", personal: true },
     http: { route: "url", phrase: "the web" },
     https: { route: "url", phrase: "the web" },
-    file: { route: "url", phrase: "a file" },
+    file: { route: "url", phrase: "a file", personal: true },
 });
 
 /** How a reference is served; a schema this page does not know is read as a folder name. */

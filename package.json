@@ -122,7 +122,7 @@
     "mirror-bbcdiscs:upload:index": "aws s3 cp .bbcdiscs-mirror/hfe/manifest.json s3://bbc.xania.org/archive/bbcdiscs/hfe/manifest.json --cache-control 'public, max-age=300' && aws s3 cp .bbcdiscs-mirror/manifest.json s3://bbc.xania.org/archive/bbcdiscs/manifest.json --cache-control 'public, max-age=300'",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder",
-    "test:e2e": "npm run build && playwright test --project chrome"
+    "test:e2e": "GA_MEASUREMENT_ID=G-E2ETEST npm run build && playwright test --project chrome"
   },
   "lint-staged": {
     "*.js": [
