@@ -12,6 +12,13 @@ export function tubeCpuSpeedLabel(multiplier, model) {
 }
 
 const capitalise = (word) => word[0].toUpperCase() + word.substring(1);
+const isOption = (options) => (value) => options.some((option) => option.value === value);
+
+const KeyLayoutOptions = [
+    { value: "physical", text: "Physical: '*' is next to Enter/Return" },
+    { value: "natural", text: "Natural: you get the character you type" },
+    { value: "gaming", text: "Gaming: handy for games like Zalaga" },
+];
 const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" : `Channel ${channel}`);
 
 const AfterglowDefaults = Object.fromEntries(persistenceSettings().map(({ setting, default: ms }) => [setting, ms]));
@@ -50,7 +57,7 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  *
  * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it;
  * a parameter with none is told as it is. One that is `reportedAtStart` is sent with the machine_start event under its
- * own name, so it must be a menu, a check or a BOOL, whose values are a fixed set.
+ * own name, so its values must be a fixed set: a BOOL, or a menu whose `valid` holds it to its options.
  */
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
@@ -77,15 +84,12 @@ export const Parameters = {
         default: "physical",
         reportedAtStart: true,
         fromUrl: (layout) => layout.toLowerCase(),
+        valid: isOption(KeyLayoutOptions),
         field: {
             type: "menu",
             label: "Keyboard layout",
             describe: capitalise,
-            options: [
-                { value: "physical", text: "Physical: '*' is next to Enter/Return" },
-                { value: "natural", text: "Natural: you get the character you type" },
-                { value: "gaming", text: "Gaming: handy for games like Zalaga" },
-            ],
+            options: KeyLayoutOptions,
         },
     },
     displayMode: {

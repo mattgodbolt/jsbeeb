@@ -252,6 +252,7 @@ export class SessionHost {
         this.log = new SessionLog({ role: "host", room, name, model: context.model.name, version: context.version });
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
+        this.guestsJoined = 0;
         this.departed = [];
         this.desyncs = 0;
         // Who orders the session's inputs: the host (null) or a guest. While a guest does, this machine replays
@@ -720,6 +721,7 @@ export class SessionHost {
                 this.sendSnapshot(guest);
                 notify(`A guest joined (${this.connectedCount()} connected).`);
                 this.log.record("joined", { guest: guest.id });
+                ++this.guestsJoined;
                 noteStage(this.log.details.role, "connected", { peers: this.connectedCount() });
                 this.showStatus();
             },
@@ -917,7 +919,7 @@ export class SessionHost {
         holdAnalogue(processor, false);
         processor.sysvia.cmos.leaveSession();
         this.log.record("closed");
-        noteStage(this.log.details.role, "ended", { reason: "page_closed", peers: this.guestsSeen });
+        noteStage(this.log.details.role, "ended", { reason: "page_closed", peers: this.guestsJoined });
     }
 
     report() {
@@ -1025,7 +1027,10 @@ export class SessionGuest {
         channel.binaryType = "arraybuffer";
         channel.addEventListener("message", ({ data }) => this.fromHost(data));
         channel.addEventListener("close", () => this.hostLeft());
-        window.addEventListener("pagehide", () => this.send({ type: "bye" }));
+        window.addEventListener("pagehide", () => {
+            this.send({ type: "bye" });
+            if (!this.left) noteStage(this.log.details.role, "ended", { reason: "page_closed" });
+        });
         await pc.setLocalDescription(await pc.createOffer());
         notify(`Joining "${this.room}"...`);
         await rendezvous.postOffer(this.room, this.id, await gatheredDescription(pc));

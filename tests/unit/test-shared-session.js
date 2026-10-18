@@ -324,6 +324,14 @@ describe("SessionHost", () => {
         ]);
     });
 
+    it("counts only the guests who joined when it ends", async () => {
+        const sent = sentEvents();
+        const { host } = await hosting();
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        host.close();
+        expect(sent("session").at(-1)).toEqual({ role: "host", stage: "ended", reason: "page_closed", peers: "0" });
+    });
+
     describe("the link to join", () => {
         afterEach(() => {
             delete navigator.clipboard;
@@ -1638,6 +1646,17 @@ describe("SessionGuest", () => {
                 { role: "guest", stage: "connected" },
                 { role: "guest", stage: "ended", reason: "host_left" },
             ]);
+        });
+
+        it("notes its own page closing as the end", async () => {
+            const closings = () => sent("session").filter(({ reason }) => reason === "page_closed").length;
+            // Earlier tests' guests still listen on the same window.
+            window.dispatchEvent(new Event("pagehide"));
+            const earlier = closings();
+            await joining();
+            window.dispatchEvent(new Event("pagehide"));
+            expect(closings()).toBe(2 * earlier + 1);
+            expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "ended", reason: "page_closed" });
         });
 
         it("notes failing on something from the host it cannot read as a protocol failure", async () => {

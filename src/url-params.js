@@ -266,7 +266,7 @@ export function processAutobootParams(parsedQuery) {
 
 /** How the page was asked to boot: as `processAutobootParams` says, or `basic` for a BASIC program in the URL. */
 export function bootModeOf(parsedQuery) {
-    if (isDefined(parsedQuery.loadBasic) || isDefined(parsedQuery.embedBasic)) return "basic";
+    if (parsedQuery.loadBasic || parsedQuery.embedBasic) return "basic";
     return processAutobootParams(parsedQuery).needsAutoboot;
 }
 

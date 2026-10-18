@@ -30,7 +30,14 @@ describe("Parameters", () => {
     it.each(Object.entries(Parameters).filter(([, { reportedAtStart }]) => reportedAtStart))(
         "reports %s at start only as one of a fixed set of values",
         (name, { type, field }) => {
-            expect(type === ParamTypes.BOOL || ["menu", "check"].includes(field?.type)).toBe(true);
+            const urlState = new UrlState(
+                { origin: "https://bbc.example", pathname: "/", search: `?${name}=SomeonesOwnText`, hash: "" },
+                { pushState: vi.fn() },
+            );
+            vi.spyOn(console, "log").mockImplementation(() => {});
+            const value = new Settings({ urlState }).value(name);
+            if (type === ParamTypes.BOOL) expect(typeof value === "boolean" || value === undefined).toBe(true);
+            else expect(field.options.map((option) => option.value)).toContain(value);
         },
     );
 

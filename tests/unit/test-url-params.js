@@ -347,6 +347,7 @@ describe("URL Parameters", () => {
             [{ autotype: "HELLO" }, "type"],
             [{ loadBasic: "prog.bas", autorun: true }, "basic"],
             [{ embedBasic: "10 PRINT" }, "basic"],
+            [{ loadBasic: "", autoboot: true }, "boot"],
         ])("reads %o as %s", (params, mode) => {
             expect(bootModeOf(params)).toBe(mode);
         });
