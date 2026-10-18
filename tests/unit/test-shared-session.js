@@ -24,6 +24,8 @@ import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { MaxWaitingKeys } from "../../src/web/session-sequencer.js";
+import { parseQueryString } from "../../src/url-params.js";
+import { UrlParamTypes } from "../../src/web/parameters.js";
 import { domFromIndexHtml } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
@@ -2312,7 +2314,29 @@ describe("joinLink", () => {
         window.history.replaceState(null, "", "/?model=Master&disc=elite.ssd#frag");
         expect(joinLink("brave-owls-sing")).toBe(`${window.location.origin}/?client=brave-owls-sing`);
         expect(joinLink("brave-owls-sing", "matt g")).toBe(
-            `${window.location.origin}/?client=brave-owls-sing&name=matt+g`,
+            `${window.location.origin}/?client=brave-owls-sing&name=matt%20g`,
+        );
+    });
+
+    it("gives the name back as it was when the link is read", () => {
+        const query = new URL(joinLink("brave-owls-sing", "matt g")).search.substring(1);
+        expect(parseQueryString(query, UrlParamTypes).name).toBe("matt g");
+    });
+
+    it("keeps the settings local to the page and the input mappings it is given, and nothing that changes the machine", () => {
+        const params = {
+            model: "Master",
+            disc: "elite.ssd",
+            cpuMultiplier: 2,
+            audioLatencyMs: 80,
+            embed: true,
+            "KEY.CAPSLOCK": "CTRL",
+            "GP.FIRE2": "RETURN",
+            FIRE: "SPACE",
+        };
+        expect(joinLink("brave-owls-sing", "matt", params)).toBe(
+            `${window.location.origin}/?client=brave-owls-sing&name=matt&audioLatencyMs=80&embed` +
+                "&KEY.CAPSLOCK=CTRL&GP.FIRE2=RETURN&FIRE=SPACE",
         );
     });
 });

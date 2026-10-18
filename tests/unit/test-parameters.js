@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     DisplaySection,
+    LocalToPageParams,
     Parameters,
     tubeCpuSpeedLabel,
     UrlParamTypes,
@@ -23,6 +24,13 @@ describe("Parameters", () => {
     it("types every parameter", () => {
         for (const [name, type] of Object.entries(UrlParamTypes)) {
             expect(Object.values(ParamTypes), name).toContain(type);
+        }
+    });
+
+    it("never makes a startup action or a setting that needs a fresh machine local to the page", () => {
+        for (const name of LocalToPageParams) {
+            expect(Parameters[name].field?.restart, name).toBeFalsy();
+            expect(Parameters[name].startupAction, name).toBeFalsy();
         }
     });
 
