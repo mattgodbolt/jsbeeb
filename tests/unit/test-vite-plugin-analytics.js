@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "vite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { analyticsPlugin } from "../../tools/vite-plugin-analytics.js";
 
@@ -21,7 +21,12 @@ describe("analyticsPlugin", () => {
         return server.transformIndexHtml("/index.html", IndexHtml);
     };
 
+    beforeEach(() => {
+        vi.stubEnv("GA_MEASUREMENT_ID", undefined);
+    });
+
     afterEach(async () => {
+        vi.unstubAllEnvs();
         await server?.close();
         server = undefined;
     });

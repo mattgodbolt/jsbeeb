@@ -19,10 +19,7 @@ gtag("js", new Date());`,
     },
 ];
 
-/**
- * Google Analytics on the page and its measurement id in `import.meta.env.GA_MEASUREMENT_ID`, both only when
- * GA_MEASUREMENT_ID is set, which only the deploy job does.
- */
+/** Google Analytics on the page and its measurement id in `import.meta.env.GA_MEASUREMENT_ID`, both only with an id. */
 export function analyticsPlugin(measurementId = process.env.GA_MEASUREMENT_ID) {
     return {
         name: "analytics",
