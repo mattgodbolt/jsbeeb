@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TickMs } from "../../src/emulation-tick.js";
 import { EmulationLoop } from "../../src/web/emulation-loop.js";
 import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
@@ -90,7 +91,7 @@ describe("EmulationLoop", () => {
 
     it("turns the wall clock into cycles", () => {
         started();
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         expect(deps.audioHandler.flushChipEvents).toHaveBeenCalled();
         expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.sysvia);
@@ -100,7 +101,7 @@ describe("EmulationLoop", () => {
 
     it("never emulates more than a tenth of a second in one tick", () => {
         const loop = started();
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         // The page stalls for a second before the next tick gets to run.
         const afterTheStall = performance.now() + 1000;
         vi.spyOn(performance, "now").mockReturnValue(afterTheStall);
@@ -113,7 +114,7 @@ describe("EmulationLoop", () => {
     describe("on a vsync", () => {
         it("runs the machine up to the vsync and presents in the same callback", () => {
             started();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             const vsyncTime = performance.now() + 5;
             vi.advanceTimersByTime(7);
             vsync(vsyncTime);
@@ -125,7 +126,7 @@ describe("EmulationLoop", () => {
         it("times the run from when the callback ran, not from the vsync", () => {
             const loop = started();
             const update = vi.spyOn(loop.virtualSpeedUpdater, "update");
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             const vsyncTime = performance.now() + 5;
             vi.advanceTimersByTime(7);
             vsync(vsyncTime);
@@ -134,7 +135,7 @@ describe("EmulationLoop", () => {
 
         it("presents but emulates nothing for a vsync a timer tick has already passed", () => {
             started();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             const executed = cyclesExecuted().length;
             vsync(performance.now() - 5);
             expect(cyclesExecuted().length).toBe(executed);
@@ -144,7 +145,7 @@ describe("EmulationLoop", () => {
         it("emulates nothing while going as fast as possible", () => {
             const loop = started();
             loop.toggleFastAsPossible();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             const executed = cyclesExecuted().length;
             vsync(performance.now() + 5);
             expect(cyclesExecuted().length).toBe(executed);
@@ -162,7 +163,7 @@ describe("EmulationLoop", () => {
     it("books each tick from the previous one's due time, so a late tick shortens the next wait", () => {
         const loop = started();
         const setTimeoutSpy = vi.spyOn(window, "setTimeout");
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(setTimeoutSpy.mock.calls.at(-1)[1]).toBe(10);
         vi.spyOn(performance, "now").mockReturnValue(performance.now() + 14);
         loop.tick();
@@ -180,7 +181,7 @@ describe("EmulationLoop", () => {
     it("runs a fiftieth of a second per tick when going as fast as possible", () => {
         const loop = started();
         loop.toggleFastAsPossible();
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 50);
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(true);
     });
@@ -199,7 +200,7 @@ describe("EmulationLoop", () => {
         deps.fastTape = true;
         const loop = started();
         deps.processor.tapeInterface.motorOn = true;
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 50);
         expect(loop.isRunning()).toBe(true);
     });
@@ -207,13 +208,13 @@ describe("EmulationLoop", () => {
     describe("the speed readout", () => {
         it("shows normal speed, turbo while the machine runs speedy, and normal again after", () => {
             const loop = started();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(speedIconsShown()).toEqual(["speed-normal"]);
             loop.toggleFastAsPossible();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(speedIconsShown()).toEqual(["speed-turbo"]);
             loop.toggleFastAsPossible();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(speedIconsShown()).toEqual(["speed-normal"]);
         });
 
@@ -221,7 +222,7 @@ describe("EmulationLoop", () => {
             deps.fastTape = true;
             started();
             deps.processor.tapeInterface.motorOn = true;
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(speedIconsShown()).toEqual(["speed-turbo"]);
         });
     });
@@ -229,7 +230,7 @@ describe("EmulationLoop", () => {
     it("stops into the debugger when the processor stops itself", () => {
         const loop = started();
         deps.processor.execute.mockReturnValue(false);
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(deps.audioHandler.mute).toHaveBeenCalled();
@@ -241,7 +242,7 @@ describe("EmulationLoop", () => {
         deps.processor.execute.mockImplementation(() => {
             throw new Error("bad opcode");
         });
-        expect(() => vi.advanceTimersByTime(10)).toThrow("bad opcode");
+        expect(() => vi.advanceTimersByTime(TickMs)).toThrow("bad opcode");
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(sent("js_error")).toEqual([expect.objectContaining({ where: "loop", message: "bad opcode" })]);
@@ -252,7 +253,7 @@ describe("EmulationLoop", () => {
     it("pauses when the keyboard asks after a frame", () => {
         const loop = started();
         deps.keyboard.postFrameShouldPause.mockReturnValue(true);
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).not.toHaveBeenCalled();
     });
@@ -271,7 +272,7 @@ describe("EmulationLoop", () => {
         loop.setEmulationLead(20);
         expect(deps.processor.execute).not.toHaveBeenCalled();
         // The 30ms handed back come out of the next ticks' budget.
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         expect(cyclesExecuted()).toEqual([0]);
         vi.advanceTimersByTime(40);
         expect(cyclesExecuted().at(-1)).toBe((10 * ClocksPerSecond) / 1000);
@@ -287,8 +288,7 @@ describe("EmulationLoop", () => {
         const loop = started();
         const ticks = vi.fn();
         loop.addEventListener("tick", ticks);
-        vi.advanceTimersByTime(100);
-        // A tick every 10ms.
+        vi.advanceTimersByTime(10 * TickMs);
         expect(ticks).toHaveBeenCalledTimes(10);
     });
 
@@ -442,7 +442,7 @@ describe("EmulationLoop", () => {
             const loop = started();
             loop.setLockstep(lockstep);
             deps.gamepad.update.mockClear();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             loop.setEmulationLead(50);
             expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000, (50 * ClocksPerSecond) / 1000]);
             expect(cyclesExecuted()).toEqual([]);
@@ -453,7 +453,7 @@ describe("EmulationLoop", () => {
             const loop = started();
             loop.toggleFastAsPossible();
             loop.setLockstep(lockstep);
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(lockstepCycles()).toEqual([(10 * ClocksPerSecond) / 1000]);
             expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
         });
@@ -461,12 +461,12 @@ describe("EmulationLoop", () => {
         it("shows normal speed for the session, and turbo from before it again once it ends", () => {
             const loop = started();
             loop.toggleFastAsPossible();
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             loop.setLockstep(lockstep);
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(speedIconsShown()).toEqual(["speed-normal"]);
             loop.setLockstep(null);
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(speedIconsShown()).toEqual(["speed-turbo"]);
         });
 
@@ -483,14 +483,14 @@ describe("EmulationLoop", () => {
             const loop = started();
             loop.setLockstep(lockstep);
             loop.setLockstep(null);
-            vi.advanceTimersByTime(10);
+            vi.advanceTimersByTime(TickMs);
             expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         });
     });
 
     it("does nothing once stopped, even with a tick in flight", () => {
         const loop = started();
-        vi.advanceTimersByTime(10);
+        vi.advanceTimersByTime(TickMs);
         const executed = cyclesExecuted().length;
         loop.stop(false);
         vi.advanceTimersByTime(100);

@@ -1,7 +1,7 @@
 import { checkWorkload, readWorkload, restoreWorkload } from "../benchmark-workloads.js";
+import { TickMs } from "../emulation-tick.js";
 import { isSameModel } from "../snapshot.js";
 import { FakeVideo } from "../video.js";
-import { TickMs } from "./emulation-loop.js";
 
 export const WarmupSeconds = 5;
 export const Repeats = 10;

@@ -11,14 +11,13 @@ import { fileURLToPath } from "node:url";
 
 import { benchmarkMachine, listBenchmarkWorkloads } from "../src/benchmark-machine.js";
 import { assertFastPath } from "../src/benchmark-workloads.js";
+import { TickMs } from "../src/emulation-tick.js";
 import { RepoRoot } from "../src/test-machine.js";
 
 const HashesPath = path.join(RepoRoot, "tests", "same-answer-hashes.json");
 const RelativeHashesPath = path.relative(RepoRoot, HashesPath);
 export const Frames = 100;
 const FramesPerSecond = 50;
-// TickMs in src/web/emulation-loop.js, so execute() is called as the page calls it.
-const BrowserTickMs = 10;
 const MsPerSecond = 1000;
 const RomBankBytes = 16384;
 const HashHexDigits = 16;
@@ -115,7 +114,7 @@ export async function workloadHashes(name) {
     trace.soundEvents.length = 0;
     assertFastPath(cpu);
     const { cyclesPerSecond } = cpu.model;
-    const tickCycles = (cyclesPerSecond * BrowserTickMs) / MsPerSecond;
+    const tickCycles = (cyclesPerSecond * TickMs) / MsPerSecond;
     const totalCycles = (cyclesPerSecond * Frames) / FramesPerSecond;
     for (let run = 0; run < totalCycles; run += tickCycles) {
         cpu.execute(tickCycles);
