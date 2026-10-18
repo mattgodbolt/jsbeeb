@@ -145,6 +145,300 @@ describe("MachineSession running for cycles", () => {
     });
 });
 
+describe("MachineSession watching execution", () => {
+    const ProgramAddress = 0x2000;
+    const Program = [0xa9, 0x01, 0xa2, 0x02, 0xa0, 0x03, 0x60]; // LDA #1, LDX #2, LDY #3, RTS
+    const ProgramPcs = [0x2000, 0x2002, 0x2004, 0x2006];
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    afterEach(() => {
+        session.clearBreakpoints();
+        session.resetBreakpointHits();
+    });
+
+    function irqHandler() {
+        const [lo, hi] = session.readMemory(0x204, 2);
+        return lo | (hi << 8);
+    }
+
+    async function stopAtProgramStart(program = Program, { keepBreakpoint = false } = {}) {
+        session.writeMemory(ProgramAddress, program);
+        const id = session.addBreakpoint("execute", ProgramAddress);
+        await session.type(`CALL &${ProgramAddress.toString(16)}`);
+        if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+        expect(session.hitBreakpoint().id).toBe(id);
+        if (!keepBreakpoint) session.removeBreakpoint(id);
+        session.resetBreakpointHits();
+    }
+
+    it("keeps running whatever the watcher returns", async () => {
+        const remove = session.onExecute(() => true);
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(result.completed).toBe(true);
+    });
+
+    it("stops reporting once removed", async () => {
+        const seen = new Set();
+        session.onExecute((pc) => seen.add(pc))();
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(seen.size).toBe(0);
+    });
+
+    it("reports the address runUntilAddress stopped at to a watcher added after", async () => {
+        const handler = irqHandler();
+        await session.runUntilAddress(handler);
+        const pcs = [];
+        const remove = session.onExecute((pc) => pcs.push(pc));
+
+        await session.runFor(10);
+        remove();
+
+        expect(pcs[0]).toBe(handler);
+    });
+
+    it("reports each instruction once across a breakpoint stop and resume", async () => {
+        await stopAtProgramStart();
+        const pcs = [];
+        const remove = session.onExecute((pc) => {
+            if (pc >= ProgramAddress && pc < ProgramAddress + Program.length) pcs.push(pc);
+        });
+        session.addBreakpoint("execute", ProgramPcs[2]);
+
+        const stopped = await session.runFor(CyclesPerInterlacedFrame);
+        session.clearBreakpoints();
+        await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(stopped.completed).toBe(false);
+        expect(pcs).toEqual(ProgramPcs);
+    });
+
+    it("removes a watcher that removes itself at the address it was added stopped at", async () => {
+        const handler = irqHandler();
+        await session.runUntilAddress(handler);
+        const pcs = [];
+        const remove = session.onExecute((pc) => {
+            pcs.push(pc);
+            if (pc === handler) remove();
+        });
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(pcs).toEqual([handler]);
+    });
+
+    it("reports the restored pc once, and not the one the machine was stopped at before", async () => {
+        await stopAtProgramStart();
+        const state = session.snapshot();
+        session.addBreakpoint("execute", ProgramPcs[2]);
+        await session.runFor(CyclesPerInterlacedFrame);
+        session.clearBreakpoints();
+        const pcs = [];
+        const remove = session.onExecute((pc) => {
+            if (pc >= ProgramAddress && pc < ProgramAddress + Program.length) pcs.push(pc);
+        });
+
+        session.restore(state);
+        await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(pcs).toEqual(ProgramPcs);
+    });
+
+    it("propagates an exception from a watcher out of the run and still removes it", async () => {
+        const remove = session.onExecute(() => {
+            throw new Error("watcher failed");
+        });
+
+        await expect(session.runFor(CyclesPerInterlacedFrame)).rejects.toThrow("watcher failed");
+        remove();
+
+        expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(true);
+    });
+
+    it("lets a breakpoint fire at the address where a watcher removes itself", async () => {
+        const handler = irqHandler();
+        const id = session.addBreakpoint("execute", handler);
+        let removedAt;
+        const remove = session.onExecute((pc) => {
+            if (pc !== handler) return;
+            removedAt = session.elapsedCycles;
+            remove();
+        });
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result.completed).toBe(false);
+        expect(session.hitBreakpoint().id).toBe(id);
+        expect(session.elapsedCycles).toBe(removedAt);
+    });
+
+    it("lets a breakpoint added after a watcher fire where the watcher removes itself", async () => {
+        await stopAtProgramStart();
+        const remove = session.onExecute((pc) => {
+            if (pc === ProgramPcs[2]) remove();
+        });
+        const id = session.addBreakpoint("execute", ProgramPcs[2]);
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result.completed).toBe(false);
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.clearBreakpoints();
+        await session.runFor(CyclesPerInterlacedFrame);
+    });
+
+    it("can call a remover twice", async () => {
+        const remove = session.onExecute(() => {});
+        remove();
+
+        expect(() => remove()).not.toThrow();
+    });
+
+    it("offers the resumed instruction to a watcher added at the stop, after another removed itself", async () => {
+        await stopAtProgramStart();
+        const pcs = [];
+        let removeAdded;
+        const removeFirst = session.onExecute((pc) => {
+            if (pc === ProgramPcs[2]) removeFirst();
+        });
+        const removeAdder = session.onExecute((pc) => {
+            if (pc !== ProgramPcs[2]) return;
+            removeAdder();
+            removeAdded = session.onExecute((seen) => pcs.push(seen));
+        });
+        session.addBreakpoint("execute", ProgramPcs[2]);
+
+        expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(false);
+        session.clearBreakpoints();
+        await session.runFor(10);
+        removeAdded();
+
+        expect(pcs[0]).toBe(ProgramPcs[2]);
+    });
+
+    it.each([
+        ["a frame painted", () => session.runFrames(1)],
+        [
+            "a write breakpoint",
+            async () => {
+                session.addBreakpoint("write", 0x70);
+                session.writeMemory(ProgramAddress, [0x85, 0x70, 0x60]); // STA &70, RTS
+                await session.type(`CALL &${ProgramAddress.toString(16)}`);
+                if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+                expect(session.hitBreakpoint().type).toBe("write");
+            },
+        ],
+    ])("stops at once for a breakpoint added where %s stopped it", async (_name, stop) => {
+        await stop();
+        session.clearBreakpoints();
+        session.resetBreakpointHits();
+        const id = session.addBreakpoint("execute", session.registers().pc);
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result).toEqual({ completed: false, cyclesRun: 0 });
+        expect(session.hitBreakpoint().id).toBe(id);
+    });
+
+    it("does not stop again at the breakpoint it resumes from", async () => {
+        await stopAtProgramStart(Program, { keepBreakpoint: true });
+
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBe(null);
+    });
+
+    it("stops once for two breakpoints at one address, and records both", async () => {
+        await stopAtProgramStart();
+        const first = session.addBreakpoint("execute", ProgramPcs[2]);
+        const second = session.addBreakpoint("execute", ProgramPcs[2]);
+
+        const stopped = await session.runFor(CyclesPerInterlacedFrame);
+        session.removeBreakpoint(first);
+        const alsoHit = session.hitBreakpoint();
+        session.resetBreakpointHits();
+        const resumed = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(stopped.completed).toBe(false);
+        expect(alsoHit.id).toBe(second);
+        expect(resumed.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBe(null);
+    });
+
+    it("does not stop or record a hit for a breakpoint added at the address it is stopped at", async () => {
+        await stopAtProgramStart();
+        session.addBreakpoint("execute", ProgramAddress);
+
+        const resumed = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(resumed.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBe(null);
+    });
+
+    it("fires a write breakpoint on the instruction an execute breakpoint stopped at", async () => {
+        const StoreAddress = 0x70;
+        const storeProgram = [0xa9, 0x2a, 0x85, StoreAddress, 0x60]; // LDA #42, STA &70, RTS
+        await stopAtProgramStart(storeProgram);
+        const execute = session.addBreakpoint("execute", ProgramAddress + 2);
+        const write = session.addBreakpoint("write", StoreAddress);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+        const atStore = session.hitBreakpoint();
+        session.resetBreakpointHits();
+        await session.runFor(CyclesPerInterlacedFrame);
+        const afterStore = session.hitBreakpoint();
+
+        expect(atStore.id).toBe(execute);
+        expect(afterStore).toEqual({ id: write, type: "write", address: StoreAddress, value: 42 });
+    });
+
+    it("does not report the address it was added stopped at once reset moves the pc", async () => {
+        const handler = irqHandler();
+        await session.runUntilAddress(handler);
+        const pcs = [];
+        const remove = session.onExecute((pc) => pcs.push(pc));
+
+        session.reset();
+        await session.runFor(100);
+        remove();
+
+        const [lo, hi] = session.readMemory(0xfffc, 2);
+        expect(pcs[0]).toBe(lo | (hi << 8));
+        expect(pcs).not.toContain(handler);
+    });
+});
+
+describe("MachineSession breakpoints across a reset", () => {
+    it("stops again at the reset address after a reset while stopped there", async () => {
+        const session = new MachineSession("B-DFS1.2");
+        await session.initialise();
+        const [lo, hi] = session.readMemory(0xfffc, 2);
+        const id = session.addBreakpoint("execute", lo | (hi << 8));
+        expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(false);
+        session.resetBreakpointHits();
+
+        session.reset();
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result).toEqual({ completed: false, cyclesRun: 0 });
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.destroy();
+    });
+});
+
 describe("MachineSession keyboard", () => {
     let session;
     const HoldCycles = 200000; // a tenth of a second, several OS keyboard scans

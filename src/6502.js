@@ -577,30 +577,32 @@ class FakeTube {
 }
 
 class DebugHook {
-    constructor(cpu, functionName) {
+    constructor(cpu, functionName, { remembersStop = false } = {}) {
         this.cpu = cpu;
         this.functionName = functionName;
+        this.remembersStop = remembersStop;
         this.handlers = [];
+        this.calledAtStop = null;
     }
 
     add(handler) {
-        const self = this;
         this.handlers.push(handler);
         if (!this.cpu[this.functionName]) {
-            this.cpu[this.functionName] = function () {
-                for (let i = 0; i < self.handlers.length; ++i) {
-                    const handler = self.handlers[i];
-                    if (handler.apply(handler, arguments)) {
-                        self.cpu.stop();
-                        return true;
-                    }
+            this.cpu[this.functionName] = (...args) => {
+                // remove() replaces the array, so a handler removing itself cannot make the loop skip the next one.
+                const handlers = this.handlers;
+                let stop = false;
+                for (const hook of handlers) {
+                    if (hook.apply(hook, args)) stop = true;
                 }
-                return false;
+                if (stop) {
+                    if (this.remembersStop) this.calledAtStop = new Set(handlers);
+                    this.cpu.stop();
+                }
+                return stop;
             };
         }
-        handler.remove = function () {
-            self.remove(handler);
-        };
+        handler.remove = () => this.remove(handler);
         return handler;
     }
 
@@ -616,6 +618,27 @@ class DebugHook {
     clear() {
         this.handlers = [];
         this.cpu[this.functionName] = null;
+    }
+
+    get stopped() {
+        return this.calledAtStop !== null;
+    }
+
+    forgetStop() {
+        this.calledAtStop = null;
+    }
+
+    /** Calls the handlers not called at the stop, with `cpu.resumingFromStop` set, ignoring any request to stop. */
+    callRemaining(...args) {
+        const called = this.calledAtStop;
+        this.cpu.resumingFromStop = true;
+        try {
+            for (const handler of this.handlers) {
+                if (!called.has(handler)) handler.apply(handler, args);
+            }
+        } finally {
+            this.cpu.resumingFromStop = false;
+        }
     }
 }
 
@@ -690,7 +713,8 @@ export class Cpu6502 extends Base6502 {
         this.is1MHzAccess = this.buildIs1MHzAccess();
 
         this._debugRead = this._debugWrite = this._debugInstruction = null;
-        this.debugInstruction = new DebugHook(this, "_debugInstruction");
+        this.resumingFromStop = false;
+        this.debugInstruction = new DebugHook(this, "_debugInstruction", { remembersStop: true });
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
 
@@ -1516,7 +1540,7 @@ export class Cpu6502 extends Base6502 {
         this._nmiEdge = false;
         this._nmiSources = 0;
         this.halted = false;
-        this.breakpointResume = false;
+        this.debugInstruction.forgetStop();
         this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
@@ -1625,27 +1649,31 @@ export class Cpu6502 extends Base6502 {
         if (this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite) {
             return this.executeInternal();
         } else {
+            if (this.currentCycles < this.targetCycles) this.debugInstruction.forgetStop();
             return this.executeInternalFast();
         }
     }
 
     executeInternal() {
-        // Skip the debug-instruction check on the very first instruction only
-        // when resuming from a previous breakpoint stop (so we don't immediately
-        // re-trigger the same breakpoint).  Previously this skipped the first
-        // instruction of every execute() chunk, which could miss breakpoints.
-        let skipNext = this.breakpointResume;
-        this.breakpointResume = false;
+        // Each instruction hook sees the instruction a debug stop halted before once, at the stop or on resume,
+        // and none stops the machine at it again.
+        let resuming = this.debugInstruction.stopped;
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
             this.oldPcArray[this.oldPcIndex] = this.pc;
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
-            if (this._debugInstruction && !skipNext && this._debugInstruction(this.pc, opcode)) {
-                this.breakpointResume = true;
-                return false;
+            if (this._debugInstruction) {
+                if (resuming) {
+                    this.debugInstruction.callRemaining(this.pc, opcode);
+                } else if (this._debugInstruction(this.pc, opcode)) {
+                    return false;
+                }
             }
-            skipNext = false;
+            if (resuming) {
+                this.debugInstruction.forgetStop();
+                resuming = false;
+            }
             this.incpc();
             this.runner.run(opcode);
             this.oldAArray[this.oldPcIndex] = this.a;

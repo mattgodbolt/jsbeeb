@@ -389,7 +389,7 @@ export class MachineSession {
     /**
      * Run for an exact number of emulated CPU cycles, or until something stops
      * the CPU first: a breakpoint, or the paint runFrames stops at. `completed`
-     * is false if it was stopped short.
+     * is false if it was stopped short. Rejects if a hook or device throws.
      * @returns {Promise<{cyclesRun: number, completed: boolean}>}
      */
     async runFor(cycles) {
@@ -470,7 +470,7 @@ export class MachineSession {
 
         if (type === "execute") {
             bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address && inBank()) {
+                if (pc === address && inBank() && !cpu.resumingFromStop) {
                     bp.hit = true;
                     return true;
                 }
@@ -497,6 +497,25 @@ export class MachineSession {
 
         this._breakpoints.set(id, bp);
         return id;
+    }
+
+    /**
+     * Call `fn(pc)` just before each instruction on the host CPU runs, so an instruction the machine stops at is
+     * reported before it executes, until the returned function is called. Watching never stops the machine; an
+     * exception from `fn` propagates out of the run, and hooks that saw that instruction see it again on the
+     * next run.
+     * @param {function(number): *} fn - its return value is ignored
+     * @returns {function(): void} removes the watcher
+     */
+    onExecute(fn) {
+        const hook = this._machine.processor.debugInstruction.add((pc) => {
+            fn(pc);
+        });
+        let removed = false;
+        return () => {
+            if (!removed) hook.remove();
+            removed = true;
+        };
     }
 
     /**
