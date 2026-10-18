@@ -2,7 +2,7 @@ import { ParamTypes } from "../url-params.js";
 import { allModels, findModel, tubeModelFor } from "../models.js";
 import { AudioOutputs, DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { getFilterForMode, MaxPersistenceMs, persistenceSettings } from "./canvas.js";
-import { mediaLabel, redacted } from "./analytics-filters.js";
+import { asIs, mediaLabel, redacted } from "./analytics-filters.js";
 
 const round = (value) => Number(value.toFixed(2));
 
@@ -29,11 +29,16 @@ export const DisplaySection = "display";
 const Peripherals = { label: "Additional peripherals", hint: "(some combinations may cause compatibility issues)" };
 
 /**
- * Every parameter the page understands, with all it is: its URL `type`, and whether it is a `startupAction` (has the
- * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
- * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry) or
- * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
- * page joining a shared session keeps its own).
+ * Every parameter the page understands, with all it is: its URL `type`, whether it is `localToPage` (changes only this
+ * page's picture, sound, key mapping or logging, never what the machine does, so a page joining a shared session keeps
+ * its own), its `analyticsFilter`, and whether it is a `startupAction` (has the page do something once it is up, rather
+ * than describe it), `stored` (kept in browser storage for next time as well as in the URL) or `slid` (changed live as
+ * a slider moves, so a burst of changes makes one history entry). Every entry declares each of RequiredProperties.
+ *
+ * A family is an entry for every parameter whose name starts with its `prefix`, in any case, or is one of its `names`;
+ * the entry's own key is not a parameter. Its `apply(member, value, context)` puts one of them into effect, given the
+ * rest of its name (or the whole of one of its `names`) and its value, both upper-cased, and returns what is wrong
+ * with it if it cannot. Settings, storage and the dialog work by name, so a family has none of their properties.
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
  * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
@@ -55,15 +60,18 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * `restart` field only takes effect on a freshly built machine. `enabledWhen(proposed)` greys a control out unless the
  * settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
  *
- * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it;
- * a parameter with none is told as it is. One that is `reportedAtStart` is sent with the machine_start event under its
- * own name, so its values must be a fixed set: a BOOL, or a menu held to its options, by its `valid` or, for the
- * model, by Settings.
+ * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it.
+ * One that is `reportedAtStart` is sent with the machine_start event under its own name, so its values must be a fixed
+ * set: a BOOL, or a menu held to its options, by its `valid` or, for the model, by Settings.
  */
+export const RequiredProperties = ["type", "localToPage", "analyticsFilter"];
+
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
     model: {
         type: ParamTypes.STRING,
+        localToPage: false,
+        analyticsFilter: asIs,
         reportedAtStart: true,
         field: {
             type: "menu",
@@ -80,6 +88,7 @@ export const Parameters = {
     },
     keyLayout: {
         type: ParamTypes.STRING,
+        analyticsFilter: asIs,
         localToPage: true,
         stored: true,
         default: "physical",
@@ -95,6 +104,7 @@ export const Parameters = {
     },
     displayMode: {
         type: ParamTypes.STRING,
+        analyticsFilter: asIs,
         localToPage: true,
         stored: true,
         default: "rgb",
@@ -113,11 +123,15 @@ export const Parameters = {
     },
     coProcessor: {
         type: ParamTypes.BOOL,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: false,
         field: { type: "check", group: Peripherals, label: "65c02 co-processor", restart: true },
     },
     tubeCpuMultiplier: {
         type: ParamTypes.FLOAT,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: 1,
         valid: (multiplier) => multiplier !== 0,
         field: {
@@ -133,21 +147,28 @@ export const Parameters = {
     },
     hasMusic5000: {
         type: ParamTypes.BOOL,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: false,
         field: { type: "check", group: Peripherals, label: "Music 5000 synthesiser", restart: true },
     },
     hasTeletextAdaptor: {
         type: ParamTypes.BOOL,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: false,
         field: { type: "check", group: Peripherals, label: "Teletext adaptor", restart: true },
     },
     hasEconet: {
         type: ParamTypes.BOOL,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: false,
         field: { type: "check", group: Peripherals, label: "Econet with file server", restart: true },
     },
     audioOutput: {
         type: ParamTypes.STRING,
+        analyticsFilter: asIs,
         localToPage: true,
         stored: true,
         default: DefaultAudioOutput,
@@ -167,6 +188,7 @@ export const Parameters = {
     },
     speakerAmount: {
         type: ParamTypes.FLOAT,
+        analyticsFilter: asIs,
         localToPage: true,
         stored: true,
         slid: true,
@@ -185,6 +207,8 @@ export const Parameters = {
     },
     microphoneChannel: {
         type: ParamTypes.INT,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: undefined,
         field: {
             type: "menu",
@@ -200,6 +224,8 @@ export const Parameters = {
     },
     mouseJoystickEnabled: {
         type: ParamTypes.BOOL,
+        localToPage: false,
+        analyticsFilter: asIs,
         default: false,
         field: {
             type: "check",
@@ -211,6 +237,7 @@ export const Parameters = {
     },
     speechOutput: {
         type: ParamTypes.BOOL,
+        analyticsFilter: asIs,
         localToPage: true,
         default: false,
         field: {
@@ -227,6 +254,7 @@ export const Parameters = {
     // Each display's afterglow
     palPersistenceMs: {
         type: ParamTypes.FLOAT,
+        analyticsFilter: asIs,
         localToPage: true,
         stored: true,
         slid: true,
@@ -235,6 +263,7 @@ export const Parameters = {
     },
     rgbPersistenceMs: {
         type: ParamTypes.FLOAT,
+        analyticsFilter: asIs,
         localToPage: true,
         stored: true,
         slid: true,
@@ -243,61 +272,111 @@ export const Parameters = {
     },
 
     // Startup actions
-    autoboot: { type: ParamTypes.BOOL, startupAction: true },
-    autochain: { type: ParamTypes.BOOL, startupAction: true },
-    autorun: { type: ParamTypes.BOOL, startupAction: true },
-    autotype: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
-    loadBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: mediaLabel },
-    embedBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
-    patch: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
+    autoboot: { type: ParamTypes.BOOL, localToPage: false, startupAction: true, analyticsFilter: asIs },
+    autochain: { type: ParamTypes.BOOL, localToPage: false, startupAction: true, analyticsFilter: asIs },
+    autorun: { type: ParamTypes.BOOL, localToPage: false, startupAction: true, analyticsFilter: asIs },
+    autotype: { type: ParamTypes.STRING, localToPage: false, startupAction: true, analyticsFilter: redacted },
+    loadBasic: { type: ParamTypes.STRING, localToPage: false, startupAction: true, analyticsFilter: mediaLabel },
+    embedBasic: { type: ParamTypes.STRING, localToPage: false, startupAction: true, analyticsFilter: redacted },
+    patch: { type: ParamTypes.STRING, localToPage: false, startupAction: true, analyticsFilter: redacted },
 
     // Array parameters
-    rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },
+    rom: { type: ParamTypes.ARRAY, localToPage: false, analyticsFilter: mediaLabel },
 
     // Boolean parameters
-    embed: { type: ParamTypes.BOOL, localToPage: true, reportedAtStart: true },
-    fasttape: { type: ParamTypes.BOOL },
-    noseek: { type: ParamTypes.BOOL },
-    glEnabled: { type: ParamTypes.BOOL, localToPage: true },
-    lowLatency: { type: ParamTypes.BOOL, localToPage: true },
-    fakeVideo: { type: ParamTypes.BOOL },
-    logFdcCommands: { type: ParamTypes.BOOL, localToPage: true },
-    logFdcStateChanges: { type: ParamTypes.BOOL, localToPage: true },
-    audioDebug: { type: ParamTypes.BOOL, localToPage: true },
+    embed: { type: ParamTypes.BOOL, localToPage: true, reportedAtStart: true, analyticsFilter: asIs },
+    fasttape: { type: ParamTypes.BOOL, localToPage: false, analyticsFilter: asIs },
+    noseek: { type: ParamTypes.BOOL, localToPage: false, analyticsFilter: asIs },
+    glEnabled: { type: ParamTypes.BOOL, localToPage: true, analyticsFilter: asIs },
+    lowLatency: { type: ParamTypes.BOOL, localToPage: true, analyticsFilter: asIs },
+    fakeVideo: { type: ParamTypes.BOOL, localToPage: false, analyticsFilter: asIs },
+    logFdcCommands: { type: ParamTypes.BOOL, localToPage: true, analyticsFilter: asIs },
+    logFdcStateChanges: { type: ParamTypes.BOOL, localToPage: true, analyticsFilter: asIs },
+    audioDebug: { type: ParamTypes.BOOL, localToPage: true, analyticsFilter: asIs },
 
     // Numeric parameters
-    stationId: { type: ParamTypes.INT },
-    frameSkip: { type: ParamTypes.INT },
-    videoCyclesBatch: { type: ParamTypes.INT },
-    audiofilterfreq: { type: ParamTypes.FLOAT, localToPage: true },
-    audiofilterq: { type: ParamTypes.FLOAT, localToPage: true },
-    audioLatencyMs: { type: ParamTypes.FLOAT, localToPage: true },
-    cpuMultiplier: { type: ParamTypes.FLOAT },
+    stationId: { type: ParamTypes.INT, localToPage: false, analyticsFilter: asIs },
+    frameSkip: { type: ParamTypes.INT, localToPage: false, analyticsFilter: asIs },
+    videoCyclesBatch: { type: ParamTypes.INT, localToPage: false, analyticsFilter: asIs },
+    audiofilterfreq: { type: ParamTypes.FLOAT, localToPage: true, analyticsFilter: asIs },
+    audiofilterq: { type: ParamTypes.FLOAT, localToPage: true, analyticsFilter: asIs },
+    audioLatencyMs: { type: ParamTypes.FLOAT, localToPage: true, analyticsFilter: asIs },
+    cpuMultiplier: { type: ParamTypes.FLOAT, localToPage: false, analyticsFilter: asIs },
 
     // String parameters (these are the default but listed for clarity)
-    disc: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
-    disc1: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
-    disc2: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
-    tape: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
-    mmc: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
-    drive0Tracks: { type: ParamTypes.STRING },
-    drive1Tracks: { type: ParamTypes.STRING },
-    sbLeft: { type: ParamTypes.STRING, localToPage: true },
-    sbRight: { type: ParamTypes.STRING, localToPage: true },
-    sbBottom: { type: ParamTypes.STRING, localToPage: true },
+    disc: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
+    disc1: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
+    disc2: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
+    tape: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
+    mmc: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
+    drive0Tracks: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: asIs },
+    drive1Tracks: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: asIs },
+    sbLeft: { type: ParamTypes.STRING, localToPage: true, analyticsFilter: asIs },
+    sbRight: { type: ParamTypes.STRING, localToPage: true, analyticsFilter: asIs },
+    sbBottom: { type: ParamTypes.STRING, localToPage: true, analyticsFilter: asIs },
 
     // A shared session's room, and the name its user goes by there
-    server: { type: ParamTypes.STRING, analyticsFilter: redacted },
-    client: { type: ParamTypes.STRING, analyticsFilter: redacted },
-    name: { type: ParamTypes.STRING, analyticsFilter: redacted },
+    server: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: redacted },
+    client: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: redacted },
+    name: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: redacted },
+
+    // Families
+    // Host key names are keymap.js's, so the BBC's RETURN is ENTER here; both lists are in the README.
+    keyMapping: {
+        prefix: "KEY.",
+        type: ParamTypes.STRING,
+        localToPage: true,
+        analyticsFilter: asIs,
+        apply: (hostKey, machineKey, { machineKeys, hostKeyCodes, userKeymap }) => {
+            if (!machineKeys[machineKey]) return `"${machineKey}" is not a key on the emulated machine.`;
+            if (hostKeyCodes(hostKey).length === 0) return `"${hostKey}" is not a key on your keyboard.`;
+            userKeymap.push({ native: hostKey, key: machineKey });
+        },
+    },
+    gamepadMapping: {
+        prefix: "GP.",
+        names: ["LEFT", "RIGHT", "UP", "DOWN", "FIRE"],
+        type: ParamTypes.STRING,
+        localToPage: true,
+        analyticsFilter: asIs,
+        apply: (control, bbcKey, { gamepad }) => gamepad.remap(control, bbcKey),
+    },
 };
 
-/** @returns {Object.<string, string>} each parameter's URL type, as the URL parser takes them. */
-export const urlParamTypes = (parameters) =>
-    Object.fromEntries(Object.entries(parameters).map(([name, { type }]) => [name, type]));
+/**
+ * @returns {{parameter: object, member?: string}|undefined} the entry the parameter `name` is, or the family it is in
+ * with the part of its name that family maps (the host key, the gamepad control).
+ */
+export function parameterFor(name, parameters = Parameters) {
+    if (Object.hasOwn(parameters, name) && !parameters[name].prefix) return { parameter: parameters[name] };
+    for (const parameter of Object.values(parameters)) {
+        if (!parameter.prefix) continue;
+        if (parameter.names?.includes(name)) return { parameter, member: name };
+        if (name.toUpperCase().startsWith(parameter.prefix))
+            return { parameter, member: name.substring(parameter.prefix.length).toUpperCase() };
+    }
+    return undefined;
+}
 
-export const UrlParamTypes = urlParamTypes(Parameters);
+/** @returns {string|undefined} the URL type of the parameter `name`, as the URL parser takes it. */
+export const urlParamType = (name, parameters = Parameters) => parameterFor(name, parameters)?.parameter.type;
 
 export const StartupActionParams = Object.keys(Parameters).filter((name) => Parameters[name].startupAction);
 
-export const LocalToPageParams = Object.keys(Parameters).filter((name) => Parameters[name].localToPage);
+/**
+ * Puts each parameter in `params` that a family applies into effect.
+ * @param {object} params - The page's parsed parameters
+ * @param {{machineKeys: object, hostKeyCodes: (name: string) => string[], userKeymap: object[], gamepad: object}}
+ *     context - What the families need from the page: the emulated machine's keys (`BBC`, or `ATOM` for the Atom)
+ * @returns {string[]} what is wrong with each that could not be, for showing to the user
+ */
+export function processInputParams(params, context) {
+    const warnings = [];
+    for (const [name, value] of Object.entries(params)) {
+        const { parameter, member } = parameterFor(name) ?? {};
+        if (!parameter?.apply || !value) continue;
+        const problem = parameter.apply(member, value.toUpperCase(), context);
+        if (problem) warnings.push(`${name}=${value}: ${problem}`);
+    }
+    return warnings;
+}

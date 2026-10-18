@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { analyticsLocation } from "../../src/web/analytics.js";
 import { Parameters } from "../../src/web/parameters.js";
+import { asIs } from "../../src/web/analytics-filters.js";
 
 describe("analytics", () => {
     describe("the features index.html declares", () => {
@@ -67,13 +68,17 @@ describe("analytics", () => {
             expect(analyticsLocation(`${base}?server=room-key`)).toBe(`${base}?server=redacted`);
         });
 
-        it.each(Object.entries(Parameters).filter(([, { analyticsFilter }]) => analyticsFilter))(
-            "puts %s through its own analyticsFilter",
-            (name, { analyticsFilter }) => {
-                const value = "gd:1AbC/Mine.ssd";
-                expect(analyticsLocation(`${base}?${name}=${value}`)).toBe(`${base}?${name}=${analyticsFilter(value)}`);
-            },
-        );
+        it.each(
+            Object.entries(Parameters).filter(([, { analyticsFilter, prefix }]) => analyticsFilter !== asIs && !prefix),
+        )("puts %s through its own analyticsFilter", (name, { analyticsFilter }) => {
+            const value = "gd:1AbC/Mine.ssd";
+            expect(analyticsLocation(`${base}?${name}=${value}`)).toBe(`${base}?${name}=${analyticsFilter(value)}`);
+        });
+
+        it("leaves the key and gamepad mappings as they are", () => {
+            const href = `${base}?KEY.CAPSLOCK=CTRL&key.f1=COPY&GP.FIRE2=RETURN&gp.fire1=SPACE&FIRE=SPACE`;
+            expect(analyticsLocation(href)).toBe(href);
+        });
 
         it("leaves a parameter the page does not know as it is", () => {
             const href = `${base}?utm_source=somewhere&constructor=gd:1AbC/Mine.ssd`;

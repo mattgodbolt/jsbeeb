@@ -42,13 +42,8 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
-import {
-    bootModeOf,
-    parseMediaParams,
-    processAutobootParams,
-    processDriveTrackParams,
-    processInputParams,
-} from "./url-params.js";
+import { bootModeOf, parseMediaParams, processAutobootParams, processDriveTrackParams } from "./url-params.js";
+import { processInputParams } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
@@ -122,7 +117,12 @@ speak(settings.speechOutput);
 settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
-const keyMappingWarnings = processInputParams(parsedQuery, model.keys, hostKeyCodes, userKeymap, gamepad);
+const keyMappingWarnings = processInputParams(parsedQuery, {
+    machineKeys: model.keys,
+    hostKeyCodes,
+    userKeymap,
+    gamepad,
+});
 if (keyMappingWarnings.length) {
     toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
         title: "Mappings in the URL",

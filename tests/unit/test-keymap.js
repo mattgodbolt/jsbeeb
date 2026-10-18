@@ -10,7 +10,7 @@ import {
     stringToBBCKeys,
     userKeymap,
 } from "../../src/keymap.js";
-import { processInputParams } from "../../src/url-params.js";
+import { processInputParams } from "../../src/web/parameters.js";
 
 describe("Keyboard mapping", function () {
     it("maps simple strings to BBC keys correctly", function () {
@@ -65,7 +65,7 @@ describe("User key mapping from KEY. URL parameters", function () {
     });
 
     const applyParams = (params, machineKeys) =>
-        processInputParams(params, machineKeys, hostKeyCodes, userKeymap, { remap: () => null });
+        processInputParams(params, { machineKeys, hostKeyCodes, userKeymap, gamepad: { remap: () => null } });
 
     it("overrides the default binding for the host key", function () {
         expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.RETURN);

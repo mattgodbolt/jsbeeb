@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 import {
     parseQueryString,
     parseLocationParams,
     buildUrlFromParams,
-    processInputParams,
     processAutobootParams,
     bootModeOf,
     parseMediaParams,
@@ -13,6 +12,8 @@ import {
     DriveTracks,
     ParamTypes,
 } from "../../src/url-params.js";
+
+const typesOf = (types) => (name) => types[name];
 
 describe("URL Parameters", () => {
     describe("parseQueryString", () => {
@@ -56,7 +57,7 @@ describe("URL Parameters", () => {
 
         it("should handle array parameters", () => {
             const qs = "rom=os.rom&rom=basic.rom&rom=dfs.rom&model=B";
-            expect(parseQueryString(qs, { rom: ParamTypes.ARRAY })).toEqual({
+            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY }))).toEqual({
                 rom: ["os.rom", "basic.rom", "dfs.rom"],
                 model: "B",
             });
@@ -64,7 +65,7 @@ describe("URL Parameters", () => {
 
         it("should handle array parameters with single value", () => {
             const qs = "rom=os.rom&model=B";
-            expect(parseQueryString(qs, { rom: ParamTypes.ARRAY })).toEqual({
+            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY }))).toEqual({
                 rom: ["os.rom"],
                 model: "B",
             });
@@ -72,7 +73,7 @@ describe("URL Parameters", () => {
 
         it("should handle empty array parameters", () => {
             const qs = "rom=&model=B";
-            expect(parseQueryString(qs, { rom: ParamTypes.ARRAY })).toEqual({
+            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY }))).toEqual({
                 rom: [""],
                 model: "B",
             });
@@ -80,7 +81,7 @@ describe("URL Parameters", () => {
 
         it("should handle multiple array parameter types", () => {
             const qs = "rom=os.rom&rom=basic.rom&disc=elite.ssd&disc=other.ssd";
-            expect(parseQueryString(qs, { rom: ParamTypes.ARRAY, disc: ParamTypes.ARRAY })).toEqual({
+            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY, disc: ParamTypes.ARRAY }))).toEqual({
                 rom: ["os.rom", "basic.rom"],
                 disc: ["elite.ssd", "other.ssd"],
             });
@@ -89,7 +90,7 @@ describe("URL Parameters", () => {
         // Tests for new parameter types
         it("should parse parameter types - string", () => {
             const qs = "name=jsbeeb&title=BBC%20Emulator";
-            expect(parseQueryString(qs, { name: ParamTypes.STRING, title: ParamTypes.STRING })).toEqual({
+            expect(parseQueryString(qs, typesOf({ name: ParamTypes.STRING, title: ParamTypes.STRING }))).toEqual({
                 name: "jsbeeb",
                 title: "BBC Emulator",
             });
@@ -97,7 +98,7 @@ describe("URL Parameters", () => {
 
         it("should parse parameter types - int", () => {
             const qs = "speed=100&cycles=50";
-            expect(parseQueryString(qs, { speed: ParamTypes.INT, cycles: ParamTypes.INT })).toEqual({
+            expect(parseQueryString(qs, typesOf({ speed: ParamTypes.INT, cycles: ParamTypes.INT }))).toEqual({
                 speed: 100,
                 cycles: 50,
             });
@@ -105,7 +106,7 @@ describe("URL Parameters", () => {
 
         it("should parse parameter types - float", () => {
             const qs = "volume=0.5&zoom=1.25";
-            expect(parseQueryString(qs, { volume: ParamTypes.FLOAT, zoom: ParamTypes.FLOAT })).toEqual({
+            expect(parseQueryString(qs, typesOf({ volume: ParamTypes.FLOAT, zoom: ParamTypes.FLOAT }))).toEqual({
                 volume: 0.5,
                 zoom: 1.25,
             });
@@ -114,7 +115,10 @@ describe("URL Parameters", () => {
         it("should parse parameter types - bool", () => {
             const qs = "debug&verbose=false&noseek=true";
             expect(
-                parseQueryString(qs, { debug: ParamTypes.BOOL, verbose: ParamTypes.BOOL, noseek: ParamTypes.BOOL }),
+                parseQueryString(
+                    qs,
+                    typesOf({ debug: ParamTypes.BOOL, verbose: ParamTypes.BOOL, noseek: ParamTypes.BOOL }),
+                ),
             ).toEqual({
                 debug: true,
                 verbose: false,
@@ -132,7 +136,7 @@ describe("URL Parameters", () => {
                 debug: ParamTypes.BOOL,
             };
 
-            expect(parseQueryString(qs, paramTypes)).toEqual({
+            expect(parseQueryString(qs, typesOf(paramTypes))).toEqual({
                 model: "B",
                 rom: ["os.rom", "basic.rom"],
                 speed: 4,
@@ -145,7 +149,9 @@ describe("URL Parameters", () => {
     describe("parseLocationParams", () => {
         it("reads the parameters in the query and after the hash", () => {
             const location = new URL("https://bbc.example/?disc=elite.ssd&autoboot#frameSkip=2");
-            expect(parseLocationParams(location, { autoboot: ParamTypes.BOOL, frameSkip: ParamTypes.INT })).toEqual({
+            expect(
+                parseLocationParams(location, typesOf({ autoboot: ParamTypes.BOOL, frameSkip: ParamTypes.INT })),
+            ).toEqual({
                 disc: "elite.ssd",
                 autoboot: true,
                 frameSkip: 2,
@@ -166,7 +172,7 @@ describe("URL Parameters", () => {
                 model: "B",
                 rom: ["os.rom", "basic.rom", "dfs.rom"],
             };
-            expect(buildUrlFromParams(baseUrl, params, { rom: ParamTypes.ARRAY })).toBe(
+            expect(buildUrlFromParams(baseUrl, params, typesOf({ rom: ParamTypes.ARRAY }))).toBe(
                 "http://localhost:8080/index.html?model=B&rom=os.rom&rom=basic.rom&rom=dfs.rom",
             );
         });
@@ -178,7 +184,7 @@ describe("URL Parameters", () => {
                 debug: null,
                 rom: [],
             };
-            expect(buildUrlFromParams(baseUrl, params, { rom: ParamTypes.ARRAY })).toBe(
+            expect(buildUrlFromParams(baseUrl, params, typesOf({ rom: ParamTypes.ARRAY }))).toBe(
                 "http://localhost:8080/index.html?model=B",
             );
         });
@@ -189,7 +195,7 @@ describe("URL Parameters", () => {
                 disc: "test.ssd",
                 rom: ["os.rom", "basic.rom"],
             };
-            expect(buildUrlFromParams(baseUrl, params, { rom: ParamTypes.ARRAY })).toBe(
+            expect(buildUrlFromParams(baseUrl, params, typesOf({ rom: ParamTypes.ARRAY }))).toBe(
                 "http://localhost:8080/index.html?model=B&disc=test.ssd&rom=os.rom&rom=basic.rom",
             );
         });
@@ -214,7 +220,7 @@ describe("URL Parameters", () => {
                 noseek: ParamTypes.BOOL,
             };
 
-            expect(buildUrlFromParams(baseUrl, params, paramTypes)).toBe(
+            expect(buildUrlFromParams(baseUrl, params, typesOf(paramTypes))).toBe(
                 "http://localhost:8080/index.html?model=B&rom=os.rom&rom=basic.rom&speed=4&volume=0.8&debug",
             );
         });
@@ -230,60 +236,9 @@ describe("URL Parameters", () => {
                 volume: ParamTypes.FLOAT,
             };
 
-            expect(buildUrlFromParams(baseUrl, params, paramTypes)).toBe(
+            expect(buildUrlFromParams(baseUrl, params, typesOf(paramTypes))).toBe(
                 "http://localhost:8080/index.html?speed=0&volume=0",
             );
-        });
-    });
-
-    describe("processInputParams", () => {
-        it("should process keyboard mappings", () => {
-            const machineKeys = { CTRL: "CTRL", SHIFT: "SHIFT" };
-            const hostKeyCodes = (name) => (["A", "B"].includes(name) ? ["Key" + name] : []);
-            const userKeymap = [];
-            const gamepad = { remap: vi.fn() };
-
-            const parsedQuery = {
-                "KEY.A": "CTRL",
-                "KEY.B": "SHIFT",
-                "GP.FIRE2": "RETURN",
-                UP: "Q",
-                other: "value",
-            };
-
-            const warnings = processInputParams(parsedQuery, machineKeys, hostKeyCodes, userKeymap, gamepad);
-
-            expect(userKeymap).toEqual([
-                { native: "A", key: "CTRL" },
-                { native: "B", key: "SHIFT" },
-            ]);
-            expect(warnings).toEqual([]);
-
-            expect(gamepad.remap).toHaveBeenCalledTimes(2);
-            expect(gamepad.remap).toHaveBeenCalledWith("FIRE2", "RETURN");
-            expect(gamepad.remap).toHaveBeenCalledWith("UP", "Q");
-        });
-
-        it("should report mappings it can't apply", () => {
-            const machineKeys = { CTRL: "CTRL" };
-            const hostKeyCodes = (name) => (name === "A" ? ["KeyA"] : []);
-            const userKeymap = [];
-            const gamepad = { remap: vi.fn().mockReturnValue('unknown gamepad control "WIBBLE".') };
-
-            const warnings = processInputParams(
-                { "KEY.A": "NOTAKEY", "KEY.NOTAKEY": "CTRL", "GP.WIBBLE": "CTRL" },
-                machineKeys,
-                hostKeyCodes,
-                userKeymap,
-                gamepad,
-            );
-
-            expect(warnings).toEqual([
-                'KEY.A=NOTAKEY: "NOTAKEY" is not a key on the emulated machine.',
-                'KEY.NOTAKEY=CTRL: "NOTAKEY" is not a key on your keyboard.',
-                'GP.WIBBLE=CTRL: unknown gamepad control "WIBBLE".',
-            ]);
-            expect(userKeymap).toEqual([]);
         });
     });
 
@@ -433,7 +388,7 @@ describe("URL Parameters", () => {
 
         it.each(awkwardValues)("should survive a build and parse of %j", (value) => {
             const url = buildUrlFromParams("", { disc1: value, autoboot: true });
-            expect(parseQueryString(url.substring(1), { autoboot: ParamTypes.BOOL })).toEqual({
+            expect(parseQueryString(url.substring(1), typesOf({ autoboot: ParamTypes.BOOL }))).toEqual({
                 disc1: value,
                 autoboot: true,
             });
@@ -553,16 +508,20 @@ describe("URL Parameters", () => {
             };
 
             // With ARRAY type for roms - we should get separate parameters
-            expect(buildUrlFromParams(baseUrl, params, { roms: ParamTypes.ARRAY })).toBe(
+            expect(buildUrlFromParams(baseUrl, params, typesOf({ roms: ParamTypes.ARRAY }))).toBe(
                 "http://localhost:8080/index.html?name=jsbeeb&roms=os.rom&roms=basic.rom&debug=true",
             );
 
             // With BOOL type for debug and ARRAY type for roms
             expect(
-                buildUrlFromParams(baseUrl, params, {
-                    debug: ParamTypes.BOOL,
-                    roms: ParamTypes.ARRAY,
-                }),
+                buildUrlFromParams(
+                    baseUrl,
+                    params,
+                    typesOf({
+                        debug: ParamTypes.BOOL,
+                        roms: ParamTypes.ARRAY,
+                    }),
+                ),
             ).toBe("http://localhost:8080/index.html?name=jsbeeb&roms=os.rom&roms=basic.rom&debug");
         });
     });

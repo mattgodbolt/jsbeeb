@@ -1,13 +1,11 @@
 import { buildUrlFromParams, ParamTypes, parseLocationParams } from "../url-params.js";
-import { Parameters, UrlParamTypes } from "./parameters.js";
+import { parameterFor, Parameters, urlParamType } from "./parameters.js";
 import { errorLabel } from "./analytics-filters.js";
 
 const MaxErrorsNoted = 10;
 const StackFrame = /(?:^\s*at |@).*?([^\s(@]+):(\d+):(\d+)\)?\s*$/;
 
 const measurementId = () => import.meta.env.GA_MEASUREMENT_ID;
-
-const analyticsFilter = (key) => (Object.hasOwn(Parameters, key) ? Parameters[key].analyticsFilter : undefined);
 
 /**
  * `href` with each parameter put through its `analyticsFilter`, read and written as the page reads and writes its own
@@ -18,12 +16,12 @@ export function analyticsLocation(href) {
     const url = new URL(href);
     const page = url.origin + url.pathname;
     try {
-        const params = parseLocationParams(url, UrlParamTypes);
+        const params = parseLocationParams(url, urlParamType);
         for (const [key, value] of Object.entries(params)) {
-            const filter = analyticsFilter(key);
+            const filter = parameterFor(key)?.parameter.analyticsFilter;
             if (filter && value !== null) params[key] = Array.isArray(value) ? value.map(filter) : filter(value);
         }
-        return buildUrlFromParams(page, params, UrlParamTypes);
+        return buildUrlFromParams(page, params, urlParamType);
     } catch {
         return page;
     }

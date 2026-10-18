@@ -16,10 +16,10 @@ import {
 } from "../lockstep.js";
 import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
-import { buildUrlFromParams, isInputMappingParam } from "../url-params.js";
+import { buildUrlFromParams } from "../url-params.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { LocalToPageParams, UrlParamTypes } from "./parameters.js";
+import { parameterFor, urlParamType } from "./parameters.js";
 import {
     connectionStats,
     IntervalStats,
@@ -1425,13 +1425,13 @@ function cleanRoster(guests) {
 }
 
 /**
- * The address that joins `room`, as `name` if one is given, keeping those of `params` that are local to the page and
- * the key and gamepad mappings, which a guest applies before its keys are sent.
+ * The address that joins `room`, as `name` if one is given, keeping those of `params` that are local to the page, the
+ * key and gamepad mappings among them, which a guest applies before its keys are sent.
  */
 export function joinLink(room, name, params = {}) {
-    const kept = Object.entries(params).filter(([key]) => LocalToPageParams.includes(key) || isInputMappingParam(key));
+    const kept = Object.entries(params).filter(([key]) => parameterFor(key)?.parameter.localToPage);
     const { origin, pathname } = window.location;
-    return buildUrlFromParams(origin + pathname, { client: room, name, ...Object.fromEntries(kept) }, UrlParamTypes);
+    return buildUrlFromParams(origin + pathname, { client: room, name, ...Object.fromEntries(kept) }, urlParamType);
 }
 
 function parsedUrl(text) {

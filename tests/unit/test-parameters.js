@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     DisplaySection,
-    LocalToPageParams,
     Parameters,
+    parameterFor,
+    processInputParams,
+    RequiredProperties,
     tubeCpuSpeedLabel,
-    UrlParamTypes,
-    urlParamTypes,
+    urlParamType,
 } from "../../src/web/parameters.js";
+import { asIs } from "../../src/web/analytics-filters.js";
 import { configForm } from "../../src/web/config-form.js";
 import { Settings } from "../../src/web/settings.js";
 import { Config } from "../../src/web/config.js";
@@ -21,9 +23,25 @@ import { domFromIndexHtml, teardownDom } from "./helpers.js";
 describe("Parameters", () => {
     afterEach(teardownDom);
 
-    it("types every parameter", () => {
-        for (const [name, type] of Object.entries(UrlParamTypes)) {
-            expect(Object.values(ParamTypes), name).toContain(type);
+    const families = Object.entries(Parameters).filter(([, { prefix }]) => prefix);
+    const fixedNames = Object.keys(Parameters).filter((name) => !Parameters[name].prefix);
+
+    it.each(Object.entries(Parameters))("declares everything %s must", (name, parameter) => {
+        for (const property of RequiredProperties) expect(parameter, property).toHaveProperty(property);
+        expect(Object.values(ParamTypes)).toContain(parameter.type);
+        expect(typeof parameter.localToPage).toBe("boolean");
+        expect(typeof parameter.analyticsFilter).toBe("function");
+    });
+
+    it.each(families)("declares nothing for %s that only works by name", (name, family) => {
+        for (const property of ["default", "stored", "field", "slid", "startupAction", "reportedAtStart"])
+            expect(family, property).not.toHaveProperty(property);
+    });
+
+    it.each(families)("puts no parameter with a name of its own in %s", (name, { prefix, names = [] }) => {
+        for (const fixed of fixedNames) {
+            expect(fixed.toUpperCase().startsWith(prefix), fixed).toBe(false);
+            expect(names, fixed).not.toContain(fixed);
         }
     });
 
@@ -42,9 +60,9 @@ describe("Parameters", () => {
     );
 
     it("never makes a startup action or a setting that needs a fresh machine local to the page", () => {
-        for (const name of LocalToPageParams) {
-            expect(Parameters[name].field?.restart, name).toBeFalsy();
-            expect(Parameters[name].startupAction, name).toBeFalsy();
+        for (const [name, parameter] of Object.entries(Parameters).filter(([, { localToPage }]) => localToPage)) {
+            expect(parameter.field?.restart, name).toBeFalsy();
+            expect(parameter.startupAction, name).toBeFalsy();
         }
     });
 
@@ -93,6 +111,8 @@ describe("Parameters", () => {
             ...Parameters,
             screenTint: {
                 type: ParamTypes.STRING,
+                localToPage: false,
+                analyticsFilter: asIs,
                 stored: true,
                 default: "amber",
                 fromUrl: (tint) => tint.toLowerCase(),
@@ -107,14 +127,20 @@ describe("Parameters", () => {
                     ],
                 },
             },
-            scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
-            tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
+            scanlines: {
+                type: ParamTypes.BOOL,
+                localToPage: false,
+                analyticsFilter: asIs,
+                stored: true,
+                default: true,
+            },
+            tintLevel: { type: ParamTypes.INT, localToPage: false, analyticsFilter: asIs, stored: true, default: 3 },
         };
         const urlStateFor = (search) =>
             new UrlState(
                 { origin: "https://bbc.example", pathname: "/", search, hash: "" },
                 { pushState: vi.fn() },
-                urlParamTypes(withMadeUpSetting),
+                (name) => urlParamType(name, withMadeUpSetting),
             );
         const settingsFor = (search) => new Settings({ urlState: urlStateFor(search), parameters: withMadeUpSetting });
 
@@ -162,6 +188,77 @@ describe("Parameters", () => {
             document.getElementById("configuration").dispatchEvent(new Event("hide.bs.modal"));
             expect(settings.screenTint).toBe("amber");
         });
+    });
+});
+
+describe("parameterFor", () => {
+    it.each([
+        ["disc1", Parameters.disc1, undefined],
+        ["KEY.CAPSLOCK", Parameters.keyMapping, "CAPSLOCK"],
+        ["key.capslock", Parameters.keyMapping, "CAPSLOCK"],
+        ["GP.FIRE2", Parameters.gamepadMapping, "FIRE2"],
+        ["gp.fire2", Parameters.gamepadMapping, "FIRE2"],
+        ["FIRE", Parameters.gamepadMapping, "FIRE"],
+    ])("finds %s", (name, parameter, member) => {
+        expect(parameterFor(name)).toEqual(member === undefined ? { parameter } : { parameter, member });
+    });
+
+    it.each(["keyMapping", "gamepadMapping", "fire", "KEY", "constructor", "nothingAtAll"])(
+        "finds nothing for %s",
+        (name) => {
+            expect(parameterFor(name)).toBeUndefined();
+        },
+    );
+});
+
+describe("processInputParams", () => {
+    const context = (overrides) => ({
+        machineKeys: { CTRL: "CTRL", SHIFT: "SHIFT" },
+        hostKeyCodes: (name) => (["A", "B"].includes(name) ? [`Key${name}`] : []),
+        userKeymap: [],
+        gamepad: { remap: vi.fn() },
+        ...overrides,
+    });
+
+    it("maps keys and gamepad controls, whatever the case of the prefix", () => {
+        const page = context();
+        const warnings = processInputParams(
+            { "KEY.A": "ctrl", "key.b": "SHIFT", "GP.FIRE2": "RETURN", "gp.fire1": "space", UP: "Q", other: "value" },
+            page,
+        );
+
+        expect(warnings).toEqual([]);
+        expect(page.userKeymap).toEqual([
+            { native: "A", key: "CTRL" },
+            { native: "B", key: "SHIFT" },
+        ]);
+        expect(page.gamepad.remap.mock.calls).toEqual([
+            ["FIRE2", "RETURN"],
+            ["FIRE1", "SPACE"],
+            ["UP", "Q"],
+        ]);
+    });
+
+    it("leaves alone a mapping with no value, and a shorthand control not in capitals", () => {
+        const page = context();
+        processInputParams({ "KEY.A": "", "GP.FIRE2": null, up: "Q" }, page);
+
+        expect(page.userKeymap).toEqual([]);
+        expect(page.gamepad.remap).not.toHaveBeenCalled();
+    });
+
+    it("says what is wrong with each mapping it cannot make", () => {
+        const page = context({
+            gamepad: { remap: vi.fn().mockReturnValue('unknown gamepad control "WIBBLE".') },
+        });
+        const warnings = processInputParams({ "KEY.A": "NOTAKEY", "KEY.NOTAKEY": "CTRL", "GP.WIBBLE": "CTRL" }, page);
+
+        expect(warnings).toEqual([
+            'KEY.A=NOTAKEY: "NOTAKEY" is not a key on the emulated machine.',
+            'KEY.NOTAKEY=CTRL: "NOTAKEY" is not a key on your keyboard.',
+            'GP.WIBBLE=CTRL: unknown gamepad control "WIBBLE".',
+        ]);
+        expect(page.userKeymap).toEqual([]);
     });
 });
 

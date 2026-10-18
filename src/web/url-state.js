@@ -1,6 +1,6 @@
 import { buildUrlFromParams, parseLocationParams } from "../url-params.js";
 import { debounce } from "../debounce.js";
-import { UrlParamTypes } from "./parameters.js";
+import { urlParamType } from "./parameters.js";
 import { noteLocation } from "./analytics.js";
 
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
@@ -12,22 +12,22 @@ const UrlSettleMs = 300;
  * it in place and writes the URL in one step.
  */
 export class UrlState {
-    constructor(location, history, paramTypes = UrlParamTypes) {
+    constructor(location, history, typeOf = urlParamType) {
         this.history = history;
-        this.paramTypes = paramTypes;
+        this.typeOf = typeOf;
         this.baseUrl = location.origin + location.pathname;
-        this.params = parseLocationParams(location, paramTypes);
+        this.params = parseLocationParams(location, typeOf);
         this.updateUrlOnceSettled = debounce(() => this.updateUrl(), UrlSettleMs);
     }
 
     /** The page's URL with the parameters as they are now. */
     url() {
-        return buildUrlFromParams(this.baseUrl, this.params, this.paramTypes);
+        return buildUrlFromParams(this.baseUrl, this.params, this.typeOf);
     }
 
     /** The page's URL with some parameters changed, leaving `params` as it is. */
     urlWith(overrides) {
-        return buildUrlFromParams(this.baseUrl, { ...this.params, ...overrides }, this.paramTypes);
+        return buildUrlFromParams(this.baseUrl, { ...this.params, ...overrides }, this.typeOf);
     }
 
     /**
