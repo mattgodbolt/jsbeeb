@@ -11,6 +11,7 @@ import { median } from "./ab-stats.js";
 // TickMs in src/web/emulation-loop.js: execute()'s exit deopts, so the slice size counts.
 const BrowserTickMs = 10;
 const MsPerSecond = 1000;
+export const SlicesPerSecond = MsPerSecond / BrowserTickMs;
 
 /**
  * Runs `measureSecs` emulated seconds in browser-tick slices after `warmupSecs` of the same, timing each slice.
@@ -21,9 +22,9 @@ const MsPerSecond = 1000;
 export function timeSlices(cpu, { warmupSecs, measureSecs }) {
     const { cyclesPerSecond } = cpu.model;
     const sliceCycles = Math.round((cyclesPerSecond * BrowserTickMs) / MsPerSecond);
-    const slicesPerSecond = MsPerSecond / BrowserTickMs;
-    for (let slice = 0; slice < warmupSecs * slicesPerSecond; slice++) cpu.execute(sliceCycles);
-    const slices = measureSecs * slicesPerSecond;
+    const warmupSlices = Math.round(warmupSecs * SlicesPerSecond);
+    for (let slice = 0; slice < warmupSlices; slice++) cpu.execute(sliceCycles);
+    const slices = Math.round(measureSecs * SlicesPerSecond);
     const sliceMs = new Array(slices);
     const start = performance.now();
     let sliceStart = start;

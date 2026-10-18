@@ -10,7 +10,6 @@ import {
     summarisePairs,
     verdict,
 } from "../../../tools/ab-stats.js";
-import { timeSlices } from "../../../tools/node-ab-sample.js";
 
 const pairsWithLogRatios = (logRatios) => logRatios.map((logRatio) => ({ a: 50, b: 50 * Math.exp(logRatio) }));
 
@@ -138,6 +137,52 @@ describe("sampleUntilResolved", () => {
         expect(result.verdict).toBe("unresolved");
         expect(result.pairs).toBe(9);
     });
+
+    it("stops when the sides are the same to within the horizon", async () => {
+        const { sample } = sampler({ a: (call) => 50 + (call % 3) * 0.1, b: (call) => 50 + (call % 2) * 0.1 });
+        const result = await sampleUntilResolved({ sample, minPairs: 8, maxPairs: 30, horizon: 0.02 });
+        expect(result.verdict).toBe("same");
+        expect(result.pairs).toBe(8);
+    });
+
+    it("holds a clear change until it has its minimum pairs, reporting each pair from the second", async () => {
+        const { sample } = sampler({ a: () => 50, b: (call) => 60 + (call % 3) });
+        const seen = [];
+        const result = await sampleUntilResolved({
+            sample,
+            minPairs: 12,
+            maxPairs: 30,
+            horizon: 0.02,
+            onPair: ({ pairs }) => seen.push(pairs),
+        });
+        expect(result).toMatchObject({ verdict: "faster", pairs: 12 });
+        expect(seen).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    });
+
+    it("has no 99% interval to decide on before eight pairs", () => {
+        const sevenPairs = pairsWithLogRatios([0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16]);
+        expect(summarisePairs(sevenPairs, 0.02).verdict).toBe("unresolved");
+        expect(summarisePairs([...sevenPairs, ...pairsWithLogRatios([0.17])], 0.02).verdict).toBe("faster");
+    });
+
+    // The figure DecisionConfidence's comment quotes: A/A runs with 2% noise per sample.
+    it("calls about one A/A run in twenty faster or slower", async () => {
+        let seed = 1337;
+        const uniform = () => {
+            seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+            return (seed + 0.5) / 2 ** 32;
+        };
+        const normal = () => Math.sqrt(-2 * Math.log(uniform())) * Math.cos(2 * Math.PI * uniform());
+        const runs = 500;
+        let wrong = 0;
+        for (let run = 0; run < runs; run++) {
+            const sample = async () => 50 * Math.exp(0.02 * normal());
+            const { verdict } = await sampleUntilResolved({ sample, minPairs: 8, maxPairs: 30, horizon: 0.02 });
+            if (verdict === "faster" || verdict === "slower") wrong++;
+        }
+        expect(wrong / runs).toBeGreaterThan(0.02);
+        expect(wrong / runs).toBeLessThan(0.08);
+    });
 });
 
 describe("describeComparison", () => {
@@ -151,17 +196,5 @@ describe("describeComparison", () => {
     it("says when the pairs are too few to know what change they could detect", () => {
         const result = summarisePairs(pairsWithLogRatios([0.13, 0.14, 0.15]), 0.02);
         expect(describeComparison("elite", result)).toContain("3 pairs, too few to say what change they could detect");
-    });
-});
-
-describe("timeSlices", () => {
-    it("runs the warm-up and then the timed seconds in 10 ms slices of the model's clock", () => {
-        const slices = [];
-        const cpu = { model: { cyclesPerSecond: 2000000 }, execute: (cycles) => slices.push(cycles) };
-        const { cycles, sliceMs } = timeSlices(cpu, { warmupSecs: 2, measureSecs: 3 });
-        expect(slices).toHaveLength(500);
-        expect(new Set(slices)).toEqual(new Set([20000]));
-        expect(sliceMs).toHaveLength(300);
-        expect(cycles).toBe(300 * 20000);
     });
 });

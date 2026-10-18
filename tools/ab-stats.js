@@ -5,7 +5,7 @@
 
 export const Confidence = 0.95;
 // The verdict is checked after every pair, and each look is another chance of a false "faster" or "slower";
-// at 99% per look, an A/A run ends in one about 5% of the time (simulated, up to 30 pairs from 8).
+// at 99% per look, an A/A run ends in one about 5% of the time (simulated in test-ab-stats.js).
 export const DecisionConfidence = 0.99;
 // The power the minimum detectable change is quoted at: a real change that size is seen four times in five.
 export const Power = 0.8;
@@ -20,7 +20,7 @@ const BetaEpsilon = 3e-14;
 const BetaTiny = 1e-300;
 const QuantileIterations = 100;
 const QuantileUpperStart = 1;
-const PercentPerUnit = 100;
+export const PercentPerUnit = 100;
 
 function lnGamma(x) {
     if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x);
@@ -73,6 +73,14 @@ export function studentTCdf(t, df) {
 /** The t for which studentTCdf(t, df) is `p`. */
 export function studentTQuantile(p, df) {
     if (p < 0.5) return -studentTQuantile(1 - p, df);
+    const key = `${p} ${df}`;
+    if (!quantiles.has(key)) quantiles.set(key, searchTQuantile(p, df));
+    return quantiles.get(key);
+}
+
+const quantiles = new Map();
+
+function searchTQuantile(p, df) {
     let low = 0;
     let high = QuantileUpperStart;
     while (studentTCdf(high, df) < p) high *= 2;
@@ -91,8 +99,11 @@ const medianOfSorted = (sorted) => {
 
 export const median = (values) => medianOfSorted([...values].sort((a, b) => a - b));
 
+const signedRankCdfs = new Map();
+
 /** P(W <= w) for each w, where W is Wilcoxon's signed-rank statistic for `n` pairs with no real difference. */
 export function signedRankCdf(n) {
+    if (signedRankCdfs.has(n)) return signedRankCdfs.get(n);
     let probabilities = [1];
     for (let rank = 1; rank <= n; rank++) {
         const next = new Array(probabilities.length + rank).fill(0);
@@ -103,7 +114,9 @@ export function signedRankCdf(n) {
         probabilities = next;
     }
     let cumulative = 0;
-    return probabilities.map((probability) => (cumulative += probability));
+    const cdf = probabilities.map((probability) => (cumulative += probability));
+    signedRankCdfs.set(n, cdf);
+    return cdf;
 }
 
 // The mean of every pair of values, each value with itself included.
