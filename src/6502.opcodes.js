@@ -1397,22 +1397,29 @@ ${indent}`)
     // Empty to hold prototypical stuff.
     function Runner() {}
 
+    function opcodeFunctionName(opcodeNum) {
+        const opcode = opcodes[opcodeNum];
+        const instrName = opcode
+            ? opcode
+                  .replace("()", "ind")
+                  .replace("(,x)", "ind_x")
+                  .replace("(abs)", "ind_abs")
+                  .replace(/[^A-Za-z0-9]/g, "_")
+                  .toLowerCase()
+            : "undef";
+        return `exec_${hexbyte(opcodeNum)}_${instrName}`;
+    }
+
     function generate6502JumpTable() {
+        const cpuType = is65c12 ? "65c12" : "6502";
         const funcs = [];
         for (let opcodeNum = 0; opcodeNum < 256; ++opcodeNum) {
-            const opcodeFunc = new Function("cpu", getIndentedSource("  ", opcodeNum, true));
-            let funcName = `exec_${hexbyte(opcodeNum)}_`;
-            if (opcodes[opcodeNum]) {
-                const instrName = opcodes[opcodeNum]
-                    .replace("()", "ind")
-                    .replace("(,x)", "ind_x")
-                    .replace("(abs)", "ind_abs")
-                    .replace(/[^A-Za-z0-9]/g, "_")
-                    .toLowerCase();
-                funcName += instrName;
-            } else funcName += "undef";
-            Object.defineProperty(opcodeFunc, "name", { writable: true, value: funcName });
-            funcs[opcodeNum] = opcodeFunc;
+            const name = opcodeFunctionName(opcodeNum);
+            const source = getIndentedSource("  ", opcodeNum, true);
+            // Profilers ignore a `name` assigned after creation, and Firefox's ignores the sourceURL too.
+            funcs[opcodeNum] = new Function(
+                `return function ${name}(cpu) {\n${source}\n};\n//# sourceURL=${cpuType}/${name}.js`,
+            )();
         }
         return function exec(opcode) {
             return funcs[opcode].call(this, this.cpu);
