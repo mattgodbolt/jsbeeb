@@ -197,8 +197,8 @@ protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`.
 `?client=<room>` joins. Shared session in the More menu does either without editing the URL: Start hosting
 hosts the machine as it is, in a room with a generated name and without touching the URL, so a reload ends the
 session; Join takes a room's name or the link and goes to its `?client=` URL, keeping the page's own `localToPage`
-settings (`src/web/parameters.js`). While a session is going, it opens
-the session pane instead. To try it: `npm start`, then host in one window and join from another, side by
+settings (`src/web/parameters.js`) and key and gamepad mappings. While a session is going, it opens the session pane
+instead. To try it: `npm start`, then host in one window and join from another, side by
 side rather than as tabs. The first target is
 [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth): a B, keyboard only, turn-based and hot-seat
 for two to six, so lag barely matters and a shared keyboard is how it is meant to be played.

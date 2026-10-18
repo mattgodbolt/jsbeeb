@@ -27,7 +27,7 @@ describe("Parameters", () => {
         }
     });
 
-    it("keeps local to the page nothing that takes a fresh machine or does something at startup", () => {
+    it("never makes a startup action or a setting that needs a fresh machine local to the page", () => {
         for (const name of LocalToPageParams) {
             expect(Parameters[name].field?.restart, name).toBeFalsy();
             expect(Parameters[name].startupAction, name).toBeFalsy();

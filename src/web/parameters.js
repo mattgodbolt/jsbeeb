@@ -24,7 +24,7 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * Every parameter the page understands, with all it is: its URL `type`, and whether it is a `startupAction` (has the
  * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
  * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry) or
- * `localToPage` (changes how this page shows, sounds or takes keys for the machine, never what the machine does, so a
+ * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
  * page joining a shared session keeps its own).
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
