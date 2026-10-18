@@ -21,7 +21,8 @@ Every listed entry is one descriptor, whichever source it came from:
 - `title`, `publisher` and `detail` are what the row shows and what the search matches; `detail`
   is free text, joined with `·` when it has several parts.
 - `source` is a key of `Sources` in `src/web/media-catalogue.js`, which gives the chip's name,
-  the phrase used mid-sentence in a slot's status line, and a tooltip.
+  the phrase used mid-sentence in a slot's status line, a tooltip, and whether it is `personal`
+  (the user's own media, which analytics names only by its source).
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
@@ -143,11 +144,12 @@ same disc.
 
 1. An archive class in `src/`, headless and free of DOM: it fetches and caches the catalogue and
    returns the bytes for a path. `src/bitshifters.js` is the smallest example.
-2. In `src/web/media-catalogue.js`: an entry in `Sources` (name, phrase, title), a
+2. In `src/web/media-catalogue.js`: an entry in `Sources` (name, phrase, title, and `personal`
+   when it holds the user's own media rather than a public catalogue), a
    `describe...Entry` that turns one catalogue entry into a descriptor, and a rank in
    `SourceRank`.
 3. In `src/media-resolver.js`: the schema in `Schemas`, and a `case` in `resolve` if an existing
-   route does not fit.
+   route does not fit. A schema with no source is marked `personal` there instead.
 4. A source class in `src/web/` that constructs the archive and registers both halves:
    `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`. A source whose
    entries can carry `requires` also registers `media.addDescriber(source, (path) => descriptor)`,

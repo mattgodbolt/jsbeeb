@@ -42,6 +42,13 @@ describe("analytics", () => {
             },
         );
 
+        it.each(Object.entries(Schemas).filter(([, { source, personal }]) => !source && personal))(
+            "names a %s: reference by its schema alone",
+            (schema) => {
+                expect(mediaLabel(`${schema}:mine`)).toBe(schema);
+            },
+        );
+
         it("leaves nothing as nothing", () => {
             expect(mediaLabel(undefined)).toBeUndefined();
         });
