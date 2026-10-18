@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analyticsLocation, configureAnalytics, noteLocation } from "../../src/web/analytics.js";
+import { analyticsLocation } from "../../src/web/analytics.js";
 import { Parameters } from "../../src/web/parameters.js";
-import { UrlState } from "../../src/web/url-state.js";
 
 describe("analytics", () => {
     describe("analyticsLocation", () => {
@@ -67,47 +66,90 @@ describe("analytics", () => {
         let gtag;
         const origin = () => window.location.origin;
 
+        const loadWithMeasurementId = async (measurementId) => {
+            vi.stubEnv("GA_MEASUREMENT_ID", measurementId);
+            vi.resetModules();
+            return {
+                ...(await import("../../src/web/analytics.js")),
+                ...(await import("../../src/web/url-state.js")),
+            };
+        };
+
         beforeEach(() => {
             gtag = vi.fn();
             vi.stubGlobal("gtag", gtag);
+            vi.spyOn(console, "log").mockImplementation(() => {});
             vi.spyOn(Document.prototype, "referrer", "get").mockReturnValue(
                 "https://bbc.xania.org/?disc1=gd:1AbC/Before.ssd&model=B",
             );
         });
 
         afterEach(() => {
+            vi.unstubAllEnvs();
             vi.unstubAllGlobals();
             vi.restoreAllMocks();
             window.history.replaceState(null, "", "/");
         });
 
-        it("configures the page_view with the location and referrer analyticsLocation gives", () => {
-            window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
-            configureAnalytics();
-            expect(gtag).toHaveBeenCalledWith("config", expect.any(String), {
-                page_location: `${origin()}/?disc1=browser&model=B`,
-                page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
+        describe("without a measurement id", () => {
+            it("sends nothing, even with gtag on the page", async () => {
+                const { configureAnalytics, noteLocation, noteEvent, UrlState } = await loadWithMeasurementId("");
+                configureAnalytics();
+                noteLocation();
+                noteEvent("category", "type", "label");
+                new UrlState(window.location, window.history).set({ disc1: "local:Mine" });
+                expect(gtag).not.toHaveBeenCalled();
             });
         });
 
-        it("moves the location later events report without another page_view", () => {
-            window.history.replaceState(null, "", "/?disc1=gd:1AbC/Mine.ssd");
-            noteLocation();
-            expect(gtag).toHaveBeenCalledWith("config", expect.any(String), {
-                page_location: `${origin()}/?disc1=gdrive`,
-                page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
-                send_page_view: false,
-            });
-        });
+        describe("with a measurement id", () => {
+            const measurementId = "G-UNITTEST";
 
-        it("moves the location each time the page pushes its URL", () => {
-            const state = new UrlState(window.location, window.history);
-            state.set({ disc1: "local:Mine" });
-            expect(gtag).toHaveBeenLastCalledWith(
-                "config",
-                expect.any(String),
-                expect.objectContaining({ page_location: `${origin()}/?disc1=browser` }),
-            );
+            it("sends nothing without gtag on the page", async () => {
+                vi.stubGlobal("gtag", undefined);
+                const { configureAnalytics, noteEvent } = await loadWithMeasurementId(measurementId);
+                expect(() => {
+                    configureAnalytics();
+                    noteEvent("category", "type", "label");
+                }).not.toThrow();
+            });
+
+            it("configures the page_view with the location and referrer analyticsLocation gives", async () => {
+                const { configureAnalytics } = await loadWithMeasurementId(measurementId);
+                window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
+                configureAnalytics();
+                expect(gtag).toHaveBeenCalledWith("config", measurementId, {
+                    page_location: `${origin()}/?disc1=browser&model=B`,
+                    page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
+                });
+            });
+
+            it("moves the location later events report without another page_view", async () => {
+                const { noteLocation } = await loadWithMeasurementId(measurementId);
+                window.history.replaceState(null, "", "/?disc1=gd:1AbC/Mine.ssd");
+                noteLocation();
+                expect(gtag).toHaveBeenCalledWith("config", measurementId, {
+                    page_location: `${origin()}/?disc1=gdrive`,
+                    page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
+                    send_page_view: false,
+                });
+            });
+
+            it("moves the location each time the page pushes its URL", async () => {
+                const { UrlState } = await loadWithMeasurementId(measurementId);
+                new UrlState(window.location, window.history).set({ disc1: "local:Mine" });
+                expect(gtag).toHaveBeenLastCalledWith(
+                    "config",
+                    measurementId,
+                    expect.objectContaining({ page_location: `${origin()}/?disc1=browser` }),
+                );
+            });
+
+            it("sends events from any host", async () => {
+                const { noteEvent } = await loadWithMeasurementId(measurementId);
+                noteEvent("category", "type", "label");
+                expect(gtag).toHaveBeenCalledWith("event", "category", { type: "type", label: "label" });
+            });
         });
     });
 });

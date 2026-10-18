@@ -6,19 +6,26 @@ const BootTimeoutMs = 30000;
 const KeyHoldMs = 120;
 // OSBYTE &C4's variable, which *FX11 sets; zero turns auto-repeat off.
 const AutoRepeatDelayAddress = 0x254;
+// test:e2e builds with a dummy measurement id. An empty gtag.js leaves the stub's dataLayer for the tests to read
+// and sends nothing to Google.
+const GoogleAnalyticsUrls = /^https:\/\/[^/]*\.(googletagmanager|google-analytics)\.com\//;
 
 /** The page with jsbeeb on it, reached through the console surface main.js exposes. */
 export class Beeb {
     constructor(page) {
         this.page = page;
         this.problems = [];
+        this.analyticsStubbed = page.route(GoogleAnalyticsUrls, (route) =>
+            route.fulfill({ contentType: "text/javascript", body: "" }),
+        );
         page.on("pageerror", (error) => this.problems.push(`exception: ${error.message}`));
         page.on("console", (message) => {
             if (message.type() === "error") this.problems.push(`console error: ${message.text()}`);
         });
     }
 
-    open(query = "") {
+    async open(query = "") {
+        await this.analyticsStubbed;
         return this.page.goto(query || "./");
     }
 
