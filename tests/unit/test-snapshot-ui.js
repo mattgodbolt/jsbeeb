@@ -89,7 +89,12 @@ describe("SnapshotUI", () => {
         resume = vi.fn();
         domFromIndexHtml("save-state", "load-state");
         deps = {
-            processor: { fdc: { drives: [{ disc: null }, { disc: null }] }, hasTube: false, execute: vi.fn() },
+            processor: {
+                fdc: { drives: [{ disc: null }, { disc: null }] },
+                hasTube: false,
+                execute: vi.fn(),
+                debugInstruction: { stopped: false },
+            },
             model: { name: "B-DFS1.2" },
             video: { paint: vi.fn() },
             media: {
@@ -98,7 +103,7 @@ describe("SnapshotUI", () => {
             },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
-            loop: { pause: vi.fn(() => resume) },
+            loop: { pause: vi.fn(() => resume), stop: vi.fn() },
         };
     });
 
@@ -163,6 +168,17 @@ describe("SnapshotUI", () => {
             expect(deps.video.paint).toHaveBeenCalledTimes(1);
             expect(deps.modals.showError).not.toHaveBeenCalled();
             expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
+            expect(deps.loop.stop).not.toHaveBeenCalled();
+            expect(resume).toHaveBeenCalledTimes(1);
+        });
+
+        it("stops in the debugger at a state saved where a breakpoint stopped it", async () => {
+            deps.processor.restoreState = () => {
+                deps.processor.debugInstruction.stopped = true;
+            };
+            await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: false }));
+            expect(deps.loop.stop).toHaveBeenCalledWith(true);
+            expect(deps.video.paint).toHaveBeenCalledTimes(1);
             expect(resume).toHaveBeenCalledTimes(1);
         });
     });
@@ -370,6 +386,25 @@ describe("SnapshotUI", () => {
             expect(deps.processor.execute).toHaveBeenCalledWith(40000);
             expect(deps.modals.showError).not.toHaveBeenCalled();
             expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
+        });
+
+        it("stops a stashed state saved at a breakpoint in the debugger, without settling the machine", async () => {
+            deps.processor.restoreState = () => {
+                deps.processor.debugInstruction.stopped = true;
+            };
+            sessionStorage.setItem(
+                "jsbeeb-pending-state",
+                JSON.stringify({
+                    format: "jsbeeb-snapshot",
+                    version: 3,
+                    model: "B-DFS1.2",
+                    coProcessor: false,
+                    state: {},
+                }),
+            );
+            await make().restorePendingState();
+            expect(deps.loop.stop).toHaveBeenCalledWith(true);
+            expect(deps.processor.execute).not.toHaveBeenCalled();
         });
 
         it("consumes a stashed state even when it cannot be restored", async () => {

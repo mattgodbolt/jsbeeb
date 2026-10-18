@@ -154,7 +154,7 @@ export class SnapshotUI {
         if (pendingState === null) return;
         try {
             await this.restore(snapshotFromJSON(pendingState));
-            this.processor.execute(PostRestoreCycles);
+            if (!this.processor.debugInstruction.stopped) this.processor.execute(PostRestoreCycles);
         } catch (e) {
             this.modals.showError("restoring saved state", e);
         }
@@ -167,6 +167,7 @@ export class SnapshotUI {
         restoreSnapshot(this.processor, this.model, snapshot);
         // The drives' pitch and the recorder's latch came back with the state, behind the slots' backs.
         this.slots.restored();
+        if (this.processor.debugInstruction.stopped) this.loop.stop(true);
     }
 
     async reloadSnapshotMedia(savedMedia) {
