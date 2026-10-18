@@ -45,6 +45,17 @@ describe("Parameters", () => {
         }
     });
 
+    it.each(families)(
+        "declares %s so that a URL name can match it, and no other family can",
+        (name, { prefix, names = [] }) => {
+            expect(prefix).toBe(prefix.toUpperCase());
+            for (const [other, family] of families.filter(([otherName]) => otherName !== name)) {
+                expect(family.prefix.startsWith(prefix) || prefix.startsWith(family.prefix), other).toBe(false);
+                for (const member of names) expect(parameterFor(member).parameter, member).not.toBe(family);
+            }
+        },
+    );
+
     it.each(Object.entries(Parameters).filter(([, { reportedAtStart }]) => reportedAtStart))(
         "reports %s at start only as one of a fixed set of values",
         (name, { type, field }) => {

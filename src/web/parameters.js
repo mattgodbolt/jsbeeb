@@ -26,6 +26,8 @@ const clampAfterglow = (ms) => Math.min(MaxPersistenceMs, Math.max(0, ms));
 
 export const DisplaySection = "display";
 
+export const RequiredProperties = ["type", "localToPage", "analyticsFilter"];
+
 const Peripherals = { label: "Additional peripherals", hint: "(some combinations may cause compatibility issues)" };
 
 /**
@@ -64,8 +66,6 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * One that is `reportedAtStart` is sent with the machine_start event under its own name, so its values must be a fixed
  * set: a BOOL, or a menu held to its options, by its `valid` or, for the model, by Settings.
  */
-export const RequiredProperties = ["type", "localToPage", "analyticsFilter"];
-
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
     model: {

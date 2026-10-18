@@ -245,9 +245,10 @@ The gamepad control names are:
 - `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT`: individual buttons, by their Xbox 360 names
 - `FIRE1` `FIRE2`: clicking the left and right sticks
 
-The BBC key names are the same as for the keyboard, and as there, names are case-insensitive. Digits may be written
-either way round: `GP.A=1` and `GP.A=K1` both press `1`. Unlike `KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping
-can't currently be changed.
+The BBC key names are the same as for the keyboard. As with `KEY.`, the whole parameter is case-insensitive, so
+`gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both press `1`. Unlike
+`KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping can't currently be
+changed.
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.
