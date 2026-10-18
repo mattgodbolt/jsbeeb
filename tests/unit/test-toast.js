@@ -117,10 +117,11 @@ describe("toast", () => {
         expect(plain.querySelector(".toast-action").hidden).toBe(true);
     });
 
-    it("keeps one with an action until it is closed", () => {
-        toast("Something to do.", { action: { label: "Do it", run: vi.fn() } });
+    it("keeps one with an action until it is closed, giving it a close button even without a title", () => {
+        const element = toast("Something to do.", { action: { label: "Do it", run: vi.fn() } });
         vi.runAllTimers();
 
         expect(toasts()).toHaveLength(1);
+        expect(element.querySelector(".toast-header").hidden).toBe(false);
     });
 });

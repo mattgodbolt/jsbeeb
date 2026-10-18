@@ -69,7 +69,8 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
     // Disc names and the like come from the outside world, so they are set as text, never as markup.
     element.querySelector(".message").textContent = message;
     element.querySelector(".toast-header strong").textContent = title;
-    element.querySelector(".toast-header").hidden = !title;
+    // The header holds the close button, which a notice that stays needs.
+    element.querySelector(".toast-header").hidden = !title && !action;
 
     const actionButton = element.querySelector(".toast-action");
     actionButton.hidden = !action;

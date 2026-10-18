@@ -55,6 +55,20 @@ describe("offerVideoNula", () => {
             expect(restart).toHaveBeenCalledTimes(1);
         });
 
+        it("fits nothing if a shared session started while the offer was up", () => {
+            let inSession = false;
+            const settings = { set: vi.fn() };
+            const restart = vi.fn();
+            vi.useFakeTimers();
+            answerMissingVideoNula({ inSession: () => inSession, settings, restart })();
+            vi.runOnlyPendingTimers();
+            inSession = true;
+            fitButton().click();
+            expect(settings.set).not.toHaveBeenCalled();
+            expect(restart).not.toHaveBeenCalled();
+            expect(toasts().at(-1)).toContain("One can be fitted once the shared session is over.");
+        });
+
         it("offers nothing to fit while a shared session runs", () => {
             answer(true);
             vi.runOnlyPendingTimers();

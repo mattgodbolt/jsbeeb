@@ -26,9 +26,12 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
-- `requires`, when present, is the machine a disc needs, as `{ model, coProcessor, fittings, name }`:
-  `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `fittings` the
-  settings that fit what else it needs (`{ hasVideoNula: true }`), `name` what the user is told.
+- `requires`, when present, is the machine a disc needs, as `{ model, coProcessor, name, needs, fittings }`:
+  `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `name` the
+  machine's name for the user, `needs` the names of the fittings it needs beyond that and
+  `fittings` the settings that fit them (`{ hasVideoNula: true }`). `requirementName` in
+  `media-catalogue.js` says the whole requirement to the user, on the running model when there is
+  no `model` (and so no `name`).
   `requirementOf(entry)` in `media-catalogue.js` builds it from a manifest entry's `machine`, through
   the table `MachineRequirements`, and its `needs`, through the `neededAs` names of the entries in
   `src/web/parameters.js`; a name in neither gives no requirement. With `needs` and no `machine`

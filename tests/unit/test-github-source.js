@@ -50,6 +50,7 @@ describe("GitHubSource", () => {
                 expect(Number.isInteger(entry.year)).toBe(true);
                 if (entry.ref !== undefined) expect(entry.ref).toMatch(/^[^/\s]+$/);
                 if (entry.machine !== undefined) expect(Object.keys(MachineRequirements)).toContain(entry.machine);
+                if (entry.needs !== undefined) expect(Array.isArray(entry.needs), "needs is a list").toBe(true);
                 for (const name of entry.needs ?? [])
                     expect(requirementOf({ needs: [name] }), `needs ${name}`).toBeDefined();
                 if (entry.url !== undefined) expect(new URL(entry.url).protocol).toBe("https:");

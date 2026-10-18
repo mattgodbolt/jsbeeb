@@ -8,10 +8,12 @@ export const VideoNulaFeature = "videonula";
  * emulator. In a shared session fitting one would end the session, so it only says so.
  * @param {{inSession: boolean, fit: function(): void}} options
  */
+const AfterSession = "One can be fitted once the shared session is over.";
+
 export function offerVideoNula({ inSession, fit }) {
     noteFeature(VideoNulaFeature, "missing");
     const missing = "This program tried to use a VideoNuLA, which isn't fitted.";
-    toast(inSession ? `${missing} One can be fitted once the shared session is over.` : missing, {
+    toast(inSession ? `${missing} ${AfterSession}` : missing, {
         title: "VideoNuLA",
         quietKey: "quietVideoNulaMissing",
         action: inSession ? null : { label: "Fit one and restart", run: fit },
@@ -21,7 +23,7 @@ export function offerVideoNula({ inSession, fit }) {
 /**
  * The page's answer to a program writing to the missing VideoNuLA: an offer, made once the emulator has let go, since
  * the write is raised mid-instruction; `inSession()` says whether a shared session is running, and fitting one sets
- * it in `settings`, so the URL records it, and then `restart`s.
+ * it in `settings`, so the URL records it, and then `restart`s, unless a session has started since the offer was made.
  */
 export const answerMissingVideoNula =
     ({ inSession, settings, restart = () => window.location.reload() }) =>
@@ -30,6 +32,10 @@ export const answerMissingVideoNula =
             offerVideoNula({
                 inSession: inSession(),
                 fit: () => {
+                    if (inSession()) {
+                        toast(AfterSession, { title: "VideoNuLA" });
+                        return;
+                    }
                     settings.set({ hasVideoNula: true });
                     restart();
                 },
