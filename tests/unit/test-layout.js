@@ -260,14 +260,22 @@ describe("Layout", () => {
 
             it("notes going fullscreen once the browser has, and leaving it", async () => {
                 const sent = sentEvents();
+                const leaves = () => sent("feature_used").filter(({ action }) => action === "leave").length;
+                // Earlier tests' layouts still listen on the same document.
+                document.dispatchEvent(new Event("fullscreenchange"));
+                const earlier = leaves();
                 screenCanvas().requestFullscreen = vi.fn().mockResolvedValue();
                 make();
                 document.getElementById("fs").click();
-                await vi.waitFor(() => expect(sent("feature_used")).toHaveLength(1));
-                expect(sent("feature_used")).toEqual([{ feature: "fullscreen", action: "enter" }]);
+                await vi.waitFor(() =>
+                    expect(sent("feature_used")).toContainEqual({ feature: "fullscreen", action: "enter" }),
+                );
+                Object.defineProperty(document, "fullscreenElement", { value: screenCanvas(), configurable: true });
                 document.dispatchEvent(new Event("fullscreenchange"));
-                // Earlier tests' layouts listen on the same document.
-                expect(sent("feature_used").slice(1)).toContainEqual({ feature: "fullscreen", action: "leave" });
+                expect(leaves()).toBe(earlier);
+                delete document.fullscreenElement;
+                document.dispatchEvent(new Event("fullscreenchange"));
+                expect(leaves()).toBe(2 * earlier + 1);
             });
 
             it("toasts when the browser refuses", async () => {

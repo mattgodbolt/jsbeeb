@@ -264,6 +264,12 @@ export function processAutobootParams(parsedQuery) {
     return { needsAutoboot, autoType };
 }
 
+/** How the page was asked to boot: as `processAutobootParams` says, or `basic` for a BASIC program in the URL. */
+export function bootModeOf(parsedQuery) {
+    if (isDefined(parsedQuery.loadBasic) || isDefined(parsedQuery.embedBasic)) return "basic";
+    return processAutobootParams(parsedQuery).needsAutoboot;
+}
+
 /** Where a drive's 40/80 switch is set, `auto` leaving it to whatever disc is loaded. */
 export const DriveTracks = Object.freeze({ auto: "auto", forty: "40", eighty: "80" });
 

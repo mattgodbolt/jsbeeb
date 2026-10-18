@@ -58,9 +58,9 @@ const Kinds = {
     tape: { folder: "tapes", sth: "tapeSth" },
 };
 
-/** The image itself when `name` is a zip, else the bytes as given, either way as `{ name, data, ignored }`. */
 const unzipped = (data) => failingFor(LoadFailures.badImage, () => unzipDiscImage(data));
 
+/** The image itself when `name` is a zip, else the bytes as given, either way as `{ name, data, ignored }`. */
 export function openIfZip(name, data) {
     return /\.zip/i.test(name) ? unzipped(data) : { name, data, ignored: [] };
 }

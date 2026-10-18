@@ -42,7 +42,13 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
-import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
+import {
+    bootModeOf,
+    parseMediaParams,
+    processAutobootParams,
+    processDriveTrackParams,
+    processInputParams,
+} from "./url-params.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
@@ -352,7 +358,6 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 // ------------------------------------------------------------------------
 
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
-const bootMode = parsedQuery.loadBasic || parsedQuery.embedBasic ? "basic" : needsAutoboot;
 if (parsedQuery.loadBasic) needsAutoboot = "";
 
 // The boot disc is described while the machine starts, so a link that boots a disc without
@@ -382,7 +387,7 @@ const startPromise = machine.start({
         await startPromise;
         if (await switchForBootDisc(await bootDisc)) return;
         noteMachineStart(settings, parsedQuery, {
-            boot_mode: bootMode,
+            boot_mode: bootModeOf(parsedQuery),
             renderer: display.canvas.renderer,
             audio: audioHandler.noAudio ? "unavailable" : "ok",
         });

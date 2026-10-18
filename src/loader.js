@@ -27,6 +27,19 @@ export async function failingFor(reason, make) {
     }
 }
 
+const httpFailure = (url, status) =>
+    failedFor(
+        new Error(`Unable to load ${url}, http code ${status}`),
+        status === 404 ? LoadFailures.notFound : LoadFailures.http,
+    );
+
+/** The bytes at `url`, fetched, failing as `not_found`, `http` or `network`. */
+export async function fetchBytes(url) {
+    const response = await failingFor(LoadFailures.network, () => fetch(url));
+    if (!response.ok) throw httpFailure(url, response.status);
+    return new Uint8Array(await response.arrayBuffer());
+}
+
 function loadDataHttp(url) {
     return new Promise(function (resolve, reject) {
         const request = new XMLHttpRequest();
@@ -34,8 +47,7 @@ function loadDataHttp(url) {
         request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
             if (request.status !== 200) {
-                const reason = request.status === 404 ? LoadFailures.notFound : LoadFailures.http;
-                reject(failedFor(new Error(`Unable to load ${url}, http code ${request.status}`), reason));
+                reject(httpFailure(url, request.status));
                 return;
             }
             if (typeof request.response !== "string") {
@@ -63,11 +75,7 @@ async function loadDataNode(url) {
         const { fileURLToPath } = await import("url");
         return fs.readFileSync(fileURLToPath(url));
     }
-    if (/^https?:\/\//.test(url)) {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Unable to load ${url}, http code ${response.status}`);
-        return new Uint8Array(await response.arrayBuffer());
-    }
+    if (/^https?:\/\//.test(url)) return fetchBytes(url);
     const fs = await import("fs");
     const nodePath = await import("path");
     if (_nodeBasePath) {

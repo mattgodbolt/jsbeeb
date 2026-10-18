@@ -71,8 +71,21 @@ describe("StairwayToHell", () => {
         });
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "error").mockImplementation(() => {});
-        await expect(new StairwayToHell().fetch("Daxis/Daxis[droids]-demo.zip")).rejects.toThrow();
+        await expect(new StairwayToHell().fetch("Daxis/Daxis[droids]-demo.zip")).rejects.toMatchObject({
+            loadFailure: "bad_image",
+        });
         expect(seen).toEqual([`${ARCHIVE_BASE}/diskimages/Daxis/Daxis%5Bdroids%5D-demo.zip`]);
+    });
+
+    it.each([
+        ["a status the server sends", async () => ({ ok: false, status: 500 }), "http"],
+        ["no response at all", async () => Promise.reject(new TypeError("Failed to fetch")), "network"],
+    ])("fails a file on %s as %s", async (_, response, reason) => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(response);
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        await expect(new StairwayToHell().fetch("Mandarin/Lancelot.zip")).rejects.toMatchObject({
+            loadFailure: reason,
+        });
     });
 
     it("returns the name of the file found inside the zip, not the zip's own path", async () => {

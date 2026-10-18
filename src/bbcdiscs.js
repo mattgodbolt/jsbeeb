@@ -1,3 +1,5 @@
+import { fetchBytes } from "./loader.js";
+
 const mirrorBase = "https://bbc.xania.org/archive/bbcdiscs";
 
 /** How a disc came to be an image, which is the difference between the archives it came from. */
@@ -76,8 +78,6 @@ export class BbcDiscArchive {
     async fetch(path) {
         const url = this._baseUrl + encodeURIComponent(path);
         console.log("Loading HFE from " + url);
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
-        return new Uint8Array(await response.arrayBuffer());
+        return fetchBytes(url);
     }
 }

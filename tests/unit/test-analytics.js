@@ -16,6 +16,11 @@ describe("analytics", () => {
             expect(new Set(features).size).toBe(features.length);
         });
 
+        it("puts the State menu's items inside its declaration", () => {
+            expect(page.getElementById("save-state").closest("[data-feature]").dataset.feature).toBe("state");
+            expect(page.getElementById("load-state").closest("[data-feature]").dataset.feature).toBe("state");
+        });
+
         it.each(features)("names %s in snake_case", (feature) => {
             expect(feature).toMatch(/^[a-z]+(_[a-z]+)*$/);
         });
@@ -228,11 +233,11 @@ describe("analytics", () => {
                     expect(sent("js_error")).toHaveLength(1);
                 });
 
-                it("notes only the first few errors a page has", async () => {
+                it("notes only the first ten errors a page has", async () => {
                     const { noteError } = await loadWithMeasurementId(measurementId);
                     for (let i = 0; i < 100; ++i) noteError("loop", new Error(`broken ${i}`));
-                    expect(sent("js_error").length).toBeGreaterThan(1);
-                    expect(sent("js_error").length).toBeLessThan(100);
+                    expect(sent("js_error")).toHaveLength(10);
+                    expect(sent("js_error").at(-1).message).toBe("broken 9");
                 });
 
                 it("notes what the window and unhandled rejections report once configured", async () => {

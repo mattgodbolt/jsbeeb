@@ -87,7 +87,10 @@ describe("BitshiftersArchive", () => {
     it("throws when a disc is missing so the caller can report it", async () => {
         vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 404 });
         vi.spyOn(console, "log").mockImplementation(() => {});
-        await expect(archive().fetch("nope.ssd")).rejects.toThrow("404");
+        await expect(archive().fetch("nope.ssd")).rejects.toMatchObject({
+            message: expect.stringContaining("404"),
+            loadFailure: "not_found",
+        });
     });
 
     it("can be pointed at another prefix for testing", async () => {

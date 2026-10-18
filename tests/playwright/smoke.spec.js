@@ -149,7 +149,8 @@ test("analytics is told the page's location with the user's own disc and session
                 audio: expect.stringMatching(/^(ok|unavailable)$/),
             },
         ]);
-    expect(await sent("media_load")).toContainEqual({
+    const loads = await sent("media_load");
+    expect(loads).toContainEqual({
         source: "builtin",
         kind: "disc",
         slot: "drive0",
@@ -157,6 +158,8 @@ test("analytics is told the page's location with the user's own disc and session
         ref: "elite.ssd",
         result: "loaded",
     });
+    expect(loads).toContainEqual(expect.objectContaining({ slot: "drive1", source: "browser", ref: "browser" }));
+    expect(JSON.stringify(loads)).not.toContain("Mine");
 });
 
 test("the media window shows the drives, keeps the keyboard while focused, and gives it back", async ({
