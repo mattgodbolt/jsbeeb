@@ -170,8 +170,8 @@ export class MediaLoader extends EventTarget {
      * A file from this computer, into whatever it is for: a save state is
      * restored, a tape goes in the deck, anything else into the named drive.
      *
-     * @returns {Promise<?{kind: string, name: string, driveIndex?: number, words: string}>} what
-     *   happened, with words for a toast; null when a restore failed and has been reported already
+     * @returns {Promise<?{kind: string, name: string, ref?: string, driveIndex?: number, words: string}>}
+     *   what happened, with words for a toast; null when a restore failed and has been reported already
      */
     async openFile(file, driveIndex = 0) {
         const arrayBuffer = await file.arrayBuffer();
@@ -183,11 +183,11 @@ export class MediaLoader extends EventTarget {
         const { name, data, ignored } = await openIfZip(file.name, new Uint8Array(arrayBuffer));
         reportIgnoredFiles(name, ignored);
         if (isTapeName(name)) {
-            await this.loadTapeFile(name, data);
-            return { kind: "tape", name, words: `Loaded ${name} as the tape.` };
+            const ref = await this.loadTapeFile(name, data);
+            return { kind: "tape", name, ref, words: `Loaded ${name} as the tape.` };
         }
-        this.loadDiscFile(name, data, driveIndex);
-        return { kind: "disc", name, driveIndex, words: `Loaded ${name} into drive ${driveIndex}.` };
+        const ref = this.loadDiscFile(name, data, driveIndex);
+        return { kind: "disc", name, ref, driveIndex, words: `Loaded ${name} into drive ${driveIndex}.` };
     }
 
     setAutoboot(on) {
@@ -217,6 +217,7 @@ export class MediaLoader extends EventTarget {
         loadedDisc.setOriginalImage(data);
         const ref = this.rememberFile(name, data, "disc");
         this.slots.put(this.slots.drive(driveIndex), loadedDisc, ref, { inUrl: false });
+        return ref;
     }
 
     /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
@@ -224,6 +225,7 @@ export class MediaLoader extends EventTarget {
         const tape = await loadTapeFromData(name, data, this.model);
         const ref = this.rememberFile(name, data, "tape");
         this.slots.put(this.slots.deck, tape, ref, { inUrl: false });
+        return ref;
     }
 
     async loadSCSIFile(file) {

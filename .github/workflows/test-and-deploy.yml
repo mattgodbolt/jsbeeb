@@ -131,6 +131,8 @@ jobs:
           node-version: 24.19.0
           cache: npm
       - name: Build distribution
+        env:
+          GA_MEASUREMENT_ID: ${{ vars.GA_MEASUREMENT_ID }}
         run: |
           make dist
       - name: Deploy the rendezvous function

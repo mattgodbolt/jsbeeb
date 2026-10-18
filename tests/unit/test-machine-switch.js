@@ -61,6 +61,12 @@ describe("MachineSwitch", () => {
         expect(toasts()).toHaveLength(1);
     });
 
+    it("names a disc of the user's own to analytics only by its source", async () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        await make().switchFor({ ...paradroid, ref: "gd:1AbC/Mine.ssd" }, drive0, { boot: true });
+        expect(log).toHaveBeenCalledWith("event noted:", "media", "switchMachine", "gdrive");
+    });
+
     it("asks before reloading for a plain load: a yes reloads with no boot and no notice, a no stays put", async () => {
         deps.modals.confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
         await expect(make().switchFor(paradroid, drive0, { boot: false })).resolves.toBe(false);

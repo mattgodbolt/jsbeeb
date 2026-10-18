@@ -728,7 +728,7 @@ describe("MediaWindow", () => {
             box.dispatchEvent(
                 new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }),
             );
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith(elite.ref));
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
             expect(deps.media.setAutoboot).toHaveBeenCalledWith(true);
             expect(document.querySelector("#media-panel .autoboot").checked).toBe(true);
@@ -748,7 +748,7 @@ describe("MediaWindow", () => {
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
             shiftClick(rows()[0].querySelector(".media-row-main"));
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith(elite.ref));
         });
 
         it("only boots from drive 0: a shift-click on the other drive's button into drive 1 loads without a reset", async () => {
@@ -911,7 +911,7 @@ describe("MediaWindow", () => {
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
             rows()[0].querySelector(".media-row-main").click();
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("Elite"));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith(elite.ref));
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
         });
 
@@ -986,6 +986,20 @@ describe("MediaWindow", () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(tapeInterface.tape).toBe(second);
             expect(urlState.params.tape).toBe("sth:AnF/Other.zip");
+        });
+
+        it("names the user's own disc and tape to analytics only by their source", async () => {
+            const log = vi.spyOn(console, "log").mockImplementation(() => {});
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            deps.media.loadTapeImage.mockResolvedValue({ name: "Mine.uef", position: 0 });
+            const tape = { ...chuckie, ref: "session:1/Mine.uef", title: "Mine.uef", source: "session" };
+            await openWith([saves, tape]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(log).toHaveBeenCalledWith("event noted:", "media", "loadDisc", "browser"));
+            await openWith([saves, tape]);
+            document.getElementById("deck-window").click();
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(log).toHaveBeenCalledWith("event noted:", "media", "loadTape", "session"));
         });
 
         it("loads a tape into the deck from its row, unfolding the deck", async () => {
@@ -1229,12 +1243,13 @@ describe("MediaWindow", () => {
             deps.media.openFile.mockResolvedValue({
                 kind: "disc",
                 name: "game.ssd",
+                ref: "session:1/game.ssd",
                 driveIndex: 0,
                 words: "Loaded game.ssd into drive 0.",
             });
             make();
             dropFile(new File([new Uint8Array(4)], "game.ssd"));
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("game.ssd"));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("session:1/game.ssd"));
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
         });
 

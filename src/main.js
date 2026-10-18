@@ -48,9 +48,11 @@ import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./we
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
+import { configureAnalytics } from "./web/analytics.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
 
+configureAnalytics();
 installIcons();
 
 // ------------------------------------------------------------------------
@@ -298,7 +300,7 @@ const mediaWindow = new MediaWindow({
     model,
     loop,
     visualiser: discVisualiser,
-    autoboot: (image) => autoBoot.boot(image),
+    autoboot: (ref) => autoBoot.boot(ref),
     driveSource: googleDriveSource,
     machineSwitch,
 });
@@ -414,7 +416,7 @@ const startPromise = machine.start({
                 if (session && !loop.isRunning()) runControls.resume();
                 return session;
             },
-            join: (room, name) => window.location.assign(joinLink(room, name)),
+            join: (room, name) => window.location.assign(joinLink(room, name, urlState.params)),
         });
     } catch (error) {
         console.error("Error initialising emulator:", error);
