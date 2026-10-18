@@ -1,6 +1,6 @@
 import * as tokeniser from "../basic-tokenise.js";
 import { installBasic } from "../basic-loader.js";
-import { noteEvent } from "./analytics.js";
+import { mediaLabel, noteEvent } from "./analytics.js";
 import { BBC } from "../keymap.js";
 
 /** Booting and typing for the machine at startup: shift-break, *TAPE incantations and BASIC programs. */
@@ -16,9 +16,10 @@ export class Autoboot {
         return this.model.stringToKeys(text);
     }
 
-    boot(image) {
+    /** @param {string} ref the reference of the disc in drive 0 */
+    boot(ref) {
         console.log("Autobooting disc");
-        noteEvent("init", "autoboot", image);
+        noteEvent("init", "autoboot", mediaLabel(ref));
 
         // Shift-break simulation, hold SHIFT for 1000ms.
         this.sendKeys([BBC.SHIFT, 1000], false);

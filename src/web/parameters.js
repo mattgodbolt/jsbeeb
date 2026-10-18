@@ -44,6 +44,9 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * for a menu, unless `id` says otherwise. Changes are saved when the dialog closes, unless the field is `live`; a
  * `restart` field only takes effect on a freshly built machine. `enabledWhen(proposed)` greys a control out unless the
  * settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
+ *
+ * Analytics sees a `mediaRef` (a media reference) as `mediaLabel` names it, and never sees a `personal` value (the
+ * user's own).
  */
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
@@ -226,12 +229,12 @@ export const Parameters = {
     autochain: { type: ParamTypes.BOOL, startupAction: true },
     autorun: { type: ParamTypes.BOOL, startupAction: true },
     autotype: { type: ParamTypes.STRING, startupAction: true },
-    loadBasic: { type: ParamTypes.STRING, startupAction: true },
+    loadBasic: { type: ParamTypes.STRING, startupAction: true, mediaRef: true },
     embedBasic: { type: ParamTypes.STRING, startupAction: true },
     patch: { type: ParamTypes.STRING, startupAction: true },
 
     // Array parameters
-    rom: { type: ParamTypes.ARRAY },
+    rom: { type: ParamTypes.ARRAY, mediaRef: true },
 
     // Boolean parameters
     embed: { type: ParamTypes.BOOL },
@@ -254,16 +257,21 @@ export const Parameters = {
     cpuMultiplier: { type: ParamTypes.FLOAT },
 
     // String parameters (these are the default but listed for clarity)
-    disc: { type: ParamTypes.STRING },
-    disc1: { type: ParamTypes.STRING },
-    disc2: { type: ParamTypes.STRING },
-    tape: { type: ParamTypes.STRING },
-    mmc: { type: ParamTypes.STRING },
+    disc: { type: ParamTypes.STRING, mediaRef: true },
+    disc1: { type: ParamTypes.STRING, mediaRef: true },
+    disc2: { type: ParamTypes.STRING, mediaRef: true },
+    tape: { type: ParamTypes.STRING, mediaRef: true },
+    mmc: { type: ParamTypes.STRING, mediaRef: true },
     drive0Tracks: { type: ParamTypes.STRING },
     drive1Tracks: { type: ParamTypes.STRING },
     sbLeft: { type: ParamTypes.STRING },
     sbRight: { type: ParamTypes.STRING },
     sbBottom: { type: ParamTypes.STRING },
+
+    // A shared session's room, and the name its user goes by there
+    server: { type: ParamTypes.STRING, personal: true },
+    client: { type: ParamTypes.STRING, personal: true },
+    name: { type: ParamTypes.STRING, personal: true },
 };
 
 /** @returns {Object.<string, string>} each parameter's URL type, as the URL parser takes them. */

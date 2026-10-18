@@ -1,6 +1,7 @@
 import { buildUrlFromParams, parseQueryString } from "../url-params.js";
 import { debounce } from "../debounce.js";
 import { UrlParamTypes } from "./parameters.js";
+import { noteLocation } from "./analytics.js";
 
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
 const UrlSettleMs = 300;
@@ -54,5 +55,6 @@ export class UrlState {
 
     updateUrl() {
         this.history.pushState(null, null, this.url());
+        noteLocation();
     }
 }

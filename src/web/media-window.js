@@ -13,7 +13,7 @@ import {
 import { errorText, reportLoadFailure } from "./reporting.js";
 import { guessDiscTypeFromName } from "../fdc.js";
 import { toast } from "./toast.js";
-import { noteEvent } from "./analytics.js";
+import { mediaLabel, noteEvent } from "./analytics.js";
 
 const CounterDigits = 3;
 const CounterDivisions = 10 ** CounterDigits;
@@ -228,7 +228,7 @@ export class MediaWindow {
             toast(opened.words, { title });
             if (opened.kind === "disc" && opened.driveIndex === 0 && this.media.params.autoboot !== undefined) {
                 this.processor.reset(true);
-                this.autoboot(opened.name);
+                this.autoboot(opened.ref);
             }
             this.close();
         } catch (error) {
@@ -769,7 +769,7 @@ export class MediaWindow {
      *   disc; `stayOpen`: the load was not what the window was opened for
      */
     async loadDisc(driveIndex, d, { boot = false, stayOpen = false } = {}) {
-        noteEvent("media", "loadDisc", d.ref);
+        noteEvent("media", "loadDisc", mediaLabel(d.ref));
         this.unfold(driveIndex);
         // Only drive 0 boots, so only a boot into drive 0 means anything for the URL.
         boot = boot && driveIndex === 0;
@@ -786,7 +786,7 @@ export class MediaWindow {
         // The tick is read now, not before the wait, in case it was changed meanwhile.
         if (bootsOnLoad()) {
             this.processor.reset(true);
-            this.autoboot(d.title);
+            this.autoboot(d.ref);
         }
         if (boot) {
             this.media.setAutoboot(true);
@@ -796,7 +796,7 @@ export class MediaWindow {
     }
 
     async loadTape(d) {
-        noteEvent("media", "loadTape", d.ref);
+        noteEvent("media", "loadTape", mediaLabel(d.ref));
         this.unfold("tape");
         if ((await this.slots.load(this.slots.deck, d)) === "loaded") this.close();
     }
