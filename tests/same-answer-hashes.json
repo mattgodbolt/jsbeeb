@@ -1,0 +1,37 @@
+{
+  "frames": 100,
+  "workloads": {
+    "elite": {
+      "framebuffer": "6963d85bfdeb9c43",
+      "registers": "9eef24cbee828fdf",
+      "memory": "a2a01b30e38cc831",
+      "cycles": "51d4347bd4c5ea35",
+      "sound": "07c853ffb0accd69",
+      "peripherals": "6194294c1b4fd5f2"
+    },
+    "mode0-lines": {
+      "framebuffer": "e183157060b1f938",
+      "registers": "136d28f8922eb1bc",
+      "memory": "314c8032d4a4b562",
+      "cycles": "a86aa8d846c9c6eb",
+      "sound": "2a7a36fbdd161c17",
+      "peripherals": "035d10529cf50b38"
+    },
+    "mode7-text": {
+      "framebuffer": "1cd945adb8ea54ff",
+      "registers": "27988c8a7556889d",
+      "memory": "288ab69b3ea57e23",
+      "cycles": "c2f78902539afb32",
+      "sound": "665f29a596fdbdcb",
+      "peripherals": "48d317bdf3e99b56"
+    },
+    "master-shadow": {
+      "framebuffer": "c5de4c289c71a4cf",
+      "registers": "9305fd23aa80e222",
+      "memory": "66f41d99654b1e44",
+      "cycles": "f62dffab17ab1472",
+      "sound": "72ec8ef50df8dc18",
+      "peripherals": "947ee29f71a925f2"
+    }
+  }
+}
