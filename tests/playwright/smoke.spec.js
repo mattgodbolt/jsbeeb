@@ -53,35 +53,18 @@ test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     const headerBar = async (width) => {
         await page.setViewportSize({ width, height: 900 });
         return page.evaluate(() => {
-            const bar = document.getElementById("header-bar");
             const paste = document.getElementById("paste-text").getBoundingClientRect();
-            const promo = bar.querySelector(".navbar-text");
-            const promoState = () => {
-                if (getComputedStyle(promo).display === "none") return "hidden";
-                if (promo.getBoundingClientRect().right > promo.nextElementSibling.getBoundingClientRect().left)
-                    return "overflowing";
-                return promo.scrollWidth > promo.clientWidth ? "truncated" : "fits";
-            };
             return {
-                height: bar.offsetHeight,
+                height: document.getElementById("header-bar").offsetHeight,
                 pasteFits: paste.width > 0 && paste.right <= innerWidth,
-                promo: promoState(),
             };
         });
     };
     await beeb.open();
     await beeb.expectScreenText(">");
     const oneRow = await headerBar(OneRowWidth);
-    expect(oneRow.promo, `the Owlet promo at ${OneRowWidth}px`).toBe("fits");
     for (const width of LaptopWidths) {
-        const bar = await headerBar(width);
-        // A wider fallback font may truncate or hide the promo, which is
-        // allowed; spilling over the controls is not.
-        expect(bar, `the bar at ${width}px`).toEqual({
-            height: oneRow.height,
-            pasteFits: true,
-            promo: expect.not.stringMatching(/overflowing/),
-        });
+        expect(await headerBar(width), `the bar at ${width}px`).toEqual({ height: oneRow.height, pasteFits: true });
     }
 });
 

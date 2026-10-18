@@ -416,7 +416,7 @@ const startPromise = machine.start({
                 if (session && !loop.isRunning()) runControls.resume();
                 return session;
             },
-            join: (room, name) => window.location.assign(joinLink(room, name)),
+            join: (room, name) => window.location.assign(joinLink(room, name, urlState.params)),
         });
     } catch (error) {
         console.error("Error initialising emulator:", error);

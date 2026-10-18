@@ -188,6 +188,16 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
     return url;
 }
 
+const KeyMappingPrefix = "KEY.";
+const GamepadMappingPrefix = "GP.";
+const GamepadDirectionParams = ["LEFT", "RIGHT", "UP", "DOWN", "FIRE"];
+
+/** Whether `key` is one of the key or gamepad mappings that processInputParams reads. */
+export const isInputMappingParam = (key) =>
+    key.toUpperCase().startsWith(KeyMappingPrefix) ||
+    key.startsWith(GamepadMappingPrefix) ||
+    GamepadDirectionParams.includes(key);
+
 /**
  * Process keyboard and gamepad mapping parameters from query string
  * @param {Object} parsedQuery - The parsed query parameters
@@ -205,9 +215,9 @@ export function processInputParams(parsedQuery, machineKeys, hostKeyCodes, userK
 
         // `KEY.<host key>=<machine key>`, eg `KEY.CAPSLOCK=CTRL`. Host names come from
         // `keyCodes`, so the BBC's RETURN is ENTER here; both lists are in the README.
-        if (key.toUpperCase().indexOf("KEY.") === 0) {
+        if (key.toUpperCase().startsWith(KeyMappingPrefix)) {
             const machineKey = val.toUpperCase();
-            const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
+            const nativeKey = key.substring(KeyMappingPrefix.length).toUpperCase();
 
             if (!machineKeys[machineKey]) {
                 warnings.push(`${key}=${val}: "${machineKey}" is not a key on the emulated machine.`);
@@ -217,24 +227,14 @@ export function processInputParams(parsedQuery, machineKeys, hostKeyCodes, userK
                 console.log("mapping " + nativeKey + " to " + machineKey);
                 userKeymap.push({ native: nativeKey, key: machineKey });
             }
-        } else if (key.indexOf("GP.") === 0) {
-            // gamepad mapping
+        } else if (key.startsWith(GamepadMappingPrefix)) {
             // eg ?GP.FIRE2=RETURN
-            const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
+            const gamepadKey = key.substring(GamepadMappingPrefix.length).toUpperCase();
             const problem = gamepad.remap(gamepadKey, val.toUpperCase());
             if (problem) warnings.push(`${key}=${val}: ${problem}`);
-        } else {
-            switch (key) {
-                case "LEFT":
-                case "RIGHT":
-                case "UP":
-                case "DOWN":
-                case "FIRE": {
-                    const problem = gamepad.remap(key, val.toUpperCase());
-                    if (problem) warnings.push(`${key}=${val}: ${problem}`);
-                    break;
-                }
-            }
+        } else if (GamepadDirectionParams.includes(key)) {
+            const problem = gamepad.remap(key, val.toUpperCase());
+            if (problem) warnings.push(`${key}=${val}: ${problem}`);
         }
     });
 

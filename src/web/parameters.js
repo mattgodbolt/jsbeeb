@@ -24,7 +24,9 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
 /**
  * Every parameter the page understands, with all it is: its URL `type`, and whether it is a `startupAction` (has the
  * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
- * as in the URL) or `slid` (changed live as a slider moves, so a burst of changes makes one history entry).
+ * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry) or
+ * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
+ * page joining a shared session keeps its own).
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
  * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
@@ -68,6 +70,7 @@ export const Parameters = {
     },
     keyLayout: {
         type: ParamTypes.STRING,
+        localToPage: true,
         stored: true,
         default: "physical",
         fromUrl: (layout) => layout.toLowerCase(),
@@ -84,6 +87,7 @@ export const Parameters = {
     },
     displayMode: {
         type: ParamTypes.STRING,
+        localToPage: true,
         stored: true,
         default: "rgb",
         field: {
@@ -136,6 +140,7 @@ export const Parameters = {
     },
     audioOutput: {
         type: ParamTypes.STRING,
+        localToPage: true,
         stored: true,
         default: DefaultAudioOutput,
         valid: isAudioOutput,
@@ -154,6 +159,7 @@ export const Parameters = {
     },
     speakerAmount: {
         type: ParamTypes.FLOAT,
+        localToPage: true,
         stored: true,
         slid: true,
         default: 1,
@@ -197,6 +203,7 @@ export const Parameters = {
     },
     speechOutput: {
         type: ParamTypes.BOOL,
+        localToPage: true,
         default: false,
         field: {
             type: "check",
@@ -212,6 +219,7 @@ export const Parameters = {
     // Each display's afterglow
     palPersistenceMs: {
         type: ParamTypes.FLOAT,
+        localToPage: true,
         stored: true,
         slid: true,
         default: AfterglowDefaults.palPersistenceMs,
@@ -219,6 +227,7 @@ export const Parameters = {
     },
     rgbPersistenceMs: {
         type: ParamTypes.FLOAT,
+        localToPage: true,
         stored: true,
         slid: true,
         default: AfterglowDefaults.rgbPersistenceMs,
@@ -238,23 +247,23 @@ export const Parameters = {
     rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },
 
     // Boolean parameters
-    embed: { type: ParamTypes.BOOL },
+    embed: { type: ParamTypes.BOOL, localToPage: true },
     fasttape: { type: ParamTypes.BOOL },
     noseek: { type: ParamTypes.BOOL },
-    glEnabled: { type: ParamTypes.BOOL },
-    lowLatency: { type: ParamTypes.BOOL },
+    glEnabled: { type: ParamTypes.BOOL, localToPage: true },
+    lowLatency: { type: ParamTypes.BOOL, localToPage: true },
     fakeVideo: { type: ParamTypes.BOOL },
-    logFdcCommands: { type: ParamTypes.BOOL },
-    logFdcStateChanges: { type: ParamTypes.BOOL },
-    audioDebug: { type: ParamTypes.BOOL },
+    logFdcCommands: { type: ParamTypes.BOOL, localToPage: true },
+    logFdcStateChanges: { type: ParamTypes.BOOL, localToPage: true },
+    audioDebug: { type: ParamTypes.BOOL, localToPage: true },
 
     // Numeric parameters
     stationId: { type: ParamTypes.INT },
     frameSkip: { type: ParamTypes.INT },
     videoCyclesBatch: { type: ParamTypes.INT },
-    audiofilterfreq: { type: ParamTypes.FLOAT },
-    audiofilterq: { type: ParamTypes.FLOAT },
-    audioLatencyMs: { type: ParamTypes.FLOAT },
+    audiofilterfreq: { type: ParamTypes.FLOAT, localToPage: true },
+    audiofilterq: { type: ParamTypes.FLOAT, localToPage: true },
+    audioLatencyMs: { type: ParamTypes.FLOAT, localToPage: true },
     cpuMultiplier: { type: ParamTypes.FLOAT },
 
     // String parameters (these are the default but listed for clarity)
@@ -265,9 +274,9 @@ export const Parameters = {
     mmc: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
     drive0Tracks: { type: ParamTypes.STRING },
     drive1Tracks: { type: ParamTypes.STRING },
-    sbLeft: { type: ParamTypes.STRING },
-    sbRight: { type: ParamTypes.STRING },
-    sbBottom: { type: ParamTypes.STRING },
+    sbLeft: { type: ParamTypes.STRING, localToPage: true },
+    sbRight: { type: ParamTypes.STRING, localToPage: true },
+    sbBottom: { type: ParamTypes.STRING, localToPage: true },
 
     // A shared session's room, and the name its user goes by there
     server: { type: ParamTypes.STRING, analyticsFilter: redacted },
@@ -282,3 +291,5 @@ export const urlParamTypes = (parameters) =>
 export const UrlParamTypes = urlParamTypes(Parameters);
 
 export const StartupActionParams = Object.keys(Parameters).filter((name) => Parameters[name].startupAction);
+
+export const LocalToPageParams = Object.keys(Parameters).filter((name) => Parameters[name].localToPage);
