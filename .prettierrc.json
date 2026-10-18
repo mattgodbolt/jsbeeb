@@ -1,1 +1,1 @@
-{}
+{ "overrides": [{ "files": "src/web/browser-floor.js", "options": { "trailingComma": "es5" } }] }

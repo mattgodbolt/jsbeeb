@@ -127,7 +127,7 @@
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder",
     "test:e2e": "GA_MEASUREMENT_ID=G-E2ETEST npm run build && playwright test --project chrome",
-    "test:dist-syntax": "npm run build && es-check checkBrowser './dist/**/*.js' --module && es-check checkBrowser './dist/**/*.js' --module --checkFeatures"
+    "test:dist-syntax": "npm run build && es-check checkBrowser './dist/**/*.js' --module && es-check checkBrowser './dist/**/*.js' --module --checkFeatures && es-check es5 src/web/browser-floor.js"
   },
   "lint-staged": {
     "*.js": [
