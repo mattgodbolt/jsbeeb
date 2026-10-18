@@ -235,12 +235,26 @@ test("Alt+M opens the window aimed at drive 0 with the search box focused, and t
     await expect(page.locator("#media-search")).toBeFocused();
     await page.keyboard.type("welcome");
     await expect(page.locator("#media-search")).toHaveValue("welcome");
-    await expect(page.locator("#media-list .media-row-main").first()).toHaveAttribute("title", /Load Welcome/);
+    await expect(page.locator("#media-list .media-row-main").first()).toHaveAttribute("title", /Boot Welcome/);
     await page.keyboard.press("Escape");
     await expect(page.locator("#media-panel")).toBeHidden();
     await beeb.pressKey("b");
     await beeb.expectScreenText(">B");
     expect(await beeb.screenText()).not.toContain("WELCOME");
+});
+
+test("Enter in the media window boots the best match from drive 0, and the URL says so", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMedia");
+    await expect(page.locator("#media-panel .autoboot")).toBeChecked();
+    await expect(page.locator("#media-hint")).toContainText("Enter boots from drive 0");
+    await page.fill("#media-search", "elite");
+    await expect(page.locator("#media-list .media-row-main").first()).toHaveAttribute("title", /^Boot Elite/);
+    await page.keyboard.press("Enter");
+    await beeb.expectDrive0("elite.ssd");
+    await beeb.expectNotOnScreen("BASIC");
+    await expect(page).toHaveURL(/[?&]autoboot(&|$)/);
 });
 
 test("the media window's list puts a built-in disc into drive 1", async ({ beeb, page }) => {

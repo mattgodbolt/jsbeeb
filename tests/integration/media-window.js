@@ -260,9 +260,7 @@ describe("the media window against a real machine", () => {
         const reset = vi.spyOn(machine.processor, "reset");
         window.open();
         const box = await search("elite");
-        box.dispatchEvent(
-            new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }),
-        );
+        box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
         await vi.waitFor(() => expect(machine.processor.fdc.drives[0].disc?.name).toBe("elite.ssd"));
         expect(urlState.params.autoboot).toBe(true);
         expect(urlState.params.disc1).toBe("elite.ssd");
