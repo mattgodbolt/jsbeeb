@@ -1137,7 +1137,7 @@ class Disassemble6502 {
     }
 }
 
-function makeCpuFunctions(cpu, opcodes, undocumented, is65c12, cycleAccurate = true) {
+function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAccurate = true) {
     function getInstruction(opcodeString, needsReg) {
         const split = opcodeString.split(" ");
         const opcode = split[0];
@@ -1411,12 +1411,12 @@ ${indent}`)
     }
 
     function generate6502JumpTable() {
-        const cpuType = is65c12 ? "65c12" : "6502";
         const funcs = [];
         for (let opcodeNum = 0; opcodeNum < 256; ++opcodeNum) {
             const name = opcodeFunctionName(opcodeNum);
             const source = getIndentedSource("  ", opcodeNum, true);
-            // Profilers ignore a `name` assigned after creation, and Firefox's ignores the sourceURL too.
+            // Only a declared name reaches every profiler (Firefox's ignores the sourceURL), and assigning `name`
+            // afterwards puts the function in dictionary mode, which slows the dispatch's `.call`.
             funcs[opcodeNum] = new Function(
                 `return function ${name}(cpu) {\n${source}\n};\n//# sourceURL=${cpuType}/${name}.js`,
             )();
@@ -1498,13 +1498,13 @@ ${indent}`)
 }
 
 export function Cpu6502(cpu, { cycleAccurate = true } = {}) {
-    return makeCpuFunctions(cpu, opcodes6502, undocumented6502, false, cycleAccurate);
+    return makeCpuFunctions(cpu, "6502", opcodes6502, undocumented6502, false, cycleAccurate);
 }
 
 export function Cpu65c12(cpu, { cycleAccurate = true } = {}) {
-    return makeCpuFunctions(cpu, opcodes65c12, undocumented65c12, true, cycleAccurate);
+    return makeCpuFunctions(cpu, "65c12", opcodes65c12, undocumented65c12, true, cycleAccurate);
 }
 
 export function Cpu65c02(cpu, { cycleAccurate = true } = {}) {
-    return makeCpuFunctions(cpu, opcodes65c02, undocumented65c02, true, cycleAccurate);
+    return makeCpuFunctions(cpu, "65c02", opcodes65c02, undocumented65c02, true, cycleAccurate);
 }
