@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { describeComparison, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
+import { describeComparison, FewestDecisivePairs, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
 import { SlicesPerSecond } from "./node-ab-sample.js";
 
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,8 +32,6 @@ const Diagnostics = [
     { option: "cpu-prof", flag: "--cpu-prof" },
     { option: "trace-deopt", flag: "--trace-deopt" },
 ];
-// Fewer than this many pairs never has a 99% signed-rank interval, so could never reach a verdict.
-const FewestPairs = 8;
 // Decimal seconds are not exact in binary: 1.1 s is 110.00000000000001 slices.
 const SliceTolerance = 1e-6;
 
@@ -56,7 +54,7 @@ existing checkouts. With no workloads, every workload in A's ${ManifestPath} run
 Options:
   --fake-video          measure the CPU and peripherals without rendering video
   --min-pairs N         pairs taken before the result may stop early (default ${Defaults["min-pairs"]})
-  --max-pairs N         the most pairs taken per workload, at least ${FewestPairs} (default ${Defaults["max-pairs"]})
+  --max-pairs N         the most pairs taken per workload, at least ${FewestDecisivePairs} (default ${Defaults["max-pairs"]})
   --horizon P           stop once the 99% interval lies within P% of 1, or excludes 1 (default ${Defaults.horizon})
   --warmup-secs S       emulated seconds run before timing (default ${Defaults["warmup-secs"]})
   --measure-secs S      emulated seconds timed, in 10 ms browser-tick slices (default ${Defaults["measure-secs"]})
@@ -117,7 +115,7 @@ export function parseOptions(args) {
     if (options.help) return { help: true };
     if (positionals.length < 2) throw new Error(`Name two sides to compare\n\n${usage()}`);
     const minPairs = wholeNumber(options, "min-pairs", 2);
-    const maxPairs = wholeNumber(options, "max-pairs", Math.max(FewestPairs, minPairs));
+    const maxPairs = wholeNumber(options, "max-pairs", Math.max(FewestDecisivePairs, minPairs));
     const horizon = Number(options.horizon);
     if (!(horizon > 0)) throw new Error(`--horizon takes a percentage above 0, not "${options.horizon}"`);
     if (!Object.hasOwn(Statistics, options.statistic)) {
@@ -151,8 +149,14 @@ export function parseOptions(args) {
     };
 }
 
+// Run from a git hook, GIT_DIR and GIT_INDEX_FILE would point every command at the hook's repository, not `dir`.
+const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
 const gitIn = (dir, ...args) =>
-    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    execFileSync("git", ["-C", dir, ...args], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: gitEnv,
+    }).trim();
 const git = (...args) => gitIn(RepoRoot, ...args);
 
 const fileLabel = (text) => text.replace(/[^A-Za-z0-9._-]+/g, "_");
@@ -164,12 +168,21 @@ export function comparableLock(text) {
     return JSON.stringify({ ...rest, packages: { ...packages, "": ownPackage } });
 }
 
+// The node_modules Node finds for this checkout, which for a worktree inside another checkout can be that one's.
+function ownNodeModules() {
+    for (let dir = RepoRoot; ; dir = path.dirname(dir)) {
+        const candidate = path.join(dir, "node_modules");
+        if (existsSync(candidate)) return candidate;
+        if (path.dirname(dir) === dir) throw new Error(`No node_modules in or above ${RepoRoot}; run npm ci`);
+    }
+}
+
 // Node resolves the side's packages from its own checkout; a fresh worktree borrows this one's when the lock
 // files match, and installs its own when they do not.
 function provideNodeModules(dir) {
     const lock = (checkout) => comparableLock(readFileSync(path.join(checkout, "package-lock.json"), "utf8"));
     if (lock(dir) === lock(RepoRoot)) {
-        symlinkSync(path.join(RepoRoot, "node_modules"), path.join(dir, "node_modules"), "dir");
+        symlinkSync(ownNodeModules(), path.join(dir, "node_modules"), "dir");
         return;
     }
     console.error(`${dir}: package-lock.json differs from this checkout's, so running npm ci there`);
@@ -177,7 +190,7 @@ function provideNodeModules(dir) {
 }
 
 // Untracked files are left out, so the --out-dir or --json output written into a checkout does not count.
-function checkoutSha(root) {
+export function checkoutSha(root) {
     try {
         const dirty = gitIn(root, "status", "--porcelain", "--untracked-files=no") !== "";
         return `${gitIn(root, "rev-parse", "HEAD")}${dirty ? "-dirty" : ""}`;
@@ -227,7 +240,7 @@ const readManifest = (root) => JSON.parse(readFileSync(path.join(root, ManifestP
 
 // A workload re-recorded on one side runs different code from the other, which the ratio cannot tell apart
 // from a speed change.
-function checkWorkloads(sides, names) {
+export function checkWorkloads(sides, names) {
     const manifests = sides.map(({ root }) => new Map(readManifest(root).map((entry) => [entry.name, entry])));
     for (const name of names) {
         for (const [index, manifest] of manifests.entries()) {
@@ -269,7 +282,6 @@ function runSample(root, workload, settings, { execArgv = [], stdoutFile = null 
 async function diagnosticRuns(sides, names, settings) {
     if (settings.diagnostics.length === 0) return [];
     const outDir = path.resolve(settings.outDir);
-    mkdirSync(outDir, { recursive: true });
     const written = [];
     for (const name of names) {
         for (const { option, flag, side } of settings.diagnostics) {
@@ -325,6 +337,10 @@ async function main() {
     };
     process.once("SIGINT", cleanUp);
     process.once("SIGTERM", cleanUp);
+    if (settings.json && !existsSync(path.dirname(path.resolve(settings.json)))) {
+        throw new Error(`There is no directory to write ${settings.json} in`);
+    }
+    if (settings.diagnostics.length > 0) mkdirSync(settings.outDir, { recursive: true });
     try {
         const sides = settings.specs.map((spec) => prepareSide(spec, settings.workDir, created));
         const names =
@@ -334,22 +350,24 @@ async function main() {
             console.error(`${Sides[index].toUpperCase()}: ${side.spec} at ${side.root}`);
         }
         const results = await compare(sides, names, settings);
-        const files = await diagnosticRuns(sides, names, settings);
-        for (const file of files) console.error(`Wrote ${file}`);
-        if (settings.json) {
+        // Written before the diagnostic runs as well as after, so a failure in them keeps the timings.
+        const writeReport = (files) => {
+            if (!settings.json) return;
+            const { fakeVideo, statistic, warmupSecs, measureSecs, minPairs, maxPairs, horizon } = settings;
             const report = {
                 a: { spec: sides[0].spec, sha: sides[0].sha },
                 b: { spec: sides[1].spec, sha: sides[1].sha },
-                fakeVideo: settings.fakeVideo,
-                statistic: settings.statistic,
-                warmupSecs: settings.warmupSecs,
-                measureSecs: settings.measureSecs,
+                settings: { fakeVideo, statistic, warmupSecs, measureSecs, minPairs, maxPairs, horizon },
                 node: process.version,
                 results,
                 files,
             };
             writeFileSync(settings.json, `${JSON.stringify(report, null, 2)}\n`);
-        }
+        };
+        writeReport([]);
+        const files = await diagnosticRuns(sides, names, settings);
+        for (const file of files) console.error(`Wrote ${file}`);
+        writeReport(files);
         return 0;
     } finally {
         removeWorktrees(created);

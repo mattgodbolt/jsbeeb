@@ -6,6 +6,7 @@
 /out
 /v8.log*
 /perf.data
+/node-ab-out
 .eslintcache
 **/.DS_Store
 coverage

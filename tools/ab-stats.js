@@ -7,6 +7,8 @@ export const Confidence = 0.95;
 // The verdict is checked after every pair, and each look is another chance of a false "faster" or "slower";
 // at 99% per look, an A/A run ends in one about 5% of the time (simulated in test-ab-stats.js).
 export const DecisionConfidence = 0.99;
+// The fewest pairs with a DecisionConfidence signed-rank interval: all n pairs agreeing has probability 2^-n.
+export const FewestDecisivePairs = Math.ceil(-Math.log2((1 - DecisionConfidence) / 2));
 // The power the minimum detectable change is quoted at: a real change that size is seen four times in five.
 export const Power = 0.8;
 
