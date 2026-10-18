@@ -31,6 +31,12 @@ const OneRowWidth = 4000;
 const ShaderCompileBudgetMs = 30000;
 // The bar expands at Bootstrap's lg breakpoint, 992px.
 const LaptopWidths = [993, 1024, 1280, 1400, 1440, 1512, 1536, 1600];
+// The short one is under the 1200x700 that hides the bar's headers, which leaves two lines.
+const LightsBarViewports = [
+    { width: 1400, height: 900, lines: 3 },
+    { width: 390, height: 900, lines: 3 },
+    { width: 1100, height: 650, lines: 2 },
+];
 const Oswrch = 0xffee;
 // osnewl's JSR oswrch, a few instructions above oswrch itself.
 const OsnewlCall = 0xffe9;
@@ -68,13 +74,14 @@ test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     }
 });
 
-test("every label and lamp in the lights bar sits on one of its three shared lines", async ({ beeb, page }) => {
-    const lineCentres = () =>
+test("every label and lamp in the lights bar sits on one of its shared lines", async ({ beeb, page }) => {
+    const lightsBarItems = () =>
         page.evaluate(() =>
             [...document.querySelectorAll("#leds .slot-readout, #leds .cell")]
                 .filter((item) => item.getClientRects().length)
                 .map((item) => {
-                    const top = item.getBoundingClientRect().top;
+                    const box = item.getBoundingClientRect();
+                    const group = item.parentElement.getBoundingClientRect();
                     const rects = [...item.querySelectorAll(".led, [data-icon] > svg")].map((lamp) =>
                         lamp.getBoundingClientRect(),
                     );
@@ -87,19 +94,29 @@ test("every label and lamp in the lights bar sits on one of its three shared lin
                     }
                     const centres = rects
                         .filter((rect) => rect.height)
-                        .map((rect) => Math.round((rect.top + rect.bottom) / 2 - top));
-                    return { label: item.textContent.trim().replace(/\s+/g, " "), centres: [...new Set(centres)] };
+                        .map((rect) => Math.round((rect.top + rect.bottom) / 2 - box.top));
+                    return {
+                        label: item.textContent.trim().replace(/\s+/g, " "),
+                        fillsItsGroup: box.top === group.top && box.bottom === group.bottom,
+                        centres: [...new Set(centres)],
+                    };
                 }),
         );
     await beeb.open("?disc=elite.ssd&tape=Welcome.uef");
     await beeb.expectDrive0("elite.ssd");
-    await expect(page.locator('#leds [data-slot="tape"] .counter')).not.toBeEmpty();
+    const counter = page.locator('#leds [data-slot="tape"] .counter');
+    await expect(counter).not.toBeEmpty();
+    await expect(counter, "the deck's counter styling reaching the bar").toHaveCSS("box-shadow", "none");
     await expect(page.locator("#leds .virtualMHz")).not.toBeEmpty();
-    for (const width of [1400, 390]) {
-        await page.setViewportSize({ width, height: 900 });
-        const items = await lineCentres();
-        const lines = [...new Set(items.flatMap(({ centres }) => centres))].sort((a, b) => a - b);
-        expect(lines.length, `lines at ${width}px: ${JSON.stringify(items)}`).toBe(3);
+    for (const { width, height, lines } of LightsBarViewports) {
+        await page.setViewportSize({ width, height });
+        const items = await lightsBarItems();
+        const where = `at ${width}x${height}: ${JSON.stringify(items)}`;
+        expect(
+            items.every(({ fillsItsGroup }) => fillsItsGroup),
+            `items not filling their group ${where}`,
+        ).toBe(true);
+        expect(new Set(items.flatMap(({ centres }) => centres)).size, `lines ${where}`).toBe(lines);
     }
 });
 

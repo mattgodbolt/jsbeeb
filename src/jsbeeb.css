@@ -216,7 +216,7 @@ span.accesskey {
 }
 
 /* Every readout and light shares these rows, so all the text in the bar lines up row by row and every lamp
-   sits on one line. A two-line header spans the first two rows. */
+   sits on one line. */
 #leds .slot-readout,
 #leds .cell {
   display: grid;
@@ -295,6 +295,10 @@ span.accesskey {
 #leds .slot-readout .hdr {
   grid-row: 1;
   grid-column: 1 / -1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #leds .slot-readout .name {
