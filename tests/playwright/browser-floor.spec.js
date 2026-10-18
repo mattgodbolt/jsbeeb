@@ -2,9 +2,17 @@
 // e2e build's dummy measurement id.
 
 import { Beeb, expect, test } from "./fixtures.js";
-import { floorText } from "../../tools/vite-plugin-browser-floor.js";
+import { browserFloors, floorText } from "../../tools/vite-plugin-browser-floor.js";
 
 const ModuleScriptSrc = /<script type="module"[^>]* src="([^"]+)"/;
+const Chrome105 =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36";
+
+const pretendToBe = (page, userAgent) =>
+    page.addInitScript(
+        (agent) => Object.defineProperty(Navigator.prototype, "userAgent", { get: () => agent }),
+        userAgent,
+    );
 
 const analyticsCalls = (page, command) =>
     page.evaluate(
@@ -33,23 +41,22 @@ test("an error from the bundle once main.js has finished starting shows no messa
     expect(await unsupportedBrowserEvents(page)).toEqual([]);
 });
 
-test("a browser missing a floor feature is told what is needed, and the emulator still starts", async ({
+test("a browser below the floor is told its version and the one it needs, and the emulator still starts", async ({
     beeb,
     page,
 }) => {
-    await page.addInitScript(() => delete window.CompressionStream);
+    await pretendToBe(page, Chrome105);
     await beeb.open();
     const message = page.locator("#browser-floor");
     await expect(message).toBeVisible();
-    await expect(message).toContainText(`It needs ${floorText()} or newer.`);
-    await expect(message).toContainText(/This looks like Chrome \d+\./);
+    await expect(message).toContainText(
+        `You're using Chrome 105. jsbeeb needs Chrome ${browserFloors().Chrome} or newer.`,
+    );
     await expect(message.getByRole("link", { name: "matt@godbolt.org" })).toHaveAttribute(
         "href",
         "mailto:matt@godbolt.org",
     );
-    expect(await unsupportedBrowserEvents(page)).toEqual([
-        ["event", "unsupported_browser", { reason: "CompressionStream" }],
-    ]);
+    expect(await unsupportedBrowserEvents(page)).toEqual([["event", "unsupported_browser", { reason: "below_floor" }]]);
     expect(await analyticsCalls(page, "config"), "main.js's config and no other").toHaveLength(1);
     await beeb.expectScreenText(">");
     await message.getByRole("button", { name: "Close" }).click();
@@ -74,6 +81,9 @@ test("a bundle that fails to parse leaves the message, and its own page_view, in
     await breakBundle(page);
     await beeb.open("./?disc1=elite");
     await expect(page.locator("#browser-floor")).toBeVisible();
+    await expect(page.locator("#browser-floor")).toContainText(
+        new RegExp(`jsbeeb didn't start in Chrome \\d+\\. It supports ${floorText()} and newer\\.`),
+    );
     expect(await unsupportedBrowserEvents(page)).toEqual([
         ["event", "unsupported_browser", { reason: "startup_failed" }],
     ]);
@@ -82,17 +92,15 @@ test("a bundle that fails to parse leaves the message, and its own page_view, in
     expect(config[2].page_location).not.toContain("?");
 });
 
-test("a browser below the floor that cannot parse the bundle either is reported by the missing feature", async ({
+test("a browser below the floor that cannot parse the bundle either is reported as below the floor", async ({
     page,
 }) => {
     const beeb = new Beeb(page);
-    await page.addInitScript(() => delete window.CompressionStream);
+    await pretendToBe(page, Chrome105);
     await breakBundle(page);
     await beeb.open();
     await expect(page.locator("#browser-floor")).toBeVisible();
-    expect(await unsupportedBrowserEvents(page)).toEqual([
-        ["event", "unsupported_browser", { reason: "CompressionStream" }],
-    ]);
+    expect(await unsupportedBrowserEvents(page)).toEqual([["event", "unsupported_browser", { reason: "below_floor" }]]);
 });
 
 test("an error from another site's script shows no message", async ({ page }) => {

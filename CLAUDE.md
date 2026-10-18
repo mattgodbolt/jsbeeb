@@ -41,9 +41,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Modules**: ES modules with import/export syntax (type: "module")
 - **Browser Target**: the `browserslist` field in package.json is the single declaration of supported browsers; Vite's
   build target, `eslint-plugin-compat` and `npm run test:dist-syntax` all read or follow it. Code may use any syntax or
-  API those versions support, and jsconfig.json type-checks with strict null checks. The exception is
-  `src/web/browser-floor.js`, the ES5 check that tells a browser below the floor so; its message takes the versions from
-  `browserslist`, but the features it tests are picked by hand, so moving the floor means picking them again
+  API those versions support, and jsconfig.json type-checks with strict null checks
 - **Error Handling**: Use try/catch with explicit error messages that provide context about what failed
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
