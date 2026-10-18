@@ -16,8 +16,10 @@ import {
 } from "../lockstep.js";
 import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
+import { buildUrlFromParams } from "../url-params.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
+import { LocalToPageParams, UrlParamTypes } from "./parameters.js";
 import {
     connectionStats,
     IntervalStats,
@@ -1381,14 +1383,11 @@ function cleanRoster(guests) {
     }));
 }
 
-/** The address that joins `room`, as `name` if one is given. */
-export function joinLink(room, name) {
-    const link = new URL(window.location.href);
-    link.search = "";
-    link.hash = "";
-    link.searchParams.set("client", room);
-    if (name) link.searchParams.set("name", name);
-    return link.toString();
+/** The address that joins `room`, as `name` if one is given, keeping those of `params` that are local to the page. */
+export function joinLink(room, name, params = {}) {
+    const local = LocalToPageParams.filter((key) => key in params).map((key) => [key, params[key]]);
+    const { origin, pathname } = window.location;
+    return buildUrlFromParams(origin + pathname, { client: room, name, ...Object.fromEntries(local) }, UrlParamTypes);
 }
 
 function parsedUrl(text) {

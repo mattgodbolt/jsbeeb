@@ -2312,7 +2312,14 @@ describe("joinLink", () => {
         window.history.replaceState(null, "", "/?model=Master&disc=elite.ssd#frag");
         expect(joinLink("brave-owls-sing")).toBe(`${window.location.origin}/?client=brave-owls-sing`);
         expect(joinLink("brave-owls-sing", "matt g")).toBe(
-            `${window.location.origin}/?client=brave-owls-sing&name=matt+g`,
+            `${window.location.origin}/?client=brave-owls-sing&name=matt%20g`,
+        );
+    });
+
+    it("keeps the settings local to the page from those it is given, and nothing that changes the machine", () => {
+        const params = { model: "Master", disc: "elite.ssd", cpuMultiplier: 2, audioLatencyMs: 80, lowLatency: true };
+        expect(joinLink("brave-owls-sing", "matt", params)).toBe(
+            `${window.location.origin}/?client=brave-owls-sing&name=matt&lowLatency&audioLatencyMs=80`,
         );
     });
 });

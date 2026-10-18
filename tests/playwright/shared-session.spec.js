@@ -45,7 +45,7 @@ test("a guest joins a hosted session, and what either types reaches both machine
     }
 });
 
-test("Shared session in the More menu hosts this machine, paused or not, and a guest joins by pasting the link", async ({
+test("Shared session in the More menu hosts this machine, paused or not, and a guest joins by pasting the link, keeping its own audio latency", async ({
     browser,
     beeb,
 }) => {
@@ -68,7 +68,7 @@ test("Shared session in the More menu hosts this machine, paused or not, and a g
     const guestContext = await browser.newContext();
     const guest = new Beeb(await guestContext.newPage());
     try {
-        await guest.open();
+        await guest.open("?audioLatencyMs=80&fasttape");
         await guest.expectScreenText("BASIC");
         await openSessionDialog(guest);
         await guest.page.fill("#session-name", "tom");
@@ -77,6 +77,8 @@ test("Shared session in the More menu hosts this machine, paused or not, and a g
         await expect(guest.page.locator("#session-pane .session-you")).toHaveText("You are tom", {
             timeout: JoinTimeoutMs,
         });
+        const room = new URL(await link.textContent()).searchParams.get("client");
+        expect(new URL(guest.page.url()).search).toBe(`?client=${room}&name=tom&audioLatencyMs=80`);
         await openSessionFromMore(guest);
         await expect(guest.page.locator("#session-pane")).toBeVisible({ timeout: JoinTimeoutMs });
         await expect(guest.page.locator("#session-pane .session-control")).toHaveText("In control: matt", {
