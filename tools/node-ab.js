@@ -4,6 +4,7 @@
 import { execFileSync, fork } from "node:child_process";
 import {
     closeSync,
+    statSync,
     existsSync,
     mkdirSync,
     mkdtempSync,
@@ -53,7 +54,7 @@ existing checkouts. With no workloads, every workload in A's ${ManifestPath} run
 
 Options:
   --fake-video          measure the CPU and peripherals without rendering video
-  --min-pairs N         pairs taken before the result may stop early (default ${Defaults["min-pairs"]})
+  --min-pairs N         pairs taken before the result may stop early, at least ${FewestDecisivePairs} (default ${Defaults["min-pairs"]})
   --max-pairs N         the most pairs taken per workload, at least ${FewestDecisivePairs} (default ${Defaults["max-pairs"]})
   --horizon P           stop once the 99% interval lies within P% of 1, or excludes 1 (default ${Defaults.horizon})
   --warmup-secs S       emulated seconds run before timing (default ${Defaults["warmup-secs"]})
@@ -114,7 +115,7 @@ export function parseOptions(args) {
     });
     if (options.help) return { help: true };
     if (positionals.length < 2) throw new Error(`Name two sides to compare\n\n${usage()}`);
-    const minPairs = wholeNumber(options, "min-pairs", 2);
+    const minPairs = wholeNumber(options, "min-pairs", FewestDecisivePairs);
     const maxPairs = wholeNumber(options, "max-pairs", Math.max(FewestDecisivePairs, minPairs));
     const horizon = Number(options.horizon);
     if (!(horizon > 0)) throw new Error(`--horizon takes a percentage above 0, not "${options.horizon}"`);
@@ -323,6 +324,14 @@ async function compare(sides, names, settings) {
     return results;
 }
 
+/** Throws unless `file` could be written: its directory exists and it is not a directory itself. */
+export function assertWritableFile(file) {
+    const isDirectory = (where) => existsSync(where) && statSync(where).isDirectory();
+    if (!isDirectory(path.dirname(path.resolve(file))) || isDirectory(file)) {
+        throw new Error(`Cannot write ${file}: it needs to be a file in a directory that exists`);
+    }
+}
+
 async function main() {
     const settings = parseOptions(process.argv.slice(2));
     if (settings.help) {
@@ -337,9 +346,8 @@ async function main() {
     };
     process.once("SIGINT", cleanUp);
     process.once("SIGTERM", cleanUp);
-    if (settings.json && !existsSync(path.dirname(path.resolve(settings.json)))) {
-        throw new Error(`There is no directory to write ${settings.json} in`);
-    }
+    process.once("SIGHUP", cleanUp);
+    if (settings.json) assertWritableFile(settings.json);
     if (settings.diagnostics.length > 0) mkdirSync(settings.outDir, { recursive: true });
     try {
         const sides = settings.specs.map((spec) => prepareSide(spec, settings.workDir, created));
@@ -357,7 +365,15 @@ async function main() {
             const report = {
                 a: { spec: sides[0].spec, sha: sides[0].sha },
                 b: { spec: sides[1].spec, sha: sides[1].sha },
-                settings: { fakeVideo, statistic, warmupSecs, measureSecs, minPairs, maxPairs, horizon },
+                settings: {
+                    fakeVideo,
+                    statistic,
+                    warmupSecs,
+                    measureSecs,
+                    minPairs,
+                    maxPairs,
+                    horizonPercent: horizon * PercentPerUnit,
+                },
                 node: process.version,
                 results,
                 files,

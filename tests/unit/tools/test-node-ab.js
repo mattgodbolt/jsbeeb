@@ -4,7 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { checkoutSha, checkWorkloads, comparableLock, parseOptions } from "../../../tools/node-ab.js";
+import {
+    assertWritableFile,
+    checkoutSha,
+    checkWorkloads,
+    comparableLock,
+    parseOptions,
+} from "../../../tools/node-ab.js";
 
 let scratch;
 beforeEach(() => {
@@ -142,5 +148,22 @@ describe("comparableLock", () => {
 
     it("sees a changed dependency", () => {
         expect(comparableLock(lock("2.8.0", "2.1.1"))).not.toBe(comparableLock(lock("2.8.0", "2.1.0")));
+    });
+});
+
+describe("assertWritableFile", () => {
+    it("accepts a new or existing file in a directory that exists", () => {
+        writeFileSync(path.join(scratch, "old.json"), "{}");
+        expect(() => assertWritableFile(path.join(scratch, "new.json"))).not.toThrow();
+        expect(() => assertWritableFile(path.join(scratch, "old.json"))).not.toThrow();
+    });
+
+    it.each([
+        ["a directory", (dir) => `${dir}/`],
+        ["a file in a missing directory", (dir) => path.join(dir, "missing", "result.json")],
+        ["a file under a file", (dir) => path.join(dir, "old.json", "result.json")],
+    ])("refuses %s", (_what, target) => {
+        writeFileSync(path.join(scratch, "old.json"), "{}");
+        expect(() => assertWritableFile(target(scratch))).toThrow("Cannot write");
     });
 });
