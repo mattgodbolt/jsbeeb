@@ -1,0 +1,27 @@
+name: Browser floor review
+
+on:
+  schedule:
+    - cron: "0 9 1 3 *"
+  workflow_dispatch:
+
+jobs:
+  open-review-issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open the yearly review issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh issue create \
+            --title "Review the supported browser versions ($(date +%Y))" \
+            --body "Time for the yearly look at the browser versions jsbeeb supports, which are the \`browserslist\` field in package.json.
+
+          - Check the last year of Google Analytics: which browser versions visitors use, and whether those below a raised floor actually use the emulator.
+          - Decide whether to raise any version. Lint (eslint-plugin-compat), the Vite build target and the dist syntax check all follow the field; the ECMAScript level in tools/check-dist-syntax.js and jsconfig.json is set by hand to match it.
+          - If nothing changes, close this issue."
