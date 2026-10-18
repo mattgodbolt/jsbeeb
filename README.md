@@ -368,7 +368,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `tape=github:OWNER/REPO/PATH` - loads a tape from a public GitHub repo, as `disc1=github:` does a disc
 - `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See
   [Remapping Keys](#remapping-keys).
-- `GP.X=Y` - makes gamepad control `X` press BBC key `Y`, e.g. `GP.FIRE=COPY`. See [Joystick Support](#joystick-support).
+- `GP.X=Y` - makes gamepad control `X` press BBC key `Y`, e.g. `GP.FIRE=COPY`. See
+  [Joystick Support](#joystick-support).
 - `patch=P` - applies a memory patch `P`. See below.
 - `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed
   it in to the emulator

@@ -39,8 +39,9 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  *
  * A family is an entry for every parameter whose name starts with its `prefix`, in any case, or is one of its `names`;
  * the entry's own key is not a parameter. Its `apply(member, value, context)` puts one of them into effect, given the
- * rest of its name (or the whole of one of its `names`), upper-cased, and its value as its `type` parses it (upper-cased
- * if a string), and returns what is wrong with it if it cannot. A parameter with no value, or an empty one, is skipped. Settings, storage and the dialog work by name, so a family has none of their properties.
+ * rest of its name (or the whole of one of its `names`) and its value as its `type` parses it, both upper-cased if they
+ * are strings, and returns what is wrong with it if it cannot. One whose value parses as null or an empty string is
+ * skipped. Settings, storage and the dialog work by name, so a family has none of their properties.
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
  * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
