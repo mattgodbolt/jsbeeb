@@ -154,15 +154,16 @@ changing layout.
 
 ### Discs and Tapes
 
-Click **Media** on the top bar, type part of a name, and press `Enter`: the top row goes into drive 0 and boots.
-Clicking a row does the same for that row.
+Click **Media** on the top bar to open the media window, with two disc drives and a cassette deck showing what is
+loaded. Type part of a disc's name and press `Enter`: the top row goes into drive 0 and boots. Clicking a row does the
+same for that row.
 
 - **Without booting:** `Shift+Enter` or `Shift`+click loads without booting. Untick **Autoboot** (to swap data
   discs, say) and it is the other way round: the plain gestures only load and `Shift` boots. The tick starts ticked
   each time the page opens.
 - **Only drive 0 boots.** Aim at drive 1 or the cassette deck with the **Into** control, by clicking a slot, or from
-  its line in the LED panel under the screen; what goes there just goes in. The row and the hint under the search box
-  say what will happen.
+  its line in the LED panel under the screen; what goes there just goes in. The row and the hint under the list say what
+  will happen.
 - **What the list holds:** the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, the
   demos and games Bitshifters publish, games and demos from their authors' GitHub repos, your Google Drive once
   connected, discs kept in this browser, and files opened this session. With nothing typed, what you loaded most
@@ -175,8 +176,9 @@ Clicking a row does the same for that row.
   or on Google Drive, and connects Google Drive.
 - **Each drive** has an eject latch, a 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the
   URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser.
-- **The URL** names what is loaded (except files from this computer) and says whether the last load into drive 0
-  booted, so a link copied afterwards does the same. See [URL Parameters](#url-parameters).
+- **The URL** names what is loaded and says whether the last load into drive 0 booted, so a link copied afterwards
+  does the same. A file from this computer is left out, so a link never boots one. See
+  [URL Parameters](#url-parameters).
 
 [docs/media-sources.md](docs/media-sources.md) says how the sources fit together and what adding one takes.
 

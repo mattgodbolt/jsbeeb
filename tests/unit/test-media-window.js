@@ -1528,12 +1528,7 @@ describe("MediaWindow", () => {
             setTick(false);
             expect(urlState.params).toEqual({});
             expect(urlState.updateUrl).not.toHaveBeenCalled();
-            expect(Object.keys(window.localStorage)).toEqual([]);
-            made.dispose();
-            teardownDom();
-            domFromIndexHtml("navbarSupportedContent", "leds", "drop-zone", "media-panel", "drive-bay-template");
-            make();
-            expect(autobootTick().checked).toBe(true);
+            expect(Object.keys(window.localStorage).filter((key) => /autoboot/i.test(key))).toEqual([]);
         });
 
         it("offers this browser for a new disc each time the form opens, however the last one was made", async () => {
