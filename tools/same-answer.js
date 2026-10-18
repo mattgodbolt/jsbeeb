@@ -14,7 +14,8 @@ import { assertFastPath } from "../src/benchmark-workloads.js";
 import { RepoRoot } from "../src/test-machine.js";
 
 const HashesPath = path.join(RepoRoot, "tests", "same-answer-hashes.json");
-const Frames = 100;
+const RelativeHashesPath = path.relative(RepoRoot, HashesPath);
+export const Frames = 100;
 const FramesPerSecond = 50;
 // TickMs in src/web/emulation-loop.js, so execute() is called as the page calls it.
 const BrowserTickMs = 10;
@@ -130,45 +131,63 @@ export function differingParts(expected, actual) {
     return [...parts].filter((part) => expected[part] !== actual[part]);
 }
 
-const relativeHashesPath = path.relative(RepoRoot, HashesPath);
-
 async function record(names) {
     const workloads = {};
     for (const name of names) workloads[name] = await workloadHashes(name);
     writeFileSync(HashesPath, `${JSON.stringify({ frames: Frames, workloads }, null, 2)}\n`);
-    console.log(`Wrote ${relativeHashesPath}`);
+    console.log(`Wrote ${RelativeHashesPath}`);
     return 0;
 }
 
-async function failureOf(name, recorded) {
-    if (!recorded) return `no recorded hashes in ${relativeHashesPath}`;
+async function failureOf(name, recorded, hashesOf) {
+    if (!recorded) return `no recorded hashes in ${RelativeHashesPath}`;
     try {
-        const differ = differingParts(recorded, await workloadHashes(name));
+        const differ = differingParts(recorded, await hashesOf(name));
         return differ.length ? `${differ.join(", ")} differ` : null;
     } catch (error) {
         return error.message;
     }
 }
 
-async function check(names) {
-    const { frames, workloads } = JSON.parse(readFileSync(HashesPath, "utf8"));
+/**
+ * Compares each named workload's hashes with the recorded ones, a line of verdict per workload. A workload
+ * recorded but no longer named fails, and so does a file recorded over another number of frames.
+ * @param {{frames: number, workloads: Record<string, Record<string, string>>}} recorded the hashes file's contents
+ * @param {string[]} names the workloads there are
+ * @param {function(string): Promise<Record<string, string>>} [hashesOf]
+ * @returns {Promise<{lines: string[], failures: number}>}
+ */
+export async function checkHashes({ frames, workloads }, names, hashesOf = workloadHashes) {
     if (frames !== Frames) {
-        console.log(`${relativeHashesPath} was recorded over ${frames} frames, not ${Frames}; rerun with --record`);
-        return 1;
+        const line = `${RelativeHashesPath} was recorded over ${frames} frames, not ${Frames}; rerun with --record`;
+        return { lines: [line], failures: 1 };
     }
+    const lines = [];
     let failures = 0;
+    const fail = (name, why) => {
+        lines.push(`${name}: FAIL, ${why}`);
+        failures++;
+    };
     for (const name of names) {
-        const failure = await failureOf(name, workloads[name]);
-        console.log(failure ? `${name}: FAIL, ${failure}` : `${name}: pass`);
-        if (failure) failures++;
+        const failure = await failureOf(name, workloads[name], hashesOf);
+        if (failure) fail(name, failure);
+        else lines.push(`${name}: pass`);
     }
     for (const name of Object.keys(workloads).filter((name) => !names.includes(name))) {
-        console.log(`${name}: FAIL, recorded in ${relativeHashesPath} but no longer a workload`);
-        failures++;
+        fail(name, `recorded in ${RelativeHashesPath} but no longer a workload`);
     }
-    if (!failures) return 0;
-    console.log(`${failures} failed; if the change is intended, rerun with --record and commit ${relativeHashesPath}`);
-    return 1;
+    if (failures) {
+        lines.push(
+            `${failures} failed; if the change is intended, rerun with --record and commit ${RelativeHashesPath}`,
+        );
+    }
+    return { lines, failures };
+}
+
+async function check(names) {
+    const { lines, failures } = await checkHashes(JSON.parse(readFileSync(HashesPath, "utf8")), names);
+    for (const line of lines) console.log(line);
+    return failures ? 1 : 0;
 }
 
 async function main() {
