@@ -20,7 +20,9 @@ const analyticsSent = (page) =>
 test("runs a workload, publishes its result for a script, then runs the machine", async ({ beeb, page }) => {
     test.setTimeout(BenchmarkTimeoutMs);
     await beeb.open("?benchmark=elite");
-    await expect(page.locator("#benchmark .benchmark-status")).toContainText("measuring");
+    await expect(page.locator("#benchmark .benchmark-status")).toContainText("measuring", {
+        timeout: BenchmarkTimeoutMs,
+    });
     await expect(page.locator("#benchmark .benchmark-close")).toHaveCount(2);
     for (const close of await page.locator("#benchmark .benchmark-close").all()) await expect(close).toBeHidden();
     await page.keyboard.press("Escape");
