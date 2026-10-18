@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import browserslistToEsbuild from "browserslist-to-esbuild";
 import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
@@ -11,10 +12,23 @@ import { workersFor } from "./tools/test-workers.js";
 // run as it starts it.
 const JobSummaryTitle = process.env.VITEST_JOB_SUMMARY_TITLE;
 
+// What the benchmark page reports a build as: the commit, with "-dirty" for uncommitted changes.
+function gitCommit() {
+    try {
+        return execFileSync("git", ["describe", "--always", "--dirty", "--exclude=*"], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+    } catch {
+        return "unknown";
+    }
+}
+
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
     base: "./", // Use relative paths for Electron compatibility
     plugins: [firShaderPlugin(), rendezvousPlugin(), analyticsPlugin(), browserFloorPlugin()],
+    define: { "import.meta.env.JSBEEB_COMMIT": JSON.stringify(gitCommit()) },
     build: {
         target: browserslistToEsbuild(),
         sourcemap: true,

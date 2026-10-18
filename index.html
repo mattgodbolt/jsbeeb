@@ -1157,6 +1157,25 @@
       </div>
     </div>
 
+    <div class="modal fade" id="benchmark" tabindex="-1" aria-labelledby="benchmarkModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="benchmarkModalLabel">Benchmark</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="benchmark-status"></p>
+            <textarea class="form-control font-monospace benchmark-line" rows="8" readonly hidden></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary benchmark-copy" hidden>Copy</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal fade" id="error-dialog" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
