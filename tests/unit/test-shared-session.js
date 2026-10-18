@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +8,7 @@ import {
     ConnectTimeoutMs,
     MaxConnectingGuests,
     MinResyncIntervalMs,
+    SessionFailures,
     SessionGuest,
     SessionHost,
     cleanName,
@@ -1638,6 +1640,11 @@ describe("SessionGuest", () => {
             sent = sentEvents();
         });
 
+        afterEach(() => {
+            for (const { reason } of sent("session").filter(({ reason }) => reason !== undefined))
+                expect(Object.values(SessionFailures)).toContain(reason);
+        });
+
         it("notes being created, connecting and the host leaving", async () => {
             const { channel } = await joining();
             channel.emit("close");
@@ -2425,6 +2432,18 @@ describe("hostSession", () => {
         expect(await hostSession(context, "matt")).toBeNull();
         await settle();
         expect(context.rendezvous.createRoom).not.toHaveBeenCalled();
+    });
+});
+
+describe("SessionFailures", () => {
+    const source = readFileSync("src/web/shared-session.js", "utf8");
+
+    it.each(Object.keys(SessionFailures))("has %s raised somewhere", (key) => {
+        expect(source).toContain(`SessionFailures.${key}`);
+    });
+
+    it("is where every reason a session notes comes from", () => {
+        expect(source).not.toMatch(/noteStage\([^;]*reason: "|code: "|sessionFailure: "|\.fail\(\s*"/);
     });
 });
 

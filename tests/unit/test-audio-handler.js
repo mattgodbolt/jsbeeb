@@ -85,6 +85,10 @@ describe("AudioHandler", () => {
             expect(warning().textContent).toContain("No audio worklet API");
         });
 
+        it("is ready at once, as unavailable", async () => {
+            await expect(makeHandler().ready).resolves.toBe("unavailable");
+        });
+
         it("leaves the banner up when the audio status is checked", () => {
             const handler = makeHandler();
 
@@ -257,13 +261,9 @@ describe("AudioHandler", () => {
             expect(warningShown()).toBe(true);
         });
 
-        it("has said there is no audio by the time it has initialised", async () => {
-            const slowly = rejectModule("audio-renderer");
-            stubAudio({ addModule: (url) => new Promise((resolve) => setTimeout(resolve)).then(() => slowly(url)) });
-            const handler = makeHandler();
-            vi.spyOn(handler.relayNoise, "initialise").mockResolvedValue();
-            await handler.initialise();
-            expect(handler.noAudio).toBe(true);
+        it("is ready, as unavailable, once the module has failed", async () => {
+            stubAudio({ addModule: rejectModule("audio-renderer") });
+            await expect(makeHandler().ready).resolves.toBe("unavailable");
         });
 
         it("toasts about the Music 5000 and leaves the banner down", async () => {
@@ -276,9 +276,25 @@ describe("AudioHandler", () => {
         });
     });
 
-    it("shows no warning when there is no audio at all", () => {
-        makeHandler();
+    it("shows no warning when there is no audio at all, and is ready as unavailable", async () => {
+        const handler = makeHandler();
 
         expect(warningShown()).toBe(false);
+        await expect(handler.ready).resolves.toBe("unavailable");
+    });
+
+    it("is ready, as ok, once its output is set up", async () => {
+        stubAudio();
+        await expect(makeHandler().ready).resolves.toBe("ok");
+    });
+
+    it("initialises without waiting for its output to be set up", async () => {
+        stubAudio({ addModule: () => new Promise(() => {}) });
+        const handler = makeHandler();
+        vi.spyOn(handler.relayNoise, "initialise").mockResolvedValue();
+        const ready = vi.fn();
+        handler.ready.then(ready);
+        await handler.initialise();
+        expect(ready).not.toHaveBeenCalled();
     });
 });

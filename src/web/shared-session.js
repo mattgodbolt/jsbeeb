@@ -87,9 +87,25 @@ const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
 
-const timedOut = (message) => Object.assign(new Error(message), { sessionFailure: "timeout" });
+/** Why a session failed or ended, in terms general enough to report. */
+export const SessionFailures = Object.freeze({
+    protocol: "protocol",
+    restoreFailed: "restore_failed",
+    timeout: "timeout",
+    serviceUnavailable: "service_unavailable",
+    roomTaken: "room_taken",
+    noRoom: "no_room",
+    tooManyJoining: "too_many_joining",
+    alreadyWaiting: "already_waiting",
+    unsupportedMachine: "unsupported_machine",
+    hostLeft: "host_left",
+    pageClosed: "page_closed",
+    other: "other",
+});
 
-/** Notes a session reaching `stage`; `reason` is one of the fixed codes its callers raise, never words. */
+const timedOut = (message) => Object.assign(new Error(message), { sessionFailure: SessionFailures.timeout });
+
+/** Notes a session reaching `stage`; `reason` is one of `SessionFailures`, never words. */
 function noteStage(role, stage, { reason, peers } = {}) {
     note("session", { role, stage, reason, peers: peers === undefined ? undefined : countBucket(peers) });
 }
@@ -919,7 +935,7 @@ export class SessionHost {
         holdAnalogue(processor, false);
         processor.sysvia.cmos.leaveSession();
         this.log.record("closed");
-        noteStage(this.log.details.role, "ended", { reason: "page_closed", peers: this.guestsJoined });
+        noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed, peers: this.guestsJoined });
     }
 
     report() {
@@ -1029,7 +1045,7 @@ export class SessionGuest {
         channel.addEventListener("close", () => this.hostLeft());
         window.addEventListener("pagehide", () => {
             this.send({ type: "bye" });
-            if (!this.left) noteStage(this.log.details.role, "ended", { reason: "page_closed" });
+            if (!this.left) noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
         });
         await pc.setLocalDescription(await pc.createOffer());
         notify(`Joining "${this.room}"...`);
@@ -1198,7 +1214,7 @@ export class SessionGuest {
         }
         const message = parsed(data);
         if (!message) {
-            this.fail("protocol", "the host sent something this page cannot read");
+            this.fail(SessionFailures.protocol, "the host sent something this page cannot read");
             return;
         }
         switch (message.type) {
@@ -1207,7 +1223,7 @@ export class SessionGuest {
                 break;
             case "snapshot":
                 if (!Number.isInteger(message.bytes) || message.bytes <= 0 || message.bytes > MaxSnapshotBytes) {
-                    this.fail("protocol", "the host sent a snapshot of an impossible size");
+                    this.fail(SessionFailures.protocol, "the host sent a snapshot of an impossible size");
                     return;
                 }
                 // A snapshot from the host makes this machine a replayer again, whatever it was doing; one that was
@@ -1247,7 +1263,7 @@ export class SessionGuest {
     // restored in the order they came, so a second one cannot overtake the first.
     receiveCommit(commit) {
         if (!isValidCommit(commit)) {
-            this.fail("protocol", "the host sent a commit this page cannot read");
+            this.fail(SessionFailures.protocol, "the host sent a commit this page cannot read");
             return;
         }
         this.stats.tick("commits");
@@ -1268,12 +1284,12 @@ export class SessionGuest {
         this.log.record("welcome", { model: field(model), version: field(version), name: this.hostName });
         this.showStatus();
         if (typeof model !== "string" || !findModel(model)) {
-            this.fail("protocol", "the host did not say what machine it is");
+            this.fail(SessionFailures.protocol, "the host did not say what machine it is");
             return;
         }
         if (version !== this.context.version) {
             this.fail(
-                "protocol",
+                SessionFailures.protocol,
                 `the host runs jsbeeb ${version} and this is ${this.context.version}; whoever is older should reload`,
             );
             return;
@@ -1289,7 +1305,7 @@ export class SessionGuest {
         const incoming = this.incoming;
         if (!incoming) return;
         if (incoming.received + chunk.length > incoming.bytes.length) {
-            this.fail("protocol", "the host sent more snapshot than it said it would");
+            this.fail(SessionFailures.protocol, "the host sent more snapshot than it said it would");
             return;
         }
         incoming.bytes.set(chunk, incoming.received);
@@ -1300,7 +1316,9 @@ export class SessionGuest {
         this.log.record("snapshot", { bytes: incoming.bytes.length });
         this.restored = this.restored
             .then(() => this.restore(incoming))
-            .catch((error) => this.fail("restore_failed", `restoring the host's machine failed: ${error.message}`));
+            .catch((error) =>
+                this.fail(SessionFailures.restoreFailed, `restoring the host's machine failed: ${error.message}`),
+            );
     }
 
     async restore(snapshot) {
@@ -1343,11 +1361,11 @@ export class SessionGuest {
         if (this.left) return;
         notify("Lost the host; the machine carries on here on its own.");
         this.log.record("left", { reason: "lost the host" });
-        noteStage(this.log.details.role, "ended", { reason: "host_left" });
+        noteStage(this.log.details.role, "ended", { reason: SessionFailures.hostLeft });
         this.leave("lost the host");
     }
 
-    /** @param {"protocol"|"restore_failed"} code what went wrong, for analytics; `reason` says it in words */
+    /** @param {string} code what went wrong, one of `SessionFailures`; `reason` says it in words */
     fail(code, reason) {
         if (this.left) return;
         notify(`Leaving the session: ${reason}.`);
@@ -1474,28 +1492,35 @@ export function sessionRefusal({ model, processor }) {
 function startFailure(error, room, host) {
     if (host) {
         if (error.status === RoomGone)
-            return { code: "service_unavailable", words: "the shared session service isn't available here" };
-        if (error.status === RoomTaken) return { code: "room_taken", words: `a room called "${room}" is already open` };
+            return {
+                code: SessionFailures.serviceUnavailable,
+                words: "the shared session service isn't available here",
+            };
+        if (error.status === RoomTaken)
+            return { code: SessionFailures.roomTaken, words: `a room called "${room}" is already open` };
     } else {
         if (error.status === RoomGone)
             return {
-                code: "no_room",
+                code: SessionFailures.noRoom,
                 words: `there's no room called "${room}"; check its name, or the host's page may have closed`,
             };
         if (error.status === TooManyOffers)
             return {
-                code: "too_many_joining",
+                code: SessionFailures.tooManyJoining,
                 words: "too many people are joining at once; try again in a moment",
             };
         if (error.status === RoomTaken)
-            return { code: "already_waiting", words: "this page is already waiting to join; reload it to try again" };
+            return {
+                code: SessionFailures.alreadyWaiting,
+                words: "this page is already waiting to join; reload it to try again",
+            };
     }
-    return { code: error.sessionFailure ?? "other", words: error.message };
+    return { code: error.sessionFailure ?? SessionFailures.other, words: error.message };
 }
 
 function refused(refusal, host) {
     notify(refusal);
-    noteStage(host ? "host" : "guest", "failed", { reason: "unsupported_machine" });
+    noteStage(host ? "host" : "guest", "failed", { reason: SessionFailures.unsupportedMachine });
 }
 
 function failedToStart(error, room, host) {
