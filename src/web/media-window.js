@@ -28,6 +28,21 @@ const FoldableDrive = 1;
 
 const targetFrom = (slot) => (slot === "tape" ? "tape" : Number(slot));
 
+/** The keys that load from the search box, and what they do, aimed at `target`: only drive 0 boots. */
+function hintKeys(target, autoboot) {
+    if (target === "tape") return [["Enter", "loads into the deck"]];
+    if (target !== 0) return [["Enter", `loads into drive ${target}, which does not boot`]];
+    if (autoboot)
+        return [
+            ["Enter", "boots from drive 0"],
+            ["Shift+Enter", "loads without booting"],
+        ];
+    return [
+        ["Enter", "loads into drive 0"],
+        ["Shift+Enter", "loads and boots"],
+    ];
+}
+
 // What fits on a line of the LED panel: the name without its folder or extension, cut in the
 // middle when it is still too long, so both the start and the end of it survive.
 const ReadoutChars = 12;
@@ -91,6 +106,7 @@ export class MediaWindow {
         this.counterBase = 0;
         this.lastCounter = null;
         this.target = 0;
+        this.asked = [null, null];
 
         for (const opener of document.querySelectorAll(".media-window-open"))
             opener.addEventListener("click", (e) => {
@@ -228,10 +244,7 @@ export class MediaWindow {
             const opened = await this.media.openFile(file, this.targetDrive, entry);
             if (!opened) return;
             toast(opened.words, { title });
-            if (opened.kind === "disc" && opened.driveIndex === 0 && this.media.params.autoboot !== undefined) {
-                this.processor.reset(true);
-                this.boot();
-            }
+            if (opened.kind === "disc") this.loaded(opened.driveIndex, this.bootsFrom(opened.driveIndex));
             this.close();
         } catch (error) {
             reportLoadFailure(file.name, error);
@@ -324,7 +337,10 @@ export class MediaWindow {
         bay.hide.title = `Fold drive ${driveIndex} away`;
         bay.hide.addEventListener("click", () => this.showDrive(false));
         bay.retry.addEventListener("click", () =>
-            this.loadDisc(driveIndex, this.slots.drive(driveIndex).failed.descriptor, { entry: "retry" }),
+            this.loadDisc(driveIndex, this.slots.drive(driveIndex).failed.descriptor, {
+                ...this.askedOf(driveIndex),
+                entry: "retry",
+            }),
         );
         section
             .querySelector(".bay-save-ssd")
@@ -430,7 +446,7 @@ export class MediaWindow {
             if (e.key === "Enter" && first) {
                 e.preventDefault();
                 this.loadInto(this.rowTarget(first.descriptor), first.descriptor, {
-                    boot: e.shiftKey,
+                    shift: e.shiftKey,
                     entry: first.entry,
                 });
             } else if (e.key === "ArrowDown" && first) {
@@ -458,7 +474,8 @@ export class MediaWindow {
         list.connect.addEventListener("click", async () => {
             if (await this.driveSource.connect()) this.loadDriveDiscs();
         });
-        list.autoboot.addEventListener("change", () => this.media.setAutoboot(list.autoboot.checked));
+        list.autoboot.checked = true;
+        list.autoboot.addEventListener("change", () => this.renderList());
         list.newDisc.addEventListener("click", () => this.showDiscForm({ copyFrom: null }));
         document.getElementById("media-new-disc-cancel").addEventListener("click", () => {
             list.newDiscForm.hidden = true;
@@ -532,12 +549,16 @@ export class MediaWindow {
             button.classList.toggle("active", aimed);
             button.setAttribute("aria-pressed", String(aimed));
         }
+        this.renderChips();
+        this.renderList();
+    }
+
+    /** What the keys do to the row Enter takes, or where the list is aimed when there is none. */
+    renderHint() {
+        const first = this.list.rows.querySelector(".media-row-main")?.descriptor;
+        const target = first ? this.rowTarget(first) : this.target;
         this.list.hint.replaceChildren(
-            ...[
-                ["Enter", `loads into ${into}`],
-                ...(target === 0 ? [["Shift+Enter", "loads, ticks Autoboot and boots"]] : []),
-                ["Esc", "closes"],
-            ].map(([key, what]) => {
+            ...[...hintKeys(target, this.list.autoboot.checked), ["Esc", "closes"]].map(([key, what]) => {
                 const span = document.createElement("span");
                 const kbd = document.createElement("kbd");
                 kbd.textContent = key;
@@ -545,8 +566,6 @@ export class MediaWindow {
                 return span;
             }),
         );
-        this.renderChips();
-        this.renderList();
     }
 
     /** @returns {Promise<object[]>} the descriptors this refresh fetched, shown unless a newer one overtook it */
@@ -564,7 +583,6 @@ export class MediaWindow {
             this.list.source = "all";
         this.list.connect.hidden = this.driveSource.connected;
         this.list.newDiscDriveOption.hidden = !this.driveSource.connected;
-        this.list.autoboot.checked = this.media.params.autoboot !== undefined;
         this.renderChips();
         this.renderList();
         this.renderAll();
@@ -647,6 +665,7 @@ export class MediaWindow {
             notices.push(li);
         }
         list.rows.replaceChildren(...notices, ...rows);
+        this.renderHint();
         list.count.textContent = list.loaded
             ? shown.length > MaxRows
                 ? `showing ${MaxRows} of ${shown.length}; keep typing to narrow it`
@@ -681,9 +700,8 @@ export class MediaWindow {
         main.type = "button";
         main.className = "media-row-main";
         const target = this.rowTarget(d);
-        const targetName = target === "tape" ? "the cassette deck" : `drive ${target}`;
         const label = [d.title, d.publisher, d.detail, sourceName(d.source)].filter(Boolean).join(", ");
-        main.title = `Load ${label} into ${targetName}`;
+        main.title = this.actionWords(target, label);
         main.setAttribute("aria-label", recent ? `${main.title}, recently loaded` : main.title);
         const cell = (className, text) => {
             const span = document.createElement("span");
@@ -712,7 +730,7 @@ export class MediaWindow {
         );
         main.descriptor = d;
         main.entry = recent ? "recent" : "list";
-        main.addEventListener("click", (e) => this.loadInto(target, d, { boot: e.shiftKey, entry: main.entry }));
+        main.addEventListener("click", (e) => this.loadInto(target, d, { shift: e.shiftKey, entry: main.entry }));
         const targets = document.createElement("span");
         targets.className = "targets";
         if (d.kind === "disc") {
@@ -721,9 +739,9 @@ export class MediaWindow {
             button.type = "button";
             button.className = "media-target";
             button.textContent = String(other);
-            button.title = `Load ${d.title} into drive ${other}`;
+            button.title = this.actionWords(other, d.title);
             button.setAttribute("aria-label", button.title);
-            button.addEventListener("click", (e) => this.loadDisc(other, d, { boot: e.shiftKey, entry: main.entry }));
+            button.addEventListener("click", (e) => this.loadDisc(other, d, { shift: e.shiftKey, entry: main.entry }));
             targets.append(button);
         }
         const page = webPage(d.url);
@@ -740,6 +758,17 @@ export class MediaWindow {
         }
         li.append(main, targets);
         return li;
+    }
+
+    /** What a plain click on something named `label` does when it goes to `target`. */
+    actionWords(target, label) {
+        if (target === "tape") return `Load ${label} into the cassette deck`;
+        return this.bootsFrom(target) ? `Boot ${label} from drive ${target}` : `Load ${label} into drive ${target}`;
+    }
+
+    /** Whether a load into `driveIndex` boots: only drive 0 does, as Autoboot says, or the other way with Shift. */
+    bootsFrom(driveIndex, shift = false) {
+        return driveIndex === 0 && shift !== this.list.autoboot.checked;
     }
 
     /** Which slot a descriptor's media is loaded in, as text, or null. */
@@ -772,20 +801,19 @@ export class MediaWindow {
             const wanted = slot.failed?.descriptor;
             if (slot.media || slot.busy || wanted?.source !== "gdrive") continue;
             const listed = descriptors.find((d) => d.ref === wanted.ref) ?? wanted;
-            await this.loadDisc(slot.index, listed, { stayOpen: true, entry: "retry" });
+            await this.loadDisc(slot.index, listed, { ...this.askedOf(slot.index), stayOpen: true, entry: "retry" });
         }
     }
 
     /**
-     * @param {object} [options] `boot`: tick Autoboot, so the URL says what happened, and boot the
-     *   disc; `stayOpen`: the load was not what the window was opened for; `entry`: how it was asked for
+     * @param {object} [options] `shift`: the gesture had Shift held, so it does the opposite of the
+     *   Autoboot tick; `boot`: boot or not whatever the tick says; `stayOpen`: the load was not what the
+     *   window was opened for; `entry`: how it was asked for
      */
-    async loadDisc(driveIndex, d, { boot = false, stayOpen = false, entry } = {}) {
+    async loadDisc(driveIndex, d, { shift = false, boot, stayOpen = false, entry } = {}) {
         this.unfold(driveIndex);
-        // Only drive 0 boots, so only a boot into drive 0 means anything for the URL.
-        boot = boot && driveIndex === 0;
         const slot = this.slots.drive(driveIndex);
-        const bootsOnLoad = () => boot || (driveIndex === 0 && this.media.params.autoboot !== undefined);
+        const bootsOnLoad = () => driveIndex === 0 && (boot ?? this.bootsFrom(driveIndex, shift));
         if (
             !this.machineSwitch.satisfies(d) &&
             (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() }))
@@ -793,17 +821,31 @@ export class MediaWindow {
             this.slots.recent.note(d.ref, "disc");
             return;
         }
-        if ((await this.slots.load(slot, d, { entry })) !== "loaded") return;
+        const asked = (this.asked[driveIndex] = { shift, boot });
+        const outcome = await this.slots.load(slot, d, { entry });
+        if (outcome !== "failed" && this.asked[driveIndex] === asked) this.asked[driveIndex] = null;
+        if (outcome !== "loaded") return;
         // The tick is read now, not before the wait, in case it was changed meanwhile.
-        if (bootsOnLoad()) {
+        this.loaded(driveIndex, bootsOnLoad());
+        if (!stayOpen) this.close();
+    }
+
+    /**
+     * A retry asks for what the failed load asked for; a load the window did not ask for, as a link's
+     * was, boots as the URL says.
+     */
+    askedOf(driveIndex) {
+        return this.asked[driveIndex] ?? { boot: this.media.params.autoboot !== undefined };
+    }
+
+    /** Boots what has just gone into drive 0 if it is to, and has the URL say whether a link to it boots. */
+    loaded(driveIndex, boots) {
+        if (driveIndex !== 0) return;
+        if (boots) {
             this.processor.reset(true);
             this.boot();
         }
-        if (boot) {
-            this.media.setAutoboot(true);
-            this.showAutoboot(true);
-        }
-        if (!stayOpen) this.close();
+        this.media.setAutoboot(boots && this.slots.drive(0).inUrl);
     }
 
     async loadTape(d, { entry } = {}) {
@@ -814,11 +856,6 @@ export class MediaWindow {
     boot() {
         noteFeature(this.panel, "boot");
         this.autoboot();
-    }
-
-    /** Ticks or clears the autoboot box, for whoever changed the setting elsewhere. */
-    showAutoboot(checked) {
-        this.list.autoboot.checked = checked;
     }
 
     /**
@@ -859,7 +896,7 @@ export class MediaWindow {
         const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;
         if (copyFrom === null && where === "browser")
-            return this.loadDisc(driveIndex, describeBrowserDisc(name), { entry: "create" });
+            return this.loadDisc(driveIndex, describeBrowserDisc(name), { boot: false, entry: "create" });
         const copied = copyFrom === null ? null : await this.drives.sectorImage(copyFrom);
         if (copyFrom !== null && !copied) return;
         const layout = this.drives.layoutForDrive(driveIndex);
@@ -874,7 +911,9 @@ export class MediaWindow {
                 return { media: disc, ref };
             },
         });
-        if (outcome === "loaded") this.close();
+        if (outcome !== "loaded") return;
+        this.loaded(driveIndex, false);
+        this.close();
     }
 
     /** Folds the recorder to one line, or unfolds it. */
