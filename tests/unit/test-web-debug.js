@@ -6,7 +6,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 describe("Debugger", () => {
     let cpu;
@@ -44,6 +44,18 @@ describe("Debugger", () => {
             expect(dbgr.enabled()).toBe(true);
             expect(visible("debug")).toBe(true);
             expect(visible("hardware_debug")).toBe(true);
+        });
+
+        it("note the debugger opening each time it is entered, not each time it stops", () => {
+            const sent = sentEvents();
+            dbgr.debug(cpu.pc);
+            dbgr.debug(cpu.pc);
+            dbgr.hide();
+            dbgr.debug(cpu.pc);
+            expect(sent("feature_used")).toEqual([
+                { feature: "debugger", action: "open" },
+                { feature: "debugger", action: "open" },
+            ]);
         });
 
         it("hide again on leaving", () => {

@@ -42,13 +42,19 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
-import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
+import {
+    bootModeOf,
+    parseMediaParams,
+    processAutobootParams,
+    processDriveTrackParams,
+    processInputParams,
+} from "./url-params.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
-import { configureAnalytics } from "./web/analytics.js";
+import { configureAnalytics, noteError, noteMachineStart } from "./web/analytics.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
 
@@ -300,7 +306,7 @@ const mediaWindow = new MediaWindow({
     model,
     loop,
     visualiser: discVisualiser,
-    autoboot: (ref) => autoBoot.boot(ref),
+    autoboot: () => autoBoot.boot(),
     driveSource: googleDriveSource,
     machineSwitch,
 });
@@ -380,10 +386,16 @@ const startPromise = machine.start({
         machineSwitch.announce();
         await startPromise;
         if (await switchForBootDisc(await bootDisc)) return;
+        noteMachineStart(
+            settings,
+            parsedQuery,
+            { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
+            audioHandler.ready,
+        );
 
         switch (needsAutoboot) {
             case "boot":
-                autoBoot.boot(discImage);
+                autoBoot.boot();
                 break;
             case "type":
                 autoBoot.type(autoType);
@@ -420,6 +432,7 @@ const startPromise = machine.start({
         });
     } catch (error) {
         console.error("Error initialising emulator:", error);
+        noteError("startup", error);
         modals.showError("initialising", error);
     }
 })();

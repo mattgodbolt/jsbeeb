@@ -1,6 +1,6 @@
 import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
-import { noteEvent } from "./analytics.js";
+import { note } from "./analytics.js";
 import { keyCodes } from "../keymap.js";
 import { Shortcuts } from "./shortcuts.js";
 
@@ -42,12 +42,12 @@ export class KeyboardSetup {
         keyboard.addEventListener("resume", () => actions.resume());
         keyboard.addEventListener("break", (e) => {
             // F12/Break: Reset processor
-            if (e.detail) noteEvent("keyboard", "press", "break");
+            if (e.detail) note("keyboard", { type: "press", label: "break" });
         });
 
-        const onDown = (note, action) => (down) => {
+        const onDown = (label, action) => (down) => {
             if (down) {
-                if (note) noteEvent("keyboard", "press", note);
+                if (label) note("keyboard", { type: "press", label });
                 action();
             }
         };

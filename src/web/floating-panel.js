@@ -1,3 +1,5 @@
+import { noteFeature } from "./analytics.js";
+
 /**
  * A panel that floats over the machine: hidden until opened, dragged by its
  * header, closed by its button or Escape, and kept inside the window as the
@@ -37,6 +39,7 @@ export class FloatingPanel extends EventTarget {
         this.panel.hidden = false;
         window.addEventListener("resize", this._onResize);
         this._keepInWindow();
+        noteFeature(this.panel, "open");
         this.dispatchEvent(new Event("open"));
     }
 

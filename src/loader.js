@@ -2,6 +2,44 @@ import { stringToUint8Array } from "./binary.js";
 
 export const runningInNode = typeof window === "undefined";
 
+/** Why a disc or tape could not be loaded, in terms general enough to report. */
+export const LoadFailures = Object.freeze({
+    notFound: "not_found",
+    http: "http",
+    network: "network",
+    unauthorised: "unauthorised",
+    badImage: "bad_image",
+    other: "other",
+});
+
+/** `error`, saying it failed for `reason` unless it already says why. */
+export function failedFor(error, reason) {
+    if (!error.loadFailure) error.loadFailure = reason;
+    return error;
+}
+
+/** What `make` resolves to, any failure of it failing for `reason` unless it already says why. */
+export async function failingFor(reason, make) {
+    try {
+        return await make();
+    } catch (error) {
+        throw failedFor(error, reason);
+    }
+}
+
+const httpFailure = (url, status) =>
+    failedFor(
+        new Error(`Unable to load ${url}, http code ${status}`),
+        status === 404 ? LoadFailures.notFound : LoadFailures.http,
+    );
+
+/** The bytes at `url`, fetched, failing as `not_found`, `http` or `network`. */
+export async function fetchBytes(url) {
+    const response = await failingFor(LoadFailures.network, () => fetch(url));
+    if (!response.ok) throw httpFailure(url, response.status);
+    return new Uint8Array(await response.arrayBuffer());
+}
+
 function loadDataHttp(url) {
     return new Promise(function (resolve, reject) {
         const request = new XMLHttpRequest();
@@ -9,7 +47,7 @@ function loadDataHttp(url) {
         request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
             if (request.status !== 200) {
-                reject(new Error("Unable to load " + url + ", http code " + request.status));
+                reject(httpFailure(url, request.status));
                 return;
             }
             if (typeof request.response !== "string") {
@@ -19,7 +57,7 @@ function loadDataHttp(url) {
             }
         };
         request.onerror = function () {
-            reject(new Error("A network error occurred loading " + url));
+            reject(failedFor(new Error(`A network error occurred loading ${url}`), LoadFailures.network));
         };
         request.send(null);
     });
@@ -37,11 +75,7 @@ async function loadDataNode(url) {
         const { fileURLToPath } = await import("url");
         return fs.readFileSync(fileURLToPath(url));
     }
-    if (/^https?:\/\//.test(url)) {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Unable to load ${url}, http code ${response.status}`);
-        return new Uint8Array(await response.arrayBuffer());
-    }
+    if (/^https?:\/\//.test(url)) return fetchBytes(url);
     const fs = await import("fs");
     const nodePath = await import("path");
     if (_nodeBasePath) {

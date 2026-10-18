@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mediaLabel, redacted } from "../../src/web/analytics-filters.js";
+import { countBucket, errorLabel, mediaLabel, redacted, sourceKey } from "../../src/web/analytics-filters.js";
 import { Sources } from "../../src/web/media-catalogue.js";
 import { Schemas } from "../../src/media-resolver.js";
 
@@ -48,6 +48,64 @@ describe("analytics filters", () => {
 
         it("leaves nothing as nothing", () => {
             expect(mediaLabel(undefined)).toBeUndefined();
+        });
+    });
+
+    describe("sourceKey", () => {
+        it.each([
+            ["elite.ssd", "builtin"],
+            ["sth:Acornsoft/Elite.zip", "sth"],
+            ["|Acornsoft/Elite.zip", "sth"],
+            ["github:someone/discs@v1/game.ssd", "github"],
+            ["gd:1AbCdEf/My Disc.ssd", "gdrive"],
+            ["!My Disc", "browser"],
+            ["https://example.com/game.ssd", "https"],
+            ["data:application/binary;base64,AAAA", "data"],
+            ["file:///home/someone/mine.ssd", "file"],
+        ])("says %s comes from %s", (ref, source) => {
+            expect(sourceKey(ref)).toBe(source);
+        });
+
+        it.each(Object.entries(Schemas).filter(([schema]) => schema))(
+            "gives a %s: reference a Sources key or its own schema",
+            (schema, { source }) => {
+                const key = sourceKey(`${schema}${schema.length > 1 ? ":" : ""}x`);
+                expect(source ? Object.keys(Sources) : [schema]).toContain(key);
+            },
+        );
+    });
+
+    describe("errorLabel", () => {
+        it("takes out quoted text and addresses", () => {
+            expect(
+                errorLabel(`Unable to load "My Disc.ssd" from https://example.com/x.ssd?k=1, 'mine' and \`this\``),
+            ).toBe('Unable to load "" from <address> "" and ""');
+        });
+
+        it("takes out data and file addresses", () => {
+            expect(errorLabel("bad data:AAAA and file:///home/me/x.ssd")).toBe("bad <address> and <address>");
+        });
+
+        it("cuts a long message to GA's parameter limit", () => {
+            expect(errorLabel("x".repeat(500))).toHaveLength(100);
+        });
+
+        it("tells what was thrown when it was not an error", () => {
+            expect(errorLabel(undefined)).toBe("undefined");
+        });
+    });
+
+    describe("countBucket", () => {
+        it.each([
+            [0, "0"],
+            [1, "1"],
+            [2, "2"],
+            [3, "3-4"],
+            [4, "3-4"],
+            [5, "5+"],
+            [40, "5+"],
+        ])("puts %i in %s", (count, bucket) => {
+            expect(countBucket(count)).toBe(bucket);
         });
     });
 

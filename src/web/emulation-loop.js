@@ -1,4 +1,4 @@
-import { noteEvent } from "./analytics.js";
+import { noteError } from "./analytics.js";
 import { toast } from "./toast.js";
 
 // The machine runs in short slices of real time on a timer, whatever the
@@ -289,7 +289,7 @@ export class EmulationLoop extends EventTarget {
                     );
             } catch (e) {
                 this.running = false;
-                noteEvent("exception", "thrown", e.stack);
+                noteError("loop", e);
                 this.dbgr.debug(processor.pc);
                 throw e;
             }

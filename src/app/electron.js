@@ -8,8 +8,8 @@ function init(args) {
     const api = window.electronAPI;
     const { slots } = media;
 
-    api.onLoadDisc(({ drive, path }) => slots.load(slots.drive(drive), describeRef(path, "disc")));
-    api.onLoadTape(({ path }) => slots.load(slots.deck, describeRef(path, "tape")));
+    api.onLoadDisc(({ drive, path }) => slots.load(slots.drive(drive), describeRef(path, "disc"), { entry: "menu" }));
+    api.onLoadTape(({ path }) => slots.load(slots.deck, describeRef(path, "tape"), { entry: "menu" }));
 
     api.onShowModal((message) => {
         if (modals && modals.show) modals.show(message.modalId);

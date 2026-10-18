@@ -1,6 +1,7 @@
 import { renderThumbnails, executeUntilFrame } from "./rewind-thumbnail.js";
 import { RewindBuffer } from "../rewind.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
+import { noteFeature } from "./analytics.js";
 
 const RewindBufferSnapshots = 30;
 
@@ -81,6 +82,7 @@ export class RewindUI {
             this._restoreAndPaint(this.selectedIndex);
             this._updateSelectionHighlight();
             this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
+            noteFeature(this.panel, "open");
         } catch (e) {
             if (this.savedState) this.processor.restoreState(this.savedState);
             this._closePanel();
@@ -99,6 +101,7 @@ export class RewindUI {
         if (this.selectedIndex >= 0 && this.selectedIndex < this.snapshots.length) {
             this.processor.restoreState(this.snapshots[this.selectedIndex]);
         }
+        noteFeature(this.panel, "rewound");
         this._closePanel();
     }
 

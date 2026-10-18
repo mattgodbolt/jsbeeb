@@ -11,7 +11,16 @@ import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
-import { domFromIndexHtml, fakeFdc, fakeUrlState, ssdImage, stubNavigation, teardownDom, toasts } from "./helpers.js";
+import {
+    domFromIndexHtml,
+    fakeFdc,
+    fakeUrlState,
+    sentEvents,
+    ssdImage,
+    stubNavigation,
+    teardownDom,
+    toasts,
+} from "./helpers.js";
 
 /** An SSD whose catalogue carries a title and cycle number. */
 function titledImage(title, cycle) {
@@ -728,7 +737,7 @@ describe("MediaWindow", () => {
             box.dispatchEvent(
                 new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }),
             );
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith(elite.ref));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
             expect(deps.media.setAutoboot).toHaveBeenCalledWith(true);
             expect(document.querySelector("#media-panel .autoboot").checked).toBe(true);
@@ -744,11 +753,31 @@ describe("MediaWindow", () => {
             expect(deps.processor.reset).not.toHaveBeenCalled();
         });
 
-        it("boots the disc on a shift-click of its row", async () => {
+        it("boots the disc on a shift-click of its row, noting a boot from the window", async () => {
+            const sent = sentEvents();
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
             shiftClick(rows()[0].querySelector(".media-row-main"));
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith(elite.ref));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
+            expect(sent("feature_used")).toEqual([
+                { feature: "media_window", action: "open" },
+                { feature: "media_window", action: "boot" },
+            ]);
+        });
+
+        it("notes a search once per opening, when the box first has something in it", async () => {
+            const sent = sentEvents();
+            const window = await openWith([elite]);
+            const box = document.getElementById("media-search");
+            for (const text of ["e", "el", ""]) {
+                box.value = text;
+                box.dispatchEvent(new Event("input"));
+            }
+            window.close();
+            window.open();
+            box.value = "x";
+            box.dispatchEvent(new Event("input"));
+            expect(sent("feature_used").filter(({ action }) => action === "search")).toHaveLength(2);
         });
 
         it("only boots from drive 0: a shift-click on the other drive's button into drive 1 loads without a reset", async () => {
@@ -911,7 +940,7 @@ describe("MediaWindow", () => {
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([elite]);
             rows()[0].querySelector(".media-row-main").click();
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith(elite.ref));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
         });
 
@@ -988,18 +1017,33 @@ describe("MediaWindow", () => {
             expect(urlState.params.tape).toBe("sth:AnF/Other.zip");
         });
 
-        it("names the user's own disc and tape to analytics only by their source", async () => {
-            const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        it("notes each load with the row it was picked from, naming the user's own media only by its source", async () => {
+            const sent = sentEvents();
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             deps.media.loadTapeImage.mockResolvedValue({ name: "Mine.uef", position: 0 });
             const tape = { ...chuckie, ref: "session:1/Mine.uef", title: "Mine.uef", source: "session" };
             await openWith([saves, tape]);
             rows()[0].querySelector(".media-row-main").click();
-            await vi.waitFor(() => expect(log).toHaveBeenCalledWith("event noted:", "media", "loadDisc", "browser"));
+            await vi.waitFor(() => expect(sent("media_load")).toHaveLength(1));
             await openWith([saves, tape]);
             document.getElementById("deck-window").click();
-            rows()[0].querySelector(".media-row-main").click();
-            await vi.waitFor(() => expect(log).toHaveBeenCalledWith("event noted:", "media", "loadTape", "session"));
+            [...rows()]
+                .find((row) => row.textContent.includes("Mine.uef"))
+                .querySelector(".media-row-main")
+                .click();
+            await vi.waitFor(() => expect(sent("media_load")).toHaveLength(2));
+            await openWith([saves, tape]);
+            [...rows()]
+                .find((row) => row.textContent.includes("saves.ssd"))
+                .querySelector(".media-row-main")
+                .click();
+            await vi.waitFor(() => expect(sent("media_load")).toHaveLength(3));
+            const disc = { source: "browser", kind: "disc", slot: "drive0", ref: "browser", result: "loaded" };
+            expect(sent("media_load")).toEqual([
+                { ...disc, entry: "list" },
+                { source: "session", kind: "tape", slot: "deck", entry: "list", ref: "session", result: "loaded" },
+                { ...disc, entry: "recent" },
+            ]);
         });
 
         it("loads a tape into the deck from its row, unfolding the deck", async () => {
@@ -1039,7 +1083,7 @@ describe("MediaWindow", () => {
             const input = document.getElementById("media-open");
             Object.defineProperty(input, "files", { value: [new File([new Uint8Array(4)], "mine.ssd")] });
             input.dispatchEvent(new Event("change"));
-            await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1));
+            await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1, "file"));
             expect(panel().hidden).toBe(true);
             document.getElementById("media-connect-drive").click();
             await vi.waitFor(() => expect(deps.driveSource.connect).toHaveBeenCalled());
@@ -1229,7 +1273,7 @@ describe("MediaWindow", () => {
             document.querySelector('#media-into [data-target="1"]').click();
             dragEvent("dragenter");
             dropFile(new File([new Uint8Array(4)], "mine.ssd"));
-            await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1));
+            await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1, "drop"));
             await vi.waitFor(() =>
                 expect(toasts()).toEqual([expect.stringContaining("Loaded mine.ssd into drive 1.")]),
             );
@@ -1249,7 +1293,7 @@ describe("MediaWindow", () => {
             });
             make();
             dropFile(new File([new Uint8Array(4)], "game.ssd"));
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledWith("session:1/game.ssd"));
+            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
         });
 

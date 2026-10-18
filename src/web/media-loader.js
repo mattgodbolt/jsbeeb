@@ -7,7 +7,8 @@ import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js
 import { MediaResolver, Schemas, openIfZip, routeOf, splitImage } from "../media-resolver.js";
 import { MediaSlots } from "./media-slots.js";
 import { stringToUint8Array } from "../binary.js";
-import { noteEvent } from "./analytics.js";
+import { noteFeature } from "./analytics.js";
+import { failingFor, LoadFailures } from "../loader.js";
 import { browserDiscNames, describeBrowserDisc, describeBuiltIn, describeSessionFile } from "./media-catalogue.js";
 
 const isTapeName = (name) => /\.uef$/i.test(name);
@@ -93,7 +94,7 @@ export class MediaLoader extends EventTarget {
 
         document.getElementById("fs_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
-            noteEvent("local", "click"); // NB no filename here
+            noteFeature(evt.target, "upload");
             const file = evt.target.files[0];
             try {
                 await this.loadSCSIFile(file);
@@ -173,7 +174,7 @@ export class MediaLoader extends EventTarget {
      * @returns {Promise<?{kind: string, name: string, ref?: string, driveIndex?: number, words: string}>}
      *   what happened, with words for a toast; null when a restore failed and has been reported already
      */
-    async openFile(file, driveIndex = 0) {
+    async openFile(file, driveIndex = 0, entry) {
         const arrayBuffer = await file.arrayBuffer();
         if (this.isSnapshotFile(file.name, arrayBuffer)) {
             if (!(await this.loadSnapshot(file, arrayBuffer))) return null;
@@ -183,10 +184,10 @@ export class MediaLoader extends EventTarget {
         const { name, data, ignored } = await openIfZip(file.name, new Uint8Array(arrayBuffer));
         reportIgnoredFiles(name, ignored);
         if (isTapeName(name)) {
-            const ref = await this.loadTapeFile(name, data);
+            const ref = await this.loadTapeFile(name, data, entry);
             return { kind: "tape", name, ref, words: `Loaded ${name} as the tape.` };
         }
-        const ref = this.loadDiscFile(name, data, driveIndex);
+        const ref = this.loadDiscFile(name, data, driveIndex, entry);
         return { kind: "disc", name, ref, driveIndex, words: `Loaded ${name} into drive ${driveIndex}.` };
     }
 
@@ -211,20 +212,20 @@ export class MediaLoader extends EventTarget {
     }
 
     /** A disc image from this computer, into a drive; the URL cannot name it, so it is unnamed there. */
-    loadDiscFile(name, data, driveIndex) {
+    loadDiscFile(name, data, driveIndex, entry) {
         const loadedDisc = disc.discFor(name, data, undefined, this.drives.layoutForDrive(driveIndex));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(data);
         const ref = this.rememberFile(name, data, "disc");
-        this.slots.put(this.slots.drive(driveIndex), loadedDisc, ref, { inUrl: false });
+        this.slots.put(this.slots.drive(driveIndex), loadedDisc, ref, { inUrl: false, entry });
         return ref;
     }
 
     /** A tape image from this computer, into the deck; likewise unnamed in the URL. */
-    async loadTapeFile(name, data) {
+    async loadTapeFile(name, data, entry) {
         const tape = await loadTapeFromData(name, data, this.model);
         const ref = this.rememberFile(name, data, "tape");
-        this.slots.put(this.slots.deck, tape, ref, { inUrl: false });
+        this.slots.put(this.slots.deck, tape, ref, { inUrl: false, entry });
         return ref;
     }
 
@@ -270,7 +271,7 @@ export class MediaLoader extends EventTarget {
         // * Dialog box (ugh) saying "is this ok?"
         const { name, data, ignored } = await this.resolver.resolve("disc", discImage);
         reportIgnoredFiles(name, ignored);
-        const loaded = disc.discFor(name, data, undefined, layout);
+        const loaded = await failingFor(LoadFailures.badImage, () => disc.discFor(name, data, undefined, layout));
         if (route === "session") loaded.setOriginalImage(data);
         return loaded;
     }
@@ -279,6 +280,6 @@ export class MediaLoader extends EventTarget {
         if (!tapeImage) return null;
         const { name, data, ignored } = await this.resolver.resolve("tape", tapeImage);
         reportIgnoredFiles(name, ignored);
-        return loadTapeFromData(name, data, this.model);
+        return failingFor(LoadFailures.badImage, () => loadTapeFromData(name, data, this.model));
     }
 }

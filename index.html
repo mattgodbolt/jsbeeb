@@ -98,7 +98,7 @@
                 ><span class="nav-icon d-xl-none me-1" data-icon="clock-history" aria-hidden="true"></span
                 ><span class="nav-word d-none d-xl-inline">State</span></a
               >
-              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarState">
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarState" data-feature="state">
                 <li><a href="#" id="save-state" class="dropdown-item">Save state</a></li>
                 <li>
                   <label class="dropdown-item" style="cursor: pointer"
@@ -127,7 +127,7 @@
                 ><span class="nav-word d-none d-xl-inline">More</span></a
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
-                <li><a href="#" id="fs" class="dropdown-item">Fullscreen</a></li>
+                <li><a href="#" id="fs" data-feature="fullscreen" class="dropdown-item">Fullscreen</a></li>
                 <li><a href="#" id="disc-visualiser-open" class="dropdown-item">Disc surface</a></li>
                 <li><hr class="dropdown-divider" /></li>
                 <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
@@ -164,7 +164,13 @@
             </li>
           </ul>
           <div class="d-flex align-items-center ms-auto me-3" id="quick-settings">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Sound output" id="audio-output">
+            <div
+              class="btn-group btn-group-sm"
+              role="group"
+              aria-label="Sound output"
+              id="audio-output"
+              data-feature="audio_output"
+            >
               <button
                 type="button"
                 class="btn btn-outline-light"
@@ -273,7 +279,7 @@
         </div>
       </div>
       <canvas id="audio-stats" width="400" height="100"></canvas>
-      <div id="rewind-panel" hidden>
+      <div id="rewind-panel" data-feature="rewind" hidden>
         <div class="rewind-header">
           <button id="rewind-close" class="btn btn-sm btn-outline-light" title="Close (Escape)">Close</button>
           <span class="rewind-title">Rewind</span>
@@ -314,7 +320,7 @@
         </table>
         <button type="button" class="btn btn-sm btn-outline-light session-report">Save session report</button>
       </div>
-      <div id="disc-panel" hidden>
+      <div id="disc-panel" data-feature="disc_surface" hidden>
         <div class="disc-header">
           <span class="disc-title">Disc surface</span>
           <span id="disc-name"></span>
@@ -413,7 +419,7 @@
           <span class="drop-zone-into"></span>
         </div>
       </div>
-      <div id="media-panel" hidden role="dialog" aria-labelledby="media-title">
+      <div id="media-panel" data-feature="media_window" hidden role="dialog" aria-labelledby="media-title">
         <div class="media-header" title="Drag to move">
           <span class="disc-title" id="media-title">Media</span>
           <span id="media-summary"></span>
@@ -717,7 +723,7 @@
           </table>
         </div>
       </div>
-      <div id="debug" class="initially-hidden">
+      <div id="debug" data-feature="debugger" class="initially-hidden">
         <div class="debug-container">
           <form id="goto-mem-addr-form" role="form">
             <div class="input-group input-group-sm">
@@ -853,8 +859,34 @@
           <div class="modal-body">
             <ul>
               <li>
-                jsbeeb uses cookies for simple analytics, to track usage and improve the site. There are no server logs
-                and nothing is kept on the jsbeeb servers; this is a static page served from an AWS bucket.
+                jsbeeb uses Google Analytics, which sets cookies, to count how the site is used and to find what goes
+                wrong. There are no server logs and nothing is kept on the jsbeeb servers; this is a static page served
+                from an AWS bucket. What is sent:
+                <ul>
+                  <li>
+                    the page's address, with anything of your own taken out: a disc from your Google Drive, this browser
+                    or your computer is named only by where it came from, and a shared session's room and names are
+                    removed;
+                  </li>
+                  <li>
+                    each disc or tape loaded: where from, how it was picked, and whether it loaded or why not in general
+                    terms. Public discs are named; your own are not;
+                  </li>
+                  <li>
+                    how the emulator started: the machine model, keyboard layout, whether it is embedded in another
+                    page, how it was asked to boot, and whether WebGL and sound are working;
+                  </li>
+                  <li>which parts of jsbeeb are used, such as the media window, the debugger, rewind or Help;</li>
+                  <li>
+                    errors in jsbeeb itself: the start of the message, with quoted text and addresses removed, and where
+                    in jsbeeb's code it happened;
+                  </li>
+                  <li>shared sessions being hosted, joined, failing and ending, and roughly how many took part;</li>
+                  <li>pressing Break, and a few of jsbeeb's shortcut keys.</li>
+                </ul>
+                Not sent: what you type into the emulator, the contents of any disc or tape, or the names of your own
+                files. Google Analytics also records what it records on any site, such as your browser, device type and
+                rough location.
               </li>
               <li>
                 No personal information is kept. Logging in to Google Drive stores only what is needed to reach your own
@@ -877,7 +909,14 @@
       </div>
     </div>
 
-    <div class="modal fade" id="help" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="help"
+      data-feature="help"
+      tabindex="-1"
+      aria-labelledby="helpModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
@@ -1007,7 +1046,14 @@
       </div>
     </div>
 
-    <div class="modal fade" id="econetfs" tabindex="-1" aria-labelledby="econetModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="econetfs"
+      data-feature="econet_fileserver"
+      tabindex="-1"
+      aria-labelledby="econetModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
@@ -1037,7 +1083,14 @@
       </div>
     </div>
 
-    <div class="modal fade" id="session-dialog" tabindex="-1" aria-labelledby="sessionModalLabel" aria-hidden="true">
+    <div
+      class="modal fade"
+      id="session-dialog"
+      data-feature="shared_session"
+      tabindex="-1"
+      aria-labelledby="sessionModalLabel"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
           <div class="modal-header">
@@ -1139,6 +1192,7 @@
     <div
       class="modal fade"
       id="configuration"
+      data-feature="settings"
       tabindex="-1"
       aria-labelledby="configurationModalLabel"
       aria-hidden="true"

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 const FakeContext = {
     createImageData: () => ({ data: new Uint8Array(1024 * 625 * 4) }),
@@ -99,6 +99,22 @@ describe("RewindUI", () => {
             expect(loop.pause).toHaveBeenCalledTimes(1);
             expect(thumbs()).toHaveLength(1);
         });
+    });
+
+    it("notes opening and rewinding, but not opening with nothing captured or cancelling", () => {
+        const sent = sentEvents();
+        const ui = make();
+        ui.open();
+        captured(2);
+        ui.open();
+        key("Escape");
+        ui.open();
+        key("Enter");
+        expect(sent("feature_used")).toEqual([
+            { feature: "rewind", action: "open" },
+            { feature: "rewind", action: "open" },
+            { feature: "rewind", action: "rewound" },
+        ]);
     });
 
     describe("choosing a snapshot", () => {

@@ -1,4 +1,5 @@
 import * as bootstrap from "bootstrap";
+import { noteFeature } from "./analytics.js";
 
 /**
  * The dialogs the page raises itself, and the rule that a dialog pauses the
@@ -14,6 +15,7 @@ export class Modals {
 
         const holds = new WeakMap();
         document.addEventListener("show.bs.modal", (event) => {
+            noteFeature(event.target, "open");
             if (!holds.has(event.target)) holds.set(event.target, loop.pause(`the ${event.target.id} dialog`));
         });
         document.addEventListener("hidden.bs.modal", (event) => {

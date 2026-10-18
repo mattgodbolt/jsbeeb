@@ -94,6 +94,10 @@ describe("GlCanvas", () => {
         ["xBR", XbrFilter],
     ];
 
+    it("says it renders with WebGL", () => {
+        expect(new GlCanvas(fakeCanvasElement(recordingGl()), PassthroughFilter).renderer).toBe("webgl");
+    });
+
     it.each(filters)("releases everything it created when disposed (%s)", (_name, filterClass) => {
         const gl = recordingGl();
         const canvas = new GlCanvas(fakeCanvasElement(gl), filterClass);
@@ -550,6 +554,16 @@ describe("Canvas", () => {
             getContextAttributes: () => ({}),
         };
     }
+
+    it("says it renders with a 2D canvas", () => {
+        const backing = { getContext: () => fake2dContext() };
+        vi.spyOn(document, "createElement").mockReturnValue(backing);
+        try {
+            expect(new Canvas({ getContext: () => fake2dContext() }).renderer).toBe("canvas2d");
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
 
     it("washes the old picture down by the decay and keeps the brighter of it and the frame off screen, then shows it", () => {
         const calls = [];

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +8,7 @@ import {
     ConnectTimeoutMs,
     MaxConnectingGuests,
     MinResyncIntervalMs,
+    SessionFailures,
     SessionGuest,
     SessionHost,
     cleanName,
@@ -26,7 +28,7 @@ import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { MaxWaitingKeys } from "../../src/web/session-sequencer.js";
 import { parseQueryString } from "../../src/url-params.js";
 import { UrlParamTypes } from "../../src/web/parameters.js";
-import { domFromIndexHtml } from "./helpers.js";
+import { domFromIndexHtml, sentEvents } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
 const MsPerMinute = 60 * 1000;
@@ -272,6 +274,7 @@ afterEach(() => {
     for (const host of hosts) host.close();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     document.body.innerHTML = "";
 });
@@ -303,6 +306,33 @@ describe("SessionHost", () => {
     }
 
     const keyMessage = (input) => message({ type: "input", input });
+
+    it("notes being created, each guest connecting with how many are, and ending with how many came", async () => {
+        const sent = sentEvents();
+        const { host } = await hosting([
+            { guest: "g1", sdp: "offer" },
+            { guest: "g2", sdp: "offer" },
+        ]);
+        connectTo(0);
+        await vi.waitFor(() => expect(sent("session")).toHaveLength(2));
+        connectTo(1);
+        await vi.waitFor(() => expect(sent("session")).toHaveLength(3));
+        host.close();
+        expect(sent("session")).toEqual([
+            { role: "host", stage: "created" },
+            { role: "host", stage: "connected", peers: "1" },
+            { role: "host", stage: "connected", peers: "2" },
+            { role: "host", stage: "ended", reason: "page_closed", peers: "2" },
+        ]);
+    });
+
+    it("counts only the guests who joined when it ends", async () => {
+        const sent = sentEvents();
+        const { host } = await hosting();
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        host.close();
+        expect(sent("session").at(-1)).toEqual({ role: "host", stage: "ended", reason: "page_closed", peers: "0" });
+    });
 
     describe("the link to join", () => {
         afterEach(() => {
@@ -1603,6 +1633,69 @@ describe("SessionGuest", () => {
         expect(option.disabled).toBe(true);
     });
 
+    describe("analytics", () => {
+        let sent;
+
+        beforeEach(() => {
+            sent = sentEvents();
+        });
+
+        afterEach(() => {
+            for (const { reason } of sent("session").filter(({ reason }) => reason !== undefined))
+                expect(Object.values(SessionFailures)).toContain(reason);
+        });
+
+        it("notes being created, connecting and the host leaving", async () => {
+            const { channel } = await joining();
+            channel.emit("close");
+            expect(sent("session")).toEqual([
+                { role: "guest", stage: "created" },
+                { role: "guest", stage: "connected" },
+                { role: "guest", stage: "ended", reason: "host_left" },
+            ]);
+        });
+
+        it("notes its own page closing as the end", async () => {
+            const closings = () => sent("session").filter(({ reason }) => reason === "page_closed").length;
+            // Earlier tests' guests still listen on the same window.
+            window.dispatchEvent(new Event("pagehide"));
+            const earlier = closings();
+            await joining();
+            window.dispatchEvent(new Event("pagehide"));
+            expect(closings()).toBe(2 * earlier + 1);
+            expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "ended", reason: "page_closed" });
+        });
+
+        it("notes failing on something from the host it cannot read as a protocol failure", async () => {
+            const { channel } = await joining();
+            channel.emit("message", { data: "{not json" });
+            expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "failed", reason: "protocol" });
+        });
+
+        it("notes failing to restore the host's machine", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const { deliver } = await joining();
+            const junk = new Uint8Array([1, 2, 3]);
+            deliver([message({ type: "snapshot", bytes: junk.length }), { data: junk.buffer }]);
+            await vi.waitFor(() =>
+                expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "failed", reason: "restore_failed" }),
+            );
+        });
+
+        it("notes a host that never answers as a timeout", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            startSessionFromUrl(
+                { client: "there" },
+                fakeContext({ rendezvous: { getAnswer: vi.fn(async () => null) } }),
+            );
+            await vi.advanceTimersByTimeAsync(AnswerTimeoutMs + 1000);
+            expect(sent("session")).toEqual([
+                { role: "guest", stage: "created" },
+                { role: "guest", stage: "failed", reason: "timeout" },
+            ]);
+        });
+    });
+
     describe("in control", () => {
         const A = [4, 1];
         const commitsSent = (channel) => channel.messages().filter((each) => each.type === "commit");
@@ -2235,6 +2328,27 @@ describe("startSessionFromUrl", () => {
     });
 
     it.each([
+        [404, "no_room"],
+        [429, "too_many_joining"],
+        [409, "already_waiting"],
+        [500, "other"],
+    ])("notes a refusal of %i to join as %s, with none of its words", async (status, reason) => {
+        const sent = sentEvents();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const postOffer = vi.fn(async () => {
+            throw new RendezvousError(`Rendezvous post offer failed with status ${status}`, status);
+        });
+        await started({ client: "there" }, { rendezvous: { postOffer } });
+        expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "failed", reason });
+    });
+
+    it("notes a machine that cannot take part as unsupported", async () => {
+        const sent = sentEvents();
+        await started({ server: "here" }, { model: { isAtom: true } });
+        expect(sent("session")).toEqual([{ role: "host", stage: "failed", reason: "unsupported_machine" }]);
+    });
+
+    it.each([
         ["no session asked for", {}, {}],
         ["an Atom", { server: "here" }, { model: { isAtom: true } }],
         ["a second processor", { server: "here" }, { processor: Object.assign(fakeProcessor(), { hasTube: true }) }],
@@ -2299,11 +2413,37 @@ describe("hostSession", () => {
         expect(toastTexts()[0]).toMatch(/^The session couldn't start: /);
     });
 
+    it.each([
+        [404, "service_unavailable"],
+        [409, "room_taken"],
+        [500, "other"],
+    ])("notes failing to make a room with %i as %s", async (status, reason) => {
+        const sent = sentEvents();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const createRoom = vi.fn(async () => {
+            throw new RendezvousError(`Rendezvous create room failed with status ${status}`, status);
+        });
+        expect(await hostSession(fakeContext({ rendezvous: { createRoom } }), "matt")).toBeNull();
+        expect(sent("session")).toEqual([{ role: "host", stage: "failed", reason }]);
+    });
+
     it("refuses a machine that cannot take part, and starts nothing", async () => {
         const context = fakeContext({ model: { isAtom: true } });
         expect(await hostSession(context, "matt")).toBeNull();
         await settle();
         expect(context.rendezvous.createRoom).not.toHaveBeenCalled();
+    });
+});
+
+describe("SessionFailures", () => {
+    const source = readFileSync("src/web/shared-session.js", "utf8");
+
+    it.each(Object.keys(SessionFailures))("has %s raised somewhere", (key) => {
+        expect(source).toContain(`SessionFailures.${key}`);
+    });
+
+    it("is where every reason a session notes comes from", () => {
+        expect(source).not.toMatch(/noteStage\([^;]*reason: "|code: "|sessionFailure: "|\.fail\(\s*"/);
     });
 });
 

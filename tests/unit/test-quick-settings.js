@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { QuickSettings } from "../../src/web/quick-settings.js";
 import { Settings } from "../../src/web/settings.js";
-import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, sentEvents, teardownDom } from "./helpers.js";
 
 describe("QuickSettings", () => {
     let settings;
@@ -42,6 +42,13 @@ describe("QuickSettings", () => {
         inner.click();
         expect(settings.audioOutput).toBe("speaker");
         expect(amount().disabled).toBe(false);
+    });
+
+    it("notes the sound output picked", () => {
+        const sent = sentEvents();
+        make();
+        document.querySelector('[data-output="board"]').click();
+        expect(sent("feature_used")).toEqual([{ feature: "audio_output", action: "board" }]);
     });
 
     it("sets the amount as the slider moves", () => {

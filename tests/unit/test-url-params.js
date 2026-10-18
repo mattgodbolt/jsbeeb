@@ -6,6 +6,7 @@ import {
     buildUrlFromParams,
     processInputParams,
     processAutobootParams,
+    bootModeOf,
     parseMediaParams,
     processDriveTrackParams,
     guessModelFromHostname,
@@ -313,7 +314,7 @@ describe("URL Parameters", () => {
             });
 
             expect(processAutobootParams({ other: "value" })).toEqual({
-                needsAutoboot: false,
+                needsAutoboot: "none",
                 autoType: "",
             });
         });
@@ -334,6 +335,21 @@ describe("URL Parameters", () => {
                 needsAutoboot: "run",
                 autoType: "",
             });
+        });
+    });
+
+    describe("bootModeOf", () => {
+        it.each([
+            [{}, "none"],
+            [{ autoboot: true }, "boot"],
+            [{ autochain: true }, "chain"],
+            [{ autorun: true }, "run"],
+            [{ autotype: "HELLO" }, "type"],
+            [{ loadBasic: "prog.bas", autorun: true }, "basic"],
+            [{ embedBasic: "10 PRINT" }, "basic"],
+            [{ loadBasic: "", autoboot: true }, "boot"],
+        ])("reads %o as %s", (params, mode) => {
+            expect(bootModeOf(params)).toBe(mode);
         });
     });
 

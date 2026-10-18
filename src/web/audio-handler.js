@@ -50,6 +50,7 @@ export class AudioHandler {
         }
         this.audioContext = createAudioContext();
         this._jsAudioNode = null;
+        let setup = Promise.resolve();
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
             const onEvent = (event) => {
@@ -64,7 +65,7 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }).catch((error) =>
+            setup = this._setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }).catch((error) =>
                 this._audioUnavailable(error),
             );
         } else {
@@ -84,6 +85,9 @@ export class AudioHandler {
             this.ddNoise = new FakeDdNoise();
             this.relayNoise = new FakeRelayNoise();
         }
+
+        /** How the sound came up, `ok` or `unavailable`, once its output is set up or known never to be. */
+        this.ready = setup.then(() => (this.noAudio || !this.audioContext ? "unavailable" : "ok"));
 
         this.warningNode.addEventListener("mousedown", () => this.tryResume());
 

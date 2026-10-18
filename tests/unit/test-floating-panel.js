@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingPanel } from "../../src/web/floating-panel.js";
-import { teardownDom } from "./helpers.js";
+import { sentEvents, teardownDom } from "./helpers.js";
 
 describe("FloatingPanel", () => {
     let panel;
@@ -11,7 +11,7 @@ describe("FloatingPanel", () => {
 
     beforeEach(() => {
         document.body.innerHTML = `
-            <div id="p" hidden>
+            <div id="p" data-feature="thing" hidden>
                 <div class="header"><button id="close">Close</button></div>
                 <button id="inside">Inside</button>
             </div>`;
@@ -43,6 +43,19 @@ describe("FloatingPanel", () => {
         expect(panel.hidden).toBe(true);
         floating.close();
         expect(seen).toEqual(["open", "close"]);
+    });
+
+    it("notes each opening as its feature's", () => {
+        const sent = sentEvents();
+        const floating = make();
+        floating.open();
+        floating.open();
+        floating.close();
+        floating.open();
+        expect(sent("feature_used")).toEqual([
+            { feature: "thing", action: "open" },
+            { feature: "thing", action: "open" },
+        ]);
     });
 
     it("closes from its button and from Escape pressed inside it", () => {

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Modals } from "../../src/web/modals.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 describe("Modals", () => {
     let loop;
@@ -67,6 +67,14 @@ describe("Modals", () => {
             lower("help");
             expect(modals.anyVisible()).toBe(false);
         });
+    });
+
+    it("notes the opening of a dialog that declares its feature, and of no other", () => {
+        const sent = sentEvents();
+        raise("info");
+        raise("help");
+        const noted = new Set(sent("feature_used").map(({ feature, action }) => `${feature} ${action}`));
+        expect(noted).toEqual(new Set(["help open"]));
     });
 
     describe("showError", () => {

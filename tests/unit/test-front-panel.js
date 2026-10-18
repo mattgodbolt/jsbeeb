@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontPanel } from "../../src/web/front-panel.js";
 import { Printer } from "../../src/printer.js";
-import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 describe("FrontPanel", () => {
     let processor;
@@ -107,6 +107,19 @@ describe("FrontPanel", () => {
             // A second check leaves the open window alone.
             panel.checkPrinterWindow();
             expect(window.open).toHaveBeenCalledTimes(1);
+        });
+
+        it("notes the printer opening only when a window opens", () => {
+            const sent = sentEvents();
+            vi.spyOn(window, "open").mockReturnValueOnce(null);
+            const panel = make(false, Object.assign(new EventTarget(), { text: "" }));
+            panel.checkPrinterWindow();
+            window.open.mockReturnValueOnce({
+                closed: false,
+                document: { write: vi.fn(), getElementById: () => ({ value: "" }) },
+            });
+            panel.checkPrinterWindow();
+            expect(sent("feature_used")).toEqual([{ feature: "printer", action: "open" }]);
         });
     });
 });

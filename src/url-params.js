@@ -244,10 +244,10 @@ export function processInputParams(parsedQuery, machineKeys, hostKeyCodes, userK
 /**
  * Process autoboot and other emulation parameters
  * @param {Object} parsedQuery - The parsed query parameters
- * @returns {Object} Information about autoboot settings
+ * @returns {{needsAutoboot: "none"|"boot"|"chain"|"run"|"type", autoType: string}} how the page boots
  */
 export function processAutobootParams(parsedQuery) {
-    let needsAutoboot = false;
+    let needsAutoboot = "none";
     let autoType = "";
 
     if (isDefined(parsedQuery.autoboot)) {
@@ -262,6 +262,12 @@ export function processAutobootParams(parsedQuery) {
     }
 
     return { needsAutoboot, autoType };
+}
+
+/** How the page was asked to boot: as `processAutobootParams` says, or `basic` for a BASIC program in the URL. */
+export function bootModeOf(parsedQuery) {
+    if (parsedQuery.loadBasic || parsedQuery.embedBasic) return "basic";
+    return processAutobootParams(parsedQuery).needsAutoboot;
 }
 
 /** Where a drive's 40/80 switch is set, `auto` leaving it to whatever disc is loaded. */

@@ -4,6 +4,7 @@
 import * as bootstrap from "bootstrap";
 
 import { roomFrom } from "./shared-session.js";
+import { noteFeature } from "./analytics.js";
 
 // An Enter held on Start hosting repeats after the dialog has gone, and the machine, which never saw it go down,
 // would take each repeat as a fresh RETURN.
@@ -62,6 +63,7 @@ export class SessionDialog {
         // machine among them) to have run, so the machine is no longer held for it.
         hostButton.addEventListener("click", (event) => {
             if (!shown) return;
+            noteFeature(dialog, "host");
             this.hosting = true;
             hostButton.disabled = joinButton.disabled = true;
             if (event.detail === 0) holdBackEnterRepeats();
@@ -82,7 +84,9 @@ export class SessionDialog {
             event.preventDefault();
             const room = roomFrom(roomInput.value);
             roomInput.classList.toggle("is-invalid", !room);
-            if (room) join(room, nameInput.value.trim());
+            if (!room) return;
+            noteFeature(dialog, "join");
+            join(room, nameInput.value.trim());
         });
     }
 }

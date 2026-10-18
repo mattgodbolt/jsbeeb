@@ -74,6 +74,11 @@ export class Settings extends EventTarget {
             if ("default" in parameter) this[name] = resolve(name, parameter, params);
     }
 
+    /** A setting's value as the menu and the URL name it: the model by its synonym, or its name if it has none. */
+    value(name) {
+        return name === "model" ? (this.model.synonyms[0] ?? this.model.name) : this[name];
+    }
+
     get extraRoms() {
         return fittedRoms(this);
     }

@@ -1,6 +1,6 @@
 import { unzipDiscImage } from "./archive.js";
 import { stringToUint8Array } from "./binary.js";
-import { loadData } from "./loader.js";
+import { failingFor, loadData, LoadFailures } from "./loader.js";
 
 /** Splits an image reference into its schema (empty for a bare name) and the image it names. */
 export function splitImage(image) {
@@ -58,9 +58,11 @@ const Kinds = {
     tape: { folder: "tapes", sth: "tapeSth" },
 };
 
+const unzipped = (data) => failingFor(LoadFailures.badImage, () => unzipDiscImage(data));
+
 /** The image itself when `name` is a zip, else the bytes as given, either way as `{ name, data, ignored }`. */
 export function openIfZip(name, data) {
-    return /\.zip/i.test(name) ? unzipDiscImage(data) : { name, data, ignored: [] };
+    return /\.zip/i.test(name) ? unzipped(data) : { name, data, ignored: [] };
 }
 
 /**
@@ -98,7 +100,7 @@ export class MediaResolver {
             case "inline":
                 return { name: "disk.ssd", data: stringToUint8Array(atob(image)), ignored: [] };
             case "zipped-inline":
-                return unzipDiscImage(stringToUint8Array(atob(image)));
+                return unzipped(stringToUint8Array(atob(image)));
             case "url":
                 // The URL may end in query parameters, which would upset the extension check.
                 return openIfZip(new URL(ref).pathname.split("/").pop(), await this.load(ref));

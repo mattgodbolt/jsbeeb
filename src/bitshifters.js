@@ -1,3 +1,5 @@
+import { fetchBytes } from "./loader.js";
+
 const SiteBase = "https://bitshifters.github.io/content";
 
 /**
@@ -40,8 +42,6 @@ export class BitshiftersArchive {
     async fetch(path) {
         const url = this._baseUrl + path.split("/").map(encodeURIComponent).join("/");
         console.log("Loading disc from " + url);
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
-        return new Uint8Array(await response.arrayBuffer());
+        return fetchBytes(url);
     }
 }

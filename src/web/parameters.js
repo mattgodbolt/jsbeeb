@@ -12,6 +12,13 @@ export function tubeCpuSpeedLabel(multiplier, model) {
 }
 
 const capitalise = (word) => word[0].toUpperCase() + word.substring(1);
+const isOption = (options) => (value) => options.some((option) => option.value === value);
+
+const KeyLayoutOptions = [
+    { value: "physical", text: "Physical: '*' is next to Enter/Return" },
+    { value: "natural", text: "Natural: you get the character you type" },
+    { value: "gaming", text: "Gaming: handy for games like Zalaga" },
+];
 const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" : `Channel ${channel}`);
 
 const AfterglowDefaults = Object.fromEntries(persistenceSettings().map(({ setting, default: ms }) => [setting, ms]));
@@ -49,12 +56,15 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
  *
  * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it;
- * a parameter with none is told as it is.
+ * a parameter with none is told as it is. One that is `reportedAtStart` is sent with the machine_start event under its
+ * own name, so its values must be a fixed set: a BOOL, or a menu held to its options, by its `valid` or, for the
+ * model, by Settings.
  */
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
     model: {
         type: ParamTypes.STRING,
+        reportedAtStart: true,
         field: {
             type: "menu",
             id: "bbc-model-dropdown",
@@ -73,16 +83,14 @@ export const Parameters = {
         localToPage: true,
         stored: true,
         default: "physical",
+        reportedAtStart: true,
         fromUrl: (layout) => layout.toLowerCase(),
+        valid: isOption(KeyLayoutOptions),
         field: {
             type: "menu",
             label: "Keyboard layout",
             describe: capitalise,
-            options: [
-                { value: "physical", text: "Physical: '*' is next to Enter/Return" },
-                { value: "natural", text: "Natural: you get the character you type" },
-                { value: "gaming", text: "Gaming: handy for games like Zalaga" },
-            ],
+            options: KeyLayoutOptions,
         },
     },
     displayMode: {
@@ -238,16 +246,16 @@ export const Parameters = {
     autoboot: { type: ParamTypes.BOOL, startupAction: true },
     autochain: { type: ParamTypes.BOOL, startupAction: true },
     autorun: { type: ParamTypes.BOOL, startupAction: true },
-    autotype: { type: ParamTypes.STRING, startupAction: true },
+    autotype: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
     loadBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: mediaLabel },
-    embedBasic: { type: ParamTypes.STRING, startupAction: true },
-    patch: { type: ParamTypes.STRING, startupAction: true },
+    embedBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
+    patch: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
 
     // Array parameters
     rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },
 
     // Boolean parameters
-    embed: { type: ParamTypes.BOOL, localToPage: true },
+    embed: { type: ParamTypes.BOOL, localToPage: true, reportedAtStart: true },
     fasttape: { type: ParamTypes.BOOL },
     noseek: { type: ParamTypes.BOOL },
     glEnabled: { type: ParamTypes.BOOL, localToPage: true },

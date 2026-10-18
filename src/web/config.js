@@ -95,13 +95,8 @@ export class Config extends EventTarget {
         for (const { setting } of persistenceSettings()) settings.on(setting, () => this.setPersistenceSlider());
     }
 
-    /**
-     * A setting as saved, in the form the menu and the URL use: the model by synonym rather than resolved, or by name
-     * for one with no synonym to be picked by.
-     */
     saved(setting) {
-        const { model } = this.settings;
-        return setting === "model" ? (model.synonyms[0] ?? model.name) : this.settings[setting];
+        return this.settings.value(setting);
     }
 
     /** Every setting the dialog shows, as it would be saved if the dialog were closed now. */

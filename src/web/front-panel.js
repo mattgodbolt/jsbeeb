@@ -1,4 +1,5 @@
 import { toast } from "./toast.js";
+import { noteFeature } from "./analytics.js";
 
 class Light {
     constructor(name) {
@@ -87,5 +88,6 @@ export class FrontPanel {
         );
         this.printerTextArea = this.printerWindow.document.getElementById("text");
         this.printerTextArea.value = this.printer.text;
+        noteFeature("printer", "open");
     }
 }

@@ -1,7 +1,13 @@
 import { reportLoadFailure } from "./reporting.js";
 import { RecentMedia, sourceName } from "./media-catalogue.js";
+import { note } from "./analytics.js";
+import { mediaLabel, sourceKey } from "./analytics-filters.js";
+import { LoadFailures } from "../loader.js";
 
 const DriveNames = ["drive 0", "drive 1"];
+
+const noteLoad = (slot, { source, entry, ref, result }) =>
+    note("media_load", { source, kind: slot.kind, slot: slot.id, entry, ref: mediaLabel(ref), result });
 
 /** One place media goes: a drive or the deck. What it holds is read from the machine itself. */
 class Slot {
@@ -10,6 +16,7 @@ class Slot {
         this.kind = kind;
         this.index = index;
         this.name = kind === "tape" ? "the deck" : DriveNames[index];
+        this.id = kind === "tape" ? "deck" : `drive${index}`;
         /** How the media is known: a URL reference, or a session: reference for a file opened here. */
         this.ref = undefined;
         this.inUrl = false;
@@ -99,30 +106,41 @@ export class MediaSlots extends EventTarget {
      * @param {Function} [options.fetch] async, returning `{ media, ref }`; a failure of it is not kept for a retry
      * @param {boolean} [options.inUrl] whether the URL names what was loaded; a file opened this session never is
      * @param {boolean} [options.recent] whether it counts as loaded recently; what a page starts with does not
+     * @param {string} [options.entry] how the load was asked for: `list`, `recent`, `retry`, `create`, `url`,
+     *   `default` or `menu`
      * @returns {Promise<"loaded"|"overtaken"|"failed"|"nothing">}
      */
-    async load(slot, descriptor, { fetch, inUrl, recent = true } = {}) {
+    async load(slot, descriptor, { entry, ...options } = {}) {
+        const { result, ref = descriptor.ref, error } = await this.attempt(slot, descriptor, options);
+        const source = ref ? sourceKey(ref) : descriptor.source;
+        noteLoad(slot, { source, entry, ref, result });
+        if (result === "failed")
+            note("load_failed", { source, kind: slot.kind, reason: error?.loadFailure ?? LoadFailures.other });
+        return result;
+    }
+
+    async attempt(slot, descriptor, { fetch, inUrl, recent = true }) {
         const claim = (slot.claim = {});
         slot.busy = descriptor;
         slot.failed = null;
         this.changed(slot);
         try {
             const { media, ref = descriptor.ref } = await (fetch ?? (() => this.fetchDefault(slot, descriptor)))();
-            if (slot.claim !== claim) return "overtaken";
+            if (slot.claim !== claim) return { result: "overtaken", ref };
             if (!media) {
                 slot.busy = null;
                 this.changed(slot);
-                return "nothing";
+                return { result: "nothing", ref };
             }
             this.install(slot, media, ref, inUrl ?? descriptor.source !== "session", recent);
-            return "loaded";
+            return { result: "loaded", ref };
         } catch (error) {
-            if (slot.claim !== claim) return "overtaken";
+            if (slot.claim !== claim) return { result: "overtaken" };
             slot.busy = null;
             if (!fetch) slot.failed = { descriptor, error };
             reportLoadFailure(`${descriptor.title} from ${sourceName(descriptor.source)}`, error);
             this.changed(slot);
-            return "failed";
+            return { result: "failed", error };
         }
     }
 
@@ -138,10 +156,12 @@ export class MediaSlots extends EventTarget {
      *
      * @param {object} [options]
      * @param {boolean} [options.recent] whether it counts as loaded recently; a restored state's media does not
+     * @param {string} [options.entry] how it was asked for: `drop`, `file` or `restore`
      */
-    put(slot, media, ref, { inUrl = true, recent = true } = {}) {
+    put(slot, media, ref, { inUrl = true, recent = true, entry } = {}) {
         slot.claim = {};
         this.install(slot, media, ref, inUrl, recent);
+        noteLoad(slot, { source: ref && sourceKey(ref), entry, ref, result: "loaded" });
     }
 
     eject(slot) {

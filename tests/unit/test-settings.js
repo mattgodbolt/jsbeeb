@@ -330,6 +330,22 @@ describe("Settings", () => {
         });
     });
 
+    describe("value", () => {
+        it("names the model as the menu and the URL do, and any other setting as it is", () => {
+            urlState.params.model = "MasterTurbo";
+            urlState.params.keyLayout = "Gaming";
+            const settings = make();
+            expect(settings.value("model")).toBe("Master");
+            expect(settings.value("keyLayout")).toBe("gaming");
+            expect(settings.value("coProcessor")).toBe(true);
+        });
+
+        it("names a model with no synonym by its name", () => {
+            urlState.params.model = "Tube65C02";
+            expect(make().value("model")).toBe("Tube65C02");
+        });
+    });
+
     describe("mapLegacyModels", () => {
         it("splits the combination models into a model and its fitting", () => {
             const turbo = { model: "MasterTurbo" };
