@@ -1637,6 +1637,14 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
+    /**
+     * Whether execute() runs executeInternalFast. Any tracing or debug hook needs the slower
+     * executeInternal: the debug read or debug write might change tracing or other debugging while it runs.
+     */
+    get onFastPath() {
+        return !(this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite);
+    }
+
     execute(numCyclesToRun) {
         this.halted = false;
         this.targetCycles += numCyclesToRun;
@@ -1651,9 +1659,7 @@ export class Cpu6502 extends Base6502 {
             this.currentCycles -= cyclesPerSecond;
             this.cycleSeconds++;
         }
-        // Any tracing or debugging means we need to run the potentially slower version: the debug read or
-        // debug write might change tracing or other debugging while we're running.
-        if (this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite) {
+        if (!this.onFastPath) {
             return this.executeInternal();
         } else {
             if (this.currentCycles < this.targetCycles) this.debugInstruction.forgetStop();
