@@ -3,7 +3,7 @@ import browserslist from "browserslist";
 
 const BrowserNames = { chrome: "Chrome", edge: "Edge", firefox: "Firefox", safari: "Safari", ios_saf: "Safari" };
 const Contact = "matt@godbolt.org";
-const FloorScript = readFileSync(new URL("../src/browser-floor.js", import.meta.url), "utf8");
+const FloorScript = readFileSync(new URL("../src/web/browser-floor.js", import.meta.url), "utf8");
 // Inline, as jsbeeb.css may never arrive, and visible inside the body jsbeeb.css has not yet revealed.
 const MessageStyle = [
     "position: fixed",

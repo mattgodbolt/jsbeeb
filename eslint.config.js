@@ -45,7 +45,7 @@ export default [
         languageOptions: { globals: { XMLHttpRequest: "readonly" } },
     },
     {
-        files: ["src/browser-floor.js"],
+        files: ["src/web/browser-floor.js"],
         languageOptions: {
             ecmaVersion: 5,
             sourceType: "script",

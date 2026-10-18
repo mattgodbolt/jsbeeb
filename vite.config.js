@@ -58,6 +58,7 @@ export default defineConfig({
                 "src/lib/**", // Third-party libraries
                 "**/*.config.js",
                 "src/app/**", // App-specific code
+                "src/web/browser-floor.js", // Put on the page as text, never imported
             ],
         },
     },

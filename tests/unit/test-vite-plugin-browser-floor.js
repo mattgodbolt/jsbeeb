@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { browserFloorPlugin, floorText } from "../../tools/vite-plugin-browser-floor.js";
 
 const IndexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
-const FloorScript = readFileSync(new URL("../../src/browser-floor.js", import.meta.url), "utf8");
+const FloorScript = readFileSync(new URL("../../src/web/browser-floor.js", import.meta.url), "utf8");
 
 describe("floorText", () => {
     it("names each browser's oldest version, saying a shared version once", () => {

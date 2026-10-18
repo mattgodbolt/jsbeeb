@@ -22,6 +22,17 @@ test("a supported browser sees no message and reports nothing", async ({ beeb, p
     expect(await unsupportedBrowserEvents(page)).toEqual([]);
 });
 
+test("an error from the bundle once main.js has finished starting shows no message", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.evaluate(() => {
+        const bundle = document.querySelector('script[type="module"]').src;
+        window.dispatchEvent(new ErrorEvent("error", { filename: bundle }));
+    });
+    await expect(page.locator("#browser-floor")).toBeHidden();
+    expect(await unsupportedBrowserEvents(page)).toEqual([]);
+});
+
 test("a browser missing a floor feature is told what is needed, and the emulator still starts", async ({
     beeb,
     page,

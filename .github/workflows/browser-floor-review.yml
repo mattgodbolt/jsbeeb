@@ -23,5 +23,5 @@ jobs:
             --body "Time for the yearly look at the browser versions jsbeeb supports, which are the \`browserslist\` field in package.json.
 
           - Check the last year of Google Analytics: which browser versions visitors use, and whether those below a raised floor actually use the emulator. The \`unsupported_browser\` event counts who already sees the message below the floor.
-          - Decide whether to raise any version. Lint (eslint-plugin-compat), the Vite build target and the dist check (es-check) all follow the field; only the editor target in jsconfig.json and the features src/browser-floor.js tests are set by hand to match it.
+          - Decide whether to raise any version. Lint (eslint-plugin-compat), the Vite build target and the dist check (es-check) all follow the field; only the editor target in jsconfig.json and the features src/web/browser-floor.js tests are set by hand to match it.
           - If nothing changes, close this issue."
