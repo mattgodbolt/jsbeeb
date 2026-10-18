@@ -56,6 +56,21 @@ export function stubNavigation(urlState) {
     return urlState;
 }
 
+/**
+ * Has analytics send to a stand-in gtag, as it does on the deployed site.
+ * @returns {function(string): object[]} the parameters of each event sent with the name given, in order
+ */
+export function sentEvents() {
+    const gtag = vi.fn();
+    vi.stubEnv("GA_MEASUREMENT_ID", "G-UNITTEST");
+    vi.stubGlobal("gtag", gtag);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    return (name) =>
+        gtag.mock.calls
+            .filter(([command, event]) => command === "event" && event === name)
+            .map(([, , params]) => params);
+}
+
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
@@ -118,6 +133,7 @@ export async function teardownDom() {
     }
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     await disposeToasts();
     document.body.innerHTML = "";
     window.localStorage.clear();

@@ -27,6 +27,13 @@ describe("Parameters", () => {
         }
     });
 
+    it.each(Object.entries(Parameters).filter(([, { reportedAtStart }]) => reportedAtStart))(
+        "reports %s at start only as one of a fixed set of values",
+        (name, { type, field }) => {
+            expect(type === ParamTypes.BOOL || ["menu", "check"].includes(field?.type)).toBe(true);
+        },
+    );
+
     it("never makes a startup action or a setting that needs a fresh machine local to the page", () => {
         for (const name of LocalToPageParams) {
             expect(Parameters[name].field?.restart, name).toBeFalsy();

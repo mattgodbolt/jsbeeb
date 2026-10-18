@@ -173,14 +173,20 @@ export class Machine {
         const { slots } = media;
         if (discImage)
             startImageLoad(`disc ${discImage}`, () =>
-                slots.load(slots.drive(0), describeRef(discImage, "disc"), { inUrl: discImageInUrl, recent: false }),
+                slots.load(slots.drive(0), describeRef(discImage, "disc"), {
+                    inUrl: discImageInUrl,
+                    recent: false,
+                    entry: discImageInUrl ? "url" : "default",
+                }),
             );
         if (secondDiscImage)
             startImageLoad(`disc ${secondDiscImage}`, () =>
-                slots.load(slots.drive(1), describeRef(secondDiscImage, "disc"), { recent: false }),
+                slots.load(slots.drive(1), describeRef(secondDiscImage, "disc"), { recent: false, entry: "url" }),
             );
         if (tape)
-            startImageLoad(`tape ${tape}`, () => slots.load(slots.deck, describeRef(tape, "tape"), { recent: false }));
+            startImageLoad(`tape ${tape}`, () =>
+                slots.load(slots.deck, describeRef(tape, "tape"), { recent: false, entry: "url" }),
+            );
 
         if (mmcImage && this.model.isAtom) {
             startImageLoad(`MMC image ${mmcImage}`, async () => processor.atommc.SetMMCData(await LoadSD(mmcImage)));

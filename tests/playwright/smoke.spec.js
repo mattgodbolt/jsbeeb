@@ -131,6 +131,32 @@ test("analytics is told the page's location with the user's own disc and session
         window.dataLayer.filter((entry) => entry[0] === "config").map((entry) => entry[2].page_location),
     );
     expect(configs).toEqual([expect.stringMatching(/\?disc=elite\.ssd&disc2=browser&name=redacted&model=B$/)]);
+    const sent = (name) =>
+        page.evaluate(
+            (name) =>
+                window.dataLayer.filter((entry) => entry[0] === "event" && entry[1] === name).map((entry) => entry[2]),
+            name,
+        );
+    await expect
+        .poll(() => sent("machine_start"))
+        .toEqual([
+            {
+                model: "B-DFS0.9",
+                keyLayout: "physical",
+                embed: false,
+                boot_mode: "none",
+                renderer: expect.stringMatching(/^(webgl|canvas2d)$/),
+                audio: expect.stringMatching(/^(ok|unavailable)$/),
+            },
+        ]);
+    expect(await sent("media_load")).toContainEqual({
+        source: "builtin",
+        kind: "disc",
+        slot: "drive0",
+        entry: "url",
+        ref: "elite.ssd",
+        result: "loaded",
+    });
 });
 
 test("the media window shows the drives, keeps the keyboard while focused, and gives it back", async ({

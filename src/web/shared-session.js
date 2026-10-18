@@ -33,6 +33,8 @@ import { LaggingMs, PeerStates, peerState, SessionPanel } from "./session-panel.
 import { KeyStamper, Sequencer } from "./session-sequencer.js";
 import { downloadBlob } from "./dom-utils.js";
 import { toast } from "./toast.js";
+import { note } from "./analytics.js";
+import { countBucket } from "./analytics-filters.js";
 
 const IceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 const IceGatheringTimeoutMs = 3000;
@@ -85,6 +87,13 @@ const MaxRosterGuests = 16;
 // A guest that has left keeps its light this long, so a drop is seen even by someone who looked away.
 const LeftShownMs = 30000;
 
+const timedOut = (message) => Object.assign(new Error(message), { sessionFailure: "timeout" });
+
+/** Notes a session reaching `stage`; `reason` is one of the fixed codes its callers raise, never words. */
+function noteStage(role, stage, { reason, peers } = {}) {
+    note("session", { role, stage, reason, peers: peers === undefined ? undefined : countBucket(peers) });
+}
+
 function notify(message) {
     console.log(`Shared session: ${message}`);
     toast(message, { title: ToastTitle });
@@ -126,7 +135,7 @@ async function gatheredDescription(pc) {
 function opened(channel) {
     if (channel.readyState === "open") return Promise.resolve();
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("couldn't connect directly")), ConnectTimeoutMs);
+        const timer = setTimeout(() => reject(timedOut("couldn't connect directly")), ConnectTimeoutMs);
         channel.addEventListener("open", () => {
             clearTimeout(timer);
             resolve();
@@ -289,6 +298,7 @@ export class SessionHost {
         notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`);
         this.panel.open();
         this.log.record("hosting");
+        noteStage(this.log.details.role, "created");
         this.stopWatchingPage = watchPage(this.log, () => this.stats);
         this.poll();
     }
@@ -710,6 +720,7 @@ export class SessionHost {
                 this.sendSnapshot(guest);
                 notify(`A guest joined (${this.connectedCount()} connected).`);
                 this.log.record("joined", { guest: guest.id });
+                noteStage(this.log.details.role, "connected", { peers: this.connectedCount() });
                 this.showStatus();
             },
             () => this.drop(guest, "its channel never opened"),
@@ -906,6 +917,7 @@ export class SessionHost {
         holdAnalogue(processor, false);
         processor.sysvia.cmos.leaveSession();
         this.log.record("closed");
+        noteStage(this.log.details.role, "ended", { reason: "page_closed", peers: this.guestsSeen });
     }
 
     report() {
@@ -992,6 +1004,7 @@ export class SessionGuest {
     }
 
     async start() {
+        noteStage(this.log.details.role, "created");
         try {
             await this.join();
         } catch (error) {
@@ -1022,6 +1035,7 @@ export class SessionGuest {
         await pc.setRemoteDescription({ type: "answer", sdp: answer });
         await opened(channel);
         this.log.record("connected");
+        noteStage(this.log.details.role, "connected");
         this.send({ type: "hello", name: this.name });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: false }));
     }
@@ -1164,7 +1178,7 @@ export class SessionGuest {
             if (answer) return answer;
             await delay(GuestPollMs);
         }
-        throw new Error("the host isn't answering");
+        throw timedOut("the host isn't answering");
     }
 
     send(message) {
@@ -1179,7 +1193,7 @@ export class SessionGuest {
         }
         const message = parsed(data);
         if (!message) {
-            this.fail("the host sent something this page cannot read");
+            this.fail("protocol", "the host sent something this page cannot read");
             return;
         }
         switch (message.type) {
@@ -1188,7 +1202,7 @@ export class SessionGuest {
                 break;
             case "snapshot":
                 if (!Number.isInteger(message.bytes) || message.bytes <= 0 || message.bytes > MaxSnapshotBytes) {
-                    this.fail("the host sent a snapshot of an impossible size");
+                    this.fail("protocol", "the host sent a snapshot of an impossible size");
                     return;
                 }
                 // A snapshot from the host makes this machine a replayer again, whatever it was doing; one that was
@@ -1228,7 +1242,7 @@ export class SessionGuest {
     // restored in the order they came, so a second one cannot overtake the first.
     receiveCommit(commit) {
         if (!isValidCommit(commit)) {
-            this.fail("the host sent a commit this page cannot read");
+            this.fail("protocol", "the host sent a commit this page cannot read");
             return;
         }
         this.stats.tick("commits");
@@ -1249,11 +1263,12 @@ export class SessionGuest {
         this.log.record("welcome", { model: field(model), version: field(version), name: this.hostName });
         this.showStatus();
         if (typeof model !== "string" || !findModel(model)) {
-            this.fail("the host did not say what machine it is");
+            this.fail("protocol", "the host did not say what machine it is");
             return;
         }
         if (version !== this.context.version) {
             this.fail(
+                "protocol",
                 `the host runs jsbeeb ${version} and this is ${this.context.version}; whoever is older should reload`,
             );
             return;
@@ -1269,7 +1284,7 @@ export class SessionGuest {
         const incoming = this.incoming;
         if (!incoming) return;
         if (incoming.received + chunk.length > incoming.bytes.length) {
-            this.fail("the host sent more snapshot than it said it would");
+            this.fail("protocol", "the host sent more snapshot than it said it would");
             return;
         }
         incoming.bytes.set(chunk, incoming.received);
@@ -1280,7 +1295,7 @@ export class SessionGuest {
         this.log.record("snapshot", { bytes: incoming.bytes.length });
         this.restored = this.restored
             .then(() => this.restore(incoming))
-            .catch((error) => this.fail(`restoring the host's machine failed: ${error.message}`));
+            .catch((error) => this.fail("restore_failed", `restoring the host's machine failed: ${error.message}`));
     }
 
     async restore(snapshot) {
@@ -1323,13 +1338,16 @@ export class SessionGuest {
         if (this.left) return;
         notify("Lost the host; the machine carries on here on its own.");
         this.log.record("left", { reason: "lost the host" });
+        noteStage(this.log.details.role, "ended", { reason: "host_left" });
         this.leave("lost the host");
     }
 
-    fail(reason) {
+    /** @param {"protocol"|"restore_failed"} code what went wrong, for analytics; `reason` says it in words */
+    fail(code, reason) {
         if (this.left) return;
         notify(`Leaving the session: ${reason}.`);
         this.log.record("left", { reason });
+        noteStage(this.log.details.role, "failed", { reason: code });
         this.leave(reason);
     }
 
@@ -1444,18 +1462,42 @@ export function sessionRefusal({ model, processor }) {
     return null;
 }
 
-// What the rendezvous's refusals mean to a host, which only ever makes its room, and to a guest, which looks for one.
+/**
+ * What the rendezvous's refusals mean to a host, which only ever makes its room, and to a guest, which looks for one:
+ * a `code` for analytics and the `words` for the user.
+ */
 function startFailure(error, room, host) {
     if (host) {
-        if (error.status === RoomGone) return "the shared session service isn't available here";
-        if (error.status === RoomTaken) return `a room called "${room}" is already open`;
+        if (error.status === RoomGone)
+            return { code: "service_unavailable", words: "the shared session service isn't available here" };
+        if (error.status === RoomTaken) return { code: "room_taken", words: `a room called "${room}" is already open` };
     } else {
         if (error.status === RoomGone)
-            return `there's no room called "${room}"; check its name, or the host's page may have closed`;
-        if (error.status === TooManyOffers) return "too many people are joining at once; try again in a moment";
-        if (error.status === RoomTaken) return "this page is already waiting to join; reload it to try again";
+            return {
+                code: "no_room",
+                words: `there's no room called "${room}"; check its name, or the host's page may have closed`,
+            };
+        if (error.status === TooManyOffers)
+            return {
+                code: "too_many_joining",
+                words: "too many people are joining at once; try again in a moment",
+            };
+        if (error.status === RoomTaken)
+            return { code: "already_waiting", words: "this page is already waiting to join; reload it to try again" };
     }
-    return error.message;
+    return { code: error.sessionFailure ?? "other", words: error.message };
+}
+
+function refused(refusal, host) {
+    notify(refusal);
+    noteStage(host ? "host" : "guest", "failed", { reason: "unsupported_machine" });
+}
+
+function failedToStart(error, room, host) {
+    const { code, words } = startFailure(error, room, host);
+    notify(`The session couldn't start: ${words}.`);
+    noteStage(host ? "host" : "guest", "failed", { reason: code });
+    console.error(error);
 }
 
 /**
@@ -1466,15 +1508,12 @@ function startFailure(error, room, host) {
 function startSession(context, { host, room, name, secret }) {
     const refusal = sessionRefusal(context);
     if (refusal) {
-        notify(refusal);
+        refused(refusal, host);
         return null;
     }
     const cleanedName = cleanName(name) ?? randomName();
     const session = host ? new SessionHost(context, room, cleanedName) : new SessionGuest(context, room, cleanedName);
-    session.start(secret).catch((error) => {
-        notify(`The session couldn't start: ${startFailure(error, room, host)}.`);
-        console.error(error);
-    });
+    session.start(secret).catch((error) => failedToStart(error, room, host));
     return session;
 }
 
@@ -1487,7 +1526,7 @@ function startSession(context, { host, room, name, secret }) {
 export async function hostSession(context, name) {
     const refusal = sessionRefusal(context);
     if (refusal) {
-        notify(refusal);
+        refused(refusal, true);
         return null;
     }
     for (let tries = 1; ; ++tries) {
@@ -1497,8 +1536,7 @@ export async function hostSession(context, name) {
             return startSession(context, { host: true, room, name, secret });
         } catch (error) {
             if (error.status === RoomTaken && tries < MaxRoomNameTries) continue;
-            notify(`The session couldn't start: ${startFailure(error, room, true)}.`);
-            console.error(error);
+            failedToStart(error, room, true);
             return null;
         }
     }

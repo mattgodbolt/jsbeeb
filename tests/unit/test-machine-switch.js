@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MachineSwitch, leaveForNextPage, reloadAsMachine, takeFromLastPage } from "../../src/web/machine-switch.js";
 import { MachineRequirements } from "../../src/web/media-catalogue.js";
 import { findModel } from "../../src/models.js";
-import { fakeUrlState, stubNavigation, teardownDom, toasts } from "./helpers.js";
+import { fakeUrlState, sentEvents, stubNavigation, teardownDom, toasts } from "./helpers.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
@@ -62,9 +62,9 @@ describe("MachineSwitch", () => {
     });
 
     it("names a disc of the user's own to analytics only by its source", async () => {
-        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        const sent = sentEvents();
         await make().switchFor({ ...paradroid, ref: "gd:1AbC/Mine.ssd" }, drive0, { boot: true });
-        expect(log).toHaveBeenCalledWith("event noted:", "media", "switchMachine", "gdrive");
+        expect(sent("media")).toEqual([{ type: "switchMachine", label: "gdrive" }]);
     });
 
     it("asks before reloading for a plain load: a yes reloads with no boot and no notice, a no stays put", async () => {

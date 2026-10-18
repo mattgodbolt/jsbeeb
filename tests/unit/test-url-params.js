@@ -313,7 +313,7 @@ describe("URL Parameters", () => {
             });
 
             expect(processAutobootParams({ other: "value" })).toEqual({
-                needsAutoboot: false,
+                needsAutoboot: "none",
                 autoType: "",
             });
         });

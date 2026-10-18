@@ -100,8 +100,7 @@ export class Config extends EventTarget {
      * for one with no synonym to be picked by.
      */
     saved(setting) {
-        const { model } = this.settings;
-        return setting === "model" ? (model.synonyms[0] ?? model.name) : this.settings[setting];
+        return this.settings.value(setting);
     }
 
     /** Every setting the dialog shows, as it would be saved if the dialog were closed now. */

@@ -2,6 +2,7 @@ import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
+import { noteFeature } from "./analytics.js";
 
 const noop = () => {};
 
@@ -412,6 +413,7 @@ export class Debugger {
         if (this._enabled && !e) {
             this.updatePrevMem();
         }
+        if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
         this._enabled = e;
         const focused = document.activeElement;
         if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();

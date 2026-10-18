@@ -37,15 +37,8 @@ describe("Autoboot", () => {
         new Autoboot({ model: findModel(isAtom ? "Atom" : "B-DFS1.2"), processor, sendKeys });
 
     it("boots a disc by holding SHIFT through a break", () => {
-        make().boot("elite.ssd");
+        make().boot();
         expect(sendKeys).toHaveBeenCalledWith([BBC.SHIFT, 1000], false);
-    });
-
-    it("names the disc it boots to analytics as mediaLabel does", () => {
-        make().boot("local:Mine");
-        make().boot("elite.ssd");
-        expect(console.log).toHaveBeenCalledWith("event noted:", "init", "autoboot", "browser");
-        expect(console.log).toHaveBeenCalledWith("event noted:", "init", "autoboot", "elite.ssd");
     });
 
     it("types the requested keys after a pause", () => {

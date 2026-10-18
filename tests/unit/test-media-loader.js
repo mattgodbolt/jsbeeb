@@ -8,7 +8,7 @@ import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
 import { createZipBlob } from "../../src/archive.js";
-import { domFromIndexHtml, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, sentEvents, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 const fileFor = (name, bytes) => new File([bytes], name);
 
@@ -64,6 +64,11 @@ describe("MediaLoader", () => {
             expect(loaded.name).toBe("ELITE.ssd");
         });
 
+        it("fails a disc that is not one as a bad image", async () => {
+            sources.sth.mockResolvedValue({ name: "x.hfe", data: new Uint8Array(10), ignored: [] });
+            await expect(make().loadDiscImage("sth:X.zip")).rejects.toMatchObject({ loadFailure: "bad_image" });
+        });
+
         it("reports what an archive held besides the file it loaded", async () => {
             sources.sth.mockResolvedValue({ name: "side1.ssd", data: ssdImage(), ignored: ["side2.ssd"] });
             await make().loadDiscImage("sth:Game.zip");
@@ -113,6 +118,11 @@ describe("MediaLoader", () => {
         it("returns nothing for no reference", async () => {
             expect(await make().loadTapeImage(undefined)).toBeNull();
         });
+
+        it("fails a tape that is not one as a bad image", async () => {
+            sources.tapeSth.mockResolvedValue({ name: "x.uef", data: new Uint8Array(10), ignored: [] });
+            await expect(make().loadTapeImage("sth:X.zip")).rejects.toMatchObject({ loadFailure: "bad_image" });
+        });
     });
 
     describe("autoboot in the URL", () => {
@@ -126,13 +136,15 @@ describe("MediaLoader", () => {
     });
 
     describe("the filestore input", () => {
-        it("loads the SCSI image and restarts the filestore", async () => {
+        it("loads the SCSI image and restarts the filestore, noting the upload", async () => {
+            const sent = sentEvents();
             make();
             await pickFile("fs_load", fileFor("scsi.dat", new Uint8Array([1, 2, 3])));
             await vi.waitFor(() => expect(deps.modals.hide).toHaveBeenCalledWith("econetfs"));
             expect([...deps.processor.filestore.scsi]).toEqual([1, 2, 3]);
             expect(deps.processor.filestore.PC).toBe(0x400);
             expect(deps.processor.econet.receiveBlocks).toEqual([]);
+            expect(sent("feature_used")).toEqual([{ feature: "econet_fileserver", action: "upload" }]);
         });
 
         it("quietly ignores a SCSI image when no filestore is fitted", async () => {

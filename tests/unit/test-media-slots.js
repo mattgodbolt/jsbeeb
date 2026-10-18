@@ -5,7 +5,8 @@ import { MediaSlots } from "../../src/web/media-slots.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
-import { fakeFdc, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
+import { fakeFdc, fakeUrlState, sentEvents, ssdImage, teardownDom, toasts } from "./helpers.js";
+import { failedFor, LoadFailures } from "../../src/loader.js";
 
 const elite = { ref: "sth:Games/Elite.zip", kind: "disc", title: "Elite", publisher: "", detail: "", source: "sth" };
 const chuckie = {
@@ -259,6 +260,77 @@ describe("MediaSlots", () => {
             expect(slots.slotFor(1)).toBe(slots.drive(1));
             expect(slots.slotFor("tape")).toBe(slots.deck);
             expect(slots.deck.urlParams()).toEqual({ tape: undefined });
+        });
+    });
+
+    describe("analytics", () => {
+        let sent;
+
+        beforeEach(() => {
+            sent = sentEvents();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+        });
+
+        it("notes a load with where it came from, how it was asked for and how it ended", async () => {
+            loader.loadDiscImage.mockResolvedValue(discFor("elite.ssd", ssdImage()));
+            await slots.load(slots.drive(1), elite, { entry: "list" });
+            loader.loadTapeImage.mockResolvedValue(null);
+            await slots.load(slots.deck, chuckie, { entry: "url" });
+            expect(sent("media_load")).toEqual([
+                { source: "sth", kind: "disc", slot: "drive1", entry: "list", ref: elite.ref, result: "loaded" },
+                { source: "sth", kind: "tape", slot: "deck", entry: "url", ref: chuckie.ref, result: "nothing" },
+            ]);
+            expect(sent("load_failed")).toEqual([]);
+        });
+
+        it("names the user's own media only by its source, and takes the reference a fetch ends up with", async () => {
+            const making = { ...elite, ref: undefined, title: "fresh.ssd", source: "gdrive" };
+            await slots.load(slots.drive(0), making, {
+                entry: "create",
+                fetch: async () => ({ media: discFor("fresh.ssd", ssdImage()), ref: "gd:xyz/fresh.ssd" }),
+            });
+            await slots.load(slots.drive(0), making, {
+                entry: "create",
+                fetch: async () => {
+                    throw new Error("Drive is full");
+                },
+            });
+            expect(sent("media_load")).toEqual([
+                { source: "gdrive", kind: "disc", slot: "drive0", entry: "create", ref: "gdrive", result: "loaded" },
+                { source: "gdrive", kind: "disc", slot: "drive0", entry: "create", result: "failed" },
+            ]);
+        });
+
+        it("notes why a load failed, as the error says, or as other", async () => {
+            loader.loadDiscImage.mockRejectedValueOnce(failedFor(new Error("gone"), LoadFailures.notFound));
+            await slots.load(slots.drive(0), elite, { entry: "retry" });
+            loader.loadTapeImage.mockRejectedValueOnce(new Error("odd"));
+            await slots.load(slots.deck, chuckie, { entry: "list" });
+            expect(sent("media_load").map(({ result }) => result)).toEqual(["failed", "failed"]);
+            expect(sent("load_failed")).toEqual([
+                { source: "sth", kind: "disc", reason: "not_found" },
+                { source: "sth", kind: "tape", reason: "other" },
+            ]);
+        });
+
+        it("notes an overtaken load as overtaken, and not as a failure", async () => {
+            const first = deferred();
+            loader.loadDiscImage.mockReturnValueOnce(first.promise).mockResolvedValueOnce(discFor("b.ssd", ssdImage()));
+            const firstLoad = slots.load(slots.drive(0), elite, { entry: "list" });
+            await slots.load(slots.drive(0), { ...elite, ref: "sth:B.zip" }, { entry: "list" });
+            first.reject(new Error("late"));
+            await firstLoad;
+            expect(sent("media_load").map(({ result }) => result)).toEqual(["loaded", "overtaken"]);
+            expect(sent("load_failed")).toEqual([]);
+        });
+
+        it("notes media put straight in as loaded", () => {
+            slots.put(slots.drive(1), discFor("mine.ssd", ssdImage()), "session:1/mine.ssd", { entry: "drop" });
+            slots.put(slots.drive(0), discFor("saved.ssd", ssdImage()), undefined, { entry: "restore" });
+            expect(sent("media_load")).toEqual([
+                { source: "session", kind: "disc", slot: "drive1", entry: "drop", ref: "session", result: "loaded" },
+                { kind: "disc", slot: "drive0", entry: "restore", result: "loaded" },
+            ]);
         });
     });
 });

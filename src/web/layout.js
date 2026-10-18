@@ -1,5 +1,6 @@
 import { toast } from "./toast.js";
 import { errorText } from "./reporting.js";
+import { noteFeature } from "./analytics.js";
 
 /** Steps the drawing buffer grows in, as a multiple of the base canvas size. */
 const CanvasScaleStep = 0.25;
@@ -117,9 +118,13 @@ export class Layout {
                 event.preventDefault();
                 try {
                     await screenCanvas.requestFullscreen();
+                    noteFeature(fullscreenItem, "enter");
                 } catch (error) {
                     toast(`Could not go fullscreen: ${errorText(error)}`, { title: "Fullscreen" });
                 }
+            });
+            document.addEventListener("fullscreenchange", () => {
+                if (!document.fullscreenElement) noteFeature(fullscreenItem, "leave");
             });
         } else {
             fullscreenItem.closest("li").hidden = true;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createZipBlob } from "../../src/archive.js";
-import { MediaResolver, splitImage } from "../../src/media-resolver.js";
+import { MediaResolver, openIfZip, splitImage } from "../../src/media-resolver.js";
 
 describe("splitImage", () => {
     it.each([
@@ -17,6 +17,19 @@ describe("splitImage", () => {
         ["elite.ssd", "", "elite.ssd"],
     ])("splits %s into schema %j and image %j", (ref, schema, image) => {
         expect(splitImage(ref)).toEqual({ schema, image });
+    });
+});
+
+describe("openIfZip", () => {
+    it("fails a zip that is not one as a bad image", async () => {
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        await expect(openIfZip("x.zip", new Uint8Array(10))).rejects.toMatchObject({ loadFailure: "bad_image" });
+        vi.restoreAllMocks();
+    });
+
+    it("leaves anything else as it is", () => {
+        const data = new Uint8Array(10);
+        expect(openIfZip("x.ssd", data)).toEqual({ name: "x.ssd", data, ignored: [] });
     });
 });
 

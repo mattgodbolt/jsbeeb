@@ -38,7 +38,9 @@ describe("GoogleDriveSource", () => {
             loader: lapsed,
         });
         expect(source.connected).toBe(true);
-        await expect(lister()).rejects.toThrow("Invalid Credentials");
+        await expect(lister()).rejects.toThrow(
+            expect.objectContaining({ message: "Invalid Credentials", loadFailure: "unauthorised" }),
+        );
         expect(source.connected).toBe(false);
     });
 
@@ -75,9 +77,10 @@ describe("GoogleDriveSource", () => {
         });
 
         it("asks for a connection rather than signing in by itself", async () => {
-            await expect(make().load({ id: "abc", name: "mine.ssd" }, "auto")).rejects.toThrow(
-                "Google Drive is not connected",
-            );
+            await expect(make().load({ id: "abc", name: "mine.ssd" }, "auto")).rejects.toMatchObject({
+                message: expect.stringContaining("Google Drive is not connected"),
+                loadFailure: "unauthorised",
+            });
             expect(loader.authorize).toHaveBeenCalledWith(true);
             expect(loader.load).not.toHaveBeenCalled();
         });

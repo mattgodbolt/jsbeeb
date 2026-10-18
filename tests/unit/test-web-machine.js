@@ -146,13 +146,15 @@ describe("Machine", () => {
             expect(load).toHaveBeenCalledWith(
                 "drive 0",
                 expect.objectContaining({ ref: "elite.ssd", kind: "disc", title: "elite.ssd" }),
-                { inUrl: false, recent: false },
+                { inUrl: false, recent: false, entry: "default" },
             );
             expect(load).toHaveBeenCalledWith("drive 1", expect.objectContaining({ ref: "sth:B.zip", source: "sth" }), {
                 recent: false,
+                entry: "url",
             });
             expect(load).toHaveBeenCalledWith("the deck", expect.objectContaining({ ref: "t.uef", kind: "tape" }), {
                 recent: false,
+                entry: "url",
             });
         });
 
@@ -163,6 +165,7 @@ describe("Machine", () => {
             expect(started.media.slots.load).toHaveBeenCalledWith("drive 0", expect.anything(), {
                 inUrl: true,
                 recent: false,
+                entry: "url",
             });
         });
 

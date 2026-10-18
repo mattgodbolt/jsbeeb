@@ -48,7 +48,7 @@ import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./we
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
-import { configureAnalytics } from "./web/analytics.js";
+import { configureAnalytics, noteError, noteMachineStart } from "./web/analytics.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
 
@@ -300,7 +300,7 @@ const mediaWindow = new MediaWindow({
     model,
     loop,
     visualiser: discVisualiser,
-    autoboot: (ref) => autoBoot.boot(ref),
+    autoboot: () => autoBoot.boot(),
     driveSource: googleDriveSource,
     machineSwitch,
 });
@@ -352,6 +352,7 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 // ------------------------------------------------------------------------
 
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
+const bootMode = parsedQuery.loadBasic || parsedQuery.embedBasic ? "basic" : needsAutoboot;
 if (parsedQuery.loadBasic) needsAutoboot = "";
 
 // The boot disc is described while the machine starts, so a link that boots a disc without
@@ -380,10 +381,15 @@ const startPromise = machine.start({
         machineSwitch.announce();
         await startPromise;
         if (await switchForBootDisc(await bootDisc)) return;
+        noteMachineStart(settings, parsedQuery, {
+            boot_mode: bootMode,
+            renderer: display.canvas.renderer,
+            audio: audioHandler.noAudio ? "unavailable" : "ok",
+        });
 
         switch (needsAutoboot) {
             case "boot":
-                autoBoot.boot(discImage);
+                autoBoot.boot();
                 break;
             case "type":
                 autoBoot.type(autoType);
@@ -420,6 +426,7 @@ const startPromise = machine.start({
         });
     } catch (error) {
         console.error("Error initialising emulator:", error);
+        noteError("startup", error);
         modals.showError("initialising", error);
     }
 })();

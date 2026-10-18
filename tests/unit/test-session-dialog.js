@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Modals } from "../../src/web/modals.js";
 import { SessionDialog } from "../../src/web/session-dialog.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 describe("SessionDialog", () => {
     let host;
@@ -79,6 +79,20 @@ describe("SessionDialog", () => {
         expect(host).toHaveBeenCalledWith("matt");
         openIt();
         expect(session.panel.open).toHaveBeenCalled();
+    });
+
+    it("notes hosting and joining as the shared session's", async () => {
+        const sent = sentEvents();
+        new SessionDialog({ session: null, refusal: null, host, join });
+        await openDialog();
+        submitJoin("not a room ?");
+        submitJoin("some-room");
+        await startHosting();
+        await hosted();
+        expect(sent("feature_used").filter(({ action }) => action !== "open")).toEqual([
+            { feature: "shared_session", action: "join" },
+            { feature: "shared_session", action: "host" },
+        ]);
     });
 
     it("hosts once the page has let go of the machine it held for the dialog", async () => {

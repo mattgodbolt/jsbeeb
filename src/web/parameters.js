@@ -49,12 +49,14 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
  *
  * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it;
- * a parameter with none is told as it is.
+ * a parameter with none is told as it is. One that is `reportedAtStart` is sent with the machine_start event under its
+ * own name, so it must be a menu, a check or a BOOL, whose values are a fixed set.
  */
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
     model: {
         type: ParamTypes.STRING,
+        reportedAtStart: true,
         field: {
             type: "menu",
             id: "bbc-model-dropdown",
@@ -73,6 +75,7 @@ export const Parameters = {
         localToPage: true,
         stored: true,
         default: "physical",
+        reportedAtStart: true,
         fromUrl: (layout) => layout.toLowerCase(),
         field: {
             type: "menu",
@@ -247,7 +250,7 @@ export const Parameters = {
     rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },
 
     // Boolean parameters
-    embed: { type: ParamTypes.BOOL, localToPage: true },
+    embed: { type: ParamTypes.BOOL, localToPage: true, reportedAtStart: true },
     fasttape: { type: ParamTypes.BOOL },
     noseek: { type: ParamTypes.BOOL },
     glEnabled: { type: ParamTypes.BOOL, localToPage: true },

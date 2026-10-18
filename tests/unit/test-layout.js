@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Layout, fitMonitor, navbarHeightOf } from "../../src/web/layout.js";
-import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 const Config = {
     imageWidth: 800,
@@ -256,6 +256,18 @@ describe("Layout", () => {
                 make();
                 document.getElementById("fs").click();
                 expect(screenCanvas().requestFullscreen).toHaveBeenCalledTimes(1);
+            });
+
+            it("notes going fullscreen once the browser has, and leaving it", async () => {
+                const sent = sentEvents();
+                screenCanvas().requestFullscreen = vi.fn().mockResolvedValue();
+                make();
+                document.getElementById("fs").click();
+                await vi.waitFor(() => expect(sent("feature_used")).toHaveLength(1));
+                expect(sent("feature_used")).toEqual([{ feature: "fullscreen", action: "enter" }]);
+                document.dispatchEvent(new Event("fullscreenchange"));
+                // Earlier tests' layouts listen on the same document.
+                expect(sent("feature_used").slice(1)).toContainEqual({ feature: "fullscreen", action: "leave" });
             });
 
             it("toasts when the browser refuses", async () => {

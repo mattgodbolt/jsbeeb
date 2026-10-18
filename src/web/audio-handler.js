@@ -50,6 +50,7 @@ export class AudioHandler {
         }
         this.audioContext = createAudioContext();
         this._jsAudioNode = null;
+        this._setupDone = Promise.resolve();
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
             const onEvent = (event) => {
@@ -64,8 +65,8 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }).catch((error) =>
-                this._audioUnavailable(error),
+            this._setupDone = this._setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }).catch(
+                (error) => this._audioUnavailable(error),
             );
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
@@ -254,7 +255,9 @@ export class AudioHandler {
         else fadeOut(this.warningNode);
     }
 
+    /** Resolves once the sound chip's output is set up, or `noAudio` says it never will be. */
     async initialise() {
+        await this._setupDone;
         await this.ddNoise.initialise();
         await this.relayNoise.initialise();
     }

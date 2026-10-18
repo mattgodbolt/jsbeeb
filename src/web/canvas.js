@@ -77,6 +77,10 @@ function reportDesynchronized(ctx, asked) {
 }
 
 export class Canvas {
+    get renderer() {
+        return "canvas2d";
+    }
+
     /** The 2D canvas draws the framebuffer as-is, which is what this filter is. */
     get filterClass() {
         return PassthroughFilter;
@@ -157,6 +161,10 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
+    get renderer() {
+        return "webgl";
+    }
+
     /** The filter actually built, which may not be the one that was asked for. */
     get filterClass() {
         return this.filter.constructor;

@@ -4,6 +4,7 @@ import { toast } from "./toast.js";
 import { errorText } from "./reporting.js";
 import { replaceOrAddExtension } from "../archive.js";
 import { describeDriveFile } from "./media-catalogue.js";
+import { failedFor, LoadFailures } from "../loader.js";
 
 const isUnauthorised = (error) => error?.status === 401 || error?.result?.error?.code === 401;
 
@@ -25,9 +26,12 @@ export class GoogleDriveSource {
         try {
             return await call();
         } catch (error) {
-            if (isUnauthorised(error)) this.googleDrive.authorized = false;
+            const unauthorised = isUnauthorised(error);
+            if (unauthorised) this.googleDrive.authorized = false;
             // gapi rejects with a response object; its message is a level down.
-            throw error instanceof Error ? error : new Error(error?.result?.error?.message ?? errorText(error));
+            const thrown =
+                error instanceof Error ? error : new Error(error?.result?.error?.message ?? errorText(error));
+            throw unauthorised ? failedFor(thrown, LoadFailures.unauthorised) : thrown;
         }
     }
 
@@ -60,7 +64,10 @@ export class GoogleDriveSource {
     async load(cat, layout) {
         if (!(await this.googleDrive.initialise())) throw new Error("Google Drive is not available");
         if (!(await this.googleDrive.authorize(true)))
-            throw new Error("Google Drive is not connected; use Connect Google Drive in the media window first");
+            throw failedFor(
+                new Error("Google Drive is not connected; use Connect Google Drive in the media window first"),
+                LoadFailures.unauthorised,
+            );
         const loaded = await this.withToken(() => this.googleDrive.load(cat.id, layout));
         if (!loaded.savesChanges) {
             toast(`${cat.name} is read only on Google Drive, so changes to it are not written back.`, {

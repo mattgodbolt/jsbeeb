@@ -257,6 +257,15 @@ describe("AudioHandler", () => {
             expect(warningShown()).toBe(true);
         });
 
+        it("has said there is no audio by the time it has initialised", async () => {
+            const slowly = rejectModule("audio-renderer");
+            stubAudio({ addModule: (url) => new Promise((resolve) => setTimeout(resolve)).then(() => slowly(url)) });
+            const handler = makeHandler();
+            vi.spyOn(handler.relayNoise, "initialise").mockResolvedValue();
+            await handler.initialise();
+            expect(handler.noAudio).toBe(true);
+        });
+
         it("toasts about the Music 5000 and leaves the banner down", async () => {
             stubAudio({ addModule: rejectModule("music5000") });
 

@@ -64,6 +64,7 @@ describe("the Electron hooks", () => {
         expect(deps.media.slots.load).toHaveBeenCalledWith(
             "drive 1",
             expect.objectContaining({ ref: "file:///discs/b.ssd", kind: "disc", title: "b.ssd" }),
+            { entry: "menu" },
         );
     });
 
@@ -72,6 +73,7 @@ describe("the Electron hooks", () => {
         expect(deps.media.slots.load).toHaveBeenCalledWith(
             "the deck",
             expect.objectContaining({ ref: "file:///tapes/t.uef", kind: "tape" }),
+            { entry: "menu" },
         );
     });
 

@@ -244,10 +244,10 @@ export function processInputParams(parsedQuery, machineKeys, hostKeyCodes, userK
 /**
  * Process autoboot and other emulation parameters
  * @param {Object} parsedQuery - The parsed query parameters
- * @returns {Object} Information about autoboot settings
+ * @returns {{needsAutoboot: "none"|"boot"|"chain"|"run"|"type", autoType: string}} how the page boots
  */
 export function processAutobootParams(parsedQuery) {
-    let needsAutoboot = false;
+    let needsAutoboot = "none";
     let autoType = "";
 
     if (isDefined(parsedQuery.autoboot)) {

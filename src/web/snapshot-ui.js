@@ -12,6 +12,7 @@ import {
 import { isBemSnapshot, parseBemSnapshot } from "../bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "../uef-snapshot.js";
 import { leaveForNextPage, reloadAsMachine, takeFromLastPage } from "./machine-switch.js";
+import { noteFeature } from "./analytics.js";
 
 const PendingStateKey = "jsbeeb-pending-state";
 
@@ -93,7 +94,8 @@ export class SnapshotUI {
         this.modals = modals;
         this.loop = loop;
 
-        document.getElementById("save-state").addEventListener("click", async (event) => {
+        this.saveItem = document.getElementById("save-state");
+        this.saveItem.addEventListener("click", async (event) => {
             event.preventDefault();
             await this.saveState();
         });
@@ -107,6 +109,7 @@ export class SnapshotUI {
     }
 
     async saveState() {
+        noteFeature(this.saveItem, "save");
         const resume = this.loop.pause("saving state");
         try {
             const manifest = snapshotMedia(this.slots);
@@ -123,6 +126,7 @@ export class SnapshotUI {
     }
 
     async loadStateFromFile(file, preReadBuffer) {
+        noteFeature(this.saveItem, "load");
         const resume = this.loop.pause("loading state");
         try {
             const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
@@ -228,7 +232,10 @@ export class SnapshotUI {
             }
 
             // An embedded disc has no reference, which takes whatever the URL named before out of it.
-            this.slots.put(this.slots.drive(driveIndex), loadedDisc, savedMedia[discKey], { recent: false });
+            this.slots.put(this.slots.drive(driveIndex), loadedDisc, savedMedia[discKey], {
+                recent: false,
+                entry: "restore",
+            });
         }
     }
 }

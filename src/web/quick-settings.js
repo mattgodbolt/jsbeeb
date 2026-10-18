@@ -1,4 +1,5 @@
 import { AudioOutputs } from "../audio-output.js";
+import { noteFeature } from "./analytics.js";
 
 /**
  * The sound output, speaker amount and display mode controls on the top bar:
@@ -20,7 +21,9 @@ export class QuickSettings {
 
         this.output.addEventListener("click", (e) => {
             const audioOutput = e.target.closest("[data-output]")?.dataset.output;
-            if (audioOutput) settings.set({ audioOutput });
+            if (!audioOutput) return;
+            settings.set({ audioOutput });
+            noteFeature(this.output, audioOutput);
         });
         this.amount.addEventListener("input", () => settings.set({ speakerAmount: parseFloat(this.amount.value) }));
         this.display.addEventListener("click", (e) => {

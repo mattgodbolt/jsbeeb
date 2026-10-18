@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmulationLoop } from "../../src/web/emulation-loop.js";
-import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
 // Bootstrap's stand-in for a transitionend in jsdom fires after 5 ms.
@@ -233,6 +233,20 @@ describe("EmulationLoop", () => {
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(deps.audioHandler.mute).toHaveBeenCalled();
+    });
+
+    it("notes an error the processor throws, stops into the debugger and throws it on", () => {
+        const sent = sentEvents();
+        const loop = started();
+        deps.processor.execute.mockImplementation(() => {
+            throw new Error("bad opcode");
+        });
+        expect(() => vi.advanceTimersByTime(10)).toThrow("bad opcode");
+        expect(loop.isRunning()).toBe(false);
+        expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
+        expect(sent("js_error")).toEqual([expect.objectContaining({ where: "loop", message: "bad opcode" })]);
+        // A later test's visibility change would start this loop again.
+        deps.processor.execute.mockReturnValue(true);
     });
 
     it("pauses when the keyboard asks after a frame", () => {

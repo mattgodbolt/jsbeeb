@@ -8,7 +8,16 @@ import { MediaSlots } from "../../src/web/media-slots.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
-import { domFromIndexHtml, fakeFdc, fakeUrlState, ssdImage, stubNavigation, teardownDom, toasts } from "./helpers.js";
+import {
+    domFromIndexHtml,
+    fakeFdc,
+    fakeUrlState,
+    sentEvents,
+    ssdImage,
+    stubNavigation,
+    teardownDom,
+    toasts,
+} from "./helpers.js";
 
 describe("snapshot media manifest", () => {
     const urlDisc = { originalImageCrc32: 0x1234, is40Track: false, originalImageData: null };
@@ -96,6 +105,25 @@ describe("SnapshotUI", () => {
     afterEach(teardownDom);
 
     const make = () => new SnapshotUI(deps);
+
+    it("notes saving and loading a state as the State menu's", async () => {
+        const sent = sentEvents();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const menu = document.createElement("ul");
+        menu.dataset.feature = "state";
+        menu.append(document.getElementById("save-state"));
+        document.body.append(menu);
+        const ui = make();
+        deps.processor.snapshotState = vi.fn(() => {
+            throw new Error("not this time");
+        });
+        await ui.saveState();
+        await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
+        expect(sent("feature_used")).toEqual([
+            { feature: "state", action: "save" },
+            { feature: "state", action: "load" },
+        ]);
+    });
 
     describe("loading a state", () => {
         it("holds the emulator, reports a file it cannot read, and lets go", async () => {
@@ -204,7 +232,10 @@ describe("SnapshotUI", () => {
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 });
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("sth:ELITE.zip", DiscLayout.contiguous);
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "sth:ELITE.zip", { recent: false });
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "sth:ELITE.zip", {
+                recent: false,
+                entry: "restore",
+            });
             expect(toasts()).toEqual([]);
         });
 
@@ -226,7 +257,10 @@ describe("SnapshotUI", () => {
             const loaded = { name: "mine.ssd", originalImageCrc32: 0x9999, savesChanges: true };
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc1: "local:mine.ssd", disc1Crc32: 0x1234 });
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "local:mine.ssd", { recent: false });
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "local:mine.ssd", {
+                recent: false,
+                entry: "restore",
+            });
         });
 
         it("refuses to restore when the source has changed under the state", async () => {
@@ -272,7 +306,10 @@ describe("SnapshotUI", () => {
             deps.media.loadDiscImage.mockResolvedValue(bootDisc);
             await ui.reloadSnapshotMedia(manifest);
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.contiguous);
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", bootDisc, "elite.ssd", { recent: false });
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", bootDisc, "elite.ssd", {
+                recent: false,
+                entry: "restore",
+            });
         });
 
         it("rebuilds an embedded local disc and keeps it out of the URL", async () => {
@@ -302,7 +339,10 @@ describe("SnapshotUI", () => {
             const loaded = { name: "B.ssd" };
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc2: "b.ssd" });
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 1", loaded, "b.ssd", { recent: false });
+            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 1", loaded, "b.ssd", {
+                recent: false,
+                entry: "restore",
+            });
         });
     });
 
