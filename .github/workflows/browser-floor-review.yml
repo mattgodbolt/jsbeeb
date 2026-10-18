@@ -22,6 +22,6 @@ jobs:
             --title "Review the supported browser versions ($(date +%Y))" \
             --body "Time for the yearly look at the browser versions jsbeeb supports, which are the \`browserslist\` field in package.json.
 
-          - Check the last year of Google Analytics: which browser versions visitors use, and whether those below a raised floor actually use the emulator.
+          - Check the last year of Google Analytics: which browser versions visitors use, and whether those below a raised floor actually use the emulator. The \`unsupported_browser\` events with \`reason\` \`below_floor\` count visitors already below the current floor.
           - Decide whether to raise any version. Lint (eslint-plugin-compat), the Vite build target and the dist check (es-check) all follow the field; only the editor target in jsconfig.json is set by hand to match it.
           - If nothing changes, close this issue."

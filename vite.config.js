@@ -3,6 +3,7 @@ import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 import { rendezvousPlugin } from "./rendezvous/vite-plugin.js";
 import { analyticsPlugin } from "./tools/vite-plugin-analytics.js";
+import { browserFloorPlugin } from "./tools/vite-plugin-browser-floor.js";
 import { workersFor } from "./tools/test-workers.js";
 
 // Every run in a GitHub Actions job appends to one summary page, so the suites need headings of
@@ -13,7 +14,7 @@ const JobSummaryTitle = process.env.VITEST_JOB_SUMMARY_TITLE;
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
     base: "./", // Use relative paths for Electron compatibility
-    plugins: [firShaderPlugin(), rendezvousPlugin(), analyticsPlugin()],
+    plugins: [firShaderPlugin(), rendezvousPlugin(), analyticsPlugin(), browserFloorPlugin()],
     build: {
         target: browserslistToEsbuild(),
         sourcemap: true,
@@ -57,6 +58,7 @@ export default defineConfig({
                 "src/lib/**", // Third-party libraries
                 "**/*.config.js",
                 "src/app/**", // App-specific code
+                "src/web/browser-floor.js", // Put on the page as text, never imported
             ],
         },
     },

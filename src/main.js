@@ -460,3 +460,6 @@ electron({
         resume: () => runControls.resume(),
     },
 });
+
+// From here on an uncaught error is not a failed start; see src/web/browser-floor.js.
+window.jsbeebStartupFinished?.();
