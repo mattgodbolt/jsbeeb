@@ -1,7 +1,6 @@
 import { buildUrlFromParams, parseLocationParams } from "../url-params.js";
 import { Parameters, UrlParamTypes } from "./parameters.js";
 
-/*global gtag*/
 const MeasurementId = import.meta.env.GA_MEASUREMENT_ID;
 
 const analyticsFilter = (key) => (Object.hasOwn(Parameters, key) ? Parameters[key].analyticsFilter : undefined);
@@ -26,6 +25,7 @@ export function analyticsLocation(href) {
     }
 }
 
+/*global gtag*/
 const injectedGtag = () => (MeasurementId && typeof gtag === "function" ? gtag : undefined);
 
 const pageLocations = () => ({
