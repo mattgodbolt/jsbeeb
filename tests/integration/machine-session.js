@@ -256,6 +256,36 @@ describe("MachineSession watching execution", () => {
         expect(pcs).toEqual(ProgramPcs);
     });
 
+    it("runs on past a breakpoint it was saved at, showing the restored pc to a watcher added since", async () => {
+        await stopAtProgramStart(Program, { keepBreakpoint: true });
+        const state = session.snapshot();
+        await session.runFor(CyclesPerInterlacedFrame);
+        const pcs = [];
+        const remove = session.onExecute((pc) => pcs.push(pc));
+
+        session.restore(state);
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+        remove();
+
+        expect(result.completed).toBe(true);
+        expect(session.hitBreakpoint()).toBeNull();
+        expect(pcs[0]).toBe(ProgramAddress);
+    });
+
+    it("stops at a breakpoint at the restored pc of a state saved running", async () => {
+        await session.runFor(CyclesPerInterlacedFrame);
+        const state = session.snapshot();
+        const id = session.addBreakpoint("execute", session.registers().pc);
+        await session.runFor(CyclesPerInterlacedFrame);
+        session.resetBreakpointHits();
+
+        session.restore(state);
+        const result = await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(result).toEqual({ cyclesRun: 0, completed: false });
+        expect(session.hitBreakpoint().id).toBe(id);
+    });
+
     it("propagates an exception from a watcher out of the run and still removes it", async () => {
         const remove = session.onExecute(() => {
             throw new Error("watcher failed");

@@ -628,6 +628,11 @@ class DebugHook {
         this.calledAtStop = null;
     }
 
+    /** Treats the next instruction as one a stop halted before that no handler has seen yet. */
+    rememberUnseenStop() {
+        this.calledAtStop = new Set();
+    }
+
     /** Calls the handlers not called at the stop, with `cpu.resumingFromStop` set, ignoring any request to stop. */
     callRemaining(...args) {
         const called = this.calledAtStop;
