@@ -211,9 +211,11 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   `gd:` discs need no fetching; each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
   so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
   connect is told "couldn't connect directly". The host and each guest see each other's public IP address. A
-  guest whose model, or any setting its Parameters entry marks `takenFromHost`, differs from the host's reloads as the host's machine before it joins: the
-  host's welcome carries every such setting, so a new one is its one declaration. One on another jsbeeb version is
-  turned away. When the host leaves, each guest's machine carries on as a local one, with its own CMOS and clock back.
+  guest whose model, or any setting its Parameters entry marks `takenFromHost`, differs from the host's reloads
+  as the host's machine before it joins: the host's welcome carries every such setting, so a new one is its one
+  declaration. A guest leaves the session rather than reload with a value its own URL would not take, which could
+  never match. One on another jsbeeb version is turned away. When the host leaves, each guest's machine carries
+  on as a local one, with its own CMOS and clock back.
   The host takes only keys, resync requests, goodbyes, one name and its summaries from a guest, rate-limits its
   resyncs and summaries, logs only the summary's known numbers, drops one whose channel cannot keep up, and opens
   only a few connections at a time.

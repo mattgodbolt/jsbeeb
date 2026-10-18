@@ -391,12 +391,12 @@ const acceptable = ({ valid, fit }, value) =>
 /**
  * @returns {object|null} the values of the parameters a session guest takes from its host, as the host `sent` them in
  * its welcome, or null if one is a value this page would not take from its own URL, so reloading with it could never
- * match; one its parameter's type cannot take counts as none.
+ * match; one its parameter's type cannot take counts as none, which for a setting is its default.
  */
 export function readTakenFromHost(sent, parameters = Parameters) {
     const entries = takenFromHostEntries(parameters).map(([name, parameter]) => [
         name,
-        usableAs[parameter.type](sent?.[name]),
+        usableAs[parameter.type](sent?.[name]) ?? parameter.default,
         parameter,
     ]);
     if (!entries.every(([, value, parameter]) => acceptable(parameter, value))) return null;

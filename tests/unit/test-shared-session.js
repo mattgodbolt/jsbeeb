@@ -2298,6 +2298,16 @@ describe("SessionGuest", () => {
         expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
     });
 
+    it.each([
+        ["no settings at all", { takenFromHost: undefined }],
+        ["no tube speed", { takenFromHost: { ...StockTakenFromHost, tubeCpuMultiplier: undefined } }],
+    ])("joins a host whose welcome has %s as the defaults", async (_, fields) => {
+        const { context, channel } = await joining();
+        channel.emit("message", message(welcomeAs(fields)));
+        expect(context.urlState.urlWith).not.toHaveBeenCalled();
+        expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
+    });
+
     it("takes a setting the host sent as something its type cannot be as none", async () => {
         const { context, channel } = await joining({ takenFromHost: { ...StockTakenFromHost, cpuMultiplier: 2 } });
         channel.emit("message", message(welcomeAs({ takenFromHost: { ...StockTakenFromHost, cpuMultiplier: "2" } })));

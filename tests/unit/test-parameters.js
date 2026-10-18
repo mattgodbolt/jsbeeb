@@ -327,6 +327,11 @@ describe("the settings a session guest takes from its host", () => {
         expect(matchesHost(readTakenFromHost(host), takenFromHostValues(settings, reloaded.params))).toBe(true);
     });
 
+    it("takes a setting the host left out as its default, and any other as absent", () => {
+        expect(readTakenFromHost({})).toMatchObject({ tubeCpuMultiplier: 1, hasVideoNula: false });
+        expect(readTakenFromHost({}).cpuMultiplier).toBeUndefined();
+    });
+
     it("refuses a host's value this page would not take from its own URL", () => {
         expect(readTakenFromHost({ tubeCpuMultiplier: 0 })).toBeNull();
         expect(readTakenFromHost({ tubeCpuMultiplier: 2 })).toMatchObject({ tubeCpuMultiplier: 2 });
