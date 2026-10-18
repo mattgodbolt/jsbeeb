@@ -511,6 +511,8 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
     beeb,
     page,
 }) => {
+    const noted = [];
+    page.on("console", (message) => noted.push(message.text()));
     await beeb.open(`?autotype=${encodeURIComponent("?&FE23=&0F:?&FE23=&00\n")}`);
     const notice = page.locator(".toast", { hasText: "VideoNuLA" });
     await expect(notice).toContainText("This program tried to use a VideoNuLA, which isn't fitted.");
@@ -518,5 +520,8 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
     await expect(page).toHaveURL(/hasVideoNula/);
     await beeb.expectScreenText("BASIC");
     expect(await page.evaluate(() => window.processor.video.ula.hasVideoNula)).toBe(true);
+    await expect
+        .poll(() => noted.filter((text) => text.startsWith("event noted: feature_used")))
+        .toEqual([expect.stringContaining("action: missing"), expect.stringContaining("action: fitted")]);
     expect(beeb.problems).toEqual([]);
 });

@@ -16,6 +16,7 @@ import {
     describeSthTape,
     compareForQuery,
     matchesQuery,
+    requirementName,
     requirementOf,
     satisfiesRequirement,
     scoreQuery,
@@ -178,26 +179,42 @@ describe("the media catalogue", () => {
             expect(neededAs.map(([setting, { neededAs }]) => [setting, neededAs])).toEqual([
                 ["hasVideoNula", "VideoNuLA"],
             ]);
-            for (const [setting, { type, neededAs: name }] of neededAs) {
+            for (const [setting, { type, takenFromHost, neededAs: name }] of neededAs) {
                 expect(type, setting).toBe("bool");
+                expect(takenFromHost, `${setting}, which the machine switch reads among the session's`).toBe(true);
                 expect(requirementOf({ needs: [name] }).fittings).toEqual({ [setting]: true });
             }
         });
 
         it("leave the model alone without a machine, and add to the machine's with one", () => {
-            expect(requirementOf({ needs: ["VideoNuLA"] })).toEqual({
+            expect(requirementOf({ needs: ["VideoNuLA", "VideoNuLA"] })).toEqual({
+                needs: ["VideoNuLA"],
                 fittings: { hasVideoNula: true },
-                name: "BBC Micro with a VideoNuLA",
             });
             expect(requirementOf({ machine: "Master", needs: ["VideoNuLA"] })).toEqual({
                 ...MachineRequirements.Master,
+                needs: ["VideoNuLA"],
                 fittings: { hasVideoNula: true },
-                name: "BBC Master 128 with a VideoNuLA",
             });
         });
 
+        it("are named on the machine the user has, or the one the entry names", () => {
+            const master = findModel("Master");
+            expect(requirementName(requirementOf({ needs: ["VideoNuLA"] }), master)).toBe(
+                "BBC Master 128 (DFS) with a VideoNuLA",
+            );
+            expect(requirementName(requirementOf({ needs: ["VideoNuLA"] }), findModel("B-DFS1.2"))).toBe(
+                "BBC B with 8271 (DFS 1.2) and a VideoNuLA",
+            );
+            expect(requirementName(requirementOf({ machine: "MasterTurbo", needs: ["VideoNuLA"] }), master)).toBe(
+                "BBC Master 128 with a 65C102 co-processor and a VideoNuLA",
+            );
+            expect(requirementName({ needs: ["Ultracard"] }, master)).toBe("BBC Master 128 (DFS) with an Ultracard");
+            expect(requirementName(MachineRequirements.Master, findModel("B-DFS1.2"))).toBe("BBC Master 128");
+        });
+
         it("ignore a name the table does not give, and a list that is not one", () => {
-            for (const needs of [["Chameleon"], ["constructor"], "VideoNuLA", 7, undefined])
+            for (const needs of [["Chameleon"], ["constructor"], [undefined], "VideoNuLA", 7, undefined])
                 expect(requirementOf({ needs })).toBeUndefined();
             expect(requirementOf({ machine: "Master", needs: ["Chameleon"] })).toBe(MachineRequirements.Master);
         });

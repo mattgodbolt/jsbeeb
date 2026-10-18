@@ -129,22 +129,35 @@ export const machineRequirement = (machine) =>
     Object.hasOwn(MachineRequirements, machine) ? MachineRequirements[machine] : undefined;
 
 // Looked up when asked, since parameters.js imports this module by way of analytics-filters.js.
-const settingNeededAs = (name) => Object.entries(Parameters).find(([, { neededAs }]) => neededAs === name)?.[0];
+const settingNeededAs = (name) =>
+    typeof name === "string"
+        ? Object.entries(Parameters).find(([, { neededAs }]) => neededAs === name)?.[0]
+        : undefined;
 
 /**
  * A descriptor's `requires` for a manifest entry's `machine` and the fittings it `needs`, or undefined for neither; a
  * name outside `MachineRequirements` or the Parameters' `neededAs` is no requirement. A requirement with fittings has
- * them as `fittings`, the settings that fit them, and leaves the model as it is unless it names a machine too.
+ * their names as `needs` and the settings that fit them as `fittings`, and leaves the model as it is unless it names a
+ * machine too.
  */
 export function requirementOf({ machine, needs }) {
     const required = machineRequirement(machine);
-    const fittings = (Array.isArray(needs) ? needs : []).filter((name) => settingNeededAs(name));
-    if (fittings.length === 0) return required;
+    const named = [...new Set(Array.isArray(needs) ? needs : [])].filter((name) => settingNeededAs(name));
+    if (named.length === 0) return required;
     return {
         ...required,
-        fittings: Object.fromEntries(fittings.map((name) => [settingNeededAs(name), true])),
-        name: `${required?.name ?? "BBC Micro"} with ${fittings.map((name) => `a ${name}`).join(" and ")}`,
+        needs: named,
+        fittings: Object.fromEntries(named.map((name) => [settingNeededAs(name), true])),
     };
+}
+
+const withArticle = (name) => `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+
+/** What the user is told a requirement is, on a machine that is `model` now: "BBC Master 128 with a VideoNuLA". */
+export function requirementName({ name, needs = [] }, model) {
+    const machine = name ?? model.name;
+    if (needs.length === 0) return machine;
+    return `${machine}${machine.includes(" with ") ? " and" : " with"} ${needs.map(withArticle).join(" and ")}`;
 }
 
 /**

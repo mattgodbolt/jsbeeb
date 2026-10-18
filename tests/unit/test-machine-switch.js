@@ -47,7 +47,9 @@ describe("MachineSwitch", () => {
     it("fits what a disc needs, keeping the model when the disc names none", async () => {
         await make().switchFor(nulaDemo, drive0, { boot: true });
         expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?disc1=github:a/b/nula.ssd&autoboot&hasVideoNula");
-        expect(sessionStorage.getItem(PendingSwitchKey)).toBe("Switched to a BBC Micro with a VideoNuLA for NuLA demo");
+        expect(sessionStorage.getItem(PendingSwitchKey)).toBe(
+            "Switched to a BBC B with 8271 (DFS 1.2) and a VideoNuLA for NuLA demo",
+        );
     });
 
     it("is satisfied by a disc that names no machine, and otherwise only by that very machine, Tube included", () => {

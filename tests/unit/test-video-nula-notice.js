@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { offerVideoNula } from "../../src/web/video-nula-notice.js";
+import { answerMissingVideoNula, offerVideoNula } from "../../src/web/video-nula-notice.js";
 import { sentEvents, teardownDom, toasts } from "./helpers.js";
 
 describe("offerVideoNula", () => {
@@ -16,7 +16,7 @@ describe("offerVideoNula", () => {
             expect.stringContaining("This program tried to use a VideoNuLA, which isn't fitted."),
         ]);
         expect(fitButton().hidden).toBe(false);
-        expect(fitButton().textContent).toBe("Fit one");
+        expect(fitButton().textContent).toBe("Fit one and restart");
         fitButton().click();
         expect(fit).toHaveBeenCalledTimes(1);
     });
@@ -35,6 +35,32 @@ describe("offerVideoNula", () => {
         offerVideoNula({ inSession: true, fit });
         expect(toasts()[0]).toContain("One can be fitted once the shared session is over.");
         expect(fitButton().hidden).toBe(true);
+    });
+
+    describe("the page's answer", () => {
+        const answer = (inSession) => {
+            const settings = { set: vi.fn() };
+            const restart = vi.fn();
+            vi.useFakeTimers();
+            answerMissingVideoNula({ inSession: () => inSession, settings, restart })();
+            return { settings, restart };
+        };
+
+        it("waits for the emulator to let go, then fits one through the settings and restarts", () => {
+            const { settings, restart } = answer(false);
+            expect(toasts()).toEqual([]);
+            vi.runOnlyPendingTimers();
+            fitButton().click();
+            expect(settings.set).toHaveBeenCalledWith({ hasVideoNula: true });
+            expect(restart).toHaveBeenCalledTimes(1);
+        });
+
+        it("offers nothing to fit while a shared session runs", () => {
+            answer(true);
+            vi.runOnlyPendingTimers();
+            expect(toasts()[0]).toContain("once the shared session is over");
+            expect(fitButton().hidden).toBe(true);
+        });
     });
 
     it("notes the VideoNuLA as missing, even for a user who asked not to be told", () => {

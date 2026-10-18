@@ -752,6 +752,15 @@ describe("Video", () => {
             expect(onMissingVideoNula).toHaveBeenCalledTimes(1);
         });
 
+        it("tells nobody of a write to the B's mirrors above &FE23, where a Master disc probe lands", () => {
+            const onMissingVideoNula = vi.fn();
+            video = makeMockedVideo({ onMissingVideoNula });
+            for (const addr of [0xfe26, 0xfe27, 0xfe2a, 0xfe2b, 0xfe2e, 0xfe2f]) video.ula.write(addr, 0x08);
+            expect(onMissingVideoNula).not.toHaveBeenCalled();
+            video.ula.write(0xfe22, 0x08);
+            expect(onMissingVideoNula).toHaveBeenCalledTimes(1);
+        });
+
         it("tells nobody when a fitted NULA that software disabled is written to", () => {
             const onMissingVideoNula = vi.fn();
             video = makeMockedVideo({ hasVideoNula: true, onMissingVideoNula });

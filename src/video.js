@@ -84,7 +84,8 @@ class Ula {
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
         if (reg >= 2 && this.disabled) {
-            if (this.onMissingVideoNula) {
+            // Not the B's mirrors from &FE26 up, where a probe for the Master's 1770 would land.
+            if (this.onMissingVideoNula && (addr & 0xf) < 4) {
                 const notify = this.onMissingVideoNula;
                 this.onMissingVideoNula = null;
                 notify();

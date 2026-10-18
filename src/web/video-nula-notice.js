@@ -14,6 +14,24 @@ export function offerVideoNula({ inSession, fit }) {
     toast(inSession ? `${missing} One can be fitted once the shared session is over.` : missing, {
         title: "VideoNuLA",
         quietKey: "quietVideoNulaMissing",
-        action: inSession ? null : { label: "Fit one", run: fit },
+        action: inSession ? null : { label: "Fit one and restart", run: fit },
     });
 }
+
+/**
+ * The page's answer to a program writing to the missing VideoNuLA: an offer, made once the emulator has let go, since
+ * the write is raised mid-instruction; `inSession()` says whether a shared session is running, and fitting one sets
+ * it in `settings`, so the URL records it, and then `restart`s.
+ */
+export const answerMissingVideoNula =
+    ({ inSession, settings, restart = () => window.location.reload() }) =>
+    () =>
+        setTimeout(() =>
+            offerVideoNula({
+                inSession: inSession(),
+                fit: () => {
+                    settings.set({ hasVideoNula: true });
+                    restart();
+                },
+            }),
+        );

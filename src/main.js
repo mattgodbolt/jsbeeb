@@ -50,7 +50,7 @@ import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
-import { offerVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
+import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
@@ -152,17 +152,7 @@ const display = new Display({
     lowLatency,
     fakeVideo: !!parsedQuery.fakeVideo,
     hasVideoNula,
-    // Raised mid-instruction, so the page answers once the emulator has let go.
-    onMissingVideoNula: () =>
-        setTimeout(() =>
-            offerVideoNula({
-                inSession: !!loop.lockstep,
-                fit: () => {
-                    settings.set({ hasVideoNula: true });
-                    window.location.reload();
-                },
-            }),
-        ),
+    onMissingVideoNula: answerMissingVideoNula({ inSession: () => !!loop.lockstep, settings }),
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
 const video = display.video;

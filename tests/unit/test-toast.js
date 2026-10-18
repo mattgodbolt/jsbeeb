@@ -116,4 +116,11 @@ describe("toast", () => {
         expect(run).toHaveBeenCalledTimes(1);
         expect(plain.querySelector(".toast-action").hidden).toBe(true);
     });
+
+    it("keeps one with an action until it is closed", () => {
+        toast("Something to do.", { action: { label: "Do it", run: vi.fn() } });
+        vi.runAllTimers();
+
+        expect(toasts()).toHaveLength(1);
+    });
 });

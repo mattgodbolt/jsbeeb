@@ -1,4 +1,4 @@
-import { satisfiesRequirement } from "./media-catalogue.js";
+import { requirementName, satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { note } from "./analytics.js";
 import { mediaLabel } from "./analytics-filters.js";
@@ -58,16 +58,17 @@ export class MachineSwitch {
      */
     async switchFor(d, slot, { boot, replace = false }) {
         const { requires } = d;
+        const needed = requirementName(requires, this.model);
         if (!boot) {
             const wanted = await this.modals.confirm(
-                `${d.title} needs a ${requires.name}. Switch machine? The emulator restarts.`,
+                `${d.title} needs a ${needed}. Switch machine? The emulator restarts.`,
                 "Switch machine",
                 "Load it here",
             );
             if (!wanted) return false;
         }
         note("media", { type: "switchMachine", label: mediaLabel(d.ref) });
-        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
+        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${needed} for ${d.title}`);
         reloadAsMachine(
             this.urlState,
             {
