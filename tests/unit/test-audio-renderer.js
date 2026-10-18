@@ -387,6 +387,30 @@ describe("SoundChipProcessor rendering", () => {
         for (let i = 0; i < 10; ++i) output.push(...quantum(proc));
         expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeGreaterThan(0.1);
     });
+
+    it("should play a state restored while paused straight away, not hold the old one for the rewound time", () => {
+        const RewoundMs = 3000;
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = makeProducer(proc);
+        const silentState = producer.chip.snapshotState();
+        producer.advance(RewoundMs);
+        producer.poke(...ToneOn);
+        producer.advance(proc.targetLatencyMs);
+        producer.flush();
+        simulate(proc, producer, 0.2);
+        mute(proc);
+        producer.flush();
+        simulate(proc, producer, 0.2, { ticking: () => false });
+        expect(proc.stalled).toBe(true);
+
+        producer.chip.scheduler.epoch -= RewoundMs * CyclesPerMs;
+        producer.chip.restoreState(silentState);
+        proc.onMessage({ command: "setEnabled", enabled: true });
+        producer.flush();
+        const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.25 });
+        expect(proc.stalled).toBe(false);
+        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(1e-3);
+    });
 });
 
 describe("SoundChipProcessor rate control", () => {
