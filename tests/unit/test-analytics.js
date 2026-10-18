@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { analyticsLocation, configureAnalytics, mediaLabel, noteLocation } from "../../src/web/analytics.js";
 import { Sources } from "../../src/web/media-catalogue.js";
 import { Schemas } from "../../src/media-resolver.js";
 import { Parameters } from "../../src/web/parameters.js";
+import { UrlState } from "../../src/web/url-state.js";
 
 describe("analytics", () => {
     describe("mediaLabel", () => {
@@ -91,38 +92,60 @@ describe("analytics", () => {
             expect(analyticsLocation(href)).toBe(href);
         });
 
+        it("keeps no parameters at all from a URL whose parameters cannot be decoded", () => {
+            expect(analyticsLocation(`${base}?disc1=gd:1AbC/Mine%E0.ssd&model=B`)).toBe(base);
+        });
+
         it("leaves an empty referrer empty", () => {
             expect(analyticsLocation("")).toBe("");
         });
     });
 
     describe("gtag", () => {
-        afterEach(() => {
-            vi.unstubAllGlobals();
-            window.history.replaceState(null, "", "/");
-        });
+        let gtag;
+        const origin = () => window.location.origin;
 
-        it("configures the page_view with the location analyticsLocation gives", () => {
-            const gtag = vi.fn();
+        beforeEach(() => {
+            gtag = vi.fn();
             vi.stubGlobal("gtag", gtag);
-            window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
-            configureAnalytics();
-            expect(gtag).toHaveBeenCalledWith(
-                "config",
-                expect.any(String),
-                expect.objectContaining({ page_location: `${window.location.origin}/?disc1=browser&model=B` }),
+            vi.spyOn(Document.prototype, "referrer", "get").mockReturnValue(
+                "https://bbc.xania.org/?disc1=gd:1AbC/Before.ssd&model=B",
             );
         });
 
+        afterEach(() => {
+            vi.unstubAllGlobals();
+            vi.restoreAllMocks();
+            window.history.replaceState(null, "", "/");
+        });
+
+        it("configures the page_view with the location and referrer analyticsLocation gives", () => {
+            window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
+            configureAnalytics();
+            expect(gtag).toHaveBeenCalledWith("config", expect.any(String), {
+                page_location: `${origin()}/?disc1=browser&model=B`,
+                page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
+            });
+        });
+
         it("moves the location later events report without another page_view", () => {
-            const gtag = vi.fn();
-            vi.stubGlobal("gtag", gtag);
             window.history.replaceState(null, "", "/?disc1=gd:1AbC/Mine.ssd");
             noteLocation();
             expect(gtag).toHaveBeenCalledWith("config", expect.any(String), {
-                page_location: `${window.location.origin}/?disc1=gdrive`,
+                page_location: `${origin()}/?disc1=gdrive`,
+                page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
                 send_page_view: false,
             });
+        });
+
+        it("moves the location each time the page pushes its URL", () => {
+            const state = new UrlState(window.location, window.history);
+            state.set({ disc1: "local:Mine" });
+            expect(gtag).toHaveBeenLastCalledWith(
+                "config",
+                expect.any(String),
+                expect.objectContaining({ page_location: `${origin()}/?disc1=browser` }),
+            );
         });
     });
 });

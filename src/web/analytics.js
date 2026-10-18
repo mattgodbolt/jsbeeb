@@ -36,33 +36,37 @@ function analyticsParams(params) {
         .join("&");
 }
 
-/** `href` with its parameters as the `Parameters` table lets analytics see them, in the query and after the hash. */
+/**
+ * `href` with its parameters as the `Parameters` table lets analytics see them, in the query and after the hash; with
+ * none at all when they cannot be decoded.
+ */
 export function analyticsLocation(href) {
     if (!href) return href;
     const url = new URL(href);
-    if (url.search) url.search = analyticsParams(url.search.substring(1));
-    if (url.hash) url.hash = analyticsParams(url.hash.substring(1));
-    return url.href;
+    try {
+        if (url.search) url.search = analyticsParams(url.search.substring(1));
+        if (url.hash) url.hash = analyticsParams(url.hash.substring(1));
+        return url.href;
+    } catch {
+        return url.origin + url.pathname;
+    }
 }
 
 const analyticsReady = () => !runningInNode && typeof gtag === "function";
 
+const pageLocations = () => ({
+    page_location: analyticsLocation(window.location.href),
+    page_referrer: analyticsLocation(document.referrer),
+});
+
 /** Sends the page_view, telling Google Analytics where the page is as analyticsLocation does. */
 export function configureAnalytics() {
-    if (!analyticsReady()) return;
-    gtag("config", MeasurementId, {
-        page_location: analyticsLocation(window.location.href),
-        page_referrer: analyticsLocation(document.referrer),
-    });
+    if (analyticsReady()) gtag("config", MeasurementId, pageLocations());
 }
 
 /** Moves the location later events report to the URL the page has just pushed, without a page_view. */
 export function noteLocation() {
-    if (!analyticsReady()) return;
-    gtag("config", MeasurementId, {
-        page_location: analyticsLocation(window.location.href),
-        send_page_view: false,
-    });
+    if (analyticsReady()) gtag("config", MeasurementId, { ...pageLocations(), send_page_view: false });
 }
 
 export function noteEvent(category, type, label) {

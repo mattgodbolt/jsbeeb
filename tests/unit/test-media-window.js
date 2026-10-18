@@ -988,6 +988,20 @@ describe("MediaWindow", () => {
             expect(urlState.params.tape).toBe("sth:AnF/Other.zip");
         });
 
+        it("names the user's own disc and tape to analytics only by their source", async () => {
+            const log = vi.spyOn(console, "log").mockImplementation(() => {});
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            deps.media.loadTapeImage.mockResolvedValue({ name: "Mine.uef", position: 0 });
+            const tape = { ...chuckie, ref: "session:1/Mine.uef", title: "Mine.uef", source: "session" };
+            await openWith([saves, tape]);
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(log).toHaveBeenCalledWith("event noted:", "media", "loadDisc", "browser"));
+            await openWith([saves, tape]);
+            document.getElementById("deck-window").click();
+            rows()[0].querySelector(".media-row-main").click();
+            await vi.waitFor(() => expect(log).toHaveBeenCalledWith("event noted:", "media", "loadTape", "session"));
+        });
+
         it("loads a tape into the deck from its row, unfolding the deck", async () => {
             const loadedTape = { name: "Chuckie.uef", position: 0 };
             deps.media.loadTapeImage.mockResolvedValue(loadedTape);
