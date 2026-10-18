@@ -133,11 +133,7 @@ describe("Parameters", () => {
                     ],
                 },
             },
-            scanlines: {
-                type: ParamTypes.BOOL,
-                stored: true,
-                default: true,
-            },
+            scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
             tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
         };
         const urlStateFor = (search) =>
