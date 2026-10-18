@@ -111,9 +111,11 @@ describe("toast", () => {
         const plain = toast("Nothing to do.");
 
         offering.querySelector(".toast-action").click();
+        vi.runAllTimers();
 
         expect(offering.querySelector(".toast-action").textContent).toBe("Do it");
         expect(run).toHaveBeenCalledTimes(1);
+        expect(offering.isConnected).toBe(false);
         expect(plain.querySelector(".toast-action").hidden).toBe(true);
     });
 

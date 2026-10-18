@@ -34,8 +34,9 @@ Every listed entry is one descriptor, whichever source it came from:
   no `model` (and so no `name`).
   `requirementOf(entry)` in `media-catalogue.js` builds it from a manifest entry's `machine`, through
   the table `MachineRequirements`, and its `needs`, through the `neededAs` names of the entries in
-  `src/web/parameters.js`; a name in neither gives no requirement. With `needs` and no `machine`
-  there is no `model`, and the machine switch keeps the model it has.
+  `src/web/parameters.js`. A name in neither table counts for nothing, so an entry whose `machine`
+  is unknown and whose `needs` are known requires the fittings alone. With no `model` the
+  machine switch keeps the model it has.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,

@@ -3,13 +3,13 @@ import { toast } from "./toast.js";
 
 export const VideoNulaFeature = "videonula";
 
+const AfterSession = "One can be fitted once the shared session is over.";
+
 /**
  * Tells the user the program wrote to a VideoNuLA the machine has not got, and offers to fit one, which restarts the
  * emulator. In a shared session fitting one would end the session, so it only says so.
  * @param {{inSession: boolean, fit: function(): void}} options
  */
-const AfterSession = "One can be fitted once the shared session is over.";
-
 export function offerVideoNula({ inSession, fit }) {
     noteFeature(VideoNulaFeature, "missing");
     const missing = "This program tried to use a VideoNuLA, which isn't fitted.";

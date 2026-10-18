@@ -41,8 +41,8 @@ function remember(key, wanted) {
  * @param {object} [options]
  * @param {string} [options.title] a heading, for a notice whose message does not say where it came from
  * @param {string} [options.quietKey] offer to stop showing this kind of notice, remembering the answer here
- * @param {{label: string, run: function(): void}} [options.action] a button that does something about it; a notice
- *     with one stays until it is closed
+ * @param {{label: string, run: function(): void}} [options.action] a button that does something about it and closes
+ *     the notice; a notice with one stays until it is closed
  */
 export function toast(message, { title = "", quietKey = "", action = null } = {}) {
     if (quietKey && remembered(quietKey)) return;
@@ -76,7 +76,10 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
     actionButton.hidden = !action;
     if (action) {
         actionButton.textContent = action.label;
-        actionButton.addEventListener("click", () => action.run());
+        actionButton.addEventListener("click", () => {
+            bootstrap.Toast.getInstance(element)?.hide();
+            action.run();
+        });
     }
 
     const quiet = element.querySelector(".form-check");
