@@ -87,6 +87,16 @@ export function parseQueryString(queryString, paramTypes = {}) {
 }
 
 /**
+ * Parse the parameters of a page's location: those in its query, and those after its hash.
+ * @param {{search: string, hash: string}} location - A Location or URL
+ * @param {Object.<string, ParamType>} [paramTypes={}] - A map of parameter names to their types
+ * @returns {Object} Object containing parsed query parameters
+ */
+export function parseLocationParams(location, paramTypes = {}) {
+    return parseQueryString(location.search.substring(1) + "&" + location.hash.substring(1), paramTypes);
+}
+
+/**
  * Characters RFC 3986 allows literally in a query that `encodeURIComponent` escapes anyway. `&`,
  * `=`, `+`, `#`, `%` and space are left escaped because they delimit something, and `?` because a
  * URL with a second one in it reads as broken even though the grammar permits it.

@@ -161,6 +161,7 @@ describe("MediaLoader", () => {
             expect(await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).toEqual({
                 kind: "disc",
                 name: "mine.ssd",
+                ref: expect.stringMatching(/^session:/),
                 driveIndex: 1,
                 words: "Loaded mine.ssd into drive 1.",
             });
@@ -208,6 +209,7 @@ describe("MediaLoader", () => {
             expect(await media.openFile(fileFor("chuckie_egg.zip", zipped))).toEqual({
                 kind: "tape",
                 name: "Chuckie.uef",
+                ref: expect.stringMatching(/^session:/),
                 words: "Loaded Chuckie.uef as the tape.",
             });
             expect(deps.urlState.params.tape).toBeUndefined();

@@ -13,7 +13,8 @@ import { findModel } from "../models.js";
  * from `machineRequirement`, when its source says.
  */
 
-// `name` heads a chip; `phrase` sits mid-sentence in a slot's status line.
+// `name` heads a chip; `phrase` sits mid-sentence in a slot's status line. A `personal` source holds
+// the user's own media, which analytics names only by its source.
 export const Sources = Object.freeze({
     builtin: { name: "Built in", phrase: "built in", title: "The example discs that ship with jsbeeb" },
     sth: { name: "STH archive", phrase: "STH archive", title: "The Stairway To Hell mirror" },
@@ -37,16 +38,23 @@ export const Sources = Object.freeze({
         phrase: "GitHub",
         title: "Games and demos from their authors' GitHub repos, each with a link to its repo",
     },
-    gdrive: { name: "Google Drive", phrase: "Google Drive", title: "Your Google Drive; changes are kept there" },
+    gdrive: {
+        name: "Google Drive",
+        phrase: "Google Drive",
+        title: "Your Google Drive; changes are kept there",
+        personal: true,
+    },
     browser: {
         name: "This browser",
         phrase: "this browser",
         title: "Discs kept in this browser's storage; changes are kept",
+        personal: true,
     },
     session: {
         name: "This session",
         phrase: "a file opened this session",
         title: "Files opened this session; they cannot be named in the URL",
+        personal: true,
     },
 });
 

@@ -121,6 +121,17 @@ test("a disc named in the URL is loaded and autobooted", async ({ beeb }) => {
     await beeb.expectNotOnScreen("BASIC");
 });
 
+test("analytics is told the page's location with the user's own disc and session name taken out", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open("?disc=elite.ssd&disc2=local:Mine&name=Someone&model=B");
+    const configs = await page.evaluate(() =>
+        window.dataLayer.filter((entry) => entry[0] === "config").map((entry) => entry[2].page_location),
+    );
+    expect(configs).toEqual([expect.stringMatching(/\?disc=elite\.ssd&disc2=browser&name=redacted&model=B$/)]);
+});
+
 test("the media window shows the drives, keeps the keyboard while focused, and gives it back", async ({
     beeb,
     page,

@@ -41,6 +41,13 @@ describe("Autoboot", () => {
         expect(sendKeys).toHaveBeenCalledWith([BBC.SHIFT, 1000], false);
     });
 
+    it("names the disc it boots to analytics as mediaLabel does", () => {
+        make().boot("local:Mine");
+        make().boot("elite.ssd");
+        expect(console.log).toHaveBeenCalledWith("event noted:", "init", "autoboot", "browser");
+        expect(console.log).toHaveBeenCalledWith("event noted:", "init", "autoboot", "elite.ssd");
+    });
+
     it("types the requested keys after a pause", () => {
         make().type("*CAT\n");
         const [keys, checkLocks] = sendKeys.mock.calls[0];

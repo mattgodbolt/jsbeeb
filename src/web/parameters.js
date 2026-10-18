@@ -2,6 +2,7 @@ import { ParamTypes } from "../url-params.js";
 import { allModels, findModel, tubeModelFor } from "../models.js";
 import { AudioOutputs, DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { getFilterForMode, MaxPersistenceMs, persistenceSettings } from "./canvas.js";
+import { mediaLabel, redacted } from "./analytics-filters.js";
 
 const round = (value) => Number(value.toFixed(2));
 
@@ -46,6 +47,9 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * for a menu, unless `id` says otherwise. Changes are saved when the dialog closes, unless the field is `live`; a
  * `restart` field only takes effect on a freshly built machine. `enabledWhen(proposed)` greys a control out unless the
  * settings as they would be saved allow it. `title` is a slider's tooltip, and backquotes mark code.
+ *
+ * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it;
+ * a parameter with none is told as it is.
  */
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
@@ -235,12 +239,12 @@ export const Parameters = {
     autochain: { type: ParamTypes.BOOL, startupAction: true },
     autorun: { type: ParamTypes.BOOL, startupAction: true },
     autotype: { type: ParamTypes.STRING, startupAction: true },
-    loadBasic: { type: ParamTypes.STRING, startupAction: true },
+    loadBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: mediaLabel },
     embedBasic: { type: ParamTypes.STRING, startupAction: true },
     patch: { type: ParamTypes.STRING, startupAction: true },
 
     // Array parameters
-    rom: { type: ParamTypes.ARRAY },
+    rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },
 
     // Boolean parameters
     embed: { type: ParamTypes.BOOL, localToPage: true },
@@ -263,16 +267,21 @@ export const Parameters = {
     cpuMultiplier: { type: ParamTypes.FLOAT },
 
     // String parameters (these are the default but listed for clarity)
-    disc: { type: ParamTypes.STRING },
-    disc1: { type: ParamTypes.STRING },
-    disc2: { type: ParamTypes.STRING },
-    tape: { type: ParamTypes.STRING },
-    mmc: { type: ParamTypes.STRING },
+    disc: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
+    disc1: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
+    disc2: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
+    tape: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
+    mmc: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
     drive0Tracks: { type: ParamTypes.STRING },
     drive1Tracks: { type: ParamTypes.STRING },
     sbLeft: { type: ParamTypes.STRING, localToPage: true },
     sbRight: { type: ParamTypes.STRING, localToPage: true },
     sbBottom: { type: ParamTypes.STRING, localToPage: true },
+
+    // A shared session's room, and the name its user goes by there
+    server: { type: ParamTypes.STRING, analyticsFilter: redacted },
+    client: { type: ParamTypes.STRING, analyticsFilter: redacted },
+    name: { type: ParamTypes.STRING, analyticsFilter: redacted },
 };
 
 /** @returns {Object.<string, string>} each parameter's URL type, as the URL parser takes them. */

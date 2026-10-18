@@ -1,6 +1,7 @@
 import { satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
+import { mediaLabel } from "./analytics-filters.js";
 import { StartupActionParams } from "./parameters.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
@@ -62,7 +63,7 @@ export class MachineSwitch {
             );
             if (!wanted) return false;
         }
-        noteEvent("media", "switchMachine", d.ref);
+        noteEvent("media", "switchMachine", mediaLabel(d.ref));
         if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
         reloadAsMachine(
             this.urlState,
