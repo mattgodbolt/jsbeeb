@@ -4,6 +4,8 @@ import { expect, test } from "./fixtures.js";
 
 // Three passes of fifteen emulated seconds each, unthrottled, under the software renderer CI uses.
 const BenchmarkTimeoutMs = 120000;
+// Longer than Bootstrap's modal fade, so a dialog that was going to close has.
+const ModalFadeMs = 500;
 
 const benchmarkRecord = async (page) => {
     await page.waitForFunction(() => window.jsbeebBenchmark);
@@ -21,6 +23,10 @@ test("runs a workload, publishes its result for a script, then runs the machine"
     await expect(page.locator("#benchmark .benchmark-status")).toBeVisible();
     await expect(page.locator("#benchmark .benchmark-close")).toHaveCount(2);
     for (const close of await page.locator("#benchmark .benchmark-close").all()) await expect(close).toBeHidden();
+    await page.keyboard.press("Escape");
+    await page.mouse.click(5, 5);
+    await page.waitForTimeout(ModalFadeMs);
+    await expect(page.locator("#benchmark")).toHaveClass(/\bshow\b/);
     const { status, line, result } = await benchmarkRecord(page);
     expect(status).toBe("done");
     expect(Object.keys(result.passes)).toEqual(["full", "video", "cpu"]);
@@ -44,4 +50,13 @@ test("a workload for another model fails, saying which model it needs", async ({
         error: "The master-shadow workload runs on the Master: add &model=Master to the URL",
     });
     await expect(page.locator("#benchmark .benchmark-status")).toContainText("add &model=Master");
+});
+
+test("a parameter that changes what is measured is refused", async ({ beeb, page }) => {
+    await beeb.open("?benchmark=elite&frameSkip=2");
+    const { status, error } = await benchmarkRecord(page);
+    expect({ status, error }).toEqual({
+        status: "failed",
+        error: "frameSkip would change what is measured; take it out of the URL",
+    });
 });

@@ -147,8 +147,9 @@ export class BenchmarkPage {
         }
     }
 
-    /** Ends the run as failed, leaving the machine stopped wherever the failure left it. */
+    /** Ends a run still going as failed, leaving the machine stopped wherever the failure left it. */
     fail(error) {
+        if (this.record.status !== "running") return;
         console.warn("Benchmark failed:", error);
         Object.assign(this.record, { status: "failed", error: error.message });
         this.showStatus(`The benchmark stopped: ${error.message}. Reload the page without it to use the emulator.`);
