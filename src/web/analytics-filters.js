@@ -28,10 +28,6 @@ export function mediaLabel(ref) {
     return personal ? sourceKey(ref) : ref;
 }
 
-/** The value as it is, for a parameter whose values are no one's own. */
-export const asIs = (value) => value;
-
-/** Nothing of the value at all. */
 export const redacted = () => "redacted";
 
 /** An error message without what it quotes or the addresses it names, which may be the user's own. */

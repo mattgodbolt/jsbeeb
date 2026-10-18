@@ -10,7 +10,6 @@ import {
     tubeCpuSpeedLabel,
     urlParamType,
 } from "../../src/web/parameters.js";
-import { asIs } from "../../src/web/analytics-filters.js";
 import { configForm } from "../../src/web/config-form.js";
 import { Settings } from "../../src/web/settings.js";
 import { Config } from "../../src/web/config.js";
@@ -29,8 +28,6 @@ describe("Parameters", () => {
     it.each(Object.entries(Parameters))("declares everything %s must", (name, parameter) => {
         for (const property of RequiredProperties) expect(parameter, property).toHaveProperty(property);
         expect(Object.values(ParamTypes)).toContain(parameter.type);
-        expect(typeof parameter.localToPage).toBe("boolean");
-        expect(typeof parameter.analyticsFilter).toBe("function");
     });
 
     it.each(families)("declares nothing for %s that only works by name", (name, family) => {
@@ -122,8 +119,6 @@ describe("Parameters", () => {
             ...Parameters,
             screenTint: {
                 type: ParamTypes.STRING,
-                localToPage: false,
-                analyticsFilter: asIs,
                 stored: true,
                 default: "amber",
                 fromUrl: (tint) => tint.toLowerCase(),
@@ -140,12 +135,10 @@ describe("Parameters", () => {
             },
             scanlines: {
                 type: ParamTypes.BOOL,
-                localToPage: false,
-                analyticsFilter: asIs,
                 stored: true,
                 default: true,
             },
-            tintLevel: { type: ParamTypes.INT, localToPage: false, analyticsFilter: asIs, stored: true, default: 3 },
+            tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
         };
         const urlStateFor = (search) =>
             new UrlState(
