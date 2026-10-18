@@ -153,6 +153,46 @@ describe("TestMachine debug stops", () => {
         });
     });
 
+    describe("a state saved where a hook stopped it", () => {
+        it("says so, where one saved running does not", async () => {
+            const machine = await bootedMachine();
+            expect(machine.snapshot().stoppedAtBreakpoint).toBe(false);
+
+            await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
+
+            expect(machine.snapshot().stoppedAtBreakpoint).toBe(true);
+        });
+
+        it("runs on past the restored pc, which a hook added since still sees", async () => {
+            const machine = await bootedMachine();
+            const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
+            const state = machine.snapshot();
+            hook.remove();
+            await cyclesToRun(machine, ShortRunCycles);
+            machine.processor.debugInstruction.add(hook);
+            const pcs = [];
+            machine.processor.debugInstruction.add((pc) => {
+                pcs.push(pc);
+            });
+
+            machine.restore(state);
+
+            expect(await cyclesToRun(machine, ShortRunCycles)).toBe(JmpCycles);
+            expect(pcs).toEqual([LoopAddress, LoopAddress]);
+        });
+
+        it("stops at the restored pc when the state predates the field", async () => {
+            const machine = await bootedMachine();
+            await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
+            const state = machine.snapshot();
+            delete state.stoppedAtBreakpoint;
+
+            machine.restore(state);
+
+            expect(await cyclesToRun(machine, ShortRunCycles)).toBe(0);
+        });
+    });
+
     it("keeps the hooks called at a stop across an execute that runs nothing", async () => {
         const machine = await bootedMachine();
         await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
