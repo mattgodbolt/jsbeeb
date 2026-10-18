@@ -109,7 +109,6 @@ describe("Parameters", () => {
             },
             scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
             tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
-            hideTint: { type: ParamTypes.BOOL, stored: true, notInUrl: true, default: true },
         };
         const urlStateFor = (search) =>
             new UrlState(
@@ -146,19 +145,6 @@ describe("Parameters", () => {
             settings.set({ screenTint: "green" });
             expect(settings.urlState.url()).toBe("https://bbc.example/?model=Master&screenTint=green");
             expect(settingsFor(new URL(settings.urlState.url()).search).screenTint).toBe("green");
-        });
-
-        it("is kept in storage alone when the URL is no place for it", () => {
-            expect(settingsFor("?hideTint=false").hideTint).toBe(true);
-            const settings = settingsFor("?model=Master");
-            settings.set({ hideTint: false });
-            expect(window.localStorage.hideTint).toBe("false");
-            expect(settings.urlState.url()).toBe("https://bbc.example/?model=Master");
-            expect(settings.urlState.history.pushState).not.toHaveBeenCalled();
-            expect(settingsFor("").hideTint).toBe(false);
-            settings.set({ hideTint: undefined });
-            expect(window.localStorage.hideTint).toBeUndefined();
-            expect(urlParamTypes(withMadeUpSetting)).not.toHaveProperty("hideTint");
         });
 
         it("appears in the dialog where it is declared, and sets the setting", () => {

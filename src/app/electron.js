@@ -2,7 +2,6 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 import { describeRef } from "../web/media-catalogue.js";
-import { UrlParamTypes } from "../web/parameters.js";
 
 function init(args) {
     const { loadStateFile, modals, actions, settings, media } = args;
@@ -43,10 +42,10 @@ function init(args) {
         });
     }
 
-    // The saved settings are the query the next launch starts with, so only what the URL carries.
+    // Save settings when they change
     if (settings) {
         settings.addEventListener("change", (e) => {
-            api.saveSettings(Object.fromEntries(Object.entries(e.detail).filter(([name]) => name in UrlParamTypes)));
+            api.saveSettings(e.detail);
         });
     }
     if (media) {

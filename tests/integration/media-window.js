@@ -8,7 +8,6 @@ import { SnapshotUI, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { createSnapshot, snapshotToJSON } from "../../src/snapshot.js";
 import { MediaWindow } from "../../src/web/media-window.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
-import { Settings } from "../../src/web/settings.js";
 import { Drives } from "../../src/web/drives.js";
 import { describeRef } from "../../src/web/media-catalogue.js";
 import { DriveTracks } from "../../src/url-params.js";
@@ -94,7 +93,6 @@ describe("the media window against a real machine", () => {
                 urlState,
                 modals: { confirm: async () => false },
             }),
-            settings: new Settings({ urlState }),
         });
         return { machine, urlState, drives, media, window };
     };

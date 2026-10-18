@@ -79,9 +79,8 @@ function webPage(url) {
 }
 
 export class MediaWindow {
-    constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource, machineSwitch, settings }) {
+    constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource, machineSwitch }) {
         this.media = media;
-        this.settings = settings;
         this.slots = media.slots;
         this.drives = drives;
         this.processor = processor;
@@ -475,11 +474,8 @@ export class MediaWindow {
         list.connect.addEventListener("click", async () => {
             if (await this.driveSource.connect()) this.loadDriveDiscs();
         });
-        list.autoboot.checked = this.settings.mediaAutoboot;
-        list.autoboot.addEventListener("change", () => {
-            this.settings.set({ mediaAutoboot: list.autoboot.checked ? undefined : false });
-            this.renderList();
-        });
+        list.autoboot.checked = true;
+        list.autoboot.addEventListener("change", () => this.renderList());
         list.newDisc.addEventListener("click", () => this.showDiscForm({ copyFrom: null }));
         document.getElementById("media-new-disc-cancel").addEventListener("click", () => {
             list.newDiscForm.hidden = true;
@@ -562,7 +558,7 @@ export class MediaWindow {
         const first = this.list.rows.querySelector(".media-row-main")?.descriptor;
         const target = first ? this.rowTarget(first) : this.target;
         this.list.hint.replaceChildren(
-            ...[...hintKeys(target, this.settings.mediaAutoboot), ["Esc", "closes"]].map(([key, what]) => {
+            ...[...hintKeys(target, this.list.autoboot.checked), ["Esc", "closes"]].map(([key, what]) => {
                 const span = document.createElement("span");
                 const kbd = document.createElement("kbd");
                 kbd.textContent = key;
@@ -772,7 +768,7 @@ export class MediaWindow {
 
     /** Whether a load into `driveIndex` boots: only drive 0 does, as Autoboot says, or the other way with Shift. */
     bootsFrom(driveIndex, shift = false) {
-        return driveIndex === 0 && shift !== this.settings.mediaAutoboot;
+        return driveIndex === 0 && shift !== this.list.autoboot.checked;
     }
 
     /** Which slot a descriptor's media is loaded in, as text, or null. */

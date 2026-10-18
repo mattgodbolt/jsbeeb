@@ -7,7 +7,6 @@ import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { findModel } from "../../src/models.js";
 import { Schemas } from "../../src/media-resolver.js";
 import { MediaSlots } from "../../src/web/media-slots.js";
-import { Settings } from "../../src/web/settings.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
@@ -92,7 +91,6 @@ describe("MediaWindow", () => {
                 createFrom: vi.fn(),
             },
             machineSwitch: new MachineSwitch({ model, processor, urlState, modals: { confirm } }),
-            settings: new Settings({ urlState }),
         };
     });
 
@@ -105,7 +103,13 @@ describe("MediaWindow", () => {
         return teardownDom();
     });
 
-    const make = (using = deps) => (made = new MediaWindow(using));
+    let startTicked;
+    beforeEach(() => (startTicked = true));
+    const make = () => {
+        made = new MediaWindow(deps);
+        if (!startTicked) setTick(false);
+        return made;
+    };
     const panel = () => document.getElementById("media-panel");
     const bay = (driveIndex) => document.querySelector(`.bay[data-drive="${driveIndex}"]`);
     const text = (el) => el.textContent.replace(/\s+/g, " ").trim();
@@ -885,7 +889,7 @@ describe("MediaWindow", () => {
         });
 
         describe("with Autoboot unticked", () => {
-            beforeEach(() => deps.settings.set({ mediaAutoboot: false }));
+            beforeEach(() => (startTicked = false));
 
             it("says Enter only loads and Shift+Enter boots, and names a plain load as one", async () => {
                 await openWith([elite]);
@@ -952,7 +956,7 @@ describe("MediaWindow", () => {
         it.each(tickAndShift)(
             "loads into drive 1 from the other drive's button without a boot, ticked %s, Shift %s",
             async (ticked, shiftKey) => {
-                deps.settings.set({ mediaAutoboot: ticked });
+                startTicked = ticked;
                 deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
                 urlState.set({ autoboot: true });
                 await openWith([elite]);
@@ -969,7 +973,7 @@ describe("MediaWindow", () => {
         it.each(tickAndShift)(
             "loads into drive 1 without a boot on Enter aimed there, ticked %s, Shift %s",
             async (ticked, shiftKey) => {
-                deps.settings.set({ mediaAutoboot: ticked });
+                startTicked = ticked;
                 deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
                 await openWith([elite]);
                 document.querySelector('#media-into [data-target="1"]').click();
@@ -982,7 +986,7 @@ describe("MediaWindow", () => {
         );
 
         it.each(tickAndShift)("never boots a tape, ticked %s, Shift %s", async (ticked, shiftKey) => {
-            deps.settings.set({ mediaAutoboot: ticked });
+            startTicked = ticked;
             deps.media.loadTapeImage.mockResolvedValue({ name: "Chuckie.uef", position: 0 });
             await openWith([chuckie]);
             document.querySelector('#media-into [data-target="tape"]').click();
@@ -1360,7 +1364,7 @@ describe("MediaWindow", () => {
         });
 
         it("switches without asking on a shift-click with Autoboot unticked", async () => {
-            deps.settings.set({ mediaAutoboot: false });
+            startTicked = false;
             await openWith([paradroid]);
             row().dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
             await vi.waitFor(() =>
@@ -1394,7 +1398,7 @@ describe("MediaWindow", () => {
         });
 
         it("asks on a plain click with Autoboot unticked", async () => {
-            deps.settings.set({ mediaAutoboot: false });
+            startTicked = false;
             confirm.mockResolvedValue(false);
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
             await openWith([paradroid]);
@@ -1485,7 +1489,7 @@ describe("MediaWindow", () => {
         });
 
         it("does not boot a disc dropped into drive 0 when Autoboot is unticked", async () => {
-            deps.settings.set({ mediaAutoboot: false });
+            startTicked = false;
             deps.media.openFile.mockResolvedValue({
                 kind: "disc",
                 name: "game.ssd",
@@ -1517,26 +1521,19 @@ describe("MediaWindow", () => {
     });
 
     describe("the footer", () => {
-        it("remembers Autoboot unticked in this browser, and leaves the URL out of it", async () => {
+        it("starts Autoboot ticked, and remembers an untick nowhere", async () => {
             vi.spyOn(urlState, "updateUrl");
             await openWith();
-            setTick(false);
-            expect(window.localStorage.mediaAutoboot).toBe("false");
-            setTick(true);
-            expect(window.localStorage.mediaAutoboot).toBeUndefined();
+            expect(autobootTick().checked).toBe(true);
             setTick(false);
             expect(urlState.params).toEqual({});
             expect(urlState.updateUrl).not.toHaveBeenCalled();
-        });
-
-        it.each([
-            [undefined, true],
-            ["false", false],
-        ])("starts a fresh page with storage holding %s ticked %s, whatever the URL says", (stored, ticked) => {
-            if (stored !== undefined) window.localStorage.mediaAutoboot = stored;
-            const fromUrl = fakeUrlState(`?autoboot&mediaAutoboot=${!ticked}`);
-            make({ ...deps, settings: new Settings({ urlState: fromUrl }) });
-            expect(document.querySelector("#media-panel .autoboot").checked).toBe(ticked);
+            expect(Object.keys(window.localStorage)).toEqual([]);
+            made.dispose();
+            teardownDom();
+            domFromIndexHtml("navbarSupportedContent", "leds", "drop-zone", "media-panel", "drive-bay-template");
+            make();
+            expect(autobootTick().checked).toBe(true);
         });
 
         it("offers this browser for a new disc each time the form opens, however the last one was made", async () => {
