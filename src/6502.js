@@ -577,9 +577,10 @@ class FakeTube {
 }
 
 class DebugHook {
-    constructor(cpu, functionName) {
+    constructor(cpu, functionName, { remembersStop = false } = {}) {
         this.cpu = cpu;
         this.functionName = functionName;
+        this.remembersStop = remembersStop;
         this.handlers = [];
         this.calledAtStop = null;
     }
@@ -596,7 +597,7 @@ class DebugHook {
                     if (handlers[i].apply(handlers[i], arguments)) stop = true;
                 }
                 if (stop) {
-                    self.calledAtStop = new Set(handlers);
+                    if (self.remembersStop) self.calledAtStop = new Set(handlers);
                     self.cpu.stop();
                 }
                 return stop;
@@ -716,7 +717,7 @@ export class Cpu6502 extends Base6502 {
 
         this._debugRead = this._debugWrite = this._debugInstruction = null;
         this.resumingFromStop = false;
-        this.debugInstruction = new DebugHook(this, "_debugInstruction");
+        this.debugInstruction = new DebugHook(this, "_debugInstruction", { remembersStop: true });
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
 
