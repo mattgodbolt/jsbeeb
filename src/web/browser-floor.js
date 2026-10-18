@@ -1,9 +1,11 @@
 /* exported browserFloor */
 // ES5, as it runs exactly where the bundle's syntax does not. tools/vite-plugin-browser-floor.js passes the floors.
 function browserFloor(config) {
-    // Every iOS browser is Safari's engine at the iOS version, Edge's agent string also says Chrome, and Android
-    // WebView's also says Version/, so the order matters.
+    // The order matters. Safari on iOS says its version just before Mobile/; every other iOS browser is Safari's engine
+    // at the iOS version (frozen at 18_6 from iOS 26). Edge's agent string also says Chrome, and Android WebView's
+    // also says Version/.
     var Browsers = [
+        ["Safari", /Version\/(\d+(?:\.\d+)?) Mobile\/\w+ Safari/],
         ["Safari", /OS (\d+)_(\d+)(?:_\d+)? like Mac OS X/],
         ["Edge", /Edg[eA]?\/(\d+)/],
         ["Firefox", /Firefox\/(\d+)/],

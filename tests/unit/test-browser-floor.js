@@ -153,6 +153,10 @@ describe("the browser floor check", () => {
                 `Mozilla/5.0 (iPhone; CPU iPhone OS ${floors.Safari.replace(".", "_")} like Mac OS X) Version/16.0 EdgiOS/119.0 Mobile/15E148 Safari/605.1.15`,
             ],
             [
+                "Safari on iOS 26, whose agent string stops the iOS version at 18_6",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+            ],
+            [
                 "Android WebView",
                 "Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36 Version/4.0 Chrome/120.0.0.0 Mobile Safari/537.36",
             ],
@@ -162,12 +166,21 @@ describe("the browser floor check", () => {
         });
     });
 
-    it("judges any browser on iOS by the iOS version, Safari's engine", async () => {
+    it("judges another browser on iOS by the iOS version, Safari's engine", async () => {
         const window = await open({
             userAgent:
                 "Mozilla/5.0 (iPhone; CPU iPhone OS 15_2_1 like Mac OS X) Version/15.0 EdgiOS/119.0 Mobile/15E148 Safari/605.1.15",
         });
         expect(textOf(window)).toMatch(/^You're using Safari 15\.2\. jsbeeb needs Safari /);
+    });
+
+    it("names Safari on iOS by its own version", async () => {
+        const window = await open({
+            userAgent:
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+        });
+        errorFrom(window, OurBundle);
+        expect(textOf(window)).toMatch(/^jsbeeb didn't start in Safari 26\.0\./);
     });
 
     describe("an uncaught error before startup finishes", () => {
