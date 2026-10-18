@@ -200,6 +200,14 @@ describe("analytics", () => {
                 expect(gtag).toHaveBeenCalledWith("event", "category", { type: "type", count: 0 });
             });
 
+            it("logs what it sends as one line of text, quoting the values that would not read as one word", async () => {
+                const { note } = await loadWithMeasurementId(measurementId);
+                note("js_error", { where: "loop", message: 'bad "x"', file_line: undefined, label: "", count: 0 });
+                expect(console.log).toHaveBeenCalledWith(
+                    'event noted: js_error where=loop message="bad \\"x\\"" label="" count=0',
+                );
+            });
+
             const sent = (name) =>
                 gtag.mock.calls.filter(([command, event]) => command === "event" && event === name).map(([, , p]) => p);
 
