@@ -8,7 +8,8 @@ import { parseArgs } from "node:util";
 
 import { median } from "./ab-stats.js";
 
-// TickMs in src/web/emulation-loop.js: execute()'s exit deopts, so the slice size counts.
+// TickMs in src/web/emulation-loop.js, which Node cannot import (it reaches bootstrap and Vite's .glsl imports).
+// execute()'s exit deopts, so the slice size counts.
 const BrowserTickMs = 10;
 const MsPerSecond = 1000;
 export const SlicesPerSecond = MsPerSecond / BrowserTickMs;

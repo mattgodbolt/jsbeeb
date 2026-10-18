@@ -47,7 +47,7 @@ const Defaults = {
 };
 
 function usage() {
-    return `Usage: node tools/node-ab.js <A> <B> [workload ...] [options]
+    return `Usage: npm run benchmark:ab -- <A> <B> [workload ...] [options]
 
 A and B are git refs (each checked out into its own temporary worktree, removed afterwards) or paths to
 existing checkouts. With no workloads, every workload in A's ${ManifestPath} runs. B/A > 1 means B is faster.
@@ -318,7 +318,7 @@ async function compare(sides, names, settings) {
         const onPair = ({ pairs, ratio, low, high }) =>
             console.error(`  ${name} ${pairs} pairs: ${ratio.toFixed(3)} [${low.toFixed(3)}, ${high.toFixed(3)}]`);
         const result = await sampleUntilResolved({ sample, onPair, minPairs, maxPairs, horizon });
-        console.log(describeComparison(name, result));
+        console.log(describeComparison(name, result, `Node ${process.version}`));
         results.push({ workload: name, ...result, raw });
     }
     return results;

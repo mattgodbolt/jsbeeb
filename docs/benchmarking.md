@@ -7,8 +7,10 @@ Node, and the A/B runner below says whether a difference between two commits is 
 ## Node A/B runner
 
 ```sh
-node tools/node-ab.js <A> <B> [workload ...] [options]
+npm run benchmark:ab -- <A> <B> [workload ...] [options]
 ```
+
+npm runs it from the checkout's root, so relative paths (a side, `--json`, `--out-dir`) are taken from there.
 
 A and B are git refs or paths to existing checkouts. A ref is checked out into a temporary worktree (in the
 system temp directory, or `--work-dir`) that is removed afterwards, also on Ctrl-C, SIGTERM or SIGHUP; its
@@ -22,9 +24,12 @@ workloads, so neither can predate them. A run killed outright (`kill -9`) leaves
 
 With no workloads named, every workload in A's manifest runs, one after another. `--fake-video` measures the
 CPU and peripherals without rendering video; the difference from a run without it is the video's cost.
-`node tools/node-ab.js --help` lists the rest.
+`npm run benchmark:ab -- --help` lists the rest.
 
-Each sample is a fresh Node process, so no side inherits the other's type feedback or compiled code. It
+Each sample is a fresh Node process, so no side inherits the other's type feedback or compiled code. Both sides
+run on the runner's own Node, whatever version each side's `package.json` asks for, so the comparison is of the
+code and not of two engines; the version goes on every result line and in the JSON (`node`), since results from
+different versions or machines are not comparable with each other. It
 restores the workload from its side's checkout, runs `--warmup-secs` emulated seconds (5) for the JIT tiers to
 settle, then times `--measure-secs` (10) in 10 ms slices of emulated time, the size of the page's tick
 (`TickMs` in `src/web/emulation-loop.js`), since `execute()`'s exit deopts and the slice size changes what is

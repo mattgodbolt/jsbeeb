@@ -228,8 +228,11 @@ export async function sampleUntilResolved({ sample, minPairs, maxPairs, horizon,
 const percent = (fraction, digits = 1) => `${(fraction * PercentPerUnit).toFixed(digits)}%`;
 const signedPercent = (ratio) => `${ratio >= 1 ? "+" : ""}${percent(ratio - 1)}`;
 
-/** One line per workload for people: the change B makes, its interval, the verdict and what it could see. */
-export function describeComparison(name, result) {
+/**
+ * One line per workload for people: the change B makes, its interval, the verdict and what it could see, ending
+ * with `engine` (what ran the samples, such as the Node version) when given.
+ */
+export function describeComparison(name, result, engine) {
     const { ratio, low, high, pairs, minDetectableChange, aMedian, bMedian } = result;
     const detectable = Number.isFinite(minDetectableChange)
         ? `min detectable change ${percent(minDetectableChange)}`
@@ -238,6 +241,6 @@ export function describeComparison(name, result) {
         `${name}: B/A ${ratio.toFixed(3)} (${signedPercent(ratio)}), ` +
         `${percent(result.confidence, 0)} CI [${low.toFixed(3)}, ${high.toFixed(3)}], ${result.verdict}; ` +
         `${pairs} pairs, ${detectable}; ` +
-        `median A ${aMedian.toFixed(2)}, B ${bMedian.toFixed(2)}`
+        `median A ${aMedian.toFixed(2)}, B ${bMedian.toFixed(2)}${engine ? `; ${engine}` : ""}`
     );
 }

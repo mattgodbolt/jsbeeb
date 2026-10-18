@@ -193,6 +193,11 @@ describe("describeComparison", () => {
         );
     });
 
+    it("ends with what ran the samples, when given", () => {
+        const result = summarisePairs(pairsWithLogRatios([0.13, 0.14, 0.15]), 0.02);
+        expect(describeComparison("elite", result, "Node v24.18.1")).toMatch(/; Node v24\.18\.1$/);
+    });
+
     it("says when the pairs are too few to know what change they could detect", () => {
         const result = summarisePairs(pairsWithLogRatios([0.13, 0.14, 0.15]), 0.02);
         expect(describeComparison("elite", result)).toContain("3 pairs, too few to say what change they could detect");

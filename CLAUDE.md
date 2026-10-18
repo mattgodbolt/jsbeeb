@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run benchmark:workloads` - Rebuild the workload snapshots in `public/benchmarks` from a boot and scripted
   input (`tools/make-benchmark-workloads.js`); `-- --check` compares instead of writing. `src/benchmark-workloads.js`
   restores one by name, in Node or the page, and checks it is running what its name says
-- `node tools/node-ab.js <A> <B> [workload ...]` - Whether B is faster than A in Node, with a confidence interval,
+- `npm run benchmark:ab -- <A> <B> [workload ...]` - Whether B is faster than A in Node, with a confidence interval,
   from fresh processes alternating between two refs or checkouts; see `docs/benchmarking.md`
 - `npm run test:same-answer` - Run each benchmark workload for 100 frames and compare hashes of its state (framebuffer,
   registers, memory, cycles, sound, peripherals) against `tests/same-answer-hashes.json`, naming the parts that
