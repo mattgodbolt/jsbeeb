@@ -35,10 +35,10 @@ export const ParamTypes = {
 /**
  * Parse a query string into an object
  * @param {string} queryString - The query string to parse
- * @param {Object.<string, ParamType>} [paramTypes={}] - A map of parameter names to their types
+ * @param {(name: string) => ParamType|undefined} [typeOf] - The type of the parameter `name`, STRING if none
  * @returns {Object} Object containing parsed query parameters
  */
-export function parseQueryString(queryString, paramTypes = {}) {
+export function parseQueryString(queryString, typeOf = () => undefined) {
     if (!queryString) return {};
 
     const parsedQuery = {};
@@ -51,7 +51,7 @@ export function parseQueryString(queryString, paramTypes = {}) {
         let val = null;
         if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal.slice(1).join("="));
 
-        const paramType = paramTypes[key] || ParamTypes.STRING;
+        const paramType = typeOf(key) ?? ParamTypes.STRING;
 
         switch (paramType) {
             case ParamTypes.ARRAY:
@@ -89,11 +89,11 @@ export function parseQueryString(queryString, paramTypes = {}) {
 /**
  * Parse the parameters of a page's location: those in its query, and those after its hash.
  * @param {{search: string, hash: string}} location - A Location or URL
- * @param {Object.<string, ParamType>} [paramTypes={}] - A map of parameter names to their types
+ * @param {(name: string) => ParamType|undefined} [typeOf] - The type of the parameter `name`, STRING if none
  * @returns {Object} Object containing parsed query parameters
  */
-export function parseLocationParams(location, paramTypes = {}) {
-    return parseQueryString(location.search.substring(1) + "&" + location.hash.substring(1), paramTypes);
+export function parseLocationParams(location, typeOf = () => undefined) {
+    return parseQueryString(location.search.substring(1) + "&" + location.hash.substring(1), typeOf);
 }
 
 /**
@@ -137,18 +137,17 @@ function appendParam(url, sep, key, value = undefined) {
  * Build a URL string from base URL and query parameters
  * @param {string} baseUrl - The base URL (without query string)
  * @param {Object} parsedQuery - Object containing query parameters
- * @param {Object.<string, ParamType>} [paramTypes={}] - Object mapping parameter names to their types
+ * @param {(name: string) => ParamType|undefined} [typeOf] - The type of the parameter `name`, STRING if none
  * @returns {string} The complete URL with query parameters
  */
-export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
+export function buildUrlFromParams(baseUrl, parsedQuery, typeOf = () => undefined) {
     let url = baseUrl;
     let sep = "?";
 
     Object.entries(parsedQuery).forEach(([key, value]) => {
         if (key.length === 0) return;
 
-        // Default to STRING unless explicitly specified
-        const paramType = paramTypes[key] || ParamTypes.STRING;
+        const paramType = typeOf(key) ?? ParamTypes.STRING;
 
         switch (paramType) {
             case ParamTypes.ARRAY:
@@ -186,59 +185,6 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
     });
 
     return url;
-}
-
-const KeyMappingPrefix = "KEY.";
-const GamepadMappingPrefix = "GP.";
-const GamepadDirectionParams = ["LEFT", "RIGHT", "UP", "DOWN", "FIRE"];
-
-/** Whether `key` is one of the key or gamepad mappings that processInputParams reads. */
-export const isInputMappingParam = (key) =>
-    key.toUpperCase().startsWith(KeyMappingPrefix) ||
-    key.startsWith(GamepadMappingPrefix) ||
-    GamepadDirectionParams.includes(key);
-
-/**
- * Process keyboard and gamepad mapping parameters from query string
- * @param {Object} parsedQuery - The parsed query parameters
- * @param {Object} machineKeys - Emulated machine's key constants (`BBC`, or `ATOM` for the Atom)
- * @param {(name: string) => string[]} hostKeyCodes - jsbeeb's host key name to `KeyboardEvent.code` names
- * @param {Array} userKeymap - Array to store user key mappings
- * @param {Object} gamepad - Gamepad object for handling mapping
- * @returns {string[]} descriptions of any mappings that were skipped, for showing to the user
- */
-export function processInputParams(parsedQuery, machineKeys, hostKeyCodes, userKeymap, gamepad) {
-    const warnings = [];
-
-    Object.entries(parsedQuery).forEach(([key, val]) => {
-        if (!val) return;
-
-        // `KEY.<host key>=<machine key>`, eg `KEY.CAPSLOCK=CTRL`. Host names come from
-        // `keyCodes`, so the BBC's RETURN is ENTER here; both lists are in the README.
-        if (key.toUpperCase().startsWith(KeyMappingPrefix)) {
-            const machineKey = val.toUpperCase();
-            const nativeKey = key.substring(KeyMappingPrefix.length).toUpperCase();
-
-            if (!machineKeys[machineKey]) {
-                warnings.push(`${key}=${val}: "${machineKey}" is not a key on the emulated machine.`);
-            } else if (hostKeyCodes(nativeKey).length === 0) {
-                warnings.push(`${key}=${val}: "${nativeKey}" is not a key on your keyboard.`);
-            } else {
-                console.log("mapping " + nativeKey + " to " + machineKey);
-                userKeymap.push({ native: nativeKey, key: machineKey });
-            }
-        } else if (key.startsWith(GamepadMappingPrefix)) {
-            // eg ?GP.FIRE2=RETURN
-            const gamepadKey = key.substring(GamepadMappingPrefix.length).toUpperCase();
-            const problem = gamepad.remap(gamepadKey, val.toUpperCase());
-            if (problem) warnings.push(`${key}=${val}: ${problem}`);
-        } else if (GamepadDirectionParams.includes(key)) {
-            const problem = gamepad.remap(key, val.toUpperCase());
-            if (problem) warnings.push(`${key}=${val}: ${problem}`);
-        }
-    });
-
-    return warnings;
 }
 
 /**

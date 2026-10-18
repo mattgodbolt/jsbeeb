@@ -27,7 +27,7 @@ import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { MaxWaitingKeys } from "../../src/web/session-sequencer.js";
 import { parseQueryString } from "../../src/url-params.js";
-import { UrlParamTypes } from "../../src/web/parameters.js";
+import { urlParamType } from "../../src/web/parameters.js";
 import { domFromIndexHtml, sentEvents } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
@@ -2460,7 +2460,7 @@ describe("joinLink", () => {
 
     it("gives the name back as it was when the link is read", () => {
         const query = new URL(joinLink("brave-owls-sing", "matt g")).search.substring(1);
-        expect(parseQueryString(query, UrlParamTypes).name).toBe("matt g");
+        expect(parseQueryString(query, urlParamType).name).toBe("matt g");
     });
 
     it("keeps the settings local to the page and the input mappings it is given, and nothing that changes the machine", () => {
@@ -2475,11 +2475,13 @@ describe("joinLink", () => {
             embed: true,
             "KEY.CAPSLOCK": "CTRL",
             "GP.FIRE2": "RETURN",
+            "gp.fire1": "SPACE",
             FIRE: "SPACE",
+            fire: "SPACE",
         };
         expect(joinLink("brave-owls-sing", "matt", params)).toBe(
             `${window.location.origin}/?client=brave-owls-sing&name=matt&audioLatencyMs=80&embed` +
-                "&KEY.CAPSLOCK=CTRL&GP.FIRE2=RETURN&FIRE=SPACE",
+                "&KEY.CAPSLOCK=CTRL&GP.FIRE2=RETURN&gp.fire1=SPACE&FIRE=SPACE",
         );
     });
 });

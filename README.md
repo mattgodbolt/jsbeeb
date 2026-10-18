@@ -245,12 +245,13 @@ The gamepad control names are:
 - `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT`: individual buttons, by their Xbox 360 names
 - `FIRE1` `FIRE2`: clicking the left and right sticks
 
-The BBC key names are the same as for the keyboard, and digits may be written either way round: `GP.A=1` and `GP.A=K1`
-both press `1`. Unlike `KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping
-can't currently be changed.
+The BBC key names are the same as for the keyboard. As with `KEY.`, the whole parameter is case-insensitive, so
+`gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both press `1`. Unlike
+`KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping can't currently be
+changed.
 
-The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix) still work and mean the same
-thing.
+The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
+mean the same thing.
 
 ## Getting Set Up to Run Locally
 
@@ -367,6 +368,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `tape=github:OWNER/REPO/PATH` - loads a tape from a public GitHub repo, as `disc1=github:` does a disc
 - `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See
   [Remapping Keys](#remapping-keys).
+- `GP.X=Y` - makes gamepad control `X` press BBC key `Y`, e.g. `GP.FIRE=COPY`. See
+  [Joystick Support](#joystick-support).
 - `patch=P` - applies a memory patch `P`. See below.
 - `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed
   it in to the emulator

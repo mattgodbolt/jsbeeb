@@ -28,7 +28,6 @@ export function mediaLabel(ref) {
     return personal ? sourceKey(ref) : ref;
 }
 
-/** Nothing of the value at all. */
 export const redacted = () => "redacted";
 
 /** An error message without what it quotes or the addresses it names, which may be the user's own. */

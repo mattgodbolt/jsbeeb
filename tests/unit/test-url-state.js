@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
-import { UrlParamTypes } from "../../src/web/parameters.js";
+import { Parameters } from "../../src/web/parameters.js";
 import { ParamTypes } from "../../src/url-params.js";
 
 const location = (search, hash = "") => ({ origin: "https://bbc.example", pathname: "/play", search, hash });
@@ -105,9 +105,17 @@ describe("UrlState", () => {
             [ParamTypes.FLOAT]: (name) => `${name}=0.25`,
             [ParamTypes.BOOL]: (name) => name,
         };
-        const query = Object.entries(UrlParamTypes)
-            .map(([name, type]) => samples[type](name))
+        const query = Object.entries(Parameters)
+            .filter(([, { prefix }]) => !prefix)
+            .map(([name, { type }]) => samples[type](name))
             .join("&");
         expect(new UrlState(location(`?${query}`), history).url()).toBe(`https://bbc.example/play?${query}`);
+    });
+
+    it("gives back the key and gamepad mappings as they were spelled", () => {
+        const query = "KEY.CAPSLOCK=CTRL&key.f1=COPY&GP.FIRE2=RETURN&gp.fire1=SPACE&FIRE=SPACE";
+        const state = new UrlState(location(`?${query}`), history);
+        expect(state.params).toMatchObject({ "key.f1": "COPY", "gp.fire1": "SPACE", FIRE: "SPACE" });
+        expect(state.url()).toBe(`https://bbc.example/play?${query}`);
     });
 });

@@ -26,6 +26,8 @@ const clampAfterglow = (ms) => Math.min(MaxPersistenceMs, Math.max(0, ms));
 
 export const DisplaySection = "display";
 
+export const RequiredProperties = ["type"];
+
 const Peripherals = { label: "Additional peripherals", hint: "(some combinations may cause compatibility issues)" };
 
 /**
@@ -34,6 +36,12 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry) or
  * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
  * page joining a shared session keeps its own).
+ *
+ * A family is an entry for every parameter whose name starts with its `prefix`, in any case, or is one of its `names`;
+ * the entry's own key is not a parameter. Its `apply(member, value, context)` puts one of them into effect, given the
+ * rest of its name (or the whole of one of its `names`) and its value as its `type` parses it, both upper-cased if they
+ * are strings, and returns what is wrong with it if it cannot. One whose value parses as null or an empty string is
+ * skipped. Settings, storage and the dialog work by name, so a family has none of their properties.
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
  * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
@@ -290,14 +298,62 @@ export const Parameters = {
     server: { type: ParamTypes.STRING, analyticsFilter: redacted },
     client: { type: ParamTypes.STRING, analyticsFilter: redacted },
     name: { type: ParamTypes.STRING, analyticsFilter: redacted },
+
+    // Families
+    // Host key names are keymap.js's, so the BBC's RETURN is ENTER here; both lists are in the README.
+    keyMapping: {
+        prefix: "KEY.",
+        type: ParamTypes.STRING,
+        localToPage: true,
+        apply: (hostKey, machineKey, { machineKeys, hostKeyCodes, userKeymap }) => {
+            if (!machineKeys[machineKey]) return `"${machineKey}" is not a key on the emulated machine.`;
+            if (hostKeyCodes(hostKey).length === 0) return `"${hostKey}" is not a key on your keyboard.`;
+            userKeymap.push({ native: hostKey, key: machineKey });
+        },
+    },
+    gamepadMapping: {
+        prefix: "GP.",
+        names: ["LEFT", "RIGHT", "UP", "DOWN", "FIRE"],
+        type: ParamTypes.STRING,
+        localToPage: true,
+        apply: (control, bbcKey, { gamepad }) => gamepad.remap(control, bbcKey),
+    },
 };
 
-/** @returns {Object.<string, string>} each parameter's URL type, as the URL parser takes them. */
-export const urlParamTypes = (parameters) =>
-    Object.fromEntries(Object.entries(parameters).map(([name, { type }]) => [name, type]));
+/**
+ * @returns {{parameter: object, member?: string}|undefined} the entry the parameter `name` is, or the family it is in
+ * with the part of its name that family maps (the host key, the gamepad control).
+ */
+export function parameterFor(name, parameters = Parameters) {
+    if (Object.hasOwn(parameters, name) && !parameters[name].prefix) return { parameter: parameters[name] };
+    for (const parameter of Object.values(parameters)) {
+        if (!parameter.prefix) continue;
+        if (parameter.names?.includes(name)) return { parameter, member: name };
+        if (name.toUpperCase().startsWith(parameter.prefix))
+            return { parameter, member: name.substring(parameter.prefix.length).toUpperCase() };
+    }
+    return undefined;
+}
 
-export const UrlParamTypes = urlParamTypes(Parameters);
+/** @returns {string|undefined} the URL type of the parameter `name`, as the URL parser takes it. */
+export const urlParamType = (name, parameters = Parameters) => parameterFor(name, parameters)?.parameter.type;
 
 export const StartupActionParams = Object.keys(Parameters).filter((name) => Parameters[name].startupAction);
 
-export const LocalToPageParams = Object.keys(Parameters).filter((name) => Parameters[name].localToPage);
+/**
+ * Puts each parameter in `params` that a family applies into effect.
+ * @param {object} params - The page's parsed parameters
+ * @param {{machineKeys: object, hostKeyCodes: (name: string) => string[], userKeymap: object[], gamepad: object}}
+ *     context - What the families need from the page: the emulated machine's keys (`BBC`, or `ATOM` for the Atom)
+ * @returns {string[]} what is wrong with each that could not be, for showing to the user
+ */
+export function processInputParams(params, context) {
+    const warnings = [];
+    for (const [name, value] of Object.entries(params)) {
+        const { parameter, member } = parameterFor(name) ?? {};
+        if (!parameter?.apply || value === null || value === "") continue;
+        const problem = parameter.apply(member, typeof value === "string" ? value.toUpperCase() : value, context);
+        if (problem) warnings.push(`${name}=${value}: ${problem}`);
+    }
+    return warnings;
+}
