@@ -1,3 +1,4 @@
+import compat from "eslint-plugin-compat";
 import prettier from "eslint-plugin-prettier";
 import eslintConfigPrettier from "eslint-config-prettier";
 import js from "@eslint/js";
@@ -13,7 +14,7 @@ export default [
         plugins: { prettier },
         languageOptions: {
             parserOptions: {
-                ecmaVersion: 2020,
+                ecmaVersion: "latest",
                 sourceType: "module",
             },
             globals: {
@@ -42,5 +43,12 @@ export default [
     {
         files: ["src/loader.js"],
         languageOptions: { globals: { XMLHttpRequest: "readonly" } },
+    },
+    {
+        files: ["src/**/*.js"],
+        ignores: ["src/app/**"],
+        plugins: { compat },
+        rules: { "compat/compat": "error" },
+        settings: { lintAllEsApis: true },
     },
 ];
