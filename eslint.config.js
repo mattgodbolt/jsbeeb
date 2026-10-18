@@ -49,11 +49,6 @@ export default [
         ignores: ["src/app/**"],
         plugins: { compat },
         rules: { "compat/compat": "error" },
-        settings: {
-            lintAllEsApis: true,
-            // The plugin does not see parameters, so it takes our Scheduler, passed in as `scheduler`, for the
-            // browser's task-scheduling global; nothing here uses that global.
-            polyfills: ["scheduler"],
-        },
+        settings: { lintAllEsApis: true },
     },
 ];

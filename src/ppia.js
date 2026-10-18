@@ -246,6 +246,8 @@ export class AtomPPIA extends PPIA {
         this.reset();
 
         // from ACIA
+        // compat does not see parameters, so it mistakes our Scheduler for the browser's scheduler global.
+        // eslint-disable-next-line compat/compat
         this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 
