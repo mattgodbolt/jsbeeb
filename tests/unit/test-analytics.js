@@ -54,6 +54,12 @@ describe("analytics", () => {
             );
         });
 
+        it("redacts what the URL would have typed or run", () => {
+            expect(analyticsLocation(`${base}?autotype=my%20secret&embedBasic=10%20PRINT&patch=1234:ea`)).toBe(
+                `${base}?autotype=redacted&embedBasic=redacted&patch=redacted`,
+            );
+        });
+
         it("redacts the room and the name of a shared session", () => {
             expect(analyticsLocation(`${base}?client=room-key&name=Someone&model=B`)).toBe(
                 `${base}?client=redacted&name=redacted&model=B`,

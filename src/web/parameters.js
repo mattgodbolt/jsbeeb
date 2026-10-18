@@ -57,7 +57,8 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  *
  * Analytics is told a parameter's value as its `analyticsFilter`, one of those in analytics-filters.js, returns it;
  * a parameter with none is told as it is. One that is `reportedAtStart` is sent with the machine_start event under its
- * own name, so its values must be a fixed set: a BOOL, or a menu whose `valid` holds it to its options.
+ * own name, so its values must be a fixed set: a BOOL, or a menu held to its options, by its `valid` or, for the
+ * model, by Settings.
  */
 export const Parameters = {
     // Shown in the Settings dialog, top to bottom
@@ -245,10 +246,10 @@ export const Parameters = {
     autoboot: { type: ParamTypes.BOOL, startupAction: true },
     autochain: { type: ParamTypes.BOOL, startupAction: true },
     autorun: { type: ParamTypes.BOOL, startupAction: true },
-    autotype: { type: ParamTypes.STRING, startupAction: true },
+    autotype: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
     loadBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: mediaLabel },
-    embedBasic: { type: ParamTypes.STRING, startupAction: true },
-    patch: { type: ParamTypes.STRING, startupAction: true },
+    embedBasic: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
+    patch: { type: ParamTypes.STRING, startupAction: true, analyticsFilter: redacted },
 
     // Array parameters
     rom: { type: ParamTypes.ARRAY, analyticsFilter: mediaLabel },
