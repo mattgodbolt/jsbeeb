@@ -126,6 +126,7 @@ test("analytics is told the page's location with the user's own disc and session
     page,
 }) => {
     await beeb.open("?disc=elite.ssd&disc2=local:Mine&name=Someone&model=B");
+    await expect(page.locator('script[src^="https://www.googletagmanager.com/gtag/js?id="]')).toHaveCount(1);
     const configs = await page.evaluate(() =>
         window.dataLayer.filter((entry) => entry[0] === "config").map((entry) => entry[2].page_location),
     );
