@@ -20,7 +20,7 @@ const analyticsSent = (page) =>
 test("runs a workload, publishes its result for a script, then runs the machine", async ({ beeb, page }) => {
     test.setTimeout(BenchmarkTimeoutMs);
     await beeb.open("?benchmark=elite");
-    await expect(page.locator("#benchmark .benchmark-status")).toBeVisible();
+    await expect(page.locator("#benchmark .benchmark-status")).toContainText("measuring");
     await expect(page.locator("#benchmark .benchmark-close")).toHaveCount(2);
     for (const close of await page.locator("#benchmark .benchmark-close").all()) await expect(close).toBeHidden();
     await page.keyboard.press("Escape");
@@ -58,5 +58,14 @@ test("a parameter that changes what is measured is refused", async ({ beeb, page
     expect({ status, error }).toEqual({
         status: "failed",
         error: "frameSkip would change what is measured; take it out of the URL",
+    });
+});
+
+test("a machine with a peripheral that runs every cycle is refused", async ({ beeb, page }) => {
+    await beeb.open("?benchmark=elite&hasMusic5000=true");
+    const { status, error } = await benchmarkRecord(page);
+    expect({ status, error }).toEqual({
+        status: "failed",
+        error: "The machine has a Music 5000 fitted, which a workload does not have; turn it off",
     });
 });

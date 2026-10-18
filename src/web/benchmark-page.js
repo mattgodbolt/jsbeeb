@@ -8,7 +8,9 @@ export const Repeats = 10;
 const ChunksPerSecond = 1000 / TickMs;
 const DialogId = "benchmark";
 // Each changes what a pass measures or what an emulated second is.
-const MeasureChangingParams = ["fakeVideo", "frameSkip", "cpuMultiplier", "videoCyclesBatch"];
+const MeasureChangingParams = ["fakeVideo", "frameSkip", "cpuMultiplier", "videoCyclesBatch", "lowLatency"];
+// Each adds its own polltime to every cycle the CPU runs.
+const Peripherals = { music5000: "a Music 5000", teletextAdaptor: "a teletext adaptor", econet: "Econet" };
 
 const fixed = (value) => value.toFixed(1);
 const noPaint = () => {};
@@ -112,6 +114,11 @@ export class BenchmarkPage {
             const refused = MeasureChangingParams.filter((param) => Object.hasOwn(parsedQuery, param));
             if (refused.length)
                 throw new Error(`${refused.join(", ")} would change what is measured; take it out of the URL`);
+            const fitted = Object.keys(Peripherals).filter((peripheral) => processor[peripheral]);
+            if (fitted.length) {
+                const names = fitted.map((peripheral) => Peripherals[peripheral]).join(", ");
+                throw new Error(`The machine has ${names} fitted, which a workload does not have; turn it off`);
+            }
             const workload = await readWorkload(name);
             if (!isSameModel(workload.model, processor.model.name)) {
                 throw new Error(
