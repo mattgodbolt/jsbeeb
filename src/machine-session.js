@@ -349,8 +349,9 @@ export class MachineSession {
      * Put back a state from snapshot().  `elapsedCycles` rewinds with the
      * machine; breakpoints belong to the session, not the machine, so they and
      * their hit flags are left alone, and `frameCount` keeps counting the way it
-     * does across a hard reset. A state saved where a breakpoint stopped the
-     * machine runs on past that instruction, and every hook still sees it.
+     * does across a hard reset. A state saved where an execute breakpoint or
+     * runUntilAddress stopped the machine runs on past that instruction, and
+     * every hook still sees it.
      */
     restore(state) {
         this._machine.restore(state.machine);

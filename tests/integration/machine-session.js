@@ -276,7 +276,7 @@ describe("MachineSession watching execution", () => {
         await session.runFor(CyclesPerInterlacedFrame);
         const state = session.snapshot();
         const id = session.addBreakpoint("execute", session.registers().pc);
-        await session.runFor(CyclesPerInterlacedFrame);
+        expect(await session.runFor(CyclesPerInterlacedFrame)).toEqual({ cyclesRun: 0, completed: false });
         session.resetBreakpointHits();
 
         session.restore(state);

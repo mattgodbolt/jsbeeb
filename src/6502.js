@@ -628,7 +628,6 @@ class DebugHook {
         this.calledAtStop = null;
     }
 
-    /** Treats the next instruction as one a stop halted before that no handler has seen yet. */
     rememberUnseenStop() {
         this.calledAtStop = new Set();
     }
