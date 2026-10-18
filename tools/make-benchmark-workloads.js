@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { gzip } from "pako";
+import * as prettier from "prettier";
 
 import { newBenchmarkMachine } from "../src/benchmark-machine.js";
 import { WorkloadsDir } from "../src/benchmark-workloads.js";
@@ -173,7 +174,7 @@ async function buildWorkload(workload) {
     return gzip(snapshotToJSON(snapshot), { level: GzipLevel });
 }
 
-function manifestFor(workloads) {
+async function manifestFor(workloads) {
     const entries = workloads.map(({ name, model, description, source, checks }) => ({
         name,
         model,
@@ -182,14 +183,15 @@ function manifestFor(workloads) {
         snapshot: `${name}.json.gz`,
         checks,
     }));
-    return `${JSON.stringify({ workloads: entries }, null, 4)}\n`;
+    const options = await prettier.resolveConfig(ManifestPath, { editorconfig: true });
+    return prettier.format(JSON.stringify({ workloads: entries }), { ...options, filepath: ManifestPath });
 }
 
 const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
 
 async function main() {
     const { values } = parseArgs({ options: { check: { type: "boolean", default: false } } });
-    const outputs = new Map([[ManifestPath, new TextEncoder().encode(manifestFor(Workloads))]]);
+    const outputs = new Map([[ManifestPath, new TextEncoder().encode(await manifestFor(Workloads))]]);
     for (const workload of Workloads) {
         outputs.set(path.join(OutDir, `${workload.name}.json.gz`), await buildWorkload(workload));
     }
