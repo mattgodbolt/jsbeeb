@@ -2,7 +2,8 @@
 
 How to tell whether a change makes the emulator faster. The workloads are the snapshots in
 `public/benchmarks` (see `src/benchmark-workloads.js`); `npm run benchmark` gives a quick look at their speed in
-Node, and the A/B runner below says whether a difference between two commits is real.
+Node, the page's `?benchmark=<workload>` mode measures them in a browser (see the README), and the A/B runner
+below says whether a difference between two commits is real.
 
 ## Node A/B runner
 
@@ -10,30 +11,32 @@ Node, and the A/B runner below says whether a difference between two commits is 
 npm run benchmark:ab -- <A> <B> [workload ...] [options]
 ```
 
-npm runs it from the checkout's root, so relative paths (a side, `--json`, `--out-dir`) are taken from there.
+npm runs it from the checkout's root, so relative paths (a side, `--json`, `--out-dir`, `--work-dir`) are taken
+from there. `npm run -s` leaves out npm's own banner lines, for a script reading the output.
 
 A and B are git refs or paths to existing checkouts. A ref is checked out into a temporary worktree (in the
-system temp directory, or `--work-dir`) that is removed afterwards, also on Ctrl-C, SIGTERM or SIGHUP; its
-`node_modules` is a link to the one Node finds for this checkout (in it or a directory above) when the lock
-files match apart from the package's own version, and its own `npm ci` otherwise. A path is used as it is,
-uncommitted changes and all, so an agent can compare its working tree against a
-worktree of the commit it started from; it needs its packages installed (or a `node_modules` in a directory
-above it, as a worktree under `.claude/worktrees` finds the main checkout's). Both sides need the benchmark
-workloads, so neither can predate them. A run killed outright (`kill -9`) leaves its worktrees behind;
-`git worktree prune` after deleting their directories tidies them up.
+system temp directory, or `--work-dir`) that is removed afterwards, also on Ctrl-C, SIGTERM or SIGHUP (the npm
+script `exec`s Node, so a SIGTERM sent to npm reaches it); its `node_modules` is a link to the one Node finds
+for this checkout (in it or a directory above) when the lock files match apart from the package's own version,
+and its own `npm ci` otherwise. A path is used as it is, uncommitted changes and all, so an agent can compare
+its working tree against a worktree of the commit it started from; it needs its packages installed (or a
+`node_modules` in a directory above it, as a worktree under `.claude/worktrees` finds the main checkout's). Both
+sides need the benchmark workloads, so neither can predate them. A run killed outright (`kill -9`) leaves its
+worktrees behind; `git worktree prune` after deleting their directories tidies them up.
 
 With no workloads named, every workload in A's manifest runs, one after another. `--fake-video` measures the
 CPU and peripherals without rendering video; the difference from a run without it is the video's cost.
 `npm run benchmark:ab -- --help` lists the rest.
 
-Each sample is a fresh Node process, so no side inherits the other's type feedback or compiled code. Both sides
-run on the runner's own Node, whatever version each side's `package.json` asks for, so the comparison is of the
-code and not of two engines; the version goes on every result line and in the JSON (`node`), since results from
-different versions or machines are not comparable with each other. It
+Each sample is a fresh Node process, so no side inherits the other's type feedback or compiled code. It
 restores the workload from its side's checkout, runs `--warmup-secs` emulated seconds (5) for the JIT tiers to
 settle, then times `--measure-secs` (10) in 10 ms slices of emulated time, the size of the page's tick
 (`TickMs` in `src/web/emulation-loop.js`), since `execute()`'s exit deopts and the slice size changes what is
-measured. A sample's throughput is its median slice's virtual MHz: a busy machine stalls runs of slices, which
+measured. Both sides run on the runner's own Node, whatever version each side's `package.json` asks for, so the
+comparison is of the code and not of two engines. The version goes on every result line and in the JSON
+(`node`): results from different Node versions are not comparable, nor are results from different machines.
+
+A sample's throughput is its median slice's virtual MHz: a busy machine stalls runs of slices, which
 the median ignores and the total time does not. `--statistic total` uses the total time instead, which also
 counts the rare slow slices (a garbage collection, a costly stretch of the program) that the median leaves out.
 
