@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     DisplaySection,
+    matchesHost,
     Parameters,
     parameterFor,
     processInputParams,
+    readTakenFromHost,
     RequiredProperties,
+    takenFromHostValues,
     tubeCpuSpeedLabel,
     urlParamType,
 } from "../../src/web/parameters.js";
@@ -278,5 +281,52 @@ describe("tubeCpuSpeedLabel", () => {
 
     it("keeps a repeating multiplier from a URL readable", () => {
         expect(tubeCpuSpeedLabel(4 / 3, bbcB)).toBe("1.33x (4MHz)");
+    });
+});
+
+describe("the settings a session guest takes from its host", () => {
+    const takenNames = Object.keys(Parameters).filter((name) => Parameters[name].takenFromHost);
+
+    it("are the fittings and the knobs that change how the machine runs", () => {
+        expect(takenNames).toEqual([
+            "coProcessor",
+            "tubeCpuMultiplier",
+            "hasMusic5000",
+            "hasTeletextAdaptor",
+            "hasEconet",
+            "hasVideoNula",
+            "fakeVideo",
+            "stationId",
+            "videoCyclesBatch",
+            "cpuMultiplier",
+        ]);
+    });
+
+    it("are neither local to the page nor kept in storage, which a reload to match would not override", () => {
+        for (const name of takenNames) {
+            expect(Parameters[name].localToPage, name).toBeFalsy();
+            expect(Parameters[name].stored, name).toBeFalsy();
+        }
+    });
+
+    it("carries one marked in any table, with nothing else to change", () => {
+        const table = {
+            fitted: { type: ParamTypes.BOOL, takenFromHost: true, default: false },
+            speed: { type: ParamTypes.FLOAT, takenFromHost: true },
+            colour: { type: ParamTypes.STRING },
+        };
+        const host = takenFromHostValues({ fitted: true }, { speed: 2, colour: "red" }, table);
+        expect(host).toEqual({ fitted: true, speed: 2 });
+
+        const sent = readTakenFromHost(JSON.parse(JSON.stringify(host)), table);
+        expect(matchesHost(sent, takenFromHostValues({ fitted: true }, { speed: 2 }, table))).toBe(true);
+        expect(matchesHost(sent, takenFromHostValues({ fitted: false }, { speed: 2 }, table))).toBe(false);
+        expect(matchesHost(sent, takenFromHostValues({ fitted: true }, {}, table))).toBe(false);
+    });
+
+    it("takes a value absent from the URL as the same as one the host does not have", () => {
+        const table = { speed: { type: ParamTypes.FLOAT, takenFromHost: true } };
+        const sent = readTakenFromHost(JSON.parse(JSON.stringify(takenFromHostValues({}, {}, table))), table);
+        expect(matchesHost(sent, takenFromHostValues({}, {}, table))).toBe(true);
     });
 });

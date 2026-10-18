@@ -19,7 +19,7 @@ import { findModel } from "../models.js";
 import { buildUrlFromParams } from "../url-params.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { parameterFor, urlParamType } from "./parameters.js";
+import { matchesHost, parameterFor, readTakenFromHost, urlParamType } from "./parameters.js";
 import {
     connectionStats,
     IntervalStats,
@@ -248,7 +248,7 @@ function parsed(data) {
  * @typedef {object} SessionContext
  * @property {object} processor
  * @property {object} model
- * @property {boolean} hasVideoNula
+ * @property {object} takenFromHost - the page's takenFromHostValues, as its machine was built with them
  * @property {import("./emulation-loop.js").EmulationLoop} loop
  * @property {import("./keyboard.js").Keyboard} keyboard
  * @property {import("./url-state.js").UrlState} urlState
@@ -731,8 +731,8 @@ export class SessionHost {
         channel.addEventListener("message", ({ data }) => this.fromGuest(guest, data));
         opened(channel).then(
             () => {
-                const { model, hasVideoNula, version } = this.context;
-                const welcome = { type: "welcome", model: model.name, hasVideoNula, version, name: this.name };
+                const { model, takenFromHost, version } = this.context;
+                const welcome = { type: "welcome", model: model.name, takenFromHost, version, name: this.name };
                 if (!this.sendTo(guest, JSON.stringify(welcome))) return;
                 guest.welcomed = true;
                 this.sendSnapshot(guest);
@@ -1279,12 +1279,13 @@ export class SessionGuest {
         else this.lockstep?.receive(commit);
     }
 
-    welcome({ model, hasVideoNula, version, name }) {
+    welcome({ model, takenFromHost, version, name }) {
         this.hostName = cleanName(name);
         const field = (value) => String(value).slice(0, MaxReasonLength);
+        const hostValues = readTakenFromHost(takenFromHost);
         this.log.record("welcome", {
             model: field(model),
-            hasVideoNula: hasVideoNula === true,
+            takenFromHost: hostValues,
             version: field(version),
             name: this.hostName,
         });
@@ -1300,11 +1301,10 @@ export class SessionGuest {
             );
             return;
         }
-        const hostHasVideoNula = hasVideoNula === true;
-        if (!isSameModel(model, this.context.model.name) || hostHasVideoNula !== this.context.hasVideoNula) {
+        if (!isSameModel(model, this.context.model.name) || !matchesHost(hostValues, this.context.takenFromHost)) {
             this.send({ type: "bye" });
             this.left = true;
-            reloadAsMachine(this.context.urlState, { model, hasVideoNula: hostHasVideoNula }, { replace: true });
+            reloadAsMachine(this.context.urlState, { model, ...hostValues }, { replace: true });
         }
     }
 

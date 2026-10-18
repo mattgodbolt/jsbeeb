@@ -43,7 +43,7 @@ import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { bootModeOf, parseMediaParams, processAutobootParams, processDriveTrackParams } from "./url-params.js";
-import { processInputParams } from "./web/parameters.js";
+import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
@@ -108,6 +108,7 @@ const accessibilitySwitches = new AccessibilitySwitches();
 const settings = new Settings({ urlState });
 const { keyLayout, displayMode, audioOutput, speakerAmount } = settings;
 const { model, hasVideoNula } = settings;
+const takenFromHost = takenFromHostValues(settings, parsedQuery);
 const config = new Config(settings);
 
 const speechOutput = new SpeechOutput();
@@ -148,7 +149,7 @@ const display = new Display({
     mode: displayMode,
     tryGl,
     lowLatency,
-    fakeVideo: parsedQuery.fakeVideo !== undefined,
+    fakeVideo: !!parsedQuery.fakeVideo,
     hasVideoNula,
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
@@ -445,7 +446,7 @@ async function startAsTheUrlAsks() {
         const sessionContext = {
             processor,
             model,
-            hasVideoNula,
+            takenFromHost,
             loop,
             keyboard,
             urlState,

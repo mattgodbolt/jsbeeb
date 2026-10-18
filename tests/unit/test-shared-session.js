@@ -26,8 +26,8 @@ import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { MaxWaitingKeys } from "../../src/web/session-sequencer.js";
-import { parseQueryString } from "../../src/url-params.js";
-import { urlParamType } from "../../src/web/parameters.js";
+import { ParamTypes, parseQueryString } from "../../src/url-params.js";
+import { Parameters, takenFromHostValues, urlParamType } from "../../src/web/parameters.js";
 import { domFromIndexHtml, sentEvents } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
@@ -232,11 +232,31 @@ function fakeProcessor({ cycles = 1000 } = {}) {
     return processor;
 }
 
-function fakeContext({ processor = fakeProcessor(), rendezvous = {}, model = {}, hasVideoNula = false } = {}) {
+const DefaultSettings = Object.fromEntries(
+    Object.entries(Parameters)
+        .filter(([, parameter]) => "default" in parameter)
+        .map(([name, parameter]) => [name, parameter.default]),
+);
+const StockTakenFromHost = takenFromHostValues(DefaultSettings, {});
+const TakenFromHostNames = Object.keys(Parameters).filter((name) => Parameters[name].takenFromHost);
+const welcomeAs = (fields) => ({
+    type: "welcome",
+    model: "B-DFS1.2",
+    version: "1.0",
+    takenFromHost: StockTakenFromHost,
+    ...fields,
+});
+
+function fakeContext({
+    processor = fakeProcessor(),
+    rendezvous = {},
+    model = {},
+    takenFromHost = StockTakenFromHost,
+} = {}) {
     return {
         processor,
         model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
-        hasVideoNula,
+        takenFromHost,
         loop: { setLockstep: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         urlState: { urlWith: vi.fn(() => "about:blank") },
@@ -407,13 +427,13 @@ describe("SessionHost", () => {
         expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
     });
 
-    it("welcomes a guest with its model, version and the host's name, then sends the machine", async () => {
+    it("welcomes a guest with its model, the settings a guest takes from it, its version and name, then sends the machine", async () => {
         const { host } = await hosting();
         const channel = await joined();
         expect(channel.messages()[0]).toEqual({
             type: "welcome",
             model: "BBC B with 8271 (DFS 1.2)",
-            hasVideoNula: false,
+            takenFromHost: StockTakenFromHost,
             version: "1.0",
             name: host.name,
         });
@@ -1574,7 +1594,7 @@ describe("SessionGuest", () => {
         await new SessionGuest(context, "room", "Kieran").start();
         const { channel } = peers[0];
         expect(channel.messages()[0]).toEqual({ type: "hello", name: "Kieran" });
-        channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
+        channel.emit("message", message(welcomeAs({ model: context.model.name, name: "Matt" })));
         expect(document.querySelector("#session-panel .led").title).toMatch(/^Matt: /);
     });
 
@@ -2036,7 +2056,7 @@ describe("SessionGuest", () => {
     it("measures its own round trip to the host, and shows and logs it", async () => {
         showLights();
         const { guest, context, channel, deliver, lockstep } = await joining();
-        channel.emit("message", message({ type: "welcome", model: context.model.name, version: "1.0", name: "Matt" }));
+        channel.emit("message", message(welcomeAs({ model: context.model.name, name: "Matt" })));
         deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
         await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
         lockstep().execute(100);
@@ -2225,40 +2245,59 @@ describe("SessionGuest", () => {
 
     it("stays as it is when the host is the same machine", async () => {
         const { context, channel } = await joining();
-        channel.emit("message", message({ type: "welcome", model: "B-DFS1.2", version: "1.0" }));
+        channel.emit("message", message(welcomeAs({})));
         expect(context.urlState.urlWith).not.toHaveBeenCalled();
         expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
     });
 
     it("reloads as the host's model, by the page's own URL builder", async () => {
         const { context, channel } = await joining();
-        channel.emit("message", message({ type: "welcome", model: "BBC Master 128 (DFS)", version: "1.0" }));
+        channel.emit("message", message(welcomeAs({ model: "BBC Master 128 (DFS)" })));
         expect(context.urlState.urlWith).toHaveBeenCalledWith(
             expect.objectContaining({ model: "BBC Master 128 (DFS)" }),
         );
         expect(channel.messages().at(-1)).toEqual({ type: "bye" });
     });
 
-    it("stays as it is when it and the host both have a VideoNuLA", async () => {
-        const { context, channel } = await joining({ hasVideoNula: true });
-        channel.emit("message", message({ type: "welcome", model: "B-DFS1.2", hasVideoNula: true, version: "1.0" }));
+    const differentValue = (name) =>
+        ({
+            [ParamTypes.BOOL]: !StockTakenFromHost[name],
+            [ParamTypes.INT]: 7,
+            [ParamTypes.FLOAT]: 2.5,
+        })[Parameters[name].type];
+
+    it.each(TakenFromHostNames)("reloads with the host's %s when its own differs", async (name) => {
+        const { context, channel } = await joining();
+        const host = { ...StockTakenFromHost, [name]: differentValue(name) };
+        channel.emit("message", message(welcomeAs({ takenFromHost: host })));
+        expect(context.urlState.urlWith).toHaveBeenCalledWith(
+            expect.objectContaining({ model: "B-DFS1.2", [name]: differentValue(name) }),
+        );
+        expect(channel.messages().at(-1)).toEqual({ type: "bye" });
+    });
+
+    it.each(TakenFromHostNames)("drops its own %s when the host has the default", async (name) => {
+        const { context, channel } = await joining({
+            takenFromHost: { ...StockTakenFromHost, [name]: differentValue(name) },
+        });
+        channel.emit("message", message(welcomeAs({})));
+        expect(context.urlState.urlWith).toHaveBeenCalledWith(
+            expect.objectContaining({ [name]: StockTakenFromHost[name] }),
+        );
+    });
+
+    it("stays as it is when it already runs with every one of the host's settings", async () => {
+        const matching = Object.fromEntries(TakenFromHostNames.map((name) => [name, differentValue(name)]));
+        const { context, channel } = await joining({ takenFromHost: matching });
+        channel.emit("message", message(welcomeAs({ takenFromHost: matching })));
         expect(context.urlState.urlWith).not.toHaveBeenCalled();
         expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
     });
 
-    it.each([
-        ["fits a VideoNuLA", false, true],
-        ["takes out a VideoNuLA", true, false],
-    ])("%s to match the host's machine", async (_, guestHasVideoNula, hostHasVideoNula) => {
-        const { context, channel } = await joining({ hasVideoNula: guestHasVideoNula });
-        channel.emit(
-            "message",
-            message({ type: "welcome", model: "B-DFS1.2", hasVideoNula: hostHasVideoNula, version: "1.0" }),
-        );
-        expect(context.urlState.urlWith).toHaveBeenCalledWith(
-            expect.objectContaining({ model: "B-DFS1.2", hasVideoNula: hostHasVideoNula }),
-        );
-        expect(channel.messages().at(-1)).toEqual({ type: "bye" });
+    it("takes a setting the host sent as something its type cannot be as none", async () => {
+        const { context, channel } = await joining({ takenFromHost: { ...StockTakenFromHost, cpuMultiplier: 2 } });
+        channel.emit("message", message(welcomeAs({ takenFromHost: { ...StockTakenFromHost, cpuMultiplier: "2" } })));
+        expect(context.urlState.urlWith).toHaveBeenCalledWith(expect.objectContaining({ cpuMultiplier: undefined }));
     });
 });
 
