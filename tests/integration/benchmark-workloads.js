@@ -9,7 +9,7 @@ const OsRomResetVector = 0xfffc;
 async function restoreAltered(name, alter) {
     const workload = await readWorkload(name);
     const machine = await newBenchmarkMachine(workload.model);
-    alter(workload, machine);
+    alter(workload);
     return restoreWorkload(machine.processor, workload);
 }
 
@@ -52,11 +52,14 @@ describe("benchmark workloads", () => {
         await expect(restoring).rejects.toThrow(/"elite" is not running: the reset vector at &FFFC did not change/);
     });
 
-    it("refuses a disc that is not the one the workload was made with", async () => {
-        const restoring = restoreAltered("elite", (workload) => {
-            workload.snapshot.media.disc1Crc32 += 1;
-        });
-        await expect(restoring).rejects.toThrow(/discs\/elite.ssd is not the disc the workload was made with/);
+    it("refuses a disc that is not the one the workload was made with before touching the drives", async () => {
+        const { cpu, workload } = await benchmarkMachine("elite");
+        const disc = cpu.fdc.drives[0].disc;
+        workload.snapshot.media.disc1Crc32 += 1;
+        await expect(restoreWorkload(cpu, workload)).rejects.toThrow(
+            /discs\/elite.ssd is not the disc the workload was made with/,
+        );
+        expect(cpu.fdc.drives[0].disc).toBe(disc);
     });
 
     it("refuses a machine of another model before touching its drives", async () => {
@@ -66,10 +69,14 @@ describe("benchmark workloads", () => {
         expect(cpu.fdc.drives[0].disc).toBe(disc);
     });
 
-    it("refuses a machine that would leave the fast path", async () => {
-        const restoring = restoreAltered("elite", (workload, machine) => {
-            machine.processor.debugInstruction.add(() => false);
-        });
-        await expect(restoring).rejects.toThrow(/would run the slow executeInternal/);
+    it("refuses a machine that would leave the fast path before touching it", async () => {
+        const { cpu } = await benchmarkMachine("mode7-text");
+        const pc = cpu.pc;
+        cpu.debugInstruction.add(() => false);
+        await expect(restoreWorkload(cpu, await readWorkload("elite"))).rejects.toThrow(
+            /would run the slow executeInternal/,
+        );
+        expect(cpu.pc).toBe(pc);
+        expect(cpu.fdc.drives[0].disc).toBeFalsy();
     });
 });

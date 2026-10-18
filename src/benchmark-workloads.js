@@ -108,9 +108,9 @@ function advancingBytes(cpu, { address, length }) {
 export async function restoreWorkload(cpu, workload) {
     const { snapshot } = workload;
     assertSnapshotFits(cpu, cpu.model, snapshot);
+    assertFastPath(cpu);
     const discImages = await readDiscImages(snapshot.media);
     restoreWithDiscs(cpu, snapshot, discImages);
-    assertFastPath(cpu);
     checkWorkload(cpu, workload);
     const { advancing } = workload.checks;
     const before = advancingBytes(cpu, advancing);
