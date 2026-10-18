@@ -151,6 +151,18 @@ describe("analytics", () => {
                 }).not.toThrow();
             });
 
+            it("sends nothing once silenced", async () => {
+                const { configureAnalytics, silenceAnalytics, noteLocation, note, noteFeature, noteError } =
+                    await loadWithMeasurementId(measurementId);
+                silenceAnalytics();
+                configureAnalytics(new EventTarget());
+                noteLocation();
+                note("event", { type: "type" });
+                noteFeature("printer", "open");
+                noteError("loop", new Error("broken"));
+                expect(gtag).not.toHaveBeenCalled();
+            });
+
             it("configures the page_view with the location and referrer analyticsLocation gives", async () => {
                 const { configureAnalytics } = await loadWithMeasurementId(measurementId);
                 window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
