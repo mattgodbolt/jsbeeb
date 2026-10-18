@@ -26,7 +26,7 @@
     ];
     // Edge's agent string also says Chrome, and Chrome's also says Safari, so the order matters.
     var Browsers = [
-        ["Edge", /Edge?\/(\d+)/],
+        ["Edge", /Edg[eA]?\/(\d+)/],
         ["Firefox", /Firefox\/(\d+)/],
         ["Chrome", /Chrome\/(\d+)/],
         ["Safari", /Version\/(\d+(?:\.\d+)?).*Safari/],

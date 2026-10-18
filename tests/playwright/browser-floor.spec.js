@@ -50,6 +50,7 @@ test("a browser missing a floor feature is told what is needed, and the emulator
     expect(await unsupportedBrowserEvents(page)).toEqual([
         ["event", "unsupported_browser", { reason: "CompressionStream" }],
     ]);
+    expect(await analyticsCalls(page, "config"), "main.js's config and no other").toHaveLength(1);
     await beeb.expectScreenText(">");
     await message.getByRole("button", { name: "Close" }).click();
     await expect(message).toBeHidden();
