@@ -11,8 +11,8 @@ node tools/node-ab.js <A> <B> [workload ...] [options]
 ```
 
 A and B are git refs or paths to existing checkouts. A ref is checked out into a temporary worktree (in the
-system temp directory, or `--work-dir`) that is removed afterwards; its `node_modules` is a link to this
-checkout's when the lock files match apart from the package's own version, and its own `npm ci` otherwise. A
+system temp directory, or `--work-dir`) that is removed afterwards; its `node_modules` is a link to the one
+Node finds for this checkout (in it or a directory above) when the lock files match apart from the package's own version, and its own `npm ci` otherwise. A
 path is used as it is, uncommitted changes and all, so an agent can compare its working tree against a
 worktree of the commit it started from; it needs its packages installed (or a `node_modules` in a directory
 above it, as a worktree under `.claude/worktrees` finds the main checkout's). Both sides need the benchmark
