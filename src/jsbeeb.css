@@ -199,6 +199,8 @@ span.accesskey {
   align-items: stretch;
   gap: 8px;
   color: #ddd;
+  --leds-line: 13px;
+  --leds-lamp-line: 20px;
 }
 
 #leds .slot-readouts,
@@ -211,29 +213,43 @@ span.accesskey {
 #leds .lights {
   border-left: 1px solid #444;
   padding-left: 8px;
-  align-items: flex-end;
+}
+
+/* Every readout and light shares these rows, so all the text in the bar lines up row by row and every lamp
+   sits on one line. */
+#leds .slot-readout,
+#leds .cell {
+  display: grid;
+  grid-template-rows: var(--leds-header-line, var(--leds-line)) var(--leds-line) var(--leds-lamp-line);
+  justify-items: center;
+  align-items: center;
+  border: 1px solid transparent;
+  padding-block: 1px;
 }
 
 #leds .hdr {
   font-size: 8pt;
-  line-height: 1.15;
+  line-height: var(--leds-line);
   text-align: center;
   color: #bbb;
 }
 
 #leds .cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 0 2px;
+  padding-inline: 2px;
+}
+
+#leds .cell .hdr {
+  grid-row: 1 / span 2;
+}
+
+#leds .cell > :last-child {
+  grid-row: 3;
 }
 
 #leds .speed {
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-top: 2px;
 }
 
 #leds .speed [data-icon] {
@@ -254,16 +270,11 @@ span.accesskey {
 
 /* A slot reads down: its header, the name of what it holds, then its LED with the tape counter beside. */
 #leds .slot-readout {
-  display: grid;
   grid-template-columns: auto auto;
-  grid-template-rows: auto auto auto;
-  justify-items: center;
-  align-items: center;
-  gap: 3px 4px;
+  column-gap: 4px;
   min-width: 6.5em;
   max-width: 9em;
-  padding: 1px 6px;
-  border: 1px solid transparent;
+  padding-inline: 6px;
   border-radius: 4px;
   background: none;
   color: inherit;
@@ -284,6 +295,10 @@ span.accesskey {
 #leds .slot-readout .hdr {
   grid-row: 1;
   grid-column: 1 / -1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #leds .slot-readout .name {
@@ -294,6 +309,7 @@ span.accesskey {
   text-overflow: ellipsis;
   font-family: var(--bs-font-monospace);
   font-size: 10px;
+  line-height: var(--leds-line);
   white-space: nowrap;
 }
 
@@ -430,6 +446,10 @@ span.accesskey {
 
 /* hide the LED headers when the LEDs would likely cover the screen */
 @media screen and (max-width: 1200px) and (max-height: 700px) {
+  #leds {
+    --leds-header-line: 0;
+  }
+
   #leds .hdr {
     display: none;
   }
@@ -1503,7 +1523,7 @@ div.smoothie-chart-tooltip {
   align-items: center;
 }
 
-.counter {
+.counter-row .counter {
   display: inline-flex;
   gap: 1px;
   padding: 2px;
@@ -1514,7 +1534,7 @@ div.smoothie-chart-tooltip {
     0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.counter b {
+.counter-row .counter b {
   width: 13px;
   height: 17px;
   display: grid;
