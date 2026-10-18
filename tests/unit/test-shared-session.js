@@ -2239,6 +2239,13 @@ describe("SessionGuest", () => {
         expect(channel.messages().at(-1)).toEqual({ type: "bye" });
     });
 
+    it("stays as it is when it and the host both have a VideoNuLA", async () => {
+        const { context, channel } = await joining({ hasVideoNula: true });
+        channel.emit("message", message({ type: "welcome", model: "B-DFS1.2", hasVideoNula: true, version: "1.0" }));
+        expect(context.urlState.urlWith).not.toHaveBeenCalled();
+        expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
+    });
+
     it.each([
         ["fits a VideoNuLA", false, true],
         ["takes out a VideoNuLA", true, false],

@@ -16,6 +16,12 @@ import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 import * as binary from "../../src/binary.js";
 
+const NulaPaletteModeOn = 0x11;
+const NulaDisable = 0x50;
+const NulaHorizontalOffsetOne = 0x21;
+const LogicalZeroAsPhysicalZero = 0x07;
+const NulaColourZeroFullRed = [0x0f, 0x00];
+
 // Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
     let video;
@@ -726,22 +732,22 @@ describe("Video", () => {
         });
 
         it("takes NULA commands on a stock ULA as ULA control writes", () => {
-            video.ula.write(2, 0x11); // NULA palette mode on
+            video.ula.write(2, NulaPaletteModeOn);
             expect(video.ula.paletteMode).toBe(0);
-            expect(video.ulactrl).toBe(0x11);
-            video.ula.write(2, 0x50); // NULA disable
-            video.ula.write(2, 0x21); // NULA horizontal offset 1
+            expect(video.ulactrl).toBe(NulaPaletteModeOn);
+            video.ula.write(2, NulaDisable);
+            video.ula.write(2, NulaHorizontalOffsetOne);
             expect(video.ula.horizontalOffset).toBe(0);
-            expect(video.ulactrl).toBe(0x21);
+            expect(video.ulactrl).toBe(NulaHorizontalOffsetOne);
         });
 
         it("starts a fitted NULA enabled, taking &FE22 as its own until disabled", () => {
             video = makeMockedVideo({ hasVideoNula: true });
             video.ula.write(0, 0x08);
-            video.ula.write(2, 0x11);
+            video.ula.write(2, NulaPaletteModeOn);
             expect(video.ula.paletteMode).toBe(1);
             expect(video.ulactrl).toBe(0x08);
-            video.ula.write(2, 0x50);
+            video.ula.write(2, NulaDisable);
             video.ula.write(2, 0x1c);
             expect(video.ulactrl).toBe(0x1c);
         });
@@ -1796,11 +1802,10 @@ describe("Video", () => {
         it("keeps a stock ULA stock when restoring a state saved with a NULA fitted", () => {
             const fitted = makeRealVideo({ hasVideoNula: true });
             fitted.ula.write(0, 0x08);
-            fitted.ula.write(1, 0x07); // logical colour 0 shows physical colour 0
-            fitted.ula.write(2, 0x11);
-            fitted.ula.write(2, 0x21);
-            fitted.ula.write(3, 0x0f);
-            fitted.ula.write(3, 0x00); // physical colour 0 becomes red
+            fitted.ula.write(1, LogicalZeroAsPhysicalZero);
+            fitted.ula.write(2, NulaPaletteModeOn);
+            fitted.ula.write(2, NulaHorizontalOffsetOne);
+            for (const byte of NulaColourZeroFullRed) fitted.ula.write(3, byte);
             const stock = makeRealVideo();
             const stockBlack = stock.ula.collook[0];
 

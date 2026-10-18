@@ -104,7 +104,7 @@ const accessibilitySwitches = new AccessibilitySwitches();
 
 const settings = new Settings({ urlState });
 const { keyLayout, displayMode, audioOutput, speakerAmount } = settings;
-const model = settings.model;
+const { model, hasVideoNula } = settings;
 const config = new Config(settings);
 
 const speechOutput = new SpeechOutput();
@@ -146,7 +146,7 @@ const display = new Display({
     tryGl,
     lowLatency,
     fakeVideo: parsedQuery.fakeVideo !== undefined,
-    hasVideoNula: settings.hasVideoNula,
+    hasVideoNula,
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
 const video = display.video;
@@ -423,7 +423,7 @@ const startPromise = machine.start({
         const sessionContext = {
             processor,
             model,
-            hasVideoNula: settings.hasVideoNula,
+            hasVideoNula,
             loop,
             keyboard,
             urlState,

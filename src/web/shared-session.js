@@ -1282,7 +1282,12 @@ export class SessionGuest {
     welcome({ model, hasVideoNula, version, name }) {
         this.hostName = cleanName(name);
         const field = (value) => String(value).slice(0, MaxReasonLength);
-        this.log.record("welcome", { model: field(model), version: field(version), name: this.hostName });
+        this.log.record("welcome", {
+            model: field(model),
+            hasVideoNula: hasVideoNula === true,
+            version: field(version),
+            name: this.hostName,
+        });
         this.showStatus();
         if (typeof model !== "string" || !findModel(model)) {
             this.fail(SessionFailures.protocol, "the host did not say what machine it is");
