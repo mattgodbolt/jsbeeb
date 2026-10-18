@@ -68,6 +68,41 @@ test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     }
 });
 
+test("every label and lamp in the lights bar sits on one of its three shared lines", async ({ beeb, page }) => {
+    const lineCentres = () =>
+        page.evaluate(() =>
+            [...document.querySelectorAll("#leds .slot-readout, #leds .cell")]
+                .filter((item) => item.getClientRects().length)
+                .map((item) => {
+                    const top = item.getBoundingClientRect().top;
+                    const rects = [...item.querySelectorAll(".led, [data-icon] > svg")].map((lamp) =>
+                        lamp.getBoundingClientRect(),
+                    );
+                    const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+                    while (walker.nextNode()) {
+                        if (!walker.currentNode.textContent.trim()) continue;
+                        const range = document.createRange();
+                        range.selectNodeContents(walker.currentNode);
+                        rects.push(...range.getClientRects());
+                    }
+                    const centres = rects
+                        .filter((rect) => rect.height)
+                        .map((rect) => Math.round((rect.top + rect.bottom) / 2 - top));
+                    return { label: item.textContent.trim().replace(/\s+/g, " "), centres: [...new Set(centres)] };
+                }),
+        );
+    await beeb.open("?disc=elite.ssd&tape=Welcome.uef");
+    await beeb.expectDrive0("elite.ssd");
+    await expect(page.locator('#leds [data-slot="tape"] .counter')).not.toBeEmpty();
+    await expect(page.locator("#leds .virtualMHz")).not.toBeEmpty();
+    for (const width of [1400, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const items = await lineCentres();
+        const lines = [...new Set(items.flatMap(({ centres }) => centres))].sort((a, b) => a - b);
+        expect(lines.length, `lines at ${width}px: ${JSON.stringify(items)}`).toBe(3);
+    }
+});
+
 test("typing at the keyboard reaches the machine", async ({ beeb }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
