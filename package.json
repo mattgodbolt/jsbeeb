@@ -39,9 +39,9 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@vitest/coverage-v8": "^5.0.0",
-    "acorn": "^8.19.0",
     "browserslist": "^4.29.3",
     "browserslist-to-esbuild": "^2.1.1",
+    "es-check": "^9.8.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-compat": "^7.0.2",
@@ -127,7 +127,7 @@
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder",
     "test:e2e": "npm run build && playwright test --project chrome",
-    "test:dist-syntax": "npm run build && node tools/check-dist-syntax.js"
+    "test:dist-syntax": "npm run build && es-check checkBrowser './dist/**/*.js' --module --checkFeatures"
   },
   "lint-staged": {
     "*.js": [
