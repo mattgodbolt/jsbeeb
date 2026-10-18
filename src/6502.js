@@ -592,8 +592,8 @@ class DebugHook {
                 // remove() replaces the array, so a handler removing itself cannot make the loop skip the next one.
                 const handlers = this.handlers;
                 let stop = false;
-                for (const h of handlers) {
-                    if (h.apply(h, args)) stop = true;
+                for (const hook of handlers) {
+                    if (hook.apply(hook, args)) stop = true;
                 }
                 if (stop) {
                     if (this.remembersStop) this.calledAtStop = new Set(handlers);
