@@ -27,8 +27,15 @@ export function analyticsLocation(href) {
     }
 }
 
+let silenced = false;
+
+/** Sends nothing from here on: benchmark runs, many of them scripted, would swamp the counts. */
+export function silenceAnalytics() {
+    silenced = true;
+}
+
 /*global gtag*/
-const injectedGtag = () => (measurementId() && typeof gtag === "function" ? gtag : undefined);
+const injectedGtag = () => (!silenced && measurementId() && typeof gtag === "function" ? gtag : undefined);
 
 const pageLocations = () => ({
     page_location: analyticsLocation(window.location.href),

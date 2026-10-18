@@ -13,6 +13,10 @@ const HexRadix = 16;
 export const CheckCycles = 1000 * 1000;
 
 const AllBits = 0xff;
+const GzipMagic = [0x1f, 0x8b];
+
+// Vite's preview server sends a .gz file with Content-Encoding: gzip, so the browser has already inflated it.
+const isGzip = (bytes) => GzipMagic.every((byte, index) => bytes[index] === byte);
 const hex = (value) => `&${value.toString(HexRadix).toUpperCase()}`;
 
 /**
@@ -37,8 +41,9 @@ export async function readWorkload(name) {
         const known = workloads.map((candidate) => candidate.name).join(", ");
         throw new Error(`No benchmark workload "${name}"; the workloads are ${known}`);
     }
-    const compressed = await loadData(`${WorkloadsDir}/${workload.snapshot}`);
-    const snapshot = snapshotFromJSON(new TextDecoder().decode(await ungzip(compressed)));
+    const bytes = await loadData(`${WorkloadsDir}/${workload.snapshot}`);
+    const json = isGzip(bytes) ? await ungzip(bytes) : bytes;
+    const snapshot = snapshotFromJSON(new TextDecoder().decode(json));
     return { ...workload, snapshot };
 }
 
