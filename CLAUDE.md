@@ -23,6 +23,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   Chrome uses the machine's GPU when it has one and the software renderer otherwise, which is what CI runs;
   `E2E_GL=software` or `E2E_GL=hardware` forces one
 - `npm run ci-checks` - Run ESLint, Prettier and the check that every `test:*` script has a CI workflow step
+- `npm run benchmark` - Time the benchmark workloads in Node (`tests/bench`, one file per model and kind of video,
+  run one after another); CI does not run it
+- `npm run benchmark:workloads` - Rebuild the workload snapshots in `public/benchmarks` from a boot and scripted
+  input (`tools/make-benchmark-workloads.js`); `-- --check` compares instead of writing. `src/benchmark-workloads.js`
+  restores one by name, in Node or the page, and checks it is running what its name says
 - `vitest run tests/unit/test-archive.js` - Run a single test file
 
 ### Code Coverage

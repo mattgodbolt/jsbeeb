@@ -17,7 +17,7 @@ const RomselBankMask = 0x0f;
 const RomselAndy = 0x80;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
-const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HostKeyCodes = new Set(Object.values(keyCodes));
 
 function requireKnownKeyCode(method, code) {

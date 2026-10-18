@@ -1,0 +1,54 @@
+{
+  "workloads": [
+    {
+      "name": "elite",
+      "model": "B-DFS1.2",
+      "description": "Elite in flight: launched from Lave station with the default commander, no keys held.",
+      "source": "public/discs/elite.ssd, Ian Bell's disc image as fixed for jsbeeb (see public/discs/README.elite)",
+      "snapshot": "elite.json.gz",
+      "checks": {
+        "bytes": [
+          { "address": 142, "value": 0, "what": "Elite's docked flag QQ12, in space" },
+          { "address": 135, "value": 0, "what": "Elite's view type QQ11, the space view" }
+        ],
+        "advancing": { "address": 138, "length": 1, "what": "Elite's main loop counter MCNT" }
+      }
+    },
+    {
+      "name": "mode0-lines",
+      "model": "B-DFS1.2",
+      "description": "A BASIC graphics demo in MODE 0: screen-wide lines EORed on a sweeping path.",
+      "source": "a BASIC program in tools/make-benchmark-workloads.js",
+      "snapshot": "mode0-lines.json.gz",
+      "checks": {
+        "bytes": [{ "address": 853, "value": 0, "what": "the OS screen mode, MODE 0" }],
+        "advancing": { "address": 1048, "length": 4, "what": "the program's loop counter F%" }
+      }
+    },
+    {
+      "name": "mode7-text",
+      "model": "B-DFS1.2",
+      "description": "MODE 7 text scrolling up the screen: coloured text, backgrounds and graphics characters.",
+      "source": "a BASIC program in tools/make-benchmark-workloads.js",
+      "snapshot": "mode7-text.json.gz",
+      "checks": {
+        "bytes": [{ "address": 853, "value": 7, "what": "the OS screen mode, MODE 7" }],
+        "advancing": { "address": 1048, "length": 4, "what": "the program's loop counter F%" }
+      }
+    },
+    {
+      "name": "master-shadow",
+      "model": "Master",
+      "description": "A Master BASIC demo in shadow MODE 2 (MODE 130): filled triangles in changing colours.",
+      "source": "a BASIC program in tools/make-benchmark-workloads.js",
+      "snapshot": "master-shadow.json.gz",
+      "checks": {
+        "bytes": [
+          { "address": 853, "value": 2, "what": "the OS screen mode, MODE 2" },
+          { "address": 208, "mask": 16, "value": 16, "what": "the VDU's shadow flag" }
+        ],
+        "advancing": { "address": 1048, "length": 4, "what": "the program's loop counter F%" }
+      }
+    }
+  ]
+}
