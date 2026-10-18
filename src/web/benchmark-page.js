@@ -7,6 +7,8 @@ export const WarmupSeconds = 5;
 export const Repeats = 10;
 const ChunksPerSecond = 1000 / TickMs;
 const DialogId = "benchmark";
+// Each changes what a pass measures or what an emulated second is.
+const MeasureChangingParams = ["fakeVideo", "frameSkip", "cpuMultiplier", "videoCyclesBatch"];
 
 const fixed = (value) => value.toFixed(1);
 const noPaint = () => {};
@@ -50,6 +52,7 @@ export function resultLine(result) {
         `jsbeeb benchmark ${workload} (${model}): ${mhz.toFixed(2)} MHz. ` +
         `ms per emulated second, median of ${repeats} after ${warmupSeconds}s warm-up: ${summaries.join("; ")}. ` +
         `Split: ${splitText}. ` +
+        `Display ${result.display} on ${result.renderer}. ` +
         `Commit ${result.commit} (${result.version}), crossOriginIsolated ${result.crossOriginIsolated}, ` +
         `${result.userAgent}`
     );
@@ -100,12 +103,15 @@ export class BenchmarkPage {
      * Runs the benchmark on the page's machine and shows what it found. The machine is left at the workload's
      * start and the loop asked to run it, so the page carries on as usual once the dialog is closed.
      */
-    async run({ processor, display, audioHandler, slots, loop, modals, commit, version }) {
+    async run({ processor, display, audioHandler, slots, loop, modals, parsedQuery, commit, version }) {
         const { workload: name } = this.record;
         this.showStatus(`Loading the ${name} workload...`);
         modals.show(DialogId);
         audioHandler.mute();
         try {
+            const refused = MeasureChangingParams.filter((param) => Object.hasOwn(parsedQuery, param));
+            if (refused.length)
+                throw new Error(`${refused.join(", ")} would change what is measured; take it out of the URL`);
             const workload = await readWorkload(name);
             if (!isSameModel(workload.model, processor.model.name)) {
                 throw new Error(
@@ -123,6 +129,8 @@ export class BenchmarkPage {
                 ...measured,
                 commit,
                 version,
+                display: display.filterClass.getDisplayConfig().name,
+                renderer: display.canvas.renderer,
                 crossOriginIsolated: !!window.crossOriginIsolated,
                 userAgent: navigator.userAgent,
             };
@@ -131,13 +139,21 @@ export class BenchmarkPage {
             Object.assign(this.record, { status: "done", result, line });
             this.showStatus("Done. The line below has every figure; the machine runs the workload once this closes.");
             this.showLine(line);
+            this.allowClose();
+            this.finish(this.record);
+            loop.go();
         } catch (error) {
-            console.error("Benchmark failed:", error);
-            Object.assign(this.record, { status: "failed", error: error.message });
-            this.showStatus(`The benchmark stopped: ${error.message}`);
+            this.fail(error);
         }
+    }
+
+    /** Ends the run as failed, leaving the machine stopped wherever the failure left it. */
+    fail(error) {
+        console.warn("Benchmark failed:", error);
+        Object.assign(this.record, { status: "failed", error: error.message });
+        this.showStatus(`The benchmark stopped: ${error.message}. Reload the page without it to use the emulator.`);
+        this.allowClose();
         this.finish(this.record);
-        loop.go();
     }
 
     async measure(workload, { processor, display, audioHandler, clocksPerSecond }) {
@@ -191,8 +207,8 @@ export class BenchmarkPage {
         const cpu = await runPass("cpu", () => {
             const fake = new FakeVideo();
             fake.reset(processor, processor.sysvia);
-            processor.video = fake;
-            return () => (processor.video = video);
+            Object.assign(processor, { video: fake, crtc: fake.crtc, ula: fake.ula });
+            return () => Object.assign(processor, { video, crtc: video.crtc, ula: video.ula });
         });
 
         const msOf = (samples, field = "ms") => summarise(samples.map((sample) => sample[field]));
@@ -213,6 +229,11 @@ export class BenchmarkPage {
             },
             samples: { full, video: videoOnly, cpu },
         };
+    }
+
+    // Until now the dialog has no way out: closing it would let the loop be started under the run.
+    allowClose() {
+        for (const button of this.dialog.querySelectorAll(".benchmark-close")) button.hidden = false;
     }
 
     showStatus(text) {

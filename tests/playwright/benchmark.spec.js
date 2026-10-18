@@ -5,28 +5,43 @@ import { expect, test } from "./fixtures.js";
 // Three passes of fifteen emulated seconds each, unthrottled, under the software renderer CI uses.
 const BenchmarkTimeoutMs = 120000;
 
-test("runs a workload and publishes its result for a script to wait on", async ({ beeb, page }) => {
+const benchmarkRecord = async (page) => {
+    await page.waitForFunction(() => window.jsbeebBenchmark);
+    return page.evaluate(() =>
+        window.jsbeebBenchmark.done.then(({ status, error, line, result }) => ({ status, error, line, result })),
+    );
+};
+
+const analyticsSent = (page) =>
+    page.evaluate(() => window.dataLayer.filter((entry) => entry[0] === "config" || entry[0] === "event"));
+
+test("runs a workload, publishes its result for a script, then runs the machine", async ({ beeb, page }) => {
     test.setTimeout(BenchmarkTimeoutMs);
     await beeb.open("?benchmark=elite");
-    await page.waitForFunction(() => window.jsbeebBenchmark);
-    const record = await page.evaluate(() =>
-        window.jsbeebBenchmark.done.then(({ status, error, line, result }) => ({
-            status,
-            error,
-            line,
-            passes: Object.keys(result.passes),
-            split: Object.keys(result.split),
-            mhz: result.mhz,
-        })),
-    );
-    expect(record).toMatchObject({
-        status: "done",
-        passes: ["full", "video", "cpu"],
-        split: ["cpu", "video", "copy", "present"],
+    await expect(page.locator("#benchmark .benchmark-status")).toBeVisible();
+    await expect(page.locator("#benchmark .benchmark-close")).toHaveCount(2);
+    for (const close of await page.locator("#benchmark .benchmark-close").all()) await expect(close).toBeHidden();
+    const { status, line, result } = await benchmarkRecord(page);
+    expect(status).toBe("done");
+    expect(Object.keys(result.passes)).toEqual(["full", "video", "cpu"]);
+    expect(Object.keys(result.split)).toEqual(["cpu", "video", "copy", "present"]);
+    expect(result.mhz).toBeGreaterThan(0);
+    expect(line).toMatch(/^jsbeeb benchmark elite \(B-DFS1\.2\): [\d.]+ MHz\. .*crossOriginIsolated (true|false)/);
+    await expect(page.locator("#benchmark .benchmark-line")).toHaveValue(line);
+    expect(await analyticsSent(page)).toEqual([]);
+
+    await beeb.expectDrive0("elite.ssd");
+    const held = await beeb.expectHeld();
+    await page.locator("#benchmark .modal-footer .benchmark-close").click();
+    await beeb.expectRunningPast(held);
+});
+
+test("a workload for another model fails, saying which model it needs", async ({ beeb, page }) => {
+    await beeb.open("?benchmark=master-shadow");
+    const { status, error } = await benchmarkRecord(page);
+    expect({ status, error }).toEqual({
+        status: "failed",
+        error: "The master-shadow workload runs on the Master: add &model=Master to the URL",
     });
-    expect(record.mhz).toBeGreaterThan(0);
-    expect(record.line).toMatch(
-        /^jsbeeb benchmark elite \(B-DFS1\.2\): [\d.]+ MHz\. .*crossOriginIsolated (true|false)/,
-    );
-    await expect(page.locator("#benchmark .benchmark-line")).toHaveValue(record.line);
+    await expect(page.locator("#benchmark .benchmark-status")).toContainText("add &model=Master");
 });

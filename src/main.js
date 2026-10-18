@@ -435,6 +435,7 @@ async function startAsTheUrlAsks() {
                 slots: media.slots,
                 loop,
                 modals,
+                parsedQuery,
                 commit,
                 version,
             });
@@ -453,6 +454,7 @@ async function startAsTheUrlAsks() {
         });
     } catch (error) {
         console.error("Error initialising emulator:", error);
+        benchmarkPage?.fail(error);
         noteError("startup", error);
         modals.showError("initialising", error);
     }

@@ -40,6 +40,8 @@ describe("benchmark page", () => {
             warmupSeconds: 5,
             passes: { full: { ms: summary(130) }, video: { ms: summary(120) }, cpu: { ms: summary(40) } },
             split: { cpu: 40, video: 80, copy: 4.25, present: 3 },
+            display: "RGB Monitor",
+            renderer: "webgl",
             commit: "abc1234",
             version: "2.8.0",
             crossOriginIsolated: false,
@@ -53,6 +55,7 @@ describe("benchmark page", () => {
                     "video 120.0 [min 118.0, IQR 119.0-121.0, first 123.0, last 120.0]; " +
                     "cpu 40.0 [min 38.0, IQR 39.0-41.0, first 43.0, last 40.0]. " +
                     "Split: cpu 40.0, video 80.0, copy 4.3, present 3.0. " +
+                    "Display RGB Monitor on webgl. " +
                     "Commit abc1234 (2.8.0), crossOriginIsolated false, Agent/1.0",
             );
         });
