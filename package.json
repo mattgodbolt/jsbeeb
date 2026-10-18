@@ -127,7 +127,7 @@
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder",
     "test:e2e": "npm run build && playwright test --project chrome",
-    "test:dist-syntax": "npm run build && es-check checkBrowser './dist/**/*.js' --module --checkFeatures"
+    "test:dist-syntax": "npm run build && es-check checkBrowser './dist/**/*.js' --module && es-check checkBrowser './dist/**/*.js' --module --checkFeatures"
   },
   "lint-staged": {
     "*.js": [
