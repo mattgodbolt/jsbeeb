@@ -39,8 +39,8 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
  *
  * A family is an entry for every parameter whose name starts with its `prefix`, in any case, or is one of its `names`;
  * the entry's own key is not a parameter. Its `apply(member, value, context)` puts one of them into effect, given the
- * rest of its name (or the whole of one of its `names`) and its value, both upper-cased, and returns what is wrong
- * with it if it cannot. Settings, storage and the dialog work by name, so a family has none of their properties.
+ * rest of its name (or the whole of one of its `names`), upper-cased, and its value as its `type` parses it (upper-cased
+ * if a string), and returns what is wrong with it if it cannot. A parameter with no value, or an empty one, is skipped. Settings, storage and the dialog work by name, so a family has none of their properties.
  *
  * A setting is the model, which Settings resolves with code of its own, or a parameter with a `default`, which Settings
  * takes from the URL, then from storage if it is stored, then the default. `fromUrl` adjusts a value from the URL, and
@@ -303,7 +303,7 @@ export const Parameters = {
     audioLatencyMs: { type: ParamTypes.FLOAT, localToPage: true, analyticsFilter: asIs },
     cpuMultiplier: { type: ParamTypes.FLOAT, localToPage: false, analyticsFilter: asIs },
 
-    // String parameters (these are the default but listed for clarity)
+    // String parameters
     disc: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
     disc1: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
     disc2: { type: ParamTypes.STRING, localToPage: false, analyticsFilter: mediaLabel },
@@ -374,8 +374,8 @@ export function processInputParams(params, context) {
     const warnings = [];
     for (const [name, value] of Object.entries(params)) {
         const { parameter, member } = parameterFor(name) ?? {};
-        if (!parameter?.apply || !value) continue;
-        const problem = parameter.apply(member, value.toUpperCase(), context);
+        if (!parameter?.apply || value === null || value === "") continue;
+        const problem = parameter.apply(member, typeof value === "string" ? value.toUpperCase() : value, context);
         if (problem) warnings.push(`${name}=${value}: ${problem}`);
     }
     return warnings;
