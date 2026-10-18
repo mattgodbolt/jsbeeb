@@ -114,7 +114,7 @@ test("a breakpoint in the MOS names its addresses, and says where the names came
     expect(await panelWidth()).toBe(uncreditedWidth);
 });
 
-test("a state saved at a breakpoint loads paused there in the debugger, and one continue runs past it", async ({
+test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
     page,
 }) => {
@@ -145,6 +145,11 @@ test("a state saved at a breakpoint loads paused there in the debugger, and one 
 
     await page.evaluate(() => window.e2eBreakpoint.remove());
     await expect(page.locator("#debug-pause")).toBeEnabled();
+
+    await loadAndContinue(saved);
+
+    await beeb.open("?model=Master");
+    await beeb.expectScreenText(">");
 
     await loadAndContinue(saved);
 });
