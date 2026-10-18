@@ -141,43 +141,41 @@
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
                 <li><a href="#" id="fs" class="dropdown-item">Fullscreen</a></li>
-                <li><a href="#help" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#help">Help</a></li>
+                <li><a href="#" id="disc-visualiser-open" class="dropdown-item">Disc surface</a></li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
+                <li id="fsmenuitem">
+                  <a href="#econetfs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#econetfs">
+                    Econet file server</a
+                  >
+                </li>
+                <li><hr class="dropdown-divider" /></li>
                 <li>
                   <a href="https://bbcmic.ro/" class="dropdown-item" target="_blank" rel="noopener"
-                    >Edit BBC BASIC with Owlet (bbcmic.ro)</a
+                    >Edit BASIC with Owlet (bbcmic.ro)</a
                   >
                 </li>
-                <li>
-                  <a href="#pp-tos" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#pp-tos"
-                    >Privacy Policy &amp; ToS</a
-                  >
-                </li>
-                <li><a href="mailto:matt@godbolt.org" class="dropdown-item">Contact the Author</a></li>
-                <li>
-                  <a href="http://xania.org/MattGodbolt" class="dropdown-item" rel="author" target="_blank">
-                    About the Author</a
-                  >
-                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a href="#help" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#help">Help</a></li>
                 <li>
                   <a href="#about" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#info" id="about">
                     About jsbeeb</a
                   >
                 </li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><a href="#" id="disc-visualiser-open" class="dropdown-item">View disc surface</a></li>
-                <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
-                <li id="fsmenuitem">
-                  <a href="#econetfs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#econetfs">
-                    Econet File Server</a
+                <li>
+                  <a href="http://xania.org/MattGodbolt" class="dropdown-item" rel="author" target="_blank">
+                    About the author</a
+                  >
+                </li>
+                <li><a href="mailto:matt@godbolt.org" class="dropdown-item">Contact the author</a></li>
+                <li>
+                  <a href="#pp-tos" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#pp-tos"
+                    >Privacy and terms</a
                   >
                 </li>
               </ul>
             </li>
           </ul>
-          <span class="navbar-text ms-auto px-3 d-none d-xxl-inline">
-            Edit BBC BASIC with Owlet at
-            <a href="https://bbcmic.ro/" target="_blank" rel="noopener">bbcmic.ro</a>!
-          </span>
           <div class="d-flex align-items-center ms-auto me-3" id="quick-settings">
             <div class="btn-group btn-group-sm" role="group" aria-label="Sound output" id="audio-output">
               <button
@@ -1026,7 +1024,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="econetModalLabel">Econet File Server</h5>
+            <h5 class="modal-title" id="econetModalLabel">Econet file server</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
