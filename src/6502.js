@@ -1404,6 +1404,7 @@ export class Cpu6502 extends Base6502 {
         this._nmiSources = 0;
         this.halted = state.halted;
         this.takeInt = state.takeInt;
+        this.debugInstruction.forgetStop();
 
         // 3. Memory
         this.ramRomOs.set(state.ram);

@@ -153,6 +153,15 @@ describe("TestMachine debug stops", () => {
         });
     });
 
+    it("stops at the restored pc when restored where a hook stopped it", async () => {
+        const machine = await bootedMachine();
+        await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
+
+        machine.restore(machine.snapshot());
+
+        expect(await cyclesToRun(machine, ShortRunCycles)).toBe(0);
+    });
+
     it("keeps the hooks called at a stop across an execute that runs nothing", async () => {
         const machine = await bootedMachine();
         await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
