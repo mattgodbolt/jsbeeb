@@ -66,11 +66,17 @@ jobs:
           VITEST_JOB_SUMMARY_TITLE: Shader tests
         run: npm run test:shader
       - name: Built scripts parse at the browser floor
-        run: npm run test:dist-syntax
+        run: |
+          echo "# Built scripts parse at the browser floor" >> "$GITHUB_STEP_SUMMARY"
+          if npm run test:dist-syntax; then result=passed; else result="failed; the step's log says where"; fi
+          echo "$result" >> "$GITHUB_STEP_SUMMARY"
+          [ "$result" = passed ]
       - name: End-to-end tests
         run: |
           echo "# End-to-end tests" >> "$GITHUB_STEP_SUMMARY"
-          npm run test:e2e
+          if npm run test:e2e; then result=passed; else result="failed; the step's log and the Playwright traces say which test"; fi
+          echo "$result" >> "$GITHUB_STEP_SUMMARY"
+          [ "$result" = passed ]
       - name: Keep the Playwright report and traces of any failure
         if: failure()
         uses: actions/upload-artifact@v7
@@ -96,7 +102,11 @@ jobs:
       - name: npm ci
         run: npm ci
       - name: CPU tests
-        run: npm run test:cpu
+        run: |
+          echo "# CPU tests" >> "$GITHUB_STEP_SUMMARY"
+          if npm run test:cpu; then result=passed; else result="failed; the step's log says which test"; fi
+          echo "$result" >> "$GITHUB_STEP_SUMMARY"
+          [ "$result" = passed ]
 
   build-electron-packages:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
