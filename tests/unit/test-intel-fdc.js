@@ -420,8 +420,7 @@ describe("Intel 8271 tests", function () {
         it("does not unload the head in the middle of a seek longer than the unload count", () => {
             const { scheduler, readStatus, readFirstByte } = dfsFdc();
             expect(readFirstByte(79)).toEqual({ result: 0, firstByte: 79 });
-            // The DFS's last status poll sets the count going, then its settling delay, which a
-            // busy interrupt handler stretches, and a 78 track seek take it past 12 revolutions.
+            // 600 ms and 78 steps at 24 ms take the count a status read starts past 12 revolutions.
             readStatus();
             scheduler.polltime(ms(600));
             expect(readFirstByte(1)).toEqual({ result: 0, firstByte: 1 });
