@@ -103,6 +103,10 @@ const Status = Object.freeze({
     busy: 0x01,
 });
 
+// The type I bits that follow the drive's lines. Write protect is polled like track 0 after a type I
+// command (Jean Louis-Guerin's WD1772 specification, status register summary, note 4).
+const TypeIPolledStatus = Status.typeITrack0 | Status.typeIIndex | Status.writeProtected;
+
 /**
  * Controller state.
  *
@@ -844,9 +848,10 @@ export class WdFdc {
         this._logCommand("automatic motor off");
         this._currentDrive.stopSpinning();
         this._statusRegister &= ~Status.motorOn;
-        // In @scarybeasts's testing on a 1772 the polled type 1 status bits get cleared on spin down.
+        // In @scarybeasts's testing on a 1772 the polled track 0 and index bits get cleared on spin down;
+        // write protect, polled the same way, is assumed to go with them.
         if (this._commandType === 1) {
-            this._statusRegister &= ~(Status.typeITrack0 | Status.typeIIndex);
+            this._statusRegister &= ~TypeIPolledStatus;
         }
     }
 
@@ -1129,9 +1134,10 @@ export class WdFdc {
 
     _updateTypeIStatusBits() {
         if (this._commandType !== 1) return;
-        this._statusRegister &= ~(Status.typeITrack0 | Status.typeIIndex);
+        this._statusRegister &= ~TypeIPolledStatus;
         if (this._currentDrive.track === 0) this._statusRegister |= Status.typeITrack0;
         if (this._currentDrive.indexPulse) this._statusRegister |= Status.typeIIndex;
+        if (this._currentDrive.writeProtect) this._statusRegister |= Status.writeProtected;
     }
 
     _startTimer(timerState, waitUs) {
