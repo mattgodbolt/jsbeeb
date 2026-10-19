@@ -360,10 +360,48 @@ describe("spindle motor", () => {
         drive.startSpinning();
         expect(drive.speed).toBeCloseTo(1, 3);
         drive.stopSpinning();
-        scheduler.polltime(ms(1000));
+        scheduler.polltime(ms(500));
         expect(drive.speed).toBeCloseTo(0.37, 1);
         drive.startSpinning();
         expect(drive.speed).toBeCloseTo(0.37, 1);
+    });
+
+    it("keeps the disc turning through a brief stop, with no pulses while the motor is off", () => {
+        const spinningDrive = () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+            drive.setDisc(fortyTrackDisc());
+            let pulses = 0;
+            drive.setPulsesCallback(() => ++pulses);
+            drive.startSpinning();
+            scheduler.polltime(ms(3000));
+            return { scheduler, drive, pulses: () => pulses };
+        };
+        const steady = spinningDrive();
+        const stopped = spinningDrive();
+        stopped.drive.stopSpinning();
+        const pulsesAtStop = stopped.pulses();
+        steady.scheduler.polltime(ms(1));
+        stopped.scheduler.polltime(ms(1));
+        expect(stopped.pulses()).toBe(pulsesAtStop);
+        stopped.drive.startSpinning();
+        steady.scheduler.polltime(ms(10));
+        stopped.scheduler.polltime(ms(10));
+        const oneByte = 1 / stopped.drive.trackLength;
+        expect(Math.abs(stopped.drive.positionFraction - steady.drive.positionFraction)).toBeLessThanOrEqual(oneByte);
+    });
+
+    it("comes to rest about two seconds after the motor stops", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        scheduler.polltime(ms(3000));
+        drive.stopSpinning();
+        scheduler.polltime(ms(1900));
+        expect(scheduler.headroom()).not.toBe(Scheduler.MaxHeadroom);
+        scheduler.polltime(ms(100));
+        expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
     it("carries its speed through a snapshot", () => {
@@ -378,6 +416,31 @@ describe("spindle motor", () => {
         restored.setDisc(fortyTrackDisc());
         restored.restoreState(state);
         expect(restored.speed).toBeCloseTo(0.63, 1);
+    });
+
+    it("carries a coast through a snapshot, turning unread until it comes to rest", () => {
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+        drive.setDisc(fortyTrackDisc());
+        drive.startSpinning();
+        scheduler.polltime(ms(3000));
+        drive.stopSpinning();
+        scheduler.polltime(ms(350));
+        const state = drive.snapshotState();
+        expect(state.spinning).toBe(false);
+        expect(state.timerTaskOffset).not.toBeNull();
+
+        const restoredScheduler = new Scheduler();
+        const restored = new DiscDrive(0, restoredScheduler, BbcCyclesPerSecond);
+        restored.setDisc(fortyTrackDisc());
+        restored.setPulsesCallback(() => expect.fail("no pulses while coasting"));
+        restored.restoreState(state);
+        expect(restored.speed).toBeCloseTo(0.5, 1);
+        const position = restored.positionFraction;
+        restoredScheduler.polltime(ms(10));
+        expect(restored.positionFraction).not.toBe(position);
+        restoredScheduler.polltime(ms(2000));
+        expect(restoredScheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
     function untilIndexRises(drive, scheduler) {
