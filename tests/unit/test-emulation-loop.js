@@ -186,6 +186,14 @@ describe("EmulationLoop", () => {
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(true);
     });
 
+    it("names turbo's shortcut as a Mac's keyboard prints it, on a Mac", async () => {
+        vi.spyOn(Navigator.prototype, "platform", "get").mockReturnValue("MacIntel");
+        vi.resetModules();
+        const { EmulationLoop: MacEmulationLoop } = await import("../../src/web/emulation-loop.js");
+        new MacEmulationLoop(deps).toggleFastAsPossible();
+        expect(toasts()).toEqual([expect.stringContaining("Turbo is on. ⌥T turns it off.")]);
+    });
+
     it("says whether turbo is now on or off each time it is toggled, and notes each toggle", () => {
         const sent = sentEvents();
         const loop = make();

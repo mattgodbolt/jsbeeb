@@ -1,6 +1,7 @@
 import { TickMs } from "../emulation-tick.js";
 import { noteError, noteFeature } from "./analytics.js";
 import { toast } from "./toast.js";
+import { shortcutLabel } from "./shortcuts.js";
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
 
@@ -168,7 +169,7 @@ export class EmulationLoop extends EventTarget {
         this.fastAsPossible = !this.fastAsPossible;
         noteFeature("turbo", this.fastAsPossible ? "enter" : "leave");
         const [now, next] = this.fastAsPossible ? ["on", "off"] : ["off", "on"];
-        toast(`Turbo is ${now}. Alt-T turns it ${next}.`, { title: "Turbo" });
+        toast(`Turbo is ${now}. ${shortcutLabel("Alt-T")} turns it ${next}.`, { title: "Turbo" });
     }
 
     /**
