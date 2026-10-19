@@ -291,9 +291,14 @@ describe("WD1770 FDC tests", () => {
             expect(() => fdc.write(CommandRegister, ForceInterrupt)).not.toThrow();
         });
 
-        it("runs a restore with no drive selected", () => {
+        it.each([
+            ["without", 0, 0],
+            ["with", VerifyFlag, StatusRecordNotFound],
+        ])("gives up a restore %s verify after 255 steps with no drive selected", (_, verify, seekError) => {
             const { scheduler, fdc } = makeFdc({ control: ControlRunningNoDrive });
-            expect(() => runCommand(fdc, scheduler, RestoreCommand)).not.toThrow();
+            const { status, ticks } = runCommand(fdc, scheduler, RestoreCommand | verify);
+            expect(status & StatusRecordNotFound).toBe(seekError);
+            expect(Math.round(ticks / (6 * TicksPerMs))).toBe(255);
         });
 
         it("accepts every combination of flags when idle", () => {

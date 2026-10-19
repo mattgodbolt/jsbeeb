@@ -1164,6 +1164,13 @@ export class WdFdc {
         this._logCommand(`result status ${hexbyte(this._statusRegister)}`);
     }
 
+    /** A restore that steps 255 times without seeing track 0 stops there, with a seek error if it was to verify. */
+    _giveUpRestore() {
+        if (this._currentDrive) this._currentDrive.notifySeekEnd();
+        if (this._isCommandVerify) this._statusRegister |= Status.recordNotFound;
+        this._commandDone(true);
+    }
+
     _checkVerify() {
         if (this._currentDrive) this._currentDrive.notifySeekEnd();
         if (this._isCommandVerify) {
@@ -1183,6 +1190,10 @@ export class WdFdc {
 
     _doSeekStepOrVerify() {
         if (this._trackRegister === this._dataRegister) {
+            if (this._command === Command.restore && this._currentDrive?.track !== 0) {
+                this._giveUpRestore();
+                return;
+            }
             this._checkVerify();
             return;
         }
