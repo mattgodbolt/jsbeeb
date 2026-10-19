@@ -427,6 +427,17 @@ describe("Intel 8271 tests", function () {
             expect(readFirstByte(1)).toEqual({ result: 0, firstByte: 1 });
         });
 
+        it("keeps the disc turning through the moment a write special register command deselects the drive", () => {
+            const steady = dfsFdc();
+            const rewritten = dfsFdc();
+            for (let write = 0; write < 100; ++write) {
+                sendCommand(rewritten.fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+                steady.scheduler.polltime(ms(1));
+                rewritten.scheduler.polltime(ms(1));
+            }
+            expect(rewritten.drive.positionFraction).toBe(steady.drive.positionFraction);
+        });
+
         it("still unloads the head the counted revolutions after a command", () => {
             const { scheduler, drive, readFirstByte } = dfsFdc();
             readFirstByte(1);

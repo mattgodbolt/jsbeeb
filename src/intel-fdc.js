@@ -1240,14 +1240,16 @@ export class IntelFdc {
      * @param {DriveOut|Number} driveOut
      */
     _setDriveOut(driveOut) {
-        if (this._currentDrive) this._currentDrive.stopSpinning();
-        this._currentDrive = null;
-
         // Note: unclear what to do if both drives are selected. We select no drive
         // for now, to avoid shenanigans.
         const selectBits = driveOut & DriveOut.selectFlags;
-        if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
-        else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
+        let drive = null;
+        if (selectBits === DriveOut.select_0) drive = this._drives[0];
+        else if (selectBits === DriveOut.select_1) drive = this._drives[1];
+
+        if (this._currentDrive && (this._currentDrive !== drive || !(driveOut & DriveOut.loadHead)))
+            this._currentDrive.stopSpinning();
+        this._currentDrive = drive;
 
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             this._ready = false;

@@ -256,21 +256,21 @@ export class DiscDrive extends BaseDiscDrive {
     }
 
     _onTimer() {
-        let pulses = this.disc ? this.disc.readPulses(this._isSideUpper, this._track, this._headPosition) : 0;
-        let numPulses = 32;
-        if (this._pulsePosition === 16 || this._in32usMode) {
-            numPulses = 16;
-            if (this._pulsePosition === 0) pulses >>>= 16;
-            pulses &= 0xffff;
-        }
+        const numPulses = this._pulsePosition === 16 || this._in32usMode ? 16 : 32;
+        // A disc coasting with the motor off still turns, but nothing is reading it.
+        if (this._spinning && this._pulsesCallback) {
+            let pulses = this.disc ? this.disc.readPulses(this._isSideUpper, this._track, this._headPosition) : 0;
+            if (numPulses === 16) {
+                if (this._pulsePosition === 0) pulses >>>= 16;
+                pulses &= 0xffff;
+            }
 
-        // If there's an empty patch on the disc surface, the disc drive's head amplifier will typically desperately
-        // seek for a signal in the noise, resulting in "weak bits". @scarybeasts verified this with an oscilloscope on
-        // his Chinon F-051MD drive, which has a Motorola MC3470AP head amplifier. We need to return an inconsistent yet
-        // deterministic set of weak bits.
-        if (pulses === 0) pulses = this.getQuasiRandomPulses();
+            // If there's an empty patch on the disc surface, the disc drive's head amplifier will typically desperately
+            // seek for a signal in the noise, resulting in "weak bits". @scarybeasts verified this with an oscilloscope
+            // on his Chinon F-051MD drive, which has a Motorola MC3470AP head amplifier. We need to return an
+            // inconsistent yet deterministic set of weak bits.
+            if (pulses === 0) pulses = this.getQuasiRandomPulses();
 
-        if (this._pulsesCallback) {
             this._pulsesCallback(pulses, numPulses);
         }
 
@@ -294,7 +294,8 @@ export class DiscDrive extends BaseDiscDrive {
             this._headPosition = 0;
             this._checkTrackNeedsWrite();
         }
-        if (this._spinning) this._timer.reschedule(Math.round((nextTicks - thisTicks) / this.speed));
+        const speed = this.speed;
+        if (this._spinning || speed > LeastSpeed) this._timer.reschedule(Math.round((nextTicks - thisTicks) / speed));
     }
 
     /** How fast the disc is turning, as a fraction of its rated speed. */
@@ -354,7 +355,7 @@ export class DiscDrive extends BaseDiscDrive {
             this._noteSpeed();
             this._spinning = true;
             this.dispatchEvent(new Event("startSpinning"));
-            this._timer.schedule(1);
+            if (!this._timer.scheduled()) this._timer.schedule(1);
         }
     }
 
@@ -364,12 +365,12 @@ export class DiscDrive extends BaseDiscDrive {
             this._spinning = false;
             this.dispatchEvent(new Event("stopSpinning"));
         }
-        this._timer.cancel();
     }
 
     selectSide(isSideUpper) {
-        const fraction = this.positionFraction;
         this._checkTrackNeedsWrite();
+        if (isSideUpper === this._isSideUpper) return;
+        const fraction = this.positionFraction;
         this._isSideUpper = isSideUpper;
         this.positionFraction = fraction;
     }

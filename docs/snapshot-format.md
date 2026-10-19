@@ -453,7 +453,7 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `spinning`        | boolean      | Drive motor spinning                                              |
 | `speed`           | number       | Disc speed as a fraction of 300 rpm, spinning up or coasting down |
 | `is40Track`       | boolean      | Drive double steps for a 40 track disc                            |
-| `timerTaskOffset` | number\|null | Timer task offset from scheduler epoch                            |
+| `timerTaskOffset` | number\|null | Timer task offset from scheduler epoch; set while the disc coasts |
 | `disc`            | object\|null | Disc state (null if no disc loaded)                               |
 
 ### Disc (`state.fdc.drives[n].disc`)
