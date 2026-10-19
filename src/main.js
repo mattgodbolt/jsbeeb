@@ -21,7 +21,7 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop } from "./web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
@@ -412,7 +412,7 @@ async function startAsTheUrlAsks() {
     // Restore the state a cross-model reload stashed, if there is one.
     await snapshots.restorePendingState();
 
-    if (loop.mode !== "debugging") loop.go();
+    if (loop.mode !== RunMode.debugging) loop.go();
     return true;
 }
 

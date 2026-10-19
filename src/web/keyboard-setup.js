@@ -2,6 +2,7 @@ import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
 import { keyCodes } from "../keymap.js";
 import { Shortcuts } from "./shortcuts.js";
+import { RunMode } from "./emulation-loop.js";
 
 const PasteBoxId = "paste-text";
 /** The eight accessibility switches, on the number keys. */
@@ -43,7 +44,7 @@ export class KeyboardSetup {
 
         const alt = { alt: true, ctrl: false };
         const runners = {
-            toggleDebugger: () => (loop.mode === "debugging" ? loop.go() : loop.stop(true)),
+            toggleDebugger: () => (loop.mode === RunMode.debugging ? loop.go() : loop.stop(true)),
             togglePause: () => (loop.isRunning() ? loop.stop(false) : loop.go()),
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
@@ -86,8 +87,8 @@ export class KeyboardSetup {
     keyPress(evt) {
         if (inKeyboardSink()) return;
         const { loop, dbgr } = this;
-        if (loop.mode === "paused" && evt.key === "n") loop.step();
-        else if ((loop.mode === "paused" || loop.mode === "debugging") && evt.key === "g") loop.go();
-        else if (loop.mode === "debugging" && dbgr.keyPress(evt.key)) evt.preventDefault();
+        if (loop.mode === RunMode.paused && evt.key === "n") loop.step();
+        else if ((loop.mode === RunMode.paused || loop.mode === RunMode.debugging) && evt.key === "g") loop.go();
+        else if (loop.mode === RunMode.debugging && dbgr.keyPress(evt.key)) evt.preventDefault();
     }
 }

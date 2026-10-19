@@ -4,6 +4,19 @@ import { toast } from "./toast.js";
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
 
+/**
+ * Why the machine is or is not running: stopped until it is first started, then
+ * running, paused, debugging (the debugger is shown exactly then; a breakpoint or
+ * an error lands here too) or stepping (one frame, then paused again).
+ */
+export const RunMode = Object.freeze({
+    stopped: "stopped",
+    running: "running",
+    paused: "paused",
+    debugging: "debugging",
+    stepping: "stepping",
+});
+
 // Under ?audioDebug, one console line per second in which the emulator sat
 // idle between ticks or a tick ran long, or the audio queue underran or
 // dropped, so a click can be matched to a cause. The sound chip posts samples
@@ -56,10 +69,7 @@ class VirtualSpeedUpdater {
  * machine (the first tick only takes the time), and "rewind-capture" every
  * RewindCaptureInterval frames for whoever keeps the rewind history.
  *
- * `mode` is why the machine is or is not running: "stopped" until it is first
- * started, then "running", "paused", "debugging" (the debugger is shown exactly
- * then; a breakpoint or an error lands here too) or "stepping" (one frame, then
- * paused again). Anything that needs the machine held still while it works (a
+ * `mode` is a RunMode. Anything that needs the machine held still while it works (a
  * dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`, which
  * stops it without changing the mode; it runs again once every hold has let go,
  * if the mode still wants it running.
@@ -88,7 +98,7 @@ export class EmulationLoop extends EventTarget {
         this.fastTape = fastTape;
         this.audioStatsNode = audioStatsNode;
 
-        this.mode = "stopped";
+        this.mode = RunMode.stopped;
         this.running = false;
         this.fastAsPossible = false;
         this.emulatedTo = 0;
@@ -113,16 +123,16 @@ export class EmulationLoop extends EventTarget {
     }
 
     go() {
-        this.setMode("running");
+        this.setMode(RunMode.running);
     }
 
     /** Runs one frame from a pause, then pauses again. */
     step() {
-        this.setMode("stepping");
+        this.setMode(RunMode.stepping);
     }
 
     stop(debug) {
-        this.setMode(debug ? "debugging" : "paused");
+        this.setMode(debug ? RunMode.debugging : RunMode.paused);
         if (debug) this.dbgr.debug(this.processor.pc);
     }
 
@@ -130,7 +140,7 @@ export class EmulationLoop extends EventTarget {
         const wasPaused = this.isPaused();
         this.mode = mode;
         if (this.isPaused() !== wasPaused) noteFeature("pause", wasPaused ? "leave" : "enter");
-        if (mode !== "debugging") this.dbgr.hide();
+        if (mode !== RunMode.debugging) this.dbgr.hide();
         if (!this.wanted()) {
             if (this.running) this.halt();
         } else if (this.holds.size === 0) {
@@ -144,11 +154,11 @@ export class EmulationLoop extends EventTarget {
 
     // A step is taken inside a pause, not out of it.
     isPaused() {
-        return this.mode === "paused" || this.mode === "stepping";
+        return this.mode === RunMode.paused || this.mode === RunMode.stepping;
     }
 
     wanted() {
-        return this.mode === "running" || this.mode === "stepping";
+        return this.mode === RunMode.running || this.mode === RunMode.stepping;
     }
 
     /**
@@ -317,7 +327,7 @@ export class EmulationLoop extends EventTarget {
                 this.stop(true);
                 throw e;
             }
-            if (this.mode === "stepping") this.stop(false);
+            if (this.mode === RunMode.stepping) this.stop(false);
         }
         this.emulatedTo = Math.max(this.emulatedTo, now);
         this.lastEnd = performance.now();

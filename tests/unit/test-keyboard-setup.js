@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
-import { EmulationLoop } from "../../src/web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "../../src/web/emulation-loop.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 import { TickMs } from "../../src/emulation-tick.js";
@@ -249,11 +249,11 @@ describe("KeyboardSetup", () => {
 
             document.querySelector("#goto-dis-addr-form .goto-addr").focus();
             typeG();
-            expect(loop.mode).toBe("debugging");
+            expect(loop.mode).toBe(RunMode.debugging);
 
             document.activeElement.blur();
             typeG();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
         });
 
         it("keeps a held shortcut's repeats out of the media window it just opened", () => {
@@ -303,27 +303,27 @@ describe("KeyboardSetup", () => {
 
         it("Alt-P pauses a running machine and runs a paused one", () => {
             altP();
-            expect(loop.mode).toBe("paused");
+            expect(loop.mode).toBe(RunMode.paused);
             altP();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
         });
 
         it("Alt-S shows the debugger and hides it again, running the machine", () => {
             altS();
-            expect(loop.mode).toBe("debugging");
+            expect(loop.mode).toBe(RunMode.debugging);
             expect(dbgr.debug).toHaveBeenCalled();
             altS();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
         });
 
         it("while paused, n runs one frame and stays paused", () => {
             altP();
             processor.execute.mockClear();
             type("n");
-            expect(loop.mode).toBe("stepping");
+            expect(loop.mode).toBe(RunMode.stepping);
             frame();
             frame();
-            expect(loop.mode).toBe("paused");
+            expect(loop.mode).toBe(RunMode.paused);
             expect(processor.execute).toHaveBeenCalledTimes(1);
         });
 
@@ -332,9 +332,9 @@ describe("KeyboardSetup", () => {
             const n = type("n");
             expect(dbgr.keyPress).toHaveBeenCalledWith("n");
             expect(n.defaultPrevented).toBe(true);
-            expect(loop.mode).toBe("debugging");
+            expect(loop.mode).toBe(RunMode.debugging);
             type("g");
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
         });
 
         it("hands n to the debugger when it is shown over a pause", () => {
@@ -344,14 +344,14 @@ describe("KeyboardSetup", () => {
             document.dispatchEvent(new KeyboardEvent("keypress", { key: "n", cancelable: true }));
             frame();
             expect(dbgr.keyPress).toHaveBeenCalledWith("n");
-            expect(loop.mode).toBe("debugging");
+            expect(loop.mode).toBe(RunMode.debugging);
             expect(processor.execute).not.toHaveBeenCalled();
         });
 
         it("leaves typed characters alone while the machine runs", () => {
             const g = type("g");
             type("n");
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
             expect(dbgr.keyPress).not.toHaveBeenCalled();
             expect(g.defaultPrevented).toBe(false);
         });
@@ -367,7 +367,7 @@ describe("KeyboardSetup", () => {
             const sent = sentEvents();
             altP();
             leave();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
             altP();
             expect(pauseNotes(sent)).toEqual(["enter", "leave", "enter"]);
         });
@@ -380,7 +380,7 @@ describe("KeyboardSetup", () => {
             type("g");
             frame();
             frame();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
             expect(loop.isRunning()).toBe(true);
             expect(pauseNotes(sent)).toEqual(["enter", "leave"]);
         });
@@ -389,7 +389,7 @@ describe("KeyboardSetup", () => {
             const sent = sentEvents();
             altS();
             altP();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
             expect(dbgr.hide).toHaveBeenCalled();
             expect(sent("feature_used")).toEqual([]);
         });

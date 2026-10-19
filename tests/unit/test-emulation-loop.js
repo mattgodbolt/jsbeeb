@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TickMs } from "../../src/emulation-tick.js";
-import { EmulationLoop } from "../../src/web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "../../src/web/emulation-loop.js";
 import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
@@ -250,7 +250,7 @@ describe("EmulationLoop", () => {
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(sent("js_error")).toEqual([expect.objectContaining({ where: "loop", message: "bad opcode" })]);
-        expect(loop.mode).toBe("debugging");
+        expect(loop.mode).toBe(RunMode.debugging);
         loop.hold("the test")();
         expect(loop.isRunning()).toBe(false);
     });
@@ -261,15 +261,15 @@ describe("EmulationLoop", () => {
 
         it("is stopped until first started, and follows go, stop and step", () => {
             const loop = make();
-            expect(loop.mode).toBe("stopped");
+            expect(loop.mode).toBe(RunMode.stopped);
             loop.go();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
             loop.stop(false);
-            expect(loop.mode).toBe("paused");
+            expect(loop.mode).toBe(RunMode.paused);
             loop.step();
-            expect(loop.mode).toBe("stepping");
+            expect(loop.mode).toBe(RunMode.stepping);
             loop.stop(true);
-            expect(loop.mode).toBe("debugging");
+            expect(loop.mode).toBe(RunMode.debugging);
         });
 
         it("runs one frame for a step, then is paused again, noting nothing more", () => {
@@ -283,7 +283,7 @@ describe("EmulationLoop", () => {
             frame();
             frame();
             expect(cyclesExecuted()).toHaveLength(1);
-            expect(loop.mode).toBe("paused");
+            expect(loop.mode).toBe(RunMode.paused);
             expect(loop.isRunning()).toBe(false);
             expect(pauseNotes(sent)).toEqual(["enter"]);
         });
@@ -295,7 +295,7 @@ describe("EmulationLoop", () => {
             deps.processor.execute.mockReturnValue(false);
             frame();
             frame();
-            expect(loop.mode).toBe("debugging");
+            expect(loop.mode).toBe(RunMode.debugging);
             expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         });
 
@@ -307,7 +307,7 @@ describe("EmulationLoop", () => {
             release();
             frame();
             frame();
-            expect(loop.mode).toBe("paused");
+            expect(loop.mode).toBe(RunMode.paused);
             expect(cyclesExecuted()).toHaveLength(1);
         });
 
@@ -321,7 +321,7 @@ describe("EmulationLoop", () => {
             frame();
             frame();
             frame();
-            expect(loop.mode).toBe("running");
+            expect(loop.mode).toBe(RunMode.running);
             expect(loop.isRunning()).toBe(true);
             expect(pauseNotes(sent)).toEqual(["enter", "leave"]);
         });
