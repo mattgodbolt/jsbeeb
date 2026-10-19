@@ -46,6 +46,9 @@ const SpinUpWaitFlag = 0x08;
 
 const TicksPerMs = 2000;
 const RevolutionTicks = 200 * TicksPerMs;
+// The step rate a command's rate bits of 00 select.
+const StepTicks = 6 * TicksPerMs;
+const RestoreGiveUpSteps = 255;
 const DoneTimerTicks = 64;
 // Long enough to reach the drive's first pulse callback and to outlast the 32us the controller
 // takes to report a command as complete, but still well inside a seek's first step.
@@ -318,7 +321,7 @@ describe("WD1770 FDC tests", () => {
             const { scheduler, fdc } = makeFdc({ control: ControlRunningNoDrive });
             const { status, ticks } = runCommand(fdc, scheduler, RestoreCommand | verify);
             expect(status & StatusRecordNotFound).toBe(seekError);
-            expect(Math.round(ticks / (6 * TicksPerMs))).toBe(255);
+            expect(Math.round(ticks / StepTicks)).toBe(RestoreGiveUpSteps);
         });
     });
 
@@ -439,7 +442,6 @@ describe("WD1770 FDC tests", () => {
         describe("written mid-command", () => {
             const SeekTarget = 40;
             const StepsBeforeWrite = 10;
-            const StepTicks = 6 * TicksPerMs;
 
             const runUntilIdle = (fdc, scheduler) => {
                 const start = scheduler.epoch;
