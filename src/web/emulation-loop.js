@@ -69,10 +69,10 @@ class VirtualSpeedUpdater {
  * machine (the first tick only takes the time), and "rewind-capture" every
  * RewindCaptureInterval frames for whoever keeps the rewind history.
  *
- * `mode` is a RunMode. Anything that needs the machine held still while it works (a
- * dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`, which
- * stops it without changing the mode; it runs again once every hold has let go,
- * if the mode still wants it running.
+ * `mode` is a RunMode. Anything that needs the machine held still while it
+ * works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`,
+ * which stops it without changing the mode; it runs again once every hold has
+ * let go, if the mode still wants it running.
  */
 export class EmulationLoop extends EventTarget {
     constructor({
