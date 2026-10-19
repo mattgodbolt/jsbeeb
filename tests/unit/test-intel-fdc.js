@@ -365,6 +365,78 @@ describe("Intel 8271 tests", function () {
         });
     });
 
+    describe("head unload", () => {
+        const statusAddr = 0;
+        const resultAddr = 1;
+        const dataAddr = 4;
+        const needData = 0x04;
+        const modeRegister = 0x17;
+        const dfsMode = 0xc1;
+        const readDataCmd = (0x04 << 2) | driveSelect1 | 3;
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        const badTracksDrive0 = 0x10;
+        const oneSectorOf256Bytes = 0x21;
+        const SectorBytes = 256;
+        const SectorsPerTrack = 10;
+        const Tracks = 80;
+        const pollTicks = 16;
+        const ms = (n) => n * 2000;
+
+        function dfsFdc() {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+            const data = new Uint8Array(Tracks * SectorsPerTrack * SectorBytes);
+            for (let track = 0; track < Tracks; ++track) data[track * SectorsPerTrack * SectorBytes] = track;
+            drive.setDisc(loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null));
+            const fdc = new IntelFdc(cpu, scheduler, [drive]);
+            sendCommand(fdc, writeRegCmd, modeRegister, dfsMode);
+            // DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
+            sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+            sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            scheduler.polltime(ms(1000));
+            const readStatus = () => {
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                return fdc.read(resultAddr);
+            };
+            readStatus();
+            const readFirstByte = (track) => {
+                sendCommand(fdc, readDataCmd, track, 0, oneSectorOf256Bytes);
+                let firstByte = null;
+                while (fdc.peek(statusAddr) & busy) {
+                    scheduler.polltime(pollTicks);
+                    if (fdc.peek(statusAddr) & needData) {
+                        const byte = fdc.read(dataAddr);
+                        firstByte ??= byte;
+                    }
+                }
+                return { result: fdc.read(resultAddr), firstByte };
+            };
+            return { fdc, scheduler, drive, readStatus, readFirstByte };
+        }
+
+        it("does not unload the head in the middle of a seek longer than the unload count", () => {
+            const { scheduler, readStatus, readFirstByte } = dfsFdc();
+            expect(readFirstByte(79)).toEqual({ result: 0, firstByte: 79 });
+            // The DFS's last status poll sets the count going, then its settling delay, which a
+            // busy interrupt handler stretches, and a 78 track seek take it past 12 revolutions.
+            readStatus();
+            scheduler.polltime(ms(600));
+            expect(readFirstByte(1)).toEqual({ result: 0, firstByte: 1 });
+        });
+
+        it("still unloads the head the counted revolutions after a command", () => {
+            const { scheduler, drive, readFirstByte } = dfsFdc();
+            readFirstByte(1);
+            scheduler.polltime(ms(11 * 200));
+            expect(drive.spinning).toBe(true);
+            scheduler.polltime(ms(2 * 200));
+            expect(drive.spinning).toBe(false);
+        });
+    });
+
     describe("peeking", () => {
         const statusAddr = 0;
         const resultAddr = 1;

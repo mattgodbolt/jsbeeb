@@ -1283,6 +1283,9 @@ export class IntelFdc {
      */
     _doSeek(callContext) {
         if (callContext !== Call.unchanged) this._callContext = callContext;
+        // The ROM busy-waits from here through the head load without yielding, so no index pulse is
+        // acted on until the command picks its own handler: not even the last command's head unload count.
+        this._indexPulseCallback = IndexPulse.none;
         let newTrack = this._regs[Registers.internalParam_1] + this._regs[Registers.internalSeekRetryCount];
         const trackRegOffset =
             this._driveOut & DriveOut.select_1 ? Registers.badTrack_1Drive_1 : Registers.badTrack_1Drive_0;
