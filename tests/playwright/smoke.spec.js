@@ -393,13 +393,20 @@ test("help fits a desktop browser window whole, and on a phone or tablet scrolls
     }
 });
 
-test("on a Mac the help shows the shortcuts with the Option symbol", async ({ beeb, page }) => {
+test("the help names the shortcuts by Alt, and on a Mac by the Option symbol", async ({ beeb, page }) => {
+    const helpKeys = async () => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        return page.locator("#help .key").allTextContents();
+    };
+    const keys = await helpKeys();
+    expect(keys).toEqual(expect.arrayContaining(["Alt-S", "Alt-Shift-M", "Alt-1 to Alt-8", "Alt"]));
+    expect(keys.filter((key) => key.includes("⌥"))).toEqual([]);
+
     await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    const keys = await page.locator("#help .key").allTextContents();
-    expect(keys).toEqual(expect.arrayContaining(["⌥S", "⌥⇧M", "⌥1 to ⌥8"]));
-    expect(keys.filter((key) => key.includes("Alt"))).toEqual([]);
+    const macKeys = await helpKeys();
+    expect(macKeys).toEqual(expect.arrayContaining(["⌥S", "⌥⇧M", "⌥1 to ⌥8", "⌥"]));
+    expect(macKeys.filter((key) => key.includes("Alt"))).toEqual([]);
 });
 
 test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {

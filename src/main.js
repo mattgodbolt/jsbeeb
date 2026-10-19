@@ -69,7 +69,7 @@ configureAnalytics();
 installIcons();
 if (isMac) {
     for (const key of document.querySelectorAll("#help .key")) {
-        key.textContent = key.textContent.replaceAll("Alt-Shift-", "⌥⇧").replaceAll("Alt-", "⌥");
+        key.textContent = key.textContent.replaceAll("Alt-Shift-", "⌥⇧").replaceAll(/Alt-?/g, "⌥");
     }
 }
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
