@@ -383,6 +383,7 @@ describe("Intel 8271 tests", function () {
         const pollTicks = 16;
         const ms = (n) => n * 2000;
 
+        // The defaults are DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
         function dfsFdc({ stepRate = 12, settleTime = 10, headLoadUnload = 0xc8, alterDisc = () => {} } = {}) {
             const scheduler = new Scheduler();
             const cpu = fake6502();
@@ -394,7 +395,6 @@ describe("Intel 8271 tests", function () {
             drive.setDisc(disc);
             const fdc = new IntelFdc(cpu, scheduler, [drive]);
             sendCommand(fdc, writeRegCmd, modeRegister, dfsMode);
-            // DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
             sendCommand(fdc, specifyCmd, initialisation, stepRate, settleTime, headLoadUnload);
             sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
