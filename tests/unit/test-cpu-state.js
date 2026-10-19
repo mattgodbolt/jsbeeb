@@ -20,9 +20,16 @@ function makeCpu(model = TEST_6502) {
 // The 8271 seek command, selecting drive 1. The drive is empty, so it never reports ready and the
 // command completes at once with an error, raising its completion NMI.
 const SeekDrive1 = 0x69;
+const WriteSpecialRegister = 0x3a;
+const DriveOutRegister = 0x23;
+const LoadHeadDrive1 = 0x48;
 const FdcResetRegister = 2;
 
 function sendSeekToMissingDrive(fdc) {
+    // Loads the head first, as the DFS does, so the seek ends at once with drive not ready.
+    fdc.write(0, WriteSpecialRegister);
+    fdc.write(1, DriveOutRegister);
+    fdc.write(1, LoadHeadDrive1);
     fdc.write(0, SeekDrive1);
     fdc.write(1, 0);
 }

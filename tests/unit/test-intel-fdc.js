@@ -155,6 +155,7 @@ describe("Intel 8271 tests", function () {
             expect(drive.track).toBe(13);
             for (let track = 13; track < 20; ++track) drive.seekOneTrack(1);
             events.length = 0;
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             sendCommand(fdc, seekCmd, 10);
             scheduler.polltime(6000 * 10);
             expect(events).toEqual([[-3, 3], "end after 3"]);
@@ -190,16 +191,18 @@ describe("Intel 8271 tests", function () {
         const specifyCmd = 0x35;
         const initialisation = 0x0d;
 
-        it("loads the head over eight milliseconds a unit, as a 5.25 inch drive doubles it", () => {
+        it("loads the head over eight milliseconds a unit, as a 5.25 inch drive doubles it, after the steps", () => {
             const fakeDrive = new FakeDrive();
             const scheduler = new Scheduler();
             const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
             sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
             sendCommand(fdc, writeRegCmd, mmioWrite, driveSelect1);
             sendCommand(fdc, seekCmd, 1);
-            // Steps at the 24 ms the specify asked for, two extra for the bad track registers.
-            while (scheduler.headroom() === 24 * 2000) scheduler.polltime(scheduler.headroom());
-            expect(fakeDrive.track).toBe(3);
+            // Three steps at the 24 ms the specify asked for, two extra for the bad track registers, sent
+            // while LOAD HEAD gates the drive's select off, so they never reach it.
+            let steps = 0;
+            for (; scheduler.headroom() === 24 * 2000; ++steps) scheduler.polltime(scheduler.headroom());
+            expect([steps, fakeDrive.track]).toEqual([3, 0]);
             // The head, unloaded until now, takes 8 units of 8 ms to load.
             expect(scheduler.headroom()).toBe(8 * 8 * 2000);
         });
@@ -238,6 +241,34 @@ describe("Intel 8271 tests", function () {
             scheduler.polltime(ms(2000));
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect2);
             expect(drives[1].speed).toBe(1);
+        });
+    });
+
+    describe("seek to track 0", () => {
+        const resultAddr = 1;
+        const trackZeroNotFound = 0x14;
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        const dfsHeadLoadUnload = 0xc8;
+
+        it.each([
+            ["loaded first, as the DFS does, finds it", loadHead | driveSelect1, 0, 0],
+            ["unloaded reaches no drive and gives up after 255 steps", driveSelect1, trackZeroNotFound, 20],
+        ])("with the head %s", (_, driveOut, result, track) => {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+            drive.setDisc(Disc.createBlank());
+            for (let step = 0; step < 20; ++step) drive.seekOneTrack(1);
+            const fdc = new IntelFdc(cpu, scheduler, [drive]);
+            sendCommand(fdc, specifyCmd, initialisation, 0, 0, dfsHeadLoadUnload);
+            sendCommand(fdc, writeRegCmd, mmioWrite, driveOut);
+            scheduler.polltime(ms(1000));
+            // The ready latch only updates when the drive status is read.
+            sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+            sendCommand(fdc, seekCmd, 0);
+            while (fdc.peek(0) & busy) scheduler.polltime(ms(1));
+            expect([fdc.read(resultAddr), drive.track]).toEqual([result, track]);
         });
     });
 
