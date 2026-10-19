@@ -121,6 +121,27 @@ describe("Disc drive tests", function () {
         }
         expect(risingEdges).toBe((rpm / 60) * testSeconds);
     });
+    it("keeps the index coming after a disc with shorter tracks goes in past the end of them", () => {
+        const ShortTrackLength = IbmDiscFormat.bytesPerTrack / 4;
+        const shortDisc = Disc.createBlank();
+        shortDisc.buildTrack(false, 0).appendRepeatFmByte(0xff, ShortTrackLength).setTrackLength();
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+        drive.setDisc(Disc.createBlank());
+        drive.startSpinning();
+        scheduler.polltime(3 * BbcCyclesPerSecond);
+        drive.positionFraction = 0.9;
+        drive.setDisc(shortDisc);
+        let risingEdges = 0;
+        let previousIndex = drive.indexPulse;
+        const cyclesPerIter = 100;
+        for (let cycle = 0; cycle < BbcCyclesPerSecond / 2; cycle += cyclesPerIter) {
+            scheduler.polltime(cyclesPerIter);
+            if (drive.indexPulse && !previousIndex) risingEdges++;
+            previousIndex = drive.indexPulse;
+        }
+        expect(risingEdges).toBeGreaterThan(0);
+    });
 });
 
 describe("40 track discs", () => {

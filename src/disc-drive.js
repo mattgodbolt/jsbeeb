@@ -380,7 +380,10 @@ export class DiscDrive extends BaseDiscDrive {
      * @param {Disc} disc
      */
     setDisc(disc) {
+        // The new disc's tracks may be shorter, so keep the head at the same angle, not the same word.
+        const fraction = this.positionFraction;
         this._disc = disc;
+        this.positionFraction = fraction;
     }
 
     /** @returns {Number} how many of the surface's tracks the head crosses for one of the format's */
