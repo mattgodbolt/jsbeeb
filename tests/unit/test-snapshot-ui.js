@@ -103,7 +103,7 @@ describe("SnapshotUI", () => {
             },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
-            loop: { pause: vi.fn(() => resume), stop: vi.fn() },
+            loop: { hold: vi.fn(() => resume), stop: vi.fn() },
         };
     });
 
@@ -133,7 +133,7 @@ describe("SnapshotUI", () => {
     describe("loading a state", () => {
         it("holds the emulator, reports a file it cannot read, and lets go", async () => {
             await make().loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
-            expect(deps.loop.pause).toHaveBeenCalledWith("loading state");
+            expect(deps.loop.hold).toHaveBeenCalledWith("loading state");
             expect(deps.modals.showError).toHaveBeenCalledWith("loading state", expect.anything());
             expect(resume).toHaveBeenCalledTimes(1);
         });
@@ -195,7 +195,7 @@ describe("SnapshotUI", () => {
                 isRunning() {
                     return this.holds === 0;
                 },
-                pause() {
+                hold() {
                     this.holds++;
                     let held = true;
                     return () => {

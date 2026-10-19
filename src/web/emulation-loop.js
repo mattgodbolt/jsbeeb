@@ -4,6 +4,19 @@ import { toast } from "./toast.js";
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
 
+/**
+ * Why the machine is or is not running: stopped until it is first started, then
+ * running, paused, debugging (the debugger is shown exactly then; a breakpoint or
+ * an error lands here too) or stepping (one frame, then paused again).
+ */
+export const RunMode = Object.freeze({
+    stopped: "stopped",
+    running: "running",
+    paused: "paused",
+    debugging: "debugging",
+    stepping: "stepping",
+});
+
 // Under ?audioDebug, one console line per second in which the emulator sat
 // idle between ticks or a tick ran long, or the audio queue underran or
 // dropped, so a click can be matched to a cause. The sound chip posts samples
@@ -54,10 +67,12 @@ class VirtualSpeedUpdater {
  * readout. Owns `running`, and dispatches a "running" event whenever it
  * changes hands, "tick" on every timer tick and on every vsync that runs the
  * machine (the first tick only takes the time), and "rewind-capture" every
- * RewindCaptureInterval frames for whoever keeps the rewind history. Anything
- * that needs the machine held still while it works (a dialog, a snapshot, the
- * rewind panel, a hidden tab) takes a `pause()`; the loop runs again once every
- * hold has let go, provided the user still wants it running.
+ * RewindCaptureInterval frames for whoever keeps the rewind history.
+ *
+ * `mode` is a RunMode. Anything that needs the machine held still while it
+ * works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`,
+ * which stops it without changing the mode; it runs again once every hold has
+ * let go, if the mode still wants it running.
  */
 export class EmulationLoop extends EventTarget {
     constructor({
@@ -66,7 +81,6 @@ export class EmulationLoop extends EventTarget {
         audioHandler,
         dbgr,
         gamepad,
-        keyboard,
         clocksPerSecond,
         cpuSpeed,
         fastTape,
@@ -78,13 +92,13 @@ export class EmulationLoop extends EventTarget {
         this.audioHandler = audioHandler;
         this.dbgr = dbgr;
         this.gamepad = gamepad;
-        this.keyboard = keyboard;
         this.clocksPerSecond = clocksPerSecond;
         this.maxCyclesPerTick = clocksPerSecond / 10;
         this.rewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
         this.fastTape = fastTape;
         this.audioStatsNode = audioStatsNode;
 
+        this.mode = RunMode.stopped;
         this.running = false;
         this.fastAsPossible = false;
         this.emulatedTo = 0;
@@ -94,7 +108,6 @@ export class EmulationLoop extends EventTarget {
         this.vsyncToken = null;
         this.emulationLeadMs = 0;
         this.rewindCycleCounter = 0;
-        this.wanted = false;
         this.holds = new Set();
         this.resumeOnVisible = null;
         this.lockstep = null;
@@ -110,18 +123,42 @@ export class EmulationLoop extends EventTarget {
     }
 
     go() {
-        this.wanted = true;
-        if (this.holds.size === 0) this.start();
-        else
-            console.warn(
-                `Emulator held by ${[...this.holds].map((hold) => hold.reason).join(", ")}; it runs when they let go`,
-            );
+        this.setMode(RunMode.running);
+    }
+
+    /** Runs one frame from a pause, then pauses again. */
+    step() {
+        this.setMode(RunMode.stepping);
     }
 
     stop(debug) {
-        this.wanted = false;
-        this.halt();
+        this.setMode(debug ? RunMode.debugging : RunMode.paused);
         if (debug) this.dbgr.debug(this.processor.pc);
+    }
+
+    setMode(mode) {
+        const wasPaused = this.isPaused();
+        this.mode = mode;
+        if (this.isPaused() !== wasPaused) noteFeature("pause", wasPaused ? "leave" : "enter");
+        if (mode !== RunMode.debugging) this.dbgr.hide();
+        if (!this.wanted()) {
+            if (this.running) this.halt();
+        } else if (this.holds.size === 0) {
+            this.start();
+        } else {
+            console.warn(
+                `Emulator held by ${[...this.holds].map((hold) => hold.reason).join(", ")}; it runs when they let go`,
+            );
+        }
+    }
+
+    // A step is taken inside a pause, not out of it.
+    isPaused() {
+        return this.mode === RunMode.paused || this.mode === RunMode.stepping;
+    }
+
+    wanted() {
+        return this.mode === RunMode.running || this.mode === RunMode.stepping;
     }
 
     /**
@@ -129,13 +166,13 @@ export class EmulationLoop extends EventTarget {
      * nest, and letting go twice counts once. `reason` names the holder when a
      * go() has to wait, so a hold that is never released can be found.
      */
-    pause(reason) {
+    hold(reason) {
         if (this.holds.size === 0 && this.running) this.halt();
         const hold = { reason };
         this.holds.add(hold);
         return () => {
             if (!this.holds.delete(hold)) return;
-            if (this.holds.size === 0 && this.wanted) this.start();
+            if (this.holds.size === 0 && this.wanted()) this.start();
         };
     }
 
@@ -287,12 +324,10 @@ export class EmulationLoop extends EventTarget {
             } catch (e) {
                 this.running = false;
                 noteError("loop", e);
-                this.dbgr.debug(processor.pc);
+                this.stop(true);
                 throw e;
             }
-            if (this.keyboard.postFrameShouldPause()) {
-                this.stop(false);
-            }
+            if (this.mode === RunMode.stepping) this.stop(false);
         }
         this.emulatedTo = Math.max(this.emulatedTo, now);
         this.lastEnd = performance.now();
@@ -319,7 +354,7 @@ export class EmulationLoop extends EventTarget {
             if (this.lockstep) return;
             const keepRunningWhenHidden =
                 processor.tapeInterface.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
-            if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.pause("the hidden tab");
+            if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.hold("the hidden tab");
         } else if (this.resumeOnVisible) {
             this.resumeOnVisible();
             this.resumeOnVisible = null;

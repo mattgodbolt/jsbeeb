@@ -1,6 +1,5 @@
 import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
-import { noteFeature } from "./analytics.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 const InputMethodKeyCode = 229;
@@ -26,8 +25,8 @@ const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMetho
  * @typedef {Object} KeyboardConfig
  * @property {Object} processor - The processor instance
  * @property {Function} inputEnabledFunction - A function to check if input is enabled
+ * @property {Function} runningFunction - Whether the machine is running, and so takes keys
  * @property {string} [keyLayout="physical"] - The keyboard layout
- * @property {Debugger} dbgr - The debugger instance
  */
 
 /**
@@ -40,13 +39,19 @@ export class Keyboard extends EventTarget {
      */
     constructor(config) {
         super();
-        const { processor, inputEnabledFunction, shortcutsBlockedFunction, keyLayout = "physical", dbgr } = config;
+        const {
+            processor,
+            inputEnabledFunction,
+            shortcutsBlockedFunction,
+            runningFunction,
+            keyLayout = "physical",
+        } = config;
 
         // Core components
         this.processor = processor;
         this.inputEnabledFunction = inputEnabledFunction;
         this.shortcutsBlockedFunction = shortcutsBlockedFunction ?? (() => false);
-        this.dbgr = dbgr;
+        this.runningFunction = runningFunction;
 
         this.keyInterface = processor.keyboardInterface;
         this.typist = new Typist(processor);
@@ -54,9 +59,6 @@ export class Keyboard extends EventTarget {
 
         // State
         this.emuKeyHandlers = {};
-        this.running = false;
-        this.pauseEmu = false;
-        this.stepEmuWhenPaused = false;
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
         this.releases = new Map();
@@ -141,14 +143,6 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Sets the running state of the emulator
-     * @param {boolean} isRunning - Whether the emulator is running
-     */
-    setRunning(isRunning) {
-        this.running = isRunning;
-    }
-
-    /**
      * Find a matching key handler for the given key event
      * @param {string} keyCode - The host key, by physical position
      * @param {boolean} altKey - Whether Alt is pressed
@@ -164,45 +158,6 @@ export class Keyboard extends EventTarget {
         }
 
         return null;
-    }
-
-    /**
-     * Handles a key press event
-     * @param {KeyboardEvent} evt - The keyboard event
-     */
-    keyPress(evt) {
-        // Early returns for common scenarios
-        // Check if input is enabled. If inputEnabledFunction returns true, keyboard events should not be processed.
-        if (this.inputEnabledFunction()) return;
-        if (this.running || (!this.dbgr.enabled() && !this.pauseEmu)) return;
-
-        // The debugger's keys are the characters they print, not positions.
-        const key = evt.key;
-
-        // Handle debugger 'g' key press
-        if (this.dbgr.enabled() && key === "g") {
-            this.dbgr.hide();
-            this.dispatchEvent(new Event("resume"));
-            return;
-        }
-
-        // Handle pause/step control keys
-        if (this.pauseEmu) {
-            if (key === "g") {
-                this.resumeEmulation();
-                return;
-            } else if (key === "n") {
-                this.requestStep();
-                this.dispatchEvent(new Event("resume"));
-                return;
-            }
-        }
-
-        // Pass any other keys to the debugger if it's enabled
-        if (this.dbgr.enabled()) {
-            const handled = this.dbgr.keyPress(key);
-            if (handled) evt.preventDefault();
-        }
     }
 
     /**
@@ -243,7 +198,7 @@ export class Keyboard extends EventTarget {
             return () => handler.handler(false, code);
         }
 
-        if (this.inputEnabledFunction() || !this.running) return null;
+        if (this.inputEnabledFunction() || !this.runningFunction()) return null;
         evt.preventDefault();
 
         if (code === keyCodes.F12 || code === keyCodes.BREAK) {
@@ -359,42 +314,5 @@ export class Keyboard extends EventTarget {
         this.releases.clear();
         // A session's machine is everyone's: only this person's keys are theirs to let go.
         this.input.clearKeys();
-    }
-
-    /**
-     * Called after each frame to determine if emulation should pause
-     * @returns {boolean} - True if emulation should pause
-     */
-    postFrameShouldPause() {
-        if (this.stepEmuWhenPaused) {
-            this.stepEmuWhenPaused = false;
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Request a single step of the emulator
-     */
-    requestStep() {
-        this.stepEmuWhenPaused = true;
-    }
-
-    /**
-     * Pause the emulator
-     */
-    pauseEmulation() {
-        if (!this.pauseEmu) noteFeature("pause", "enter");
-        this.pauseEmu = true;
-        this.dispatchEvent(new Event("pause"));
-    }
-
-    /**
-     * Resume the emulator
-     */
-    resumeEmulation() {
-        if (this.pauseEmu) noteFeature("pause", "leave");
-        this.pauseEmu = false;
-        this.dispatchEvent(new Event("resume"));
     }
 }

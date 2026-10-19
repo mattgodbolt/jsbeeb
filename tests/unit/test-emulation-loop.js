@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TickMs } from "../../src/emulation-tick.js";
-import { EmulationLoop } from "../../src/web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "../../src/web/emulation-loop.js";
 import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
@@ -44,9 +44,8 @@ describe("EmulationLoop", () => {
                 flushChipEvents: vi.fn(),
                 takeEventCounts: () => ({ leadMinMs: 1, stall: 0, skip: 0 }),
             },
-            dbgr: { debug: vi.fn() },
+            dbgr: { debug: vi.fn(), hide: vi.fn() },
             gamepad: { update: vi.fn() },
-            keyboard: { postFrameShouldPause: vi.fn(() => false) },
             clocksPerSecond: ClocksPerSecond,
             cpuSpeed: ClocksPerSecond,
             fastTape: false,
@@ -251,16 +250,114 @@ describe("EmulationLoop", () => {
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(sent("js_error")).toEqual([expect.objectContaining({ where: "loop", message: "bad opcode" })]);
-        // A later test's visibility change would start this loop again.
-        deps.processor.execute.mockReturnValue(true);
+        expect(loop.mode).toBe(RunMode.debugging);
+        loop.hold("the test")();
+        expect(loop.isRunning()).toBe(false);
     });
 
-    it("pauses when the keyboard asks after a frame", () => {
-        const loop = started();
-        deps.keyboard.postFrameShouldPause.mockReturnValue(true);
-        vi.advanceTimersByTime(TickMs);
-        expect(loop.isRunning()).toBe(false);
-        expect(deps.dbgr.debug).not.toHaveBeenCalled();
+    describe("the run mode", () => {
+        const frame = () => vi.advanceTimersByTime(TickMs);
+        const pauseNotes = (sent) => sent("feature_used").map(({ action }) => action);
+
+        it("is stopped until first started, and follows go, stop and step", () => {
+            const loop = make();
+            expect(loop.mode).toBe(RunMode.stopped);
+            loop.go();
+            expect(loop.mode).toBe(RunMode.running);
+            loop.stop(false);
+            expect(loop.mode).toBe(RunMode.paused);
+            loop.step();
+            expect(loop.mode).toBe(RunMode.stepping);
+            loop.stop(true);
+            expect(loop.mode).toBe(RunMode.debugging);
+        });
+
+        it("runs one frame for a step, then is paused again, noting nothing more", () => {
+            const sent = sentEvents();
+            const loop = started();
+            loop.stop(false);
+            deps.processor.execute.mockClear();
+            loop.step();
+            expect(loop.isRunning()).toBe(true);
+            frame();
+            frame();
+            frame();
+            expect(cyclesExecuted()).toHaveLength(1);
+            expect(loop.mode).toBe(RunMode.paused);
+            expect(loop.isRunning()).toBe(false);
+            expect(pauseNotes(sent)).toEqual(["enter"]);
+        });
+
+        it("stays in the debugger when a breakpoint stops a step", () => {
+            const loop = started();
+            loop.stop(false);
+            loop.step();
+            deps.processor.execute.mockReturnValue(false);
+            frame();
+            frame();
+            expect(loop.mode).toBe(RunMode.debugging);
+            expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
+        });
+
+        it("finishes a step a hold interrupted once the hold lets go", () => {
+            const loop = started();
+            loop.stop(false);
+            loop.step();
+            const release = loop.hold("the test");
+            release();
+            frame();
+            frame();
+            expect(loop.mode).toBe(RunMode.paused);
+            expect(cyclesExecuted()).toHaveLength(1);
+        });
+
+        it("forgets a step stopped before its frame, so the next go runs freely", () => {
+            const sent = sentEvents();
+            const loop = started();
+            loop.stop(false);
+            loop.step();
+            loop.stop(true);
+            loop.go();
+            frame();
+            frame();
+            frame();
+            expect(loop.mode).toBe(RunMode.running);
+            expect(loop.isRunning()).toBe(true);
+            expect(pauseNotes(sent)).toEqual(["enter", "leave"]);
+        });
+
+        it.each([
+            ["go", (loop) => loop.go()],
+            ["the debugger, then go", (loop) => (loop.stop(true), loop.go())],
+            ["a step, then go", (loop) => (loop.step(), frame(), frame(), loop.go())],
+            ["go while held", (loop) => (loop.hold("the test"), loop.go())],
+        ])("notes a pause left by %s once, and the next pause entered", (_name, leave) => {
+            const sent = sentEvents();
+            const loop = started();
+            loop.stop(false);
+            leave(loop);
+            loop.stop(false);
+            expect(pauseNotes(sent)).toEqual(["enter", "leave", "enter"]);
+        });
+
+        it("notes nothing for the debugger, or for pausing a paused machine again", () => {
+            const sent = sentEvents();
+            const loop = started();
+            loop.stop(true);
+            loop.go();
+            loop.stop(false);
+            loop.stop(false);
+            expect(pauseNotes(sent)).toEqual(["enter"]);
+        });
+
+        it("shows the debugger only while debugging", () => {
+            const loop = started();
+            loop.stop(true);
+            expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
+            deps.dbgr.hide.mockClear();
+            loop.stop(false);
+            expect(deps.dbgr.hide).toHaveBeenCalled();
+        });
     });
 
     it("emulates ahead at once when the audio queue deepens", () => {
@@ -317,7 +414,7 @@ describe("EmulationLoop", () => {
     describe("being held", () => {
         it("stops while held and runs again once let go", () => {
             const loop = started();
-            const resume = loop.pause("the test");
+            const resume = loop.hold("the test");
             expect(loop.isRunning()).toBe(false);
             expect(deps.audioHandler.mute).toHaveBeenCalled();
             resume();
@@ -326,8 +423,8 @@ describe("EmulationLoop", () => {
 
         it("runs again only when the last hold has let go", () => {
             const loop = started();
-            const first = loop.pause("the test");
-            const second = loop.pause("the test");
+            const first = loop.hold("the test");
+            const second = loop.hold("the test");
             first();
             expect(loop.isRunning()).toBe(false);
             second();
@@ -336,8 +433,8 @@ describe("EmulationLoop", () => {
 
         it("counts letting go twice as once", () => {
             const loop = started();
-            const first = loop.pause("the test");
-            const second = loop.pause("the test");
+            const first = loop.hold("the test");
+            const second = loop.hold("the test");
             first();
             first();
             expect(loop.isRunning()).toBe(false);
@@ -347,7 +444,7 @@ describe("EmulationLoop", () => {
 
         it("stays stopped if the user stopped it while held", () => {
             const loop = started();
-            const resume = loop.pause("the test");
+            const resume = loop.hold("the test");
             loop.stop(false);
             resume();
             expect(loop.isRunning()).toBe(false);
@@ -356,8 +453,8 @@ describe("EmulationLoop", () => {
         it("waits for the hold to end before honouring a go, and says who is holding", () => {
             const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
             const loop = make();
-            const resume = loop.pause("the test");
-            loop.pause("another test");
+            const resume = loop.hold("the test");
+            loop.hold("another test");
             loop.go();
             expect(loop.isRunning()).toBe(false);
             expect(warn).toHaveBeenCalledWith(expect.stringContaining("held by the test, another test"));
@@ -367,7 +464,7 @@ describe("EmulationLoop", () => {
 
         it("leaves a stopped machine stopped when let go", () => {
             const loop = make();
-            loop.pause("the test")();
+            loop.hold("the test")();
             expect(loop.isRunning()).toBe(false);
             expect(deps.audioHandler.unmute).not.toHaveBeenCalled();
         });
@@ -427,7 +524,7 @@ describe("EmulationLoop", () => {
 
         it("stays held for whoever else is holding it when the tab comes back", () => {
             const loop = started();
-            const resume = loop.pause("the test");
+            const resume = loop.hold("the test");
             hide();
             show();
             expect(loop.isRunning()).toBe(false);
