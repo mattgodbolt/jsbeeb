@@ -930,32 +930,31 @@
             <div class="row">
               <div class="col-lg-6">
                 <p>
-                  An emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular home
-                  computer in 1980s Britain. It emulates the BBC B and the Master, and also the
-                  <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them. The settings
-                  (the model name on the top bar) choose between them and set the keyboard layout.
+                  jsbeeb emulates the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a> Model B and Master
+                  128, and the <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them.
+                  Choose the machine and the keyboard layout in the settings: click the model name on the top bar.
                 </p>
                 <p>
-                  Elite, a pioneering 3D space trading game, starts in drive 0;
-                  <span class="key">SHIFT</span>+<span class="key">BREAK</span> boots it. The media window (<strong
-                    >Media</strong
-                  >
-                  on the top bar) loads other discs and tapes.
+                  Elite, the classic 3D space trading game, is already in drive 0. Press
+                  <span class="text-nowrap"><span class="key">SHIFT</span>+<span class="key">BREAK</span></span>
+                  (Shift+F12) to boot it. Other discs and tapes load from the media window: click
+                  <strong>Media</strong> on the top bar. Pasting text types it into the BBC.
                 </p>
                 <h5>Keyboard</h5>
                 <p>
-                  The BBC's keyboard differs from a modern one, mostly in where the symbols are. The default
-                  <em>Physical</em> layout presses the BBC key in the same place as yours, so the BBC's
-                  <span class="key">:</span>&nbsp;<span class="key">*</span> is two keys to the right of
-                  <span class="key">L</span>. <em>Natural</em> gives the character you type instead, and
-                  <em>Gaming</em> moves the BBC's <span class="key">CAPS LOCK</span> and
-                  <span class="key">CTRL</span> to the left <span class="key">Ctrl</span> and
-                  <span class="key">Alt</span> for games that use them. Any key can be
+                  A BBC keyboard has its symbols in different places from yours. The default <em>Physical</em> layout
+                  goes by position: each key presses the BBC key in the same place, so the BBC's
+                  <span class="key">: *</span> key is your <span class="key">'</span> key. <em>Natural</em> goes by
+                  character instead, so what you type is what the BBC gets; it suits typing, and games want Physical or
+                  Gaming. <em>Gaming</em> puts the BBC's <span class="key">CAPS LOCK</span> and
+                  <span class="key">CTRL</span> on your left <span class="key">Ctrl</span> and
+                  <span class="key">Alt</span>, for games that steer with them; jsbeeb's Alt shortcuts still come first.
+                  Any key can be
                   <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
                 </p>
                 <table class="table table-sm caption-top">
                   <caption>
-                    On the BBC and Master, in the Physical and Natural layouts
+                    Keys your keyboard doesn't have (Physical and Natural layouts)
                   </caption>
                   <thead>
                     <tr>
@@ -975,33 +974,21 @@
                     <tr>
                       <td><span class="key cursor">COPY</span></td>
                       <td>
-                        <span class="key">End</span>, or <span class="key">fn</span>+<span class="key">&rarr;</span> on
-                        a Mac
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="key cursor">&larr;</span> <span class="key cursor">&rarr;</span>
-                        <span class="key cursor">&uarr;</span> <span class="key cursor">&darr;</span>
-                      </td>
-                      <td>
-                        <span class="key">&larr;</span> <span class="key">&rarr;</span> <span class="key">&uarr;</span>
-                        <span class="key">&darr;</span>
+                        <span class="key">End</span> (on a Mac laptop,
+                        <span class="text-nowrap"><span class="key">fn</span>+<span class="key">&rarr;</span></span
+                        >)
                       </td>
                     </tr>
                     <tr>
                       <td><span class="key">SHIFT LOCK</span></td>
                       <td><span class="key">Home</span></td>
                     </tr>
-                    <tr>
-                      <td><span class="key">CAPS LOCK</span></td>
-                      <td>
-                        <span class="key">Caps Lock</span>, but not for games on a Mac, where browsers never report it
-                        released
-                      </td>
-                    </tr>
                   </tbody>
                 </table>
+                <p>
+                  On a Mac, hold fn for the function keys. Games there can't use Caps Lock to move or fire, as browsers
+                  never report it being let go; the Gaming layout puts the BBC's CAPS LOCK on Ctrl instead.
+                </p>
               </div>
               <div class="col-lg-6">
                 <h5>Shortcuts</h5>
@@ -1009,74 +996,84 @@
                   <tbody>
                     <tr>
                       <td><span class="key">Alt-S</span></td>
-                      <td>Debugger, in or out</td>
+                      <td>Stop or start; when stopped, the debugger shows</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-P</span></td>
-                      <td>Pause or resume</td>
+                      <td>Pause or resume, no debugger</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-T</span></td>
-                      <td>Full speed, on or off</td>
+                      <td>Turbo, or back to real speed</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-W</span></td>
-                      <td>Rewind</td>
+                      <td>Rewind: pick an earlier moment to go back to</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-B</span></td>
-                      <td>Printer output</td>
+                      <td>Open the printer output</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-M</span></td>
-                      <td>Discs and tapes, for drive 0</td>
+                      <td>Media window for drive 0</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-Shift-M</span></td>
-                      <td>Discs and tapes, for drive 1</td>
+                      <td>Media window for drive 1</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-C</span></td>
-                      <td>Discs and tapes, for the cassette</td>
+                      <td>Media window for the cassette</td>
                     </tr>
                     <tr>
                       <td><span class="key">Alt-1 to Alt-8</span></td>
-                      <td>Hold an accessibility switch</td>
+                      <td>Hold switch 1 to 8 on the user port (PB0 to PB7)</td>
                     </tr>
                   </tbody>
                 </table>
                 <h5>Paused or debugging</h5>
                 <p>
-                  While paused, <span class="key">g</span> resumes and <span class="key">n</span> runs one frame. In the
-                  debugger:
+                  After <span class="key">Alt-P</span>, <span class="key">g</span> resumes and
+                  <span class="key">n</span> runs one frame. In the debugger (<span class="key">Alt-S</span>):
                 </p>
                 <table class="table table-sm">
                   <tbody>
                     <tr>
                       <td><span class="key">g</span></td>
-                      <td>Resume</td>
+                      <td>Resume running</td>
                     </tr>
                     <tr>
                       <td><span class="key">n</span></td>
                       <td>Step one instruction</td>
                     </tr>
                     <tr>
-                      <td><span class="key">m</span> <span class="key">o</span></td>
-                      <td>Step over a call, step out of one</td>
+                      <td><span class="key">m</span></td>
+                      <td>Step over a subroutine call</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">o</span></td>
+                      <td>Run until the current subroutine returns</td>
                     </tr>
                     <tr>
                       <td><span class="key">t</span></td>
-                      <td>Toggle a breakpoint on the highlighted instruction</td>
+                      <td>Set or clear a breakpoint on the highlighted instruction</td>
                     </tr>
                     <tr>
                       <td><span class="key">j</span> <span class="key">k</span></td>
-                      <td>Move the disassembly; <span class="key">b</span> goes back to where it was</td>
+                      <td>Move the highlight down or up</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">b</span></td>
+                      <td>Back to before you clicked an address</td>
                     </tr>
                     <tr>
                       <td><span class="key">u</span> <span class="key">i</span></td>
-                      <td>
-                        Move the memory view by 8 bytes (<span class="key">U</span> <span class="key">I</span> by 64)
-                      </td>
+                      <td>Memory forward (u), back (i), 8 bytes</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">U</span> <span class="key">I</span></td>
+                      <td>Memory forward (U), back (I), 64 bytes</td>
                     </tr>
                   </tbody>
                 </table>
