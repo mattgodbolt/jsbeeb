@@ -16,6 +16,12 @@ import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 import * as binary from "../../src/binary.js";
 
+const NulaPaletteModeOn = 0x11;
+const NulaDisable = 0x50;
+const NulaHorizontalOffsetOne = 0x21;
+const LogicalZeroAsPhysicalZero = 0x07;
+const NulaColourZeroFullRed = [0x0f, 0x00];
+
 // Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
     let video;
@@ -27,6 +33,29 @@ describe("Video", () => {
 
     // Test framebuffer offset at pixel (100, 100) - assumes 1024 pixel width
     const TEST_FB_OFFSET = 1024 * 100 + 100;
+
+    function makeMockedVideo(options) {
+        // Create a video instance (using Model B mode, not Master)
+        const v = new Video(false, mockFb32, mockPaintExt, options);
+
+        // Create the mock teletext manually and replace the one in the video object
+        mockTeletext = {
+            setDEW: vi.fn(),
+            setDISPTMG: vi.fn(),
+            setRA0: vi.fn(),
+            fetchData: vi.fn(),
+            advance: vi.fn(),
+            emit: vi.fn(),
+            emitSecondHalf: vi.fn(),
+        };
+
+        // Replace the teletext instance
+        v.teletext = mockTeletext;
+
+        // Reset and connect CPU and VIA
+        v.reset(mockCpu, mockVia);
+        return v;
+    }
 
     beforeEach(() => {
         // Reset all mocks
@@ -53,25 +82,7 @@ describe("Video", () => {
         // Spy on makeFast32
         vi.spyOn(binary, "makeFast32").mockImplementation((arr) => arr);
 
-        // Create a video instance (using Model B mode, not Master)
-        video = new Video(false, mockFb32, mockPaintExt);
-
-        // Create the mock teletext manually and replace the one in the video object
-        mockTeletext = {
-            setDEW: vi.fn(),
-            setDISPTMG: vi.fn(),
-            setRA0: vi.fn(),
-            fetchData: vi.fn(),
-            advance: vi.fn(),
-            emit: vi.fn(),
-            emitSecondHalf: vi.fn(),
-        };
-
-        // Replace the teletext instance
-        video.teletext = mockTeletext;
-
-        // Reset and connect CPU and VIA
-        video.reset(mockCpu, mockVia);
+        video = makeMockedVideo();
     });
 
     afterEach(() => {
@@ -711,7 +722,70 @@ describe("Video", () => {
         });
     });
 
+    describe("the VideoNuLA fitting", () => {
+        it("aliases &FE22/&FE23 to &FE20/&FE21 on a stock ULA", () => {
+            video.ula.write(2, 0x08);
+            expect(video.ulactrl).toBe(0x08);
+            expect(video.ulaMode).toBe(2);
+            video.ula.write(3, 0x17);
+            expect(video.actualPal[1]).toBe(7);
+        });
+
+        it("takes NULA commands on a stock ULA as ULA control writes", () => {
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(video.ula.paletteMode).toBe(0);
+            expect(video.ulactrl).toBe(NulaPaletteModeOn);
+            video.ula.write(2, NulaDisable);
+            video.ula.write(2, NulaHorizontalOffsetOne);
+            expect(video.ula.horizontalOffset).toBe(0);
+            expect(video.ulactrl).toBe(NulaHorizontalOffsetOne);
+        });
+
+        it("tells whoever asked, once, when software first writes to the missing NuLA", () => {
+            const onMissingVideoNula = vi.fn();
+            video = makeMockedVideo({ onMissingVideoNula });
+            video.ula.write(0, 0x08);
+            video.ula.write(1, 0x17);
+            expect(onMissingVideoNula).not.toHaveBeenCalled();
+            video.ula.write(3, 0x17);
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(onMissingVideoNula).toHaveBeenCalledTimes(1);
+        });
+
+        it("tells nobody of a write to the B's mirrors above &FE23, where a Master disc probe lands", () => {
+            const onMissingVideoNula = vi.fn();
+            video = makeMockedVideo({ onMissingVideoNula });
+            for (const addr of [0xfe26, 0xfe27, 0xfe2a, 0xfe2b, 0xfe2e, 0xfe2f]) video.ula.write(addr, 0x08);
+            expect(onMissingVideoNula).not.toHaveBeenCalled();
+            video.ula.write(0xfe22, 0x08);
+            expect(onMissingVideoNula).toHaveBeenCalledTimes(1);
+        });
+
+        it("tells nobody when a fitted NULA that software disabled is written to", () => {
+            const onMissingVideoNula = vi.fn();
+            video = makeMockedVideo({ hasVideoNula: true, onMissingVideoNula });
+            video.ula.write(2, NulaDisable);
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(onMissingVideoNula).not.toHaveBeenCalled();
+        });
+
+        it("starts a fitted NULA enabled, taking &FE22 as its own until disabled", () => {
+            video = makeMockedVideo({ hasVideoNula: true });
+            video.ula.write(0, 0x08);
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(video.ula.paletteMode).toBe(1);
+            expect(video.ulactrl).toBe(0x08);
+            video.ula.write(2, NulaDisable);
+            video.ula.write(2, 0x1c);
+            expect(video.ulactrl).toBe(0x1c);
+        });
+    });
+
     describe("NULA palette mode", () => {
+        beforeEach(() => {
+            video = makeMockedVideo({ hasVideoNula: true });
+        });
+
         it("should use ulaPal (with XOR-7 mapping) when paletteMode is off", () => {
             // Set up Mode 3 (8 pixels, 4 colours per pixel)
             video.ula.write(0, 0x1c); // bits 4+3+2 set = high freq, mode 3
@@ -1510,9 +1584,9 @@ describe("Video", () => {
     describe("snapshotState / restoreState", () => {
         // These tests use fresh (non-mocked) Video instances since snapshot
         // needs the real Teletext with snapshotState/restoreState.
-        function makeRealVideo() {
+        function makeRealVideo(options) {
             const fb = new Uint32Array(1024 * 768);
-            const v = new Video(false, fb, () => {});
+            const v = new Video(false, fb, () => {}, options);
             v.reset(mockCpu, mockVia);
             return v;
         }
@@ -1696,38 +1770,82 @@ describe("Video", () => {
             expect(v2.crtc.curReg).toBe(12);
         });
 
-        it("should snapshot and restore palette", () => {
-            const v = makeRealVideo();
-            v.ulaPal[0] = 0xff0000ff;
-            v.ulaPal[5] = 0xffff0000;
-            v.actualPal[0] = 0x0a;
-            v.actualPal[5] = 0x05;
+        it.each([
+            ["a stock ULA", {}],
+            ["a VideoNuLA", { hasVideoNula: true }],
+        ])("should snapshot and restore the palette of %s", (_, options) => {
+            const v = makeRealVideo(options);
+            v.ula.write(1, 0x0a);
+            v.ula.write(1, 0x55);
 
             const snapshot = v.snapshotState();
-            const v2 = makeRealVideo();
+            const v2 = makeRealVideo(options);
             v2.restoreState(snapshot);
 
-            expect(v2.ulaPal[0]).toBe(0xff0000ff);
-            expect(v2.ulaPal[5]).toBe(0xffff0000);
+            expect(v2.ulaPal).toEqual(v.ulaPal);
+            expect(v2.ulaPal[0]).not.toBe(v2.ulaPal[5]);
             expect(v2.actualPal[0]).toBe(0x0a);
             expect(v2.actualPal[5]).toBe(0x05);
         });
 
+        it("restores the saved palette as it is onto a VideoNuLA", () => {
+            const v = makeRealVideo({ hasVideoNula: true });
+            const snapshot = v.snapshotState();
+            snapshot.ulaPal[3] = 0xff123456;
+
+            const v2 = makeRealVideo({ hasVideoNula: true });
+            v2.restoreState(snapshot);
+
+            expect(v2.ulaPal[3]).toBe(0xff123456);
+        });
+
+        it("restores a state saved without a VideoNuLA onto one as a disabled NULA", () => {
+            const stock = makeRealVideo();
+            const fitted = makeRealVideo({ hasVideoNula: true });
+
+            fitted.restoreState(stock.snapshotState());
+
+            expect(fitted.ula.disabled).toBe(true);
+            fitted.ula.write(2, 0x1c);
+            expect(fitted.ulactrl).toBe(0x1c);
+        });
+
         it("should snapshot and restore ULA NULA state", () => {
-            const v = makeRealVideo();
+            const v = makeRealVideo({ hasVideoNula: true });
             v.ula.paletteMode = 1;
             v.ula.horizontalOffset = 3;
             v.ula.disabled = true;
             v.ula.collook[0] = 0xffaabbcc;
 
             const snapshot = v.snapshotState();
-            const v2 = makeRealVideo();
+            const v2 = makeRealVideo({ hasVideoNula: true });
             v2.restoreState(snapshot);
 
             expect(v2.ula.paletteMode).toBe(1);
             expect(v2.ula.horizontalOffset).toBe(3);
             expect(v2.ula.disabled).toBe(true);
             expect(v2.ula.collook[0]).toBe(0xffaabbcc);
+        });
+
+        it("keeps a stock ULA stock when restoring a state saved with a NULA fitted", () => {
+            const fitted = makeRealVideo({ hasVideoNula: true });
+            fitted.ula.write(0, 0x08);
+            fitted.ula.write(1, LogicalZeroAsPhysicalZero);
+            fitted.ula.write(2, NulaPaletteModeOn);
+            fitted.ula.write(2, NulaHorizontalOffsetOne);
+            for (const byte of NulaColourZeroFullRed) fitted.ula.write(3, byte);
+            const stock = makeRealVideo();
+            const stockBlack = stock.ula.collook[0];
+
+            stock.restoreState(fitted.snapshotState());
+
+            expect(stock.ula.disabled).toBe(true);
+            expect(stock.ula.paletteMode).toBe(0);
+            expect(stock.ula.horizontalOffset).toBe(0);
+            expect(stock.ula.collook[0]).toBe(stockBlack);
+            expect(stock.ulaPal[0]).toBe(stockBlack);
+            stock.ula.write(2, 0x1c);
+            expect(stock.ulactrl).toBe(0x1c);
         });
 
         it("should snapshot and restore teletext state", () => {

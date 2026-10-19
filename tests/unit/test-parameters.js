@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     DisplaySection,
+    matchesHost,
     Parameters,
     parameterFor,
     processInputParams,
+    readTakenFromHost,
     RequiredProperties,
+    takenFromHostValues,
     tubeCpuSpeedLabel,
     urlParamType,
 } from "../../src/web/parameters.js";
@@ -17,7 +20,7 @@ import { UrlState } from "../../src/web/url-state.js";
 import { ParamTypes } from "../../src/url-params.js";
 import { MaxPersistenceMs, persistenceSettings } from "../../src/web/canvas.js";
 import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
 
 describe("Parameters", () => {
     afterEach(teardownDom);
@@ -105,6 +108,7 @@ describe("Parameters", () => {
                     "hasMusic5000",
                     "hasTeletextAdaptor",
                     "hasEconet",
+                    "hasVideoNula",
                 ],
             },
             ["audioOutput", "speakerAmount"],
@@ -277,5 +281,81 @@ describe("tubeCpuSpeedLabel", () => {
 
     it("keeps a repeating multiplier from a URL readable", () => {
         expect(tubeCpuSpeedLabel(4 / 3, bbcB)).toBe("1.33x (4MHz)");
+    });
+});
+
+describe("the settings a session guest takes from its host", () => {
+    const takenNames = Object.keys(Parameters).filter((name) => Parameters[name].takenFromHost);
+
+    it("are the fittings and the knobs that change how the machine runs", () => {
+        expect(takenNames).toEqual([
+            "coProcessor",
+            "tubeCpuMultiplier",
+            "hasMusic5000",
+            "hasTeletextAdaptor",
+            "hasEconet",
+            "hasVideoNula",
+            "fakeVideo",
+            "stationId",
+            "videoCyclesBatch",
+            "cpuMultiplier",
+        ]);
+    });
+
+    it("are neither local to the page nor kept in storage, which a reload to match would not override", () => {
+        for (const name of takenNames) {
+            expect(Parameters[name].localToPage, name).toBeFalsy();
+            expect(Parameters[name].stored, name).toBeFalsy();
+        }
+    });
+
+    it("never default to true, since a URL cannot say a BOOL is false", () => {
+        for (const name of takenNames) expect(Parameters[name].default, name).not.toBe(true);
+    });
+
+    const otherValue = (name) =>
+        ({ [ParamTypes.BOOL]: true, [ParamTypes.INT]: 7, [ParamTypes.FLOAT]: 2.5 })[Parameters[name].type];
+
+    it.each(takenNames)("brings a page reloaded with the host's %s to the host's", (name) => {
+        const host = takenFromHostValues(new Settings({ urlState: fakeUrlState(`?${name}=${otherValue(name)}`) }), {
+            [name]: otherValue(name),
+        });
+        const guest = fakeUrlState("");
+        const reloaded = fakeUrlState(new URL(guest.urlWith(readTakenFromHost(host))).search);
+        const settings = new Settings({ urlState: reloaded });
+        expect(takenFromHostValues(settings, reloaded.params)).toEqual(host);
+        expect(matchesHost(readTakenFromHost(host), takenFromHostValues(settings, reloaded.params))).toBe(true);
+    });
+
+    it("takes a setting the host left out as its default, and any other as absent", () => {
+        expect(readTakenFromHost({})).toMatchObject({ tubeCpuMultiplier: 1, hasVideoNula: false });
+        expect(readTakenFromHost({}).cpuMultiplier).toBeUndefined();
+    });
+
+    it("refuses a host's value this page would not take from its own URL", () => {
+        expect(readTakenFromHost({ tubeCpuMultiplier: 0 })).toBeNull();
+        expect(readTakenFromHost({ stationId: 1e21 })).toBeNull();
+        expect(readTakenFromHost({ tubeCpuMultiplier: 2 })).toMatchObject({ tubeCpuMultiplier: 2 });
+    });
+
+    it("carries one marked in any table, with nothing else to change", () => {
+        const table = {
+            fitted: { type: ParamTypes.BOOL, takenFromHost: true, default: false },
+            speed: { type: ParamTypes.FLOAT, takenFromHost: true },
+            colour: { type: ParamTypes.STRING },
+        };
+        const host = takenFromHostValues({ fitted: true }, { speed: 2, colour: "red" }, table);
+        expect(host).toEqual({ fitted: true, speed: 2 });
+
+        const sent = readTakenFromHost(JSON.parse(JSON.stringify(host)), table);
+        expect(matchesHost(sent, takenFromHostValues({ fitted: true }, { speed: 2 }, table))).toBe(true);
+        expect(matchesHost(sent, takenFromHostValues({ fitted: false }, { speed: 2 }, table))).toBe(false);
+        expect(matchesHost(sent, takenFromHostValues({ fitted: true }, {}, table))).toBe(false);
+    });
+
+    it("takes a value absent from the URL as the same as one the host does not have", () => {
+        const table = { speed: { type: ParamTypes.FLOAT, takenFromHost: true } };
+        const sent = readTakenFromHost(JSON.parse(JSON.stringify(takenFromHostValues({}, {}, table))), table);
+        expect(matchesHost(sent, takenFromHostValues({}, {}, table))).toBe(true);
     });
 });

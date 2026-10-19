@@ -149,7 +149,7 @@ describe("AudioHandler", () => {
             ]);
         });
 
-        it("mutes and unmutes by command, ahead of the chip's timeline, and flushes what the stopped emulator will not", async () => {
+        it("mutes ahead of the chip's timeline, unmutes behind what changed while stopped, and flushes both", async () => {
             const handler = makeHandler();
             await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
             const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
@@ -160,8 +160,8 @@ describe("AudioHandler", () => {
             expect(posted.mock.calls.map((call) => call[0])).toEqual([
                 { command: "setEnabled", enabled: false },
                 { command: "produced", upTo: 0, events: [] },
-                { command: "setEnabled", enabled: true },
                 { command: "produced", upTo: 0, events: [] },
+                { command: "setEnabled", enabled: true },
             ]);
         });
 

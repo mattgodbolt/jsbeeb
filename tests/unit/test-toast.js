@@ -104,4 +104,26 @@ describe("toast", () => {
 
         expect(toasts()).toHaveLength(1);
     });
+
+    it("offers its one action as a button, and no button without one", () => {
+        const run = vi.fn();
+        const offering = toast("Something to do.", { action: { label: "Do it", run } });
+        const plain = toast("Nothing to do.");
+
+        offering.querySelector(".toast-action").click();
+        vi.runAllTimers();
+
+        expect(offering.querySelector(".toast-action").textContent).toBe("Do it");
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(offering.isConnected).toBe(false);
+        expect(plain.querySelector(".toast-action").hidden).toBe(true);
+    });
+
+    it("keeps one with an action until it is closed, giving it a close button even without a title", () => {
+        const element = toast("Something to do.", { action: { label: "Do it", run: vi.fn() } });
+        vi.runAllTimers();
+
+        expect(toasts()).toHaveLength(1);
+        expect(element.querySelector(".toast-header").hidden).toBe(false);
+    });
 });

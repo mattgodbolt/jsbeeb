@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MachineSwitch, leaveForNextPage, reloadAsMachine, takeFromLastPage } from "../../src/web/machine-switch.js";
-import { MachineRequirements } from "../../src/web/media-catalogue.js";
+import { MachineRequirements, requirementOf } from "../../src/web/media-catalogue.js";
 import { findModel } from "../../src/models.js";
 import { fakeUrlState, sentEvents, stubNavigation, teardownDom, toasts } from "./helpers.js";
 
@@ -30,6 +30,27 @@ describe("MachineSwitch", () => {
     const paradroid = { ref: "bitshifters:bs-paradroid.ssd", title: "Paradroid", requires: MachineRequirements.Master };
     const twinhead = { ref: "bitshifters:twinhead.ssd", title: "Twinhead", requires: MachineRequirements.MasterTurbo };
     const drive0 = { urlParamsFor: (ref) => ({ disc: undefined, disc1: ref }) };
+    const nulaDemo = {
+        ref: "github:a/b/nula.ssd",
+        title: "NuLA demo",
+        requires: requirementOf({ needs: ["VideoNuLA"] }),
+    };
+
+    it("is satisfied by a disc that needs a VideoNuLA only when the machine was started with one", () => {
+        expect(make().satisfies(nulaDemo)).toBe(false);
+        deps.fitted = { hasVideoNula: false };
+        expect(make().satisfies(nulaDemo)).toBe(false);
+        deps.fitted = { hasVideoNula: true };
+        expect(make().satisfies(nulaDemo)).toBe(true);
+    });
+
+    it("fits what a disc needs, keeping the model when the disc names none", async () => {
+        await make().switchFor(nulaDemo, drive0, { boot: true });
+        expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?disc1=github:a/b/nula.ssd&autoboot&hasVideoNula");
+        expect(sessionStorage.getItem(PendingSwitchKey)).toBe(
+            "Switched to a BBC B with 8271 (DFS 1.2) and a VideoNuLA for NuLA demo",
+        );
+    });
 
     it("is satisfied by a disc that names no machine, and otherwise only by that very machine, Tube included", () => {
         expect(make().satisfies({ ref: "sth:Elite.zip", title: "Elite" })).toBe(true);

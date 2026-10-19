@@ -43,13 +43,14 @@ import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { bootModeOf, parseMediaParams, processAutobootParams, processDriveTrackParams } from "./url-params.js";
-import { processInputParams } from "./web/parameters.js";
+import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
-import { configureAnalytics, noteError, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
+import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
+import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
@@ -107,7 +108,8 @@ const accessibilitySwitches = new AccessibilitySwitches();
 
 const settings = new Settings({ urlState });
 const { keyLayout, displayMode, audioOutput, speakerAmount } = settings;
-const model = settings.model;
+const { model, hasVideoNula } = settings;
+const takenFromHost = takenFromHostValues(settings, parsedQuery);
 const config = new Config(settings);
 
 const speechOutput = new SpeechOutput();
@@ -148,7 +150,9 @@ const display = new Display({
     mode: displayMode,
     tryGl,
     lowLatency,
-    fakeVideo: parsedQuery.fakeVideo !== undefined,
+    fakeVideo: !!parsedQuery.fakeVideo,
+    hasVideoNula,
+    onMissingVideoNula: answerMissingVideoNula({ inSession: () => !!loop.lockstep, settings }),
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
 const video = display.video;
@@ -264,7 +268,7 @@ new HfeSource({ media });
 new BitshiftersSource({ media });
 new GitHubSource({ media });
 const googleDriveSource = new GoogleDriveSource({ media });
-const machineSwitch = new MachineSwitch({ model, processor, urlState, modals });
+const machineSwitch = new MachineSwitch({ model, processor, fitted: takenFromHost, urlState, modals });
 const snapshots = new SnapshotUI({
     processor,
     model,
@@ -393,6 +397,7 @@ async function startAsTheUrlAsks() {
         { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
         audioHandler.ready,
     );
+    if (hasVideoNula) noteFeature(VideoNulaFeature, "fitted");
 
     switch (needsAutoboot) {
         case "boot":
@@ -441,7 +446,16 @@ async function startAsTheUrlAsks() {
             });
         } else if (!(await startAsTheUrlAsks())) return;
         const rendezvous = createRendezvousClient();
-        const sessionContext = { processor, model, loop, keyboard, urlState, version, rendezvous };
+        const sessionContext = {
+            processor,
+            model,
+            takenFromHost,
+            loop,
+            keyboard,
+            urlState,
+            version,
+            rendezvous,
+        };
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
             refusal: sessionRefusal(sessionContext),

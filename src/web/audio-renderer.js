@@ -106,14 +106,17 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     // A resync (restore or reset) starts a new timeline; anything queued
-    // before it belongs to the old one.
+    // before it belongs to the old one. The clock moves to it on arrival, as a
+    // stalled renderer waits for a lead measured from the clock.
     onProduced(upTo, events) {
         let from = 0;
         for (let i = events.length - 1; i >= 0; --i) {
             if (isResync(events[i])) {
-                from = i;
+                from = i + 1;
                 this.events = [];
                 this.eventsHead = 0;
+                this.clock = events[i].cycle;
+                this.chip.applyEvent(events[i]);
                 break;
             }
         }
@@ -185,11 +188,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     // Input samples before the next change of state: the head event, or
-    // the producer's position, whichever the clock reaches first. A resync
-    // takes effect at once, since it starts a new timeline.
+    // the producer's position, whichever the clock reaches first.
     _samplesUntilNextChange() {
         const head = this.events[this.eventsHead];
-        if (head !== undefined && isResync(head)) return 0;
         const boundary = head === undefined ? this.upTo : Math.min(head.cycle, this.upTo);
         return Math.floor((boundary - this.clock) * this.samplesPerCycle);
     }
@@ -213,7 +214,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
                 this._stall(out, offset, length);
                 return;
             }
-            if (isResync(head)) this.clock = head.cycle;
             this._applyHead();
         }
     }
