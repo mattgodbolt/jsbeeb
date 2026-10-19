@@ -1450,6 +1450,8 @@ export class WdFdc {
         if (this._controlRegister & Control.drive0 || this._controlRegister & Control.drive1) {
             this._currentDrive = this._drives[this._controlRegister & Control.drive0 ? 0 : 1];
         }
+        // A snapshot from before the drives shared the motor line has only the selected one turning.
+        if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
 
         // Restore timer
         this._timerTask.cancel();
@@ -1474,8 +1476,9 @@ export class WdFdc {
         this._drives[drive].tracksPerStep = tracksPerStep;
     }
 
+    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
     get motorOn() {
-        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
     }
 
     get drives() {

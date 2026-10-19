@@ -1471,7 +1471,7 @@ export class IntelFdc {
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             // A change of drive select bits clears all drive out bits other than side select.
             // For example, the newly selected drive won't have the load head signal
-            // active. This spins down any previously selected drive.
+            // active, and dropping it stops both drives.
             const newSelectBits = selectBits | (this._driveOut & DriveOut.side);
             this._setDriveOut(newSelectBits);
         }
@@ -1814,8 +1814,9 @@ export class IntelFdc {
         this._drives[drive].tracksPerStep = tracksPerStep;
     }
 
+    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
     get motorOn() {
-        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
     }
 
     get drives() {
