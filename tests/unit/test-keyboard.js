@@ -731,10 +731,16 @@ describe("Keyboard", () => {
         expect(keyboard.pauseEmu).toBe(true);
     });
 
-    test("resumeEmulation should emit resume event", async () => {
+    test("resumeEmulation should clear pause flag and emit resume event", async () => {
+        keyboard.setRunning(true);
+        keyboard.pauseEmulation();
+        keyboard.setRunning(false);
+
         const eventPromise = waitForEvent("resume");
         keyboard.resumeEmulation();
         await eventPromise;
+
+        expect(keyboard.pauseEmu).toBe(false);
     });
 
     test("handleMacCapsLock taps the key and says why, however often it is pressed", () => {
