@@ -2,8 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
+import { EmulationLoop } from "../../src/web/emulation-loop.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
+import { TickMs } from "../../src/emulation-tick.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
@@ -20,24 +22,27 @@ describe("KeyboardSetup", () => {
     let actions;
     let accessibilitySwitches;
     let processor;
+    let dbgr;
+    let loop;
     let setup;
 
     beforeEach(() => {
+        vi.useFakeTimers();
         document.body.innerHTML = "";
         actions = {
-            toggleDebugger: vi.fn(),
             toggleFast: vi.fn(),
             openRewind: vi.fn(),
             openPrinter: vi.fn(),
             openMedia: vi.fn(),
-            pause: vi.fn(),
-            resume: vi.fn(),
             paste: vi.fn(),
             onAnyKeyDown: vi.fn(),
         };
         accessibilitySwitches = new AccessibilitySwitches();
         processor = {
             model: findModel("B-DFS1.2"),
+            execute: vi.fn(() => true),
+            stop: vi.fn(),
+            tapeInterface: { motorOn: false },
             setReset: vi.fn(),
             scheduler: {
                 newTask: () => ({
@@ -58,11 +63,26 @@ describe("KeyboardSetup", () => {
             },
         };
         processor.keyboardInterface = processor.sysvia;
-        setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr: {}, keyLayout: "physical" });
-        setup.keyboard.setRunning(true);
+        dbgr = { debug: vi.fn(), hide: vi.fn(), keyPress: vi.fn(() => true) };
+        loop = new EmulationLoop({
+            processor,
+            display: { setSpeedy: vi.fn(), takePaintMs: () => 0, present: vi.fn() },
+            audioHandler: { mute: vi.fn(), unmute: vi.fn(), flushChipEvents: vi.fn() },
+            dbgr,
+            gamepad: { update: vi.fn() },
+            clocksPerSecond: 2000000,
+            cpuSpeed: 2000000,
+            fastTape: false,
+        });
+        setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, loop, dbgr, keyLayout: "physical" });
+        loop.go();
     });
 
-    afterEach(teardownDom);
+    // The loop's ticks rearm themselves, so teardownDom cannot run the timers out.
+    afterEach(() => {
+        vi.clearAllTimers();
+        return teardownDom();
+    });
 
     describe("the accessibility switches", () => {
         it("clears a bit while its switch is held", () => {
@@ -111,7 +131,6 @@ describe("KeyboardSetup", () => {
 
     describe("the shortcuts", () => {
         it.each([
-            ["Alt-S", keyCodes.S, { alt: true }, "toggleDebugger"],
             ["Alt-T", keyCodes.T, { alt: true }, "toggleFast"],
             ["Alt-W", keyCodes.W, { alt: true }, "openRewind"],
             ["Alt-B", keyCodes.B, { alt: true }, "openPrinter"],
@@ -135,24 +154,24 @@ describe("KeyboardSetup", () => {
         });
 
         it("does not start a held shortcut again when its repeats outlast a blur", () => {
-            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.T, { alt: true }));
             setup.keyboard.clearKeys();
-            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.T, { alt: true, repeat: true }));
 
-            expect(actions.toggleDebugger).toHaveBeenCalledTimes(1);
+            expect(actions.toggleFast).toHaveBeenCalledTimes(1);
         });
 
         it("fires once however long the key is held", () => {
-            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true }));
-            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
-            document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true, repeat: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.T, { alt: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.T, { alt: true, repeat: true }));
+            document.dispatchEvent(keyEvent("keydown", keyCodes.T, { alt: true, repeat: true }));
 
-            expect(actions.toggleDebugger).toHaveBeenCalledTimes(1);
+            expect(actions.toggleFast).toHaveBeenCalledTimes(1);
         });
 
         it("does nothing without the modifier", () => {
-            document.dispatchEvent(keyEvent("keydown", keyCodes.S));
-            expect(actions.toggleDebugger).not.toHaveBeenCalled();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.T));
+            expect(actions.toggleFast).not.toHaveBeenCalled();
             expect(processor.sysvia.keyDown).toHaveBeenCalled();
         });
 
@@ -223,19 +242,16 @@ describe("KeyboardSetup", () => {
 
         it("leaves a debugger goto box its g, which elsewhere resumes the machine", () => {
             domFromIndexHtml("debug");
-            const dbgr = { enabled: () => true, hide: vi.fn(), keyPress: vi.fn() };
-            new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr, keyLayout: "physical" });
-            const typeG = () => document.dispatchEvent(new KeyboardEvent("keypress", { key: "g", cancelable: true }));
+            loop.stop(true);
+            const typeG = () => setup.keyPress(new KeyboardEvent("keypress", { key: "g", cancelable: true }));
 
             document.querySelector("#goto-dis-addr-form .goto-addr").focus();
             typeG();
-            expect(dbgr.hide).not.toHaveBeenCalled();
-            expect(actions.resume).not.toHaveBeenCalled();
+            expect(loop.mode).toBe("debugging");
 
             document.activeElement.blur();
             typeG();
-            expect(dbgr.hide).toHaveBeenCalled();
-            expect(actions.resume).toHaveBeenCalled();
+            expect(loop.mode).toBe("running");
         });
 
         it("keeps a held shortcut's repeats out of the media window it just opened", () => {
@@ -272,37 +288,96 @@ describe("KeyboardSetup", () => {
         });
     });
 
-    describe("the keyboard's own events", () => {
-        it("routes pause and resume to the loop's actions, noting nothing", () => {
-            const sent = sentEvents();
-            setup.keyboard.dispatchEvent(new CustomEvent("pause"));
-            setup.keyboard.dispatchEvent(new CustomEvent("resume"));
-            expect(actions.pause).toHaveBeenCalledTimes(1);
-            expect(actions.resume).toHaveBeenCalledTimes(1);
-            expect(sent("feature_used")).toEqual([]);
+    describe("running and stopping", () => {
+        const altP = () => setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+        const altS = () => setup.keyboard.keyDown(keyEvent("keydown", keyCodes.S, { alt: true }));
+        const type = (key) => {
+            const event = new KeyboardEvent("keypress", { key, cancelable: true });
+            setup.keyPress(event);
+            return event;
+        };
+        const frame = () => vi.advanceTimersByTime(2 * TickMs);
+        const pauseNotes = (sent) => sent("feature_used").map(({ action }) => action);
+
+        it("Alt-P pauses a running machine and runs a paused one", () => {
+            altP();
+            expect(loop.mode).toBe("paused");
+            altP();
+            expect(loop.mode).toBe("running");
         });
 
-        it("notes a pause as entered and left, however it is left", () => {
-            const sent = sentEvents();
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            setup.keyboard.setRunning(false);
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            setup.keyboard.setRunning(true);
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            setup.keyboard.resumeEmulation();
-            expect(sent("feature_used")).toEqual([
-                { feature: "pause", action: "enter" },
-                { feature: "pause", action: "leave" },
-                { feature: "pause", action: "enter" },
-                { feature: "pause", action: "leave" },
-            ]);
+        it("Alt-S shows the debugger and hides it again, running the machine", () => {
+            altS();
+            expect(loop.mode).toBe("debugging");
+            expect(dbgr.debug).toHaveBeenCalled();
+            altS();
+            expect(loop.mode).toBe("running");
         });
 
-        it("notes nothing for Alt-P when the machine was stopped by something other than a pause", () => {
+        it("while paused, n runs one frame and stays paused", () => {
+            altP();
+            processor.execute.mockClear();
+            type("n");
+            expect(loop.mode).toBe("stepping");
+            frame();
+            frame();
+            expect(loop.mode).toBe("paused");
+            expect(processor.execute).toHaveBeenCalledTimes(1);
+        });
+
+        it("in the debugger, g runs the machine and every other key is the debugger's", () => {
+            altS();
+            const n = type("n");
+            expect(dbgr.keyPress).toHaveBeenCalledWith("n");
+            expect(n.defaultPrevented).toBe(true);
+            expect(loop.mode).toBe("debugging");
+            type("g");
+            expect(loop.mode).toBe("running");
+        });
+
+        it("leaves typed characters alone while the machine runs", () => {
+            const g = type("g");
+            type("n");
+            expect(loop.mode).toBe("running");
+            expect(dbgr.keyPress).not.toHaveBeenCalled();
+            expect(g.defaultPrevented).toBe(false);
+        });
+
+        it.each([
+            ["Alt-P", () => altP()],
+            ["g", () => type("g")],
+            ["Alt-S twice", () => (altS(), altS())],
+            ["Alt-S, then the debugger's g", () => (altS(), type("g"))],
+            ["a step, then g", () => (type("n"), frame(), frame(), type("g"))],
+            ["the play button or the menu's resume", () => loop.go()],
+        ])("notes a pause left by %s, and the next pause entered", (_name, leave) => {
             const sent = sentEvents();
-            setup.keyboard.setRunning(false);
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            expect(actions.resume).toHaveBeenCalledTimes(1);
+            altP();
+            leave();
+            expect(loop.mode).toBe("running");
+            altP();
+            expect(pauseNotes(sent)).toEqual(["enter", "leave", "enter"]);
+        });
+
+        it("runs freely after a step stopped by the debugger before its frame", () => {
+            const sent = sentEvents();
+            altP();
+            type("n");
+            altS();
+            type("g");
+            frame();
+            frame();
+            expect(loop.mode).toBe("running");
+            expect(loop.isRunning()).toBe(true);
+            expect(pauseNotes(sent)).toEqual(["enter", "leave"]);
+        });
+
+        it("notes nothing for Alt-P out of the debugger", () => {
+            const sent = sentEvents();
+            altS();
+            altP();
+            expect(loop.mode).toBe("running");
+            expect(dbgr.hide).toHaveBeenCalled();
             expect(sent("feature_used")).toEqual([]);
         });
 

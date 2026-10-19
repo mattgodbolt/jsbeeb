@@ -61,7 +61,7 @@ export class RewindUI {
         this.snapshots = this.rewindBuffer.getAll();
         if (this.snapshots.length === 0) return;
 
-        this.resumeLoop = this.loop.pause("the rewind panel");
+        this.resumeLoop = this.loop.hold("the rewind panel");
         this.isOpen = true;
         try {
             this.savedState = this.processor.snapshotState();

@@ -1,39 +1,17 @@
-/**
- * The play and pause buttons on the top bar, kept in step with the loop's
- * running state. pause() and resume() are also the desktop app's menu actions.
- */
+/** The play and pause buttons on the top bar, kept in step with the loop's running state. */
 export class RunControls {
     /**
      * @param {object} options
      * @param {object} options.loop - the emulation loop
-     * @param {object} options.dbgr - the debugger, hidden on resume
-     * @param {object} options.keyboard - the machine keyboard, told the running state
      */
-    constructor({ loop, dbgr, keyboard }) {
-        this.loop = loop;
-        this.dbgr = dbgr;
-        this.keyboard = keyboard;
-        this.playButton = document.getElementById("debug-play");
-        this.pauseButton = document.getElementById("debug-pause");
-
+    constructor({ loop }) {
+        const playButton = document.getElementById("debug-play");
+        const pauseButton = document.getElementById("debug-pause");
         loop.addEventListener("running", () => {
-            const running = loop.isRunning();
-            keyboard.setRunning(running);
-            this.playButton.disabled = running;
-            this.pauseButton.disabled = !running;
+            playButton.disabled = loop.isRunning();
+            pauseButton.disabled = !loop.isRunning();
         });
-        this.pauseButton.addEventListener("click", () => this.pause());
-        this.playButton.addEventListener("click", () => this.resume());
-    }
-
-    /** Stop the loop into the debugger. */
-    pause() {
-        this.loop.stop(true);
-    }
-
-    /** Hide the debugger; the keyboard's resume event restarts the loop. */
-    resume() {
-        this.dbgr.hide();
-        this.keyboard.resumeEmulation();
+        pauseButton.addEventListener("click", () => loop.stop(true));
+        playButton.addEventListener("click", () => loop.go());
     }
 }
