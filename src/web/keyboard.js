@@ -141,11 +141,16 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Sets the running state of the emulator
+     * Sets the running state of the emulator. The loop starting by any route
+     * ends a pause, except to take a single step within it.
      * @param {boolean} isRunning - Whether the emulator is running
      */
     setRunning(isRunning) {
         this.running = isRunning;
+        if (isRunning && this.pauseEmu && !this.stepEmuWhenPaused) {
+            noteFeature("pause", "leave");
+            this.pauseEmu = false;
+        }
     }
 
     /**
@@ -390,11 +395,9 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Resume the emulator
+     * Resume the emulator; the pause ends when the loop starts again
      */
     resumeEmulation() {
-        if (this.pauseEmu) noteFeature("pause", "leave");
-        this.pauseEmu = false;
         this.dispatchEvent(new Event("resume"));
     }
 }

@@ -282,20 +282,64 @@ describe("KeyboardSetup", () => {
             expect(sent("feature_used")).toEqual([]);
         });
 
-        it("notes a pause as entered and left, however it is left", () => {
-            const sent = sentEvents();
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            setup.keyboard.setRunning(false);
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            setup.keyboard.setRunning(true);
-            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            setup.keyboard.resumeEmulation();
-            expect(sent("feature_used")).toEqual([
-                { feature: "pause", action: "enter" },
-                { feature: "pause", action: "leave" },
-                { feature: "pause", action: "enter" },
-                { feature: "pause", action: "leave" },
-            ]);
+        describe("with the loop wired as main.js wires it", () => {
+            let keyboard;
+            let debuggerOpen;
+            const altKey = (code) => keyboard.keyDown(keyEvent("keydown", code, { alt: true }));
+            const type = (key) => keyboard.keyPress(new KeyboardEvent("keypress", { key }));
+
+            beforeEach(() => {
+                debuggerOpen = false;
+                const dbgr = { enabled: () => debuggerOpen, hide: () => (debuggerOpen = false) };
+                keyboard = new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr, keyLayout: "physical" })
+                    .keyboard;
+                keyboard.setRunning(true);
+                actions.pause.mockImplementation(() => keyboard.setRunning(false));
+                actions.resume.mockImplementation(() => keyboard.setRunning(true));
+                actions.toggleDebugger.mockImplementation(() => {
+                    debuggerOpen = !debuggerOpen;
+                    keyboard.setRunning(!debuggerOpen);
+                });
+            });
+
+            it("notes a pause as entered and left once, however the machine starts again", () => {
+                const sent = sentEvents();
+                altKey(keyCodes.P);
+                altKey(keyCodes.P);
+                altKey(keyCodes.P);
+                altKey(keyCodes.S);
+                altKey(keyCodes.S);
+                altKey(keyCodes.P);
+                altKey(keyCodes.S);
+                type("g");
+                altKey(keyCodes.P);
+                keyboard.setRunning(false);
+                keyboard.setRunning(true);
+                expect(sent("feature_used")).toEqual(
+                    Array(4)
+                        .fill([
+                            { feature: "pause", action: "enter" },
+                            { feature: "pause", action: "leave" },
+                        ])
+                        .flat(),
+                );
+            });
+
+            it("stays paused through a single step", () => {
+                const sent = sentEvents();
+                altKey(keyCodes.P);
+                type("n");
+                expect(keyboard.postFrameShouldPause()).toBe(true);
+                keyboard.setRunning(false);
+                type("n");
+                expect(keyboard.postFrameShouldPause()).toBe(true);
+                keyboard.setRunning(false);
+                type("g");
+                expect(sent("feature_used")).toEqual([
+                    { feature: "pause", action: "enter" },
+                    { feature: "pause", action: "leave" },
+                ]);
+            });
         });
 
         it("notes nothing for Alt-P when the machine was stopped by something other than a pause", () => {

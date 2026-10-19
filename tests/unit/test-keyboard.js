@@ -554,18 +554,27 @@ describe("Keyboard", () => {
     });
 
     test("keyPress should emit resume event when lowercase g pressed in pause mode", async () => {
-        const event = {
-            key: "g",
-            preventDefault: vi.fn(),
-        };
-
-        keyboard.pauseEmu = true;
+        keyboard.setRunning(true);
+        keyboard.pauseEmulation();
+        keyboard.setRunning(false);
 
         const eventPromise = waitForEvent("resume");
-        keyboard.keyPress(event);
+        keyboard.keyPress({ key: "g" });
         await eventPromise;
+    });
 
-        expect(keyboard.pauseEmu).toBe(false);
+    test("a pause ends when the loop starts again, by whatever route", () => {
+        const resumeListener = vi.fn();
+        keyboard.addEventListener("resume", resumeListener);
+        keyboard.setRunning(true);
+        keyboard.pauseEmulation();
+        keyboard.setRunning(false);
+
+        keyboard.setRunning(true);
+        keyboard.setRunning(false);
+        keyboard.keyPress({ key: "g" });
+
+        expect(resumeListener).not.toHaveBeenCalled();
     });
 
     test("keyPress should handle debugger g key and emit resume event", async () => {
@@ -722,14 +731,10 @@ describe("Keyboard", () => {
         expect(keyboard.pauseEmu).toBe(true);
     });
 
-    test("resumeEmulation should clear pause flag and emit resume event", async () => {
-        keyboard.pauseEmu = true;
-
+    test("resumeEmulation should emit resume event", async () => {
         const eventPromise = waitForEvent("resume");
         keyboard.resumeEmulation();
         await eventPromise;
-
-        expect(keyboard.pauseEmu).toBe(false);
     });
 
     test("handleMacCapsLock taps the key and says why, however often it is pressed", () => {
