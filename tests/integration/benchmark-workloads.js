@@ -8,7 +8,7 @@ const OsRomResetVector = 0xfffc;
 
 async function restoreAltered(name, alter) {
     const workload = await readWorkload(name);
-    const machine = await newBenchmarkMachine(workload.model);
+    const machine = await newBenchmarkMachine(workload.model, workload.fittings);
     alter(workload);
     return restoreWorkload(machine.processor, workload);
 }

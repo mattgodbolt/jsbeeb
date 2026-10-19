@@ -402,8 +402,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   `window.jsbeebBenchmark` holds the same for scripts, and its `done` resolves when the run ends. Nothing is sent to
   Google Analytics. After a successful run the machine carries on with the workload once the dialog is closed; after a
   failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
-  refused alongside it, as they change what is measured, and so is a machine with a Music 5000, teletext adaptor or
-  Econet fitted.
+  refused alongside it, as they change what is measured, and so is a machine fitted otherwise than the workload's
+  `fittings` there say (a co-processor, Music 5000, teletext adaptor, Econet or VideoNuLA).
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.

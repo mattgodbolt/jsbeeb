@@ -3,6 +3,13 @@
     {
       "name": "elite",
       "model": "B-DFS1.2",
+      "fittings": {
+        "coProcessor": false,
+        "hasMusic5000": false,
+        "hasTeletextAdaptor": false,
+        "hasEconet": false,
+        "hasVideoNula": false
+      },
       "description": "Elite in flight: launched from Lave station with the default commander, no keys held.",
       "source": "public/discs/elite.ssd, Ian Bell's disc image as fixed for jsbeeb (see public/discs/README.elite)",
       "snapshot": "elite.json.gz",
@@ -17,6 +24,13 @@
     {
       "name": "mode0-lines",
       "model": "B-DFS1.2",
+      "fittings": {
+        "coProcessor": false,
+        "hasMusic5000": false,
+        "hasTeletextAdaptor": false,
+        "hasEconet": false,
+        "hasVideoNula": false
+      },
       "description": "A BASIC graphics demo in MODE 0: screen-wide lines EORed on a sweeping path.",
       "source": "a BASIC program in tools/make-benchmark-workloads.js",
       "snapshot": "mode0-lines.json.gz",
@@ -28,6 +42,13 @@
     {
       "name": "mode7-text",
       "model": "B-DFS1.2",
+      "fittings": {
+        "coProcessor": false,
+        "hasMusic5000": false,
+        "hasTeletextAdaptor": false,
+        "hasEconet": false,
+        "hasVideoNula": false
+      },
       "description": "MODE 7 text scrolling up the screen: coloured text, backgrounds and graphics characters.",
       "source": "a BASIC program in tools/make-benchmark-workloads.js",
       "snapshot": "mode7-text.json.gz",
@@ -39,6 +60,13 @@
     {
       "name": "master-shadow",
       "model": "Master",
+      "fittings": {
+        "coProcessor": false,
+        "hasMusic5000": false,
+        "hasTeletextAdaptor": false,
+        "hasEconet": false,
+        "hasVideoNula": false
+      },
       "description": "A Master BASIC demo in shadow MODE 2 (MODE 130): filled triangles in changing colours.",
       "source": "a BASIC program in tools/make-benchmark-workloads.js",
       "snapshot": "master-shadow.json.gz",

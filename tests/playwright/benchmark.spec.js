@@ -63,11 +63,11 @@ test("a parameter that changes what is measured is refused", async ({ beeb, page
     });
 });
 
-test("a machine with a peripheral that runs every cycle is refused", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=elite&hasMusic5000=true");
+test("a machine fitted otherwise than the workload is refused", async ({ beeb, page }) => {
+    await beeb.open("?benchmark=elite&hasVideoNula=true");
     const { status, error } = await benchmarkRecord(page);
     expect({ status, error }).toEqual({
         status: "failed",
-        error: "The machine has a Music 5000 fitted, which a workload does not have; turn it off",
+        error: "The elite workload runs with hasVideoNula=false; set that in the URL",
     });
 });
