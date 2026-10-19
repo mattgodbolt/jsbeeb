@@ -71,6 +71,12 @@ skipped question is not.
 12. **Diff hygiene.** Anything the title does not explain: lost whitespace, drive-by renames, a
     default or threshold changed without being asked, a tuned value the maintainer has not chosen,
     a test or comment in a file the change did not need to touch.
+13. **Size.** What could be deleted without losing a behaviour or the test that pins a claim? Look
+    for a module, option, parameter or abstraction with one caller and no second in view; a helper
+    that wraps a single line; a fallback for a state nothing produces; a test that pins what
+    another test in the file already pins, reached through a different door. Earlier rounds' fixes
+    count too: a test added for a taken finding can duplicate one that was already there. Say
+    whether the lines the diff adds to `src/` are the behaviour or scaffolding around it.
 
 ## The report
 
@@ -80,7 +86,7 @@ Per category, the findings or the words "nothing found". A finding is:
 - the failure in concrete terms: the sequence of events and what the user or a test would see
 - severity: **blocking** (wrong behaviour, a claim without a test, unvalidated input, a break in
   something exported, missing snapshot handling), **should fix** (a convention, a comment, a doc,
-  a stale claim in the PR text) or **note** (a judgement call for the session, with the trade-off
+  a stale claim in the PR text, code or a test that can go) or **note** (a judgement call for the session, with the trade-off
   stated)
 
 End with one line: `Would block: N. Should fix: N. Notes: N.`
