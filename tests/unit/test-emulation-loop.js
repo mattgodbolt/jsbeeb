@@ -250,8 +250,9 @@ describe("EmulationLoop", () => {
         expect(loop.isRunning()).toBe(false);
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(sent("js_error")).toEqual([expect.objectContaining({ where: "loop", message: "bad opcode" })]);
-        // A later test's visibility change would start this loop again.
-        deps.processor.execute.mockReturnValue(true);
+        expect(loop.mode).toBe("debugging");
+        loop.hold("the test")();
+        expect(loop.isRunning()).toBe(false);
     });
 
     describe("the run mode", () => {

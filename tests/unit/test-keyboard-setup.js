@@ -9,6 +9,8 @@ import { TickMs } from "../../src/emulation-tick.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
+const ClocksPerSecond = 2000000;
+
 const keyEvent = (type, code, { alt = false, ctrl = false, shift = false, repeat = false } = {}) =>
     new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, repeat, cancelable: true });
 
@@ -70,8 +72,8 @@ describe("KeyboardSetup", () => {
             audioHandler: { mute: vi.fn(), unmute: vi.fn(), flushChipEvents: vi.fn() },
             dbgr,
             gamepad: { update: vi.fn() },
-            clocksPerSecond: 2000000,
-            cpuSpeed: 2000000,
+            clocksPerSecond: ClocksPerSecond,
+            cpuSpeed: ClocksPerSecond,
             fastTape: false,
         });
         setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, loop, dbgr, keyLayout: "physical" });
