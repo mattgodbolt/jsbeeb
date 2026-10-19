@@ -49,6 +49,7 @@ const RefDir = path.join(RepoRoot, "tests/integration/teletext");
 
 const FieldCycles = 40000;
 const FlashCycleFields = 64;
+const FlashHiddenFields = 16;
 // The flash and cursor phases both count fields since power-on, 64 and 32 to a cycle, so a
 // capture at a given field of the flash cycle is the same picture whatever ran before it.
 // Which field each reference was taken at was found by capturing every field and comparing.
@@ -150,12 +151,12 @@ describe.each(["B-DFS1.2", "B-US", "B-German", "Master"])("flash phase under the
         await testMachine.runUntilInput();
         fields.length = 0;
         await testMachine.runFor(3 * FlashCycleFields * FieldCycles);
-        // The first fields after boot can predate the CRTC being programmed.
+        // Input is requested before the first counted frame, so the first fields are still out of phase.
         const hiddenStart = fields.findIndex(
             (field, i) => i > FlashCycleFields && field.hidden && !fields[i - 1].hidden,
         );
         const hiddenEnd = fields.findIndex((field, i) => i > hiddenStart && !field.hidden);
-        expect(hiddenEnd - hiddenStart).toBe(16);
+        expect(hiddenEnd - hiddenStart).toBe(FlashHiddenFields);
         expect(fields.slice(hiddenStart, hiddenEnd).every((field) => !field.cursorOn)).toBe(true);
         expect(fields[hiddenStart - 1].cursorOn).toBe(true);
         expect(fields[hiddenEnd].cursorOn).toBe(true);
