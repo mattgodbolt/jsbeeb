@@ -1,4 +1,4 @@
-import { ParamTypes } from "../url-params.js";
+import { buildUrlFromParams, ParamTypes, parseQueryString } from "../url-params.js";
 import { allModels, findModel, tubeModelFor } from "../models.js";
 import { AudioOutputs, DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { getFilterForMode, MaxPersistenceMs, persistenceSettings } from "./canvas.js";
@@ -33,9 +33,12 @@ const Peripherals = { label: "Additional peripherals", hint: "(some combinations
 /**
  * Every parameter the page understands, with all it is: its URL `type`, and whether it is a `startupAction` (has the
  * page do something once it is up, rather than describe it), `stored` (kept in browser storage for next time as well
- * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry) or
+ * as in the URL), `slid` (changed live as a slider moves, so a burst of changes makes one history entry),
  * `localToPage` (changes only this page's picture, sound, key mapping or logging, never what the machine does, so a
- * page joining a shared session keeps its own).
+ * page joining a shared session keeps its own) or `takenFromHost` (changes what the emulated machine does, so a page
+ * joining a shared session must run with the host's value, and reloads with it if its own differs). The model is taken
+ * from the host too, by code of its own. A BOOL setting that fits something a disc may need is `neededAs` the name a
+ * media source's `needs` list gives it, which is also what the user is told the disc needs.
  *
  * A family is an entry for every parameter whose name starts with its `prefix`, in any case, or is one of its `names`;
  * the entry's own key is not a parameter. Its `apply(member, value, context)` puts one of them into effect, given the
@@ -121,11 +124,13 @@ export const Parameters = {
     },
     coProcessor: {
         type: ParamTypes.BOOL,
+        takenFromHost: true,
         default: false,
         field: { type: "check", group: Peripherals, label: "65c02 co-processor", restart: true },
     },
     tubeCpuMultiplier: {
         type: ParamTypes.FLOAT,
+        takenFromHost: true,
         default: 1,
         valid: (multiplier) => multiplier !== 0,
         field: {
@@ -141,18 +146,34 @@ export const Parameters = {
     },
     hasMusic5000: {
         type: ParamTypes.BOOL,
+        takenFromHost: true,
         default: false,
         field: { type: "check", group: Peripherals, label: "Music 5000 synthesiser", restart: true },
     },
     hasTeletextAdaptor: {
         type: ParamTypes.BOOL,
+        takenFromHost: true,
         default: false,
         field: { type: "check", group: Peripherals, label: "Teletext adaptor", restart: true },
     },
     hasEconet: {
         type: ParamTypes.BOOL,
+        takenFromHost: true,
         default: false,
         field: { type: "check", group: Peripherals, label: "Econet with file server", restart: true },
+    },
+    hasVideoNula: {
+        type: ParamTypes.BOOL,
+        takenFromHost: true,
+        neededAs: "VideoNuLA",
+        default: false,
+        field: {
+            type: "check",
+            group: Peripherals,
+            label: "VideoNuLA (4096-colour palette)",
+            restart: true,
+            enabledWhen: ({ model }) => !findModel(model).isAtom,
+        },
     },
     audioOutput: {
         type: ParamTypes.STRING,
@@ -269,19 +290,19 @@ export const Parameters = {
     noseek: { type: ParamTypes.BOOL },
     glEnabled: { type: ParamTypes.BOOL, localToPage: true },
     lowLatency: { type: ParamTypes.BOOL, localToPage: true },
-    fakeVideo: { type: ParamTypes.BOOL },
+    fakeVideo: { type: ParamTypes.BOOL, takenFromHost: true },
     logFdcCommands: { type: ParamTypes.BOOL, localToPage: true },
     logFdcStateChanges: { type: ParamTypes.BOOL, localToPage: true },
     audioDebug: { type: ParamTypes.BOOL, localToPage: true },
 
     // Numeric parameters
-    stationId: { type: ParamTypes.INT },
+    stationId: { type: ParamTypes.INT, takenFromHost: true },
     frameSkip: { type: ParamTypes.INT },
-    videoCyclesBatch: { type: ParamTypes.INT },
+    videoCyclesBatch: { type: ParamTypes.INT, takenFromHost: true },
     audiofilterfreq: { type: ParamTypes.FLOAT, localToPage: true },
     audiofilterq: { type: ParamTypes.FLOAT, localToPage: true },
     audioLatencyMs: { type: ParamTypes.FLOAT, localToPage: true },
-    cpuMultiplier: { type: ParamTypes.FLOAT },
+    cpuMultiplier: { type: ParamTypes.FLOAT, takenFromHost: true },
 
     // String parameters (these are the default but listed for clarity)
     disc: { type: ParamTypes.STRING, analyticsFilter: mediaLabel },
@@ -340,6 +361,61 @@ export function parameterFor(name, parameters = Parameters) {
 export const urlParamType = (name, parameters = Parameters) => parameterFor(name, parameters)?.parameter.type;
 
 export const StartupActionParams = Object.keys(Parameters).filter((name) => Parameters[name].startupAction);
+
+const takenFromHostEntries = (parameters) =>
+    Object.entries(parameters).filter(([, { takenFromHost }]) => takenFromHost);
+
+const usableAs = {
+    [ParamTypes.BOOL]: (value) => value === true,
+    [ParamTypes.INT]: (value) => (Number.isInteger(value) ? value : undefined),
+    [ParamTypes.FLOAT]: (value) => (Number.isFinite(value) ? value : undefined),
+    [ParamTypes.STRING]: (value) => (typeof value === "string" ? value : undefined),
+    [ParamTypes.ARRAY]: (value) =>
+        Array.isArray(value) && value.every((each) => typeof each === "string") ? value : undefined,
+};
+
+/**
+ * @returns {object} the value of every parameter a session guest takes from its host, as this page's start gave it: a
+ * setting's from `settings`, any other's from the page's parsed URL `params`, absent if the URL has none
+ */
+export function takenFromHostValues(settings, params, parameters = Parameters) {
+    return Object.fromEntries(
+        takenFromHostEntries(parameters).map(([name, parameter]) => [
+            name,
+            usableAs[parameter.type]("default" in parameter ? settings[name] : params[name]),
+        ]),
+    );
+}
+
+const sameValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+function survivesUrl(name, type, value) {
+    const typeOf = () => type;
+    const url = buildUrlFromParams("", { [name]: value }, typeOf);
+    return sameValue(usableAs[type](parseQueryString(url.substring(1), typeOf)[name]), value);
+}
+
+const acceptable = (name, { type, valid, fit }, value) =>
+    value === undefined ||
+    ((!valid || valid(value)) && (!fit || fit(value) === value) && survivesUrl(name, type, value));
+
+/**
+ * @returns {object|null} the values of the parameters a session guest takes from its host, as the host `sent` them in
+ * its welcome, or null if one is a value this page would not take from its own URL, so reloading with it could never
+ * match; one its parameter's type cannot take counts as none, which for a setting is its default.
+ */
+export function readTakenFromHost(sent, parameters = Parameters) {
+    const entries = takenFromHostEntries(parameters).map(([name, parameter]) => [
+        name,
+        usableAs[parameter.type](sent?.[name]) ?? parameter.default,
+        parameter,
+    ]);
+    if (!entries.every(([name, value, parameter]) => acceptable(name, parameter, value))) return null;
+    return Object.fromEntries(entries.map(([name, value]) => [name, value]));
+}
+
+/** @returns {boolean} whether this page's `own` takenFromHostValues are the `host`'s. */
+export const matchesHost = (host, own) => Object.keys(host).every((name) => sameValue(host[name], own[name]));
 
 /**
  * Puts each parameter in `params` that a family applies into effect.

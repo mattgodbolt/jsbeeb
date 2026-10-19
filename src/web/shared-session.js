@@ -19,7 +19,7 @@ import { findModel } from "../models.js";
 import { buildUrlFromParams } from "../url-params.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
 import { reloadAsMachine } from "./machine-switch.js";
-import { parameterFor, urlParamType } from "./parameters.js";
+import { matchesHost, parameterFor, readTakenFromHost, urlParamType } from "./parameters.js";
 import {
     connectionStats,
     IntervalStats,
@@ -248,6 +248,7 @@ function parsed(data) {
  * @typedef {object} SessionContext
  * @property {object} processor
  * @property {object} model
+ * @property {object} takenFromHost - the page's takenFromHostValues, as its start gave them
  * @property {import("./emulation-loop.js").EmulationLoop} loop
  * @property {import("./keyboard.js").Keyboard} keyboard
  * @property {import("./url-state.js").UrlState} urlState
@@ -730,8 +731,8 @@ export class SessionHost {
         channel.addEventListener("message", ({ data }) => this.fromGuest(guest, data));
         opened(channel).then(
             () => {
-                const { model, version } = this.context;
-                const welcome = { type: "welcome", model: model.name, version, name: this.name };
+                const { model, takenFromHost, version } = this.context;
+                const welcome = { type: "welcome", model: model.name, takenFromHost, version, name: this.name };
                 if (!this.sendTo(guest, JSON.stringify(welcome))) return;
                 guest.welcomed = true;
                 this.sendSnapshot(guest);
@@ -1278,10 +1279,16 @@ export class SessionGuest {
         else this.lockstep?.receive(commit);
     }
 
-    welcome({ model, version, name }) {
+    welcome({ model, takenFromHost, version, name }) {
         this.hostName = cleanName(name);
         const field = (value) => String(value).slice(0, MaxReasonLength);
-        this.log.record("welcome", { model: field(model), version: field(version), name: this.hostName });
+        const hostValues = readTakenFromHost(takenFromHost);
+        this.log.record("welcome", {
+            model: field(model),
+            takenFromHost: hostValues,
+            version: field(version),
+            name: this.hostName,
+        });
         this.showStatus();
         if (typeof model !== "string" || !findModel(model)) {
             this.fail(SessionFailures.protocol, "the host did not say what machine it is");
@@ -1294,10 +1301,14 @@ export class SessionGuest {
             );
             return;
         }
-        if (!isSameModel(model, this.context.model.name)) {
+        if (!hostValues) {
+            this.fail(SessionFailures.protocol, "the host's machine has a setting this page cannot take");
+            return;
+        }
+        if (!isSameModel(model, this.context.model.name) || !matchesHost(hostValues, this.context.takenFromHost)) {
             this.send({ type: "bye" });
             this.left = true;
-            reloadAsMachine(this.context.urlState, { model }, { replace: true });
+            reloadAsMachine(this.context.urlState, { model, ...hostValues }, { replace: true });
         }
     }
 

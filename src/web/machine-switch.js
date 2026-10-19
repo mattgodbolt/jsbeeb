@@ -1,4 +1,4 @@
-import { satisfiesRequirement } from "./media-catalogue.js";
+import { requirementName, satisfiesRequirement } from "./media-catalogue.js";
 import { toast } from "./toast.js";
 import { note } from "./analytics.js";
 import { mediaLabel } from "./analytics-filters.js";
@@ -31,20 +31,23 @@ export function takeFromLastPage(key) {
 }
 
 /**
- * Switches to the machine a disc needs by reloading with the model, its co-processor and the
- * disc in the URL. The toast for the new page is stashed in sessionStorage until it arrives.
+ * Switches to the machine a disc needs by reloading with the model, its co-processor, the fittings
+ * it needs and the disc in the URL. The toast for the new page is stashed in sessionStorage until it
+ * arrives. `fitted` is the settings the running machine was started with.
  */
 export class MachineSwitch {
-    constructor({ model, processor, urlState, modals }) {
+    constructor({ model, processor, fitted = {}, urlState, modals }) {
         this.model = model;
         this.processor = processor;
+        this.fitted = fitted;
         this.urlState = urlState;
         this.modals = modals;
     }
 
     /** Whether the running machine meets the disc's requirement; a disc without one is always met. */
     satisfies(d) {
-        return !d.requires || satisfiesRequirement(d.requires, { model: this.model, hasTube: this.processor.hasTube });
+        const { model, processor, fitted } = this;
+        return !d.requires || satisfiesRequirement(d.requires, { model, hasTube: processor.hasTube, fitted });
     }
 
     /**
@@ -55,22 +58,23 @@ export class MachineSwitch {
      */
     async switchFor(d, slot, { boot, replace = false }) {
         const { requires } = d;
+        const needed = requirementName(requires, this.model);
         if (!boot) {
             const wanted = await this.modals.confirm(
-                `${d.title} needs a ${requires.name}. Switch machine? The emulator restarts.`,
+                `${d.title} needs a ${needed}. Switch machine? The emulator restarts.`,
                 "Switch machine",
                 "Load it here",
             );
             if (!wanted) return false;
         }
         note("media", { type: "switchMachine", label: mediaLabel(d.ref) });
-        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${requires.name} for ${d.title}`);
+        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${needed} for ${d.title}`);
         reloadAsMachine(
             this.urlState,
             {
                 ...slot.urlParamsFor(d.ref),
-                model: requires.model,
-                coProcessor: requires.coProcessor,
+                ...(requires.model !== undefined && { model: requires.model, coProcessor: requires.coProcessor }),
+                ...requires.fittings,
                 ...(boot ? { autoboot: true } : {}),
             },
             { replace },

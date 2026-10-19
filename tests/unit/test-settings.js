@@ -41,6 +41,7 @@ describe("Settings", () => {
                 hasEconet: false,
                 hasMusic5000: false,
                 hasTeletextAdaptor: false,
+                hasVideoNula: false,
                 mouseJoystickEnabled: false,
                 speechOutput: false,
                 displayMode: "rgb",
@@ -54,7 +55,7 @@ describe("Settings", () => {
         it("reads every setting from the URL", () => {
             urlState = fakeUrlState(
                 "?keyLayout=Natural&tubeCpuMultiplier=2.5&microphoneChannel=2&coProcessor&hasEconet&hasMusic5000" +
-                    "&hasTeletextAdaptor&mouseJoystickEnabled&speechOutput&displayMode=xbr&audioOutput=off" +
+                    "&hasTeletextAdaptor&hasVideoNula&mouseJoystickEnabled&speechOutput&displayMode=xbr&audioOutput=off" +
                     "&speakerAmount=0&palPersistenceMs=0&rgbPersistenceMs=100",
             );
             expect(make()).toMatchObject({
@@ -65,6 +66,7 @@ describe("Settings", () => {
                 hasEconet: true,
                 hasMusic5000: true,
                 hasTeletextAdaptor: true,
+                hasVideoNula: true,
                 mouseJoystickEnabled: true,
                 speechOutput: true,
                 displayMode: "xbr",
@@ -206,6 +208,7 @@ describe("Settings", () => {
                 hasEconet: true,
                 hasMusic5000: true,
                 hasTeletextAdaptor: true,
+                hasVideoNula: true,
                 mouseJoystickEnabled: true,
                 speechOutput: true,
                 microphoneChannel: 1,

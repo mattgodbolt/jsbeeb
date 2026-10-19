@@ -273,8 +273,8 @@ export class AudioHandler {
 
     unmute() {
         this.soundChip.unmute();
-        this._setEnabled(true);
         this.flushChipEvents();
+        this._setEnabled(true);
         if (this.masterGain) this.masterGain.gain.value = 1;
     }
 }

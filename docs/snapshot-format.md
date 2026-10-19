@@ -245,6 +245,8 @@ Contains ~40 scalar fields for display timing and rendering state, plus nested o
 | `attributeMode`    | number     | NULA attribute mode                |
 | `attributeText`    | number     | NULA attribute text mode           |
 
+Whether a VideoNuLA is fitted is the machine's setting, not part of the snapshot. Without one, `disabled` is always true and the NULA fields are always their power-on values: restoring onto such a machine ignores the saved NULA fields and the saved `ulaPal`, recomputing the palette from `actualPal`. A machine with a VideoNuLA restores them as saved, `disabled` included.
+
 #### Teletext (`state.video.teletext`)
 
 Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references are stored as strings (`"normal"`, `"graphics"`, `"separated"`) rather than serializing the static glyph data.

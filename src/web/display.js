@@ -26,6 +26,8 @@ export class Display {
         tryGl = true,
         lowLatency = true,
         fakeVideo = false,
+        hasVideoNula = false,
+        onMissingVideoNula = null,
         frameSkip = 0,
         makeCanvas = (canvasEl, filterClass) =>
             tryGl
@@ -79,7 +81,7 @@ export class Display {
                   function paint(minx, miny, maxx, maxy, paintedTo) {
                       display.onPaint(this, minx, miny, maxx, maxy, paintedTo);
                   },
-                  { isAtom: model.isAtom },
+                  { isAtom: model.isAtom, hasVideoNula, onMissingVideoNula },
               );
 
         this.setCrtPic();

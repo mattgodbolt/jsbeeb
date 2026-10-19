@@ -26,11 +26,17 @@ Every listed entry is one descriptor, whichever source it came from:
 - `savesChanges` says whether writes to the disc go back to the source.
 - `url`, when present, is a page about the entry. The window renders it as a link only when it
   parses as an `http` or `https` URL; a source's manifest is not trusted further than that.
-- `requires`, when present, is the machine a disc needs, as `{ model, coProcessor, name }`:
-  `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `name` what the
-  user is told. `machineRequirement(name)` in `media-catalogue.js` maps a manifest's machine name
-  to one through the table `MachineRequirements`, and a name outside the table gives no
-  requirement.
+- `requires`, when present, is the machine a disc needs, as `{ model, coProcessor, name, needs, fittings }`:
+  `model` a synonym from `src/models.js`, `coProcessor` whether a Tube is fitted, `name` the
+  machine's name for the user, `needs` the names of the fittings it needs beyond that and
+  `fittings` the settings that fit them (`{ hasVideoNula: true }`). `requirementName` in
+  `media-catalogue.js` says the whole requirement to the user, on the running model when there is
+  no `model` (and so no `name`).
+  `requirementOf(entry)` in `media-catalogue.js` builds it from a manifest entry's `machine`, through
+  the table `MachineRequirements`, and its `needs`, through the `neededAs` names of the entries in
+  `src/web/parameters.js`. A name in neither table counts for nothing, so an entry whose `machine`
+  is unknown and whose `needs` are known requires the fittings alone. With no `model` the
+  machine switch keeps the model it has.
 
 The functions that build descriptors (`describeBuiltIn`, `describeHfeEntry`,
 `describeBitshiftersEntry` and so on) live in `media-catalogue.js`, along with `SourceRank`,
@@ -77,8 +83,11 @@ stripped. Both the manifest and the discs are served with `Access-Control-Allow-
 which any remote source needs, since the browser fetches them cross-origin.
 
 `machine` is the machine the disc needs: `Master` is the Master 128 with DFS and no Tube,
-`MasterTurbo` the same with the 65C102 co-processor. Any other field we come to read, or need
-the manifest to gain, is documented here in the same change that starts reading it.
+`MasterTurbo` the same with the 65C102 co-processor. `needs`, which jsbeeb reads but the
+manifest does not carry yet, is a list of the fittings the disc needs beyond its machine, by the
+`neededAs` names in `src/web/parameters.js`: `["VideoNuLA"]` for a disc that needs a VideoNuLA.
+Any other field we come to read, or need the manifest to gain, is documented here in the same
+change that starts reading it.
 
 ## GitHub
 
@@ -132,6 +141,7 @@ manifest's fields, with `repo` and `ref` in place of the site:
 - `authors` is optional, and plain text.
 - `machine` is optional, and takes the names `MachineRequirements` knows, as the Bitshifters
   manifest's does.
+- `needs` is optional, and lists fittings by the names the Bitshifters manifest's `needs` takes.
 - `url` is optional and defaults to the repo's page, `https://github.com/<repo>`.
 
 The entry is listed as `github:<repo>/<path>`, or `github:<repo>@<ref>/<path>` when it has a ref.

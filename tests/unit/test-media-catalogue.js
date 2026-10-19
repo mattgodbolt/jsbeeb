@@ -16,11 +16,14 @@ import {
     describeSthTape,
     compareForQuery,
     matchesQuery,
+    requirementName,
+    requirementOf,
     satisfiesRequirement,
     scoreQuery,
 } from "../../src/web/media-catalogue.js";
 import { Provenance } from "../../src/bbcdiscs.js";
 import { findModel } from "../../src/models.js";
+import { Parameters } from "../../src/web/parameters.js";
 
 describe("the media catalogue", () => {
     afterEach(() => window.localStorage.clear());
@@ -166,6 +169,76 @@ describe("the media catalogue", () => {
             expect(described.url).toBe("https://example.com/frogman");
             expect(described.detail).toBe("Game · 1993");
             expect(described.requires).toBeUndefined();
+        });
+    });
+
+    describe("the fittings an entry needs", () => {
+        const neededAs = Object.entries(Parameters).filter(([, { neededAs }]) => neededAs);
+
+        it("are the settings the Parameters table says a disc may need, by the names it gives them", () => {
+            expect(neededAs.map(([setting, { neededAs }]) => [setting, neededAs])).toEqual([
+                ["hasVideoNula", "VideoNuLA"],
+            ]);
+            for (const [setting, { type, takenFromHost, neededAs: name }] of neededAs) {
+                expect(type, setting).toBe("bool");
+                expect(takenFromHost, `${setting}, which the machine switch reads among the session's`).toBe(true);
+                expect(requirementOf({ needs: [name] }).fittings).toEqual({ [setting]: true });
+            }
+        });
+
+        it("leave the model alone without a machine, and add to the machine's with one", () => {
+            expect(requirementOf({ needs: ["VideoNuLA", "VideoNuLA"] })).toEqual({
+                needs: ["VideoNuLA"],
+                fittings: { hasVideoNula: true },
+            });
+            expect(requirementOf({ machine: "Master", needs: ["VideoNuLA"] })).toEqual({
+                ...MachineRequirements.Master,
+                needs: ["VideoNuLA"],
+                fittings: { hasVideoNula: true },
+            });
+        });
+
+        it("are named on the machine the user has, or the one the entry names", () => {
+            const master = findModel("Master");
+            expect(requirementName(requirementOf({ needs: ["VideoNuLA"] }), master)).toBe(
+                "BBC Master 128 (DFS) with a VideoNuLA",
+            );
+            expect(requirementName(requirementOf({ needs: ["VideoNuLA"] }), findModel("B-DFS1.2"))).toBe(
+                "BBC B with 8271 (DFS 1.2) and a VideoNuLA",
+            );
+            expect(requirementName(requirementOf({ machine: "MasterTurbo", needs: ["VideoNuLA"] }), master)).toBe(
+                "BBC Master 128 with a 65C102 co-processor and a VideoNuLA",
+            );
+            expect(requirementName({ needs: ["Ultracard"] }, master)).toBe("BBC Master 128 (DFS) with an Ultracard");
+            expect(requirementName(MachineRequirements.Master, findModel("B-DFS1.2"))).toBe("BBC Master 128");
+        });
+
+        it("ignore a name the table does not give, and a list that is not one", () => {
+            for (const needs of [["Chameleon"], ["constructor"], [undefined], "VideoNuLA", 7, undefined])
+                expect(requirementOf({ needs })).toBeUndefined();
+            expect(requirementOf({ machine: "Master", needs: ["Chameleon"] })).toBe(MachineRequirements.Master);
+        });
+
+        it("come with an entry from either manifest", () => {
+            const needs = ["VideoNuLA"];
+            expect(describeBitshiftersEntry({ path: "x.ssd", needs }).requires.fittings).toEqual({
+                hasVideoNula: true,
+            });
+            expect(describeGitHubEntry({ repo: "a/b", path: "x.ssd", needs }).requires.fittings).toEqual({
+                hasVideoNula: true,
+            });
+        });
+
+        it("are satisfied only by a machine started with them, whatever its model", () => {
+            const nula = requirementOf({ needs: ["VideoNuLA"] });
+            const machine = (name, fitted) => ({ model: findModel(name), hasTube: false, fitted });
+            expect(satisfiesRequirement(nula, machine("B-DFS1.2", { hasVideoNula: true }))).toBe(true);
+            expect(satisfiesRequirement(nula, machine("Master", { hasVideoNula: true }))).toBe(true);
+            expect(satisfiesRequirement(nula, machine("B-DFS1.2", { hasVideoNula: false }))).toBe(false);
+            expect(satisfiesRequirement(nula, machine("B-DFS1.2", undefined))).toBe(false);
+            const masterNula = requirementOf({ machine: "Master", needs: ["VideoNuLA"] });
+            expect(satisfiesRequirement(masterNula, machine("B-DFS1.2", { hasVideoNula: true }))).toBe(false);
+            expect(satisfiesRequirement(masterNula, machine("Master", { hasVideoNula: true }))).toBe(true);
         });
     });
 

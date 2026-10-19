@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import GitHubDiscs from "../../src/web/github-discs.json";
 import { GitHubSource } from "../../src/web/github-source.js";
-import { MachineRequirements, describeGitHubEntry } from "../../src/web/media-catalogue.js";
+import { MachineRequirements, describeGitHubEntry, requirementOf } from "../../src/web/media-catalogue.js";
 
 describe("GitHubSource", () => {
     const make = () => {
@@ -38,7 +38,7 @@ describe("GitHubSource", () => {
 
     describe("the bundled list", () => {
         const Required = ["repo", "path", "title", "publisher", "year", "type"];
-        const Known = new Set([...Required, "ref", "authors", "machine", "url"]);
+        const Known = new Set([...Required, "ref", "authors", "machine", "needs", "url"]);
 
         it.each(GitHubDiscs.map((entry) => [describeGitHubEntry(entry).ref, entry]))(
             "%s has what an entry needs, and nothing the list does not know",
@@ -50,6 +50,9 @@ describe("GitHubSource", () => {
                 expect(Number.isInteger(entry.year)).toBe(true);
                 if (entry.ref !== undefined) expect(entry.ref).toMatch(/^[^/\s]+$/);
                 if (entry.machine !== undefined) expect(Object.keys(MachineRequirements)).toContain(entry.machine);
+                if (entry.needs !== undefined) expect(Array.isArray(entry.needs), "needs is a list").toBe(true);
+                for (const name of entry.needs ?? [])
+                    expect(requirementOf({ needs: [name] }), `needs ${name}`).toBeDefined();
                 if (entry.url !== undefined) expect(new URL(entry.url).protocol).toBe("https:");
             },
         );

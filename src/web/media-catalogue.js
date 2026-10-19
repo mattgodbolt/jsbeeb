@@ -1,6 +1,7 @@
 import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
 import { Schemas, splitImage } from "../media-resolver.js";
 import { findModel } from "../models.js";
+import { Parameters } from "./parameters.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
@@ -10,7 +11,7 @@ import { findModel } from "../models.js";
  *
  * `ref` is what loadDiscImage or loadTapeImage takes and what goes in the URL; `url` is a
  * page about the entry, when its source has one; `requires` is the machine the entry runs on,
- * from `machineRequirement`, when its source says.
+ * from `requirementOf`, when its source says.
  */
 
 // `name` heads a chip; `phrase` sits mid-sentence in a slot's status line. A `personal` source holds
@@ -127,9 +128,47 @@ export const MachineRequirements = Object.freeze({
 export const machineRequirement = (machine) =>
     Object.hasOwn(MachineRequirements, machine) ? MachineRequirements[machine] : undefined;
 
-/** Whether a machine is the one a requirement names: that model, with a Tube if and only if it says so. */
-export function satisfiesRequirement(requires, { model, hasTube }) {
-    return model === findModel(requires.model) && hasTube === requires.coProcessor;
+// Looked up when asked, since parameters.js imports this module by way of analytics-filters.js.
+const settingNeededAs = (name) =>
+    typeof name === "string"
+        ? Object.entries(Parameters).find(([, { neededAs }]) => neededAs === name)?.[0]
+        : undefined;
+
+/**
+ * A descriptor's `requires` for a manifest entry's `machine` and the fittings it `needs`, or undefined for neither; a
+ * name outside `MachineRequirements` or the Parameters' `neededAs` is no requirement. A requirement with fittings has
+ * their names as `needs` and the settings that fit them as `fittings`, and leaves the model as it is unless it names a
+ * machine too.
+ */
+export function requirementOf({ machine, needs }) {
+    const required = machineRequirement(machine);
+    const named = [...new Set(Array.isArray(needs) ? needs : [])].filter((name) => settingNeededAs(name));
+    if (named.length === 0) return required;
+    return {
+        ...required,
+        needs: named,
+        fittings: Object.fromEntries(named.map((name) => [settingNeededAs(name), true])),
+    };
+}
+
+const withArticle = (name) => `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+
+/** What the user is told a requirement is, on a machine that is `model` now: "BBC Master 128 with a VideoNuLA". */
+export function requirementName({ name, needs = [] }, model) {
+    const machine = name ?? model.name;
+    if (needs.length === 0) return machine;
+    return `${machine}${machine.includes(" with ") ? " and" : " with"} ${needs.map(withArticle).join(" and ")}`;
+}
+
+/**
+ * Whether a machine is the one a requirement names: that model, with a Tube if and only if it says so, and every
+ * fitting it needs among the settings the machine was started with (`fitted`).
+ */
+export function satisfiesRequirement(requires, { model, hasTube, fitted = {} }) {
+    return (
+        (requires.model === undefined || (model === findModel(requires.model) && hasTube === requires.coProcessor)) &&
+        Object.entries(requires.fittings ?? {}).every(([setting, value]) => fitted[setting] === value)
+    );
 }
 
 // The site's manifest carries its own markup in a publisher or an author, a <span> or a link.
@@ -147,7 +186,7 @@ export function describeBitshiftersEntry(file) {
         source: "bitshifters",
         savesChanges: false,
         url: file.url,
-        requires: machineRequirement(file.machine),
+        requires: requirementOf(file),
     };
 }
 
@@ -161,7 +200,7 @@ export function describeGitHubEntry(entry) {
         source: "github",
         savesChanges: false,
         url: entry.url ?? `https://github.com/${entry.repo}`,
-        requires: machineRequirement(entry.machine),
+        requires: requirementOf(entry),
     };
 }
 

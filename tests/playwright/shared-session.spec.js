@@ -45,6 +45,34 @@ test("a guest joins a hosted session, and what either types reaches both machine
     }
 });
 
+test("a guest without the host's VideoNuLA reloads with one, joins and runs the same machine", async ({
+    browser,
+    beeb,
+}) => {
+    test.setTimeout(SessionTestTimeoutMs);
+    const room = `e2e-${Date.now()}`;
+    await beeb.open(`?server=${room}&hasVideoNula`);
+    await beeb.expectScreenText("BASIC");
+    await beeb.disableAutoRepeat();
+
+    const guestContext = await browser.newContext();
+    const guest = new Beeb(await guestContext.newPage());
+    try {
+        await guest.open(`?client=${room}`);
+        await expect
+            .poll(() => new URL(guest.page.url()).searchParams.has("hasVideoNula"), { timeout: JoinTimeoutMs })
+            .toBe(true);
+        await guest.expectScreenText("BASIC", JoinTimeoutMs);
+
+        await typeLine(beeb, "PRINT 50-8");
+        await guest.expectScreenText("42");
+        await expect.poll(() => guest.screenText()).toBe(await beeb.screenText());
+        expect(guest.problems, "errors the guest's page logged").toEqual([]);
+    } finally {
+        await guestContext.close();
+    }
+});
+
 test("Shared session in the More menu hosts this machine, paused or not, and a guest joins by pasting the link, keeping its own audio latency", async ({
     browser,
     beeb,
