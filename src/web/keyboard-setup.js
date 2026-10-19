@@ -2,6 +2,7 @@ import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
 import { keyCodes } from "../keymap.js";
 import { Shortcuts } from "./shortcuts.js";
+import { RunMode } from "./emulation-loop.js";
 
 const PasteBoxId = "paste-text";
 /** The eight accessibility switches, on the number keys. */
@@ -15,6 +16,7 @@ const KeyboardSinks = `#${PasteBoxId}, #media-panel, .goto-addr`;
 // the keyboard at all. The paste box keeps every key, because on a Mac Alt is Option and types
 // an accented character rather than nothing.
 const ShortcutSinks = `#${PasteBoxId}`;
+const inKeyboardSink = () => !!document.activeElement?.closest(KeyboardSinks);
 
 /**
  * Builds the emulated keyboard and wires the browser's shortcuts around it,
@@ -24,27 +26,26 @@ export class KeyboardSetup {
     /**
      * @param {object} opts
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
-     *   toggleDebugger, toggleFast, openRewind, openPrinter, openMedia,
-     *   pause, resume, paste, onAnyKeyDown
+     *   toggleFast, openRewind, openPrinter, openMedia, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
+     * @param {import("./emulation-loop.js").EmulationLoop} opts.loop
      */
-    constructor({ actions, accessibilitySwitches, processor, dbgr, keyLayout }) {
+    constructor({ actions, accessibilitySwitches, processor, loop, dbgr, keyLayout }) {
+        this.loop = loop;
+        this.dbgr = dbgr;
         const keyboard = (this.keyboard = new Keyboard({
             processor,
-            inputEnabledFunction: () => !!document.activeElement?.closest(KeyboardSinks),
+            inputEnabledFunction: inKeyboardSink,
             shortcutsBlockedFunction: () => !!document.activeElement?.closest(ShortcutSinks),
+            runningFunction: () => loop.isRunning(),
             keyLayout,
-            dbgr,
         }));
         keyboard.addEventListener("notice", showNotice);
-        keyboard.addEventListener("pause", () => actions.pause());
-        keyboard.addEventListener("resume", () => actions.resume());
 
         const alt = { alt: true, ctrl: false };
         const runners = {
-            toggleDebugger: () => actions.toggleDebugger(),
-            // `running` is pushed in from the loop, so it stays true whatever stopped the machine.
-            togglePause: () => (keyboard.running ? keyboard.pauseEmulation() : keyboard.resumeEmulation()),
+            toggleDebugger: () => (loop.mode === RunMode.debugging ? loop.go() : loop.stop(true)),
+            togglePause: () => (loop.isRunning() ? loop.stop(false) : loop.go()),
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
             openRewind: () => actions.openRewind(),
@@ -72,7 +73,7 @@ export class KeyboardSetup {
             actions.onAnyKeyDown();
             keyboard.keyDown(evt);
         });
-        document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
+        document.addEventListener("keypress", (evt) => this.keyPress(evt));
         document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
         document.addEventListener("paste", (evt) => {
             const target = document.activeElement;
@@ -80,5 +81,14 @@ export class KeyboardSetup {
             const text = evt.clipboardData?.getData("text/plain");
             if (text) actions.paste(text);
         });
+    }
+
+    /** The debugger's keys, and a pause's, are the characters they print, not positions. */
+    keyPress(evt) {
+        if (inKeyboardSink()) return;
+        const { loop, dbgr } = this;
+        if (loop.mode === RunMode.paused && evt.key === "n") loop.step();
+        else if ((loop.mode === RunMode.paused || loop.mode === RunMode.debugging) && evt.key === "g") loop.go();
+        else if (loop.mode === RunMode.debugging && dbgr.keyPress(evt.key)) evt.preventDefault();
     }
 }

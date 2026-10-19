@@ -21,7 +21,7 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop } from "./web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
@@ -204,23 +204,26 @@ const machine = new Machine({
 });
 const processor = machine.processor;
 
+const loop = new EmulationLoop({
+    processor,
+    display,
+    audioHandler,
+    dbgr,
+    gamepad,
+    clocksPerSecond,
+    cpuSpeed,
+    fastTape: !!parsedQuery.fasttape,
+    audioStatsNode,
+});
+
+new RunControls({ loop });
+
 const { keyboard } = new KeyboardSetup({
     actions: {
-        toggleDebugger: () => {
-            if (!dbgr.enabled()) return loop.stop(true);
-            dbgr.hide();
-            loop.go();
-        },
         toggleFast: () => loop.toggleFastAsPossible(),
         openRewind: () => rewindUI.open(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
-        pause: () => loop.stop(false),
-        resume: () => {
-            // However the machine was stopped, coming back leaves no debugger behind it.
-            dbgr.hide();
-            loop.go();
-        },
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
         onAnyKeyDown: () => {
             audioHandler.tryResume();
@@ -229,24 +232,10 @@ const { keyboard } = new KeyboardSetup({
     },
     accessibilitySwitches,
     processor,
+    loop,
     dbgr,
     keyLayout,
 });
-
-const loop = new EmulationLoop({
-    processor,
-    display,
-    audioHandler,
-    dbgr,
-    gamepad,
-    keyboard,
-    clocksPerSecond,
-    cpuSpeed,
-    fastTape: !!parsedQuery.fasttape,
-    audioStatsNode,
-});
-
-const runControls = new RunControls({ loop, dbgr, keyboard });
 
 const modals = new Modals({ loop });
 
@@ -425,7 +414,7 @@ async function startAsTheUrlAsks() {
     // Restore the state a cross-model reload stashed, if there is one.
     await snapshots.restorePendingState();
 
-    if (!dbgr.enabled()) loop.go();
+    if (loop.mode !== RunMode.debugging) loop.go();
     return true;
 }
 
@@ -463,7 +452,7 @@ async function startAsTheUrlAsks() {
             refusal: sessionRefusal(sessionContext),
             host: async (name) => {
                 const session = await hostSession(sessionContext, name);
-                if (session && !loop.isRunning()) runControls.resume();
+                if (session) loop.go();
                 return session;
             },
             join: (room, name) => window.location.assign(joinLink(room, name, urlState.params)),
@@ -495,8 +484,8 @@ electron({
         "save-state": () => snapshots.saveState(),
         media: () => mediaWindow.open(),
         rewind: () => rewindUI.open(),
-        pause: () => runControls.pause(),
-        resume: () => runControls.resume(),
+        pause: () => loop.stop(true),
+        resume: () => loop.go(),
     },
 });
 

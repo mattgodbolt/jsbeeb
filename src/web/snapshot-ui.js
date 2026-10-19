@@ -110,7 +110,7 @@ export class SnapshotUI {
 
     async saveState() {
         noteFeature(this.saveItem, "save");
-        const resume = this.loop.pause("saving state");
+        const resume = this.loop.hold("saving state");
         try {
             const manifest = snapshotMedia(this.slots);
             const snapshot = createSnapshot(this.processor, this.model, manifest);
@@ -127,7 +127,7 @@ export class SnapshotUI {
 
     async loadStateFromFile(file, preReadBuffer) {
         noteFeature(this.saveItem, "load");
-        const resume = this.loop.pause("loading state");
+        const resume = this.loop.hold("loading state");
         try {
             const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
             const snapshot = await readSnapshot(arrayBuffer);

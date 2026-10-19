@@ -198,7 +198,7 @@ describe("the media window against a real machine", () => {
             media,
             urlState,
             modals,
-            loop: { pause: () => () => {} },
+            loop: { hold: () => () => {} },
         });
         window.open();
         await search("elite");

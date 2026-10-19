@@ -98,7 +98,7 @@ describe("SessionDialog", () => {
     it("hosts once the page has let go of the machine it held for the dialog", async () => {
         domFromIndexHtml("error-dialog", "are-you-sure");
         const letGo = vi.fn();
-        new Modals({ loop: { pause: () => letGo } });
+        new Modals({ loop: { hold: () => letGo } });
         let heldWhenHosting;
         host.mockImplementation(async () => {
             heldWhenHosting = letGo.mock.calls.length === 0;
