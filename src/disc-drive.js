@@ -516,7 +516,10 @@ export class DiscDrive extends BaseDiscDrive {
 
         // Restore spinning state and timer
         this._timer.cancel();
+        const wasSpinning = this._spinning;
         this._spinning = state.spinning;
+        if (this._spinning !== wasSpinning)
+            this.dispatchEvent(new Event(this._spinning ? "startSpinning" : "stopSpinning"));
         this._speedThen = state.speed ?? 1;
         this._speedEpoch = this._scheduler.epoch;
         if (state.timerTaskOffset !== null) this._timer.schedule(state.timerTaskOffset);
