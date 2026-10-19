@@ -10,6 +10,8 @@ import { findModel } from "../../src/models.js";
 const AtomModel = findModel("Atom");
 
 const ms = (n) => n * 2000;
+const WriteEnable = 0x01;
+const ResetAddr = 2;
 
 class FakeDrive {
     constructor() {
@@ -96,6 +98,13 @@ describe("Intel 8271 tests", function () {
         expect(fdc._driveOut & loadHead).toBe(loadHead);
         expect(fakeDrive.spinning).toBe(true);
     });
+
+    it("survives a reset with write enable up and the head unloaded", () => {
+        const fdc = new IntelFdc(fake6502(), new Scheduler(), [new FakeDrive()]);
+        sendCommand(fdc, writeRegCmd, mmioWrite, WriteEnable | driveSelect1);
+        expect(() => fdc.write(ResetAddr, 1)).not.toThrow();
+    });
+
     it("should seek to a track", () => {
         const fakeCpu = fake6502();
         const scheduler = new Scheduler();
@@ -247,13 +256,11 @@ describe("Intel 8271 tests", function () {
     describe("seek to track 0", () => {
         const resultAddr = 1;
         const trackZeroNotFound = 0x14;
-        const writeEnable = 0x01;
-        const resetAddr = 2;
         const specifyCmd = 0x35;
         const initialisation = 0x0d;
         // As DFS 1.20 specifies: the head stays loaded for 12 revolutions after a command, here the status read.
         const dfsHeadLoadUnload = 0xc8;
-        // A step rate of 0 leaves the steps to the drive, which jsbeeb takes as 3 ms.
+        // What _stepRateMs takes for a step rate of 0.
         const StepMs = 3;
 
         function seekToZeroFromTrack20(driveOut, { restoreMidSeek = false } = {}) {
@@ -281,12 +288,6 @@ describe("Intel 8271 tests", function () {
             const steps = Math.round((scheduler.epoch - start) / ms(StepMs));
             return { result: fdc.read(resultAddr), track: drive.track, steps };
         }
-
-        it("survives a reset with write enable up and the head unloaded", () => {
-            const fdc = new IntelFdc(fake6502(), new Scheduler(), [new FakeDrive()]);
-            sendCommand(fdc, writeRegCmd, mmioWrite, writeEnable | driveSelect1);
-            expect(() => fdc.write(resetAddr, 1)).not.toThrow();
-        });
 
         it("with the head loaded first, as the DFS does, finds it", () => {
             expect(seekToZeroFromTrack20(loadHead | driveSelect1)).toMatchObject({ result: 0, track: 0 });

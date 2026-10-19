@@ -17,7 +17,6 @@ function makeCpu(model = TEST_6502) {
     return new model.Cpu(model, { ...nullIo({ video, soundChip }), config: machineSpec() });
 }
 
-// The 8271 seek command, selecting drive 1.
 const SeekDrive1 = 0x69;
 const WriteSpecialRegister = 0x3a;
 const DriveOutRegister = 0x23;
