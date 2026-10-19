@@ -17,6 +17,8 @@ const DataRegister = 7;
 // this is double density.
 const ControlRunningDrive0 = 0x21;
 const ControlRunningDrive0Fm = 0x29;
+const ControlRunningDrive1 = 0x22;
+const ControlRunningNoDrive = 0x20;
 
 const StatusBusy = 0x01;
 const StatusDrq = 0x02;
@@ -44,6 +46,9 @@ const SpinUpWaitFlag = 0x08;
 
 const TicksPerMs = 2000;
 const RevolutionTicks = 200 * TicksPerMs;
+// The step rate a command's rate bits of 00 select.
+const StepTicks = 6 * TicksPerMs;
+const RestoreGiveUpSteps = 255;
 const DoneTimerTicks = 64;
 // Long enough to reach the drive's first pulse callback and to outlast the 32us the controller
 // takes to report a command as complete, but still well inside a seek's first step.
@@ -283,6 +288,43 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
+    describe("with no drive selected", () => {
+        it("aborts a command whose drive was deselected while it ran", () => {
+            const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
+            fdc.write(CommandRegister, ReadSectorCommand);
+            scheduler.polltime(ShortWaitTicks);
+            fdc.write(ControlRegister, ControlRunningNoDrive);
+            fdc.write(CommandRegister, ForceInterrupt);
+            scheduler.polltime(ShortWaitTicks);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
+        });
+
+        it("aborts a command issued with no drive selected, which waits for index pulses that never come", () => {
+            const { scheduler, fdc } = makeFdc({ control: ControlRunningNoDrive });
+            fdc.write(CommandRegister, ReadSectorCommand);
+            scheduler.polltime(MaxCommandTicks);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(StatusBusy);
+            fdc.write(CommandRegister, ForceInterrupt);
+            scheduler.polltime(ShortWaitTicks);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
+        });
+
+        it("accepts a force interrupt with no drive selected when idle", () => {
+            const { fdc } = makeFdc({ control: ControlRunningNoDrive });
+            expect(() => fdc.write(CommandRegister, ForceInterrupt)).not.toThrow();
+        });
+
+        it.each([
+            ["without", 0, 0],
+            ["with", VerifyFlag, StatusRecordNotFound],
+        ])("gives up a restore %s verify after 255 steps with no drive selected", (_, verify, seekError) => {
+            const { scheduler, fdc } = makeFdc({ control: ControlRunningNoDrive });
+            const { status, ticks } = runCommand(fdc, scheduler, RestoreCommand | verify);
+            expect(status & StatusRecordNotFound).toBe(seekError);
+            expect(Math.round(ticks / StepTicks)).toBe(RestoreGiveUpSteps);
+        });
+    });
+
     describe("peeking", () => {
         it("shows the status without clearing the interrupt, as reading it does", () => {
             const { cpu, fdc } = makeFdc();
@@ -395,6 +437,94 @@ describe("WD1770 FDC tests", () => {
                 rewritten.scheduler.polltime(ShortWaitTicks);
             }
             expect(rewritten.drive.positionFraction).toBe(steady.drive.positionFraction);
+        });
+
+        describe("written mid-command", () => {
+            const SeekTarget = 40;
+            const StepsBeforeWrite = 10;
+
+            const runUntilIdle = (fdc, scheduler) => {
+                const start = scheduler.epoch;
+                while (fdc.read(StatusRegister) & StatusBusy) {
+                    scheduler.polltime(ShortWaitTicks);
+                    if (scheduler.epoch - start > MaxCommandTicks) throw new Error("Command never finished");
+                }
+            };
+
+            const seekThenWriteControl = (control) => {
+                const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+                drives[1].setDisc(blankDisc());
+                const noises = [];
+                drives[0].addEventListener("seekStart", (event) => noises.push(event.steps));
+                drives[0].addEventListener("seekEnd", (event) => noises.push(`end after ${event.steps}`));
+                fdc.write(TrackRegister, 0);
+                fdc.write(DataRegister, SeekTarget);
+                fdc.write(CommandRegister, SeekCommand);
+                scheduler.polltime(StepsBeforeWrite * StepTicks - ShortWaitTicks);
+                fdc.write(ControlRegister, control);
+                runUntilIdle(fdc, scheduler);
+                return { fdc, drives, noises };
+            };
+
+            it("steps the newly selected drive for the rest of the seek", () => {
+                const { fdc, drives } = seekThenWriteControl(ControlRunningDrive1);
+                expect(fdc.read(TrackRegister)).toBe(SeekTarget);
+                expect([drives[0].track, drives[1].track]).toEqual([StepsBeforeWrite, SeekTarget - StepsBeforeWrite]);
+                expect([drives[0].spinning, drives[1].spinning]).toEqual([false, true]);
+            });
+
+            it("finishes the seek with no drive selected", () => {
+                const { fdc, drives } = seekThenWriteControl(ControlRunningNoDrive);
+                expect(fdc.read(TrackRegister)).toBe(SeekTarget);
+                expect(drives[0].track).toBe(StepsBeforeWrite);
+            });
+
+            it("ends the deselected drive's seek noise at the steps it took", () => {
+                const { noises } = seekThenWriteControl(ControlRunningNoDrive);
+                expect(noises).toEqual([SeekTarget, `end after ${StepsBeforeWrite}`]);
+            });
+
+            it("reads the newly selected drive's sector", () => {
+                const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+                drives[1].setDisc(mfmDiscWithSector({}));
+                fdc.write(CommandRegister, ReadAddressCommand);
+                scheduler.polltime(ShortWaitTicks);
+                fdc.write(ControlRegister, ControlRunningDrive1);
+                const bytes = [];
+                const start = scheduler.epoch;
+                while (fdc.read(StatusRegister) & StatusBusy && scheduler.epoch - start < MaxCommandTicks) {
+                    if (fdc.read(StatusRegister) & StatusDrq) bytes.push(fdc.read(DataRegister));
+                    scheduler.polltime(PollTicks);
+                }
+                expect(bytes.slice(0, 4)).toEqual([0, 0, 0, SectorLengthCode]);
+                expect(fdc.read(StatusRegister) & StatusRecordNotFound).toBe(0);
+            });
+
+            it("leaves the seek and its noise alone when rewritten with the same drive", () => {
+                const { fdc, drives, noises } = seekThenWriteControl(ControlRunningDrive0);
+                expect(fdc.read(TrackRegister)).toBe(SeekTarget);
+                expect(drives[0].track).toBe(SeekTarget);
+                expect(noises).toEqual([SeekTarget, `end after ${SeekTarget}`]);
+            });
+
+            it("counts the newly selected drive's index pulses", () => {
+                // Drive 0 has no disc, so its index never ends and the read would never give up.
+                const { scheduler, fdc, drives } = makeFdc();
+                drives[1].setDisc(blankDisc());
+                fdc.write(CommandRegister, ReadAddressCommand);
+                scheduler.polltime(ShortWaitTicks);
+                fdc.write(ControlRegister, ControlRunningDrive1);
+                runUntilIdle(fdc, scheduler);
+                expect(fdc.read(StatusRegister) & StatusRecordNotFound).toBe(StatusRecordNotFound);
+            });
+
+            it("waits for a disc with no drive selected", () => {
+                const { scheduler, fdc } = makeFdc({ disc: mfmDiscWithSector({}) });
+                fdc.write(CommandRegister, ReadSectorCommand | SettleFlag);
+                fdc.write(ControlRegister, ControlRunningNoDrive);
+                scheduler.polltime(MaxCommandTicks);
+                expect(fdc.read(StatusRegister) & StatusBusy).toBe(StatusBusy);
+            });
         });
     });
 
