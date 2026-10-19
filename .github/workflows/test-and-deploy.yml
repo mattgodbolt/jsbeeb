@@ -59,6 +59,8 @@ jobs:
         env:
           VITEST_JOB_SUMMARY_TITLE: Integration tests
         run: npm run test:integration
+      - name: Benchmark workloads are what their script builds
+        run: npm run test:benchmark-workloads
       - name: Same-answer check
         run: npm run test:same-answer
       - name: Shader tests

@@ -56,7 +56,7 @@ When `discNCrc32` is present, it is compared against the CRC32 of the reloaded d
 - **v3** — Added second processor state (`state.tube`) and the top-level `coProcessor` flag. Nothing before v3 captured tube state, so earlier snapshots are always host-only and load into a machine without a co-processor unchanged.
 - **v4**: TypedArrays of 1024 bytes or more are deflated before their base64 encoding (see [TypedArray encoding](#typedarray-encoding)). The state itself is unchanged, and plain base64 arrays from earlier versions still load.
 
-The benchmark workloads in `public/benchmarks` are snapshots in this format, restored in CI. After a change that stops them loading, `npm run benchmark:workloads` rebuilds them.
+The benchmark workloads in `public/benchmarks` are snapshots in this format, restored in CI, which also checks they are what `npm run benchmark:workloads` builds (`npm run test:benchmark-workloads`). After a change to the snapshot format or to what a boot does, that command rebuilds them.
 
 ### Imported snapshots
 
