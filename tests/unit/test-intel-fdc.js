@@ -203,6 +203,35 @@ describe("Intel 8271 tests", function () {
         });
     });
 
+    describe("motor", () => {
+        const driveSelect2 = 0x80;
+        const ms = (n) => n * 2000;
+
+        function twoDriveFdc() {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            const drives = [0, 1].map((id) => new DiscDrive(id, scheduler, cpu.peripheralCyclesPerSecond));
+            const fdc = new IntelFdc(cpu, scheduler, drives);
+            return { fdc, scheduler, drives };
+        }
+
+        it("turns both drives while the head is loaded, and neither once it unloads", () => {
+            const { fdc, drives } = twoDriveFdc();
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, driveSelect1);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([false, false]);
+        });
+
+        it("finds the newly selected drive already up to speed", () => {
+            const { fdc, scheduler, drives } = twoDriveFdc();
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            scheduler.polltime(ms(2000));
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect2);
+            expect(drives[1].speed).toBe(1);
+        });
+    });
+
     describe("ready", () => {
         const ms = (n) => n * 2000;
 

@@ -35,6 +35,7 @@ const AllFlagCombinations = [...Array(16).keys()];
 // revolutions of delay.
 const RestoreCommand = 0x08;
 const SeekCommand = 0x18;
+const StepInCommand = 0x48;
 const StepOutWithUpdateCommand = 0x78;
 const ReadSectorCommand = 0x88;
 const ReadAddressCommand = 0xc8;
@@ -372,7 +373,6 @@ describe("WD1770 FDC tests", () => {
             return events;
         };
         const StepRate12ms = 0x01;
-        const StepInCommand = 0x48;
         const StepOutCommand = 0x68;
 
         it("is the difference between the track asked for and the track register, at the command's rate, ending when the head stops", () => {
@@ -470,7 +470,7 @@ describe("WD1770 FDC tests", () => {
                 const { fdc, drives } = seekThenWriteControl(ControlRunningDrive1);
                 expect(fdc.read(TrackRegister)).toBe(SeekTarget);
                 expect([drives[0].track, drives[1].track]).toEqual([StepsBeforeWrite, SeekTarget - StepsBeforeWrite]);
-                expect([drives[0].spinning, drives[1].spinning]).toEqual([false, true]);
+                expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
             });
 
             it("finishes the seek with no drive selected", () => {
@@ -525,6 +525,40 @@ describe("WD1770 FDC tests", () => {
                 scheduler.polltime(MaxCommandTicks);
                 expect(fdc.read(StatusRegister) & StatusBusy).toBe(StatusBusy);
             });
+        });
+    });
+
+    describe("motor", () => {
+        const ControlRunningDrive1 = 0x22;
+        const SpinDownTicks = 10 * RevolutionTicks;
+
+        it("turns the unselected drive at the same speed as the selected one", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            scheduler.polltime(RevolutionTicks);
+            expect(drives[1].spinning).toBe(true);
+            expect(drives[1].speed).toBe(drives[0].speed);
+        });
+
+        it("keeps turning both drives across a change of drive", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            fdc.write(ControlRegister, ControlRunningDrive1);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+        });
+
+        it("stops both drives when the motor times out", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            scheduler.polltime(SpinDownTicks);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([false, false]);
+        });
+
+        it("reads only the selected drive", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            drives[1].setDisc(mfmDiscWithSector({}));
+            const { status } = runCommand(fdc, scheduler, ReadAddressCommand);
+            expect(status & StatusRecordNotFound).toBe(StatusRecordNotFound);
         });
     });
 
@@ -856,14 +890,16 @@ describe("WD1770 FDC tests", () => {
                 expect(fdc.read(TrackRegister)).toBe(0xfe);
             });
 
-            it("selects the drive from bit 0 of the control register", () => {
-                const drive0 = makeOpus(OpusDoubleDensity);
-                drive0.fdc.write(OpusCommandRegister, ForceInterrupt);
-                expect(drive0.fdc.motorOn).toEqual([true, false]);
-
-                const drive1 = makeOpus(OpusDoubleDensity | OpusDrive1);
-                drive1.fdc.write(OpusCommandRegister, ForceInterrupt);
-                expect(drive1.fdc.motorOn).toEqual([false, true]);
+            it.each([
+                ["0", OpusDoubleDensity, [1, 0]],
+                ["1", OpusDoubleDensity | OpusDrive1, [0, 1]],
+            ])("selects drive %s from bit 0 of the control register", (_, control, tracks) => {
+                const { scheduler, fdc, drives } = makeOpus(control);
+                runCommand(fdc, scheduler, StepInCommand, {
+                    commandRegister: OpusCommandRegister,
+                    dataRegister: OpusDataRegister,
+                });
+                expect([drives[0].track, drives[1].track]).toEqual(tracks);
             });
 
             it.each([
