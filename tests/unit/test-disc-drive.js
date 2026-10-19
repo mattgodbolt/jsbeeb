@@ -545,6 +545,20 @@ describe("drive noise", () => {
         expect(calls.at(-1)).toBe("spinDown");
     });
 
+    it("stays balanced over restores that leave a drive as it was", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives();
+        drives[0].startSpinning();
+        const turning = drives[0].snapshotState();
+        drives[0].restoreState(turning);
+        drives[0].restoreState(turning);
+        drives[1].restoreState(drives[1].snapshotState());
+
+        drives[0].stopSpinning();
+        vi.runAllTimers();
+        expect(calls.at(-1)).toBe("spinDown");
+    });
+
     it("passes every seek's start and end on, from either drive", () => {
         const { drives, calls } = noisyDrives();
 

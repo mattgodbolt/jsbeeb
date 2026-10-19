@@ -518,8 +518,6 @@ export class DiscDrive extends BaseDiscDrive {
         this._timer.cancel();
         const wasSpinning = this._spinning;
         this._spinning = state.spinning;
-        if (this._spinning !== wasSpinning)
-            this.dispatchEvent(new Event(this._spinning ? "startSpinning" : "stopSpinning"));
         this._speedThen = state.speed ?? 1;
         this._speedEpoch = this._scheduler.epoch;
         if (state.timerTaskOffset !== null) this._timer.schedule(state.timerTaskOffset);
@@ -528,5 +526,8 @@ export class DiscDrive extends BaseDiscDrive {
         if (state.disc && this._disc) {
             this._disc.restoreState(state.disc);
         }
+
+        if (this._spinning !== wasSpinning)
+            this.dispatchEvent(new Event(this._spinning ? "startSpinning" : "stopSpinning"));
     }
 }
