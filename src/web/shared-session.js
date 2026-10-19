@@ -735,7 +735,7 @@ export class SessionHost {
             await pc.setRemoteDescription({ type: "offer", sdp });
             await pc.setLocalDescription(await pc.createAnswer());
             const description = await gatheredDescription(pc);
-            if (this.guests.get(id) !== guest) return;
+            if (this.closed || this.guests.get(id) !== guest) return;
             await this.context.rendezvous.postAnswer(this.room, this.secret, id, description);
         } catch (error) {
             console.warn(`Shared session: answering ${id} failed: ${error.message}`);
