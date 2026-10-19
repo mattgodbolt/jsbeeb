@@ -387,6 +387,49 @@ describe("SoundChipProcessor rendering", () => {
         for (let i = 0; i < 10; ++i) output.push(...quantum(proc));
         expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeGreaterThan(0.1);
     });
+
+    it("should play a state restored while paused straight away, not hold the old one for the rewound time", () => {
+        const RewoundMs = 3000;
+        const TickMs = 10;
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = makeProducer(proc);
+        producer.poke(...toneWrites(AliasTonePeriod));
+        const restoredState = producer.chip.snapshotState();
+        producer.advance(RewoundMs);
+        producer.poke(...ToneOn);
+        producer.advance(proc.targetLatencyMs);
+        producer.flush();
+        simulate(proc, producer, 0.2, { tickMs: TickMs });
+        mute(proc);
+        producer.flush();
+        simulate(proc, producer, 0.2, { ticking: () => false });
+        expect(proc.stalled).toBe(true);
+
+        producer.chip.scheduler.epoch -= RewoundMs * CyclesPerMs;
+        producer.chip.restoreState(restoredState);
+        producer.flush();
+        proc.onMessage({ command: "setEnabled", enabled: true });
+        const waiting = simulate(proc, producer, (proc.targetLatencyMs + TickMs) / 1000, { tickMs: TickMs });
+        expect(proc.stalled).toBe(false);
+        const { output } = simulate(proc, producer, 0.1, { tickMs: TickMs });
+        for (const heard of [waiting.output, output]) {
+            expect(goertzelAmplitude(heard, AliasToneHz, OutputRate)).toBeGreaterThan(0.1);
+            expect(goertzelAmplitude(heard, ToneHz, OutputRate)).toBeLessThan(0.01);
+        }
+    });
+
+    it("should keep the writes that follow a restore in the same batch", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = startedWithTone(proc);
+        const silentState = makeProducer(proc).chip.snapshotState();
+        producer.chip.restoreState(silentState);
+        producer.poke(...toneWrites(AliasTonePeriod));
+        producer.advance(proc.targetLatencyMs);
+        producer.flush();
+        const { output } = simulate(proc, producer, 0.2, { collectAfter: 0.05 });
+        expect(goertzelAmplitude(output, AliasToneHz, OutputRate)).toBeGreaterThan(0.1);
+        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(0.01);
+    });
 });
 
 describe("SoundChipProcessor rate control", () => {
