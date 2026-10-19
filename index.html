@@ -920,125 +920,151 @@
       aria-labelledby="helpModalLabel"
       aria-hidden="true"
     >
-      <div class="modal-dialog">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-sm-down">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="helpModalLabel">Help</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <div>
-              An emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular home
-              computer in 1980s Britain. It emulates the BBC B and the Master, and also the
-              <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them. Choose which by
-              clicking the model name at the top left.
-            </div>
-            <div>
-              The default disc is Elite, a pioneering 3D space trading game. Discs are booted by pressing
-              <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The BBC's keyboard differs from a
-              modern one, mostly in where the symbols are; the layout here currently assumes a US keyboard.
-            </div>
-            <div>
-              <h5>Handy key mappings</h5>
-              <table class="keymap">
-                <tr>
-                  <th>BBC</th>
-                  <th>PC</th>
-                  <th>macOS</th>
-                </tr>
-                <tr>
-                  <td><span class="function key">F0</span></td>
-                  <td><span class="key">F10</span></td>
-                  <td><span class="key">F10</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key">BREAK</span></td>
-                  <td><span class="key">F12</span></td>
-                  <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key">COPY</span></td>
-                  <td><span class="key">End</span></td>
-                  <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="dbl key">*<br />:</div>
-                  </td>
-                  <td>
-                    <div class="dbl key">"<br />'</div>
-                  </td>
-                  <td>
-                    <div class="dbl key">"<br />'</div>
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="dbl key">CAPS<br />LOCK</div>
-                  </td>
-                  <td class="key">CAPSLOCK</td>
-                  <td>See notes</td>
-                </tr>
-                <tr>
-                  <td>Debugger, in or out</td>
-                  <td><span class="key">Alt-S</span></td>
-                  <td><span class="key">Alt-S</span></td>
-                </tr>
-                <tr>
-                  <td>Pause or resume</td>
-                  <td><span class="key">Alt-P</span></td>
-                  <td><span class="key">Alt-P</span></td>
-                </tr>
-                <tr>
-                  <td>Full speed</td>
-                  <td><span class="key">Alt-T</span></td>
-                  <td><span class="key">Alt-T</span></td>
-                </tr>
-                <tr>
-                  <td>Printer output</td>
-                  <td><span class="key">Alt-B</span></td>
-                  <td><span class="key">Alt-B</span></td>
-                </tr>
-                <tr>
-                  <td>Rewind</td>
-                  <td><span class="key">Alt-W</span></td>
-                  <td><span class="key">Alt-W</span></td>
-                </tr>
-                <tr>
-                  <td>Discs and tapes, for drive 0</td>
-                  <td><span class="key">Alt-M</span></td>
-                  <td><span class="key">Alt-M</span></td>
-                </tr>
-                <tr>
-                  <td>Discs and tapes, for drive 1</td>
-                  <td><span class="key">Alt-Shift-M</span></td>
-                  <td><span class="key">Alt-Shift-M</span></td>
-                </tr>
-                <tr>
-                  <td>Discs and tapes, for the cassette</td>
-                  <td><span class="key">Alt-C</span></td>
-                  <td><span class="key">Alt-C</span></td>
-                </tr>
-                <tr>
-                  <td>Hold an accessibility switch</td>
-                  <td><span class="key">Alt-1 to Alt-8</span></td>
-                  <td><span class="key">Alt-1 to Alt-8</span></td>
-                </tr>
-              </table>
-              <div>
-                While paused, <span class="key">g</span> resumes and <span class="key">n</span> runs one frame. In the
-                debugger, <span class="key">g</span> resumes, <span class="key">n</span> steps one instruction,
-                <span class="key">m</span> steps over a call, <span class="key">o</span> steps out of one,
-                <span class="key">t</span> toggles a breakpoint on the highlighted instruction,
-                <span class="key">j</span> and <span class="key">k</span> move the disassembly,
-                <span class="key">b</span> goes back to where it was, and <span class="key">u</span> and
-                <span class="key">i</span> move the memory view by 8 bytes (<span class="key">U</span> and
-                <span class="key">I</span> by 64).
+          <div class="modal-body help">
+            <div class="row">
+              <div class="col-lg-6">
+                <p>
+                  An emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular home
+                  computer in 1980s Britain. It emulates the BBC B and the Master, and also the
+                  <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them. The model
+                  name on the top bar opens the settings, which choose between them and set the keyboard layout.
+                </p>
+                <p>
+                  Elite, a pioneering 3D space trading game, starts in drive 0;
+                  <span class="key">SHIFT</span>+<span class="key">BREAK</span> boots it. <strong>Media</strong> on the
+                  top bar loads other discs and tapes.
+                </p>
+                <h5>Keyboard</h5>
+                <p>
+                  The BBC's keyboard differs from a modern one, mostly in where the symbols are. The default
+                  <em>Physical</em> layout presses the BBC key in the same place as yours, so the key to the right of
+                  <span class="key">L</span> is the BBC's <span class="key">:</span>&nbsp;<span class="key">*</span>.
+                  <em>Natural</em> gives the character you type instead, and <em>Gaming</em> moves the BBC's
+                  <span class="key">CAPS LOCK</span> and <span class="key">CTRL</span> to the left Ctrl and Alt for
+                  games that use them. Any key can be
+                  <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
+                </p>
+                <table class="table table-sm caption-top">
+                  <caption>
+                    In the Physical and Natural layouts
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>BBC key</th>
+                      <th>Press</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="key function">F0</span></td>
+                      <td><span class="key">F10</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">BREAK</span></td>
+                      <td><span class="key">F12</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">COPY</span></td>
+                      <td>
+                        <span class="key">End</span>, or <span class="key">fn</span>+<span class="key">&rarr;</span> on
+                        a Mac
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">SHIFT LOCK</span></td>
+                      <td><span class="key">Home</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p>
+                  Caps lock is unreliable on macOS: browsers never report it being released, so games that use it to
+                  move or fire don't work there.
+                </p>
               </div>
-              <div>
-                Caps lock is unreliable on macOS: browsers never report it being released, so games that use it to move
-                or fire don't work. Any key can be
-                <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
+              <div class="col-lg-6">
+                <h5>Shortcuts</h5>
+                <p>Alt is Option on a Mac.</p>
+                <table class="table table-sm">
+                  <tbody>
+                    <tr>
+                      <td><span class="key">Alt-S</span></td>
+                      <td>Debugger, in or out</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-P</span></td>
+                      <td>Pause or resume</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-T</span></td>
+                      <td>Full speed, on or off</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-W</span></td>
+                      <td>Rewind</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-B</span></td>
+                      <td>Printer output</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-M</span></td>
+                      <td>Discs and tapes, for drive 0</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-Shift-M</span></td>
+                      <td>Discs and tapes, for drive 1</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-C</span></td>
+                      <td>Discs and tapes, for the cassette</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-1 to Alt-8</span></td>
+                      <td>Hold an accessibility switch</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <h5>Paused or debugging</h5>
+                <p>
+                  While paused, <span class="key">g</span> resumes and <span class="key">n</span> runs one frame. In the
+                  debugger:
+                </p>
+                <table class="table table-sm">
+                  <tbody>
+                    <tr>
+                      <td><span class="key">g</span></td>
+                      <td>Resume</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">n</span></td>
+                      <td>Step one instruction</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">m</span> <span class="key">o</span></td>
+                      <td>Step over a call, step out of one</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">t</span></td>
+                      <td>Toggle a breakpoint on the highlighted instruction</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">j</span> <span class="key">k</span></td>
+                      <td>Move the disassembly; <span class="key">b</span> goes back to where it was</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">u</span> <span class="key">i</span></td>
+                      <td>
+                        Move the memory view by 8 bytes (<span class="key">U</span> <span class="key">I</span> by 64)
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

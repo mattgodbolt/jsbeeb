@@ -351,6 +351,40 @@ test("the media window fills a phone's screen without scrolling sideways", async
     expect(fit.panelScrollsSideways).toBe(false);
 });
 
+test("help fits a desktop screen whole, and on a phone scrolls under its own header", async ({ beeb, page }) => {
+    const helpLayout = async ({ width, height }) => {
+        await page.setViewportSize({ width, height });
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        await beeb.armModalShown("help");
+        await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
+        await beeb.expectModalShown();
+        return page.evaluate(() => {
+            const modal = document.getElementById("help");
+            const body = modal.querySelector(".modal-body");
+            const close = modal.querySelector(".btn-close").getBoundingClientRect();
+            return {
+                closeOnScreen: close.top >= 0 && close.bottom <= innerHeight,
+                modalScrolls: modal.scrollHeight > modal.clientHeight,
+                bodyScrolls: body.scrollHeight > body.clientHeight,
+                scrollsSideways: body.scrollWidth > body.clientWidth || modal.scrollWidth > modal.clientWidth,
+            };
+        });
+    };
+    expect(await helpLayout({ width: 1920, height: 1080 })).toEqual({
+        closeOnScreen: true,
+        modalScrolls: false,
+        bodyScrolls: false,
+        scrollsSideways: false,
+    });
+    expect(await helpLayout({ width: 390, height: 844 })).toEqual({
+        closeOnScreen: true,
+        modalScrolls: false,
+        bodyScrolls: true,
+        scrollsSideways: false,
+    });
+});
+
 test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
