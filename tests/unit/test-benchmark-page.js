@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { resultLine, summarise } from "../../src/web/benchmark-page.js";
+import { misfitting, resultLine, summarise } from "../../src/web/benchmark-page.js";
+import { FittingParams } from "../../src/web/parameters.js";
+
+const { workloads } = JSON.parse(readFileSync("public/benchmarks/workloads.json"));
 
 const summary = (median) => ({
     median,
@@ -60,4 +64,28 @@ describe("benchmark page", () => {
             );
         });
     });
+
+    describe("misfitting", () => {
+        const workload = { name: "elite", fittings: { hasMusic5000: false, hasVideoNula: false } };
+
+        it("passes a machine fitted as the workload is", () => {
+            expect(misfitting(workload, { hasMusic5000: false, hasVideoNula: false, cpuMultiplier: 2 })).toBeNull();
+        });
+
+        it("names each fitting the machine has otherwise, as the URL sets it", () => {
+            expect(misfitting(workload, { hasMusic5000: false, hasVideoNula: true })).toBe(
+                "The elite workload runs with hasVideoNula=false; set that in the URL",
+            );
+            expect(misfitting(workload, { hasMusic5000: true, hasVideoNula: true })).toBe(
+                "The elite workload runs with hasMusic5000=false, hasVideoNula=false; set those in the URL",
+            );
+        });
+    });
+
+    it.each(workloads.map((workload) => [workload.name, workload]))(
+        "%s says whether it has each fitting the settings offer",
+        (_, { fittings }) => {
+            expect(Object.keys(fittings).sort()).toEqual([...FittingParams].sort());
+        },
+    );
 });

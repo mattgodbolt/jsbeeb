@@ -434,3 +434,8 @@ export function processInputParams(params, context) {
     }
     return warnings;
 }
+
+/** The check boxes under the Settings dialog's peripherals: each fits something to the machine, or leaves it off. */
+export const FittingParams = Object.keys(Parameters).filter(
+    (name) => Parameters[name].type === ParamTypes.BOOL && Parameters[name].field?.group === Peripherals,
+);

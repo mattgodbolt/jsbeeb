@@ -12,17 +12,29 @@ const FbHeight = 625;
 const FixedClockMs = Date.UTC(2026, 0, 1);
 
 /**
- * A machine with the real Video (or FakeVideo) and the main thread's SoundChip, its sound events going to
- * `onSoundEvent` (dropped by default) where the page would hand them to the audio worklet.
+ * A machine fitted as `fittings` says, with the real Video (or FakeVideo) and the main thread's SoundChip, its sound
+ * events going to `onSoundEvent` (dropped by default) where the page would hand them to the audio worklet.
  * @param {string} model
+ * @param {{coProcessor: boolean, hasMusic5000: boolean, hasTeletextAdaptor: boolean, hasEconet: boolean,
+ *     hasVideoNula: boolean}} fittings a workload's, named as the page's settings name them
  * @param {{fakeVideo?: boolean, onSoundEvent?: function(object): void}} [options]
  * @returns {Promise<TestMachine>}
  */
-export async function newBenchmarkMachine(model, { fakeVideo = false, onSoundEvent = () => {} } = {}) {
+export async function newBenchmarkMachine(model, fittings, { fakeVideo = false, onSoundEvent = () => {} } = {}) {
+    const { coProcessor, hasMusic5000, hasTeletextAdaptor, hasEconet, hasVideoNula } = fittings;
     const { isMaster } = findModel(model);
-    const video = fakeVideo ? new FakeVideo() : new Video(isMaster, new Uint32Array(FbWidth * FbHeight), () => {});
+    const video = fakeVideo
+        ? new FakeVideo()
+        : new Video(isMaster, new Uint32Array(FbWidth * FbHeight), () => {}, { hasVideoNula });
     const soundChip = new SoundChip(null, { onEvent: onSoundEvent });
-    const machine = new TestMachine(model, { video, soundChip });
+    const machine = new TestMachine(model, {
+        video,
+        soundChip,
+        tube: coProcessor,
+        hasMusic5000,
+        hasTeletextAdaptor,
+        econet: hasEconet,
+    });
     await machine.initialise();
     machine.processor.cmos.now = () => FixedClockMs;
     machine.processor.cmos.utc = true;
@@ -45,7 +57,7 @@ export async function listBenchmarkWorkloads() {
 export async function benchmarkMachine(name, options) {
     setNodeBasePath(RepoRoot);
     const workload = await readWorkload(name);
-    const machine = await newBenchmarkMachine(workload.model, options);
+    const machine = await newBenchmarkMachine(workload.model, workload.fittings, options);
     await restoreWorkload(machine.processor, workload);
     return { machine, cpu: machine.processor, workload };
 }

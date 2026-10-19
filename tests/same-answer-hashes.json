@@ -2,12 +2,12 @@
   "frames": 100,
   "workloads": {
     "elite": {
-      "framebuffer": "6963d85bfdeb9c43",
-      "registers": "9eef24cbee828fdf",
-      "memory": "a2a01b30e38cc831",
-      "cycles": "51d4347bd4c5ea35",
-      "sound": "07c853ffb0accd69",
-      "peripherals": "d71d7abd2df2b22b"
+      "framebuffer": "c4b6b34b05b0a9a2",
+      "registers": "84a62d1f2f6aee3d",
+      "memory": "3c593186017bbcbe",
+      "cycles": "0f1a9ce39b973c8c",
+      "sound": "284c942dec8839aa",
+      "peripherals": "98242188492c49a1"
     },
     "mode0-lines": {
       "framebuffer": "e183157060b1f938",
