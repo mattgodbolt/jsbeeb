@@ -102,12 +102,15 @@ export class Beeb {
      * Bootstrap ignores a hide while its show transition is still running, and
      * says when that is over. Arm before the click that opens the modal, then
      * expect after it; a flag and a poll, so a failure mid-test leaves no
-     * dangling evaluate to muddy the report.
+     * dangling evaluate to muddy the report. Bootstrap's shown event can come
+     * from a fallback timer while the dialog is still sliding in, so the poll
+     * also waits for the modal's transitions to end.
      */
     armModalShown(id) {
         return this.page.evaluate((modalId) => {
+            window.e2eModal = document.getElementById(modalId);
             window.e2eModalShown = false;
-            document.getElementById(modalId).addEventListener(
+            window.e2eModal.addEventListener(
                 "shown.bs.modal",
                 () => {
                     window.e2eModalShown = true;
@@ -119,7 +122,13 @@ export class Beeb {
 
     async expectModalShown() {
         await expect
-            .poll(() => this.page.evaluate(() => window.e2eModalShown), { message: "the modal to finish appearing" })
+            .poll(
+                () =>
+                    this.page.evaluate(
+                        () => window.e2eModalShown && window.e2eModal.getAnimations({ subtree: true }).length === 0,
+                    ),
+                { message: "the modal to finish appearing" },
+            )
             .toBe(true);
     }
 }

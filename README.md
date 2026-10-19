@@ -123,7 +123,7 @@ two. The choice is remembered, and `?keyLayout=physical`, `?keyLayout=natural` o
 sets it from a link.
 
 **Physical** is the default, and the one to use for games. Each key presses the BBC key in the same
-place on the keyboard, so `Z` is `Z` and the key to the right of the `L` is the BBC's `:` and `*`,
+place on the keyboard, so `Z` is `Z` and the key two to the right of the `L` is the BBC's `:` and `*`,
 whatever your keyboard is printed with. A Dvorak or Hungarian keyboard works the same as a UK one,
 because only position matters.
 

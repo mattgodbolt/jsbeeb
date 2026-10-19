@@ -25,6 +25,7 @@ import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { labelPageShortcuts } from "./web/shortcuts.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
 import { FrontPanel } from "./web/front-panel.js";
@@ -66,6 +67,7 @@ const benchmarkPage = parsedQuery.benchmark ? new BenchmarkPage(parsedQuery.benc
 if (benchmarkPage) silenceAnalytics();
 configureAnalytics();
 installIcons();
+labelPageShortcuts();
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 
 let discImage = BuiltInImages[0].file;

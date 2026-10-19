@@ -351,6 +351,64 @@ test("the media window fills a phone's screen without scrolling sideways", async
     expect(fit.panelScrollsSideways).toBe(false);
 });
 
+test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({
+    beeb,
+    page,
+}) => {
+    const helpLayout = async ({ width, height }) => {
+        await page.setViewportSize({ width, height });
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        await beeb.armModalShown("help");
+        await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
+        await beeb.expectModalShown();
+        return page.evaluate(() => {
+            const modal = document.getElementById("help");
+            const body = modal.querySelector(".modal-body");
+            const close = modal.querySelector(".btn-close").getBoundingClientRect();
+            return {
+                closeOnScreen: close.top >= 0 && close.bottom <= innerHeight,
+                modalScrolls: modal.scrollHeight > modal.clientHeight,
+                bodyScrolls: body.scrollHeight > body.clientHeight,
+                scrollsSideways: body.scrollWidth > body.clientWidth || modal.scrollWidth > modal.clientWidth,
+            };
+        });
+    };
+    expect(await helpLayout({ width: 1920, height: 940 })).toEqual({
+        closeOnScreen: true,
+        modalScrolls: false,
+        bodyScrolls: false,
+        scrollsSideways: false,
+    });
+    for (const narrow of [
+        { width: 390, height: 844 },
+        { width: 768, height: 1024 },
+    ]) {
+        expect(await helpLayout(narrow), `at ${narrow.width}x${narrow.height}`).toEqual({
+            closeOnScreen: true,
+            modalScrolls: false,
+            bodyScrolls: true,
+            scrollsSideways: false,
+        });
+    }
+});
+
+test("the help names the shortcuts by Alt, and on a Mac by the Option symbol", async ({ beeb, page }) => {
+    const helpKeys = async () => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        return page.locator("#help .key").allTextContents();
+    };
+    const keys = await helpKeys();
+    expect(keys).toEqual(expect.arrayContaining(["Alt-S", "Alt-Shift-M", "Alt-1 to Alt-8", "Alt"]));
+    expect(keys.filter((key) => key.includes("⌥"))).toEqual([]);
+
+    await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
+    const macKeys = await helpKeys();
+    expect(macKeys).toEqual(expect.arrayContaining(["⌥S", "⌥⇧M", "⌥1 to ⌥8", "⌥"]));
+    expect(macKeys.filter((key) => key.includes("Alt"))).toEqual([]);
+});
+
 test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
