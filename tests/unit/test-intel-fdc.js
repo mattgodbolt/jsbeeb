@@ -247,10 +247,12 @@ describe("Intel 8271 tests", function () {
     describe("seek to track 0", () => {
         const resultAddr = 1;
         const trackZeroNotFound = 0x14;
+        const writeEnable = 0x01;
+        const resetAddr = 2;
         const specifyCmd = 0x35;
         const initialisation = 0x0d;
+        // As DFS 1.20 specifies: the head stays loaded for 12 revolutions after a command, here the status read.
         const dfsHeadLoadUnload = 0xc8;
-
         // A step rate of 0 leaves the steps to the drive, which jsbeeb takes as 3 ms.
         const StepMs = 3;
 
@@ -279,6 +281,12 @@ describe("Intel 8271 tests", function () {
             const steps = Math.round((scheduler.epoch - start) / ms(StepMs));
             return { result: fdc.read(resultAddr), track: drive.track, steps };
         }
+
+        it("survives a reset with write enable up and the head unloaded", () => {
+            const fdc = new IntelFdc(fake6502(), new Scheduler(), [new FakeDrive()]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, writeEnable | driveSelect1);
+            expect(() => fdc.write(resetAddr, 1)).not.toThrow();
+        });
 
         it("with the head loaded first, as the DFS does, finds it", () => {
             expect(seekToZeroFromTrack20(loadHead | driveSelect1)).toMatchObject({ result: 0, track: 0 });
