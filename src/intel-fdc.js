@@ -342,8 +342,11 @@ export class IntelFdc {
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
 
-        const callback = (pulses, count) => this._pulsesCallback(pulses, count);
-        for (const drive of this._drives) drive.setPulsesCallback(callback);
+        for (const drive of this._drives) {
+            drive.setPulsesCallback((pulses, count) => {
+                if (drive === this._currentDrive) this._pulsesCallback(pulses, count);
+            });
+        }
 
         this.powerOnReset();
     }
@@ -1247,8 +1250,6 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) drive = this._drives[0];
         else if (selectBits === DriveOut.select_1) drive = this._drives[1];
 
-        if (this._currentDrive && (this._currentDrive !== drive || !(driveOut & DriveOut.loadHead)))
-            this._currentDrive.stopSpinning();
         this._currentDrive = drive;
 
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
@@ -1258,10 +1259,12 @@ export class IntelFdc {
             // Edges are counted from the new drive's level, not the old one's
             this._stateIsIndexPulse = this._index;
         }
-        if (this._currentDrive) {
-            if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
-            this._currentDrive.selectSide(!!(driveOut & DriveOut.side));
+        // LOAD HEAD is the drives' common motor line
+        for (const eachDrive of this._drives) {
+            if (driveOut & DriveOut.loadHead) eachDrive.startSpinning();
+            else eachDrive.stopSpinning();
         }
+        this._currentDrive?.selectSide(!!(driveOut & DriveOut.side));
         this._driveOut = driveOut;
     }
 
@@ -1468,7 +1471,7 @@ export class IntelFdc {
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             // A change of drive select bits clears all drive out bits other than side select.
             // For example, the newly selected drive won't have the load head signal
-            // active. This spins down any previously selected drive.
+            // active, and dropping it stops both drives.
             const newSelectBits = selectBits | (this._driveOut & DriveOut.side);
             this._setDriveOut(newSelectBits);
         }
@@ -1811,8 +1814,9 @@ export class IntelFdc {
         this._drives[drive].tracksPerStep = tracksPerStep;
     }
 
+    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
     get motorOn() {
-        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
     }
 
     get drives() {

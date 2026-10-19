@@ -19,6 +19,7 @@ const ControlRunningDrive0 = 0x21;
 const ControlRunningDrive0Fm = 0x29;
 const ControlRunningDrive1 = 0x22;
 const ControlRunningNoDrive = 0x20;
+const ControlResetDrive0 = 0x01;
 
 const StatusBusy = 0x01;
 const StatusDrq = 0x02;
@@ -58,6 +59,8 @@ const MfmByteTicks = 64;
 const PollTicks = 16;
 // A type II command gives up after five revolutions, so a command still busy after ten has hung.
 const MaxCommandTicks = 10 * RevolutionTicks;
+// The motor times out after nine index pulses once the controller is idle.
+const MotorTimeoutTicks = 10 * RevolutionTicks;
 
 const IdMark = IbmDiscFormat.idMarkDataPattern;
 const DataMark = IbmDiscFormat.dataMarkDataPattern;
@@ -470,7 +473,7 @@ describe("WD1770 FDC tests", () => {
                 const { fdc, drives } = seekThenWriteControl(ControlRunningDrive1);
                 expect(fdc.read(TrackRegister)).toBe(SeekTarget);
                 expect([drives[0].track, drives[1].track]).toEqual([StepsBeforeWrite, SeekTarget - StepsBeforeWrite]);
-                expect([drives[0].spinning, drives[1].spinning]).toEqual([false, true]);
+                expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
             });
 
             it("finishes the seek with no drive selected", () => {
@@ -528,10 +531,80 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
-    describe("write protect", () => {
-        // The motor times out after nine index pulses once the controller is idle.
-        const MotorTimeoutTicks = 10 * RevolutionTicks;
+    describe("motor", () => {
+        it("turns the unselected drive at the same speed as the selected one", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            scheduler.polltime(RevolutionTicks);
+            expect(drives[1].spinning).toBe(true);
+            expect(drives[1].speed).toBe(drives[0].speed);
+        });
 
+        it("keeps turning both drives across a change of drive", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            fdc.write(ControlRegister, ControlRunningDrive1);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+        });
+
+        it("stops both drives when the motor times out", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            scheduler.polltime(MotorTimeoutTicks);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([false, false]);
+        });
+
+        it("stops both drives on a reset", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            fdc.write(ControlRegister, ControlResetDrive0);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([false, false]);
+        });
+
+        it("starts both drives for a force interrupt while idle", () => {
+            const { fdc, drives } = makeFdc();
+            fdc.write(CommandRegister, ForceInterrupt);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+        });
+
+        it("lights only the selected drive", () => {
+            const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            expect(fdc.motorOn).toEqual([true, false]);
+            fdc.write(ControlRegister, ControlRunningDrive1);
+            expect(fdc.motorOn).toEqual([false, true]);
+        });
+
+        it("turns both drives after restoring a snapshot in which only the selected one turned", () => {
+            const original = makeFdc({ disc: blankDisc() });
+            runCommand(original.fdc, original.scheduler, RestoreCommand);
+            const snapshot = original.fdc.snapshotState();
+            snapshot.drives[1] = { ...snapshot.drives[1], spinning: false, timerTaskOffset: null };
+            const { fdc, drives } = makeFdc({ disc: blankDisc() });
+            fdc.restoreState(snapshot);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+        });
+
+        it("reads only the selected drive", () => {
+            const data = sectorData();
+            const { scheduler, fdc, drives } = makeFdc({ disc: mfmDiscWithSector({ data }) });
+            drives[1].setDisc(mfmDiscWithSector({ data: new Uint8Array(SectorBytes).fill(0xaa) }));
+            fdc.write(SectorRegister, 0);
+            const { bytes, status } = runCommand(fdc, scheduler, ReadSectorCommand);
+            expect(status & (StatusRecordNotFound | StatusCrcError)).toBe(0);
+            expect(hex(bytes)).toBe(hex([...data]));
+        });
+
+        it("keeps both drives turning with no drive selected, as no index pulses come to time it out", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            fdc.write(ControlRegister, ControlRunningNoDrive);
+            scheduler.polltime(MotorTimeoutTicks);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+        });
+    });
+
+    describe("write protect", () => {
         it.each([
             ["restore", RestoreCommand],
             ["seek", SeekCommand],

@@ -9,6 +9,8 @@ import { findModel } from "../../src/models.js";
 
 const AtomModel = findModel("Atom");
 
+const ms = (n) => n * 2000;
+
 class FakeDrive {
     constructor() {
         this.spinning = false;
@@ -203,9 +205,43 @@ describe("Intel 8271 tests", function () {
         });
     });
 
-    describe("ready", () => {
-        const ms = (n) => n * 2000;
+    describe("motor", () => {
+        const driveSelect2 = 0x80;
 
+        function twoDriveFdc() {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            const drives = [0, 1].map((id) => new DiscDrive(id, scheduler, cpu.peripheralCyclesPerSecond));
+            const fdc = new IntelFdc(cpu, scheduler, drives);
+            return { fdc, scheduler, drives };
+        }
+
+        it("turns both drives while the head is loaded, and neither once it unloads", () => {
+            const { fdc, drives } = twoDriveFdc();
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([true, true]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, driveSelect1);
+            expect([drives[0].spinning, drives[1].spinning]).toEqual([false, false]);
+        });
+
+        it("lights only the selected drive", () => {
+            const { fdc } = twoDriveFdc();
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            expect(fdc.motorOn).toEqual([true, false]);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect2);
+            expect(fdc.motorOn).toEqual([false, true]);
+        });
+
+        it("finds the newly selected drive already up to speed", () => {
+            const { fdc, scheduler, drives } = twoDriveFdc();
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            scheduler.polltime(ms(2000));
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect2);
+            expect(drives[1].speed).toBe(1);
+        });
+    });
+
+    describe("ready", () => {
         function readyFdc(cpu = fake6502()) {
             const fakeDrive = new FakeDrive();
             const scheduler = new Scheduler();
@@ -381,10 +417,15 @@ describe("Intel 8271 tests", function () {
         const SectorsPerTrack = 10;
         const Tracks = 80;
         const pollTicks = 16;
-        const ms = (n) => n * 2000;
 
         // The defaults are DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
-        function dfsFdc({ stepRate = 12, settleTime = 10, headLoadUnload = 0xc8, alterDisc = () => {} } = {}) {
+        function dfsFdc({
+            stepRate = 12,
+            settleTime = 10,
+            headLoadUnload = 0xc8,
+            alterDisc = () => {},
+            secondDisc,
+        } = {}) {
             const scheduler = new Scheduler();
             const cpu = fake6502();
             const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
@@ -393,7 +434,12 @@ describe("Intel 8271 tests", function () {
             const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null);
             alterDisc(disc);
             drive.setDisc(disc);
-            const fdc = new IntelFdc(cpu, scheduler, [drive]);
+            const drives = [drive];
+            if (secondDisc) {
+                drives.push(new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond));
+                drives[1].setDisc(secondDisc);
+            }
+            const fdc = new IntelFdc(cpu, scheduler, drives);
             sendCommand(fdc, writeRegCmd, modeRegister, dfsMode);
             sendCommand(fdc, specifyCmd, initialisation, stepRate, settleTime, headLoadUnload);
             sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
@@ -418,6 +464,13 @@ describe("Intel 8271 tests", function () {
             };
             return { fdc, scheduler, drive, readStatus, readFirstByte };
         }
+
+        it("reads only the selected drive while the other turns", () => {
+            const otherData = new Uint8Array(Tracks * SectorsPerTrack * SectorBytes).fill(0xaa);
+            const secondDisc = loadSsd(new Disc(true, new DiscConfig(), "other.ssd"), otherData, false, null);
+            const { readFirstByte } = dfsFdc({ secondDisc });
+            expect(readFirstByte(5)).toEqual({ result: 0, firstByte: 5 });
+        });
 
         it("does not unload the head in the middle of a seek longer than the unload count", () => {
             const { scheduler, readStatus, readFirstByte } = dfsFdc();
