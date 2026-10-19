@@ -188,7 +188,7 @@ test("a state saved at a breakpoint loads paused there in the debugger, on this 
     await beeb.expectRunningPast(savedAt.cycles);
 
     // Each load starts with the machine running and the debugger shut. The play button comes on as soon as the load
-    // holds the machine, long before the state is in; the debugger opening is what says it is.
+    // holds the machine, before the state is in; the debugger opening is what says it is.
     const loadAndContinue = async (file) => {
         await page.setInputFiles("#load-state", file);
         await expect(page.locator("#debug")).toBeVisible();
