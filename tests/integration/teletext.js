@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import path from "node:path";
 import sharp from "sharp";
 import { TestMachine } from "../../src/test-machine.js";
@@ -52,11 +52,10 @@ const FlashCycleFields = 64;
 // The flash and cursor phases both count fields since power-on, 64 and 32 to a cycle, so a
 // capture at a given field of the flash cycle is the same picture whatever ran before it.
 // Which field each reference was taken at was found by capturing every field and comparing.
-const FlashHiddenField = 56;
-const FlashShownField = 26;
+const FlashHiddenField = 22;
+const FlashShownField = 56;
 const CursorJustOnField = 15;
 const CursorOnField = 8;
-const FlashShownCursorOnField = 0;
 
 async function captureAtField(video, testMachine, field) {
     for (let i = 0; i < 2 * FlashCycleFields; i++) {
@@ -124,7 +123,7 @@ describe("Test other teletext test pages", () => {
         // but pos 5 (Steady+held) and pos 6-7 should show red (Steady applies "Set At").
         await testMachine.type("CLS:VDU &91,&88,&BF,&BF,&9E,&89,&BF,&BF");
         await testMachine.runUntilInput();
-        await compare(video, testMachine, `expected_steady_set_at_flash_1.png`, FlashShownCursorOnField);
+        await compare(video, testMachine, `expected_steady_set_at_flash_1.png`, FlashHiddenField);
     });
     it("should work with the alternative engineer test page bug 469", async () => {
         const video = new CapturingVideo();
@@ -138,5 +137,27 @@ describe("Test other teletext test pages", () => {
         );
         await testMachine.runUntilInput();
         await compare(video, testMachine, `expected_bug_469.png`, CursorOnField);
+    });
+});
+
+describe.each(["B-DFS1.2", "Master"])("flash phase under the %s MOS", (model) => {
+    it("hides flashing text for exactly the fields of one cursor-off period", async () => {
+        const fields = [];
+        const video = new Video(false, new Uint32Array(1024 * 1024), () => {});
+        video.paint_ext = () => fields.push({ hidden: video.teletext.hideFlashing, cursorOn: video.cursorOnThisFrame });
+        const testMachine = new TestMachine(model, { video });
+        await testMachine.initialise();
+        await testMachine.runUntilInput();
+        fields.length = 0;
+        await testMachine.runFor(3 * FlashCycleFields * FieldCycles);
+        // The first fields after boot can predate the CRTC being programmed.
+        const hiddenStart = fields.findIndex(
+            (field, i) => i > FlashCycleFields && field.hidden && !fields[i - 1].hidden,
+        );
+        const hiddenEnd = fields.findIndex((field, i) => i > hiddenStart && !field.hidden);
+        expect(hiddenEnd - hiddenStart).toBe(16);
+        expect(fields.slice(hiddenStart, hiddenEnd).every((field) => !field.cursorOn)).toBe(true);
+        expect(fields[hiddenStart - 1].cursorOn).toBe(true);
+        expect(fields[hiddenEnd].cursorOn).toBe(true);
     });
 });

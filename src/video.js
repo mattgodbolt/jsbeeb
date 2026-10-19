@@ -1290,6 +1290,9 @@ export class Video {
                 this.dispEnableClear(VDISPENABLE);
                 // Perhaps surprisingly, this happens here. Both cursor
                 // blink and interlace cease if R6 > R4.
+                // Until the MOS programs the CRTC, its all-zero registers give DEW a pulse every 128
+                // rows of one scanline but count no frames, so the flash phase is set here instead.
+                if (this.frameCount === 0) this.teletext.restartFlashCycle();
                 this.frameCount++;
             }
         } // matches while
