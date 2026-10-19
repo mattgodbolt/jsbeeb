@@ -360,7 +360,7 @@ describe("spindle motor", () => {
         drive.startSpinning();
         expect(drive.speed).toBeCloseTo(1, 3);
         drive.stopSpinning();
-        scheduler.polltime(ms(1000));
+        scheduler.polltime(ms(500));
         expect(drive.speed).toBeCloseTo(0.37, 1);
         drive.startSpinning();
         expect(drive.speed).toBeCloseTo(0.37, 1);
@@ -391,14 +391,16 @@ describe("spindle motor", () => {
         expect(Math.abs(stopped.drive.positionFraction - steady.drive.positionFraction)).toBeLessThanOrEqual(oneByte);
     });
 
-    it("comes to rest a few seconds after the motor stops", () => {
+    it("comes to rest about two seconds after the motor stops", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(fortyTrackDisc());
         drive.startSpinning();
         scheduler.polltime(ms(3000));
         drive.stopSpinning();
-        scheduler.polltime(ms(5000));
+        scheduler.polltime(ms(1900));
+        expect(scheduler.headroom()).not.toBe(Scheduler.MaxHeadroom);
+        scheduler.polltime(ms(100));
         expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
@@ -423,7 +425,7 @@ describe("spindle motor", () => {
         drive.startSpinning();
         scheduler.polltime(ms(3000));
         drive.stopSpinning();
-        scheduler.polltime(ms(700));
+        scheduler.polltime(ms(350));
         const state = drive.snapshotState();
         expect(state.spinning).toBe(false);
         expect(state.timerTaskOffset).not.toBeNull();
@@ -437,7 +439,7 @@ describe("spindle motor", () => {
         const position = restored.positionFraction;
         restoredScheduler.polltime(ms(10));
         expect(restored.positionFraction).not.toBe(position);
-        restoredScheduler.polltime(ms(5000));
+        restoredScheduler.polltime(ms(2000));
         expect(restoredScheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
