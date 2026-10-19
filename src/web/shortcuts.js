@@ -30,7 +30,7 @@ export function shortcutLabel(text, mac = isMac) {
 export function labelPageShortcuts(mac = isMac) {
     if (!mac) return;
     for (const key of document.querySelectorAll("#help .key")) key.textContent = shortcutLabel(key.textContent, mac);
-    for (const element of document.querySelectorAll("[title*='Alt-']")) {
+    for (const element of document.querySelectorAll("[title*='Alt']")) {
         element.title = shortcutLabel(element.title, mac);
     }
 }
