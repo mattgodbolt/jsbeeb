@@ -208,7 +208,7 @@ Press `Alt-B` to open a window showing what has been printed so far; it then kee
 
 ### Save State and Rewind
 
-Save and load full emulator state snapshots from the **State** menu (or `Ctrl+S` / `Ctrl+O` in the Electron app).
+Save and load full emulator state snapshots from the **State** menu.
 A save state dropped on the page is restored too.
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
