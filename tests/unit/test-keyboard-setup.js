@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
@@ -277,6 +277,13 @@ describe("KeyboardSetup", () => {
             setup.keyboard.dispatchEvent(new CustomEvent("resume"));
             expect(actions.pause).toHaveBeenCalledTimes(1);
             expect(actions.resume).toHaveBeenCalledTimes(1);
+        });
+
+        it("notes a pause from Alt-P as the pause feature", () => {
+            const sent = sentEvents();
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            expect(actions.pause).toHaveBeenCalledTimes(1);
+            expect(sent("feature_used")).toEqual([{ feature: "pause", action: "enter" }]);
         });
     });
 });

@@ -246,12 +246,8 @@ export class Keyboard extends EventTarget {
         evt.preventDefault();
 
         if (code === keyCodes.F12 || code === keyCodes.BREAK) {
-            this.dispatchEvent(new CustomEvent("break", { detail: true }));
             this.input.setReset(true);
-            return () => {
-                this.dispatchEvent(new CustomEvent("break", { detail: false }));
-                this.input.setReset(false);
-            };
+            return () => this.input.setReset(false);
         }
 
         if (isMac && code === keyCodes.CAPSLOCK) {

@@ -1,6 +1,6 @@
 import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
-import { note } from "./analytics.js";
+import { noteFeature } from "./analytics.js";
 import { keyCodes } from "../keymap.js";
 import { Shortcuts } from "./shortcuts.js";
 
@@ -38,18 +38,14 @@ export class KeyboardSetup {
             dbgr,
         }));
         keyboard.addEventListener("notice", showNotice);
-        keyboard.addEventListener("pause", () => actions.pause());
-        keyboard.addEventListener("resume", () => actions.resume());
-        keyboard.addEventListener("break", (e) => {
-            // F12/Break: Reset processor
-            if (e.detail) note("keyboard", { type: "press", label: "break" });
+        keyboard.addEventListener("pause", () => {
+            noteFeature("pause", "enter");
+            actions.pause();
         });
+        keyboard.addEventListener("resume", () => actions.resume());
 
-        const onDown = (label, action) => (down) => {
-            if (down) {
-                if (label) note("keyboard", { type: "press", label });
-                action();
-            }
+        const onDown = (action) => (down) => {
+            if (down) action();
         };
         const alt = { alt: true, ctrl: false };
         const runners = {
@@ -74,11 +70,7 @@ export class KeyboardSetup {
                 );
                 continue;
             }
-            keyboard.registerKeyHandler(
-                keyCodes[shortcut.key],
-                onDown(shortcut.note ?? null, runners[shortcut.run]),
-                alt,
-            );
+            keyboard.registerKeyHandler(keyCodes[shortcut.key], onDown(runners[shortcut.run]), alt);
         }
 
         // Alt means the underlying key is never forwarded to the BBC Micro (keyboard.js bails
