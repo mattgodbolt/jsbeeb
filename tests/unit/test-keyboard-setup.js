@@ -335,6 +335,17 @@ describe("KeyboardSetup", () => {
             expect(loop.mode).toBe("running");
         });
 
+        it("hands n to the debugger when it is shown over a pause", () => {
+            altP();
+            altS();
+            processor.execute.mockClear();
+            document.dispatchEvent(new KeyboardEvent("keypress", { key: "n", cancelable: true }));
+            frame();
+            expect(dbgr.keyPress).toHaveBeenCalledWith("n");
+            expect(loop.mode).toBe("debugging");
+            expect(processor.execute).not.toHaveBeenCalled();
+        });
+
         it("leaves typed characters alone while the machine runs", () => {
             const g = type("g");
             type("n");

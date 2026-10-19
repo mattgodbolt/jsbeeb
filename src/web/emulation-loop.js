@@ -56,9 +56,10 @@ class VirtualSpeedUpdater {
  * machine (the first tick only takes the time), and "rewind-capture" every
  * RewindCaptureInterval frames for whoever keeps the rewind history.
  *
- * `mode` is what the user last asked of the machine: "stopped" until it is first
+ * `mode` is why the machine is or is not running: "stopped" until it is first
  * started, then "running", "paused", "debugging" (the debugger is shown exactly
- * then) or "stepping" (one frame, then paused again). Anything that needs the
+ * then; a breakpoint or an error lands here too) or "stepping" (one frame, then
+ * paused again). Anything that needs the
  * machine held still while it works (a dialog, a snapshot, the rewind panel, a
  * hidden tab) takes a `hold()`, which stops it without changing the mode; it runs
  * again once every hold has let go, if the mode still wants it running.

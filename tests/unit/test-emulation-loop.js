@@ -287,6 +287,17 @@ describe("EmulationLoop", () => {
             expect(pauseNotes(sent)).toEqual(["enter"]);
         });
 
+        it("stays in the debugger when a breakpoint stops a step", () => {
+            const loop = started();
+            loop.stop(false);
+            loop.step();
+            deps.processor.execute.mockReturnValue(false);
+            frame();
+            frame();
+            expect(loop.mode).toBe("debugging");
+            expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
+        });
+
         it("finishes a step a hold interrupted once the hold lets go", () => {
             const loop = started();
             loop.stop(false);
