@@ -38,39 +38,34 @@ export class KeyboardSetup {
             dbgr,
         }));
         keyboard.addEventListener("notice", showNotice);
-        keyboard.addEventListener("pause", () => {
-            noteFeature("pause", "enter");
-            actions.pause();
-        });
+        keyboard.addEventListener("pause", () => actions.pause());
         keyboard.addEventListener("resume", () => actions.resume());
 
-        const onDown = (action) => (down) => {
-            if (down) action();
-        };
         const alt = { alt: true, ctrl: false };
         const runners = {
             toggleDebugger: () => actions.toggleDebugger(),
             // `running` is pushed in from the loop, so it stays true whatever stopped the machine.
-            togglePause: () => (keyboard.running ? keyboard.pauseEmulation() : keyboard.resumeEmulation()),
+            togglePause: () => {
+                noteFeature("pause", keyboard.running ? "enter" : "leave");
+                if (keyboard.running) keyboard.pauseEmulation();
+                else keyboard.resumeEmulation();
+            },
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
             openRewind: () => actions.openRewind(),
+            openMediaDrive: (shift) => actions.openMedia(shift ? 1 : 0),
             openMediaTape: () => actions.openMedia("tape"),
         };
         for (const shortcut of Shortcuts) {
             if (!shortcut.key) continue;
-            if (shortcut.run === "openMediaDrive") {
-                // The only shortcut whose shift state changes what it does, rather than which key it is.
-                keyboard.registerKeyHandler(
-                    keyCodes[shortcut.key],
-                    (down, _code, shift) => {
-                        if (down) actions.openMedia(shift ? 1 : 0);
-                    },
-                    alt,
-                );
-                continue;
-            }
-            keyboard.registerKeyHandler(keyCodes[shortcut.key], onDown(runners[shortcut.run]), alt);
+            const run = runners[shortcut.run];
+            keyboard.registerKeyHandler(
+                keyCodes[shortcut.key],
+                (down, _code, shift) => {
+                    if (down) run(shift);
+                },
+                alt,
+            );
         }
 
         // Alt means the underlying key is never forwarded to the BBC Micro (keyboard.js bails

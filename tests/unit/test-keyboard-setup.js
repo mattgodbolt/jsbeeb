@@ -273,26 +273,26 @@ describe("KeyboardSetup", () => {
     });
 
     describe("the keyboard's own events", () => {
-        it("routes pause and resume to the loop's actions", () => {
+        it("routes pause and resume to the loop's actions, noting nothing", () => {
+            const sent = sentEvents();
             setup.keyboard.dispatchEvent(new CustomEvent("pause"));
             setup.keyboard.dispatchEvent(new CustomEvent("resume"));
             expect(actions.pause).toHaveBeenCalledTimes(1);
             expect(actions.resume).toHaveBeenCalledTimes(1);
+            expect(sent("feature_used")).toEqual([]);
         });
 
-        it("notes a pause from Alt-P as the pause feature", () => {
+        it("notes Alt-P's pause and resume as entering and leaving the pause feature", () => {
             const sent = sentEvents();
             setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            expect(actions.pause).toHaveBeenCalledTimes(1);
-            expect(sent("feature_used")).toEqual([{ feature: "pause", action: "enter" }]);
-        });
-
-        it("notes nothing for a resume from Alt-P", () => {
-            const sent = sentEvents();
             setup.keyboard.setRunning(false);
             setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            expect(actions.pause).toHaveBeenCalledTimes(1);
             expect(actions.resume).toHaveBeenCalledTimes(1);
-            expect(sent("feature_used")).toEqual([]);
+            expect(sent("feature_used")).toEqual([
+                { feature: "pause", action: "enter" },
+                { feature: "pause", action: "leave" },
+            ]);
         });
 
         it("notes no key presses, from the shortcuts or Break", () => {
