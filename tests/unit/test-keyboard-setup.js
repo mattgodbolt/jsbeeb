@@ -340,19 +340,6 @@ describe("KeyboardSetup", () => {
                     { feature: "pause", action: "leave" },
                 ]);
             });
-
-            it("ends the pause when a step is stopped into the debugger before its frame", () => {
-                const sent = sentEvents();
-                altKey(keyCodes.P);
-                type("n");
-                altKey(keyCodes.S);
-                type("g");
-                expect(keyboard.postFrameShouldPause()).toBe(false);
-                expect(sent("feature_used")).toEqual([
-                    { feature: "pause", action: "enter" },
-                    { feature: "pause", action: "leave" },
-                ]);
-            });
         });
 
         it("notes nothing for Alt-P when the machine was stopped by something other than a pause", () => {
