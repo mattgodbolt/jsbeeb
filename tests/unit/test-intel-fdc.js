@@ -257,13 +257,9 @@ describe("Intel 8271 tests", function () {
         function seekToZeroFromTrack20(driveOut, { restoreMidSeek = false } = {}) {
             const scheduler = new Scheduler();
             const cpu = fake6502();
-            const makeDrive = () => {
-                const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
-                drive.setDisc(Disc.createBlank());
-                for (let step = 0; step < 20; ++step) drive.seekOneTrack(1);
-                return drive;
-            };
-            let drive = makeDrive();
+            let drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+            drive.setDisc(Disc.createBlank());
+            for (let step = 0; step < 20; ++step) drive.seekOneTrack(1);
             let fdc = new IntelFdc(cpu, scheduler, [drive]);
             sendCommand(fdc, specifyCmd, initialisation, 0, 0, dfsHeadLoadUnload);
             sendCommand(fdc, writeRegCmd, mmioWrite, driveOut);
@@ -275,7 +271,7 @@ describe("Intel 8271 tests", function () {
             if (restoreMidSeek) {
                 scheduler.polltime(ms(10 * StepMs));
                 const snapshot = fdc.snapshotState();
-                drive = makeDrive();
+                drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
                 fdc = new IntelFdc(cpu, scheduler, [drive]);
                 fdc.restoreState(snapshot);
             }
@@ -290,10 +286,12 @@ describe("Intel 8271 tests", function () {
 
         it.each([false, true])(
             "with the head unloaded reaches no drive and gives up after 255 steps (restored mid-seek: %s)",
-            (restoreMidSeek) => {
-                const expected = { result: trackZeroNotFound, track: 20, steps: 255 };
-                expect(seekToZeroFromTrack20(driveSelect1, { restoreMidSeek })).toEqual(expected);
-            },
+            (restoreMidSeek) =>
+                expect(seekToZeroFromTrack20(driveSelect1, { restoreMidSeek })).toEqual({
+                    result: trackZeroNotFound,
+                    track: 20,
+                    steps: 255,
+                }),
         );
     });
 
