@@ -38,6 +38,7 @@ describe("KeyboardSetup", () => {
         accessibilitySwitches = new AccessibilitySwitches();
         processor = {
             model: findModel("B-DFS1.2"),
+            setReset: vi.fn(),
             scheduler: {
                 newTask: () => ({
                     schedule: () => {},
@@ -284,6 +285,23 @@ describe("KeyboardSetup", () => {
             setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
             expect(actions.pause).toHaveBeenCalledTimes(1);
             expect(sent("feature_used")).toEqual([{ feature: "pause", action: "enter" }]);
+        });
+
+        it("notes nothing for a resume from Alt-P", () => {
+            const sent = sentEvents();
+            setup.keyboard.setRunning(false);
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            expect(actions.resume).toHaveBeenCalledTimes(1);
+            expect(sent("feature_used")).toEqual([]);
+        });
+
+        it("notes no key presses, from the shortcuts or Break", () => {
+            const sent = sentEvents();
+            for (const code of [keyCodes.S, keyCodes.T, keyCodes.W]) {
+                setup.keyboard.keyDown(keyEvent("keydown", code, { alt: true }));
+            }
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.F12));
+            expect(sent("keyboard")).toEqual([]);
         });
     });
 });
