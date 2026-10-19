@@ -140,7 +140,7 @@ describe("Test other teletext test pages", () => {
     });
 });
 
-describe.each(["B-DFS1.2", "Master"])("flash phase under the %s MOS", (model) => {
+describe.each(["B-DFS1.2", "B-US", "B-German", "Master"])("flash phase under the %s MOS", (model) => {
     it("hides flashing text for exactly the fields of one cursor-off period", async () => {
         const fields = [];
         const video = new Video(false, new Uint32Array(1024 * 1024), () => {});
