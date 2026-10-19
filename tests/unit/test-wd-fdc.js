@@ -17,6 +17,8 @@ const DataRegister = 7;
 // this is double density.
 const ControlRunningDrive0 = 0x21;
 const ControlRunningDrive0Fm = 0x29;
+const ControlRunningDrive1 = 0x22;
+const ControlRunningNoDrive = 0x20;
 
 const StatusBusy = 0x01;
 const StatusDrq = 0x02;
@@ -264,6 +266,36 @@ describe("WD1770 FDC tests", () => {
             expect(cpu.nmi).toBe(false);
         });
 
+        it("aborts a command whose drive was deselected while it ran", () => {
+            const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
+            fdc.write(CommandRegister, ReadSectorCommand);
+            scheduler.polltime(ShortWaitTicks);
+            fdc.write(ControlRegister, ControlRunningNoDrive);
+            fdc.write(CommandRegister, ForceInterrupt);
+            scheduler.polltime(ShortWaitTicks);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
+        });
+
+        it("aborts a command issued with no drive selected, which waits for index pulses that never come", () => {
+            const { scheduler, fdc } = makeFdc({ control: ControlRunningNoDrive });
+            fdc.write(CommandRegister, ReadSectorCommand);
+            scheduler.polltime(MaxCommandTicks);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(StatusBusy);
+            fdc.write(CommandRegister, ForceInterrupt);
+            scheduler.polltime(ShortWaitTicks);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
+        });
+
+        it("accepts a force interrupt with no drive selected when idle", () => {
+            const { fdc } = makeFdc({ control: ControlRunningNoDrive });
+            expect(() => fdc.write(CommandRegister, ForceInterrupt)).not.toThrow();
+        });
+
+        it("runs a restore with no drive selected", () => {
+            const { scheduler, fdc } = makeFdc({ control: ControlRunningNoDrive });
+            expect(() => runCommand(fdc, scheduler, RestoreCommand)).not.toThrow();
+        });
+
         it("accepts every combination of flags when idle", () => {
             for (const bits of AllFlagCombinations) {
                 const { fdc } = makeFdc();
@@ -398,8 +430,6 @@ describe("WD1770 FDC tests", () => {
         });
 
         describe("written mid-command", () => {
-            const ControlRunningDrive1 = 0x22;
-            const ControlRunningNoDrive = 0x20;
             const SeekTarget = 40;
             const StepsBeforeWrite = 10;
             const StepTicks = 6 * TicksPerMs;

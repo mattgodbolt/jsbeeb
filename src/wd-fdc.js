@@ -407,11 +407,10 @@ export class WdFdc {
     }
 
     _doCommand(val) {
-        if (!this._currentDrive) throw new Error("Command while no selected drive");
         this._logCommand(
             `command ${hexbyte(val)} tr ${this._trackRegister} sr ${this._sectorRegister} dr ${this._dataRegister} ` +
                 `cr ${hexbyte(this._controlRegister)} ` +
-                `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
+                `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
         );
         const command = val & 0xf0;
 
@@ -488,7 +487,7 @@ export class WdFdc {
             this._settleThenDispatch();
         } else {
             this._statusRegister |= Status.motorOn;
-            this._currentDrive.startSpinning();
+            this._currentDrive?.startSpinning();
             // Short circuit spin-up if command requests it.
             // /* NOTE: disabling spin-up wait is a strange facility. It makes a lot of
             // sense for a seek because the disc head can usefully get moving while the
@@ -570,7 +569,7 @@ export class WdFdc {
             this._statusRegister &= Status.motorOn;
             if (!(this._statusRegister & Status.motorOn)) {
                 this._statusRegister |= Status.motorOn;
-                this._currentDrive.startSpinning();
+                this._currentDrive?.startSpinning();
             }
         }
         if (forceInterruptBits & ForceInterruptBits.immediate) this._setIntRq(true);
@@ -699,7 +698,7 @@ export class WdFdc {
                 this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
                 // The head steps out from wherever it is, whatever the track register says
-                this._makeSeekNoise(-this._currentDrive.logicalTrack);
+                if (this._currentDrive) this._makeSeekNoise(-this._currentDrive.logicalTrack);
                 this._doSeekStepOrVerify();
                 break;
             case Command.seek:
