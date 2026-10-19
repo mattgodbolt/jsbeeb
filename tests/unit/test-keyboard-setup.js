@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
 import { findModel } from "../../src/models.js";
 
@@ -38,6 +38,7 @@ describe("KeyboardSetup", () => {
         accessibilitySwitches = new AccessibilitySwitches();
         processor = {
             model: findModel("B-DFS1.2"),
+            setReset: vi.fn(),
             scheduler: {
                 newTask: () => ({
                     schedule: () => {},
@@ -272,11 +273,46 @@ describe("KeyboardSetup", () => {
     });
 
     describe("the keyboard's own events", () => {
-        it("routes pause and resume to the loop's actions", () => {
+        it("routes pause and resume to the loop's actions, noting nothing", () => {
+            const sent = sentEvents();
             setup.keyboard.dispatchEvent(new CustomEvent("pause"));
             setup.keyboard.dispatchEvent(new CustomEvent("resume"));
             expect(actions.pause).toHaveBeenCalledTimes(1);
             expect(actions.resume).toHaveBeenCalledTimes(1);
+            expect(sent("feature_used")).toEqual([]);
+        });
+
+        it("notes a pause as entered and left, however it is left", () => {
+            const sent = sentEvents();
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            setup.keyboard.setRunning(false);
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            setup.keyboard.setRunning(true);
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            setup.keyboard.resumeEmulation();
+            expect(sent("feature_used")).toEqual([
+                { feature: "pause", action: "enter" },
+                { feature: "pause", action: "leave" },
+                { feature: "pause", action: "enter" },
+                { feature: "pause", action: "leave" },
+            ]);
+        });
+
+        it("notes nothing for Alt-P when the machine was stopped by something other than a pause", () => {
+            const sent = sentEvents();
+            setup.keyboard.setRunning(false);
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            expect(actions.resume).toHaveBeenCalledTimes(1);
+            expect(sent("feature_used")).toEqual([]);
+        });
+
+        it("notes no key presses, from the shortcuts or Break", () => {
+            const sent = sentEvents();
+            for (const code of [keyCodes.S, keyCodes.T, keyCodes.W]) {
+                setup.keyboard.keyDown(keyEvent("keydown", code, { alt: true }));
+            }
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.F12));
+            expect(sent("keyboard")).toEqual([]);
         });
     });
 });

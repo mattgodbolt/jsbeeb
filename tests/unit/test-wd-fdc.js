@@ -375,6 +375,24 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
+    describe("control register", () => {
+        it("leaves the disc turning undisturbed when rewritten with the same drive and side", () => {
+            const running = () => {
+                const { fdc, scheduler, drives } = makeFdc({ disc: mfmDiscWithSector({}) });
+                runCommand(fdc, scheduler, RestoreCommand);
+                return { fdc, scheduler, drive: drives[0] };
+            };
+            const steady = running();
+            const rewritten = running();
+            for (let write = 0; write < 100; ++write) {
+                rewritten.fdc.write(ControlRegister, ControlRunningDrive0);
+                steady.scheduler.polltime(ShortWaitTicks);
+                rewritten.scheduler.polltime(ShortWaitTicks);
+            }
+            expect(rewritten.drive.positionFraction).toBe(steady.drive.positionFraction);
+        });
+    });
+
     describe("address marks", () => {
         it.each([
             ["FM", fmDiscWithSector, ControlRunningDrive0Fm, IdMark, 0xfa, 0],

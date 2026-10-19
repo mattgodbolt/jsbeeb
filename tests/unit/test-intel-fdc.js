@@ -4,7 +4,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { DiscDrive } from "../../src/disc-drive.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { findModel } from "../../src/models.js";
 
 const AtomModel = findModel("Atom");
@@ -362,6 +362,129 @@ describe("Intel 8271 tests", function () {
             sendCommand(fdc, writeRegCmd, mmioWrite, 0);
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             expect(ready()).toBe(false);
+        });
+    });
+
+    describe("head unload", () => {
+        const statusAddr = 0;
+        const resultAddr = 1;
+        const dataAddr = 4;
+        const needData = 0x04;
+        const modeRegister = 0x17;
+        const dfsMode = 0xc1;
+        const readDataCmd = (0x04 << 2) | driveSelect1 | 3;
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        const badTracksDrive0 = 0x10;
+        const oneSectorOf256Bytes = 0x21;
+        const SectorBytes = 256;
+        const SectorsPerTrack = 10;
+        const Tracks = 80;
+        const pollTicks = 16;
+        const ms = (n) => n * 2000;
+
+        // The defaults are DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
+        function dfsFdc({ stepRate = 12, settleTime = 10, headLoadUnload = 0xc8, alterDisc = () => {} } = {}) {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+            const data = new Uint8Array(Tracks * SectorsPerTrack * SectorBytes);
+            for (let track = 0; track < Tracks; ++track) data[track * SectorsPerTrack * SectorBytes] = track;
+            const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null);
+            alterDisc(disc);
+            drive.setDisc(disc);
+            const fdc = new IntelFdc(cpu, scheduler, [drive]);
+            sendCommand(fdc, writeRegCmd, modeRegister, dfsMode);
+            sendCommand(fdc, specifyCmd, initialisation, stepRate, settleTime, headLoadUnload);
+            sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+            scheduler.polltime(ms(1000));
+            const readStatus = () => {
+                sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+                return fdc.read(resultAddr);
+            };
+            readStatus();
+            const readFirstByte = (track) => {
+                sendCommand(fdc, readDataCmd, track, 0, oneSectorOf256Bytes);
+                let firstByte = null;
+                while (fdc.peek(statusAddr) & busy) {
+                    scheduler.polltime(pollTicks);
+                    if (fdc.peek(statusAddr) & needData) {
+                        const byte = fdc.read(dataAddr);
+                        firstByte ??= byte;
+                    }
+                }
+                return { result: fdc.read(resultAddr), firstByte };
+            };
+            return { fdc, scheduler, drive, readStatus, readFirstByte };
+        }
+
+        it("does not unload the head in the middle of a seek longer than the unload count", () => {
+            const { scheduler, readStatus, readFirstByte } = dfsFdc();
+            expect(readFirstByte(79)).toEqual({ result: 0, firstByte: 79 });
+            // 600 ms and 78 steps at 24 ms take the count a status read starts past 12 revolutions.
+            readStatus();
+            scheduler.polltime(ms(600));
+            expect(readFirstByte(1)).toEqual({ result: 0, firstByte: 1 });
+        });
+
+        it("keeps the disc turning through the moment a write special register command deselects the drive", () => {
+            const steady = dfsFdc();
+            const rewritten = dfsFdc();
+            for (let write = 0; write < 100; ++write) {
+                sendCommand(rewritten.fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+                steady.scheduler.polltime(ms(1));
+                rewritten.scheduler.polltime(ms(1));
+            }
+            expect(rewritten.drive.positionFraction).toBe(steady.drive.positionFraction);
+        });
+
+        /** One sector 0 on the physical track, its ID claiming another track, its first byte the physical one. */
+        function buildTrackClaiming(disc, physicalTrack, claimedTrack) {
+            const sector = new Uint8Array(SectorBytes);
+            sector[0] = physicalTrack;
+            disc.buildTrack(false, physicalTrack)
+                .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+                .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+                .resetCrc()
+                .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+                .appendFmByte(claimedTrack)
+                .appendFmByte(0)
+                .appendFmByte(0)
+                .appendFmByte(1)
+                .appendCrc()
+                .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+                .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+                .resetCrc()
+                .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+                .appendFmChunk(sector)
+                .appendCrc()
+                .fillFmByte(0xff);
+        }
+
+        it("does not count down a read's sector timeout during its seek to the next track after a mismatch", () => {
+            // A 510 ms step and a 510 ms settle make the retry seek outlast three index pulses. The
+            // head stays loaded throughout, so only the sector timeout can end the read.
+            const neverUnload = 0xf8;
+            const { readFirstByte } = dfsFdc({
+                stepRate: 255,
+                settleTime: 255,
+                headLoadUnload: neverUnload,
+                alterDisc: (disc) => {
+                    buildTrackClaiming(disc, 5, 6);
+                    buildTrackClaiming(disc, 6, 5);
+                },
+            });
+            expect(readFirstByte(5)).toEqual({ result: 0, firstByte: 6 });
+        });
+
+        it("still unloads the head the counted revolutions after a command", () => {
+            const { scheduler, drive, readFirstByte } = dfsFdc();
+            readFirstByte(1);
+            scheduler.polltime(ms(11 * 200));
+            expect(drive.spinning).toBe(true);
+            scheduler.polltime(ms(2 * 200));
+            expect(drive.spinning).toBe(false);
         });
     });
 

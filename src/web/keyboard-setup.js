@@ -1,6 +1,5 @@
 import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
-import { note } from "./analytics.js";
 import { keyCodes } from "../keymap.js";
 import { Shortcuts } from "./shortcuts.js";
 
@@ -40,17 +39,7 @@ export class KeyboardSetup {
         keyboard.addEventListener("notice", showNotice);
         keyboard.addEventListener("pause", () => actions.pause());
         keyboard.addEventListener("resume", () => actions.resume());
-        keyboard.addEventListener("break", (e) => {
-            // F12/Break: Reset processor
-            if (e.detail) note("keyboard", { type: "press", label: "break" });
-        });
 
-        const onDown = (label, action) => (down) => {
-            if (down) {
-                if (label) note("keyboard", { type: "press", label });
-                action();
-            }
-        };
         const alt = { alt: true, ctrl: false };
         const runners = {
             toggleDebugger: () => actions.toggleDebugger(),
@@ -59,24 +48,17 @@ export class KeyboardSetup {
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
             openRewind: () => actions.openRewind(),
+            openMediaDrive: (shift) => actions.openMedia(shift ? 1 : 0),
             openMediaTape: () => actions.openMedia("tape"),
         };
         for (const shortcut of Shortcuts) {
             if (!shortcut.key) continue;
-            if (shortcut.run === "openMediaDrive") {
-                // The only shortcut whose shift state changes what it does, rather than which key it is.
-                keyboard.registerKeyHandler(
-                    keyCodes[shortcut.key],
-                    (down, _code, shift) => {
-                        if (down) actions.openMedia(shift ? 1 : 0);
-                    },
-                    alt,
-                );
-                continue;
-            }
+            const run = runners[shortcut.run];
             keyboard.registerKeyHandler(
                 keyCodes[shortcut.key],
-                onDown(shortcut.note ?? null, runners[shortcut.run]),
+                (down, _code, shift) => {
+                    if (down) run(shift);
+                },
                 alt,
             );
         }

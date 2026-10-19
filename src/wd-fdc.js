@@ -636,19 +636,16 @@ export class WdFdc {
      */
     _writeControl(val) {
         const isMotorOn = !!(this._statusRegister & Status.motorOn);
+        const drive = val & (Control.drive0 | Control.drive1) ? this._drives[val & Control.drive0 ? 0 : 1] : null;
         if (this._currentDrive && this._currentDrive.spinning) {
             if (!isMotorOn) {
                 throw new Error(
                     `Unexpected motor control bit off when setting the control register to ${hexbyte(val)}`,
                 );
             }
-            this._currentDrive.stopSpinning();
+            if (this._currentDrive !== drive) this._currentDrive.stopSpinning();
         }
-        if (val & Control.drive0 || val & Control.drive1) {
-            this._currentDrive = this._drives[val & Control.drive0 ? 0 : 1];
-        } else {
-            this._currentDrive = null;
-        }
+        this._currentDrive = drive;
         if (this._currentDrive) {
             if (isMotorOn) this._currentDrive.startSpinning();
             this._currentDrive.selectSide(this._isSide(val));

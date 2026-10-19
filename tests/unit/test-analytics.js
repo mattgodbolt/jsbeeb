@@ -200,6 +200,24 @@ describe("analytics", () => {
                 expect(gtag).toHaveBeenCalledWith("event", "category", { type: "type", count: 0 });
             });
 
+            it("logs what it sends as one line of text, leaving out the parameters that are undefined", async () => {
+                const { note } = await loadWithMeasurementId(measurementId);
+                note("category", { type: "type", label: undefined, count: 0, embed: false });
+                expect(console.log).toHaveBeenCalledWith("event noted: category type=type count=0 embed=false");
+            });
+
+            it.each([
+                ["a b", '"a b"'],
+                ['a"b', '"a\\"b"'],
+                ["a=b", '"a=b"'],
+                ["a\nb", '"a\\nb"'],
+                ["", '""'],
+            ])("quotes %j in the log line so it reads as one value", async (value, logged) => {
+                const { note } = await loadWithMeasurementId(measurementId);
+                note("category", { label: value });
+                expect(console.log).toHaveBeenCalledWith(`event noted: category label=${logged}`);
+            });
+
             const sent = (name) =>
                 gtag.mock.calls.filter(([command, event]) => command === "event" && event === name).map(([, , p]) => p);
 
