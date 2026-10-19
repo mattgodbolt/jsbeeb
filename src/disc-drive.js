@@ -10,9 +10,9 @@ const SpinDebounceMs = 2;
 const RevolutionMs = 200;
 /**
  * The spindle motor of a 5.25" drive reaches speed about half a second after it starts (drive
- * sheets give 400 to 500 ms) and coasts to a stop over a second or so: time constants of the
- * exponentials below. A coasting disc comes to rest once it falls to LeastSpeed, which is also
- * the speed a restart picks up from.
+ * sheets give 400 to 500 ms) and slows over a second or so once it stops: time constants of the
+ * exponentials below. A coasting disc comes to rest once it falls to LeastSpeed, about four
+ * seconds after its motor stops, which is also the speed a restart picks up from.
  */
 const SpinUpMs = 150;
 const SpinDownMs = 1000;

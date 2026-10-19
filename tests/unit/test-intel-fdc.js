@@ -4,7 +4,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { DiscDrive } from "../../src/disc-drive.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { findModel } from "../../src/models.js";
 
 const AtomModel = findModel("Atom");
@@ -383,17 +383,19 @@ describe("Intel 8271 tests", function () {
         const pollTicks = 16;
         const ms = (n) => n * 2000;
 
-        function dfsFdc() {
+        function dfsFdc({ stepRate = 12, settleTime = 10, headLoadUnload = 0xc8, alterDisc = () => {} } = {}) {
             const scheduler = new Scheduler();
             const cpu = fake6502();
             const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
             const data = new Uint8Array(Tracks * SectorsPerTrack * SectorBytes);
             for (let track = 0; track < Tracks; ++track) data[track * SectorsPerTrack * SectorBytes] = track;
-            drive.setDisc(loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null));
+            const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null);
+            alterDisc(disc);
+            drive.setDisc(disc);
             const fdc = new IntelFdc(cpu, scheduler, [drive]);
             sendCommand(fdc, writeRegCmd, modeRegister, dfsMode);
             // DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
-            sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
+            sendCommand(fdc, specifyCmd, initialisation, stepRate, settleTime, headLoadUnload);
             sendCommand(fdc, specifyCmd, badTracksDrive0, 0xff, 0xff, 0);
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             scheduler.polltime(ms(1000));
@@ -435,6 +437,45 @@ describe("Intel 8271 tests", function () {
                 rewritten.scheduler.polltime(ms(1));
             }
             expect(rewritten.drive.positionFraction).toBe(steady.drive.positionFraction);
+        });
+
+        /** One sector 0 on the physical track, its ID claiming another track, its first byte the physical one. */
+        function buildTrackClaiming(disc, physicalTrack, claimedTrack) {
+            const sector = new Uint8Array(SectorBytes);
+            sector[0] = physicalTrack;
+            disc.buildTrack(false, physicalTrack)
+                .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+                .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+                .resetCrc()
+                .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+                .appendFmByte(claimedTrack)
+                .appendFmByte(0)
+                .appendFmByte(0)
+                .appendFmByte(1)
+                .appendCrc()
+                .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+                .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+                .resetCrc()
+                .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+                .appendFmChunk(sector)
+                .appendCrc()
+                .fillFmByte(0xff);
+        }
+
+        it("does not count down a read's sector timeout during its seek to the next track after a mismatch", () => {
+            // A 510 ms step and a 510 ms settle make the retry seek outlast three index pulses. The
+            // head stays loaded throughout, so only the sector timeout can end the read.
+            const neverUnload = 0xf8;
+            const { readFirstByte } = dfsFdc({
+                stepRate: 255,
+                settleTime: 255,
+                headLoadUnload: neverUnload,
+                alterDisc: (disc) => {
+                    buildTrackClaiming(disc, 5, 6);
+                    buildTrackClaiming(disc, 6, 5);
+                },
+            });
+            expect(readFirstByte(5)).toEqual({ result: 0, firstByte: 6 });
         });
 
         it("still unloads the head the counted revolutions after a command", () => {
