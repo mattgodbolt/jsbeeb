@@ -435,6 +435,17 @@ describe("MachineSession watching execution", () => {
         expect(afterStore).toEqual({ id: write, type: "write", address: StoreAddress, value: 42 });
     });
 
+    it("reports the value a zero page read breakpoint saw", async () => {
+        const LoadAddress = 0x70;
+        await stopAtProgramStart([0xa5, LoadAddress, 0x60]); // LDA &70, RTS
+        session.writeMemory(LoadAddress, [42]);
+        const read = session.addBreakpoint("read", LoadAddress);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toEqual({ id: read, type: "read", address: LoadAddress, value: 42 });
+    });
+
     it("does not report the address it was added stopped at once reset moves the pc", async () => {
         const handler = irqHandler();
         await session.runUntilAddress(handler);

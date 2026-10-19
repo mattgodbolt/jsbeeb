@@ -6,15 +6,15 @@ import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { Music5000 } from "../../src/music5000.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
-import { findModel, TEST_6502 } from "../../src/models.js";
+import { findModel, TEST_6502, TEST_65C02 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 
-function makeCpu() {
+function makeCpu(model = TEST_6502) {
     const fb32 = new Uint32Array(1024 * 768);
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
-    return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec() });
+    return new model.Cpu(model, { ...nullIo({ video, soundChip }), config: machineSpec() });
 }
 
 // The 8271 seek command, selecting drive 1. The drive is empty, so it never reports ready and the
@@ -692,5 +692,50 @@ describe("peeking at the hardware", () => {
             sysvia: Array.from({ length: ViaRegisterCount }, (_, reg) => cpu.readmem(SysViaBase + reg)),
         });
         expect(state(peeked)).toEqual(state(untouched));
+    });
+});
+
+describe("Cpu6502 debug read hook", () => {
+    const ProgramAddress = 0x2000;
+    const ZeroPageAddress = 0x70;
+    const AbsoluteAddress = 0x3000;
+    const SubroutineAddress = 0x2010;
+    // prettier-ignore
+    const Program = [
+        0xa5, ZeroPageAddress, // LDA &70
+        0xad, 0x00, 0x30, // LDA &3000
+        0xa9, 0x5a, // LDA #&5A
+        0x48, // PHA
+        0xa9, 0x00, // LDA #0
+        0x68, // PLA
+        0x20, 0x10, 0x20, // JSR &2010
+        0x4c, 0x0e, 0x20, // JMP &200E
+    ];
+    const ReturnAddressLessOne = 0x200d;
+
+    it.each([
+        ["6502", TEST_6502],
+        ["65C02", TEST_65C02],
+    ])("is given the value each read on the %s returns", async (_name, model) => {
+        const cpu = makeCpu(model);
+        await cpu.initialise();
+        Program.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
+        cpu.writemem(SubroutineAddress, 0x60); // RTS
+        cpu.writemem(ZeroPageAddress, 0x42);
+        cpu.writemem(AbsoluteAddress, 0x99);
+        const stackTop = 0x100 + cpu.s;
+        cpu.pc = ProgramAddress;
+        const reads = [];
+        cpu.debugRead.add((addr, value) => {
+            reads.push([addr, value]);
+        });
+
+        cpu.execute(100);
+
+        expect(reads).toContainEqual([ZeroPageAddress, 0x42]);
+        expect(reads).toContainEqual([AbsoluteAddress, 0x99]);
+        expect(reads).toContainEqual([stackTop, 0x5a]);
+        expect(reads).toContainEqual([stackTop - 1, ReturnAddressLessOne & 0xff]);
+        expect(reads).toContainEqual([stackTop, ReturnAddressLessOne >>> 8]);
     });
 });

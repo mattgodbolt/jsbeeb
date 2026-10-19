@@ -814,7 +814,7 @@ export class Cpu6502 extends Base6502 {
     readmemZpStack(addr) {
         addr &= 0xffff;
         const res = this.ramRomOs[addr];
-        if (this._debugRead) this._debugRead(addr, 0, res);
+        if (this._debugRead) this._debugRead(addr, res, 0);
         return res | 0;
     }
 
