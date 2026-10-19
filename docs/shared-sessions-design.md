@@ -226,10 +226,11 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. Creating a room
   returns a host secret, which the host sends to the rendezvous with each request that needs it and never to a
-  guest. A guest creates an offer, waits for ICE gathering to finish (or a short timeout counted from its first
-  candidate, however long that takes to come) so the full SDP goes in one message, posts it under an ID of its
-  own, and polls for its answer. The host polls the room every
-  second or two, answers each new offer, and keeps polling for the life of the session, for late joiners.
+  guest. A guest creates an offer, waits for ICE gathering to finish so the full SDP goes in one message, posts
+  it under an ID of its own, and polls for its answer. The host polls the room every second or two, answers each
+  new offer after the same wait, and keeps polling for the life of the session, for late joiners. The wait ends
+  a short time after the first candidate, however long that takes to come, since a description without one
+  cannot connect; a side that finds none gives up after the connection timeout.
   Listing offers, answering and extending the room need the host secret; a guest can only post its offer and
   read its answer, so no guest sees another's address. Offers expire on their own short clock, so a guest that
   closes its tab while waiting cannot fill the room's cap of pending offers. The function checks IDs, caps

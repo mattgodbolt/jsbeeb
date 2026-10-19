@@ -136,9 +136,7 @@ const hasCandidate = (pc) => /^a=candidate:/m.test(pc.localDescription?.sdp ?? "
 
 // The rendezvous carries one offer and one answer per guest, so each side waits
 // for its candidates before sending its description rather than trickling them:
-// all of them, or those found within IceGatheringTimeoutMs of the first. A busy
-// machine can take seconds to find the first, and a description without one
-// cannot connect.
+// all of them, or those found within IceGatheringTimeoutMs of the first.
 async function gatheredDescription(pc) {
     const listening = new AbortController();
     const timers = [];
@@ -156,7 +154,9 @@ async function gatheredDescription(pc) {
             pc.addEventListener("icegatheringstatechange", () => gathered() && resolve(), { signal });
             pc.addEventListener("icecandidate", ({ candidate }) => candidate && foundOne(), { signal });
             if (hasCandidate(pc)) foundOne();
-            timers.push(setTimeout(() => found || reject(timedOut("couldn't connect directly")), ConnectTimeoutMs));
+            timers.push(
+                setTimeout(() => found || reject(timedOut("found no address to connect from")), ConnectTimeoutMs),
+            );
         });
     } finally {
         listening.abort();
@@ -734,7 +734,9 @@ export class SessionHost {
         try {
             await pc.setRemoteDescription({ type: "offer", sdp });
             await pc.setLocalDescription(await pc.createAnswer());
-            await this.context.rendezvous.postAnswer(this.room, this.secret, id, await gatheredDescription(pc));
+            const description = await gatheredDescription(pc);
+            if (this.guests.get(id) !== guest) return;
+            await this.context.rendezvous.postAnswer(this.room, this.secret, id, description);
         } catch (error) {
             console.warn(`Shared session: answering ${id} failed: ${error.message}`);
             this.drop(guest, `answering it failed: ${error.message}`);
