@@ -424,7 +424,7 @@ describe("Intel 8271 tests", function () {
             settleTime = 10,
             headLoadUnload = 0xc8,
             alterDisc = () => {},
-            secondDisc = undefined,
+            secondDisc,
         } = {}) {
             const scheduler = new Scheduler();
             const cpu = fake6502();
