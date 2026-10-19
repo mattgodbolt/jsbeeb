@@ -140,6 +140,7 @@ const Result = Object.freeze({
     dataCrcError: 0x0e,
     driveNotReady: 0x10,
     writeProtected: 0x12,
+    trackZeroNotFound: 0x14,
     sectorNotFound: 0x18,
     flagDeletedData: 0x20,
 });
@@ -357,7 +358,7 @@ export class IntelFdc {
         // important to emulate at all, but it does help create new copy protection
         // schemes under emulation.
         if (this._driveOut & DriveOut.writeEnable) {
-            this._currentDrive.writePulses(IbmDiscFormat.fmTo2usPulses(0xff, 0xff));
+            this._currentDrive?.writePulses(IbmDiscFormat.fmTo2usPulses(0xff, 0xff));
         }
 
         // Lower any NMI assertion. This is particularly important for error $0A,
@@ -1250,7 +1251,8 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) drive = this._drives[0];
         else if (selectBits === DriveOut.select_1) drive = this._drives[1];
 
-        this._currentDrive = drive;
+        // LOAD HEAD gates each drive select (a 7438, IC79 on the Model B), so with it low no drive is selected
+        this._currentDrive = driveOut & DriveOut.loadHead ? drive : null;
 
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             this._ready = false;
@@ -1344,7 +1346,9 @@ export class IntelFdc {
             (this._trk0 && this._regs[Registers.internalSeekTarget_2] === 0) || // Seek to 0 done, TRK0 detected
             this._regs[Registers.internalSeekCount] === 0
         ) {
-            this._doLoadHead();
+            if (this._regs[Registers.internalSeekTarget_2] === 0 && !this._trk0)
+                this._finishCommand(Result.trackZeroNotFound);
+            else this._doLoadHead();
             return;
         }
         //  We're going to actually step, so we'll need settle if the head is already loaded.
@@ -1789,6 +1793,7 @@ export class IntelFdc {
         const selectBits = this._driveOut & DriveOut.selectFlags;
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
         else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
+        if (!(this._driveOut & DriveOut.loadHead)) this._currentDrive = null;
 
         // Restore timer
         this._timerTask.cancel();

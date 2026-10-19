@@ -10,6 +10,8 @@ import { findModel } from "../../src/models.js";
 const AtomModel = findModel("Atom");
 
 const ms = (n) => n * 2000;
+const WriteEnable = 0x01;
+const ResetAddr = 2;
 
 class FakeDrive {
     constructor() {
@@ -96,6 +98,13 @@ describe("Intel 8271 tests", function () {
         expect(fdc._driveOut & loadHead).toBe(loadHead);
         expect(fakeDrive.spinning).toBe(true);
     });
+
+    it("survives a reset with write enable up and the head unloaded", () => {
+        const fdc = new IntelFdc(fake6502(), new Scheduler(), [new FakeDrive()]);
+        sendCommand(fdc, writeRegCmd, mmioWrite, WriteEnable | driveSelect1);
+        expect(() => fdc.write(ResetAddr, 1)).not.toThrow();
+    });
+
     it("should seek to a track", () => {
         const fakeCpu = fake6502();
         const scheduler = new Scheduler();
@@ -155,6 +164,7 @@ describe("Intel 8271 tests", function () {
             expect(drive.track).toBe(13);
             for (let track = 13; track < 20; ++track) drive.seekOneTrack(1);
             events.length = 0;
+            sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
             sendCommand(fdc, seekCmd, 10);
             scheduler.polltime(6000 * 10);
             expect(events).toEqual([[-3, 3], "end after 3"]);
@@ -190,16 +200,18 @@ describe("Intel 8271 tests", function () {
         const specifyCmd = 0x35;
         const initialisation = 0x0d;
 
-        it("loads the head over eight milliseconds a unit, as a 5.25 inch drive doubles it", () => {
+        it("loads the head over eight milliseconds a unit, as a 5.25 inch drive doubles it, after the steps", () => {
             const fakeDrive = new FakeDrive();
             const scheduler = new Scheduler();
             const fdc = new IntelFdc(fake6502(), scheduler, [fakeDrive]);
             sendCommand(fdc, specifyCmd, initialisation, 12, 10, 0xc8);
             sendCommand(fdc, writeRegCmd, mmioWrite, driveSelect1);
             sendCommand(fdc, seekCmd, 1);
-            // Steps at the 24 ms the specify asked for, two extra for the bad track registers.
-            while (scheduler.headroom() === 24 * 2000) scheduler.polltime(scheduler.headroom());
-            expect(fakeDrive.track).toBe(3);
+            // Three steps at the 24 ms the specify asked for, two extra for the bad track registers, sent
+            // while LOAD HEAD gates the drive's select off, so they never reach it.
+            let steps = 0;
+            for (; scheduler.headroom() === 24 * 2000; ++steps) scheduler.polltime(scheduler.headroom());
+            expect([steps, fakeDrive.track]).toEqual([3, 0]);
             // The head, unloaded until now, takes 8 units of 8 ms to load.
             expect(scheduler.headroom()).toBe(8 * 8 * 2000);
         });
@@ -239,6 +251,57 @@ describe("Intel 8271 tests", function () {
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect2);
             expect(drives[1].speed).toBe(1);
         });
+    });
+
+    describe("seek to track 0", () => {
+        const resultAddr = 1;
+        const trackZeroNotFound = 0x14;
+        const specifyCmd = 0x35;
+        const initialisation = 0x0d;
+        // As DFS 1.20 specifies: the head stays loaded for 12 revolutions after a command, here the status read.
+        const dfsHeadLoadUnload = 0xc8;
+        // What _stepRateMs takes for a step rate of 0.
+        const StepMs = 3;
+
+        function seekToZeroFromTrack20(driveOut, { restoreMidSeek = false } = {}) {
+            const scheduler = new Scheduler();
+            const cpu = fake6502();
+            let drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+            drive.setDisc(Disc.createBlank());
+            for (let step = 0; step < 20; ++step) drive.seekOneTrack(1);
+            let fdc = new IntelFdc(cpu, scheduler, [drive]);
+            sendCommand(fdc, specifyCmd, initialisation, 0, 0, dfsHeadLoadUnload);
+            sendCommand(fdc, writeRegCmd, mmioWrite, driveOut);
+            scheduler.polltime(ms(1000));
+            // The ready latch only updates when the drive status is read.
+            sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+            const start = scheduler.epoch;
+            sendCommand(fdc, seekCmd, 0);
+            if (restoreMidSeek) {
+                scheduler.polltime(ms(10 * StepMs));
+                const snapshot = fdc.snapshotState();
+                drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+                fdc = new IntelFdc(cpu, scheduler, [drive]);
+                fdc.restoreState(snapshot);
+            }
+            while (fdc.peek(0) & busy) scheduler.polltime(ms(1));
+            const steps = Math.round((scheduler.epoch - start) / ms(StepMs));
+            return { result: fdc.read(resultAddr), track: drive.track, steps };
+        }
+
+        it("with the head loaded first, as the DFS does, finds it", () => {
+            expect(seekToZeroFromTrack20(loadHead | driveSelect1)).toMatchObject({ result: 0, track: 0 });
+        });
+
+        it.each([false, true])(
+            "with the head unloaded reaches no drive and gives up after 255 steps (restored mid-seek: %s)",
+            (restoreMidSeek) =>
+                expect(seekToZeroFromTrack20(driveSelect1, { restoreMidSeek })).toEqual({
+                    result: trackZeroNotFound,
+                    track: 20,
+                    steps: 255,
+                }),
+        );
     });
 
     describe("ready", () => {
