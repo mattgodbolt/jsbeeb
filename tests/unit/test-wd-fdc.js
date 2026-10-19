@@ -24,6 +24,7 @@ const StatusLostData = 0x04;
 const StatusCrcError = 0x08;
 const StatusRecordNotFound = 0x10;
 const StatusDeletedMark = 0x20;
+const StatusWriteProtected = 0x40;
 
 const ForceInterrupt = 0xd0;
 // The whole low nibble, including the ready line bits the BBC can never exercise.
@@ -64,6 +65,10 @@ const SectorGap = 22;
 
 function blankDisc() {
     return new Disc(true, new DiscConfig(), "test.ssd");
+}
+
+function protectedDisc() {
+    return new Disc(false, new DiscConfig(), "protected.ssd");
 }
 
 /**
@@ -394,24 +399,47 @@ describe("WD1770 FDC tests", () => {
     });
 
     describe("write protect", () => {
-        const StatusWriteProtected = 0x40;
-        const protectedDisc = () => new Disc(false, new DiscConfig(), "protected.ssd");
+        // The motor times out after nine index pulses once the controller is idle.
+        const MotorTimeoutTicks = 10 * RevolutionTicks;
 
         it.each([
-            ["protected", protectedDisc, StatusWriteProtected],
-            ["writable", blankDisc, 0],
-        ])("shows a %s disc in the status after a restore", (_, disc, expected) => {
-            const { scheduler, fdc } = makeFdc({ disc: disc() });
-            const { status } = runCommand(fdc, scheduler, RestoreCommand);
-            expect(status & StatusWriteProtected).toBe(expected);
+            ["restore", RestoreCommand],
+            ["seek", SeekCommand],
+            ["step", StepOutWithUpdateCommand],
+        ])("shows a protected disc in the status after a %s", (_, command) => {
+            const { scheduler, fdc } = makeFdc({ disc: protectedDisc() });
+            const { status } = runCommand(fdc, scheduler, command);
+            expect(status & StatusWriteProtected).toBe(StatusWriteProtected);
         });
 
-        it("follows a disc changed after a type I command", () => {
-            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+        it("shows a writable disc as unprotected after a restore", () => {
+            const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
+            const { status } = runCommand(fdc, scheduler, RestoreCommand);
+            expect(status & StatusWriteProtected).toBe(0);
+        });
+
+        it.each([
+            ["writable to protected", blankDisc, protectedDisc, StatusWriteProtected],
+            ["protected to writable", protectedDisc, blankDisc, 0],
+        ])("follows a disc changed from %s after a type I command", (_, before, after, expected) => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: before() });
             runCommand(fdc, scheduler, RestoreCommand);
-            drives[0].setDisc(protectedDisc());
+            drives[0].setDisc(after());
             scheduler.polltime(RevolutionTicks);
-            expect(fdc.read(StatusRegister) & StatusWriteProtected).toBe(StatusWriteProtected);
+            expect(fdc.read(StatusRegister) & StatusWriteProtected).toBe(expected);
+        });
+
+        it("clears with track 0 and the index when the motor times out", () => {
+            const { scheduler, fdc } = makeFdc({ disc: protectedDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            scheduler.polltime(MotorTimeoutTicks);
+            expect(fdc.read(StatusRegister) & StatusWriteProtected).toBe(0);
+        });
+
+        it("does not show a protected disc after a read", () => {
+            const { scheduler, fdc } = makeFdc({ disc: protectedDisc() });
+            const { status } = runCommand(fdc, scheduler, ReadAddressCommand);
+            expect(status & StatusWriteProtected).toBe(0);
         });
     });
 
