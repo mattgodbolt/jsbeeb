@@ -48,7 +48,8 @@ their reasons).
 For each blocking or should-fix finding:
 
 - **Agree:** fix it. When the fix changes behaviour, add the test that would have caught it; a
-  comment, doc or convention fix needs none. Run `npm run lint`, `npm run format` and
+  comment, doc or convention fix needs none. A size finding is taken by deleting, after checking
+  that what remains still covers the claim. Run `npm run lint`, `npm run format` and
   `npx vitest run` on the test files the diff touches, then commit the fix as a new commit and
   add the finding and that commit to a running list of taken findings, which the next round's
   brief carries.
