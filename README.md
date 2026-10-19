@@ -172,8 +172,8 @@ same for that row.
 - **A disc that needs a Master 128** switches the emulator to one: without asking when it is to boot, after asking
   otherwise.
 - **Files from this computer:** drop one on the page, or open one from the window's footer. A disc goes into the
-  aimed drive, a tape into the deck, and a save state is restored. The footer also makes a blank disc in this browser
-  or on Google Drive, and connects Google Drive.
+  aimed drive and a tape into the deck. The footer also makes a blank disc in this browser or on Google Drive, and
+  connects Google Drive. Save states load from the **State** menu; see [Save State and Rewind](#save-state-and-rewind).
 - **Each drive** has an eject latch, a 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the
   URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser.
 - **The URL** names what is loaded and says whether the last load into drive 0 booted, so a link copied afterwards
@@ -208,6 +208,7 @@ Press `Alt-B` to open a window showing what has been printed so far; it then kee
 ### Save State and Rewind
 
 Save and load full emulator state snapshots from the **State** menu (or `Ctrl+S` / `Ctrl+O` in the Electron app).
+A save state dropped on the page is restored too.
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
 
