@@ -431,9 +431,18 @@ describe("WD1770 FDC tests", () => {
 
         it("clears with track 0 and the index when the motor times out", () => {
             const { scheduler, fdc } = makeFdc({ disc: protectedDisc() });
-            runCommand(fdc, scheduler, RestoreCommand);
+            const { status } = runCommand(fdc, scheduler, RestoreCommand);
+            expect(status & StatusWriteProtected).toBe(StatusWriteProtected);
             scheduler.polltime(MotorTimeoutTicks);
             expect(fdc.read(StatusRegister) & StatusWriteProtected).toBe(0);
+        });
+
+        it("shows a protected disc after a force interrupt while idle", () => {
+            const { scheduler, fdc } = makeFdc({ disc: protectedDisc() });
+            runCommand(fdc, scheduler, ReadAddressCommand);
+            fdc.write(CommandRegister, ForceInterrupt);
+            scheduler.polltime(RevolutionTicks);
+            expect(fdc.read(StatusRegister) & StatusWriteProtected).toBe(StatusWriteProtected);
         });
 
         it("does not show a protected disc after a read", () => {

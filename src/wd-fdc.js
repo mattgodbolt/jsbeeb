@@ -848,7 +848,8 @@ export class WdFdc {
         this._logCommand("automatic motor off");
         this._currentDrive.stopSpinning();
         this._statusRegister &= ~Status.motorOn;
-        // In @scarybeasts's testing on a 1772 the polled type 1 status bits get cleared on spin down.
+        // In @scarybeasts's testing on a 1772 the polled track 0 and index bits get cleared on spin down;
+        // write protect, polled the same way, is assumed to go with them.
         if (this._commandType === 1) {
             this._statusRegister &= ~TypeIPolledStatus;
         }
