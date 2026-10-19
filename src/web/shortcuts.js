@@ -8,17 +8,11 @@
  * row's handler.
  */
 export const Shortcuts = [
-    {
-        combo: "Alt-S",
-        key: "S",
-        note: "S",
-        run: "toggleDebugger",
-        description: "Enter the debugger, or leave it and resume",
-    },
-    { combo: "Alt-P", key: "P", note: "pause", run: "togglePause", description: "Pause emulation, or resume" },
-    { combo: "Alt-T", key: "T", note: "turbo", run: "toggleFast", description: "Toggle turbo (fast-as-possible)" },
+    { combo: "Alt-S", key: "S", run: "toggleDebugger", description: "Enter the debugger, or leave it and resume" },
+    { combo: "Alt-P", key: "P", run: "togglePause", description: "Pause emulation, or resume" },
+    { combo: "Alt-T", key: "T", run: "toggleFast", description: "Toggle turbo (fast-as-possible)" },
     { combo: "Alt-B", key: "B", run: "openPrinter", description: "Open printer output window" },
-    { combo: "Alt-W", key: "W", note: "rewind", run: "openRewind", description: "Open rewind scrubber" },
+    { combo: "Alt-W", key: "W", run: "openRewind", description: "Open rewind scrubber" },
     { combo: "Alt-M", key: "M", run: "openMediaDrive", description: "Media window, aimed at drive 0" },
     { combo: "Alt-Shift-M", description: "Media window, aimed at drive 1" },
     { combo: "Alt-C", key: "C", run: "openMediaTape", description: "Media window, aimed at the cassette" },

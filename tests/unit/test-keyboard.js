@@ -11,19 +11,10 @@ describe("Keyboard", () => {
     let mockSysvia;
     let mockInputEnabledFunction;
 
-    // Helper function to create an async event tester.
-    // Resolves with the event itself so callers can access .detail if needed.
     const waitForEvent = (eventName) => {
         return new Promise((resolve) => {
             keyboard.addEventListener(eventName, resolve, { once: true });
         });
-    };
-
-    // Helper to trigger an event and wait for the result
-    const triggerAndWaitForEvent = async (eventName, action) => {
-        const eventPromise = waitForEvent(eventName);
-        action();
-        return await eventPromise;
     };
 
     const keyEvent = (code, key = "", extra = {}) => ({
@@ -464,7 +455,7 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
-    test("keyDown should handle F12/BREAK and emit break event", async () => {
+    test("keyDown should hold reset for F12/BREAK", () => {
         const event = {
             code: keyCodes.F12,
             preventDefault: vi.fn(),
@@ -474,14 +465,10 @@ describe("Keyboard", () => {
         };
 
         keyboard.setRunning(true);
-
-        const breakState = await triggerAndWaitForEvent("break", () => {
-            keyboard.keyDown(event);
-        });
+        keyboard.keyDown(event);
 
         expect(mockProcessor.setReset).toHaveBeenCalledWith(true);
         expect(event.preventDefault).toHaveBeenCalled();
-        expect(breakState.detail).toBe(true);
     });
 
     test("keyUp should call sysvia.keyUp", () => {
@@ -521,7 +508,7 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyUp).not.toHaveBeenCalled();
     });
 
-    test("keyUp should handle F12/BREAK and emit break event", async () => {
+    test("keyUp should release reset for F12/BREAK", () => {
         const event = {
             code: keyCodes.F12,
             preventDefault: vi.fn(),
@@ -530,14 +517,10 @@ describe("Keyboard", () => {
 
         keyboard.setRunning(true);
         keyboard.keyDown(event);
-
-        const breakState = await triggerAndWaitForEvent("break", () => {
-            keyboard.keyUp(event);
-        });
+        keyboard.keyUp(event);
 
         expect(mockProcessor.setReset).toHaveBeenCalledWith(false);
         expect(event.preventDefault).toHaveBeenCalled();
-        expect(breakState.detail).toBe(false);
     });
 
     test("clearKeys should call sysvia.clearKeys", () => {

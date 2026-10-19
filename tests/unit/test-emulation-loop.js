@@ -186,13 +186,18 @@ describe("EmulationLoop", () => {
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(true);
     });
 
-    it("says whether turbo is now on or off each time it is toggled", () => {
+    it("says whether turbo is now on or off each time it is toggled, and notes each toggle", () => {
+        const sent = sentEvents();
         const loop = make();
         loop.toggleFastAsPossible();
         loop.toggleFastAsPossible();
         expect(toasts()).toEqual([
             expect.stringContaining("Turbo is on. Alt-T turns it off."),
             expect.stringContaining("Turbo is off. Alt-T turns it on."),
+        ]);
+        expect(sent("feature_used")).toEqual([
+            { feature: "turbo", action: "enter" },
+            { feature: "turbo", action: "leave" },
         ]);
     });
 
@@ -471,12 +476,14 @@ describe("EmulationLoop", () => {
         });
 
         it("refuses turbo, saying why, rather than arming it for after the session", () => {
+            const sent = sentEvents();
             const loop = started();
             loop.setLockstep(lockstep);
             loop.toggleFastAsPossible();
             loop.setLockstep(null);
             expect(loop.isSpeedy()).toBe(false);
             expect(toasts()).toEqual([expect.stringContaining("not available in a shared session")]);
+            expect(sent("feature_used")).toEqual([]);
         });
 
         it("runs the processor again once the session is over", () => {
