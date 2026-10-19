@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.10.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.9.0...v2.10.0) (2026-10-19)
+
+
+### Features
+
+* a ?benchmark=&lt;workload&gt; page mode that measures the emulator's speed ([#1356](https://github.com/mattgodbolt/jsbeeb/issues/1356)) ([61a4a90](https://github.com/mattgodbolt/jsbeeb/commit/61a4a909706e9680031ec7ec66ed1fb159b1ef2a))
+* fit a VideoNuLA only when asked, offer one when a program or disc needs it, and have a session guest take the host's machine ([#1359](https://github.com/mattgodbolt/jsbeeb/issues/1359)) ([99c1f45](https://github.com/mattgodbolt/jsbeeb/commit/99c1f45cc6650490b0f0482b79963f766bff9587))
+
+
+### Bug Fixes
+
+* log each analytics event as one line of key=value text instead of an object ([#1366](https://github.com/mattgodbolt/jsbeeb/issues/1366)) ([3341fb4](https://github.com/mattgodbolt/jsbeeb/commit/3341fb45b3e73b15d66d6a6822031323e4c14ee1))
+* play a restored state at once after a rewind, not after the rewound time ([#1367](https://github.com/mattgodbolt/jsbeeb/issues/1367)) ([d72aca3](https://github.com/mattgodbolt/jsbeeb/commit/d72aca3ad05f228e5bcfeb3643fbe7caaa88edb5))
+* the 8271 no longer unloads the head in the middle of a seek, and the disc coasts through a brief motor stop ([#1373](https://github.com/mattgodbolt/jsbeeb/issues/1373)) ([5be54b6](https://github.com/mattgodbolt/jsbeeb/commit/5be54b6e9df116d00204de78c97ae7482754f97a))
+
 ## [2.9.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.8.0...v2.9.0) (2026-10-18)
 
 
