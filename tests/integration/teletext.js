@@ -120,11 +120,11 @@ describe("Test other teletext test pages", () => {
         // flashes because Steady is incorrectly applied "Set After".
         // Red gfx, Flash, two full-block graphics, Hold, Steady, then more blocks.
         // Positions: [gfx][flash][block][block][hold][steady][block][block]
-        // During flash-on: blocks at pos 3-4 should be blanked (flashing),
+        // While flashing text is hidden: blocks at pos 3-4 should be blanked (flashing),
         // but pos 5 (Steady+held) and pos 6-7 should show red (Steady applies "Set At").
         await testMachine.type("CLS:VDU &91,&88,&BF,&BF,&9E,&89,&BF,&BF");
         await testMachine.runUntilInput();
-        await compare(video, testMachine, `expected_steady_set_at_flash_1.png`, FlashHiddenField);
+        await compare(video, testMachine, `expected_steady_set_at_flash_0.png`, FlashHiddenField);
     });
     it("should work with the alternative engineer test page bug 469", async () => {
         const video = new CapturingVideo();

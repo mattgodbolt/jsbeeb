@@ -34,7 +34,7 @@ describe("RewindUI", () => {
             }),
         };
         resume = vi.fn();
-        loop = Object.assign(new EventTarget(), { pause: vi.fn(() => resume) });
+        loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume) });
     });
 
     afterEach(teardownDom);
@@ -60,14 +60,14 @@ describe("RewindUI", () => {
         it("does nothing when nothing has been captured", () => {
             make().open();
             expect(panel().hidden).toBe(true);
-            expect(loop.pause).not.toHaveBeenCalled();
+            expect(loop.hold).not.toHaveBeenCalled();
         });
 
         it("pauses, fills the filmstrip with ages, and lands on now", () => {
             make();
             const snapshots = captured(3);
             document.getElementById("rewind-open").click();
-            expect(loop.pause).toHaveBeenCalledWith("the rewind panel");
+            expect(loop.hold).toHaveBeenCalledWith("the rewind panel");
             expect(panel().hidden).toBe(false);
             expect(thumbs().map((thumb) => thumb.querySelector(".rewind-thumb-label").textContent)).toEqual([
                 "-2s",
@@ -96,7 +96,7 @@ describe("RewindUI", () => {
             captured(1);
             ui.open();
             ui.open();
-            expect(loop.pause).toHaveBeenCalledTimes(1);
+            expect(loop.hold).toHaveBeenCalledTimes(1);
             expect(thumbs()).toHaveLength(1);
         });
     });

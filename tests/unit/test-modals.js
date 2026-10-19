@@ -11,7 +11,7 @@ describe("Modals", () => {
     beforeEach(() => {
         vi.useFakeTimers();
         domFromIndexHtml("error-dialog", "are-you-sure", "info", "help");
-        loop = { pause: vi.fn(() => vi.fn()) };
+        loop = { hold: vi.fn(() => vi.fn()) };
         modals = new Modals({ loop });
     });
 
@@ -19,7 +19,7 @@ describe("Modals", () => {
 
     // The resume handles this test's Modals took, in order. Earlier tests'
     // instances still listen on the shared document, but call their own loop.
-    const resumes = () => loop.pause.mock.results.map((result) => result.value);
+    const resumes = () => loop.hold.mock.results.map((result) => result.value);
 
     // What Bootstrap does around a modal: the events bubble up to the
     // document, and the element carries "show" while it is up.
@@ -37,7 +37,7 @@ describe("Modals", () => {
     describe("holding the emulator", () => {
         it("holds the emulator while a modal is up and lets go when it goes", () => {
             raise("info");
-            expect(loop.pause).toHaveBeenCalledWith("the info dialog");
+            expect(loop.hold).toHaveBeenCalledWith("the info dialog");
             expect(resumes()[0]).not.toHaveBeenCalled();
             lower("info");
             expect(resumes()[0]).toHaveBeenCalledTimes(1);
@@ -46,7 +46,7 @@ describe("Modals", () => {
         it("takes one hold per modal and lets each go with its own", () => {
             raise("info");
             raise("help");
-            expect(loop.pause).toHaveBeenCalledTimes(2);
+            expect(loop.hold).toHaveBeenCalledTimes(2);
             lower("info");
             expect(resumes()[0]).toHaveBeenCalledTimes(1);
             expect(resumes()[1]).not.toHaveBeenCalled();
@@ -57,7 +57,7 @@ describe("Modals", () => {
         it("does not take a second hold when a modal is shown twice", () => {
             raise("info");
             raise("info");
-            expect(loop.pause).toHaveBeenCalledTimes(1);
+            expect(loop.hold).toHaveBeenCalledTimes(1);
         });
 
         it("reports whether any modal is up", () => {
