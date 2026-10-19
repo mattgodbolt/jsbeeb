@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
@@ -44,3 +44,19 @@ it("will not wait for the vertical sync of an OS it does not know", async () => 
     await machine.initialise();
     await expect(machine.runUntilVblank()).rejects.toThrow("BBC Master 128 (DFS)");
 });
+
+it.each(["B-DFS1.2", "B-US", "B-German", "Master", "MasterADFS"])(
+    "the %s MOS boots and changes mode without touching a VideoNuLA",
+    async (model) => {
+        const onMissingVideoNula = vi.fn();
+        const video = new Video(model.startsWith("Master"), new Uint32Array(FramebufferPixels), () => {}, {
+            onMissingVideoNula,
+        });
+        const machine = new TestMachine(model, { video });
+        await machine.initialise();
+        await machine.runUntilInput(10);
+        await machine.type("MODE 2");
+        await machine.runUntilInput(10);
+        expect(onMissingVideoNula).not.toHaveBeenCalled();
+    },
+);

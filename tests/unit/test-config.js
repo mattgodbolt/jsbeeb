@@ -214,6 +214,29 @@ describe("Config", () => {
         });
     });
 
+    describe("the VideoNuLA control", () => {
+        const nula = () => document.getElementById("hasVideoNula");
+
+        it("fits a VideoNuLA from the next start and puts it in the URL", () => {
+            openDialog();
+            nula().click();
+            closeDialog();
+            expect(lastSaved()).toEqual({ hasVideoNula: true });
+            expect(settings.urlState.params.hasVideoNula).toBe(true);
+            expect(restartRequired).toHaveBeenCalledTimes(1);
+        });
+
+        it("offers a VideoNuLA on a BBC Micro but not an Atom", () => {
+            openDialog();
+            clickModel("Master");
+            expect(nula().disabled).toBe(false);
+            clickModel("Atom");
+            expect(nula().disabled).toBe(true);
+            clickModel("B-DFS1.2");
+            expect(nula().disabled).toBe(false);
+        });
+    });
+
     describe("the co-processor controls", () => {
         it("only lets the tube speed be set while the co-processor is ticked", () => {
             openDialog();
@@ -353,6 +376,7 @@ describe("Config", () => {
 describe("the Settings form", () => {
     const Changed =
         "?model=Master&keyLayout=natural&displayMode=pal&coProcessor=true&tubeCpuMultiplier=2&hasEconet=true" +
+        "&hasVideoNula=true" +
         "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&speechOutput=true";
 
     const dialog = () => document.getElementById("configuration");
@@ -399,6 +423,13 @@ describe("the Settings form", () => {
             { id: "hasMusic5000", label: "Music 5000 synthesiser", type: "checkbox", value: false, disabled: false },
             { id: "hasTeletextAdaptor", label: "Teletext adaptor", type: "checkbox", value: false, disabled: false },
             { id: "hasEconet", label: "Econet with file server", type: "checkbox", value: true, disabled: false },
+            {
+                id: "hasVideoNula",
+                label: "VideoNuLA (4096-colour palette)",
+                type: "checkbox",
+                value: true,
+                disabled: false,
+            },
             { id: "audioOutputDropdown", label: "Sound output:", type: "button", value: "Line out", disabled: false },
             { id: "speakerAmount", label: "Speaker character:", type: "range", value: "0.5", disabled: true },
             {
