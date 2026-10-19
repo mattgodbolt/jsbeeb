@@ -461,6 +461,24 @@ describe("WD1770 FDC tests", () => {
                 expect(fdc.read(StatusRegister) & StatusRecordNotFound).toBe(0);
             });
 
+            it("leaves the seek and its noise alone when rewritten with the same drive", () => {
+                const { fdc, drives, noises } = seekThenWriteControl(ControlRunningDrive0);
+                expect(fdc.read(TrackRegister)).toBe(SeekTarget);
+                expect(drives[0].track).toBe(SeekTarget);
+                expect(noises).toEqual([SeekTarget, `end after ${SeekTarget}`]);
+            });
+
+            it("counts the newly selected drive's index pulses", () => {
+                // Drive 0 has no disc, so its index never ends and the read would never give up.
+                const { scheduler, fdc, drives } = makeFdc();
+                drives[1].setDisc(blankDisc());
+                fdc.write(CommandRegister, ReadAddressCommand);
+                scheduler.polltime(ShortWaitTicks);
+                fdc.write(ControlRegister, ControlRunningDrive1);
+                runUntilIdle(fdc, scheduler);
+                expect(fdc.read(StatusRegister) & StatusRecordNotFound).toBe(StatusRecordNotFound);
+            });
+
             it("waits for a disc with no drive selected", () => {
                 const { scheduler, fdc } = makeFdc({ disc: mfmDiscWithSector({}) });
                 fdc.write(CommandRegister, ReadSectorCommand | SettleFlag);
