@@ -378,9 +378,6 @@ export class WdFdc {
             case 2:
             case 3:
                 this._logCommand(`control register now ${hexbyte(val)}`);
-                if (this._statusRegister & Status.busy && !this._isReset(val)) {
-                    throw new Error(`Control register updated while busy; without reset`);
-                }
                 this._writeControl(val);
                 break;
             case 4:
@@ -517,7 +514,7 @@ export class WdFdc {
                 `State ${this._state} -> ${state} @ tr ${this._trackRegister} ` +
                     `sr ${this._sectorRegister} dr ${this._dataRegister} ` +
                     `cr ${hexbyte(this._controlRegister)} ` +
-                    `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
+                    `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
             );
         }
         this._state = state;
@@ -689,8 +686,7 @@ export class WdFdc {
     }
 
     _dispatchCommand() {
-        if (!this._currentDrive) throw new Error("Unexpectedly dispatching a command with no drive set");
-        if (this._isCommandWrite && this._currentDrive.writeProtect) {
+        if (this._isCommandWrite && this._currentDrive?.writeProtect) {
             this._statusRegister |= Status.writeProtected;
             this._commandDone(true);
             return;
@@ -702,7 +698,7 @@ export class WdFdc {
                 this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
                 // The head steps out from wherever it is, whatever the track register says
-                this._makeSeekNoise(-this._currentDrive.logicalTrack);
+                if (this._currentDrive) this._makeSeekNoise(-this._currentDrive.logicalTrack);
                 this._doSeekStepOrVerify();
                 break;
             case Command.seek:
@@ -1135,6 +1131,7 @@ export class WdFdc {
     _updateTypeIStatusBits() {
         if (this._commandType !== 1) return;
         this._statusRegister &= ~TypeIPolledStatus;
+        if (!this._currentDrive) return;
         if (this._currentDrive.track === 0) this._statusRegister |= Status.typeITrack0;
         if (this._currentDrive.indexPulse) this._statusRegister |= Status.typeIIndex;
         if (this._currentDrive.writeProtect) this._statusRegister |= Status.writeProtected;
@@ -1177,7 +1174,7 @@ export class WdFdc {
     }
 
     _doSeekStep(stepDirection, doUpdateTr) {
-        this._currentDrive.seekOneTrack(stepDirection);
+        this._currentDrive?.seekOneTrack(stepDirection);
         if (doUpdateTr) this._trackRegister += stepDirection;
         // TRK0 signal may have been raised or lowered.
         this._updateTypeIStatusBits();
@@ -1190,7 +1187,7 @@ export class WdFdc {
             return;
         }
         const stepDirection = this._trackRegister > this._dataRegister ? -1 : 1;
-        if (this._currentDrive.track === 0 && stepDirection === -1) {
+        if (this._currentDrive?.track === 0 && stepDirection === -1) {
             this._trackRegister = 0;
             this._checkVerify();
             return;

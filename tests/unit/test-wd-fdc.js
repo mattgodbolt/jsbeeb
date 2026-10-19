@@ -396,6 +396,39 @@ describe("WD1770 FDC tests", () => {
             }
             expect(rewritten.drive.positionFraction).toBe(steady.drive.positionFraction);
         });
+
+        describe("written during a seek", () => {
+            const ControlRunningDrive1 = 0x22;
+            const ControlRunningNoDrive = 0x20;
+            const SeekTarget = 40;
+            const StepsBeforeWrite = 10;
+            const StepTicks = 6 * TicksPerMs;
+
+            const seekThenWriteControl = (control) => {
+                const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+                drives[1].setDisc(blankDisc());
+                fdc.write(TrackRegister, 0);
+                fdc.write(DataRegister, SeekTarget);
+                fdc.write(CommandRegister, SeekCommand);
+                scheduler.polltime(StepsBeforeWrite * StepTicks - ShortWaitTicks);
+                fdc.write(ControlRegister, control);
+                while (fdc.read(StatusRegister) & StatusBusy) scheduler.polltime(ShortWaitTicks);
+                return { fdc, drives };
+            };
+
+            it("steps the newly selected drive for the rest of the seek", () => {
+                const { fdc, drives } = seekThenWriteControl(ControlRunningDrive1);
+                expect(fdc.read(TrackRegister)).toBe(SeekTarget);
+                expect([drives[0].track, drives[1].track]).toEqual([StepsBeforeWrite, SeekTarget - StepsBeforeWrite]);
+                expect([drives[0].spinning, drives[1].spinning]).toEqual([false, true]);
+            });
+
+            it("finishes the seek with no drive selected", () => {
+                const { fdc, drives } = seekThenWriteControl(ControlRunningNoDrive);
+                expect(fdc.read(TrackRegister)).toBe(SeekTarget);
+                expect(drives[0].track).toBe(StepsBeforeWrite);
+            });
+        });
     });
 
     describe("write protect", () => {
