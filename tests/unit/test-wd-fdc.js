@@ -393,6 +393,28 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
+    describe("write protect", () => {
+        const StatusWriteProtected = 0x40;
+        const protectedDisc = () => new Disc(false, new DiscConfig(), "protected.ssd");
+
+        it.each([
+            ["protected", protectedDisc, StatusWriteProtected],
+            ["writable", blankDisc, 0],
+        ])("shows a %s disc in the status after a restore", (_, disc, expected) => {
+            const { scheduler, fdc } = makeFdc({ disc: disc() });
+            const { status } = runCommand(fdc, scheduler, RestoreCommand);
+            expect(status & StatusWriteProtected).toBe(expected);
+        });
+
+        it("follows a disc changed after a type I command", () => {
+            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
+            runCommand(fdc, scheduler, RestoreCommand);
+            drives[0].setDisc(protectedDisc());
+            scheduler.polltime(RevolutionTicks);
+            expect(fdc.read(StatusRegister) & StatusWriteProtected).toBe(StatusWriteProtected);
+        });
+    });
+
     describe("address marks", () => {
         it.each([
             ["FM", fmDiscWithSector, ControlRunningDrive0Fm, IdMark, 0xfa, 0],
