@@ -39,7 +39,7 @@ The BBC had a somewhat different-looking keyboard to a modern PC, and so it's us
 
 - BBC `F0` is `F10`
 - BBC `Break` key is `F12`
-- BBC `*` is on `"` (if it doesn't work for you try shift-2)
+- BBC `:` and `*` are on the key two to the right of `L` (in the default [Physical](#keyboard-layouts) layout)
 
 To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in this
 case), press shift-F12 (which is shift-Break on the BBC).
@@ -118,9 +118,10 @@ The definitive lists are `keyCodes` with `keyCodeAliases` (host) and `BBC` (BBC 
 
 ### Keyboard Layouts
 
-A BBC keyboard is not a PC keyboard, so **Keyboard** on the top bar offers three ways to bridge the
-two. The choice is remembered, and `?keyLayout=physical`, `?keyLayout=natural` or `?keyLayout=gaming`
-sets it from a link.
+A BBC keyboard is not a PC keyboard, so **Keyboard layout** in the settings offers three ways to
+bridge the two. Open the settings by clicking the gear and model name on the top bar, or from
+**Machine > Configuration...** in the desktop app. The choice is remembered, and `?keyLayout=physical`,
+`?keyLayout=natural` or `?keyLayout=gaming` sets it from a link.
 
 **Physical** is the default, and the one to use for games. Each key presses the BBC key in the same
 place on the keyboard, so `Z` is `Z` and the key two to the right of the `L` is the BBC's `:` and `*`,
