@@ -39,7 +39,7 @@ The BBC had a somewhat different-looking keyboard to a modern PC, and so it's us
 
 - BBC `F0` is `F10`
 - BBC `Break` key is `F12`
-- BBC `:` and `*` are on the `'` key, the one to the right of `;` (in the default [Physical](#keyboard-layouts) layout)
+- BBC `:` and `*` are on the key two to the right of `L` (in the default [Physical](#keyboard-layouts) layout)
 
 To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in this
 case), press shift-F12 (which is shift-Break on the BBC).
