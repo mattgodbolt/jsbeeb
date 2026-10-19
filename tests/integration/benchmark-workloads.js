@@ -5,6 +5,13 @@ import { readWorkload, restoreWorkload } from "../../src/benchmark-workloads.js"
 
 const workloads = await listBenchmarkWorkloads();
 const OsRomResetVector = 0xfffc;
+const FittedOn = {
+    coProcessor: (cpu) => cpu.hasTube,
+    hasMusic5000: (cpu) => cpu.hasMusic5000,
+    hasTeletextAdaptor: (cpu) => cpu.hasTeletextAdaptor,
+    hasEconet: (cpu) => !!cpu.econet,
+    hasVideoNula: (cpu) => cpu.video.ula.hasVideoNula,
+};
 
 async function restoreAltered(name, alter) {
     const workload = await readWorkload(name);
@@ -21,6 +28,13 @@ describe("benchmark workloads", () => {
             expect(cpu.pc).toBe(workload.snapshot.state.pc);
             expect(cpu.currentCycles).toBe(workload.snapshot.state.currentCycles);
         });
+    });
+
+    it.each(Object.keys(workloads[0].fittings))("builds a machine with %s fitted and nothing else", async (fitted) => {
+        const fittings = Object.fromEntries(Object.keys(workloads[0].fittings).map((name) => [name, name === fitted]));
+        const { processor } = await newBenchmarkMachine("B-DFS1.2", fittings);
+        const found = Object.fromEntries(Object.keys(fittings).map((name) => [name, FittedOn[name](processor)]));
+        expect(found).toEqual(fittings);
     });
 
     it("puts back the disc a workload was made with, and empties a drive it had none in", async () => {

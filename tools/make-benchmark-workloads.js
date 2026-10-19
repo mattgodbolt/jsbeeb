@@ -74,7 +74,6 @@ const basicLoopCounter = {
 };
 const osModeIs = (mode) => ({ address: OsScreenMode, value: mode, what: `the OS screen mode, MODE ${mode}` });
 
-// Every check box under the Settings dialog's peripherals, stated rather than left to its default.
 const StockFittings = {
     coProcessor: false,
     hasMusic5000: false,
