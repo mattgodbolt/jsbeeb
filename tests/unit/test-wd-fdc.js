@@ -266,6 +266,26 @@ describe("WD1770 FDC tests", () => {
             expect(cpu.nmi).toBe(false);
         });
 
+        it("accepts every combination of flags when idle", () => {
+            for (const bits of AllFlagCombinations) {
+                const { fdc } = makeFdc();
+                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
+            }
+        });
+
+        it("accepts every combination of flags during a seek", () => {
+            for (const bits of AllFlagCombinations) {
+                const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
+                fdc.write(TrackRegister, 0);
+                fdc.write(DataRegister, 40);
+                fdc.write(CommandRegister, SeekCommand);
+                scheduler.polltime(ShortWaitTicks);
+                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
+            }
+        });
+    });
+
+    describe("with no drive selected", () => {
         it("aborts a command whose drive was deselected while it ran", () => {
             const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
             fdc.write(CommandRegister, ReadSectorCommand);
@@ -299,24 +319,6 @@ describe("WD1770 FDC tests", () => {
             const { status, ticks } = runCommand(fdc, scheduler, RestoreCommand | verify);
             expect(status & StatusRecordNotFound).toBe(seekError);
             expect(Math.round(ticks / (6 * TicksPerMs))).toBe(255);
-        });
-
-        it("accepts every combination of flags when idle", () => {
-            for (const bits of AllFlagCombinations) {
-                const { fdc } = makeFdc();
-                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
-            }
-        });
-
-        it("accepts every combination of flags during a seek", () => {
-            for (const bits of AllFlagCombinations) {
-                const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
-                fdc.write(TrackRegister, 0);
-                fdc.write(DataRegister, 40);
-                fdc.write(CommandRegister, SeekCommand);
-                scheduler.polltime(ShortWaitTicks);
-                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
-            }
         });
     });
 
