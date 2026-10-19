@@ -1,6 +1,5 @@
 import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
-import { noteFeature } from "./analytics.js";
 import { keyCodes } from "../keymap.js";
 import { Shortcuts } from "./shortcuts.js";
 
@@ -45,11 +44,7 @@ export class KeyboardSetup {
         const runners = {
             toggleDebugger: () => actions.toggleDebugger(),
             // `running` is pushed in from the loop, so it stays true whatever stopped the machine.
-            togglePause: () => {
-                noteFeature("pause", keyboard.running ? "enter" : "leave");
-                if (keyboard.running) keyboard.pauseEmulation();
-                else keyboard.resumeEmulation();
-            },
+            togglePause: () => (keyboard.running ? keyboard.pauseEmulation() : keyboard.resumeEmulation()),
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
             openRewind: () => actions.openRewind(),

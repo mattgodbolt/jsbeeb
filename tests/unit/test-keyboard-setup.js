@@ -282,17 +282,28 @@ describe("KeyboardSetup", () => {
             expect(sent("feature_used")).toEqual([]);
         });
 
-        it("notes Alt-P's pause and resume as entering and leaving the pause feature", () => {
+        it("notes a pause as entered and left, however it is left", () => {
             const sent = sentEvents();
             setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
             setup.keyboard.setRunning(false);
             setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
-            expect(actions.pause).toHaveBeenCalledTimes(1);
-            expect(actions.resume).toHaveBeenCalledTimes(1);
+            setup.keyboard.setRunning(true);
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            setup.keyboard.resumeEmulation();
             expect(sent("feature_used")).toEqual([
                 { feature: "pause", action: "enter" },
                 { feature: "pause", action: "leave" },
+                { feature: "pause", action: "enter" },
+                { feature: "pause", action: "leave" },
             ]);
+        });
+
+        it("notes nothing for Alt-P when the machine was stopped by something other than a pause", () => {
+            const sent = sentEvents();
+            setup.keyboard.setRunning(false);
+            setup.keyboard.keyDown(keyEvent("keydown", keyCodes.P, { alt: true }));
+            expect(actions.resume).toHaveBeenCalledTimes(1);
+            expect(sent("feature_used")).toEqual([]);
         });
 
         it("notes no key presses, from the shortcuts or Break", () => {

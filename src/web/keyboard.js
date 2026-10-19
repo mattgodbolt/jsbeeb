@@ -1,5 +1,6 @@
 import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
+import { noteFeature } from "./analytics.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 const InputMethodKeyCode = 229;
@@ -383,6 +384,7 @@ export class Keyboard extends EventTarget {
      * Pause the emulator
      */
     pauseEmulation() {
+        if (!this.pauseEmu) noteFeature("pause", "enter");
         this.pauseEmu = true;
         this.dispatchEvent(new Event("pause"));
     }
@@ -391,6 +393,7 @@ export class Keyboard extends EventTarget {
      * Resume the emulator
      */
     resumeEmulation() {
+        if (this.pauseEmu) noteFeature("pause", "leave");
         this.pauseEmu = false;
         this.dispatchEvent(new Event("resume"));
     }
