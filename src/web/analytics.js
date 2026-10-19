@@ -63,11 +63,17 @@ export function noteLocation() {
     injectedGtag()?.("config", measurementId(), { ...pageLocations(), send_page_view: false });
 }
 
-/** Sends `event`, leaving out the parameters that are undefined. */
+const logValue = (value) => (typeof value === "string" && /^$|[\s"=]/.test(value) ? JSON.stringify(value) : value);
+
+/**
+ * Sends `event`, leaving out the parameters that are undefined, and logs what it sends, or would send, as one line of
+ * text.
+ */
 export function note(event, params) {
     const sent = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined));
     injectedGtag()?.("event", event, sent);
-    console.log("event noted:", event, sent);
+    const pairs = Object.entries(sent).map(([key, value]) => ` ${key}=${logValue(value)}`);
+    console.log(`event noted: ${event}${pairs.join("")}`);
 }
 
 /**

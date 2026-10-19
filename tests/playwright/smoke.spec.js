@@ -522,6 +522,6 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
     expect(await page.evaluate(() => window.processor.video.ula.hasVideoNula)).toBe(true);
     await expect
         .poll(() => noted.filter((text) => text.startsWith("event noted: feature_used")))
-        .toEqual([expect.stringContaining("action: missing"), expect.stringContaining("action: fitted")]);
+        .toEqual([expect.stringContaining("action=missing"), expect.stringContaining("action=fitted")]);
     expect(beeb.problems).toEqual([]);
 });
