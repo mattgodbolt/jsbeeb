@@ -646,6 +646,7 @@ export class WdFdc {
             }
             if (this._currentDrive !== drive) this._currentDrive.stopSpinning();
         }
+        if (this._currentDrive !== drive) this._currentDrive?.notifySeekEnd();
         this._currentDrive = drive;
         if (this._currentDrive) {
             if (isMotorOn) this._currentDrive.startSpinning();
@@ -698,7 +699,7 @@ export class WdFdc {
                 this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
                 // The head steps out from wherever it is, whatever the track register says
-                if (this._currentDrive) this._makeSeekNoise(-this._currentDrive.logicalTrack);
+                this._makeSeekNoise(-this._currentDrive.logicalTrack);
                 this._doSeekStepOrVerify();
                 break;
             case Command.seek:
