@@ -380,7 +380,7 @@ export class DiscDrive extends BaseDiscDrive {
      * @param {Disc} disc
      */
     setDisc(disc) {
-        // The new disc's tracks may be shorter, so keep the head at the same angle, not the same word.
+        // Discs differ in track length, so the head keeps its angle round the disc.
         const fraction = this.positionFraction;
         this._disc = disc;
         this.positionFraction = fraction;

@@ -132,6 +132,7 @@ describe("Disc drive tests", function () {
         scheduler.polltime(3 * BbcCyclesPerSecond);
         drive.positionFraction = 0.9;
         drive.setDisc(shortDisc);
+        expect(drive.positionFraction).toBeCloseTo(0.9, 2);
         let risingEdges = 0;
         let previousIndex = drive.indexPulse;
         const cyclesPerIter = 100;
@@ -140,7 +141,8 @@ describe("Disc drive tests", function () {
             if (drive.indexPulse && !previousIndex) risingEdges++;
             previousIndex = drive.indexPulse;
         }
-        expect(risingEdges).toBeGreaterThan(0);
+        // Half a second from 0.9 of the way round passes the index at 0.02, 0.22 and 0.42 s.
+        expect(risingEdges).toBe(3);
     });
 });
 
