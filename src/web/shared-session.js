@@ -37,7 +37,7 @@ import { note } from "./analytics.js";
 import { countBucket } from "./analytics-filters.js";
 
 const IceServers = [{ urls: "stun:stun.l.google.com:19302" }];
-const IceGatheringTimeoutMs = 3000;
+export const IceGatheringTimeoutMs = 3000;
 const HostPollMs = 1500;
 const GuestPollMs = 1000;
 const PasteWaitMs = 500;
@@ -132,18 +132,35 @@ function announceDesync(desyncs, what, reason, other) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const hasCandidate = (pc) => /^a=candidate:/m.test(pc.localDescription?.sdp ?? "");
+
 // The rendezvous carries one offer and one answer per guest, so each side waits
-// for its candidates before sending its description rather than trickling them.
+// for its candidates before sending its description rather than trickling them:
+// all of them, or those found within IceGatheringTimeoutMs of the first. A busy
+// machine can take seconds to find the first, and a description without one
+// cannot connect.
 async function gatheredDescription(pc) {
-    if (pc.iceGatheringState !== "complete") {
-        await Promise.race([
-            new Promise((resolve) =>
-                pc.addEventListener("icegatheringstatechange", () => {
-                    if (pc.iceGatheringState === "complete") resolve();
-                }),
-            ),
-            delay(IceGatheringTimeoutMs),
-        ]);
+    const listening = new AbortController();
+    const timers = [];
+    try {
+        await new Promise((resolve, reject) => {
+            const gathered = () => pc.iceGatheringState === "complete";
+            if (gathered()) return resolve();
+            let found = false;
+            const foundOne = () => {
+                if (found) return;
+                found = true;
+                timers.push(setTimeout(resolve, IceGatheringTimeoutMs));
+            };
+            const { signal } = listening;
+            pc.addEventListener("icegatheringstatechange", () => gathered() && resolve(), { signal });
+            pc.addEventListener("icecandidate", ({ candidate }) => candidate && foundOne(), { signal });
+            if (hasCandidate(pc)) foundOne();
+            timers.push(setTimeout(() => found || reject(timedOut("couldn't connect directly")), ConnectTimeoutMs));
+        });
+    } finally {
+        listening.abort();
+        timers.forEach(clearTimeout);
     }
     return pc.localDescription.sdp;
 }
