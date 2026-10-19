@@ -251,25 +251,50 @@ describe("Intel 8271 tests", function () {
         const initialisation = 0x0d;
         const dfsHeadLoadUnload = 0xc8;
 
-        it.each([
-            ["loaded first, as the DFS does, finds it", loadHead | driveSelect1, 0, 0],
-            ["unloaded reaches no drive and gives up after 255 steps", driveSelect1, trackZeroNotFound, 20],
-        ])("with the head %s", (_, driveOut, result, track) => {
+        // A step rate of 0 leaves the steps to the drive, which jsbeeb takes as 3 ms.
+        const StepMs = 3;
+
+        function seekToZeroFromTrack20(driveOut, { restoreMidSeek = false } = {}) {
             const scheduler = new Scheduler();
             const cpu = fake6502();
-            const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
-            drive.setDisc(Disc.createBlank());
-            for (let step = 0; step < 20; ++step) drive.seekOneTrack(1);
-            const fdc = new IntelFdc(cpu, scheduler, [drive]);
+            const makeDrive = () => {
+                const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+                drive.setDisc(Disc.createBlank());
+                for (let step = 0; step < 20; ++step) drive.seekOneTrack(1);
+                return drive;
+            };
+            let drive = makeDrive();
+            let fdc = new IntelFdc(cpu, scheduler, [drive]);
             sendCommand(fdc, specifyCmd, initialisation, 0, 0, dfsHeadLoadUnload);
             sendCommand(fdc, writeRegCmd, mmioWrite, driveOut);
             scheduler.polltime(ms(1000));
             // The ready latch only updates when the drive status is read.
             sendCommand(fdc, readDriveStatusCmd | driveSelect1);
+            const start = scheduler.epoch;
             sendCommand(fdc, seekCmd, 0);
+            if (restoreMidSeek) {
+                scheduler.polltime(ms(10 * StepMs));
+                const snapshot = fdc.snapshotState();
+                drive = makeDrive();
+                fdc = new IntelFdc(cpu, scheduler, [drive]);
+                fdc.restoreState(snapshot);
+            }
             while (fdc.peek(0) & busy) scheduler.polltime(ms(1));
-            expect([fdc.read(resultAddr), drive.track]).toEqual([result, track]);
+            const steps = Math.round((scheduler.epoch - start) / ms(StepMs));
+            return { result: fdc.read(resultAddr), track: drive.track, steps };
+        }
+
+        it("with the head loaded first, as the DFS does, finds it", () => {
+            expect(seekToZeroFromTrack20(loadHead | driveSelect1)).toMatchObject({ result: 0, track: 0 });
         });
+
+        it.each([false, true])(
+            "with the head unloaded reaches no drive and gives up after 255 steps (restored mid-seek: %s)",
+            (restoreMidSeek) => {
+                const expected = { result: trackZeroNotFound, track: 20, steps: 255 };
+                expect(seekToZeroFromTrack20(driveSelect1, { restoreMidSeek })).toEqual(expected);
+            },
+        );
     });
 
     describe("ready", () => {

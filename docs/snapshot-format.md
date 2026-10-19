@@ -398,7 +398,7 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `timerTaskOffset`    | number\|null | Timer task offset from scheduler epoch                          |
 | `drives`             | object[]     | Array of 2 drive states (see Disc drive below)                  |
 
-`_currentDrive` is derived from `driveOut` select bits on restore.
+`_currentDrive` is derived from `driveOut` on restore: its select bits, and none while LOAD HEAD is low.
 
 #### WD1770 (`state.fdc` when model is Master)
 
