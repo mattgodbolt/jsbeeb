@@ -542,7 +542,15 @@ span.accesskey {
 }
 
 .key.function {
-  background-color: #911;
+  background-color: #ae4e37;
+}
+
+.key.cursor {
+  background-color: #5a5040;
+}
+
+.key + .key {
+  margin-left: 0.2em;
 }
 
 .help td:first-child,

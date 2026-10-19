@@ -399,3 +399,5 @@ export class Keyboard extends EventTarget {
         this.dispatchEvent(new Event("resume"));
     }
 }
+
+export { isMac };

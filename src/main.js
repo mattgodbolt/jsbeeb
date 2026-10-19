@@ -25,6 +25,7 @@ import { EmulationLoop } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { isMac } from "./web/keyboard.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
 import { FrontPanel } from "./web/front-panel.js";
@@ -66,6 +67,11 @@ const benchmarkPage = parsedQuery.benchmark ? new BenchmarkPage(parsedQuery.benc
 if (benchmarkPage) silenceAnalytics();
 configureAnalytics();
 installIcons();
+if (isMac) {
+    for (const key of document.querySelectorAll("#help .key")) {
+        key.textContent = key.textContent.replaceAll("Alt-Shift-", "⌥⇧").replaceAll("Alt-", "⌥");
+    }
+}
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 
 let discImage = BuiltInImages[0].file;

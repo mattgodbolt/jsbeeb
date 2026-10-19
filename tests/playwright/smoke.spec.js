@@ -393,6 +393,15 @@ test("help fits a desktop browser window whole, and on a phone or tablet scrolls
     }
 });
 
+test("on a Mac the help shows the shortcuts with the Option symbol", async ({ beeb, page }) => {
+    await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    const keys = await page.locator("#help .key").allTextContents();
+    expect(keys).toEqual(expect.arrayContaining(["⌥S", "⌥⇧M", "⌥1 to ⌥8"]));
+    expect(keys.filter((key) => key.includes("Alt"))).toEqual([]);
+});
+
 test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
