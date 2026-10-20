@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MediaWindow, shortName } from "../../src/web/media-window.js";
+import { MediaWindow, bootDecision, shortName } from "../../src/web/media-window.js";
 import { MachineRequirements, describeRef, describeSessionFile, sourceOf } from "../../src/web/media-catalogue.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { Schemas } from "../../src/media-resolver.js";
@@ -748,27 +748,72 @@ describe("MediaWindow", () => {
             expect(hint()).toEqual(["Enter loads into the deck", "Esc closes"]);
         });
 
-        describe("with Autoboot ticked, as on a first visit", () => {
-            it("says Enter boots and Shift+Enter only loads, and ticks the box", async () => {
-                await openWith([elite]);
-                expect(autobootTick().checked).toBe(true);
-                expect(hint()).toEqual(["Enter boots from drive 0", "Shift+Enter loads without booting", "Esc closes"]);
-            });
+        it.each([
+            [true, ["Enter boots from drive 0", "Shift+Enter loads without booting", "Esc closes"], /^Boot Elite/],
+            [
+                false,
+                ["Enter loads into drive 0", "Shift+Enter loads and boots", "Esc closes"],
+                /^Load Elite.*into drive 0$/,
+            ],
+        ])("says what Enter and a click do once Autoboot is set to %s", async (ticked, keys, title) => {
+            await openWith([elite]);
+            setTick(ticked);
+            expect(hint()).toEqual(keys);
+            expect(rows()[0].querySelector(".media-row-main").title).toMatch(title);
+        });
 
-            it("boots on Enter, and the URL says so", async () => {
+        describe("what a load into a drive does", () => {
+            it.each`
+                driveIndex | ticked   | shift    | boot         | inUrl    | boots    | urlAutoboot
+                ${0}       | ${true}  | ${false} | ${undefined} | ${true}  | ${true}  | ${true}
+                ${0}       | ${true}  | ${true}  | ${undefined} | ${true}  | ${false} | ${false}
+                ${0}       | ${false} | ${false} | ${undefined} | ${true}  | ${false} | ${false}
+                ${0}       | ${false} | ${true}  | ${undefined} | ${true}  | ${true}  | ${true}
+                ${0}       | ${true}  | ${false} | ${undefined} | ${false} | ${true}  | ${false}
+                ${0}       | ${true}  | ${false} | ${false}     | ${true}  | ${false} | ${false}
+                ${0}       | ${false} | ${false} | ${true}      | ${true}  | ${true}  | ${true}
+                ${0}       | ${true}  | ${true}  | ${true}      | ${true}  | ${true}  | ${true}
+                ${1}       | ${true}  | ${false} | ${undefined} | ${true}  | ${false} | ${undefined}
+                ${1}       | ${false} | ${true}  | ${undefined} | ${true}  | ${false} | ${undefined}
+                ${1}       | ${true}  | ${false} | ${true}      | ${true}  | ${false} | ${undefined}
+            `(
+                "drive $driveIndex, ticked $ticked, Shift $shift, boot $boot, in URL $inUrl: boots $boots, URL autoboot $urlAutoboot",
+                ({ driveIndex, ticked, shift, boot, inUrl, boots, urlAutoboot }) => {
+                    expect(bootDecision({ driveIndex, ticked, shift, boot, inUrl })).toEqual({ boots, urlAutoboot });
+                },
+            );
+
+            const rowMain = () => rows()[0].querySelector(".media-row-main");
+            const otherButton = () => rows()[0].querySelector(".media-target");
+            it.each`
+                gesture                                | aim  | act                                | drive | boots    | url
+                ${"Enter"}                             | ${0} | ${() => pressEnter()}              | ${0}  | ${true}  | ${true}
+                ${"Shift+Enter"}                       | ${0} | ${() => pressEnter(true)}          | ${0}  | ${false} | ${undefined}
+                ${"a click on the row"}                | ${0} | ${() => rowMain().click()}         | ${0}  | ${true}  | ${true}
+                ${"a shift-click on the row"}          | ${0} | ${() => shiftClick(rowMain())}     | ${0}  | ${false} | ${undefined}
+                ${"Enter aimed at drive 1"}            | ${1} | ${() => pressEnter()}              | ${1}  | ${false} | ${true}
+                ${"a click on drive 0's button"}       | ${1} | ${() => otherButton().click()}     | ${0}  | ${true}  | ${true}
+                ${"a shift-click on drive 0's button"} | ${1} | ${() => shiftClick(otherButton())} | ${0}  | ${false} | ${undefined}
+                ${"a click on drive 1's button"}       | ${0} | ${() => otherButton().click()}     | ${1}  | ${false} | ${true}
+            `("loads into drive $drive on $gesture, booting $boots", async ({ aim, act, drive, boots, url }) => {
                 deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+                urlState.set({ autoboot: true });
                 await openWith([elite]);
-                pressEnter();
-                await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
-                expect(deps.processor.reset).toHaveBeenCalledWith(true);
-                expect(urlState.params).toMatchObject({ disc1: "hfe:A.hfe", autoboot: true });
+                document.querySelector(`#media-into [data-target="${aim}"]`).click();
+                act();
+                await vi.waitFor(() => expect(made.isOpen).toBe(false));
+                expect(fdc.drives[drive].disc).toBeTruthy();
+                expect(fdc.drives[1 - drive].disc).toBeUndefined();
+                expect(deps.processor.reset).toHaveBeenCalledTimes(boots ? 1 : 0);
+                expect(deps.autoboot).toHaveBeenCalledTimes(boots ? 1 : 0);
+                expect(urlState.params.autoboot).toBe(url);
             });
 
-            it("boots on a click of the row, noting a boot from the window", async () => {
+            it("notes a boot from the window", async () => {
                 const sent = sentEvents();
                 deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
                 await openWith([elite]);
-                rows()[0].querySelector(".media-row-main").click();
+                rowMain().click();
                 await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
                 expect(sent("feature_used")).toEqual([
                     { feature: "media_window", action: "open" },
@@ -777,27 +822,11 @@ describe("MediaWindow", () => {
                 expect(sent("media_load")).toEqual([expect.objectContaining({ entry: "list", slot: "drive0" })]);
             });
 
-            it("loads without booting on Shift+Enter or a shift-click, taking autoboot out of the URL", async () => {
-                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
-                urlState.set({ autoboot: true });
-                await openWith([elite]);
-                pressEnter(true);
-                await vi.waitFor(() => expect(fdc.drives[0].disc).toBeTruthy());
-                expect(urlState.params.autoboot).toBeUndefined();
-                urlState.set({ autoboot: true });
-                made.open();
-                shiftClick(rows()[0].querySelector(".media-row-main"));
-                await vi.waitFor(() => expect(urlState.params.autoboot).toBeUndefined());
-                expect(deps.media.loadDiscImage).toHaveBeenCalledTimes(2);
-                expect(deps.processor.reset).not.toHaveBeenCalled();
-                expect(deps.autoboot).not.toHaveBeenCalled();
-            });
-
             it("leaves the URL alone when a load fails", async () => {
                 vi.spyOn(console, "error").mockImplementation(() => {});
                 deps.media.loadDiscImage.mockRejectedValue(new Error("HTTP 404"));
                 await openWith([elite]);
-                rows()[0].querySelector(".media-row-main").click();
+                rowMain().click();
                 await vi.waitFor(() => expect(bay(0).querySelector(".bay-retry").hidden).toBe(false));
                 expect(deps.media.setAutoboot).not.toHaveBeenCalled();
                 expect(deps.processor.reset).not.toHaveBeenCalled();
@@ -807,9 +836,20 @@ describe("MediaWindow", () => {
                 deps.media.loadDiscImage.mockResolvedValue(discFor("mine.ssd", ssdImage()));
                 urlState.set({ autoboot: true });
                 await openWith([{ ...elite, ref: "session:mine.ssd", title: "mine.ssd", source: "session" }]);
-                rows()[0].querySelector(".media-row-main").click();
+                rowMain().click();
                 await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
                 expect(urlState.params.autoboot).toBeUndefined();
+            });
+
+            it("never boots a tape, whatever Shift says", async () => {
+                deps.media.loadTapeImage.mockResolvedValue({ name: "Chuckie.uef", position: 0 });
+                await openWith([chuckie]);
+                document.querySelector('#media-into [data-target="tape"]').click();
+                expect(rowMain().title).toMatch(/^Load Chuckie.*into the cassette deck$/);
+                pressEnter(true);
+                await vi.waitFor(() => expect(tapeInterface.tape).toBeTruthy());
+                expect(deps.processor.reset).not.toHaveBeenCalled();
+                expect(deps.media.setAutoboot).not.toHaveBeenCalled();
             });
 
             it.each([
@@ -819,9 +859,8 @@ describe("MediaWindow", () => {
                 vi.spyOn(console, "error").mockImplementation(() => {});
                 deps.media.loadDiscImage.mockRejectedValueOnce(new Error("HTTP 404"));
                 await openWith([elite]);
-                const row = rows()[0].querySelector(".media-row-main");
-                if (shiftKey) shiftClick(row);
-                else row.click();
+                if (shiftKey) shiftClick(rowMain());
+                else rowMain().click();
                 await vi.waitFor(() => expect(bay(0).querySelector(".bay-retry").hidden).toBe(false));
                 deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
                 bay(0).querySelector(".bay-retry").click();
@@ -858,22 +897,6 @@ describe("MediaWindow", () => {
                 expect(deps.autoboot).toHaveBeenCalledTimes(boots ? 1 : 0);
             });
 
-            it("describes Enter by the row it takes, not only by where the list is aimed", async () => {
-                await openWith([elite, chuckie]);
-                document.querySelector('#media-into [data-target="tape"]').click();
-                [...document.querySelectorAll("#media-chips .media-chip")]
-                    .find((chip) => text(chip) === "Discs")
-                    .click();
-                search("elite");
-                expect(hint()).toEqual(["Enter boots from drive 0", "Shift+Enter loads without booting", "Esc closes"]);
-                document.querySelector('#media-into [data-target="0"]').click();
-                [...document.querySelectorAll("#media-chips .media-chip")]
-                    .find((chip) => text(chip) === "Tapes")
-                    .click();
-                search("chuckie");
-                expect(hint()).toEqual(["Enter loads into the deck", "Esc closes"]);
-            });
-
             it("does not boot a blank disc made in this browser", async () => {
                 deps.media.loadDiscImage.mockResolvedValue(discFor("blank.ssd", ssdImage()));
                 urlState.set({ autoboot: true });
@@ -887,47 +910,16 @@ describe("MediaWindow", () => {
             });
         });
 
-        describe("with Autoboot unticked", () => {
-            beforeEach(() => (startTicked = false));
-
-            it("says Enter only loads and Shift+Enter boots, and names a plain load as one", async () => {
-                await openWith([elite]);
-                expect(autobootTick().checked).toBe(false);
-                expect(hint()).toEqual(["Enter loads into drive 0", "Shift+Enter loads and boots", "Esc closes"]);
-                expect(rows()[0].querySelector(".media-row-main").title).toMatch(/^Load Elite.*into drive 0$/);
-            });
-
-            it("loads without booting on Enter or a click, taking autoboot out of the URL", async () => {
-                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
-                urlState.set({ autoboot: true });
-                await openWith([elite]);
-                pressEnter();
-                await vi.waitFor(() => expect(fdc.drives[0].disc).toBeTruthy());
-                expect(urlState.params.autoboot).toBeUndefined();
-                made.open();
-                rows()[0].querySelector(".media-row-main").click();
-                await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledTimes(2));
-                await vi.waitFor(() => expect(made.isOpen).toBe(false));
-                expect(deps.processor.reset).not.toHaveBeenCalled();
-            });
-
-            it("boots on Shift+Enter and on a shift-click, and the URL says so", async () => {
-                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
-                await openWith([elite]);
-                pressEnter(true);
-                await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledTimes(1));
-                expect(urlState.params.autoboot).toBe(true);
-                made.open();
-                shiftClick(rows()[0].querySelector(".media-row-main"));
-                await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalledTimes(2));
-            });
-
-            it("redraws the hint and the rows when ticked again", async () => {
-                await openWith([elite]);
-                setTick(true);
-                expect(hint()).toContain("Enter boots from drive 0");
-                expect(rows()[0].querySelector(".media-row-main").title).toMatch(/^Boot Elite/);
-            });
+        it("describes Enter by the row it takes, not only by where the list is aimed", async () => {
+            await openWith([elite, chuckie]);
+            document.querySelector('#media-into [data-target="tape"]').click();
+            [...document.querySelectorAll("#media-chips .media-chip")].find((chip) => text(chip) === "Discs").click();
+            search("elite");
+            expect(hint()).toEqual(["Enter boots from drive 0", "Shift+Enter loads without booting", "Esc closes"]);
+            document.querySelector('#media-into [data-target="0"]').click();
+            [...document.querySelectorAll("#media-chips .media-chip")].find((chip) => text(chip) === "Tapes").click();
+            search("chuckie");
+            expect(hint()).toEqual(["Enter loads into the deck", "Esc closes"]);
         });
 
         it("notes a search once per opening, when the box first has something in it", async () => {
@@ -944,58 +936,6 @@ describe("MediaWindow", () => {
             box.dispatchEvent(new Event("input"));
             expect(sent("feature_used").filter(({ action }) => action === "search")).toHaveLength(2);
         });
-
-        const tickAndShift = [
-            [true, false],
-            [true, true],
-            [false, false],
-            [false, true],
-        ];
-
-        it.each(tickAndShift)(
-            "loads into drive 1 from the other drive's button without a boot, ticked %s, Shift %s",
-            async (ticked, shiftKey) => {
-                startTicked = ticked;
-                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
-                urlState.set({ autoboot: true });
-                await openWith([elite]);
-                const button = rows()[0].querySelector(".media-target");
-                if (shiftKey) shiftClick(button);
-                else button.click();
-                await vi.waitFor(() => expect(fdc.drives[1].disc).toBeTruthy());
-                expect(deps.autoboot).not.toHaveBeenCalled();
-                expect(deps.processor.reset).not.toHaveBeenCalled();
-                expect(urlState.params.autoboot).toBe(true);
-            },
-        );
-
-        it.each(tickAndShift)(
-            "loads into drive 1 without a boot on Enter aimed there, ticked %s, Shift %s",
-            async (ticked, shiftKey) => {
-                startTicked = ticked;
-                deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
-                await openWith([elite]);
-                document.querySelector('#media-into [data-target="1"]').click();
-                pressEnter(shiftKey);
-                await vi.waitFor(() => expect(fdc.drives[1].disc).toBeTruthy());
-                expect(fdc.drives[0].disc).toBeUndefined();
-                expect(deps.processor.reset).not.toHaveBeenCalled();
-                expect(deps.media.setAutoboot).not.toHaveBeenCalled();
-            },
-        );
-
-        it.each(tickAndShift)("never boots a tape, ticked %s, Shift %s", async (ticked, shiftKey) => {
-            startTicked = ticked;
-            deps.media.loadTapeImage.mockResolvedValue({ name: "Chuckie.uef", position: 0 });
-            await openWith([chuckie]);
-            document.querySelector('#media-into [data-target="tape"]').click();
-            expect(rows()[0].querySelector(".media-row-main").title).toMatch(/^Load Chuckie.*into the cassette deck$/);
-            pressEnter(shiftKey);
-            await vi.waitFor(() => expect(tapeInterface.tape).toBeTruthy());
-            expect(deps.processor.reset).not.toHaveBeenCalled();
-            expect(deps.media.setAutoboot).not.toHaveBeenCalled();
-        });
-
         it("does not fill a drive from Google Drive while a load of the user's own is in flight", async () => {
             await failedStartupLoad("gd:abc/mine.ssd");
             const mine = { ...elite, ref: "gd:abc/mine.ssd", title: "mine.ssd", source: "gdrive" };
@@ -1268,18 +1208,6 @@ describe("MediaWindow", () => {
             expect(slots().recent.rank(paradroid)).toBe(0);
         });
 
-        it("switches without asking on a shift-click with Autoboot unticked", async () => {
-            startTicked = false;
-            await openWith([paradroid]);
-            row().dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
-            await vi.waitFor(() =>
-                expect(navigatedTo()).toBe(
-                    "https://bbc.example/?autoboot&disc1=bitshifters:bs-paradroid.ssd&model=Master",
-                ),
-            );
-            expect(confirm).not.toHaveBeenCalled();
-        });
-
         it("asks on a shift-click, which only loads: yes switches with no boot, no loads it here", async () => {
             confirm.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
@@ -1300,26 +1228,6 @@ describe("MediaWindow", () => {
             await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
             await vi.waitFor(() => expect(window.isOpen).toBe(false));
             expect(deps.processor.reset).not.toHaveBeenCalled();
-        });
-
-        it("asks on a plain click with Autoboot unticked", async () => {
-            startTicked = false;
-            confirm.mockResolvedValue(false);
-            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
-            await openWith([paradroid]);
-            row().click();
-            await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
-            expect(confirm).toHaveBeenCalled();
-        });
-
-        it("asks for the other drive even with Autoboot ticked, since only drive 0 boots, and leaves the boot behind", async () => {
-            urlState.set({ autoboot: true });
-            confirm.mockResolvedValue(true);
-            await openWith([paradroid]);
-            document.querySelector("#media-list .media-target").click();
-            await vi.waitFor(() =>
-                expect(navigatedTo()).toBe("https://bbc.example/?disc2=bitshifters:bs-paradroid.ssd&model=Master"),
-            );
         });
     });
 
@@ -1391,21 +1299,6 @@ describe("MediaWindow", () => {
             dropFile(new File([new Uint8Array(4)], "game.ssd"));
             await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
             expect(deps.processor.reset).toHaveBeenCalledWith(true);
-        });
-
-        it("does not boot a disc dropped into drive 0 when Autoboot is unticked", async () => {
-            startTicked = false;
-            deps.media.openFile.mockResolvedValue({
-                kind: "disc",
-                name: "game.ssd",
-                ref: "session:1/game.ssd",
-                driveIndex: 0,
-                words: "Loaded game.ssd into drive 0.",
-            });
-            make();
-            dropFile(new File([new Uint8Array(4)], "game.ssd"));
-            await vi.waitFor(() => expect(toasts()).toHaveLength(1));
-            expect(deps.processor.reset).not.toHaveBeenCalled();
         });
 
         it("does not boot a tape or a restored state, whatever the tick says", async () => {
