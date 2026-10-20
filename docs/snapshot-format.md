@@ -196,6 +196,24 @@ System VIA additionally includes:
 | `capsLockLight`  | boolean | Caps lock LED state                         |
 | `shiftLockLight` | boolean | Shift lock LED state                        |
 
+### Atom PPIA (`state.atomppia`)
+
+Present only on the Atom.
+
+| Field             | Type       | Description                                          |
+| ----------------- | ---------- | ---------------------------------------------------- |
+| `latcha`          | number     | Port A output latch (keyboard row, VDG mode)         |
+| `latchc`          | number     | Port C latch (output bits 0-3, input bits 4-7)       |
+| `portapins`       | number     | Port A pin levels                                    |
+| `portbpins`       | number     | Always 0; port B reads come from the keyboard matrix |
+| `portcpins`       | number     | Port C pin levels                                    |
+| `creg`            | number     | Last control register write                          |
+| `keys`            | number[][] | Keyboard matrix, 1 where a key is down               |
+| `keyboardEnabled` | boolean    | Whether host key events reach the matrix             |
+| `lastSpeakerBit`  | number     | Port C bit 2 as last sent to the speaker             |
+
+Older snapshots also carry `latchb`, which was always 0 since port B is input only; it is ignored on restore.
+
 ### Video (`state.video`)
 
 Contains ~40 scalar fields for display timing and rendering state, plus nested objects:
