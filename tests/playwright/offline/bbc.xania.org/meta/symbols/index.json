@@ -1,0 +1,145 @@
+{
+  "format": 1,
+  "sets": [
+    {
+      "url": "sets/bbc-b-mos-1.20.json",
+      "licence": "CC-BY-NC-4.0",
+      "regions": {
+        "low": {
+          "start": "0xc000",
+          "end": "0xc310",
+          "minAnchors": 1,
+          "anchors": [
+            {
+              "at": "0xc303",
+              "bytes": "0d4242432043"
+            }
+          ]
+        },
+        "middle": {
+          "start": "0xc310",
+          "end": "0xdb67",
+          "minAnchors": 2,
+          "anchors": [
+            {
+              "at": "0xc4c0",
+              "bytes": "ae6a02d04d24d0"
+            },
+            {
+              "at": "0xcf40",
+              "bytes": "0a9002c81865d8"
+            }
+          ]
+        },
+        "boot": {
+          "start": "0xdb67",
+          "end": "0xdb6e",
+          "minAnchors": 1,
+          "anchors": [
+            {
+              "at": "0xdb67",
+              "bytes": "2d6702101ba002"
+            }
+          ]
+        },
+        "high": {
+          "start": "0xdb6e",
+          "end": "0xfc00",
+          "minAnchors": 3,
+          "anchors": [
+            {
+              "at": "0xdbbe",
+              "bytes": "ad8d02d005ae8c02"
+            },
+            {
+              "at": "0xe659",
+              "bytes": "6c0002a20024ff"
+            },
+            {
+              "at": "0xf12e",
+              "bytes": "a90b8d40fe8a"
+            }
+          ]
+        },
+        "top-page": {
+          "start": "0xff00",
+          "end": "0x10000",
+          "minAnchors": 3,
+          "anchors": [
+            {
+              "at": "0xff89",
+              "bytes": "08488a48babd0201"
+            },
+            {
+              "at": "0xffa6",
+              "bytes": "608ab02abc00fc"
+            },
+            {
+              "at": "0xffb2",
+              "bytes": "bc00fe603640"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "sets/bbc-basic-2.json",
+      "licence": "MIT",
+      "regions": {
+        "low": {
+          "start": "0x8000",
+          "end": "0x9000",
+          "minAnchors": 2,
+          "anchors": [
+            {
+              "at": "0x8000",
+              "bytes": "c901f01f60ea"
+            },
+            {
+              "at": "0x8810",
+              "bytes": "4c3887d025202188"
+            }
+          ]
+        },
+        "middle": {
+          "start": "0x9000",
+          "end": "0xb000",
+          "minAnchors": 4,
+          "anchors": [
+            {
+              "at": "0x900d",
+              "bytes": "a518850ca000"
+            },
+            {
+              "at": "0x9805",
+              "bytes": "1860a50b8519"
+            },
+            {
+              "at": "0xa002",
+              "bytes": "88b90006c930"
+            },
+            {
+              "at": "0xa801",
+              "bytes": "20daa1f002100c"
+            }
+          ]
+        },
+        "high": {
+          "start": "0xb000",
+          "end": "0xc000",
+          "minAnchors": 2,
+          "anchors": [
+            {
+              "at": "0xb023",
+              "bytes": "a9006020adaf"
+            },
+            {
+              "at": "0xb81f",
+              "bytes": "840aa426a52a"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

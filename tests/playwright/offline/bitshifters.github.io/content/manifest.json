@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generated": "2026-10-19T21:17:19+00:00",
+  "files": [
+    {
+      "path": "bs-paradroid.ssd",
+      "title": "Paradroid",
+      "publisher": "Bitshifters",
+      "authors": "Ported by Kieran using Claude Code, additional code by Hexwab. 'Paradroid 90' music composed by Jason Page, music conversion & code by scarybeasts.",
+      "year": 2026,
+      "type": "Game",
+      "machine": "Master",
+      "url": "https://bitshifters.github.io/posts/prods/bs-paradroid.html"
+    },
+    {
+      "path": "ghouls-revenge-v1.10.ssd",
+      "title": "Ghouls: Revenge (and Ghouls Party)",
+      "publisher": "Bitshifters",
+      "authors": "David J Hoskins (original game); Tom Seddon (level editor, additional code); Kieran, Stew, VectorEyes, Dave, Tom (new levels); Dethmunk (title screen)",
+      "year": 2024,
+      "type": "Game",
+      "machine": "Master",
+      "url": "https://bitshifters.github.io/posts/prods/bs-ghouls-revenge.html"
+    }
+  ]
+}

@@ -1,34 +1,68 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { expect, test as base } from "@playwright/test";
 
 const ScreenBase = 0x7c00;
 const ScreenBytes = 1000;
 const BootTimeoutMs = 30000;
-const KeyHoldMs = 120;
-// The OS scans the keyboard every 10 ms and can miss a release shorter than two scans, so the next press of the
-// same key would be lost.
-const KeyReleaseMs = 50;
+// The OS scans the keyboard every 10 ms and can miss a press or a release shorter than two scans.
+const KeyScansEmulatedMs = 40;
+const HeldFrames = 10;
 // OSBYTE &C4's variable, which *FX11 sets; zero turns auto-repeat off.
 const AutoRepeatDelayAddress = 0x254;
+// currentCycles wraps every emulated second; the seconds term keeps this monotonic.
+const EmulatedCycles =
+    "(window.processor.cycleSeconds * window.processor.model.cyclesPerSecond + window.processor.currentCycles)";
+const LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
 // test:e2e builds with a dummy measurement id. An empty gtag.js leaves the stub's dataLayer for the tests to read
 // and sends nothing to Google.
-const GoogleAnalyticsUrls = /^https:\/\/[^/]*\.(googletagmanager|google-analytics)\.com\//;
+const EmptyResponses = [
+    { host: /^www\.googletagmanager\.com$/, contentType: "text/javascript" },
+    { host: /^fonts\.googleapis\.com$/, contentType: "text/css" },
+];
+// Stand-ins for the other sites the page fetches from, as <host>/<path>.
+const OfflineDir = fileURLToPath(new URL("offline/", import.meta.url));
 
 /** The page with jsbeeb on it, reached through the console surface main.js exposes. */
 export class Beeb {
     constructor(page) {
         this.page = page;
         this.problems = [];
-        this.analyticsStubbed = page.route(GoogleAnalyticsUrls, (route) =>
-            route.fulfill({ contentType: "text/javascript", body: "" }),
-        );
+        this.unrouted = [];
+        this.routed = Promise.all([
+            page.route(
+                (url) => !LoopbackHosts.includes(url.hostname),
+                (route) => this._serveOffline(route),
+            ),
+            // Keeps the STUN request off the network; peers in one browser connect by their host addresses.
+            page.addInitScript(() => {
+                const Native = window.RTCPeerConnection;
+                window.RTCPeerConnection = class extends Native {
+                    constructor(config) {
+                        super({ ...config, iceServers: [] });
+                    }
+                };
+            }),
+        ]);
         page.on("pageerror", (error) => this.problems.push(`exception: ${error.message}`));
         page.on("console", (message) => {
             if (message.type() === "error") this.problems.push(`console error: ${message.text()}`);
         });
     }
 
+    _serveOffline(route) {
+        const url = new URL(route.request().url());
+        const empty = EmptyResponses.find(({ host }) => host.test(url.hostname));
+        if (empty) return route.fulfill({ contentType: empty.contentType, body: "" });
+        const standIn = `${OfflineDir}${url.hostname}${url.pathname}`;
+        if (existsSync(standIn)) return route.fulfill({ path: standIn });
+        this.unrouted.push(`${url.origin}${url.pathname}`);
+        return route.abort("blockedbyclient");
+    }
+
     async open(query = "") {
-        await this.analyticsStubbed;
+        await this.routed;
         return this.page.goto(query || "./");
     }
 
@@ -56,18 +90,26 @@ export class Beeb {
             .not.toContain(text);
     }
 
-    // currentCycles wraps every emulated second; the seconds term keeps this monotonic.
     cycles() {
-        return this.page.evaluate(
-            () =>
-                window.processor.cycleSeconds * window.processor.model.cyclesPerSecond + window.processor.currentCycles,
+        return this.page.evaluate(EmulatedCycles);
+    }
+
+    /** Until the machine has run for `ms` of its own time, or stopped. */
+    async runFor(ms) {
+        const until = await this.page.evaluate(
+            `${EmulatedCycles} + window.processor.model.cyclesPerSecond * ${ms / 1000}`,
+        );
+        await this.page.waitForFunction(
+            `${EmulatedCycles} >= ${until} || document.getElementById("debug-pause").disabled`,
         );
     }
 
-    /** Checks the emulator stays where it is for a while, and returns where that is. */
-    async expectHeld(ms = 300) {
+    /** Checks the emulator stays where it is over frames it would have run in, and returns where that is. */
+    async expectHeld() {
         const before = await this.cycles();
-        await this.page.waitForTimeout(ms);
+        await this.page.evaluate(async (frames) => {
+            for (let i = 0; i < frames; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+        }, HeldFrames);
         expect(await this.cycles(), "cycles run while the emulator should be stopped").toBe(before);
         return before;
     }
@@ -81,9 +123,9 @@ export class Beeb {
     /** Held, then let go, long enough for the OS's scans of the matrix to see both. */
     async pressKey(key) {
         await this.page.keyboard.down(key);
-        await this.page.waitForTimeout(KeyHoldMs);
+        await this.runFor(KeyScansEmulatedMs);
         await this.page.keyboard.up(key);
-        await this.page.waitForTimeout(KeyReleaseMs);
+        await this.runFor(KeyScansEmulatedMs);
     }
 
     disableAutoRepeat() {
@@ -138,6 +180,7 @@ export const test = base.extend({
         const beeb = new Beeb(page);
         await use(beeb);
         expect(beeb.problems, "errors the page logged").toEqual([]);
+        expect(beeb.unrouted, "requests that would have left this machine").toEqual([]);
     },
 });
 
