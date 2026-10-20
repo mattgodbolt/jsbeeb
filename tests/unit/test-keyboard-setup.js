@@ -191,7 +191,7 @@ describe("KeyboardSetup", () => {
             expect(actions.openMedia).not.toHaveBeenCalled();
         });
 
-        describe("a typed g or n", () => {
+        describe("the pause's and the debugger's keys", () => {
             const typeKey = (key) => setup.keyPress(new KeyboardEvent("keypress", { key, cancelable: true }));
 
             it.each([
