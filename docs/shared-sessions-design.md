@@ -213,8 +213,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 - **Transport:** WebRTC data channels in a star: each guest connects to the host only, over a reliable, ordered
   channel. A joiner's snapshot goes gzipped and in chunks over the same channel, discs included, so local and
   `gd:` discs need no fetching. The host sends a guest nothing until the guest has said hello, which proves the
-  channel can carry what the host sends (`SessionHost.welcome` has why). Each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
-  so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
+  channel can carry what the host sends (`SessionHost.welcome` has why). Each of the guest's drives takes a fresh
+  copy of the host's disc, or is emptied, so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
   connect is told "couldn't connect directly". The host and each guest see each other's public IP address. A
   guest whose model, or any setting its Parameters entry marks `takenFromHost`, differs from the host's reloads
   as the host's machine before it joins: the host's welcome carries every such setting, so a new one is its one
