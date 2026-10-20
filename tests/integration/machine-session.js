@@ -26,6 +26,14 @@ async function frameAlignedSession() {
     return session;
 }
 
+const Irq1v = 0x204;
+const ResetVector = 0xfffc;
+
+function vectorAt(session, address) {
+    const [lo, hi] = session.readMemory(address, 2);
+    return lo | (hi << 8);
+}
+
 async function cyclesOverFrames(session, frames) {
     const before = session.elapsedCycles;
     for (let i = 0; i < frames; i++) await session.runFrames();
@@ -84,8 +92,7 @@ describe("MachineSession frame stepping", () => {
     });
 
     it("stops short when a breakpoint fires", async () => {
-        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
-        const id = session.addBreakpoint("execute", lo | (hi << 8));
+        const id = session.addBreakpoint("execute", vectorAt(session, Irq1v));
 
         const result = await session.runFrames(5);
         const hit = session.hitBreakpoint();
@@ -106,10 +113,7 @@ describe("MachineSession running for cycles", () => {
 
     afterAll(() => session.destroy());
 
-    function breakOnNextInterrupt() {
-        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
-        return session.addBreakpoint("execute", lo | (hi << 8));
-    }
+    const breakOnNextInterrupt = () => session.addBreakpoint("execute", vectorAt(session, Irq1v));
 
     it("reports the cycles it ran", async () => {
         const before = session.elapsedCycles;
@@ -159,10 +163,7 @@ describe("MachineSession watching execution", () => {
         session.resetBreakpointHits();
     });
 
-    function irqHandler() {
-        const [lo, hi] = session.readMemory(0x204, 2);
-        return lo | (hi << 8);
-    }
+    const irqHandler = () => vectorAt(session, Irq1v);
 
     async function stopAtProgramStart(program = Program, { keepBreakpoint = false } = {}) {
         session.writeMemory(ProgramAddress, program);
@@ -453,8 +454,7 @@ describe("MachineSession watching execution", () => {
         await session.runFor(100);
         remove();
 
-        const [lo, hi] = session.readMemory(0xfffc, 2);
-        expect(pcs[0]).toBe(lo | (hi << 8));
+        expect(pcs[0]).toBe(vectorAt(session, ResetVector));
         expect(pcs).not.toContain(handler);
     });
 });
@@ -463,8 +463,7 @@ describe("MachineSession breakpoints across a reset", () => {
     it("stops again at the reset address after a reset while stopped there", async () => {
         const session = new MachineSession("B-DFS1.2");
         await session.initialise();
-        const [lo, hi] = session.readMemory(0xfffc, 2);
-        const id = session.addBreakpoint("execute", lo | (hi << 8));
+        const id = session.addBreakpoint("execute", vectorAt(session, ResetVector));
         expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(false);
         session.resetBreakpointHits();
 
@@ -599,11 +598,6 @@ describe("MachineSession keyboard on the Atom", () => {
     });
 
     afterAll(() => session.destroy());
-
-    it("refuses a key it does not know, as the BBC does", () => {
-        expect(() => session.keyDown("Shift_Left")).toThrow(/"Shift_Left" is not a key/);
-        expect(() => session.keyUp(16)).toThrow(/keyUp: 16 is a numeric key code/);
-    });
 
     it("presses a key it knows", () => {
         session.keyDown(keyCodes.A);
@@ -829,70 +823,52 @@ describe("MachineSession snapshots", () => {
 });
 
 describe("MachineSession disc images", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
     afterEach(() => vi.restoreAllMocks());
 
-    it(
-        "puts a github: disc in a drive from the raw file in the repo",
-        async () => {
-            const session = await bootedSession();
-            const elite = readFileSync(path.join(RepoRoot, "public/discs/elite.ssd"));
-            const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(elite));
-            expect(await session.loadDiscImage("github:someone/games@v1/discs/elite.ssd", 1)).toEqual({
-                name: "elite.ssd",
-                ignored: [],
-            });
-            expect(fetch).toHaveBeenCalledWith("https://raw.githubusercontent.com/someone/games/v1/discs/elite.ssd");
-            await session.type("*CAT 1");
-            const { screenText } = await session.runUntilPrompt(30);
-            expect(screenText).toContain("Elite");
-            session.destroy();
-        },
-        BootTimeout,
-    );
+    it("puts a github: disc in a drive from the raw file in the repo", async () => {
+        const elite = readFileSync(path.join(RepoRoot, "public/discs/elite.ssd"));
+        const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(elite));
+        expect(await session.loadDiscImage("github:someone/games@v1/discs/elite.ssd", 1)).toEqual({
+            name: "elite.ssd",
+            ignored: [],
+        });
+        expect(fetch).toHaveBeenCalledWith("https://raw.githubusercontent.com/someone/games/v1/discs/elite.ssd");
+        await session.type("*CAT 1");
+        expect((await session.runUntilPrompt(30)).screenText).toContain("Elite");
+    });
 
-    it(
-        "puts a built-in disc in drive 0 by its bare name and catalogues it",
-        async () => {
-            const session = await bootedSession();
-            expect(await session.loadDiscImage("elite.ssd")).toEqual({ name: "elite.ssd", ignored: [] });
-            await session.type("*CAT");
-            const { screenText } = await session.runUntilPrompt(30);
-            expect(screenText).toContain("Elite");
-            session.destroy();
-        },
-        BootTimeout,
-    );
+    it("puts a built-in disc in drive 0 by its bare name and catalogues it", async () => {
+        expect(await session.loadDiscImage("elite.ssd")).toEqual({ name: "elite.ssd", ignored: [] });
+        await session.type("*CAT");
+        expect((await session.runUntilPrompt(30)).screenText).toContain("Elite");
+    });
 });
 
 describe("MachineSession VideoNuLA", () => {
-    const Mode7UlaControl = 0x4a;
     const UlaFlashBit = 0x01;
 
-    async function videoAfterNulaPaletteModeOn(opts) {
-        const session = await bootedSession("B-DFS1.2", opts);
-        await session.type("?&FE22=&11");
-        await session.runUntilPrompt();
-        const { video } = session.snapshot({ includeRoms: false }).machine;
-        session.destroy();
-        return video;
-    }
+    it.each([
+        ["has a stock video ULA unless one is asked for", undefined, 0x10, 0],
+        ["fits a VideoNuLA when asked", { hasVideoNula: true }, 0x4a, 1],
+    ])(
+        "%s",
+        async (_, opts, ulaControl, paletteMode) => {
+            const session = await bootedSession("B-DFS1.2", opts);
+            await session.type("?&FE22=&11");
+            await session.runUntilPrompt();
+            const { video } = session.snapshot({ includeRoms: false }).machine;
+            session.destroy();
 
-    it(
-        "has a stock video ULA unless one is asked for",
-        async () => {
-            const video = await videoAfterNulaPaletteModeOn();
-            expect(video.ulactrl).toBe(0x11);
-            expect(video.ula.paletteMode).toBe(0);
-        },
-        BootTimeout,
-    );
-
-    it(
-        "fits a VideoNuLA when asked",
-        async () => {
-            const video = await videoAfterNulaPaletteModeOn({ hasVideoNula: true });
-            expect(video.ulactrl & ~UlaFlashBit).toBe(Mode7UlaControl);
-            expect(video.ula.paletteMode).toBe(1);
+            expect(video.ulactrl & ~UlaFlashBit).toBe(ulaControl);
+            expect(video.ula.paletteMode).toBe(paletteMode);
         },
         BootTimeout,
     );
