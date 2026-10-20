@@ -11,8 +11,8 @@ import { findModel } from "../../src/models.js";
 
 const ClocksPerSecond = 2000000;
 
-const keyEvent = (type, code, { alt = false, ctrl = false, shift = false, repeat = false } = {}) =>
-    new KeyboardEvent(type, { code, altKey: alt, ctrlKey: ctrl, shiftKey: shift, repeat, cancelable: true });
+const keyEvent = (type, code, { alt = false, ctrl = false, shift = false, repeat = false, key = "" } = {}) =>
+    new KeyboardEvent(type, { code, key, altKey: alt, ctrlKey: ctrl, shiftKey: shift, repeat, cancelable: true });
 
 const pasteEvent = (text) => {
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -209,6 +209,23 @@ describe("KeyboardSetup", () => {
             field.dispatchEvent(pasteEvent("not for the Beeb"));
             expect(actions.paste).not.toHaveBeenCalled();
         });
+    });
+
+    it("passes focus through a text field and back on a dead key", () => {
+        domFromIndexHtml("ime-reset");
+        const button = document.createElement("button");
+        document.body.append(button);
+        button.focus();
+        const trail = [];
+        const recordFocus = (evt) => trail.push(evt.target.tagName);
+        document.body.addEventListener("focusin", recordFocus);
+
+        document.dispatchEvent(keyEvent("keydown", keyCodes.APOSTROPHE, { key: "Dead", shift: true }));
+        document.body.removeEventListener("focusin", recordFocus);
+
+        expect(trail.slice(0, 2)).toEqual(["TEXTAREA", "BUTTON"]);
+        expect(document.activeElement).toBe(button);
+        expect(processor.sysvia.keyDown).toHaveBeenCalledWith(keyCodes.APOSTROPHE, true);
     });
 
     describe("where keys go", () => {

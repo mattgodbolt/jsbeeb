@@ -10,6 +10,7 @@ describe("Keyboard", () => {
     let mockProcessor;
     let mockSysvia;
     let mockInputEnabledFunction;
+    let resetInputMethod;
     let running;
 
     const keyEvent = (code, key = "", extra = {}) => ({
@@ -50,11 +51,13 @@ describe("Keyboard", () => {
 
         mockInputEnabledFunction = vi.fn().mockReturnValue(false);
         running = false;
+        resetInputMethod = vi.fn();
 
         keyboard = new Keyboard({
             processor: mockProcessor,
             inputEnabledFunction: mockInputEnabledFunction,
             runningFunction: () => running,
+            resetInputMethodFunction: resetInputMethod,
             keyLayout: "physical",
         });
     });
@@ -356,6 +359,36 @@ describe("Keyboard", () => {
             keyboard.keyDown(composedEnter());
 
             expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE]]);
+        });
+
+        test("resets the input method once when the machine takes a dead key", () => {
+            keyboard.keyDown(deadKey());
+            keyboard.keyDown(deadKey({ repeat: true }));
+
+            expect(resetInputMethod).toHaveBeenCalledTimes(1);
+        });
+
+        test("leaves the input method alone for a dead key typed into the page", () => {
+            mockInputEnabledFunction.mockReturnValue(true);
+            keyboard.keyDown(deadKey());
+
+            expect(resetInputMethod).not.toHaveBeenCalled();
+        });
+
+        test("holds a Return pressed after the reset dead key from its press to its key up", () => {
+            const enter = (extra) => keyEvent(keyCodes.ENTER, "Enter", extra);
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
+            keyboard.keyDown(deadKey());
+            keyboard.keyUp(keyEvent(keyCodes.APOSTROPHE, "Dead", { shiftKey: true }));
+            keyboard.keyUp(keyEvent(keyCodes.SHIFT_LEFT, "Shift"));
+            keyboard.keyDown(enter());
+            keyboard.keyDown(enter({ repeat: true }));
+            keyboard.keyDown(enter({ repeat: true }));
+            expect(mockSysvia.keyUp).not.toHaveBeenCalledWith(keyCodes.ENTER);
+
+            keyboard.keyUp(enter());
+            expect(mockSysvia.keyDown.mock.calls.filter(([key]) => key === keyCodes.ENTER)).toHaveLength(1);
+            expect(mockSysvia.keyUp).toHaveBeenLastCalledWith(keyCodes.ENTER);
         });
 
         test("holds a dead key through its repeats", () => {
