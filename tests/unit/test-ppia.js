@@ -3,6 +3,7 @@ import { AtomPPIA } from "../../src/ppia.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { keyCodes } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { AtomSoundChip } from "../../src/soundchip.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 function makePPIA(layout = "physical") {
@@ -179,6 +180,23 @@ describe("AtomPPIA", () => {
             ppia.write(0xb002, 0x04);
             expect(calls.length).toBeGreaterThan(0);
             expect(calls[0].bit).toBe(1); // bit 2 >> 2 = 1
+        });
+
+        it.each([0, 1])("sounds the first rising edge after a hard reset taken with the speaker at %i", (level) => {
+            const { ppia, cpu, scheduler } = makePPIA();
+            const chip = new AtomSoundChip(() => {});
+            chip.setScheduler(scheduler);
+            cpu.soundChip = chip;
+            ppia.write(0xb002, level << 2);
+
+            ppia.reset();
+            chip.reset(true);
+            cpu.currentCycles = 10;
+            ppia.write(0xb002, 0x04);
+            scheduler.epoch = 20;
+            const out = new Float32Array(10);
+            chip.render(out, 0, out.length);
+            expect(out[5]).toBeGreaterThan(0.1);
         });
     });
 
