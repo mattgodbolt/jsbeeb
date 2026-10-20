@@ -179,8 +179,8 @@ export const test = base.extend({
     beeb: async ({ page }, use) => {
         const beeb = new Beeb(page);
         await use(beeb);
-        expect(beeb.problems, "errors the page logged").toEqual([]);
         expect(beeb.unrouted, "requests that would have left this machine").toEqual([]);
+        expect(beeb.problems, "errors the page logged").toEqual([]);
     },
 });
 
