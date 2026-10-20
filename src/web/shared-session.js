@@ -176,14 +176,15 @@ function opened(channel) {
     });
 }
 
-async function gzip(text) {
-    const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-async function gunzip(bytes) {
-    return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
-}
+export const gzipCodec = Object.freeze({
+    async compress(text) {
+        const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+    },
+    async decompress(bytes) {
+        return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
+    },
+});
 
 function randomId() {
     const bytes = crypto.getRandomValues(new Uint8Array(12));
@@ -271,6 +272,8 @@ function parsed(data) {
  * @property {import("./url-state.js").UrlState} urlState
  * @property {string} version
  * @property {ReturnType<typeof import("./rendezvous-client.js").createRendezvousClient>} rendezvous
+ * @property {{compress: function(string): Promise<Uint8Array>, decompress: function(Uint8Array): Promise<string>}} codec
+ * - how a snapshot is packed for the wire: `gzipCodec`
  */
 
 export class SessionHost {
@@ -855,7 +858,7 @@ export class SessionHost {
         guest.backlog = pending;
         const json = snapshotToJSON(snapshot);
         const takeMs = rounded(this.log.elapsed() - startMs);
-        const bytes = await gzip(json);
+        const bytes = await this.context.codec.compress(json);
         if (generation !== guest.snapshotGeneration) return;
         const tookMs = rounded(this.log.elapsed() - startMs);
         this.log.record("snapshot", { guest: guest.id, bytes: bytes.length, takeMs, tookMs });
@@ -1359,7 +1362,7 @@ export class SessionGuest {
 
     async restore(snapshot) {
         const { processor, loop } = this.context;
-        const restored = snapshotFromJSON(await gunzip(snapshot.bytes));
+        const restored = snapshotFromJSON(await this.context.codec.decompress(snapshot.bytes));
         if (this.left) return;
         // Before the restore, which would cancel the typist's task and leave the keyboard it disabled.
         this.context.keyboard.cancelPaste();

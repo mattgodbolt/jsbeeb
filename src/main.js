@@ -46,7 +46,7 @@ import { PageActions } from "./web/page-actions.js";
 import { bootModeOf, parseMediaParams, processAutobootParams, processDriveTrackParams } from "./url-params.js";
 import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
-import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { gzipCodec, hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
@@ -447,6 +447,7 @@ async function startAsTheUrlAsks() {
             urlState,
             version,
             rendezvous,
+            codec: gzipCodec,
         };
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
