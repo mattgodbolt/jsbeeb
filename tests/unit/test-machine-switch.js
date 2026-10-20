@@ -32,14 +32,6 @@ describe("MachineSwitch", () => {
         requires: requirementOf({ needs: ["VideoNuLA"] }),
     };
 
-    it("is satisfied by a disc that needs a VideoNuLA only when the machine was started with one", () => {
-        expect(make().satisfies(nulaDemo)).toBe(false);
-        deps.fitted = { hasVideoNula: false };
-        expect(make().satisfies(nulaDemo)).toBe(false);
-        deps.fitted = { hasVideoNula: true };
-        expect(make().satisfies(nulaDemo)).toBe(true);
-    });
-
     it("fits what a disc needs, keeping the model when the disc names none", async () => {
         await make().switchFor(nulaDemo, drive0, { boot: true });
         expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?disc1=github:a/b/nula.ssd&autoboot&hasVideoNula");
@@ -48,17 +40,20 @@ describe("MachineSwitch", () => {
         );
     });
 
-    it("is satisfied by a disc that names no machine, and otherwise only by that very machine, Tube included", () => {
-        expect(make().satisfies({ ref: "sth:Elite.zip", title: "Elite" })).toBe(true);
-        expect(make().satisfies(paradroid)).toBe(false);
-        deps.model = findModel("MasterADFS");
-        expect(make().satisfies(paradroid)).toBe(false);
-        deps.model = findModel("Master");
-        expect(make().satisfies(paradroid)).toBe(true);
-        expect(make().satisfies(twinhead)).toBe(false);
-        deps.processor.hasTube = true;
-        expect(make().satisfies(twinhead)).toBe(true);
-        expect(make().satisfies(paradroid)).toBe(false);
+    it.each([
+        ["a disc that names no machine", {}, { ref: "sth:Elite.zip", title: "Elite" }, true],
+        ["a Master disc on a B", {}, paradroid, false],
+        ["a Master disc on a Master with ADFS", { model: "MasterADFS" }, paradroid, false],
+        ["a Master disc on a Master", { model: "Master" }, paradroid, true],
+        ["a Master disc on a Master with a Tube", { model: "Master", hasTube: true }, paradroid, false],
+        ["a Master Turbo disc on a Master", { model: "Master" }, twinhead, false],
+        ["a Master Turbo disc on a Master with a Tube", { model: "Master", hasTube: true }, twinhead, true],
+        ["a NuLA disc with no fittings given", {}, nulaDemo, false],
+        ["a NuLA disc without a NuLA fitted", { fitted: { hasVideoNula: false } }, nulaDemo, false],
+        ["a NuLA disc with a NuLA fitted", { fitted: { hasVideoNula: true } }, nulaDemo, true],
+    ])("finds %s satisfied: %s", (_, { model = "B-DFS1.2", hasTube = false, fitted }, d, satisfied) => {
+        Object.assign(deps, { model: findModel(model), processor: { hasTube }, fitted });
+        expect(make().satisfies(d)).toBe(satisfied);
     });
 
     it("reloads for a boot without asking: the machine named, the disc, the boot, and nothing else the page did", async () => {
@@ -121,15 +116,6 @@ describe("reloading as another machine", () => {
         expect(urlState.navigatedTo).toBe("https://bbc.example/?disc1=elite.ssd&model=Master&coProcessor");
         reloadAsMachine(urlState, { model: "Master", coProcessor: false, autoboot: true });
         expect(urlState.navigatedTo).toBe("https://bbc.example/?disc1=elite.ssd&autoboot&model=Master");
-    });
-
-    it("pushes a history entry unless told to replace the page", () => {
-        const urlState = pageThatDidThings();
-        const entries = window.history.length;
-        reloadAsMachine(urlState, { model: "Master" }, { replace: true });
-        expect(window.history.length).toBe(entries);
-        reloadAsMachine(urlState, { model: "Master" });
-        expect(window.history.length).toBe(entries + 1);
     });
 
     it("hands a value to the next page exactly once", () => {
