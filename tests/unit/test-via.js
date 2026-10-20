@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { SysVia, UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -24,6 +25,22 @@ function makeFakeUserPortPeripheral() {
 }
 
 describe("Via snapshotState / restoreState", () => {
+    const ORB = 0x0,
+        ORA = 0x1,
+        DDRB = 0x2,
+        DDRA = 0x3,
+        T1CL = 0x4,
+        T1CH = 0x5,
+        T2CL = 0x8,
+        T2CH = 0x9,
+        SR = 0xa,
+        ACR = 0xb,
+        PCR = 0xc,
+        IER = 0xe;
+    const AcrT1ContinuousOnPb7ShiftOutUnderT2Latching = 0xd3;
+    const PcrCa2HighCb2PulsingOnRisingEdges = 0xbf;
+    const IerSetTimers = 0xe0;
+
     let scheduler, cpu;
 
     beforeEach(() => {
@@ -31,162 +48,64 @@ describe("Via snapshotState / restoreState", () => {
         cpu = makeFakeCpu();
     });
 
-    describe("base Via (via UserVia)", () => {
-        function makeUserVia() {
-            return new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
-        }
+    function makeUserVia() {
+        return new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+    }
 
-        it("should snapshot and restore all register fields", () => {
-            const via = makeUserVia();
-            // Set some non-default state
-            via.ora = 0x42;
-            via.orb = 0x37;
-            via.ira = 0xaa;
-            via.irb = 0xbb;
-            via.ddra = 0xf0;
-            via.ddrb = 0x0f;
-            via.sr = 0x55;
-            via.acr = 0x60;
-            via.pcr = 0x22;
-            via.t1hit = false;
-            via.t2hit = false;
-            via.t1_pb7 = 1;
-            via.ca1 = true;
-            via.cb2 = true;
-
-            const snapshot = via.snapshotState();
-
-            // Create a fresh VIA and restore
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            expect(via2.ora).toBe(0x42);
-            expect(via2.orb).toBe(0x37);
-            expect(via2.ira).toBe(0xaa);
-            expect(via2.irb).toBe(0xbb);
-            expect(via2.ddra).toBe(0xf0);
-            expect(via2.ddrb).toBe(0x0f);
-            expect(via2.sr).toBe(0x55);
-            expect(via2.acr).toBe(0x60);
-            expect(via2.pcr).toBe(0x22);
-            expect(via2.t1hit).toBe(false);
-            expect(via2.t2hit).toBe(false);
-            expect(via2.t1_pb7).toBe(1);
-            expect(via2.ca1).toBe(true);
-            expect(via2.cb2).toBe(true);
+    function makeSysVia() {
+        return new SysVia(cpu, scheduler, {
+            video: makeFakeVideo(),
+            soundChip: makeFakeSoundChip(),
+            cmos: makeFakeCmos(),
+            isMaster: false,
+            initialLayout: "physical",
         });
+    }
 
-        it("should snapshot and restore timer state", () => {
-            const via = makeUserVia();
-            via.t1c = 12345;
-            via.t1l = 67890;
-            via.t2c = 11111;
-            via.t2l = 22222;
+    function driveMidCb2PulseWithTimersRunning(via) {
+        via.write(DDRA, 0xf0);
+        via.write(DDRB, 0x0f);
+        via.write(ACR, AcrT1ContinuousOnPb7ShiftOutUnderT2Latching);
+        via.write(IER, IerSetTimers);
+        via.write(T1CL, 0x34);
+        via.write(T1CH, 0x01);
+        via.write(T2CL, 7);
+        via.write(T2CH, 100);
+        via.write(SR, 0x55);
+        via.write(ORB, 0x06);
+        scheduler.polltime(1001);
+        via.write(PCR, PcrCa2HighCb2PulsingOnRisingEdges);
+        via.setca1(true);
+        via.setcb1(true);
+        via.write(ORA, 0x42);
+        via.write(ORB, 0x0b);
+        scheduler.polltime(1);
+    }
 
-            const snapshot = via.snapshotState();
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            expect(via2.t1c).toBe(12345);
-            expect(via2.t1l).toBe(67890);
-            expect(via2.t2c).toBe(11111);
-            expect(via2.t2l).toBe(22222);
-        });
-
-        it("should save task offset when task is scheduled", () => {
-            const via = makeUserVia();
-            // After reset, the via task should be scheduled
-            expect(via.task.scheduled()).toBe(true);
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.taskOffset).not.toBeNull();
-            // Task offset should be positive (relative to epoch)
-            expect(snapshot.taskOffset).toBeGreaterThan(0);
-        });
-
-        it("should save null task offset when task is not scheduled", () => {
-            const via = makeUserVia();
-            via.task.cancel();
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.taskOffset).toBeNull();
-        });
-
-        it("should re-register task with correct offset on restore", () => {
-            const via = makeUserVia();
-            scheduler.polltime(1000);
-            via._catchUp();
-
-            // Set up a known timer state
-            via.t1c = 500;
-            via.t1l = 500;
-            via.updateNextTime();
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.taskOffset).not.toBeNull();
-            const expectedOffset = snapshot.taskOffset;
-
-            // Restore to a new VIA on same scheduler
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            expect(via2.task.scheduled()).toBe(true);
-            // The task should expire at epoch + offset
-            expect(via2.task.expireEpoch).toBe(scheduler.epoch + expectedOffset);
-        });
-
-        it("should restore interrupt state correctly", () => {
-            const via = makeUserVia();
-            via.ier = 0x60; // Enable timer 1 and 2 interrupts
-            via.ifr = 0x40; // Timer 1 interrupt pending
-            via.updateIFR();
-            expect(cpu.interrupt & 0x02).toBe(0x02); // UserVia uses irq=0x02
-
-            const snapshot = via.snapshotState();
-
-            // Reset CPU interrupt state
-            cpu.interrupt = 0;
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            // Interrupt should be re-asserted
-            expect(cpu.interrupt & 0x02).toBe(0x02);
-        });
+    it("round-trips a user VIA mid-pulse on CB2 with its timers running", async () => {
+        await expectSnapshotRoundTrips(makeUserVia, driveMidCb2PulseWithTimersRunning);
     });
 
-    describe("SysVia", () => {
-        function makeSysVia() {
-            return new SysVia(cpu, scheduler, {
-                video: makeFakeVideo(),
-                soundChip: makeFakeSoundChip(),
-                cmos: makeFakeCmos(),
-                isMaster: false,
-                initialLayout: "physical",
-            });
-        }
+    it("round-trips a system VIA with its addressable latch written, mid-pulse on CB2", async () => {
+        await expectSnapshotRoundTrips(makeSysVia, driveMidCb2PulseWithTimersRunning);
+    });
 
-        it("should snapshot and restore SysVia-specific fields", () => {
-            const via = makeSysVia();
-            // IC32 bits 6,7 control lock lights: 0 = on, 1 = off
-            // Set IC32=0x23 so both lights are on (bits 6,7 clear)
-            via.IC32 = 0x23;
-            via.capsLockLight = true;
-            via.shiftLockLight = true;
+    it("should restore interrupt state correctly", () => {
+        const via = makeUserVia();
+        via.ier = 0x60; // Enable timer 1 and 2 interrupts
+        via.ifr = 0x40; // Timer 1 interrupt pending
+        via.updateIFR();
+        expect(cpu.interrupt & 0x02).toBe(0x02); // UserVia uses irq=0x02
 
-            const snapshot = via.snapshotState();
-            expect(snapshot.IC32).toBe(0x23);
-            expect(snapshot.capsLockLight).toBe(true);
-            expect(snapshot.shiftLockLight).toBe(true);
+        const snapshot = via.snapshotState();
+        cpu.interrupt = 0;
+        const via2 = makeUserVia();
+        via2.restoreState(snapshot);
 
-            const via2 = makeSysVia();
-            via2.restoreState(snapshot);
+        expect(cpu.interrupt & 0x02).toBe(0x02);
+    });
 
-            expect(via2.IC32).toBe(0x23);
-            // Lock lights are derived from IC32 during portBUpdated
-            expect(via2.capsLockLight).toBe(true);
-            expect(via2.shiftLockLight).toBe(true);
-        });
-
+    describe("SysVia keyboard", () => {
         it("hands the held keys, including a forced and a physical SHIFT, to another machine", () => {
             const via = makeSysVia();
             via.setMapped([BBC.A[0], BBC.A[1], true], 1);
@@ -216,17 +135,6 @@ describe("Via snapshotState / restoreState", () => {
             via2.keyDown(keyCodes.A, false);
             via2.restoreState(snapshot);
             expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
-        });
-
-        it("should include base Via fields in SysVia snapshot", () => {
-            const via = makeSysVia();
-            via.ora = 0x77;
-            via.acr = 0x40;
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.ora).toBe(0x77);
-            expect(snapshot.acr).toBe(0x40);
-            expect(snapshot.IC32).toBeDefined();
         });
     });
 });

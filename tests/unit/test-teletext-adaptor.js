@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
 import * as loader from "../../src/loader.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 describe("TeletextAdaptor", () => {
     // Constants
@@ -342,33 +343,18 @@ describe("TeletextAdaptor", () => {
             loadData.mockClear();
         });
 
-        it("should restore the channel, control bits and frame buffer", () => {
-            source.write(0, 0x0c | 2); // Teletext enable, interrupts, channel 2
-            source.write(1, 3);
-            source.write(2, 0xaa);
-            source.write(2, 0xbb);
-
-            restored.restoreState(source.snapshotState());
-
-            expect(restored.channel).toBe(2);
-            expect(restored.teletextEnable).toBe(true);
-            expect(restored.teletextInts).toBe(true);
-            restored.write(1, 3);
-            expect(restored.read(2)).toBe(0xaa);
-            expect(restored.read(2)).toBe(0xbb);
-        });
-
-        it("should restore the status register and its pointers", () => {
-            source.write(0, 0x0c); // Teletext enable, interrupts, channel 0
-            source.update();
-            source.write(1, 4);
-            source.read(2);
-
-            restored.restoreState(source.snapshotState());
-
-            expect(restored.teletextStatus).toBe(source.teletextStatus);
-            expect(restored.rowPtr).toBe(4);
-            expect(restored.colPtr).toBe(1);
+        it("should round-trip an adaptor on another channel, part way through writing a row", async () => {
+            await expectSnapshotRoundTrips(
+                () => new TeletextAdaptor({ interrupt: 0, resetLine: true }),
+                (adaptor) => {
+                    adaptor.write(0, 0x0c | 2); // Teletext enable, interrupts, channel 2
+                    adaptor.update();
+                    adaptor.write(1, 3);
+                    adaptor.write(2, 0xaa);
+                    adaptor.write(2, 0xbb);
+                    adaptor.polltime(1234);
+                },
+            );
         });
 
         it("should reassert an IRQ the adaptor was holding", () => {

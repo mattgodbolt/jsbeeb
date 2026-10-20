@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { SoundChip, AtomSoundChip, InstrumentedSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+
+const WhiteNoiseFastestRate = 0xe4;
+const PeriodicNoiseFastestRate = 0xe0;
 
 function makeSoundChip(onBuffer = () => {}) {
     const scheduler = new Scheduler();
@@ -129,111 +133,46 @@ describe("SoundChip DC restoration", () => {
 });
 
 describe("SoundChip snapshotState / restoreState", () => {
-    it("should snapshot and restore tone channel registers", () => {
-        const { chip } = makeSoundChip();
-        chip.registers[0] = 0x100;
-        chip.registers[1] = 0x200;
-        chip.registers[2] = 0x300;
-        chip.counter[0] = 1.5;
-        chip.counter[1] = 2.5;
-        chip.outputBit[0] = true;
-        chip.outputBit[2] = true;
-
-        const snapshot = chip.snapshotState();
-        const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
-
-        expect(chip2.registers[0]).toBe(0x100);
-        expect(chip2.registers[1]).toBe(0x200);
-        expect(chip2.registers[2]).toBe(0x300);
-        expect(chip2.counter[0]).toBeCloseTo(1.5);
-        expect(chip2.counter[1]).toBeCloseTo(2.5);
-        expect(chip2.outputBit[0]).toBe(true);
-        expect(chip2.outputBit[1]).toBe(false);
-        expect(chip2.outputBit[2]).toBe(true);
+    it("round-trips a chip part way through playing three tones, periodic noise and a cassette tone", async () => {
+        const scheduler = new Scheduler();
+        await expectSnapshotRoundTrips(
+            () => {
+                const chip = new SoundChip(() => {});
+                chip.setScheduler(scheduler);
+                return chip;
+            },
+            (driven) => {
+                for (const [channel, period, volume] of [
+                    [0, 0x123, 3],
+                    [1, 0x045, 7],
+                    [2, 0x3f0, 11],
+                ]) {
+                    driven.poke(0x80 | (channel << 5) | (period & 0x0f));
+                    driven.poke(period >> 4);
+                    driven.poke(0x90 | (channel << 5) | volume);
+                }
+                driven.poke(PeriodicNoiseFastestRate);
+                driven.toneGenerator.tone(1200);
+                scheduler.polltime(12345);
+                driven.catchUp();
+            },
+        );
     });
 
-    it("should snapshot and restore volume levels", () => {
+    it("should shift the restored LFSR as the restored noise register says", () => {
+        const shiftTwenty = (chip) => {
+            for (let i = 0; i < 20; ++i) chip.shiftLfsr();
+        };
         const { chip } = makeSoundChip();
-        chip.poke(0x90 | 0x05); // Channel 0, volume 5
-        chip.poke(0xb0 | 0x0a); // Channel 1, volume 10
-
-        const v0 = chip.volume[0];
-        const v1 = chip.volume[1];
-
-        const snapshot = chip.snapshotState();
+        chip.poke(WhiteNoiseFastestRate);
+        shiftTwenty(chip);
         const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
+        chip2.poke(PeriodicNoiseFastestRate);
 
-        expect(chip2.volume[0]).toBeCloseTo(v0);
-        expect(chip2.volume[1]).toBeCloseTo(v1);
-    });
-
-    it("should snapshot and restore LFSR and noise state", () => {
-        const { chip } = makeSoundChip();
-        // Set to periodic noise
-        chip.registers[3] = 0x02;
-        chip.noisePoked();
-        // Shift LFSR a few times to get a non-default value
-        chip.shiftLfsr();
-        chip.shiftLfsr();
-        chip.shiftLfsr();
-        const lfsrVal = chip.lfsr;
-
-        const snapshot = chip.snapshotState();
-        const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
-
-        expect(chip2.lfsr).toBe(lfsrVal);
-        expect(chip2.registers[3]).toBe(0x02);
-        // Verify periodic noise LFSR function is bound (not white noise)
-        chip2.shiftLfsr();
-        chip.shiftLfsr();
+        chip2.restoreState(chip.snapshotState());
+        shiftTwenty(chip);
+        shiftTwenty(chip2);
         expect(chip2.lfsr).toBe(chip.lfsr);
-    });
-
-    it("should snapshot and restore white noise LFSR binding", () => {
-        const { chip } = makeSoundChip();
-        // Set to white noise (bit 2 set)
-        chip.registers[3] = 0x07;
-        chip.noisePoked();
-        chip.shiftLfsr();
-        chip.shiftLfsr();
-        const lfsrVal = chip.lfsr;
-
-        const snapshot = chip.snapshotState();
-        const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
-
-        expect(chip2.lfsr).toBe(lfsrVal);
-        // Verify white noise LFSR function is bound
-        chip2.shiftLfsr();
-        chip.shiftLfsr();
-        expect(chip2.lfsr).toBe(chip.lfsr);
-    });
-
-    it("should snapshot and restore latched register", () => {
-        const { chip } = makeSoundChip();
-        chip.latchedRegister = 0x60;
-
-        const snapshot = chip.snapshotState();
-        const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
-
-        expect(chip2.latchedRegister).toBe(0x60);
-    });
-
-    it("should snapshot and restore the DC blocker state", () => {
-        const { chip } = makeSoundChip();
-        chip.dcPrevIn = 0.125;
-        chip.dcPrevOut = -0.0625;
-
-        const snapshot = chip.snapshotState();
-        const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
-
-        expect(chip2.dcPrevIn).toBeCloseTo(0.125);
-        expect(chip2.dcPrevOut).toBeCloseTo(-0.0625);
     });
 
     it("should zero the DC blocker for snapshots that predate it", () => {
@@ -247,21 +186,6 @@ describe("SoundChip snapshotState / restoreState", () => {
 
         expect(chip.dcPrevIn).toBe(0);
         expect(chip.dcPrevOut).toBe(0);
-    });
-
-    it("should snapshot and restore sine generator state", () => {
-        const { chip } = makeSoundChip();
-        chip.sineOn = true;
-        chip.sineStep = 42.5;
-        chip.sineTime = 100.25;
-
-        const snapshot = chip.snapshotState();
-        const { chip: chip2 } = makeSoundChip();
-        chip2.restoreState(snapshot);
-
-        expect(chip2.sineOn).toBe(true);
-        expect(chip2.sineStep).toBeCloseTo(42.5);
-        expect(chip2.sineTime).toBeCloseTo(100.25);
     });
 
     it("should reset output buffer on restore", () => {

@@ -3,6 +3,7 @@ import { AtomPPIA } from "../../src/ppia.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { keyCodes } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 function makePPIA(layout = "physical") {
     const scheduler = new Scheduler();
@@ -289,24 +290,16 @@ describe("AtomPPIA", () => {
     });
 
     describe("snapshot/restore", () => {
-        it("should round-trip state through snapshot and restore", () => {
-            const { ppia } = makePPIA();
-            // Mutate state
-            ppia.write(0xb000, 0x35); // port A
-            ppia.keyDownRaw([6, 1]); // press a key
-            ppia.write(0xb003, 0x05); // BSR: set speaker bit
-
-            const snapshot = ppia.snapshotState();
-            expect(snapshot.latcha).toBe(0x35);
-            expect(snapshot.keyboardEnabled).toBe(true);
-
-            // Create a fresh PPIA and restore
-            const { ppia: ppia2 } = makePPIA();
-            ppia2.restoreState(snapshot);
-
-            expect(ppia2.latcha).toBe(0x35);
-            expect(ppia2.keyboardEnabled).toBe(true);
-            expect(ppia2.keys[6][1]).toBe(1);
+        it("should round-trip a PPIA with a key down and the speaker up in vertical sync", async () => {
+            await expectSnapshotRoundTrips(
+                () => makePPIA().ppia,
+                (ppia) => {
+                    ppia.write(0xb000, 0x35);
+                    ppia.write(0xb003, 0x05);
+                    ppia.keyDownRaw([6, 1]);
+                    ppia.setVBlankInt(true);
+                },
+            );
         });
 
         it("should produce JSON-serializable state", () => {
