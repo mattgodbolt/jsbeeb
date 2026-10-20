@@ -292,8 +292,8 @@ describe("Settings", () => {
             ["MasterTurbo", { model: "MasterTurbo" }, { model: "Master", coProcessor: true }],
             ["BMusic5000", { model: "BMusic5000" }, { model: "B-DFS1.2", hasMusic5000: true }],
             ["BTeletext", { model: "BTeletext" }, { model: "B-DFS1.2", hasTeletextAdaptor: true }],
-            ["a query with no model", { autoboot: true }, { autoboot: true }],
-        ])("maps %s into a model and its fitting", (_, query, mapped) => {
+            ["nothing in a query with no model", { autoboot: true }, { autoboot: true }],
+        ])("splits %s into a model and its fitting", (_, query, mapped) => {
             mapLegacyModels(query);
             expect(query).toEqual(mapped);
         });
