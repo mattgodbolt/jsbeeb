@@ -70,7 +70,7 @@ describe.each([
     });
 });
 
-describe("chroma FIR shader substitution", () => {
+describe("chroma FIR section", () => {
     it("reads the cutoff from the section", () => {
         expect(applyFirCoefficients(Section).cutoff).toBe(2);
     });
@@ -86,7 +86,7 @@ describe("chroma FIR shader substitution", () => {
     });
 });
 
-describe("luma FIR shader substitution", () => {
+describe("luma FIR section", () => {
     it("declares as many taps as it assigns", () => {
         expect(applyLumaCoefficients(LumaSection).code).toContain(`const int LUMA_TAPS = ${LumaTaps};`);
     });

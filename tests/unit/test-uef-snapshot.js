@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { isUefSnapshot, parseUefSnapshot } from "../../src/uef-snapshot.js";
 
+const UefStateVersion = 15;
+
 const ChunkId = {
     Cpu: 0x0460,
     RomRegs: 0x0461,
@@ -27,7 +29,7 @@ function chunk(id, data) {
 function uefFile(chunks) {
     const header = new Uint8Array(12);
     new TextEncoder().encodeInto("UEF File!", header);
-    header[10] = 15; // UEFSTATE_VERSION
+    header[10] = UefStateVersion;
     const file = new Uint8Array(12 + chunks.reduce((total, c) => total + c.length, 0));
     file.set(header);
     let pos = 12;
@@ -295,12 +297,12 @@ describe("parseUefSnapshot", () => {
     });
 
     it.each([
-        ["File too small", new ArrayBuffer(5)],
-        ["Not a BeebEm UEF save state", new ArrayBuffer(100)],
-        ["VIA chunk too short", makeUefSnapshot({ sysViaLength: 10 })],
-        ["missing CPU chunk", makeUefSnapshot({ omit: [ChunkId.Cpu] })],
-        ["missing main RAM chunk", makeUefSnapshot({ omit: [ChunkId.MainRam] })],
-    ])("rejects a file with %s", (message, buffer) => {
+        ["too small to hold a header", new ArrayBuffer(5), "File too small"],
+        ["with no BeebEm id", new ArrayBuffer(100), "Not a BeebEm UEF save state"],
+        ["with a short system VIA chunk", makeUefSnapshot({ sysViaLength: 10 }), "VIA chunk too short"],
+        ["with no CPU chunk", makeUefSnapshot({ omit: [ChunkId.Cpu] }), "missing CPU chunk"],
+        ["with no main RAM chunk", makeUefSnapshot({ omit: [ChunkId.MainRam] }), "missing main RAM chunk"],
+    ])("rejects a file %s", (_, buffer, message) => {
         expect(() => parseUefSnapshot(buffer)).toThrow(message);
     });
 });

@@ -59,6 +59,14 @@ describe("BitshiftersArchive", () => {
         expect(await archive().fetch("demos/2026/a b#c.ssd")).toEqual(new Uint8Array([1]));
     });
 
+    it("doesn't refetch an archive that is legitimately empty", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([]));
+        const subject = archive();
+        await subject.catalogue();
+        await subject.catalogue();
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
     describeManifestCatalogue(
         () => new BitshiftersArchive("https://example.com/test"),
         "https://example.com/test/manifest.json",
