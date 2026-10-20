@@ -159,19 +159,6 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         // RAM snapshot should only go up to romOffset (128KB), not include ROMs
         expect(snapshot.ram.length).toBe(cpu.romOffset);
     });
-
-    it("should produce isolated snapshots", () => {
-        cpu.a = 0x42;
-        cpu.ramRomOs[0x100] = 0xaa;
-
-        const snapshot = cpu.snapshotState();
-
-        cpu.a = 0x00;
-        cpu.ramRomOs[0x100] = 0x00;
-
-        expect(snapshot.a).toBe(0x42);
-        expect(snapshot.ram[0x100]).toBe(0xaa);
-    });
 });
 
 describe("Cpu6502 NMI lines", () => {

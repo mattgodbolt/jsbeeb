@@ -37,6 +37,8 @@ describe("Video6847", () => {
             ["0xb0", 0xb0, 16, 2, 1, 1], // 128×192×2
             ["0xd0", 0xd0, 8, 2, 1, 2], // 128×192×4
             ["0xf0", 0xf0, 8, 1, 1, 1], // 256×192×2
+            ["0x60, text as AG is clear", 0x60, 8, -1, 12, 1],
+            ["0xff, as 0xf0", 0xff, 8, 1, 1, 1],
         ];
 
         it.each(cases)("mode %s sets correct geometry", (_label, mode, perChar, pxPerBit, lines, bpp) => {
@@ -48,55 +50,25 @@ describe("Video6847", () => {
             expect(vdg.bpp).toBe(bpp);
         });
 
-        it("should treat modes without MODE_AG as text mode", () => {
-            // Any mode with bit 4 clear (AG=0) is text regardless of GM bits.
-            const vdg = new Video6847(makeStubVideo());
-            vdg.setValuesFromMode(0x60); // AG=0, but GM bits would be 0x70 otherwise
-            expect(vdg.pixelsPerChar).toBe(8); // text mode pixelsPerChar
-            expect(vdg.bpp).toBe(1);
-            expect(vdg.lastmode).toBe(0x00);
-        });
-
-        it("should mask low nibble from mode value", () => {
-            const vdg = new Video6847(makeStubVideo());
-            vdg.setValuesFromMode(0xff); // low nibble should be ignored
-            // 0xff & 0xf0 = 0xf0 → clear4 geometry
-            expect(vdg.pixelsPerChar).toBe(8);
-            expect(vdg.bpp).toBe(1);
-            expect(vdg.charLinesreg9).toBe(0);
-        });
-
-        it("should skip work when mode unchanged", () => {
-            const vdg = new Video6847(makeStubVideo());
-            vdg.setValuesFromMode(0xf0);
-            vdg.scanlineCounter = 42; // set something setValuesFromMode would reset
-            vdg.setValuesFromMode(0xf0); // no change
-            expect(vdg.scanlineCounter).toBe(42); // not reset
-        });
-
-        it("should reset scanline counter on mode change", () => {
+        it.each([
+            ["keeps the scanline counter when the mode is unchanged", 0xf0, 42],
+            ["resets the scanline counter on a mode change", 0x10, 0],
+        ])("%s", (_, nextMode, expected) => {
             const vdg = new Video6847(makeStubVideo());
             vdg.setValuesFromMode(0xf0);
             vdg.scanlineCounter = 42;
-            vdg.setValuesFromMode(0x10); // different mode
-            expect(vdg.scanlineCounter).toBe(0);
+            vdg.setValuesFromMode(nextMode);
+            expect(vdg.scanlineCounter).toBe(expected);
         });
     });
 
-    describe("VDG clock", () => {
-        const fakeCpu = (clockMhz) => ({ model: { clockMhz } });
-
-        it("advances 3.638004 VDG cycles per cycle of the Atom's 1MHz CPU", () => {
-            const vdg = new Video6847(makeStubVideo());
-            vdg.reset(fakeCpu(1), {});
-            expect(vdg.vdgCyclesPerCpuCycle).toBeCloseTo(3.638004, 6);
-        });
-
-        it("advances half as far per cycle if the CPU runs twice as fast", () => {
-            const vdg = new Video6847(makeStubVideo());
-            vdg.reset(fakeCpu(2), {});
-            expect(vdg.vdgCyclesPerCpuCycle).toBeCloseTo(3.638004 / 2, 6);
-        });
+    it.each([
+        ["the Atom's 1MHz CPU", 1, 3.638004],
+        ["a CPU running twice as fast", 2, 3.638004 / 2],
+    ])("advances the VDG clock for %s", (_, clockMhz, vdgCycles) => {
+        const vdg = new Video6847(makeStubVideo());
+        vdg.reset({ model: { clockMhz } }, {});
+        expect(vdg.vdgCyclesPerCpuCycle).toBeCloseTo(vdgCycles, 6);
     });
 });
 

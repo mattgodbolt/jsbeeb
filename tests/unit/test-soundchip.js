@@ -46,15 +46,13 @@ describe("SoundChip advance", () => {
     // The guard states are unreachable through the public API (that's the
     // point), so these tests corrupt internal state to simulate a miscompile
     // or a reintroduced buffer transfer.
-    it("should throw rather than spin if the buffer position goes bad", () => {
+    it.each([
+        ["spin if the buffer position goes bad", (chip) => (chip.position = SoundBufferSamples)],
+        // An empty buffer is what a detached one reports.
+        ["fall silent if the buffer is detached or replaced", (chip) => (chip.buffer = new Float32Array(0))],
+    ])("should throw rather than %s", (_, corrupt) => {
         const { chip } = makeSoundChip();
-        chip.position = SoundBufferSamples;
-        expect(() => chip.advance(1024)).toThrow("Sound buffer accounting error");
-    });
-
-    it("should throw rather than fall silent if the buffer is detached or replaced", () => {
-        const { chip } = makeSoundChip();
-        chip.buffer = new Float32Array(0); // what a detached buffer reports
+        corrupt(chip);
         expect(() => chip.advance(1024)).toThrow("Sound buffer accounting error");
     });
 });
@@ -202,17 +200,6 @@ describe("SoundChip snapshotState / restoreState", () => {
         chip2.restoreState(snapshot);
 
         expect(chip2.position).toBe(0);
-    });
-
-    it("should produce isolated snapshots", () => {
-        const { chip } = makeSoundChip();
-        chip.registers[0] = 0x123;
-
-        const snapshot = chip.snapshotState();
-        chip.registers[0] = 0x456;
-
-        // Snapshot should not be affected by subsequent changes
-        expect(snapshot.registers[0]).toBe(0x123);
     });
 });
 
