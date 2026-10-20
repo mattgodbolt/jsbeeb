@@ -70,12 +70,12 @@ describe("snapshot media manifest", () => {
 
 describe("isSnapshotFile", () => {
     it.each([
-        ["state.snp", undefined, true],
-        ["state.json", undefined, true],
-        ["state.json.gz", undefined, true],
-        ["elite.ssd", undefined, false],
-        ["tape.uef", new Uint8Array([1, 2, 3]).buffer, false],
-    ])("judges %s a state: %s", (name, bytes, isState) => {
+        ["state.snp", true],
+        ["state.json", true],
+        ["state.json.gz", true],
+        ["elite.ssd", false],
+        ["tape.uef", false, new Uint8Array([1, 2, 3]).buffer],
+    ])("judges %s a state: %s", (name, isState, bytes) => {
         expect(isSnapshotFile(name, bytes)).toBe(isState);
     });
 });
@@ -188,6 +188,7 @@ describe("SnapshotUI", () => {
         it.each([
             [
                 "save",
+                "saving state",
                 (ui) => {
                     deps.processor.snapshotState = () => {
                         throw new Error("saving went wrong");
@@ -195,8 +196,8 @@ describe("SnapshotUI", () => {
                     return ui.saveState();
                 },
             ],
-            ["load", (ui) => ui.loadStateFromFile(null, unreadable)],
-        ])("keeps the emulator paused while the %s error shows, resuming on close", async (_, fail) => {
+            ["load", "loading state", (ui) => ui.loadStateFromFile(null, unreadable)],
+        ])("keeps the emulator paused while the %s error shows, resuming on close", async (_, doing, fail) => {
             domFromIndexHtml("error-dialog", "are-you-sure");
             vi.useFakeTimers();
             const loop = {
@@ -219,6 +220,7 @@ describe("SnapshotUI", () => {
             expect(loop.isRunning()).toBe(false);
             await vi.runAllTimersAsync();
             expect(modals.anyVisible()).toBe(true);
+            expect(document.querySelector("#error-dialog .context").textContent).toBe(doing);
             expect(loop.isRunning()).toBe(false);
             modals.hide("error-dialog");
             await vi.runAllTimersAsync();
@@ -282,6 +284,7 @@ describe("SnapshotUI", () => {
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await reload({ disc1: "local:mine.ssd", disc1Crc32: crc + 1 });
             expect(fdc.drives[0].disc).toBe(loaded);
+            expect(slots.drive(0).ref).toBe("local:mine.ssd");
         });
 
         it("refuses to restore when the source has changed under the state", async () => {
@@ -324,6 +327,7 @@ describe("SnapshotUI", () => {
             await reload(manifest);
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.contiguous);
             expect(fdc.drives[0].disc).toBe(bootDisc);
+            expect(slots.drive(0).ref).toBe("elite.ssd");
         });
 
         it.each([
@@ -333,7 +337,7 @@ describe("SnapshotUI", () => {
             const image = ssdImage();
             await reload({ disc1ImageData: asSaved(image), disc1Name: "mine.ssd", disc1Layout: DiscLayout.contiguous });
             expect(fdc.drives[0].disc.name).toBe("mine.ssd");
-            expect(fdc.drives[0].disc.originalImageData).toHaveLength(image.length);
+            expect(fdc.drives[0].disc.originalImageCrc32).toBe(crc);
             expect(slots.drive(0).ref).toBeUndefined();
             expect(deps.urlState.params).toEqual({});
         });

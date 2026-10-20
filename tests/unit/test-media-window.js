@@ -208,26 +208,32 @@ describe("MediaWindow", () => {
             expect(panel().hidden).toBe(false);
         });
 
+        const deckFolded = () => panel().classList.contains("deck-collapsed");
+        const bayFolded = () => bay(1).classList.contains("folded");
         it.each([
-            ["drive 1's line in the LED panel", () => readoutLine("1").click(), () => bay(1)],
-            ["the tape's line in the LED panel", () => readoutLine("tape").click(), () => byId("deck-window")],
-            ["drive 1's slot", () => bay(1).querySelector(".bay-slot").click(), () => bay(1)],
-            ["the deck's window", () => byId("deck-window").click(), () => byId("deck-window")],
-            ["the Into control", () => aim("1"), () => bay(1)],
+            ["drive 1's line in the LED panel", () => readoutLine("1").click(), () => bay(1), bayFolded],
             [
-                "the Media button, whatever it was aimed at before",
-                () => {
-                    readoutLine("1").click();
-                    byId("navbarMedia").click();
-                },
-                () => bay(0),
+                "the tape's line in the LED panel",
+                () => readoutLine("tape").click(),
+                () => byId("deck-window"),
+                deckFolded,
             ],
-        ])("aims the list from %s, unfolding the target, ready to type into", (_, act, target) => {
+            ["drive 1's slot", () => bay(1).querySelector(".bay-slot").click(), () => bay(1), bayFolded],
+            ["the deck's window", () => byId("deck-window").click(), () => byId("deck-window"), deckFolded],
+            ["the Into control", () => aim("1"), () => bay(1), bayFolded],
+        ])("aims the list from %s, unfolding the target, ready to type into", (_, act, target, folded) => {
             make();
             act();
             expect([...document.querySelectorAll("#media-panel .target")]).toEqual([target()]);
-            expect(target().classList.contains("folded")).toBe(false);
+            expect(folded()).toBe(false);
             expect(document.activeElement).toBe(byId("media-search"));
+        });
+
+        it("aims at drive 0 again whenever the Media button opens it", () => {
+            make();
+            readoutLine("1").click();
+            byId("navbarMedia").click();
+            expect([...document.querySelectorAll("#media-panel .target")]).toEqual([bay(0)]);
         });
     });
 

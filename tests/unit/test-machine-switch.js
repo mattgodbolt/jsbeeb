@@ -41,17 +41,17 @@ describe("MachineSwitch", () => {
     });
 
     it.each([
-        ["a disc that names no machine", {}, { ref: "sth:Elite.zip", title: "Elite" }, true],
-        ["a Master disc on a B", {}, paradroid, false],
-        ["a Master disc on a Master with ADFS", { model: "MasterADFS" }, paradroid, false],
-        ["a Master disc on a Master", { model: "Master" }, paradroid, true],
-        ["a Master disc on a Master with a Tube", { model: "Master", hasTube: true }, paradroid, false],
-        ["a Master Turbo disc on a Master", { model: "Master" }, twinhead, false],
-        ["a Master Turbo disc on a Master with a Tube", { model: "Master", hasTube: true }, twinhead, true],
-        ["a NuLA disc with no fittings given", {}, nulaDemo, false],
-        ["a NuLA disc without a NuLA fitted", { fitted: { hasVideoNula: false } }, nulaDemo, false],
-        ["a NuLA disc with a NuLA fitted", { fitted: { hasVideoNula: true } }, nulaDemo, true],
-    ])("finds %s satisfied: %s", (_, { model = "B-DFS1.2", hasTube = false, fitted }, d, satisfied) => {
+        ["a disc that names no machine", true, {}, { ref: "sth:Elite.zip", title: "Elite" }],
+        ["a Master disc on a B", false, {}, paradroid],
+        ["a Master disc on a Master with ADFS", false, { model: "MasterADFS" }, paradroid],
+        ["a Master disc on a Master", true, { model: "Master" }, paradroid],
+        ["a Master disc on a Master with a Tube", false, { model: "Master", hasTube: true }, paradroid],
+        ["a Master Turbo disc on a Master", false, { model: "Master" }, twinhead],
+        ["a Master Turbo disc on a Master with a Tube", true, { model: "Master", hasTube: true }, twinhead],
+        ["a NuLA disc with no fittings given", false, {}, nulaDemo],
+        ["a NuLA disc without a NuLA fitted", false, { fitted: { hasVideoNula: false } }, nulaDemo],
+        ["a NuLA disc with a NuLA fitted", true, { fitted: { hasVideoNula: true } }, nulaDemo],
+    ])("finds %s satisfied: %s", (_, satisfied, { model = "B-DFS1.2", hasTube = false, fitted }, d) => {
         Object.assign(deps, { model: findModel(model), processor: { hasTube }, fitted });
         expect(make().satisfies(d)).toBe(satisfied);
     });
