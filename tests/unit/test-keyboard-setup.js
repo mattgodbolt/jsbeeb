@@ -195,10 +195,10 @@ describe("KeyboardSetup", () => {
             const typeKey = (key) => setup.keyPress(new KeyboardEvent("keypress", { key, cancelable: true }));
 
             it.each([
-                ["a debugger goto box", "debug", "#goto-dis-addr-form .goto-addr", RunMode.debugging, "g"],
-                ["the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "g"],
-                ["the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "n"],
-            ])("stays in %s, and drives the machine from elsewhere", (_, from, field, mode, key) => {
+                ["g", "a debugger goto box", "debug", "#goto-dis-addr-form .goto-addr", RunMode.debugging],
+                ["g", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused],
+                ["n", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused],
+            ])("%s stays in %s, and drives the machine from elsewhere", (key, _, from, field, mode) => {
                 domFromIndexHtml(from);
                 loop.mode = mode;
 
