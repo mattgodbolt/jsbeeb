@@ -23,6 +23,12 @@ describe("TestMachine", () => {
         expect(mode7Text(machine)).toContain("BASIC");
     });
 
+    it.each(["bogus", "constructor"])("refuses a breakpoint of type %s", (type) => {
+        expect(() => new TestMachine().addBreakpoint(type, 0, {}, () => {})).toThrow(
+            `Unknown breakpoint type: ${type}`,
+        );
+    });
+
     const hex = (value) => value.toString(16).toUpperCase();
     for (const [model, romsel, address, bank, paged] of [
         ["Master", 0x04, 0x8000, 4, true],
