@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cycleCount, isValidCommit, isValidInput, LockstepGuest } from "../../src/lockstep.js";
+import { cycleCount, isValidCommit, isValidInput, LockstepGuest, stateHash } from "../../src/lockstep.js";
 
 describe("lockstep", () => {
     it.each([
@@ -49,5 +49,37 @@ describe("lockstep", () => {
         guest.execute(upTo - at);
         expect(cycleCount(cpu)).toBe(upTo);
         expect(desyncs).toEqual([]);
+    });
+
+    it("fingerprints the registers, the keyboard and sideways RAM as well as RAM, but not ROM", () => {
+        const romOffset = 0x10000;
+        const bankBytes = 16384;
+        const cpu = {
+            a: 0,
+            x: 0,
+            y: 0,
+            s: 0,
+            pc: 0,
+            p: { asByte: () => 0 },
+            romOffset,
+            ramRomOs: new Uint8Array(romOffset + 2 * bankBytes),
+            model: { swram: [false, true] },
+            sysvia: { keys: [new Uint8Array(8)] },
+        };
+        const unchanged = stateHash(cpu);
+        const changes = [
+            () => (cpu.x ^= 1),
+            () => (cpu.sysvia.keys[0][3] ^= 1),
+            () => (cpu.ramRomOs[0x3000] ^= 1),
+            () => (cpu.ramRomOs[romOffset + bankBytes] ^= 1),
+        ];
+        for (const change of changes) {
+            change();
+            expect(stateHash(cpu)).not.toBe(unchanged);
+            change();
+            expect(stateHash(cpu)).toBe(unchanged);
+        }
+        cpu.ramRomOs[romOffset] ^= 1;
+        expect(stateHash(cpu)).toBe(unchanged);
     });
 });

@@ -2,10 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TestMachine } from "../../src/test-machine.js";
-import { keyCodes } from "../../src/keymap.js";
 import { SessionGuest, SessionHost } from "../../src/web/shared-session.js";
-import { Parameters, takenFromHostValues } from "../../src/web/parameters.js";
 import { inProcessTransport } from "../helpers/session-link.js";
+import { StockTakenFromHost, fakePage, keyCodeFor, plainCodec } from "../helpers/session-fakes.js";
 import { mode7Text } from "./helpers.js";
 
 const Model = "B-DFS1.2";
@@ -16,33 +15,6 @@ const FrameCycles = 40000;
 const KeyFrames = 5;
 // Frames for a command to run and print, and for control changing hands to settle.
 const SettleFrames = 50;
-const KeyNames = { " ": "SPACE", "-": "MINUS", "\n": "ENTER" };
-
-const plainCodec = {
-    compress: async (text) => new TextEncoder().encode(text),
-    decompress: async (bytes) => new TextDecoder().decode(bytes),
-};
-
-const quietPage = () => ({
-    notices: [],
-    notify(text) {
-        this.notices.push(text);
-    },
-    hidden: () => false,
-    watch: () => () => {},
-    onPageHide: () => {},
-    joinLink: (room) => `?client=${room}`,
-    reloadAs: (params) => {
-        throw new Error(`a guest of the same machine reloaded as ${JSON.stringify(params)}`);
-    },
-    panel: () => ({ open() {}, show() {}, showControl() {}, showTakeOnKey() {} }),
-});
-
-const DefaultSettings = Object.fromEntries(
-    Object.entries(Parameters)
-        .filter(([, parameter]) => "default" in parameter)
-        .map(([name, parameter]) => [name, parameter.default]),
-);
 
 /** A machine with what a session needs of its page, keeping the loop's lockstep and the keyboard's input. */
 async function station(transport, { boot }) {
@@ -56,13 +28,13 @@ async function station(transport, { boot }) {
     const context = {
         processor: machine.processor,
         model: machine.model,
-        takenFromHost: takenFromHostValues(DefaultSettings, {}),
+        takenFromHost: StockTakenFromHost,
         loop: { setLockstep: (lockstep) => (page.lockstep = lockstep) },
         keyboard: { isPasting: false, setInput: (input) => (page.input = input), cancelPaste() {} },
         version: "test",
         transport,
         codec: plainCodec,
-        page: quietPage(),
+        page: fakePage(),
     };
     return { machine, context, page };
 }
@@ -92,7 +64,7 @@ async function sessionOf(guestCount) {
 
     async function type(who, text) {
         for (const char of text) {
-            const key = keyCodes[KeyNames[char] ?? (/\d/.test(char) ? `K${char}` : char)];
+            const key = keyCodeFor(char);
             who.page.input.keyDown(key, false);
             await frames(KeyFrames);
             who.page.input.keyUp(key);
@@ -122,12 +94,15 @@ async function sessionOf(guestCount) {
             expect(events).not.toContain("desync");
             expect(events).not.toContain("resync asked");
             expect(context.page.notices.filter((text) => /taken control back|desync/.test(text))).toEqual([]);
+            expect(context.page.reloads).toEqual([]);
         }
         for (const { session } of guests) expect(session.snapshotsRestored).toBe(1);
     }
 
     const inControl = () =>
-        everyone.filter(({ session }) => session.sequencer && !session.left).map(({ session }) => session.name);
+        everyone
+            .filter(({ session, context }) => !session.left && context.page.panels.at(-1).who === "you")
+            .map(({ session }) => session.name);
 
     await frames(SettleFrames);
     return { host, guests, frames, type, expectInStep, expectNothingMended, inControl };
