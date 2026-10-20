@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,6 +11,7 @@ import {
     SessionGuest,
     SessionHost,
     cleanName,
+    gzipCodec,
     hostSession,
     joinLink,
     roomFrom,
@@ -31,8 +31,21 @@ import { domFromIndexHtml, sentEvents } from "./helpers.js";
 
 const CyclesPerSecond = 2000000;
 const MsPerMinute = 60 * 1000;
-// Enough turns of the microtask queue for a channel's open to reach the host, not for a gzip to finish.
-const OpeningTurns = 10;
+
+const plainCodec = {
+    compress: async (text) => new TextEncoder().encode(text),
+    decompress: async (bytes) => new TextDecoder().decode(bytes),
+};
+
+// A codec that packs nothing until told to, as gzip takes its time.
+function heldCodec() {
+    const held = [];
+    return {
+        compress: (text) => new Promise((resolve) => held.push(() => resolve(plainCodec.compress(text)))),
+        decompress: plainCodec.decompress,
+        release: () => held.splice(0).forEach((pack) => pack()),
+    };
+}
 
 // A layout in which "a" is at [4, 1], and "@" is the same key with BBC SHIFT forced up.
 const layout = {
@@ -57,6 +70,16 @@ describe("cleanName", () => {
         [42, null],
     ])("makes %j %j", (name, cleaned) => {
         expect(cleanName(name)).toBe(cleaned);
+    });
+});
+
+describe("gzipCodec", () => {
+    it("gives back what it packed, smaller, and refuses what is not gzip", async () => {
+        const text = JSON.stringify({ ram: "\u0000".repeat(10000) });
+        const packed = await gzipCodec.compress(text);
+        expect(packed.length).toBeLessThan(text.length / 10);
+        expect(await gzipCodec.decompress(packed)).toBe(text);
+        await expect(gzipCodec.decompress(new Uint8Array([1, 2, 3]))).rejects.toThrow();
     });
 });
 
@@ -127,7 +150,7 @@ class FakeChannel extends FakeEvents {
             if (typeof data === "string") {
                 expecting = JSON.parse(data).type === "snapshot";
             } else if (expecting) {
-                snapshots.push(snapshotFromJSON(gunzipSync(Buffer.from(data)).toString()));
+                snapshots.push(snapshotFromJSON(new TextDecoder().decode(data)));
                 expecting = false;
             }
         }
@@ -267,6 +290,7 @@ function fakeContext({
     rendezvous = {},
     model = {},
     takenFromHost = StockTakenFromHost,
+    codec = plainCodec,
 } = {}) {
     return {
         processor,
@@ -285,6 +309,7 @@ function fakeContext({
             getAnswer: vi.fn(async () => "answer sdp"),
             ...rendezvous,
         },
+        codec,
     };
 }
 
@@ -319,10 +344,10 @@ afterEach(() => {
 });
 
 describe("SessionHost", () => {
-    async function hosting(offers = [{ guest: "g1", sdp: "offer" }], rendezvous = {}) {
+    async function hosting(offers = [{ guest: "g1", sdp: "offer" }], rendezvous = {}, codec = plainCodec) {
         const processor = fakeProcessor();
         const listOffers = vi.fn(async () => offers.splice(0));
-        const context = fakeContext({ processor, rendezvous: { listOffers, ...rendezvous } });
+        const context = fakeContext({ processor, rendezvous: { listOffers, ...rendezvous }, codec });
         const host = new SessionHost(context, "room");
         hosts.push(host);
         await host.start();
@@ -340,7 +365,7 @@ describe("SessionHost", () => {
 
     async function joined() {
         const channel = connect();
-        await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
+        await settle();
         return channel;
     }
 
@@ -353,9 +378,9 @@ describe("SessionHost", () => {
             { guest: "g2", sdp: "offer" },
         ]);
         connectTo(0);
-        await vi.waitFor(() => expect(sent("session")).toHaveLength(2));
+        await settle();
         connectTo(1);
-        await vi.waitFor(() => expect(sent("session")).toHaveLength(3));
+        await settle();
         host.close();
         expect(sent("session")).toEqual([
             { role: "host", stage: "created" },
@@ -459,12 +484,15 @@ describe("SessionHost", () => {
     });
 
     it("sends a joiner the commits made while its snapshot was compressed, after it", async () => {
-        const { host } = await hosting();
+        const codec = heldCodec();
+        const { host } = await hosting(undefined, {}, codec);
         const channel = connect();
-        for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
+        await settle();
         host.execute(100);
         host.execute(100);
-        await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
+        codec.release();
+        await settle();
+        expect(channel.snapshots()).toHaveLength(1);
         const commits = channel.messages().filter((each) => each.type === "commit");
         expect(commits.map(({ at, upTo }) => [at, upTo])).toEqual([
             [1000, 1100],
@@ -512,8 +540,7 @@ describe("SessionHost", () => {
             ]);
             const first = connectTo(0);
             const second = connectTo(1);
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(1));
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+            await settle();
             return { host, processor, first, second };
         }
         const commit = (at, upTo, inputs = []) => message({ type: "commit", at, upTo, inputs });
@@ -570,10 +597,12 @@ describe("SessionHost", () => {
                 { guest: "g2", sdp: "offer" },
             ]);
             const first = connectTo(0);
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(1));
+            await settle();
+            expect(first.snapshots()).toHaveLength(1);
             document.querySelector("#session-pane .session-take-on-key").click();
             const second = connectTo(1);
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+            await settle();
+            expect(second.snapshots()).toHaveLength(1);
             expect(sentOf(second, "roster")[0]).toMatchObject({ takeOnKey: true });
         });
 
@@ -723,8 +752,9 @@ describe("SessionHost", () => {
             host.input(keyB);
             const release = (at) => first.emit("message", commit(at, at + 2000, [keyAUp]));
             happen({ host, processor, first, release });
-            await vi.waitFor(() => expect(first.snapshots().length).toBeGreaterThan(1));
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(everyone ? 2 : 1));
+            await settle();
+            expect(first.snapshots().length).toBeGreaterThan(1);
+            expect(second.snapshots()).toHaveLength(everyone ? 2 : 1);
             expect(
                 host
                     .report()
@@ -733,7 +763,8 @@ describe("SessionHost", () => {
             ).toMatchObject({ guest: "host" });
             const before = sentOf(second, "commit").length;
             host.execute(CyclesPerSecond);
-            await vi.waitFor(() => expect(sentOf(second, "commit").length).toBeGreaterThan(before));
+            await settle();
+            expect(sentOf(second, "commit").length).toBeGreaterThan(before);
             expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
             expect(processor.sysvia.setMapped.mock.calls).toContainEqual([keyB.mapping, 1]);
         });
@@ -769,7 +800,8 @@ describe("SessionHost", () => {
             before(first);
             processor.currentCycles = processor.targetCycles = 50;
             host.execute(100);
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            await settle();
+            expect(first.snapshots()).toHaveLength(2);
             expect(host.report().events.filter((each) => each.event === "desync")).toEqual([]);
             expect(desyncToasts()).toEqual([]);
             first.emit("message", message({ type: "resync", reason: "state differs" }));
@@ -785,7 +817,8 @@ describe("SessionHost", () => {
             vi.advanceTimersByTime(60000);
             first.emit("message", message({ type: "commit", at: 1000, upTo: 3000, inputs: [], hash: "nope" }));
             host.execute(5000);
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            await settle();
+            expect(first.snapshots()).toHaveLength(2);
             expect(first.snapshots()[1].rtcBaseMs).toBe(before.rtcBaseMs);
         });
 
@@ -822,8 +855,9 @@ describe("SessionHost", () => {
             host.resyncEveryone();
             first.emit("message", message({ type: "take" }));
             expect(sentOf(first, "handover")).toEqual([]);
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
-            await vi.waitFor(() => expect(sentOf(first, "handover")).toHaveLength(1));
+            await settle();
+            expect(first.snapshots()).toHaveLength(2);
+            expect(sentOf(first, "handover")).toHaveLength(1);
             const sent = first.messages();
             expect(sent.findIndex((each) => each.type === "handover")).toBeGreaterThan(
                 sent.findLastIndex((each) => each.type === "snapshot"),
@@ -839,8 +873,9 @@ describe("SessionHost", () => {
             vi.advanceTimersByTime(MinResyncIntervalMs);
             second.emit("message", message({ type: "take" }));
             expect(sentOf(first, "release")).toEqual([]);
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
-            await vi.waitFor(() => expect(sentOf(first, "release")).toHaveLength(1));
+            await settle();
+            expect(second.snapshots()).toHaveLength(2);
+            expect(sentOf(first, "release")).toHaveLength(1);
         });
 
         it("hands control to a guest that asked while the host was taking it back, once it has", async () => {
@@ -876,7 +911,8 @@ describe("SessionHost", () => {
             first.emit("message", commit(1000, 3000));
             second.emit("message", message({ type: "take" }));
             first.emit("message", message({ type: "released", at: 2500, waiting: [] }));
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
+            await settle();
+            expect(second.snapshots()).toHaveLength(2);
         });
 
         it("does not pass the guest in control its own keys back", async () => {
@@ -893,7 +929,8 @@ describe("SessionHost", () => {
             first.emit("message", message({ type: "take" }));
             processor.currentCycles = processor.targetCycles = 50;
             host.execute(100);
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
+            await settle();
+            expect(first.snapshots()).toHaveLength(2);
             expect(first.snapshots()[1].rtcBaseMs).not.toBe(before.rtcBaseMs);
         });
 
@@ -957,7 +994,8 @@ describe("SessionHost", () => {
             host.execute(1000);
             second.emit("message", message({ type: "resync", reason: "test" }));
             vi.advanceTimersByTime(MinResyncIntervalMs);
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
+            await settle();
+            expect(second.snapshots()).toHaveLength(2);
             const [snapshot] = second.snapshots().slice(-1);
             const after = second.messages().slice(second.messages().findLastIndex((each) => each.type === "snapshot"));
             const commits = after.filter((each) => each.type === "commit");
@@ -1016,7 +1054,8 @@ describe("SessionHost", () => {
             run(host, 1, 20);
             processor.currentCycles = processor.targetCycles = 1000;
             run(host, 1, 0);
-            await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(2));
+            await settle();
+            expect(channel.snapshots()).toHaveLength(2);
             channel.emit("message", stamped(false, 30, A, { snapshots: 2 }));
             run(host, 3, 20);
             expect(appliedMs(channel).at(-1)).toEqual(["4,1", false, 30]);
@@ -1206,7 +1245,8 @@ describe("SessionHost", () => {
         ]);
         const first = connectTo(0);
         const second = connectTo(1);
-        await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+        await settle();
+        expect(second.snapshots()).toHaveLength(1);
         first.emit("message", message({ type: "hello", name: "Kieran" }));
         second.emit("message", message({ type: "hello", name: "Ana" }));
         const lastRoster = (channel) =>
@@ -1232,7 +1272,8 @@ describe("SessionHost", () => {
         ]);
         const first = connectTo(0);
         const second = connectTo(1);
-        await vi.waitFor(() => expect(second.snapshots()).toHaveLength(1));
+        await settle();
+        expect(second.snapshots()).toHaveLength(1);
         for (let i = 0; i < 3; ++i) first.emit("message", message({ type: "resync", reason: "state differs" }));
         second.emit("message", message({ type: "resync", reason: "it moved" }));
         expect(desyncToasts()).toEqual([
@@ -1290,19 +1331,19 @@ describe("SessionHost", () => {
         await settle();
         expect(channel.snapshots()).toHaveLength(1);
         await vi.advanceTimersByTimeAsync(MinResyncIntervalMs);
-        await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(2));
+        await settle();
+        expect(channel.snapshots()).toHaveLength(2);
     });
 
     it("sends a guest whose snapshot is still on its way the machine from after a jump instead", async () => {
-        const { host, processor } = await hosting();
+        const codec = heldCodec();
+        const { host, processor } = await hosting(undefined, {}, codec);
         const channel = connect();
-        // The welcome and the snapshot start together; the jump comes while it is compressed.
-        for (let i = 0; i < OpeningTurns && channel.messages().length === 0; ++i) await Promise.resolve();
+        await settle();
         expect(channel.messages()[0]).toMatchObject({ type: "welcome" });
-        expect(channel.messages().some((each) => each.type === "snapshot")).toBe(false);
         processor.currentCycles = processor.targetCycles = 50;
         host.execute(0);
-        await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(1));
+        codec.release();
         await settle();
         expect(channel.snapshots().map((snapshot) => snapshot.at)).toEqual([50]);
     });
@@ -1376,7 +1417,7 @@ describe("SessionGuest", () => {
             () => {},
             { rtcBaseMs },
         ).snapshot();
-        const bytes = gzipSync(snapshotToJSON(snapshot));
+        const bytes = new TextEncoder().encode(snapshotToJSON(snapshot));
         const chunkBytes = Math.ceil(bytes.length / chunks);
         const pieces = [];
         for (let offset = 0; offset < bytes.length; offset += chunkBytes) {
@@ -1396,7 +1437,10 @@ describe("SessionGuest", () => {
         guests.push(guest);
         await guest.start();
         const channel = peers[0].channel;
-        const deliver = (messages) => messages.forEach((each) => channel.emit("message", each));
+        const deliver = async (messages) => {
+            messages.forEach((each) => channel.emit("message", each));
+            await settle();
+        };
         const lockstep = () => context.loop.setLockstep.mock.calls.at(-1)[0];
         return { guest, context, channel, deliver, lockstep };
     }
@@ -1493,7 +1537,7 @@ describe("SessionGuest", () => {
     it("logs the inputs the host applied, with their cycle, and no lag once it has left", async () => {
         const { guest, channel, deliver } = await joining();
         const input = { kind: "key", mapping: [4, 1], down: true };
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [{ ...input, junk: "x".repeat(1000) }] }]));
+        await deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [{ ...input, junk: "x".repeat(1000) }] }]));
         expect(guest.report().events).toContainEqual(
             expect.objectContaining({ event: "inputs", cycle: 100, inputs: [input] }),
         );
@@ -1522,7 +1566,7 @@ describe("SessionGuest", () => {
         const { context, channel, deliver } = await joining();
         const keyboard = context.keyboard.setInput.mock.calls.at(-1)[0];
         keyboard.keyDown("a", false);
-        deliver([message({ type: "roster", guests: [], takeOnKey: true })]);
+        await deliver([message({ type: "roster", guests: [], takeOnKey: true })]);
         keyboard.keyDown("a", false);
         const sent = channel.messages().filter((each) => each.type === "input");
         expect(sent.map(({ take }) => take)).toEqual([false, true]);
@@ -1581,10 +1625,8 @@ describe("SessionGuest", () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             const { deliver } = await joining();
             const junk = new Uint8Array([1, 2, 3]);
-            deliver([message({ type: "snapshot", bytes: junk.length }), { data: junk.buffer }]);
-            await vi.waitFor(() =>
-                expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "failed", reason: "restore_failed" }),
-            );
+            await deliver([message({ type: "snapshot", bytes: junk.length }), { data: junk.buffer }]);
+            expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "failed", reason: "restore_failed" });
         });
 
         it("notes a host that never answers as a timeout", async () => {
@@ -1606,9 +1648,8 @@ describe("SessionGuest", () => {
         const commitsSent = (channel) => channel.messages().filter((each) => each.type === "commit");
         async function inControl() {
             const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
-            session.deliver([message({ type: "handover", at: 1000 })]);
+            await session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await session.deliver([message({ type: "handover", at: 1000 })]);
             session.lockstep().execute(2000);
             return session;
         }
@@ -1631,7 +1672,7 @@ describe("SessionGuest", () => {
 
         it("applies the keys the host passes on at their stamps", async () => {
             const { channel, deliver, lockstep } = await inControl();
-            deliver([
+            await deliver([
                 message({ type: "input", input: { kind: "key", mapping: A, down: true }, at: 1200, source: "g2" }),
             ]);
             lockstep().execute(500);
@@ -1645,8 +1686,8 @@ describe("SessionGuest", () => {
             const { channel, deliver, lockstep } = await inControl();
             lockstep().execute(500);
             const later = { kind: "key", mapping: A, down: true };
-            deliver([message({ type: "input", input: later, at: 100000, source: "host" })]);
-            deliver([message({ type: "release" })]);
+            await deliver([message({ type: "input", input: later, at: 100000, source: "host" })]);
+            await deliver([message({ type: "release" })]);
             expect(channel.messages().find((each) => each.type === "released")).toEqual({
                 type: "released",
                 at: 1500,
@@ -1658,9 +1699,8 @@ describe("SessionGuest", () => {
 
         it("keeps the keys passed on before it has reached the cycle it takes control at", async () => {
             const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
-            session.deliver([
+            await session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
+            await session.deliver([
                 message({ type: "handover", at: 1000 }),
                 message({ type: "input", input: { kind: "key", mapping: A, down: true }, at: 1200, source: "g2" }),
             ]);
@@ -1671,10 +1711,9 @@ describe("SessionGuest", () => {
 
         it("asked to stop before it has taken control, gives it up at the cycle it was to take it at", async () => {
             const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            await session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
             const key = { kind: "key", mapping: A, down: false };
-            session.deliver([
+            await session.deliver([
                 message({ type: "handover", at: 1000 }),
                 message({ type: "input", input: key, at: 1200, source: "g2" }),
                 message({ type: "release" }),
@@ -1704,7 +1743,7 @@ describe("SessionGuest", () => {
             const { channel, deliver, lockstep } = await inControl();
             lockstep().execute(500);
             const [header] = snapshotMessages(5000, [{ at: 5000, upTo: 6000, inputs: [] }]);
-            deliver([header]);
+            await deliver([header]);
             lockstep().execute(500);
             expect(channel.messages().filter((each) => each.type === "resync")).toEqual([]);
         });
@@ -1712,25 +1751,23 @@ describe("SessionGuest", () => {
         it("greys out its Take control button while control is on its way to it", async () => {
             showLights();
             const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            await session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
             const take = document.querySelector("#session-pane .session-take");
-            session.deliver([message({ type: "roster", guests: [] })]);
+            await session.deliver([message({ type: "roster", guests: [] })]);
             expect(take.disabled).toBe(false);
-            session.deliver([message({ type: "handover", at: 5000 }), message({ type: "roster", guests: [] })]);
+            await session.deliver([message({ type: "handover", at: 5000 }), message({ type: "roster", guests: [] })]);
             expect(take.disabled).toBe(true);
         });
 
         it("does not let a quick re-tap land with the release of a key that took control late", async () => {
             const MsCycles = CyclesPerSecond / 1000;
             const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            await session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
             const keyboard = session.context.keyboard.setInput.mock.calls.at(-1)[0];
             keyboard.keyDown("a", false);
             const [press] = session.channel.messages().filter((each) => each.type === "input");
             const handoverAt = press.at + 30 * MsCycles;
-            session.deliver([
+            await session.deliver([
                 message({ type: "commit", at: 1000, upTo: handoverAt, inputs: [] }),
                 message({ type: "handover", at: handoverAt }),
                 message({ type: "input", input: press.input, at: press.at, source: session.guest.id }),
@@ -1755,7 +1792,7 @@ describe("SessionGuest", () => {
             const { context, channel, deliver, lockstep } = await inControl();
             lockstep().execute(500);
             context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
-            deliver([message({ type: "release" })]);
+            await deliver([message({ type: "release" })]);
             const sent = channel.messages().filter((each) => each.type === "commit" || each.type === "released");
             expect(sent.at(-2)).toMatchObject({
                 type: "commit",
@@ -1769,16 +1806,15 @@ describe("SessionGuest", () => {
         it("asks for nothing more after it stops", async () => {
             const { channel, deliver, lockstep } = await inControl();
             lockstep().execute(500);
-            deliver([message({ type: "release" })]);
+            await deliver([message({ type: "release" })]);
             lockstep().execute(500);
             lockstep().execute(500);
             expect(channel.messages().filter((each) => each.type === "resync")).toEqual([]);
         });
 
         it("gives it up when the host sends a snapshot", async () => {
-            const { context, channel, deliver, lockstep } = await inControl();
-            deliver(snapshotMessages(5000, [{ at: 5000, upTo: 6000, inputs: [] }]));
-            await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
+            const { channel, deliver, lockstep } = await inControl();
+            await deliver(snapshotMessages(5000, [{ at: 5000, upTo: 6000, inputs: [] }]));
             lockstep().execute(500);
             expect(commitsSent(channel)).toEqual([]);
         });
@@ -1791,8 +1827,7 @@ describe("SessionGuest", () => {
         const commit = (at, upTo) => message({ type: "commit", at, upTo, inputs: [] });
         const joinedAt = async (upTo) => {
             const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            await session.deliver(snapshotMessages(100, [{ at: 100, upTo, inputs: [] }]));
             return session;
         };
 
@@ -1817,9 +1852,8 @@ describe("SessionGuest", () => {
         it("afresh after a resync, counting the snapshots it has restored", async () => {
             const { context, channel, deliver } = await joinedAt(100000);
             press(context);
-            deliver(snapshotMessages(500, [{ at: 500, upTo: 600, inputs: [] }]));
-            await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
-            deliver([commit(600, 700)]);
+            await deliver(snapshotMessages(500, [{ at: 500, upTo: 600, inputs: [] }]));
+            await deliver([commit(600, 700)]);
             press(context);
             const [, second] = sentKeys(channel);
             expect(second).toMatchObject({ at: 700 + (200 + 20) * MsCycles, snapshots: 2 });
@@ -1827,9 +1861,8 @@ describe("SessionGuest", () => {
     });
 
     it("tells the host once a second how it kept up", async () => {
-        const { context, channel, deliver, lockstep } = await joining();
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [] }]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        const { channel, deliver, lockstep } = await joining();
+        await deliver(snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [] }]));
         lockstep().execute(100);
         vi.advanceTimersByTime(1000);
         lockstep().execute(100);
@@ -1847,12 +1880,11 @@ describe("SessionGuest", () => {
         const { context, deliver } = await joining();
         const pane = document.getElementById("session-pane");
         expect(pane.hidden).toBe(true);
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
         expect(pane.hidden).toBe(false);
         pane.querySelector(".session-pane-close").click();
-        deliver(snapshotMessages(200, [{ at: 200, upTo: 100000, inputs: [] }]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
+        await deliver(snapshotMessages(200, [{ at: 200, upTo: 100000, inputs: [] }]));
+        expect(context.processor.restoreState).toHaveBeenCalledTimes(2);
         expect(pane.hidden).toBe(true);
     });
 
@@ -1860,8 +1892,7 @@ describe("SessionGuest", () => {
         showLights();
         const { guest, context, channel, deliver, lockstep } = await joining();
         channel.emit("message", message(welcomeAs({ model: context.model.name, name: "Matt" })));
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(100, [{ at: 100, upTo: 100000, inputs: [] }]));
         lockstep().execute(100);
         vi.advanceTimersByTime(StatsIntervalMs);
         lockstep().execute(100);
@@ -1874,10 +1905,9 @@ describe("SessionGuest", () => {
     });
 
     it("does not count a frame as catching up when its lag is within a slice of the limit", async () => {
-        const { context, channel, deliver, lockstep } = await joining();
+        const { channel, deliver, lockstep } = await joining();
         const justOverTheLimit = MaxGuestLagSeconds * CyclesPerSecond + 50;
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + justOverTheLimit, inputs: [] }]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + justOverTheLimit, inputs: [] }]));
         lockstep().execute(100);
         vi.advanceTimersByTime(1000);
         lockstep().execute(100);
@@ -1886,10 +1916,9 @@ describe("SessionGuest", () => {
     });
 
     it("counts a frame as catching up only when it starts far behind the host", async () => {
-        const { context, channel, deliver, lockstep } = await joining();
+        const { channel, deliver, lockstep } = await joining();
         const farBehind = CyclesPerSecond;
-        deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + farBehind, inputs: [] }]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(100, [{ at: 100, upTo: 100 + farBehind, inputs: [] }]));
         lockstep().execute(100);
         vi.advanceTimersByTime(1000);
         lockstep().execute(100);
@@ -1902,8 +1931,7 @@ describe("SessionGuest", () => {
         const { context, deliver } = await joining();
         const { cancelPaste } = context.keyboard;
         expect(cancelPaste).toHaveBeenCalledTimes(1);
-        deliver(snapshotMessages(100));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(100));
         expect(cancelPaste).toHaveBeenCalledTimes(2);
         expect(cancelPaste.mock.invocationCallOrder[1]).toBeLessThan(
             context.processor.restoreState.mock.invocationCallOrder[0],
@@ -1928,8 +1956,7 @@ describe("SessionGuest", () => {
 
     it("puts a snapshot back together from its chunks", async () => {
         const { context, deliver } = await joining();
-        deliver(snapshotMessages(700, [], { chunks: 3 }));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(700, [], { chunks: 3 }));
         expect(context.processor.restoreState.mock.calls[0][0].cycles).toBe(700);
     });
 
@@ -1937,34 +1964,29 @@ describe("SessionGuest", () => {
         const { context, channel, deliver } = await joining();
         const [header, ...chunks] = snapshotMessages(700);
         channel.emit("message", message({ ...JSON.parse(header.data), bytes: 10 }));
-        deliver(chunks);
+        await deliver(chunks);
         expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
     });
 
     it("restores each snapshot in turn and replays the commits that follow it", async () => {
         const { context, deliver, lockstep } = await joining();
-        deliver([
+        await deliver([
             ...snapshotMessages(100, [{ at: 100, upTo: 150, inputs: [] }]),
             ...snapshotMessages(500, [{ at: 500, upTo: 600, inputs: [] }]),
         ]);
         const { processor } = context;
-        await vi.waitFor(() => expect(processor.restoreState).toHaveBeenCalledTimes(2));
         expect(processor.restoreState.mock.calls.map(([state]) => state.cycles)).toEqual([100, 500]);
-        await vi.waitFor(() => {
-            lockstep().execute(1000);
-            expect(processor.currentCycles).toBe(600);
-        });
+        lockstep().execute(1000);
+        expect(processor.currentCycles).toBe(600);
     });
 
     it("asks for a resync once when it parts from the host, and again after the next restore", async () => {
-        const { context, channel, deliver, lockstep } = await joining();
+        const { channel, deliver, lockstep } = await joining();
         const bogus = (at) => ({ at, upTo: at + 50, inputs: [], hash: "bogus" });
-        deliver(snapshotMessages(100, [bogus(100), bogus(150)]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(1));
+        await deliver(snapshotMessages(100, [bogus(100), bogus(150)]));
         lockstep().execute(100);
         expect(resyncsAsked(channel)).toBe(1);
-        deliver(snapshotMessages(300, [bogus(300)]));
-        await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(2));
+        await deliver(snapshotMessages(300, [bogus(300)]));
         lockstep().execute(100);
         expect(resyncsAsked(channel)).toBe(2);
     });
@@ -1974,20 +1996,15 @@ describe("SessionGuest", () => {
 
         async function desyncedAt(at) {
             const parts = await joining();
-            parts.deliver(snapshotMessages(at, [bogus(at)]));
-            await vi.waitFor(() => expect(parts.context.processor.restoreState).toHaveBeenCalledTimes(1));
+            await parts.deliver(snapshotMessages(at, [bogus(at)]));
             parts.lockstep().execute(100);
             return parts;
         }
 
         it("says so and why, plainly that a second is a bug, and nothing more after", async () => {
-            const { context, deliver, lockstep } = await desyncedAt(100);
-            for (const [restores, at] of [
-                [2, 300],
-                [3, 500],
-            ]) {
-                deliver(snapshotMessages(at, [bogus(at)]));
-                await vi.waitFor(() => expect(context.processor.restoreState).toHaveBeenCalledTimes(restores));
+            const { deliver, lockstep } = await desyncedAt(100);
+            for (const at of [300, 500]) {
+                await deliver(snapshotMessages(at, [bogus(at)]));
                 lockstep().execute(100);
             }
             expect(desyncToasts()).toEqual([
@@ -2026,8 +2043,9 @@ describe("SessionGuest", () => {
         const { cmos } = context.processor.sysvia;
         const rtcBaseMs = Date.UTC(2026, 1, 10, 12, 0, 0);
         const rtcOffsetMs = MsPerMinute;
-        deliver(snapshotMessages(CyclesPerSecond * 3, [], { rtcBaseMs, rtcOffsetMs }));
-        await vi.waitFor(() => expect(cmos.bbcDateTime().getTime()).toBe(rtcBaseMs + 3000 + rtcOffsetMs));
+        await deliver(snapshotMessages(CyclesPerSecond * 3, [], { rtcBaseMs, rtcOffsetMs }));
+        await settle();
+        expect(cmos.bbcDateTime().getTime()).toBe(rtcBaseMs + 3000 + rtcOffsetMs);
         channel.emit("close");
         expect(cmos.bbcDateTime().getTime()).toBe(Math.floor(Date.now() / 1000) * 1000);
     });
