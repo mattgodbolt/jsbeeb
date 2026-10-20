@@ -302,6 +302,16 @@ describe("AtomPPIA", () => {
             expect(ppia2.latcha).toBe(0x42);
             expect(ppia2.keys[3][2]).toBe(1);
         });
+
+        it("should restore a snapshot from before latchb was dropped", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb000, 0x42);
+            const saved = ppia.snapshotState();
+
+            const { ppia: restored } = makePPIA();
+            restored.restoreState({ ...saved, latchb: 0 });
+            expect(restored.snapshotState()).toEqual(saved);
+        });
     });
 });
 
