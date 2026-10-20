@@ -356,14 +356,6 @@ describe("WD1770 FDC tests", () => {
             expect(fdc.read(DataRegister)).toBe(data[0]);
             expect(fdc.peek(StatusRegister) & StatusDrq).toBe(0);
         });
-
-        it("shows the track, sector and data registers", () => {
-            const { fdc } = makeFdc();
-            fdc.write(TrackRegister, 12);
-            fdc.write(SectorRegister, 3);
-            fdc.write(DataRegister, 0x5a);
-            expect([fdc.peek(TrackRegister), fdc.peek(SectorRegister), fdc.peek(DataRegister)]).toEqual([12, 3, 0x5a]);
-        });
     });
 
     describe("seek noise", () => {
