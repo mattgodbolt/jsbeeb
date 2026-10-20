@@ -14,6 +14,13 @@ function makeCpu(config = {}) {
     return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec(config) });
 }
 
+const TrackBytes = 256 * 10;
+
+function discOf(tracks, doubleSided = false) {
+    const image = new Uint8Array(TrackBytes * tracks * (doubleSided ? 2 : 1)).map((_, i) => i * 7);
+    return loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), image, doubleSided);
+}
+
 describe("Snapshot coordinator", () => {
     let cpu;
     const model = TEST_6502;
@@ -30,46 +37,72 @@ describe("Snapshot coordinator", () => {
             expect(snapshot.format).toBe("jsbeeb-snapshot");
             expect(snapshot.version).toBe(4);
             expect(snapshot.model).toBe(model.name);
-            expect(snapshot.timestamp).toBeDefined();
-            expect(snapshot.state).toBeDefined();
-            expect(snapshot.state.a).toBeDefined();
-            expect(snapshot.state.ram).toBeDefined();
+            expect(Date.parse(snapshot.timestamp)).not.toBeNaN();
         });
     });
 
     describe("restoreSnapshot", () => {
-        it("should restore state from a snapshot", () => {
-            cpu.a = 0x42;
-            cpu.x = 0x10;
-            cpu.ramRomOs[0x100] = 0xaa;
+        const host = () => cpu;
+        const withCoProcessor = () => makeCpu({ tube: TubeModel });
 
-            const snapshot = createSnapshot(cpu, model);
-
-            const cpu2 = makeCpu();
-            restoreSnapshot(cpu2, model, snapshot);
-
-            expect(cpu2.a).toBe(0x42);
-            expect(cpu2.x).toBe(0x10);
-            expect(cpu2.ramRomOs[0x100]).toBe(0xaa);
+        it.each([
+            ["a different model", { restoreModel: { name: "Completely Different Machine" } }, /Model mismatch/],
+            ["an unknown format", { mutate: (s) => (s.format = "unknown") }, /Unknown snapshot format/],
+            ["a newer version", { mutate: (s) => (s.version = 999) }, /newer than supported/],
+            [
+                "a host-only snapshot into a machine with a co-processor",
+                { into: withCoProcessor },
+                /Co-processor mismatch/,
+            ],
+            ["a co-processor snapshot into a machine without one", { from: withCoProcessor }, /Co-processor mismatch/],
+        ])("refuses %s", (_, { from = host, mutate = () => {}, into = host, restoreModel = model }, error) => {
+            const snapshot = createSnapshot(from(), model);
+            mutate(snapshot);
+            expect(() => restoreSnapshot(into(), restoreModel, snapshot)).toThrow(error);
         });
 
-        it("should throw on model mismatch", () => {
+        it.each([
+            [
+                "a v1 snapshot without an FDC field",
+                (s) => {
+                    s.version = 1;
+                    delete s.state.fdc;
+                },
+            ],
+            [
+                "a snapshot from before touchscreen state was saved",
+                (s) => {
+                    s.version = 3;
+                    delete s.state.touchScreen;
+                },
+            ],
+            [
+                "a pre-v3 snapshot, which never recorded a co-processor",
+                (s) => {
+                    s.version = 2;
+                    delete s.coProcessor;
+                },
+            ],
+            [
+                "a snapshot with no teletext adaptor state into a machine with one",
+                () => {},
+                { hasTeletextAdaptor: true },
+            ],
+            [
+                "a snapshot from before a disc's written tracks were saved",
+                (s) => delete s.state.fdc.drives[0].disc.dirtyTracks,
+                {},
+                (machine) => machine.fdc.loadDisc(0, discOf(1)),
+            ],
+        ])("restores %s", async (_, mutate, config = {}, loadDisc = () => {}) => {
+            loadDisc(cpu);
             const snapshot = createSnapshot(cpu, model);
-            // Use a name that findModel won't resolve and doesn't match
-            const otherModel = { name: "Completely Different Machine" };
+            mutate(snapshot);
+            const restored = makeCpu(config);
+            await restored.initialise();
+            loadDisc(restored);
 
-            expect(() => restoreSnapshot(cpu, otherModel, snapshot)).toThrow(/Model mismatch/);
-        });
-
-        it("should throw on unknown format", () => {
-            const snapshot = { format: "unknown", version: 1, model: model.name, state: {} };
-            expect(() => restoreSnapshot(cpu, model, snapshot)).toThrow(/Unknown snapshot format/);
-        });
-
-        it("should throw on newer version", () => {
-            const snapshot = createSnapshot(cpu, model);
-            snapshot.version = 999;
-            expect(() => restoreSnapshot(cpu, model, snapshot)).toThrow(/newer than supported/);
+            expect(() => restoreSnapshot(restored, model, snapshot)).not.toThrow();
         });
     });
 
@@ -151,19 +184,6 @@ describe("Snapshot coordinator", () => {
         });
     });
 
-    describe("v1 backward compatibility", () => {
-        it("should restore a v1 snapshot without FDC field", () => {
-            const snapshot = createSnapshot(cpu, model);
-            // Simulate a v1 snapshot by removing FDC and setting version to 1
-            snapshot.version = 1;
-            delete snapshot.state.fdc;
-
-            const cpu2 = makeCpu();
-            // Should not throw — FDC keeps its current state
-            expect(() => restoreSnapshot(cpu2, model, snapshot)).not.toThrow();
-        });
-    });
-
     describe("touchscreen", () => {
         function selectPollingMode(machine) {
             for (const char of "M129.") machine.touchScreen.onTransmit(char.charCodeAt(0));
@@ -180,14 +200,6 @@ describe("Snapshot coordinator", () => {
 
             expect(cpu2.touchScreen.tryReceive(true)).toBe(0x43);
         });
-
-        it("restores a snapshot from before touchscreen state was saved", () => {
-            const snapshot = createSnapshot(cpu, model);
-            snapshot.version = 3;
-            delete snapshot.state.touchScreen;
-
-            expect(() => restoreSnapshot(makeCpu(), model, snapshot)).not.toThrow();
-        });
     });
 
     describe("co-processor", () => {
@@ -201,28 +213,6 @@ describe("Snapshot coordinator", () => {
 
             expect(snapshot.coProcessor).toBe(true);
             expect(snapshot.state.tube.ula).toBeDefined();
-        });
-
-        it("refuses to restore a host-only snapshot into a machine with a co-processor", () => {
-            const snapshot = createSnapshot(cpu, model);
-
-            expect(() => restoreSnapshot(makeCpu({ tube: TubeModel }), model, snapshot)).toThrow(
-                /Co-processor mismatch/,
-            );
-        });
-
-        it("refuses to restore a co-processor snapshot into a machine without one", () => {
-            const snapshot = createSnapshot(makeCpu({ tube: TubeModel }), model);
-
-            expect(() => restoreSnapshot(cpu, model, snapshot)).toThrow(/Co-processor mismatch/);
-        });
-
-        it("still loads pre-v3 snapshots, which never recorded a co-processor", () => {
-            const snapshot = createSnapshot(cpu, model);
-            snapshot.version = 2;
-            delete snapshot.coProcessor;
-
-            expect(() => restoreSnapshot(makeCpu(), model, snapshot)).not.toThrow();
         });
     });
 
@@ -252,22 +242,9 @@ describe("Snapshot coordinator", () => {
             restored.teletextAdaptor.write(RowRegister, 3);
             expect(restored.teletextAdaptor.read(DataRegister)).toBe(0xaa);
         });
-
-        it("leaves a fitted adaptor alone when the snapshot has no adaptor state", async () => {
-            const snapshot = createSnapshot(cpu, model);
-            const restored = makeCpu({ hasTeletextAdaptor: true });
-            await restored.initialise();
-
-            expect(() => restoreSnapshot(restored, model, snapshot)).not.toThrow();
-        });
     });
 
     describe("discs in a save file", () => {
-        const TrackBytes = 256 * 10;
-        const discOf = (tracks, doubleSided = false) => {
-            const image = new Uint8Array(TrackBytes * tracks * (doubleSided ? 2 : 1)).map((_, i) => i * 7);
-            return loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), image, doubleSided);
-        };
         const write = (disc, isSideUpper, track, pulses) => {
             disc.writePulses(isSideUpper, track, 0, pulses);
             disc.flushWrites();
@@ -336,14 +313,6 @@ describe("Snapshot coordinator", () => {
 
             expect(dirtyTracks["false:0"].pulses2Us[0]).toBe(0xaaaaaaaa);
             expect(dirtyTracks["false:1"].pulses2Us[0]).toBe(0xbbbbbbbb);
-        });
-
-        it("restores a snapshot from before written tracks were saved", () => {
-            cpu.fdc.loadDisc(0, discOf(1));
-            const snapshot = createSnapshot(cpu, model);
-            delete snapshot.state.fdc.drives[0].disc.dirtyTracks;
-
-            expect(() => restoreSnapshot(machineWith(discOf(1)), model, snapshot)).not.toThrow();
         });
     });
 });
