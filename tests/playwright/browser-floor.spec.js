@@ -23,12 +23,16 @@ const analyticsCalls = (page, command) =>
 const unsupportedBrowserEvents = async (page) =>
     (await analyticsCalls(page, "event")).filter((call) => call[1] === "unsupported_browser");
 
-test("a supported browser loads gtag.js once, reports the machine starting, and sees no message, even for an error once main.js has started", async ({
+test("a supported browser starts the machine with its console names, loads gtag.js once, reports the start, and sees no message, even for an error once main.js has started", async ({
     beeb,
     page,
 }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
+    expect(await page.evaluate(() => [window.video, window.soundChip].map((part) => typeof part))).toEqual([
+        "object",
+        "object",
+    ]);
     await expect(page.locator('script[src^="https://www.googletagmanager.com/gtag/js?id="]')).toHaveCount(1);
     expect(await analyticsCalls(page, "config"), "main.js's config").toHaveLength(1);
     await expect
