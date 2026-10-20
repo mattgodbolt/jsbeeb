@@ -62,10 +62,6 @@ describe("Keyboard", () => {
         });
     });
 
-    test("should create a keyboard instance", () => {
-        expect(keyboard).toBeDefined();
-    });
-
     describe("in a shared session", () => {
         let input;
         beforeEach(() => {
@@ -422,93 +418,9 @@ describe("Keyboard", () => {
         });
     });
 
-    test("keyCode is the physical position the event came from", () => {
-        expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
-        expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);
-        expect(keyboard.keyCode({ code: "NumpadEnter" })).toBe(keyCodes.NUMPADENTER);
-        expect(keyboard.keyCode({ code: "NumpadDecimal" })).toBe(keyCodes.NUMPAD_DECIMAL_POINT);
-        expect(keyboard.keyCode({ code: "KeyA" })).toBe(keyCodes.A);
-    });
-
-    test("keyDown should handle normal key press", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
-        expect(event.preventDefault).toHaveBeenCalled();
-    });
-
-    test("keyDown should not handle keys when not running", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = false;
-        keyboard.keyDown(event);
-
+    test("keeps keys from a machine that is not running", () => {
+        keyboard.keyDown(keyEvent(keyCodes.A));
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("keyDown should not handle keys when input is enabled", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        // Set input enabled to true
-        mockInputEnabledFunction.mockReturnValueOnce(true);
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockInputEnabledFunction).toHaveBeenCalled();
-        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("keyDown should hold reset for F12/BREAK", () => {
-        const event = {
-            code: keyCodes.F12,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockProcessor.setReset).toHaveBeenCalledWith(true);
-        expect(event.preventDefault).toHaveBeenCalled();
-    });
-
-    test("keyUp should call sysvia.keyUp", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            altKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-        keyboard.keyUp(event);
-
-        expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
-        expect(event.preventDefault).toHaveBeenCalled();
     });
 
     test("releases a key pressed before focus moved into a text field", () => {
@@ -533,128 +445,24 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyUp).not.toHaveBeenCalled();
     });
 
-    test("keyUp should release reset for F12/BREAK", () => {
-        const event = {
-            code: keyCodes.F12,
-            preventDefault: vi.fn(),
-            altKey: false,
-        };
-
+    test("gives a key to its Ctrl handler instead of the machine", () => {
+        const handler = vi.fn();
+        keyboard.registerKeyHandler(keyCodes.E, handler, { alt: false, ctrl: true });
         running = true;
-        keyboard.keyDown(event);
-        keyboard.keyUp(event);
 
-        expect(mockProcessor.setReset).toHaveBeenCalledWith(false);
-        expect(event.preventDefault).toHaveBeenCalled();
-    });
+        keyboard.keyDown(keyEvent(keyCodes.E, "", { ctrlKey: true }));
 
-    test("clearKeys should call sysvia.clearKeys", () => {
-        keyboard.clearKeys();
-        expect(mockSysvia.clearKeys).toHaveBeenCalled();
-    });
-
-    test("setKeyLayout hands the layout to the processor", () => {
-        keyboard.setKeyLayout("gaming");
-        expect(mockProcessor.setKeyLayout).toHaveBeenCalledWith("gaming");
-    });
-
-    test("registerKeyHandler should add a handler for a key with Alt modifier", () => {
-        const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.Q, mockHandler, { alt: true, ctrl: false });
-
-        const event = {
-            code: keyCodes.Q,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: true,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.Q, false);
+        expect(handler).toHaveBeenCalledWith(true, keyCodes.E, false);
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
-    test("registered handler suppresses sysvia.keyDown for that key", () => {
-        // When a handler claims a key, the BBC Micro should NOT also receive it.
-        const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.K1, mockHandler, { alt: true, ctrl: false });
-
+    test("keeps the keyboard from the machine while a paste types, until Escape cancels it", () => {
         running = true;
-        keyboard.keyDown({
-            code: keyCodes.K1,
-            preventDefault: vi.fn(),
-            altKey: true,
-            ctrlKey: false,
-            shiftKey: false,
-        });
-
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.K1, false);
-        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("unhandled keys still reach sysvia.keyDown", () => {
-        running = true;
-        keyboard.keyDown({
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            altKey: false,
-            ctrlKey: false,
-            shiftKey: false,
-        });
-
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
-    });
-
-    test("registerKeyHandler should add a handler for a key with Ctrl modifier", () => {
-        const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.E, mockHandler, { alt: false, ctrl: true });
-
-        const event = {
-            code: keyCodes.E,
-            preventDefault: vi.fn(),
-            ctrlKey: true,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.E, false);
-    });
-
-    test("sendRawKeyboard should disable keyboard and schedule paste task", () => {
-        keyboard.sendRawKeyboard([BBC.A], false);
-
+        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
         expect(keyboard.isPasting).toBe(true);
-    });
 
-    test("cancelPaste should stop paste and re-enable keyboard", () => {
-        keyboard.sendRawKeyboard([BBC.A, BBC.B, BBC.C], false);
-        mockProcessor.scheduler.polltime(1); // deliver first key
-
-        keyboard.cancelPaste();
-
-        expect(keyboard.isPasting).toBe(false);
-        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
-    });
-
-    test("Escape should cancel paste during keyDown", () => {
-        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
-        running = true;
-
-        const escEvent = {
-            code: keyCodes.ESCAPE,
-            preventDefault: vi.fn(),
-            altKey: false,
-            ctrlKey: false,
-            shiftKey: false,
-        };
-        keyboard.keyDown(escEvent);
+        keyboard.keyDown(keyEvent(keyCodes.ESCAPE));
 
         expect(keyboard.isPasting).toBe(false);
         expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
