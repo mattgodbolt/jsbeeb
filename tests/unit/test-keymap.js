@@ -234,7 +234,8 @@ describe("ShiftOverride", function () {
         ["forces SHIFT off while a key is down, then gives the shift key back", "S+1 N+0 N-1"],
         ["keeps SHIFT forced when the shift key goes first", "S+1 N+0 S-0 N-0"],
         ["holds a forced SHIFT through a plain key", "Y+1 P+1 P-1 Y-0"],
-        ["lets the later of two forcing keys win, and the first release end it", "Y+1 N+0 N-0"],
+        ["lets the later of two forcing keys win, and its release end the force", "S+1 Y+1 N+0 N-1"],
+        ["ends the force on the release of the earlier of two forcing keys too", "S+1 Y+1 N+0 Y-1"],
     ])("%s", function (_, steps) {
         const keys = makeMatrix();
         const shift = new ShiftOverride(Shift);

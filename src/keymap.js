@@ -693,8 +693,8 @@ export class ShiftOverride {
         }
     }
 
-    // Shared-session peers exchange this, and only the package version must match between them,
-    // so the field names stay those of the SysVia's keyboard state.
+    // Part of SysVia.keyboardState(), which shared-session peers on different deploys of one
+    // package version exchange.
     state() {
         return {
             physicalShiftDown: this.physicalShiftDown,
