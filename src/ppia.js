@@ -223,7 +223,6 @@ export class AtomPPIA extends PPIA {
         this.shiftOverride = null;
 
         this.keyboardEnabled = true;
-        this.lastSpeakerBit = 0;
         // The Atom has no lock lights. Report caps lock as "on" and shift
         // lock as "off" so the paste routine's lock-toggle logic is never
         // triggered (it toggles CAPSLOCK when !capsLockLight, and SHIFTLOCK
@@ -239,6 +238,11 @@ export class AtomPPIA extends PPIA {
         // from ACIA; compat ignores parameters as shadowing, so takes our Scheduler for the browser's global.
         // eslint-disable-next-line compat/compat
         this.runTapeTask = scheduler.newTask(() => this.runTape());
+    }
+
+    reset() {
+        super.reset();
+        this.lastSpeakerBit = (this.latchc & 0x04) >>> 2;
     }
 
     setKeyLayout(map) {
