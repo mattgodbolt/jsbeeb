@@ -135,9 +135,9 @@ describe("Sequencer", () => {
 
     it("keeps keys' stamps across a stop at a breakpoint", () => {
         const { processor, sequencer, queue, run, applied } = sequencing();
+        queue("A+21 A-41");
         processor.stopAt = cycleAt(1);
         expect(sequencer.execute(100 * MsCycles)).toBe(false);
-        queue("A+21 A-41");
         run(4, 20);
         expect(applied()).toEqual(["A+21", "A-41"]);
     });
@@ -275,10 +275,9 @@ describe("KeyStamper", () => {
 
         it("keeps keys held back while control came as far apart as they were pressed, up to the catch-up gap", () => {
             const keys = new KeyStamper(CyclesPerSecond);
-            expect([follow(keys, 0, 0, true), follow(keys, 0, 30, true), follow(keys, 0, 114, true)]).toEqual([
-                0, 30, 70,
-            ]);
+            expect(follow(keys, 0, 0, true)).toBe(0);
             expect(keys.catchingUp).toBe(true);
+            expect([follow(keys, 0, 30, true), follow(keys, 0, 114, true)]).toEqual([30, 70]);
         });
 
         it("follows a key stamped ahead until one lands where the machine is", () => {
