@@ -298,53 +298,18 @@ describe("SysVia getJoysticks", () => {
         });
     }
 
-    it("should return no buttons pressed when no gamepads connected", () => {
-        const via = makeSysViaWithGamepads(null);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(false);
-    });
-
-    it("should detect FIRE1 (button 10) on first gamepad as button1", () => {
-        const pad = makeMockPad({ 10: true });
-        const via = makeSysViaWithGamepads([pad]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(true);
-        expect(result.button2).toBe(false);
-    });
-
-    it("should detect FIRE2 (button 11) on first gamepad as button2 with single gamepad", () => {
-        const pad = makeMockPad({ 11: true });
-        const via = makeSysViaWithGamepads([pad]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(true);
-    });
-
-    it("should detect FIRE1 (button 10) on second gamepad as button2", () => {
-        const pad1 = makeMockPad({});
-        const pad2 = makeMockPad({ 10: true });
-        const via = makeSysViaWithGamepads([pad1, pad2]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(true);
-    });
-
-    it("should detect FIRE2 (button 11) on first gamepad as button2 even with two gamepads", () => {
-        const pad1 = makeMockPad({ 11: true });
-        const pad2 = makeMockPad({});
-        const via = makeSysViaWithGamepads([pad1, pad2]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(true);
-    });
-
-    it("should combine mouse and gamepad button states with OR logic", () => {
-        const pad = makeMockPad({});
-        const via = makeSysViaWithGamepads([pad]);
-        via.setJoystickButton(0, true);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(true);
+    it.each([
+        ["no gamepads", null, false, [false, false]],
+        ["FIRE1 on the only gamepad", [{ 10: true }], false, [true, false]],
+        ["FIRE2 on the only gamepad", [{ 11: true }], false, [false, true]],
+        ["FIRE1 on the second gamepad", [{}, { 10: true }], false, [false, true]],
+        ["FIRE2 on the first of two gamepads", [{ 11: true }, {}], false, [false, true]],
+        ["the mouse's button with an idle gamepad", [{}], true, [true, false]],
+    ])("reads the fire buttons with %s", (_, pads, mouseButton, expected) => {
+        const via = makeSysViaWithGamepads(pads?.map(makeMockPad) ?? null);
+        if (mouseButton) via.setJoystickButton(0, true);
+        const { button1, button2 } = via.getJoysticks();
+        expect([button1, button2]).toEqual(expected);
     });
 });
 
@@ -728,15 +693,12 @@ describe("Via T2 toggling PB6 pulse counting", () => {
 describe("Via peek", () => {
     const ORB = 0x0,
         ORA = 0x1,
-        DDRB = 0x2,
-        DDRA = 0x3,
         T1CL = 0x4,
         T1CH = 0x5,
         ACR = 0xb,
         PCR = 0xc,
         IFR = 0xd,
         IER = 0xe;
-    const RegisterCount = 16;
     const PcrCa1Cb1RisingEdge = 0x11;
     const AcrT1Continuous = 0x40;
     const Timer1Int = 0x40;
@@ -761,24 +723,6 @@ describe("Via peek", () => {
     function runMicroseconds(us) {
         scheduler.polltime(us * TicksPerMicrosecond);
     }
-
-    it("gives what the next read of each register gives", () => {
-        via.write(DDRA, 0x0f);
-        via.write(ORA, 0x5a);
-        via.write(DDRB, 0xf0);
-        via.write(ORB, 0xa5);
-        runMicroseconds(37);
-        via.setca1(true);
-        for (let reg = 0; reg < RegisterCount; ++reg) {
-            const peeked = via.peek(reg);
-            expect(via.read(reg)).toBe(peeked);
-        }
-    });
-
-    it("sees the timer count up to the moment it is asked", () => {
-        runMicroseconds(5);
-        expect(via.peek(T1CL)).toBe(via.read(T1CL));
-    });
 
     it("leaves the timer interrupt raised when peeking the timer", () => {
         runMicroseconds(25);

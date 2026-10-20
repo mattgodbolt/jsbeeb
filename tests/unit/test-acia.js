@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { Acia } from "../../src/acia.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { findModel } from "../../src/models.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 const BbcModel = findModel("B-DFS1.2");
 
@@ -12,6 +13,11 @@ const SevenBitsTwoStopEvenParity = 0x00;
 const TransmitInterruptEnable = 0x20;
 const Tdre = 0x02;
 const Rdrf = 0x01;
+const ReceiveInterruptEnable = 0x80;
+const CarrierPollsToRaiseDcd = 209;
+const AciaIrq = 0x04;
+// A 10 bit byte at 75 baud takes 0.1333s: 266666 cycles of the 2MHz clock.
+const ByteCyclesAt75Baud = 266666;
 
 function createScheduledAcia(scheduler, cr, transmitRate, model = BbcModel) {
     const cpu = { interrupt: 0, model };
@@ -177,9 +183,6 @@ describe("Acia", () => {
     });
 
     describe("transmit timing", () => {
-        // A 10 bit byte at 75 baud takes 0.1333s: 266666 cycles of the 2MHz clock.
-        const ByteCyclesAt75Baud = 266666;
-
         const timeToEmpty = (cr, rate, model) => {
             const scheduler = new Scheduler();
             const { acia } = createScheduledAcia(scheduler, cr, rate, model);
@@ -231,6 +234,89 @@ describe("Acia", () => {
             acia.write(1, 0x55);
             scheduler.polltime(ByteCyclesAt75Baud);
             expect(cpu.interrupt).toBe(0);
+        });
+    });
+
+    describe("snapshots", () => {
+        const quiet = { mute: () => {}, tone: () => {} };
+        const relayNoise = { motorOn: () => {}, motorOff: () => {} };
+
+        it("round-trips an ACIA sending, receiving and running a tape with its carrier up", async () => {
+            const scheduler = new Scheduler();
+            const cpu = { interrupt: 0, model: BbcModel };
+            await expectSnapshotRoundTrips(
+                () => new Acia(cpu, quiet, scheduler, relayNoise),
+                (driven) => {
+                    driven.write(0, ReceiveInterruptEnable | EightBitsOneStopNoParity | 1);
+                    driven.setSerialReceive(9600);
+                    driven.setSerialTransmit(1200);
+                    scheduler.polltime(1000);
+                    driven.write(1, 0x42);
+                    driven.receive(0x5a);
+                    driven.setTape({ poll: () => 100 });
+                    driven.setMotor(true);
+                    for (let i = 0; i < CarrierPollsToRaiseDcd; ++i) driven.setTapeCarrier(true);
+                    driven.selectRs423(true);
+                },
+            );
+        });
+
+        it("keeps the recorder's PLAY latch, and restores an older snapshot with PLAY down", () => {
+            const scheduler = new Scheduler();
+            const source = new Acia({ interrupt: 0, model: BbcModel }, quiet, scheduler);
+            source.pressStop();
+            const snapshot = source.snapshotState();
+            const tapeRunsAfterRestoring = (state) => {
+                const restored = new Acia({ interrupt: 0, model: BbcModel }, quiet, scheduler, relayNoise);
+                restored.restoreState(state);
+                const tape = { poll: vi.fn(() => 100) };
+                restored.setTape(tape);
+                restored.setMotor(true);
+                return tape.poll.mock.calls.length > 0;
+            };
+            expect(tapeRunsAfterRestoring(snapshot)).toBe(false);
+            expect(tapeRunsAfterRestoring({ ...snapshot, playPressed: undefined })).toBe(true);
+        });
+
+        it("transmits at the restored rate", () => {
+            const scheduler = new Scheduler();
+            const { acia } = createScheduledAcia(scheduler, EightBitsOneStopNoParity, 75);
+            const restored = new Acia({ interrupt: 0, model: BbcModel }, quiet, scheduler);
+            restored.restoreState(acia.snapshotState());
+            restored.write(1, 0x55);
+            scheduler.polltime(ByteCyclesAt75Baud - 1);
+            expect(restored.read(0) & Tdre).toBe(0);
+            scheduler.polltime(1);
+            expect(restored.read(0) & Tdre).toBe(Tdre);
+        });
+
+        it("polls RS423 at the restored receive rate", () => {
+            const scheduler = new Scheduler();
+            const { acia } = createScheduledAcia(scheduler, EightBitsOneStopNoParity, 75);
+            acia.setSerialReceive(75);
+            const restored = new Acia({ interrupt: 0, model: BbcModel }, quiet, scheduler);
+            restored.restoreState(acia.snapshotState());
+            const polledAt = [];
+            restored.setRs423Handler({
+                onTransmit: () => {},
+                tryReceive: () => {
+                    polledAt.push(scheduler.epoch);
+                    return -1;
+                },
+            });
+            restored.selectRs423(true);
+            scheduler.polltime(2 * ByteCyclesAt75Baud);
+            expect(polledAt[1] - polledAt[0]).toBe(ByteCyclesAt75Baud);
+        });
+
+        it("reasserts the IRQ it was holding", () => {
+            const scheduler = new Scheduler();
+            const { cpu, acia } = createScheduledAcia(scheduler, ReceiveInterruptEnable | EightBitsOneStopNoParity, 75);
+            acia.receive(0x41);
+            expect(cpu.interrupt).toBe(AciaIrq);
+            const restoredCpu = { interrupt: 0, model: BbcModel };
+            new Acia(restoredCpu, quiet, scheduler).restoreState(acia.snapshotState());
+            expect(restoredCpu.interrupt).toBe(AciaIrq);
         });
     });
 });
