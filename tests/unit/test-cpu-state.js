@@ -45,10 +45,11 @@ function takesNmi(cpu) {
 const AdlcControl1 = 0xfea0;
 const AdlcControl2 = 0xfea1;
 const AdlcTxFifo = 0xfea2;
+const AdlcStatus1 = 0xfea0;
+const AdlcIrqFlag = 0x80;
 const RxTxInterruptsEnabled = 0x06;
 const RxTxReset = 0xc0;
 const PrioritisedStatus = 0x01;
-const AdlcIrqFlag = 0x80;
 
 // Releasing the resets with interrupts enabled reports two causes at once: TDRA, and via S2RQ
 // the idle line.
@@ -69,6 +70,12 @@ const RomSelect = 0xfe30;
 const SysViaOrb = 0xfe40;
 const SysViaOra = 0xfe41;
 const SysViaDdrb = 0xfe42;
+const SysViaT1CounterLow = 0xfe44;
+const SysViaT1CounterHigh = 0xfe45;
+const SysViaIer = 0xfe4e;
+const IerSet = 0x80;
+const Timer1Interrupt = 0x40;
+const SysViaIrq = 0x01;
 const SoundWriteDisabled = 0x08;
 // SED; LDA #$42; LDX #$10; LDY #$20; PHA; STA $70; loop: DEX; JMP loop
 const LoopProgram = [0xf8, 0xa9, 0x42, 0xa2, 0x10, 0xa0, 0x20, 0x48, 0x85, 0x70, 0xca, 0x4c, 0x0a, 0x20];
@@ -140,18 +147,17 @@ describe("Cpu6502 snapshotState / restoreState", () => {
     });
 
     it("should reconstruct interrupt flags from VIA state", () => {
-        // Set up sysvia to have a pending interrupt
-        cpu.sysvia.ier = 0x60;
-        cpu.sysvia.ifr = 0x40;
-        cpu.sysvia.updateIFR();
-        expect(cpu.interrupt & 0x01).toBe(0x01);
+        cpu.writeDevice(SysViaIer, IerSet | Timer1Interrupt);
+        cpu.writeDevice(SysViaT1CounterLow, 2);
+        cpu.writeDevice(SysViaT1CounterHigh, 0);
+        cpu.polltime(10);
+        expect(cpu.interrupt & SysViaIrq).toBe(SysViaIrq);
 
         const snapshot = cpu.snapshotState();
         const cpu2 = makeCpu();
         cpu2.restoreState(snapshot);
 
-        // Interrupt should be reconstructed from VIA state
-        expect(cpu2.interrupt & 0x01).toBe(0x01);
+        expect(cpu2.interrupt & SysViaIrq).toBe(SysViaIrq);
     });
 
     it("should not include ROM data in the snapshot", () => {
@@ -260,12 +266,12 @@ describe("Cpu6502 econet NMI line", () => {
 
     it("follows the ADLC's IRQ flag", () => {
         raiseAdlcIrq(cpu);
-        expect(econet.ADLC.status1 & AdlcIrqFlag).toBe(AdlcIrqFlag);
+        expect(cpu.readDevice(AdlcStatus1) & AdlcIrqFlag).toBe(AdlcIrqFlag);
         expect(cpu.nmi).toBe(true);
         expect(takesNmi(cpu)).toBe(true);
 
         clearAdlcIrq(cpu);
-        expect(econet.ADLC.status1 & AdlcIrqFlag).toBe(0);
+        expect(cpu.readDevice(AdlcStatus1) & AdlcIrqFlag).toBe(0);
         expect(cpu.nmi).toBe(false);
     });
 
@@ -287,7 +293,7 @@ describe("Cpu6502 econet NMI line", () => {
         for (let i = 0; i < 3; i++) cpu.writeDevice(AdlcTxFifo, 0x55);
         cpu.polltime(1);
 
-        expect(econet.ADLC.status1 & AdlcIrqFlag).toBe(AdlcIrqFlag);
+        expect(cpu.readDevice(AdlcStatus1) & AdlcIrqFlag).toBe(AdlcIrqFlag);
         expect(takesNmi(cpu)).toBe(true);
     });
 
@@ -371,31 +377,17 @@ describe("Cpu6502 cpuMultiplier", () => {
         return { cpu, totalVideoCycles };
     };
 
-    it("runs peripherals and video at the CPU rate by default", () => {
-        const { cpu, totalVideoCycles } = makeMultipliedCpu(undefined);
+    it.each([
+        ["the CPU rate by default", undefined, 1000],
+        ["half the CPU rate at multiplier 2", 2, 500],
+        ["twice the CPU rate at multiplier 0.5", 0.5, 2000],
+    ])("runs peripherals and video at %s", (_, cpuMultiplier, peripheralCycles) => {
+        const { cpu, totalVideoCycles } = makeMultipliedCpu(cpuMultiplier);
 
         cpu.polltime(1000);
 
-        expect(cpu.scheduler.epoch).toBe(1000);
-        expect(totalVideoCycles()).toBe(1000);
-    });
-
-    it("runs peripherals and video at half the CPU rate at multiplier 2", () => {
-        const { cpu, totalVideoCycles } = makeMultipliedCpu(2);
-
-        cpu.polltime(1000);
-
-        expect(cpu.scheduler.epoch).toBe(500);
-        expect(totalVideoCycles()).toBe(500);
-    });
-
-    it("runs peripherals and video at twice the CPU rate at multiplier 0.5", () => {
-        const { cpu, totalVideoCycles } = makeMultipliedCpu(0.5);
-
-        cpu.polltime(1000);
-
-        expect(cpu.scheduler.epoch).toBe(2000);
-        expect(totalVideoCycles()).toBe(2000);
+        expect(cpu.scheduler.epoch).toBe(peripheralCycles);
+        expect(totalVideoCycles()).toBe(peripheralCycles);
     });
 
     it("takes the unscaled path at multiplier 1, passing every cycle straight through", () => {
@@ -476,7 +468,6 @@ describe("peeking at the hardware", () => {
     const SheilaStart = 0xfe00;
     const SheilaEnd = 0xff00;
     const SysViaBase = 0xfe40;
-    const SysViaIer = 0xfe4e;
     const UserViaOrb = 0xfe60;
     const ViaRegisterCount = 16;
     const FdcResult = 0xfe81;
