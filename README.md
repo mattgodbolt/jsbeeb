@@ -487,8 +487,8 @@ For timing correctness, we have:
 - Some 65C12-specific read-modify-write tests written by Ed Spittles.
 
 Tests are run via npm scripts: `npm test` runs the whole suite. The vitest suites are `npm run test:unit`,
-`npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the smoke test is
-`npm run test:smoke` (the shader and smoke tests need Chrome installed). Please note it can take a while to run the
+`npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the browser tests are
+`npm run test:e2e` (the shader and browser tests need Chrome installed). Please note it can take a while to run the
 whole test suite.
 
 ## Thanks
