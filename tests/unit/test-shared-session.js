@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     AnswerTimeoutMs,
     ConnectTimeoutMs,
+    IceGatheringTimeoutMs,
     MaxConnectingGuests,
     MinResyncIntervalMs,
     SessionFailures,
@@ -180,6 +181,22 @@ class FakePeer extends FakeEvents {
 
     close() {
         this.closed = true;
+    }
+}
+
+const Candidate = "a=candidate:1 1 udp 2113937151 peer.local 54336 typ host";
+
+// A peer still looking for its ICE candidates, which finds one when told to.
+class GatheringPeer extends FakePeer {
+    constructor() {
+        super();
+        this.iceGatheringState = "gathering";
+        this.localDescription = { sdp: "v=0" };
+    }
+
+    find({ announced = true } = {}) {
+        this.localDescription = { sdp: `v=0\r\n${Candidate}` };
+        if (announced) this.emit("icecandidate", { candidate: {} });
     }
 }
 
@@ -1546,6 +1563,31 @@ describe("SessionHost", () => {
         expect(postAnswer).toHaveBeenCalledTimes(1);
         expect(peers).toHaveLength(1);
     });
+
+    it("answers with the candidates it found, however long the first took", async () => {
+        vi.stubGlobal("RTCPeerConnection", GatheringPeer);
+        const { context } = await hosting();
+        await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
+        expect(context.rendezvous.postAnswer).not.toHaveBeenCalled();
+        peers[0].find();
+        await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
+        expect(context.rendezvous.postAnswer).toHaveBeenCalledWith(
+            "room",
+            "secret",
+            "g1",
+            expect.stringContaining(Candidate),
+        );
+    });
+
+    it("sends no answer to a guest it gave up on while still gathering", async () => {
+        vi.stubGlobal("RTCPeerConnection", GatheringPeer);
+        const { context } = await hosting();
+        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs - IceGatheringTimeoutMs / 2);
+        peers[0].find();
+        await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
+        expect(peers[0].closed).toBe(true);
+        expect(context.rendezvous.postAnswer).not.toHaveBeenCalled();
+    });
 });
 
 describe("SessionGuest", () => {
@@ -1586,6 +1628,59 @@ describe("SessionGuest", () => {
 
     it("waits for an offer's answer for less time than the rendezvous keeps the offer", () => {
         expect(AnswerTimeoutMs).toBeLessThan(OfferLifetimeSeconds * 1000);
+    });
+
+    describe("its offer", () => {
+        function offering({ foundBeforeLooking = false } = {}) {
+            vi.stubGlobal(
+                "RTCPeerConnection",
+                class extends GatheringPeer {
+                    async setLocalDescription() {
+                        if (foundBeforeLooking) this.find({ announced: false });
+                    }
+                },
+            );
+            const context = fakeContext();
+            const started = new SessionGuest(context, "room").start();
+            return { started, postOffer: context.rendezvous.postOffer };
+        }
+
+        it("waits for a first candidate however long it takes, then as long again for more", async () => {
+            const { started, postOffer } = offering();
+            await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
+            expect(postOffer).not.toHaveBeenCalled();
+            peers[0].find();
+            await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs - 1);
+            expect(postOffer).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(postOffer).toHaveBeenCalledWith("room", expect.any(String), expect.stringContaining(Candidate));
+            await started;
+        });
+
+        it("counts from a candidate already found when it starts waiting", async () => {
+            const { started, postOffer } = offering({ foundBeforeLooking: true });
+            await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
+            expect(postOffer).toHaveBeenCalledWith("room", expect.any(String), expect.stringContaining(Candidate));
+            await started;
+        });
+
+        it("goes as soon as gathering is complete", async () => {
+            const { started, postOffer } = offering();
+            peers[0].find();
+            peers[0].iceGatheringState = "complete";
+            peers[0].emit("icegatheringstatechange");
+            await settle();
+            expect(postOffer).toHaveBeenCalledWith("room", expect.any(String), expect.stringContaining(Candidate));
+            await started;
+        });
+
+        it("gives up when no candidate comes, since nothing could connect", async () => {
+            const { started, postOffer } = offering();
+            const failed = expect(started).rejects.toThrow("found no address to connect from");
+            await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+            await failed;
+            expect(postOffer).not.toHaveBeenCalled();
+        });
     });
 
     it("says its name to the host, and calls the host by the one it was welcomed with", async () => {
