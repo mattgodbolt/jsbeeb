@@ -669,7 +669,8 @@ export function getKeyMap(keyLayout) {
 /**
  * Who holds SHIFT on a key matrix driven by mappings from a key map. A mapping of
  * `[col, row, shiftOverride]` forces SHIFT to its override while that key is down; otherwise
- * SHIFT follows the mapped shift key. Keys set on the matrix directly are left alone.
+ * SHIFT follows the mapped shift key. Keys set on the matrix directly bypass it, and a SHIFT
+ * set that way survives plain mapped keys but not the shift key or a forcing key.
  */
 export class ShiftOverride {
     constructor([shiftCol, shiftRow]) {

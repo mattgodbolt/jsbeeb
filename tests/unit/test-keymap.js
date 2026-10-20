@@ -248,14 +248,24 @@ describe("ShiftOverride", function () {
         expect(shiftAfter(new ShiftOverride(Shift), keys, "P+")).toBe(1);
     });
 
-    it("forgets a forced SHIFT on clear, and carries one through state and restore", function () {
+    it("forgets a forced SHIFT on clear", function () {
         const shift = new ShiftOverride(Shift);
         shiftAfter(shift, makeMatrix(), "Y+");
+        shift.clear();
+        expect(shiftAfter(shift, makeMatrix(), "P+")).toBe(0);
+    });
+
+    it.each([
+        ["Y", 1],
+        ["N", 0],
+    ])("carries the SHIFT %s forces through state and restore", function (forcingKey, forcedShift) {
+        const shift = new ShiftOverride(Shift);
+        shiftAfter(shift, makeMatrix(), `${forcingKey}+`);
         const carried = new ShiftOverride(Shift);
         carried.restore(shift.state());
-        shift.clear();
 
-        expect(shiftAfter(carried, makeMatrix(), "P+")).toBe(1);
-        expect(shiftAfter(shift, makeMatrix(), "P+")).toBe(0);
+        const keys = makeMatrix();
+        keys[Shift[0]][Shift[1]] = 1 - forcedShift;
+        expect(shiftAfter(carried, keys, "P+")).toBe(forcedShift);
     });
 });
