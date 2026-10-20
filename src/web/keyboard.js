@@ -221,7 +221,7 @@ export class Keyboard extends EventTarget {
         this.input.keyDown(machineKey, evt.shiftKey);
         const release = () => this.input.keyUp(machineKey);
         if (isComposing(evt)) {
-            // A composed press may get no key up (X11 sends none); there its repeats, if held, arrive as ordinary presses.
+            // A composed press may get no key up (X11 sends none); there, if held, it repeats as an ordinary press.
             setTimeout(() => {
                 if (this.releases.get(code) === release) this._letGo(code);
             }, KeyTapMs);
