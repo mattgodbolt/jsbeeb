@@ -1,8 +1,14 @@
-// What only the built page in a real browser can show (see test:e2e in CLAUDE.md). Each test gets a page of its own.
+// What only the built page in a real browser can show: main.js constructing
+// everything against the built bundle, Bootstrap layout at real widths, a
+// real keystroke, WebGL and WebAudio. Each test gets a page of its own.
 //
+//   npm run test:e2e                        build, then run every check in the system Chrome
+//   npx playwright test --project chrome    the same without the build
 //   npx playwright test --project chromium  the browser Playwright ships (npx playwright install chromium)
 //   npx playwright test -g settings         checks whose name matches
 //   npx playwright show-trace test-results/**/trace.zip
+//
+// BASE_URL=http://localhost:5173/ points a run at a server that is already up.
 
 import { expect, test } from "./fixtures.js";
 

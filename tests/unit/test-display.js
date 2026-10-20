@@ -292,7 +292,7 @@ describe("Display", () => {
         });
     });
 
-    it("carries the interlace bases and line grid to the presenter", () => {
+    it("copies the interlace bases and line grid as it is painted, for the presenter", () => {
         const display = make();
         const from = {
             lineGrid: new Uint8Array([1, 2, 3]),
@@ -302,6 +302,13 @@ describe("Display", () => {
             phaseBaseOdd: 0.75,
         };
         display.onPaint(from, 0, 0, FbWidth, 8);
+        Object.assign(from, {
+            lineGrid: new Uint8Array(3),
+            lineBaseEven: 0,
+            lineBaseOdd: 0,
+            phaseBaseEven: 0,
+            phaseBaseOdd: 0,
+        });
         presentAll();
         expect(lastPainted()).toMatchObject({
             lineBaseEven: 5,
