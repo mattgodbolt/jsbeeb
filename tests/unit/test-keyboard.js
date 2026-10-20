@@ -395,6 +395,11 @@ describe("Keyboard", () => {
         });
     });
 
+    test("names each shift key by where it is", () => {
+        expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
+        expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);
+    });
+
     test("keeps keys from a machine that is not running", () => {
         keyboard.keyDown(keyEvent(keyCodes.A));
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();

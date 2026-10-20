@@ -586,21 +586,27 @@ describe("WD1770 FDC tests", () => {
 
         it("brings back a sector read part way through from a snapshot that JSON can carry", async () => {
             const reading = snapshotting(() => ({ disc: mfmDiscWithSector({ data: sectorData() }) }));
+            const pollUntil = ({ fdc, scheduler }, done) => {
+                const start = scheduler.epoch;
+                while (!done()) {
+                    if (fdc.read(CommandRegister) & StatusDrq) fdc.read(DataRegister);
+                    scheduler.polltime(PollTicks);
+                    if (scheduler.epoch - start > MaxCommandTicks) throw new Error("The read never got there");
+                }
+            };
             let saved;
-            await expectSnapshotRoundTrips(reading, ({ fdc, scheduler }) => {
-                fdc.write(SectorRegister, 0);
-                fdc.write(CommandRegister, ReadSectorCommand);
-                while (!(fdc.read(CommandRegister) & StatusDrq)) scheduler.polltime(PollTicks);
-                saved = fdc.snapshotState();
+            await expectSnapshotRoundTrips(reading, (rig) => {
+                rig.fdc.write(SectorRegister, 0);
+                rig.fdc.write(CommandRegister, ReadSectorCommand);
+                pollUntil(rig, () => rig.fdc.read(CommandRegister) & StatusDrq);
+                saved = rig.fdc.snapshotState();
             });
-            expect(BigInt(JSON.parse(JSON.stringify(saved)).markDetector)).not.toBe(0n);
 
             const restored = reading();
             restored.fdc.restoreState(JSON.parse(JSON.stringify(saved)));
             expect(restored.fdc.read(CommandRegister) & StatusBusy).toBe(StatusBusy);
-            expect(() => {
-                while (restored.fdc.read(CommandRegister) & StatusBusy) restored.scheduler.polltime(PollTicks);
-            }).not.toThrow();
+            pollUntil(restored, () => !(restored.fdc.read(CommandRegister) & StatusBusy));
+            expect(restored.fdc.read(CommandRegister) & (StatusRecordNotFound | StatusCrcError)).toBe(0);
         });
 
         it("brings back its registers from a snapshot with no drive selected", () =>

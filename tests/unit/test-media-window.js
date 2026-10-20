@@ -1268,6 +1268,18 @@ describe("MediaWindow", () => {
             expect(slots().recent.rank(paradroid)).toBe(0);
         });
 
+        it("switches without asking on a shift-click with Autoboot unticked", async () => {
+            startTicked = false;
+            await openWith([paradroid]);
+            row().dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
+            await vi.waitFor(() =>
+                expect(navigatedTo()).toBe(
+                    "https://bbc.example/?autoboot&disc1=bitshifters:bs-paradroid.ssd&model=Master",
+                ),
+            );
+            expect(confirm).not.toHaveBeenCalled();
+        });
+
         it("asks on a shift-click, which only loads: yes switches with no boot, no loads it here", async () => {
             confirm.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
             deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
@@ -1288,18 +1300,6 @@ describe("MediaWindow", () => {
             await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
             await vi.waitFor(() => expect(window.isOpen).toBe(false));
             expect(deps.processor.reset).not.toHaveBeenCalled();
-        });
-
-        it("switches without asking on a shift-click with Autoboot unticked", async () => {
-            startTicked = false;
-            await openWith([paradroid]);
-            row().dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
-            await vi.waitFor(() =>
-                expect(navigatedTo()).toBe(
-                    "https://bbc.example/?autoboot&disc1=bitshifters:bs-paradroid.ssd&model=Master",
-                ),
-            );
-            expect(confirm).not.toHaveBeenCalled();
         });
 
         it("asks on a plain click with Autoboot unticked", async () => {
