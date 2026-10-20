@@ -60,3 +60,20 @@ it.each(["B-DFS1.2", "B-US", "B-German", "Master", "MasterADFS"])(
         expect(onMissingVideoNula).not.toHaveBeenCalled();
     },
 );
+
+describe("the Master's TIME$", () => {
+    it.each([
+        { set: "Tue,20 Oct 2026.12:34:00", shown: "Tue,20 Oct 2026.12:34" },
+        { set: "Fri,31 Dec 1999.23:58:00", shown: "Thu,31 Dec 2099.23:58" },
+        { set: "Sat,15 Mar 1980.01:02:00", shown: "Fri,15 Mar 2080.01:02" },
+    ])("reads back $set as $shown", async ({ set, shown }) => {
+        const machine = new TestMachine("Master");
+        await machine.initialise();
+        await machine.runUntilInput(10);
+        await machine.type(`TIME$="${set}"`);
+        await machine.runUntilInput(10);
+        await machine.type("PRINT LEFT$(TIME$, 21)");
+        await machine.runUntilInput(10);
+        expect(screenLines(machine).slice(-2)).toEqual([shown, ">"]);
+    });
+});
