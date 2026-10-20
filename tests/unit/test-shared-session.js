@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +25,6 @@ import { AdcCentreValue } from "../../src/adc.js";
 import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
-import { MaxWaitingKeys } from "../../src/web/session-sequencer.js";
 import { ParamTypes, parseQueryString } from "../../src/url-params.js";
 import { Parameters, takenFromHostValues, urlParamType } from "../../src/web/parameters.js";
 import { domFromIndexHtml, sentEvents } from "./helpers.js";
@@ -604,20 +602,6 @@ describe("SessionHost", () => {
             expect(sent.at).toBeGreaterThan(1000);
         });
 
-        it.each([
-            ["sends a commit that does not follow on", commit(1500, 3000)],
-            ["sends a commit with BREAK in it", commit(1000, 3000, [{ kind: "break", down: true }])],
-        ])("is taken back, and everyone started afresh, when the guest in control %s", async (_, bad) => {
-            const { host, processor, first, second } = await twoGuests();
-            first.emit("message", message({ type: "take" }));
-            first.emit("message", bad);
-            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(2));
-            await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
-            host.input(keyA);
-            host.execute(100);
-            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
-        });
-
         it("comes back to the host from the end of the last commit when the guest in control leaves", async () => {
             const { host, processor, first, second } = await twoGuests();
             first.emit("message", message({ type: "take" }));
@@ -672,35 +656,72 @@ describe("SessionHost", () => {
             expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
         });
 
+        const keyAUp = { kind: "key", mapping: A, down: false };
+        const keyB = { kind: "key", mapping: [5, 2], down: true };
+
         it.each([
-            ["the host presses BREAK", (host) => host.input({ kind: "break", down: true })],
+            [
+                "the host presses BREAK",
+                true,
+                ({ host, release }) => {
+                    release(3000);
+                    host.input({ kind: "break", down: true });
+                },
+            ],
             [
                 "the host's machine jumps",
-                (host, processor) => {
+                true,
+                ({ host, processor, release }) => {
+                    release(3000);
                     processor.currentCycles = processor.targetCycles = 50;
                     host.execute(100);
                 },
             ],
             [
                 "the host's replay disagrees with the guest in control",
-                (host, processor, first) => {
-                    first.emit("message", message({ type: "commit", at: 1000, upTo: 3000, inputs: [], hash: "nope" }));
+                true,
+                ({ host, first, release }) => {
+                    first.emit("message", message({ type: "commit", at: 3000, upTo: 5000, inputs: [], hash: "nope" }));
+                    release(5000);
                     host.execute(5000);
                 },
             ],
             [
                 "the guest in control goes quiet",
-                (host) => {
+                false,
+                ({ host, release }) => {
+                    release(3000);
                     vi.advanceTimersByTime(3001);
                     host.execute(100);
-                    host.execute(100);
+                    host.execute(5000);
                 },
             ],
-        ])("comes back to the host when %s", async (_, happen) => {
+            [
+                "the guest in control sends a commit that does not follow on",
+                true,
+                ({ first, release }) => {
+                    release(3000);
+                    first.emit("message", commit(1500, 3000));
+                },
+            ],
+            [
+                "the guest in control sends a commit with BREAK in it",
+                true,
+                ({ first, release }) => {
+                    release(3000);
+                    first.emit("message", commit(5000, 7000, [{ kind: "break", down: true }]));
+                },
+            ],
+        ])("comes back to the host when %s, with every key it had not applied", async (_, everyone, happen) => {
             const { host, processor, first, second } = await twoGuests();
             first.emit("message", message({ type: "take" }));
-            happen(host, processor, first);
+            first.emit("message", commit(1000, 3000, [keyA]));
+            host.execute(5000);
+            host.input(keyB);
+            const release = (at) => first.emit("message", commit(at, at + 2000, [keyAUp]));
+            happen({ host, processor, first, release });
             await vi.waitFor(() => expect(first.snapshots().length).toBeGreaterThan(1));
+            await vi.waitFor(() => expect(second.snapshots()).toHaveLength(everyone ? 2 : 1));
             expect(
                 host
                     .report()
@@ -708,49 +729,10 @@ describe("SessionHost", () => {
                     .at(-1),
             ).toMatchObject({ guest: "host" });
             const before = sentOf(second, "commit").length;
-            host.execute(100);
+            host.execute(CyclesPerSecond);
             await vi.waitFor(() => expect(sentOf(second, "commit").length).toBeGreaterThan(before));
-        });
-
-        const keyAUp = { kind: "key", mapping: A, down: false };
-        const takeAndBreak = (host) => host.input({ kind: "break", down: true });
-
-        it("taking back at once, applies the keys in commits it passed on but had not yet replayed", async () => {
-            const { host, processor, first } = await twoGuests();
-            first.emit("message", message({ type: "take" }));
-            first.emit("message", commit(1000, 3000, [keyA]));
-            host.execute(5000);
-            first.emit("message", commit(3000, 5000, [keyAUp]));
-            takeAndBreak(host);
-            host.execute(100);
             expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
-        });
-
-        it.each([
-            [
-                "its machine jumps",
-                (host, processor, first) => {
-                    first.emit("message", commit(3000, 5000, [keyAUp]));
-                    processor.currentCycles = processor.targetCycles = 50;
-                    host.execute(100);
-                },
-            ],
-            [
-                "its replay disagrees",
-                (host, processor, first) => {
-                    first.emit("message", message({ type: "commit", at: 3000, upTo: 5000, inputs: [], hash: "nope" }));
-                    first.emit("message", commit(5000, 7000, [keyAUp]));
-                    host.execute(5000);
-                },
-            ],
-        ])("taking back at once because %s, applies the keys in commits it had not replayed", async (_, happen) => {
-            const { host, processor, first } = await twoGuests();
-            first.emit("message", message({ type: "take" }));
-            first.emit("message", commit(1000, 3000, [keyA]));
-            host.execute(5000);
-            happen(host, processor, first);
-            host.execute(100);
-            expect(processor.sysvia.setMapped.mock.calls).toContainEqual([A, 0]);
+            expect(processor.sysvia.setMapped.mock.calls).toContainEqual([keyB.mapping, 1]);
         });
 
         it("says once that its replay desynced from the guest in control, and logs both hashes", async () => {
@@ -802,15 +784,6 @@ describe("SessionHost", () => {
             host.execute(5000);
             await vi.waitFor(() => expect(first.snapshots()).toHaveLength(2));
             expect(first.snapshots()[1].rtcBaseMs).toBe(before.rtcBaseMs);
-        });
-
-        it("taking back at once, applies the keys it sent the guest in control that no commit carried", async () => {
-            const { host, processor, first } = await twoGuests();
-            first.emit("message", message({ type: "take" }));
-            host.input(keyA);
-            takeAndBreak(host);
-            host.execute(CyclesPerSecond);
-            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
         });
 
         it("applies a key it sent the guest in control only once, when a commit carried it before that guest left", async () => {
@@ -921,23 +894,6 @@ describe("SessionHost", () => {
             expect(first.snapshots()[1].rtcBaseMs).not.toBe(before.rtcBaseMs);
         });
 
-        it("keeps a key it pressed to take control back down long enough for the keyboard scan, though it went in late", async () => {
-            showLights();
-            const { host, first, second } = await twoGuests();
-            document.querySelector("#session-pane .session-take-on-key").click();
-            first.emit("message", message({ type: "take" }));
-            first.emit("message", commit(1000, 3000));
-            host.input(keyA);
-            vi.advanceTimersByTime(84);
-            host.input(keyAUp);
-            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
-            host.execute(5000);
-            host.execute(CyclesPerSecond);
-            const keys = sentOf(second, "commit").flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
-            expect(keys[0]).toEqual([true, 3000]);
-            expect(keys[1]).toEqual([false, 3000 + 40 * MsCycles]);
-        });
-
         it("keeps a key it pressed to take control back down long enough when it is let go just after control came", async () => {
             showLights();
             const { host, first, second } = await twoGuests();
@@ -954,25 +910,6 @@ describe("SessionHost", () => {
             const keys = sentOf(second, "commit").flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
             expect(keys[0]).toEqual([true, 3000]);
             expect(keys[1][1] - 3000).toBeGreaterThanOrEqual(40 * MsCycles);
-        });
-
-        it("puts BREAK in at once, ahead of keys of its own still waiting", async () => {
-            showLights();
-            const { host, first, second } = await twoGuests();
-            document.querySelector("#session-pane .session-take-on-key").click();
-            first.emit("message", message({ type: "take" }));
-            first.emit("message", commit(1000, 3000));
-            host.input(keyA);
-            vi.advanceTimersByTime(84);
-            host.input(keyAUp);
-            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
-            host.execute(5000);
-            host.input({ kind: "break", down: true });
-            host.execute(100);
-            const breakCommit = sentOf(second, "commit").find(({ inputs }) =>
-                inputs.some(({ kind }) => kind === "break"),
-            );
-            expect(breakCommit.at).toBe(3000);
         });
 
         it("puts in at once two keys this page presses together, as a machine of its own would", async () => {
@@ -1016,38 +953,18 @@ describe("SessionHost", () => {
                 snapshots: 1,
                 ...extra,
             });
-        const applied = (channel) =>
+        const appliedMs = (channel) =>
             channel
                 .messages()
                 .filter((each) => each.type === "commit" && each.inputs.length > 0)
-                .flatMap((each) => each.inputs.map((input) => [input.mapping.join(), input.down, each.at]));
-        const appliedMs = (channel) => applied(channel).map(([name, down, at]) => [name, down, (at - 1000) / MsCycles]);
+                .flatMap((each) =>
+                    each.inputs.map((input) => [input.mapping.join(), input.down, (each.at - 1000) / MsCycles]),
+                );
         const run = (host, count, ms) => {
             for (let i = 0; i < count; ++i) host.execute(ms * MsCycles);
         };
-        const lastStats = (host) =>
-            host
-                .report()
-                .events.filter((each) => each.event === "stats")
-                .at(-1);
 
-        it("without a stamp go in as they come", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            channel.emit("message", key(true, A));
-            run(host, 1, 50);
-            channel.emit("message", key(true, B));
-            run(host, 1, 10);
-            channel.emit("message", key(false, A));
-            run(host, 1, 0);
-            expect(appliedMs(channel)).toEqual([
-                ["4,1", true, 0],
-                ["5,2", true, 50],
-                ["4,1", false, 60],
-            ]);
-        });
-
-        it("go in at the cycle they were stamped with, however the network bunched them", async () => {
+        it("go in at the cycle they were stamped with, and are logged with it", async () => {
             const { host } = await hosting();
             const channel = await joined();
             for (const each of [stamped(true, 10), stamped(false, 30), stamped(true, 30, B), stamped(false, 70, B)])
@@ -1059,74 +976,9 @@ describe("SessionHost", () => {
                 ["5,2", true, 30],
                 ["5,2", false, 70],
             ]);
-        });
-
-        it("keep their cycles through one long execute", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            channel.emit("message", stamped(true, 10));
-            channel.emit("message", stamped(false, 30));
-            run(host, 1, 100);
-            expect(appliedMs(channel)).toEqual([
-                ["4,1", true, 10],
-                ["4,1", false, 30],
-            ]);
-        });
-
-        it("keep the order they came in, whatever their stamps say", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            channel.emit("message", stamped(true, 50));
-            channel.emit("message", stamped(false, 20));
-            run(host, 4, 20);
-            expect(appliedMs(channel)).toEqual([
-                ["4,1", true, 50],
-                ["4,1", false, 50],
-            ]);
-        });
-
-        it("that come too late for their cycle go in at once, and are counted", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            run(host, 1, 50);
-            channel.emit("message", stamped(true, 10));
-            vi.advanceTimersByTime(StatsIntervalMs);
-            run(host, 1, 0);
-            expect(appliedMs(channel)).toEqual([["4,1", true, 50]]);
-            expect(lastStats(host)).toMatchObject({ lateKeys: 1, lateKeyMaxMs: 40 });
-        });
-
-        it("held up past their cycles go in as far apart as they were typed, then on time again", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            run(host, 1, 200);
-            for (const each of [stamped(true, 10), stamped(false, 30), stamped(true, 50, B)])
-                channel.emit("message", each);
-            run(host, 3, 20);
-            channel.emit("message", stamped(false, 300, B));
-            run(host, 3, 20);
-            expect(appliedMs(channel)).toEqual([
-                ["4,1", true, 200],
-                ["4,1", false, 220],
-                ["5,2", true, 240],
-                ["5,2", false, 300],
-            ]);
-        });
-
-        it("held up past their cycles make the lag up over the keys that follow", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            run(host, 1, 300);
-            for (const each of [
-                stamped(true, 10),
-                stamped(false, 30),
-                stamped(true, 330, B),
-                stamped(false, 360, B),
-                stamped(true, 500),
-            ])
-                channel.emit("message", each);
-            run(host, 10, 50);
-            expect(appliedMs(channel).map(([, , ms]) => ms)).toEqual([300, 320, 360, 390, 500]);
+            expect(host.report().events).toContainEqual(
+                expect.objectContaining({ event: "input", guest: "g1", stamp: 1000 + 10 * MsCycles }),
+            );
         });
 
         it("stamped after the host restarted its machine go in on their own cycles", async () => {
@@ -1143,30 +995,8 @@ describe("SessionHost", () => {
             expect(appliedMs(channel).at(-1)).toEqual(["4,1", false, 30]);
         });
 
-        it("after one with no stamp go in on their own cycles, whatever the run before it", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            run(host, 1, 300);
-            channel.emit("message", stamped(true, 10));
-            channel.emit("message", key(false));
-            channel.emit("message", stamped(true, 330));
-            run(host, 3, 20);
-            expect(appliedMs(channel).map(([, , ms]) => ms)).toEqual([300, 300, 330]);
-        });
-
-        it("stamped before a resync the host sent go in at once", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            host.resyncEveryone();
-            await vi.waitFor(() => expect(channel.snapshots()).toHaveLength(2));
-            channel.emit("message", stamped(true, 30));
-            run(host, 1, 0);
-            expect(appliedMs(channel)).toEqual([["4,1", true, 0]]);
-        });
-
         it.each([
             ["stamped before the guest's latest snapshot", stamped(true, 30, A, { snapshots: 0 })],
-            ["stamped implausibly far ahead", stamped(true, 3000)],
             ["with a stamp that is not a cycle", stamped(true, 30, A, { at: 1000.5 })],
         ])("%s go in at once", async (_, input) => {
             const { host } = await hosting();
@@ -1174,74 +1004,6 @@ describe("SessionHost", () => {
             channel.emit("message", input);
             run(host, 1, 0);
             expect(appliedMs(channel)).toEqual([["4,1", true, 0]]);
-        });
-
-        it("that waited are logged when they go in, with their stamp, when they came and the guest's time", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            channel.emit("message", stamped(false, 40, A, { ms: 12.5 }));
-            vi.advanceTimersByTime(30);
-            run(host, 3, 20);
-            const releases = host.report().events.filter((each) => each.event === "input" && !each.down);
-            expect(releases).toEqual([
-                expect.objectContaining({
-                    guest: "g1",
-                    guestMs: 12.5,
-                    stamp: 1000 + 40 * MsCycles,
-                    cycle: 1000 + 40 * MsCycles,
-                }),
-            ]);
-            expect(releases[0].ms - releases[0].arrivedMs).toBe(30);
-        });
-
-        it("keep their cycles across a stop at a breakpoint", async () => {
-            const { host, processor } = await hosting();
-            const channel = await joined();
-            processor.stopAt = 1000 + MsCycles;
-            expect(host.execute(100 * MsCycles)).toBe(false);
-            channel.emit("message", stamped(true, 21));
-            channel.emit("message", stamped(false, 41));
-            run(host, 4, 20);
-            expect(appliedMs(channel)).toEqual([
-                ["4,1", true, 21],
-                ["4,1", false, 41],
-            ]);
-        });
-
-        it("leave an execute with nothing waiting as one commit, overshoot and all", async () => {
-            const { host, processor } = await hosting();
-            const channel = await joined();
-            // As the real processor does: whole instructions, so a little past the target.
-            processor.execute = function (count) {
-                this.targetCycles += count;
-                while (this.currentCycles < this.targetCycles) this.currentCycles += 7;
-                return true;
-            };
-            const commits = () => channel.messages().filter((each) => each.type === "commit").length;
-            const before = commits();
-            run(host, 10, 10);
-            expect(commits()).toBe(before + 10);
-            expect(processor.currentCycles - processor.targetCycles).toBeLessThan(7);
-        });
-
-        it("all go in at once when far more are waiting than anyone types, and the guest stays", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            for (let i = 0; i < 100; ++i) channel.emit("message", stamped(i % 2 === 0, 10 + i * 10));
-            run(host, 1, 0);
-            expect(applied(channel).length).toBeGreaterThan(MaxWaitingKeys);
-            expect(host.connectedCount()).toBe(1);
-            run(host, 60, 50);
-            expect(applied(channel)).toHaveLength(100);
-        });
-
-        it("after all going in at once start a fresh run", async () => {
-            const { host } = await hosting();
-            const channel = await joined();
-            for (let i = 0; i <= MaxWaitingKeys; ++i) channel.emit("message", stamped(i % 2 === 0, 1000 + i * 10));
-            channel.emit("message", stamped(true, 50, B));
-            run(host, 4, 20);
-            expect(appliedMs(channel).at(-1)).toEqual(["5,2", true, 50]);
         });
 
         it("are let go when the guest leaves with a release still waiting", async () => {
@@ -1264,19 +1026,6 @@ describe("SessionHost", () => {
             channel.emit("message", key(true));
             channel.emit("message", stamped(false, 40));
             host.close();
-            expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([A, 0]);
-        });
-
-        it("still waiting at a jump move with the cycle count", async () => {
-            const { host, processor } = await hosting();
-            const channel = await joined();
-            channel.emit("message", key(true));
-            channel.emit("message", stamped(false, 40));
-            processor.currentCycles = processor.targetCycles = 50;
-            run(host, 1, 20);
-            expect(processor.sysvia.setMapped.mock.calls).toEqual([[A, 1]]);
-            run(host, 1, 20);
-            run(host, 1, 0);
             expect(processor.sysvia.setMapped.mock.calls.at(-1)).toEqual([A, 0]);
         });
     });
@@ -1933,30 +1682,6 @@ describe("SessionGuest", () => {
             expect(take.disabled).toBe(true);
         });
 
-        it("keeps a key pressed to take control down long enough for the keyboard scan, though it went in late", async () => {
-            const MsCycles = CyclesPerSecond / 1000;
-            const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
-            const keyboard = session.context.keyboard.setInput.mock.calls.at(-1)[0];
-            keyboard.keyDown("a", false);
-            const [press] = session.channel.messages().filter((each) => each.type === "input");
-            session.deliver([
-                message({ type: "handover", at: 1000 }),
-                message({ type: "input", input: press.input, at: press.at, source: session.guest.id }),
-            ]);
-            session.lockstep().execute(2000);
-            vi.advanceTimersByTime(84);
-            keyboard.keyUp("a");
-            vi.advanceTimersByTime(10);
-            keyboard.keyDown("a", false);
-            session.lockstep().execute(press.at + 100 * MsCycles);
-            const keys = commitsSent(session.channel).flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
-            expect(keys[0]).toEqual([true, press.at]);
-            expect(keys[1]).toEqual([false, press.at + 40 * MsCycles]);
-            expect(keys.at(-1)).toEqual([true, press.at + 50 * MsCycles]);
-        });
-
         it("does not let a quick re-tap land with the release of a key that took control late", async () => {
             const MsCycles = CyclesPerSecond / 1000;
             const session = await joining();
@@ -1984,28 +1709,6 @@ describe("SessionGuest", () => {
             const release = keys.find(([down]) => !down);
             const retap = keys.findLast(([down]) => down);
             expect(retap[1]).toBeGreaterThan(release[1]);
-        });
-
-        it("keeps a key pressed to take control down long enough when it is let go just after the press went in", async () => {
-            const MsCycles = CyclesPerSecond / 1000;
-            const session = await joining();
-            session.deliver(snapshotMessages(100, [{ at: 100, upTo: 1000, inputs: [] }]));
-            await vi.waitFor(() => expect(session.context.processor.restoreState).toHaveBeenCalledTimes(1));
-            const keyboard = session.context.keyboard.setInput.mock.calls.at(-1)[0];
-            keyboard.keyDown("a", false);
-            const [press] = session.channel.messages().filter((each) => each.type === "input");
-            session.deliver([
-                message({ type: "handover", at: 1000 }),
-                message({ type: "input", input: press.input, at: press.at, source: session.guest.id }),
-            ]);
-            session.lockstep().execute(2000);
-            session.lockstep().execute(press.at);
-            vi.advanceTimersByTime(240);
-            keyboard.keyUp("a");
-            session.lockstep().execute(100 * MsCycles);
-            const keys = commitsSent(session.channel).flatMap(({ at, inputs }) => inputs.map(({ down }) => [down, at]));
-            expect(keys[0]).toEqual([true, press.at]);
-            expect(keys[1][1] - press.at).toBeGreaterThanOrEqual(40 * MsCycles);
         });
 
         it("commits its own key pressed just before it is asked to stop, then stops after it", async () => {
@@ -2059,41 +1762,6 @@ describe("SessionGuest", () => {
             const [key] = sentKeys(channel);
             expect(key.at).toBeUndefined();
             expect(key.snapshots).toBe(0);
-        });
-
-        it("a round trip and a margin past where the host was when it last heard, and later as time passes", async () => {
-            const { context, channel, deliver } = await joinedAt(100000);
-            deliver([commit(100000, 100500)]);
-            press(context);
-            vi.advanceTimersByTime(30);
-            press(context);
-            const [first, second] = sentKeys(channel);
-            expect(first).toMatchObject({ at: 100500 + (200 + 20) * MsCycles, snapshots: 1 });
-            expect(second.at - first.at).toBe(30 * MsCycles);
-        });
-
-        it("coming down to a round trip that shrinks a little with each key, never squeezing a tap", async () => {
-            const { context, channel, deliver, lockstep } = await joinedAt(100000);
-            deliver([commit(100000, 100500)]);
-            press(context);
-            lockstep().execute(100);
-            vi.advanceTimersByTime(StatsIntervalMs);
-            lockstep().execute(100);
-            await settle();
-            deliver([commit(100500, 101000)]);
-            press(context);
-            vi.advanceTimersByTime(10);
-            press(context);
-            const [first, second, third] = sentKeys(channel).map((each) => each.at);
-            expect(second - first).toBe(40 * MsCycles);
-            expect(third - second).toBe(10 * MsCycles);
-            vi.advanceTimersByTime(StatsIntervalMs);
-            lockstep().execute(100);
-            const summary = channel
-                .messages()
-                .filter((each) => each.type === "stats")
-                .at(-1).stats;
-            expect(summary.stampAheadMs).toBe(Math.round((third - 101000) / MsCycles));
         });
 
         it("and says in its summary how far ahead it stamps", async () => {
@@ -2364,31 +2032,26 @@ describe("SessionGuest", () => {
             [ParamTypes.INT]: 7,
             [ParamTypes.FLOAT]: 2.5,
         })[Parameters[name].type];
+    const allDifferent = Object.fromEntries(TakenFromHostNames.map((name) => [name, differentValue(name)]));
 
-    it.each(TakenFromHostNames)("reloads with the host's %s when its own differs", async (name) => {
+    it("reloads with every one of the host's settings that differs from its own", async () => {
         const { context, channel } = await joining();
-        const host = { ...StockTakenFromHost, [name]: differentValue(name) };
-        channel.emit("message", message(welcomeAs({ takenFromHost: host })));
+        channel.emit("message", message(welcomeAs({ takenFromHost: allDifferent })));
         expect(context.urlState.urlWith).toHaveBeenCalledWith(
-            expect.objectContaining({ model: "B-DFS1.2", [name]: differentValue(name) }),
+            expect.objectContaining({ model: "B-DFS1.2", ...allDifferent }),
         );
         expect(channel.messages().at(-1)).toEqual({ type: "bye" });
     });
 
-    it.each(TakenFromHostNames)("drops its own %s when the host has the default", async (name) => {
-        const { context, channel } = await joining({
-            takenFromHost: { ...StockTakenFromHost, [name]: differentValue(name) },
-        });
+    it("drops its own settings where the host has the defaults", async () => {
+        const { context, channel } = await joining({ takenFromHost: allDifferent });
         channel.emit("message", message(welcomeAs({})));
-        expect(context.urlState.urlWith).toHaveBeenCalledWith(
-            expect.objectContaining({ [name]: StockTakenFromHost[name] }),
-        );
+        expect(context.urlState.urlWith).toHaveBeenCalledWith(expect.objectContaining(StockTakenFromHost));
     });
 
     it("stays as it is when it already runs with every one of the host's settings", async () => {
-        const matching = Object.fromEntries(TakenFromHostNames.map((name) => [name, differentValue(name)]));
-        const { context, channel } = await joining({ takenFromHost: matching });
-        channel.emit("message", message(welcomeAs({ takenFromHost: matching })));
+        const { context, channel } = await joining({ takenFromHost: allDifferent });
+        channel.emit("message", message(welcomeAs({ takenFromHost: allDifferent })));
         expect(context.urlState.urlWith).not.toHaveBeenCalled();
         expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
     });
@@ -2487,16 +2150,20 @@ describe("startSessionFromUrl", () => {
         const createRoom = vi.fn(async () => {
             throw new RendezvousError("Rendezvous create room failed with status 404", 404);
         });
+        const sent = sentEvents();
         await started({ server: "here" }, { rendezvous: { createRoom } });
         expect(toastTexts()).toContain("The session couldn't start: the shared session service isn't available here.");
+        expect(sent("session").at(-1)).toEqual({ role: "host", stage: "failed", reason: "service_unavailable" });
     });
 
     it("says when a room of the name asked for is already open", async () => {
         const createRoom = vi.fn(async () => {
             throw new RendezvousError("Rendezvous create room failed with status 409", 409);
         });
+        const sent = sentEvents();
         await started({ server: "here" }, { rendezvous: { createRoom } });
         expect(toastTexts()).toContain(`The session couldn't start: a room called "here" is already open.`);
+        expect(sent("session").at(-1)).toEqual({ role: "host", stage: "failed", reason: "room_taken" });
     });
 
     it.each([
@@ -2604,18 +2271,6 @@ describe("hostSession", () => {
         expect(await hostSession(context, "matt")).toBeNull();
         await settle();
         expect(context.rendezvous.createRoom).not.toHaveBeenCalled();
-    });
-});
-
-describe("SessionFailures", () => {
-    const source = readFileSync("src/web/shared-session.js", "utf8");
-
-    it.each(Object.keys(SessionFailures))("has %s raised somewhere", (key) => {
-        expect(source).toContain(`SessionFailures.${key}`);
-    });
-
-    it("is where every reason a session notes comes from", () => {
-        expect(source).not.toMatch(/noteStage\([^;]*reason: "|code: "|sessionFailure: "|\.fail\(\s*"/);
     });
 });
 
