@@ -189,11 +189,12 @@ describe("CMOS", () => {
         );
 
         it.each([0x31, 0x00, 0x1a, 0xa5].map((day) => ({ day, hex: day.toString(16).padStart(2, "0") })))(
-            "holds a day of the month of &$hex, which April lacks, as written and keeps the time running",
+            "holds a day of the month of &$hex, which April lacks, as written while the time is set and runs",
             ({ day }) => {
                 writeRegister(CMOS_ADDR.DAY_OF_MONTH, day);
+                writeRegister(CMOS_ADDR.HOURS, 0x13);
                 vi.advanceTimersByTime(1000);
-                expect(readClock()).toEqual({ ...testDateRegisters, SECONDS: 0x57, DAY_OF_MONTH: day });
+                expect(readClock()).toEqual({ ...testDateRegisters, HOURS: 0x13, SECONDS: 0x57, DAY_OF_MONTH: day });
             },
         );
 

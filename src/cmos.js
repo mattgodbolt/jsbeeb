@@ -126,7 +126,7 @@ export class Cmos {
 
     /**
      * The chip as a machine joining a shared session needs it: the settings, the offset a program set
-     * the clock to, and how far through an access the bus is.
+     * the clock to, any date registers held part way through setting it, and how far through an access the bus is.
      */
     sessionState() {
         const { store, timeOffset, heldDate, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
