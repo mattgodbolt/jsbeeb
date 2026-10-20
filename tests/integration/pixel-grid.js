@@ -14,9 +14,9 @@ const FbHeight = 625;
 
 /**
  * A Video that keeps a copy of a complete frame. Reading `fb32` and `lineGrid`
- * directly after running for a fixed time gives whatever part of the raster the
- * CPU had reached — about the top sixth of the screen — and the rest would never
- * be examined. Snapshotting at paint time gives the whole picture.
+ * directly after a run gives whatever part of the raster the CPU had reached,
+ * and the rest would never be examined. Snapshotting at paint time gives the
+ * whole picture.
  */
 class FrameCapturingVideo extends Video {
     constructor(isAtom) {
@@ -24,8 +24,8 @@ class FrameCapturingVideo extends Video {
         this.wanted = false;
         this.frame = null;
         this.paint_ext = () => {
-            // Only when asked: copying two megabytes on every painted frame of
-            // a fifteen-million-cycle warm-up is all cost and no information.
+            // Only when asked: copying two megabytes on every frame painted
+            // while the program draws is all cost and no information.
             if (!this.wanted) return;
             this.wanted = false;
             this.frame = { fb32: this.fb32.slice(), lineGrid: this.lineGrid.slice() };
@@ -39,7 +39,7 @@ async function render(model, program, { isAtom = false } = {}) {
     await machine.initialise();
     await machine.runUntilInput();
     for (const line of program) await machine.type(line);
-    await machine.runFor(15 * 1000 * 1000);
+    await machine.runUntilInput();
     // Drawing has finished; take the next complete frame.
     video.wanted = true;
     for (let attempt = 0; attempt < 10 && !video.frame; ++attempt) await machine.runFor(1000 * 1000);
