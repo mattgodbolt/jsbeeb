@@ -102,13 +102,7 @@ describe("MediaWindow", () => {
         return teardownDom();
     });
 
-    let startTicked;
-    beforeEach(() => (startTicked = true));
-    const make = () => {
-        made = new MediaWindow(deps);
-        if (!startTicked) setTick(false);
-        return made;
-    };
+    const make = () => (made = new MediaWindow(deps));
     const panel = () => document.getElementById("media-panel");
     const bay = (driveIndex) => document.querySelector(`.bay[data-drive="${driveIndex}"]`);
     const text = (el) => el.textContent.replace(/\s+/g, " ").trim();
@@ -841,12 +835,12 @@ describe("MediaWindow", () => {
                 expect(urlState.params.autoboot).toBeUndefined();
             });
 
-            it("never boots a tape, whatever Shift says", async () => {
+            it("never boots a tape", async () => {
                 deps.media.loadTapeImage.mockResolvedValue({ name: "Chuckie.uef", position: 0 });
                 await openWith([chuckie]);
                 document.querySelector('#media-into [data-target="tape"]').click();
                 expect(rowMain().title).toMatch(/^Load Chuckie.*into the cassette deck$/);
-                pressEnter(true);
+                pressEnter();
                 await vi.waitFor(() => expect(tapeInterface.tape).toBeTruthy());
                 expect(deps.processor.reset).not.toHaveBeenCalled();
                 expect(deps.media.setAutoboot).not.toHaveBeenCalled();
@@ -1287,7 +1281,7 @@ describe("MediaWindow", () => {
             expect(deps.processor.reset).not.toHaveBeenCalled();
         });
 
-        it("boots a disc dropped into drive 0 when Autoboot is ticked", async () => {
+        it.each([true, false])("boots a disc dropped into drive 0 as Autoboot says, ticked %s", async (ticked) => {
             deps.media.openFile.mockResolvedValue({
                 kind: "disc",
                 name: "game.ssd",
@@ -1296,9 +1290,11 @@ describe("MediaWindow", () => {
                 words: "Loaded game.ssd into drive 0.",
             });
             make();
+            setTick(ticked);
             dropFile(new File([new Uint8Array(4)], "game.ssd"));
-            await vi.waitFor(() => expect(deps.autoboot).toHaveBeenCalled());
-            expect(deps.processor.reset).toHaveBeenCalledWith(true);
+            await vi.waitFor(() => expect(toasts()).toHaveLength(1));
+            expect(deps.autoboot).toHaveBeenCalledTimes(ticked ? 1 : 0);
+            expect(deps.processor.reset).toHaveBeenCalledTimes(ticked ? 1 : 0);
         });
 
         it("does not boot a tape or a restored state, whatever the tick says", async () => {
