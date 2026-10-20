@@ -120,7 +120,7 @@ The definitive lists are `keyCodes` with `keyCodeAliases` (host) and `BBC` (BBC 
 
 A BBC keyboard is not a PC keyboard, so **Keyboard layout** in the settings offers three ways to
 bridge the two. Open the settings by clicking the gear and model name on the top bar, or from
-**Machine > Configuration...** in the desktop app. The choice is remembered, and `?keyLayout=physical`,
+**Machine > Settings...** in the desktop app. The choice is remembered, and `?keyLayout=physical`,
 `?keyLayout=natural` or `?keyLayout=gaming` sets it from a link.
 
 **Physical** is the default, and the one to use for games. Each key presses the BBC key in the same
@@ -413,17 +413,17 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
 - `audioOutput` - what the sound chip is heard through: `speaker` (the default: the board's output stage and the
   internal speaker and case, fitted to recordings of a Master 128), `board` (the board's output stage alone, as at
-  its line-level socket) or `off` (the chip resampled and nothing else). The top bar and the configuration dialog
+  its line-level socket) or `off` (the chip resampled and nothing else). The top bar and the settings dialog
   have the same choice, and remember it. See [docs/audio-path.md](docs/audio-path.md) for the path, the Master's circuit and what a real
   machine measures.
 - `speakerAmount` - how much of the speaker's character to apply, from 0 (the same as `board`) to 1 (as measured,
-  the default). The slider next to the sound output, on the top bar and in the configuration dialog, sets it live
+  the default). The slider next to the sound output, on the top bar and in the settings dialog, sets it live
   and remembers it.
 - `audiofilterfreq` / `audiofilterq` - the corner frequency in Hz and the Q of the lowpass modelling the board's output
   filter, applied to the sound chip before it is resampled. The defaults, 7234 and 0.696, are the Beeb's own.
   `audiofilterfreq=0` turns the whole output path off.
 - `palPersistenceMs` / `rgbPersistenceMs` - the phosphor afterglow of the PAL TV and RGB monitor displays, the time
-  in milliseconds the last picture takes to fade under the next, from 0 (none) to 500; the slider in the configuration
+  in milliseconds the last picture takes to fade under the next, from 0 (none) to 500; the slider in the settings
   dialog sets the showing display's amount live and remembers it.
 - `displayMode=X` - picks the display: `rgb` (the default, a plain monitor), `pal` (a television fed by the Beeb's UHF modulator)
   or `xbr` (an upscaler, see [docs/xbr-display-mode.md](docs/xbr-display-mode.md)). The top bar has the same choice, and remembers it.
