@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { findModel } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -34,9 +35,15 @@ describe("Debugger", () => {
     const currentRow = () => document.querySelector("#disassembly .highlight");
     const memHighlight = () => document.querySelector("#memory .highlight");
     const keyPress = (char) => dbgr.keyPress(char);
+    const addrOf = (row) => row.querySelector(".dis_addr").textContent;
+    const goTo = (formId, text) => {
+        const form = document.getElementById(formId);
+        form.querySelector(".goto-addr").value = text;
+        form.dispatchEvent(new Event("submit", { cancelable: true }));
+    };
 
     describe("the panels", () => {
-        it("start hidden and show when the debugger is entered", () => {
+        it("start hidden, show when the debugger is entered, and hide again on leaving", () => {
             expect(visible("debug")).toBe(false);
             expect(visible("hardware_debug")).toBe(false);
             expect(visible("crtc_debug")).toBe(false);
@@ -44,6 +51,9 @@ describe("Debugger", () => {
             expect(dbgr.enabled()).toBe(true);
             expect(visible("debug")).toBe(true);
             expect(visible("hardware_debug")).toBe(true);
+            dbgr.hide();
+            expect(dbgr.enabled()).toBe(false);
+            expect(visible("debug")).toBe(false);
         });
 
         it("note the debugger opening each time it is entered, not each time it stops", () => {
@@ -58,27 +68,23 @@ describe("Debugger", () => {
             ]);
         });
 
-        it("hide again on leaving", () => {
+        it.each([
+            [
+                "gives the keyboard back to the machine from a goto box",
+                () => document.querySelector("#goto-dis-addr-form .goto-addr"),
+                false,
+            ],
+            [
+                "leaves focus alone elsewhere on the page",
+                () => document.body.appendChild(document.createElement("input")),
+                true,
+            ],
+        ])("%s on leaving", (_, focused, keeps) => {
             dbgr.debug(cpu.pc);
+            const el = focused();
+            el.focus();
             dbgr.hide();
-            expect(dbgr.enabled()).toBe(false);
-            expect(visible("debug")).toBe(false);
-        });
-
-        it("give the keyboard back to the machine on leaving with a goto box focused", () => {
-            dbgr.debug(cpu.pc);
-            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
-            box.focus();
-            dbgr.hide();
-            expect(document.activeElement).not.toBe(box);
-        });
-
-        it("leave focus alone on leaving when it is elsewhere on the page", () => {
-            dbgr.debug(cpu.pc);
-            const elsewhere = document.body.appendChild(document.createElement("input"));
-            elsewhere.focus();
-            dbgr.hide();
-            expect(document.activeElement).toBe(elsewhere);
+            expect(document.activeElement === el).toBe(keeps);
         });
     });
 
@@ -96,10 +102,8 @@ describe("Debugger", () => {
 
         it("goes where the address form asks", () => {
             dbgr.debug(cpu.pc);
-            const form = document.getElementById("goto-dis-addr-form");
-            form.querySelector(".goto-addr").value = "$3000";
-            form.dispatchEvent(new Event("submit", { cancelable: true }));
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000");
+            goTo("goto-dis-addr-form", "$3000");
+            expect(addrOf(currentRow())).toBe("3000");
         });
 
         it("stays put and marks the box when the text is neither a name nor an address", () => {
@@ -108,7 +112,7 @@ describe("Debugger", () => {
             box.focus();
             box.value = "monster_x";
             box.form.dispatchEvent(new Event("submit", { cancelable: true }));
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+            expect(addrOf(currentRow())).toBe("2000");
             expect(disRows().map((row) => row.querySelector(".dis_addr").textContent)).not.toContain("NaN");
             expect(box.value).toBe("monster_x");
             expect(box.classList.contains("is-invalid")).toBe(true);
@@ -122,13 +126,10 @@ describe("Debugger", () => {
 
         it("leaves the memory view alone too when the text is neither a name nor an address", () => {
             dbgr.debug(cpu.pc);
-            const form = document.getElementById("goto-mem-addr-form");
-            const box = form.querySelector(".goto-addr");
-            box.value = "$1234";
-            form.dispatchEvent(new Event("submit", { cancelable: true }));
-            box.value = "monster_x";
-            form.dispatchEvent(new Event("submit", { cancelable: true }));
-            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("1234");
+            goTo("goto-mem-addr-form", "$1234");
+            goTo("goto-mem-addr-form", "monster_x");
+            const box = document.querySelector("#goto-mem-addr-form .goto-addr");
+            expect(addrOf(memHighlight())).toBe("1234");
             expect(box.classList.contains("is-invalid")).toBe(true);
         });
 
@@ -136,13 +137,13 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             const disass = document.getElementById("disassembly");
             disass.dispatchEvent(new WheelEvent("wheel", { deltaY: 30, cancelable: true }));
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
+            expect(addrOf(currentRow())).toBe("2002");
             disass.dispatchEvent(new WheelEvent("wheel", { deltaY: -30, cancelable: true }));
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+            expect(addrOf(currentRow())).toBe("2000");
             keyPress("j");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
+            expect(addrOf(currentRow())).toBe("2002");
             keyPress("k");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+            expect(addrOf(currentRow())).toBe("2000");
         });
 
         it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {
@@ -168,9 +169,7 @@ describe("Debugger", () => {
         it("shows the bytes and text around the address the form asks for", () => {
             cpu.writemem(0x1234, 0x48);
             dbgr.debug(cpu.pc);
-            const form = document.getElementById("goto-mem-addr-form");
-            form.querySelector(".goto-addr").value = "$1234";
-            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            goTo("goto-mem-addr-form", "$1234");
             const row = memHighlight();
             expect(row.querySelector(".dis_addr").textContent).toBe("1234");
             expect(row.querySelector(".mem_bytes span").textContent).toBe("48");
@@ -178,11 +177,7 @@ describe("Debugger", () => {
         });
 
         it("marks bytes changed since the last debugger visit, forgetting them on leaving", () => {
-            const gotoMem = (value) => {
-                const form = document.getElementById("goto-mem-addr-form");
-                form.querySelector(".goto-addr").value = value;
-                form.dispatchEvent(new Event("submit", { cancelable: true }));
-            };
+            const gotoMem = (value) => goTo("goto-mem-addr-form", value);
             const changed = () => memHighlight().querySelector(".mem_bytes span").classList.contains("changed");
             dbgr.debug(cpu.pc);
             dbgr.hide();
@@ -198,26 +193,33 @@ describe("Debugger", () => {
             expect(changed()).toBe(false);
         });
 
-        it("shows the hardware registers it can read without disturbing them", () => {
-            const SysViaIer = 0xfe4e;
+        it("shows a hardware register without the side effects of reading it", async () => {
+            const SysViaOra = 0xfe41;
+            const SysViaIfr = 0xfe4d;
+            const Ca1Flag = 0x02;
+            // The test CPU has no I/O, so a BBC B, without the ROMs jsdom cannot fetch.
+            const beeb = findModel("B-DFS1.2");
+            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+            await cpu.initialise();
+            dbgr.setCpu(cpu);
+            cpu.sysvia.setVBlankInt(true);
+            cpu.sysvia.setVBlankInt(false);
+            expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
             dbgr.debug(cpu.pc);
-            const form = document.getElementById("goto-mem-addr-form");
-            form.querySelector(".goto-addr").value = "$FE4E";
-            form.dispatchEvent(new Event("submit", { cancelable: true }));
-            expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe(hexbyte(cpu.readmem(SysViaIer)));
+            goTo("goto-mem-addr-form", "$FE41");
+            expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe(hexbyte(cpu.peekmem(SysViaOra)));
+            expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
         });
 
         it("scrolls a row per wheel notch and a screenful on U", () => {
             dbgr.debug(cpu.pc);
-            const form = document.getElementById("goto-mem-addr-form");
-            form.querySelector(".goto-addr").value = "$1000";
-            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            goTo("goto-mem-addr-form", "$1000");
             document.getElementById("memory").dispatchEvent(new WheelEvent("wheel", { deltaY: 20, cancelable: true }));
-            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("1008");
+            expect(addrOf(memHighlight())).toBe("1008");
             keyPress("u");
-            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("1010");
+            expect(addrOf(memHighlight())).toBe("1010");
             keyPress("I");
-            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("0fd0");
+            expect(addrOf(memHighlight())).toBe("0fd0");
         });
     });
 
@@ -227,14 +229,14 @@ describe("Debugger", () => {
             keyPress("n");
             expect(document.getElementById("cpu6502_a").textContent).toBe("41");
             expect(document.getElementById("cpu6502_pc").textContent).toBe("2002");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
+            expect(addrOf(currentRow())).toBe("2002");
         });
 
         it("leaves the keys alone while a form field has focus", () => {
             dbgr.debug(cpu.pc);
             document.querySelector("#goto-dis-addr-form .goto-addr").focus();
             expect(keyPress("j")).toBe(false);
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+            expect(addrOf(currentRow())).toBe("2000");
         });
     });
 
@@ -284,6 +286,13 @@ describe("Debugger", () => {
             ],
         ]);
         let load;
+        /** Serves the sets with `change` made to the MOS's. */
+        const withMos = (change) =>
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("mos.json")) change(json);
+                return json;
+            });
         const rowAt = (address) => disRows().find((row) => Number(row.dataset.addr) === address);
         const code = (address) => rowAt(address).querySelector(".disassembly");
         const symbolsLine = () => document.getElementById("debug-symbols");
@@ -321,46 +330,37 @@ describe("Debugger", () => {
         it("names an address in the address column, and still follows a named operand", async () => {
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
-            expect(rowAt(0x2002).querySelector(".dis_addr").textContent).toBe("2002");
+            expect(addrOf(rowAt(0x2002))).toBe("2002");
             code(0x2002)
                 .querySelector(".instr_instr_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            expect(addrOf(currentRow())).toBe("3000 oswrch");
             expect(currentRow().querySelector(".dis_addr .symbol").title).toBe("oswrch: $3000, from Test MOS");
             expect(code(0x3004).textContent).toBe("BNE oswrch");
         });
 
         it("goes to a name typed in either box, over reading it as hex", async () => {
-            load.mockImplementation(async (url) => {
-                const json = structuredClone(files.get(url));
-                if (url.endsWith("mos.json")) json.regions.rom.symbols.fade = "0x3004";
-                return json;
-            });
-            const goTo = (formId, text) => {
-                const form = document.getElementById(formId);
-                form.querySelector(".goto-addr").value = text;
-                form.dispatchEvent(new Event("submit", { cancelable: true }));
-            };
+            withMos((mos) => (mos.regions.rom.symbols.fade = "0x3004"));
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             const box = document.querySelector("#goto-dis-addr-form .goto-addr");
             box.focus();
             goTo("goto-dis-addr-form", " oswrch ");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+            expect(addrOf(currentRow())).toBe("3000 oswrch");
             expect(box.value).toBe("");
             expect(document.activeElement).not.toBe(box);
             goTo("goto-dis-addr-form", "fade");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("3004 fade");
+            expect(addrOf(currentRow())).toBe("3004 fade");
             goTo("goto-dis-addr-form", "$fade");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            expect(addrOf(currentRow())).toBe("fade");
             goTo("goto-dis-addr-form", "FADE");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("fade");
+            expect(addrOf(currentRow())).toBe("fade");
             goTo("goto-dis-addr-form", "OSWRCH");
             expect(box.classList.contains("is-invalid")).toBe(true);
             goTo("goto-dis-addr-form", "oswrch");
             expect(box.classList.contains("is-invalid")).toBe(false);
             goTo("goto-mem-addr-form", "os_text_ptr");
-            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
+            expect(addrOf(memHighlight())).toBe("00f2");
         });
 
         it("still follows a named zero-page operand to the memory view", async () => {
@@ -369,19 +369,23 @@ describe("Debugger", () => {
             code(0x200d)
                 .querySelector(".instr_mem_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            expect(memHighlight().querySelector(".dis_addr").textContent).toBe("00f2");
+            expect(addrOf(memHighlight())).toBe("00f2");
         });
 
-        it("shows a source that isn't https as text, not a link", async () => {
-            load.mockImplementation(async (url) => {
-                const json = structuredClone(files.get(url));
-                if (url.endsWith("mos.json")) json.source = "javascript:alert(1)";
-                return json;
-            });
+        it.each([
+            ["a source", { source: "javascript:alert(1)" }, "names from Test MOS (javascript:alert(1))", []],
+            [
+                "a home",
+                { home: "javascript:alert(1)" },
+                "names from Test MOS (source)",
+                ["https://example.com/mos.lst"],
+            ],
+        ])("shows %s that isn't https as no link", async (_, change, credit, links) => {
+            withMos((mos) => Object.assign(mos, change));
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(credited()).toBe(true));
-            expect(symbolsLine().textContent).toBe("names from Test MOS (javascript:alert(1))");
-            expect(symbolsLine().querySelector("a")).toBeNull();
+            expect(symbolsLine().textContent).toBe(credit);
+            expect([...symbolsLine().querySelectorAll("a")].map((a) => a.href)).toEqual(links);
         });
 
         it("credits only the sets naming something in view, following the view as it moves", async () => {
@@ -472,34 +476,30 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => {
                 dbgr.updateDisassembly(0x70);
-                expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 lives");
+                expect(addrOf(rowAt(0x70))).toBe("0070 lives");
             });
             cpu.pc = ClockCode;
             dbgr.updateDisassembly(0x70);
-            expect(rowAt(0x70).querySelector(".dis_addr").textContent).toBe("0070 ticks");
+            expect(addrOf(rowAt(0x70))).toBe("0070 ticks");
         });
 
         describe("with links to the author's site", () => {
             const PlaceUrl = "https://example.com/mos/blob/0123abc/mos.asm#L42";
 
             beforeEach(() => {
-                load.mockImplementation(async (url) => {
-                    const json = structuredClone(files.get(url));
-                    if (url.endsWith("mos.json")) {
-                        Object.assign(json, {
-                            home: "https://www.example.com/mos/",
-                            nameLink: "https://example.com/mos/blob/0123abc/{place}",
-                            places: { oswrch: "mos.asm#L42" },
-                        });
-                        json.regions.rom.symbols.unplaced = "0x3004";
-                    }
-                    return json;
+                withMos((mos) => {
+                    Object.assign(mos, {
+                        home: "https://www.example.com/mos/",
+                        nameLink: "https://example.com/mos/blob/0123abc/{place}",
+                        places: { oswrch: "mos.asm#L42" },
+                    });
+                    mos.regions.rom.symbols.unplaced = "0x3004";
                 });
             });
 
             it("links a name in the address column to its place, opening a tab without taking focus", async () => {
                 dbgr.debug(OswrchAt);
-                await vi.waitFor(() => expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch"));
+                await vi.waitFor(() => expect(addrOf(currentRow())).toBe("3000 oswrch"));
                 const link = currentRow().querySelector(".dis_addr a.symbol");
                 expect(link.href).toBe(PlaceUrl);
                 expect(link.target).toBe("_blank");
@@ -515,27 +515,14 @@ describe("Debugger", () => {
                 const operand = code(0x2002).querySelector(".instr_instr_ref");
                 expect(operand.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
                 operand.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-                expect(currentRow().querySelector(".dis_addr").textContent).toBe("3000 oswrch");
+                expect(addrOf(currentRow())).toBe("3000 oswrch");
             });
 
             it("leaves a name with no place unlinked", async () => {
                 dbgr.debug(OswrchAt);
-                await vi.waitFor(() =>
-                    expect(rowAt(0x3004).querySelector(".dis_addr").textContent).toBe("3004 unplaced"),
-                );
+                await vi.waitFor(() => expect(addrOf(rowAt(0x3004))).toBe("3004 unplaced"));
                 expect(rowAt(0x3004).querySelector(".dis_addr .symbol").tagName).toBe("SPAN");
                 expect(rowAt(0x3004).querySelector(".dis_addr .symbol").title).toBe("unplaced: $3004, from Test MOS");
-            });
-
-            it("shows a home that isn't https as no link", async () => {
-                load.mockImplementation(async (url) => {
-                    const json = structuredClone(files.get(url));
-                    if (url.endsWith("mos.json")) json.home = "javascript:alert(1)";
-                    return json;
-                });
-                dbgr.debug(cpu.pc);
-                await vi.waitFor(() => expect(credited()).toBe(true));
-                expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             });
 
             it("links the author's page, by its site's name, beside the source", async () => {
@@ -567,7 +554,7 @@ describe("Debugger", () => {
             expect(code(0x2002).textContent).toBe("JSR $3000");
             expect(credited()).toBe(false);
             keyPress("n");
-            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
+            expect(addrOf(currentRow())).toBe("2002");
         });
 
         it("waits for the next stop to look for sets when the index arrives while the machine runs", async () => {
@@ -582,16 +569,9 @@ describe("Debugger", () => {
     });
 
     describe("patches", () => {
-        it("pokes bytes from a patch string", () => {
-            dbgr.execPatch("3000:ea4c");
-            expect(cpu.peekmem(0x3000)).toBe(0xea);
-            expect(cpu.peekmem(0x3001)).toBe(0x4c);
-        });
-
-        it("applies an unconditional patch immediately", () => {
-            dbgr.setPatch("3000:ea;3010:60");
-            expect(cpu.peekmem(0x3000)).toBe(0xea);
-            expect(cpu.peekmem(0x3010)).toBe(0x60);
+        it("applies an unconditional patch immediately, each byte of each part", () => {
+            dbgr.setPatch("3000:ea4c;3010:60");
+            expect([cpu.peekmem(0x3000), cpu.peekmem(0x3001), cpu.peekmem(0x3010)]).toEqual([0xea, 0x4c, 0x60]);
         });
 
         it("holds an @-patch until the program counter arrives", () => {

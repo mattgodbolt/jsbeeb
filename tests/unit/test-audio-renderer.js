@@ -244,12 +244,9 @@ describe("SoundChipProcessor rendering", () => {
         expect(Math.max(...quiet) - Math.min(...quiet)).toBeLessThan(0.01);
     });
 
-    it("should keep sounding the current state when the producer stalls, then skip the stalled time", () => {
+    it("should wait out a stall the producer resumes from at real time, skipping none of it", () => {
         const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
-        // The producer stops for 100ms of the consumer's time, then resumes at
-        // real-time rate: the lead drains, time stands still, and once the
-        // producer is a target ahead again nothing needs skipping.
         simulate(proc, producer, 0.3, { ticking: (t) => !(t > 0.1 && t < 0.2) });
         expect(proc.stalls).toBe(1);
         expect(proc.stalled).toBe(false);

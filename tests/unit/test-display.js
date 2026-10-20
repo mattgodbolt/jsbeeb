@@ -9,6 +9,15 @@ import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
 
+const fakeCanvasFor = (filterClass, overrides = {}) => ({
+    fb32: new Uint32Array(FbWidth * 625),
+    paint: vi.fn(),
+    setPersistence: vi.fn(),
+    canPersist: true,
+    filterClass,
+    ...overrides,
+});
+
 describe("Display", () => {
     let rafCallbacks;
     let fakeCanvas;
@@ -27,17 +36,10 @@ describe("Display", () => {
             screenCanvas,
             model: { isMaster: false, isAtom: false },
             mode: "rgb",
-            makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = {
-                    fb32: new Uint32Array(FbWidth * 625),
-                    paint: vi.fn(),
-                    setPersistence: vi.fn(),
-                    canPersist: true,
+            makeCanvas: (canvasEl, filterClass) =>
+                (fakeCanvas = fakeCanvasFor(filterClass, {
                     setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
-                    filterClass,
-                };
-                return fakeCanvas;
-            },
+                })),
             ...options,
         });
         // The video chip paints once as it is built; the tests care about what
@@ -59,6 +61,7 @@ describe("Display", () => {
     const presentAll = () => {
         for (const callback of rafCallbacks.splice(0)) callback();
     };
+    const lastPainted = () => fakeCanvas.paint.mock.calls.at(-1)[4];
 
     it("sizes the canvas element for the mode before the context exists", () => {
         const display = make();
@@ -82,8 +85,7 @@ describe("Display", () => {
         expect(rafCallbacks).toHaveLength(1);
         presentAll();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
-        // The last frame's bounds win, and the pixels were copied over.
-        expect(fakeCanvas.paint).toHaveBeenCalledWith(0, 30, FbWidth, 40, display.pendingFrame);
+        expect(fakeCanvas.paint.mock.calls[0].slice(0, 4)).toEqual([0, 30, FbWidth, 40]);
         expect(fakeCanvas.fb32[30 * FbWidth]).toBe(7);
     });
 
@@ -113,17 +115,10 @@ describe("Display", () => {
     it("gives a fallback display its own persistence, not the amount of the mode asked for", () => {
         const display = make({
             mode: "pal",
-            makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = {
-                    fb32: new Uint32Array(FbWidth * 625),
-                    paint: vi.fn(),
-                    setPersistence: vi.fn(),
-                    canPersist: true,
-                };
-                fakeCanvas.filterClass = PassthroughFilter;
-                fakeCanvas.fallbackReason = `${filterClass.getDisplayConfig().name} declined`;
-                return fakeCanvas;
-            },
+            makeCanvas: (canvasEl, filterClass) =>
+                (fakeCanvas = fakeCanvasFor(PassthroughFilter, {
+                    fallbackReason: `${filterClass.getDisplayConfig().name} declined`,
+                })),
         });
         fakeCanvas.setPersistence.mockClear();
         display.setPersistence("palPersistenceMs", 40);
@@ -164,28 +159,27 @@ describe("Display", () => {
         presentAll();
         expect(fakeCanvas.fb32[39 * FbWidth]).toBe(7);
         expect(fakeCanvas.fb32[40 * FbWidth]).toBe(3);
-        expect(display.pendingFrame.lineGrid[39]).toBe(9);
-        expect(display.pendingFrame.lineGrid[40]).toBe(5);
+        expect(lastPainted().lineGrid[39]).toBe(9);
+        expect(lastPainted().lineGrid[40]).toBe(5);
         expect(fakeCanvas.paint.mock.calls.at(-1).slice(0, 4)).toEqual([0, 10, FbWidth, 100]);
     });
 
     it("tells the canvas how many fields have passed since the frame it last showed", () => {
         const display = make();
-        const fieldsShown = () => fakeCanvas.paint.mock.calls.at(-1)[4].fields;
         display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
         presentAll();
         display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fieldsShown()).toBe(1);
+        expect(lastPainted().fields).toBe(1);
         display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fieldsShown()).toBe(10);
+        expect(lastPainted().fields).toBe(10);
         display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8, 4);
         presentAll();
-        expect(fieldsShown()).toBe(250);
+        expect(lastPainted().fields).toBe(250);
         display.onPaint(paintedFrom(0, 5000), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fieldsShown()).toBe(250);
+        expect(lastPainted().fields).toBe(250);
     });
 
     it("adds up the fields of paints that arrive before one animation frame", () => {
@@ -195,7 +189,7 @@ describe("Display", () => {
         display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
         display.onPaint(paintedFrom(0, 12), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(2);
+        expect(lastPainted().fields).toBe(2);
     });
 
     it("owes the old picture nothing after a restore", () => {
@@ -206,11 +200,11 @@ describe("Display", () => {
         restored.paintsAfresh = true;
         display.onPaint(restored, 0, 0, FbWidth, 8);
         presentAll();
-        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
+        expect(lastPainted().fields).toBe(250);
         expect(restored.paintsAfresh).toBe(false);
         display.onPaint(paintedFrom(0, 4), 0, 0, FbWidth, 8);
         presentAll();
-        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(1);
+        expect(lastPainted().fields).toBe(1);
     });
 
     it("replaces the picture on a mode change rather than glowing the old mode through it", () => {
@@ -219,7 +213,7 @@ describe("Display", () => {
         presentAll();
         display.setMode("rgb");
         presentAll();
-        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(250);
+        expect(lastPainted().fields).toBe(250);
     });
 
     it("reports no persistence setting where the canvas cannot keep a picture", () => {
@@ -240,7 +234,7 @@ describe("Display", () => {
         atom.video6847.frameCount = 10;
         display.onPaint(atom, 0, 0, FbWidth, 8);
         presentAll();
-        expect(fakeCanvas.paint.mock.calls.at(-1)[4].fields).toBe(3);
+        expect(lastPainted().fields).toBe(3);
     });
 
     it("schedules another present once the first has run", () => {
@@ -307,11 +301,14 @@ describe("Display", () => {
             phaseBaseOdd: 0.75,
         };
         display.onPaint(from, 0, 0, FbWidth, 8);
-        expect(display.pendingFrame.lineBaseEven).toBe(5);
-        expect(display.pendingFrame.lineBaseOdd).toBe(6);
-        expect(display.pendingFrame.phaseBaseEven).toBe(0.25);
-        expect(display.pendingFrame.phaseBaseOdd).toBe(0.75);
-        expect([...display.pendingFrame.lineGrid.subarray(0, 4)]).toEqual([1, 2, 3, 0]);
+        presentAll();
+        expect(lastPainted()).toMatchObject({
+            lineBaseEven: 5,
+            lineBaseOdd: 6,
+            phaseBaseEven: 0.25,
+            phaseBaseOdd: 0.75,
+        });
+        expect([...lastPainted().lineGrid.subarray(0, 4)]).toEqual([1, 2, 3, 0]);
     });
 
     it("hands over the timing counters and starts them afresh", () => {
@@ -326,30 +323,24 @@ describe("Display", () => {
 
     it("says when the filter asked for is not what was built", () => {
         make({
-            makeCanvas: (canvasEl, filterClass) => {
-                fakeCanvas = {
-                    fb32: new Uint32Array(FbWidth * 625),
-                    paint: vi.fn(),
-                    filterClass: class Other {
+            makeCanvas: (canvasEl, filterClass) =>
+                (fakeCanvas = fakeCanvasFor(
+                    class Other {
                         static getDisplayConfig() {
                             return filterClass.getDisplayConfig();
                         }
                     },
-                    fallbackReason: "no WebGL",
-                };
-                return fakeCanvas;
-            },
+                    { fallbackReason: "no WebGL" },
+                )),
         });
         expect(toasts()).toEqual([expect.stringContaining("no WebGL")]);
     });
 
-    it("uses a fake video chip when asked", () => {
-        const display = make({ fakeVideo: true });
-        expect(display.video.constructor).toBe(FakeVideo);
-    });
-
-    it("gives an Atom the fake video chip with its field sync", () => {
-        const display = make({ fakeVideo: true, model: { isMaster: false, isAtom: true } });
-        expect(display.video).toBeInstanceOf(FakeAtomVideo);
+    it.each([
+        ["a BBC", false, FakeVideo],
+        ["an Atom, with its field sync", true, FakeAtomVideo],
+    ])("gives %s the fake video chip when asked", (_, isAtom, chip) => {
+        const display = make({ fakeVideo: true, model: { isMaster: false, isAtom } });
+        expect(display.video.constructor).toBe(chip);
     });
 });
