@@ -257,35 +257,20 @@ describe("AtomPPIA", () => {
     });
 
     describe("address mirroring", () => {
-        it("should read port A via mirrored address 0xB004", () => {
-            const { ppia } = makePPIA();
-            ppia.write(0xb000, 0x35);
-            expect(ppia.read(0xb004)).toBe(0x35);
-        });
+        const readPorts = (ppia, base) => [0, 1, 2].map((port) => ppia.read(base + port));
 
-        it("should read port B via mirrored address 0xB005", () => {
-            const { ppia } = makePPIA();
-            ppia.keyDownRaw([6, 1]);
-            ppia.write(0xb000, 6); // select row 6
-            expect(ppia.read(0xb005)).toBe(ppia.read(0xb001));
-        });
-
-        it("should read port C via mirrored address 0xB006", () => {
-            const { ppia } = makePPIA();
-            expect(ppia.read(0xb006)).toBe(ppia.read(0xb002));
-        });
-
-        it("should write port A via mirrored address 0xB004", () => {
-            const { ppia } = makePPIA();
-            ppia.write(0xb004, 0x42);
-            expect(ppia.read(0xb000)).toBe(0x42);
-        });
-
-        it("should write CREG via mirrored address 0xB007", () => {
-            const { ppia } = makePPIA();
-            // BSR: set speaker (pin 2) via mirrored CREG address
-            ppia.write(0xb007, 0x05);
-            expect(ppia.portcpins & 0x04).toBe(0x04);
+        it.each([
+            ["port A, selecting a keyboard row", 0, 6],
+            ["port C's output latch", 2, 0x0f],
+            ["CREG, setting the speaker bit", 3, 0x05],
+        ])("answers at 0xB004-0xB007 as at 0xB000-0xB003: %s", (_, register, value) => {
+            const direct = makePPIA().ppia;
+            const mirrored = makePPIA().ppia;
+            for (const ppia of [direct, mirrored]) ppia.keyDownRaw([6, 1]);
+            direct.write(0xb000 + register, value);
+            mirrored.write(0xb004 + register, value);
+            expect(readPorts(mirrored, 0xb004)).toEqual(readPorts(direct, 0xb000));
+            expect(readPorts(direct, 0xb004)).toEqual(readPorts(direct, 0xb000));
         });
     });
 

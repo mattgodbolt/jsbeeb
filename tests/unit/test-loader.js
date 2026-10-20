@@ -25,12 +25,26 @@ describe("loadData in node", () => {
         expect(fetch).toHaveBeenCalledWith("https://example.com/a.ssd");
     });
 
-    it("reports a URL that is not there", async () => {
+    it.each([
+        [404, "not_found"],
+        [500, "http"],
+    ])("fails an HTTP %i as %s", async (status, reason) => {
         vi.stubGlobal(
             "fetch",
-            vi.fn(async () => new Response(null, { status: 404 })),
+            vi.fn(async () => new Response(null, { status })),
         );
-        await expect(loadData("https://example.com/nosuch.ssd")).rejects.toThrow("http code 404");
+        await expect(loadData("https://example.com/nosuch.ssd")).rejects.toMatchObject({
+            message: expect.stringContaining(`http code ${status}`),
+            loadFailure: reason,
+        });
+    });
+
+    it("fails a request that never got a response as a network failure", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))),
+        );
+        await expect(loadData("https://example.com/a.ssd")).rejects.toMatchObject({ loadFailure: "network" });
     });
 });
 
