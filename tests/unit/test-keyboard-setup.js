@@ -216,9 +216,11 @@ describe("KeyboardSetup", () => {
         document.body.append(button);
         button.focus();
         const trail = [];
-        document.body.addEventListener("focusin", (evt) => trail.push(evt.target.tagName));
+        const recordFocus = (evt) => trail.push(evt.target.tagName);
+        document.body.addEventListener("focusin", recordFocus);
 
         document.dispatchEvent(keyEvent("keydown", keyCodes.APOSTROPHE, { key: "Dead", shift: true }));
+        document.body.removeEventListener("focusin", recordFocus);
 
         expect(trail).toEqual(["TEXTAREA", "BUTTON"]);
         expect(document.activeElement).toBe(button);
