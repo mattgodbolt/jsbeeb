@@ -84,18 +84,23 @@ describe("Adc", () => {
         scheduler.polltime(EightBitConversionCycles - 1);
         expect(adc.read(Status) & Busy).toBe(Busy);
         scheduler.polltime(1);
-        expect(registers().slice(1)).toEqual([0x12, 0x34]);
+        expect(registers().slice(1)).toEqual([0x12, 0x30]);
     });
 
-    it.each([
-        [0, 0x3fff],
-        [1, 0xffff],
-        [2, 0x5fff],
-        [3, 0xdfff],
-    ])("reads channel %i from its own source", (channel, value) => {
-        for (let other = 0; other < 4; other++) adc.setChannelSource(other, source(other === channel ? value : 0));
-        convert(TenBit | channel);
-        expect(registers().slice(1)).toEqual([value >>> 8, value & 0xff]);
+    describe.each([
+        ["8-bit", 0],
+        ["10-bit", TenBit],
+    ])("in %s mode", (_, precision) => {
+        it.each([
+            [0, 0x3fff, [0x3f, 0xf0]],
+            [1, 0xffff, [0xff, 0xf0]],
+            [2, 0x5a5f, [0x5a, 0x50]],
+            [3, 0xdc0f, [0xdc, 0x00]],
+        ])("reads channel %i from its own source, the low byte's bits 3-0 as zero", (channel, value, highLow) => {
+            for (let other = 0; other < 4; other++) adc.setChannelSource(other, source(other === channel ? value : 0));
+            convert(precision | channel);
+            expect(registers().slice(1)).toEqual(highLow);
+        });
     });
 
     it("reads the centre on a channel with no source", () => {
@@ -110,7 +115,7 @@ describe("Adc", () => {
         expect(registers().slice(1)).toEqual([0x80, 0x00]);
         adc.setFixedValue(null);
         convert(1);
-        expect(registers().slice(1)).toEqual([0x12, 0x34]);
+        expect(registers().slice(1)).toEqual([0x12, 0x30]);
     });
 
     describe("sources", () => {
