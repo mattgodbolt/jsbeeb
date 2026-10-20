@@ -1,26 +1,19 @@
 // A shared session's host and guests joined in-process: what one end sends reaches the other in order, on a
 // microtask of its own, as a data channel's messages come in tasks of their own, and a guest has its link before
-// the host's first message reaches it, as a channel opens before anything comes on it. What the host sends before
-// it has heard from the guest is lost, as Chrome may lose it (see SessionHost.welcome).
+// the host's first message reaches it, as a channel opens before anything comes on it.
 
 class LinkEnd {
-    constructor(stats, { heard = true } = {}) {
+    constructor(stats) {
         this.connectionStats = stats;
         this.listener = null;
         this.other = null;
         this.open = false;
-        this.heard = heard;
     }
 
     send(data) {
         if (!this.open) throw new Error("the link is not open");
-        if (!this.heard) return;
         const copy = typeof data === "string" ? data : data.slice().buffer;
-        queueMicrotask(() => {
-            if (!this.other.open) return;
-            this.other.heard = true;
-            this.other.listener.message(copy);
-        });
+        queueMicrotask(() => this.other.open && this.other.listener.message(copy));
     }
 
     isOpen() {
@@ -44,7 +37,7 @@ class LinkEnd {
 
 /** The host's end and a guest's end of one link, open once `open()` is called. */
 export function linkPair({ rttMs = 0 } = {}) {
-    const host = new LinkEnd({ rttMs, route: "host/host" }, { heard: false });
+    const host = new LinkEnd({ rttMs, route: "host/host" });
     const guest = new LinkEnd({ rttMs, route: "host/host" });
     host.other = guest;
     guest.other = host;

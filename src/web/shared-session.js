@@ -630,8 +630,8 @@ export class SessionHost {
         };
     }
 
-    // Sent once the guest has said hello: Chrome calls a channel the guest opened open before it can carry anything,
-    // and silently drops what is sent on it until it can.
+    // Sent once the guest has said hello: Chrome reports a channel the guest opened as open before it can carry
+    // anything, and silently drops what is sent on it until it can.
     welcome(guest) {
         const { model, takenFromHost, version } = this.context;
         const welcome = { type: "welcome", model: model.name, takenFromHost, version, name: this.name };

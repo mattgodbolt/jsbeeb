@@ -1114,6 +1114,9 @@ describe("SessionHost", () => {
         const { host } = await hosting();
         const channel = await joined("Kieran");
         channel.emit("message", message({ type: "hello", name: "Matt (you)" }));
+        await settle();
+        expect(channel.messages().filter((each) => each.type === "welcome")).toHaveLength(1);
+        expect(channel.snapshots()).toHaveLength(1);
         for (let i = 0; i < 3; ++i) channel.emit("message", message({ type: "stats", stats: { lagMs: i } }));
         vi.advanceTimersByTime(StatsIntervalMs);
         channel.emit("message", message({ type: "stats", stats: { lagMs: 9 } }));
