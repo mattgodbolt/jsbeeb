@@ -535,6 +535,19 @@ describe("EmulationLoop", () => {
             expect(loop.isRunning()).toBe(true);
         });
 
+        it("holds when a session ends in a hidden tab, as if the tab had been hidden with no session", () => {
+            const loop = started();
+            loop.setLockstep(lockstepStub());
+            hide();
+            loop.setLockstep(null);
+            expect(loop.isRunning()).toBe(false);
+            show();
+            expect(loop.isRunning()).toBe(true);
+            loop.setLockstep(lockstepStub());
+            loop.setLockstep(null);
+            expect(loop.isRunning()).toBe(true);
+        });
+
         it("keeps running while a motor is on", () => {
             const loop = started();
             deps.processor.fdc.motorOn[0] = true;

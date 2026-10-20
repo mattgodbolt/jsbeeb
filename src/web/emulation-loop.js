@@ -116,7 +116,7 @@ export class EmulationLoop extends EventTarget {
         this.virtualSpeedUpdater = new VirtualSpeedUpdater(cpuSpeed);
         this.audioDebugLog = { start: 0, ticks: 0, cycles: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
 
-        document.addEventListener("visibilitychange", () => this.handleVisibilityChange(), false);
+        document.addEventListener("visibilitychange", () => this.holdWhileHidden(), false);
     }
 
     isRunning() {
@@ -217,10 +217,7 @@ export class EmulationLoop extends EventTarget {
      */
     setLockstep(lockstep) {
         this.lockstep = lockstep;
-        if (lockstep && this.resumeOnVisible) {
-            this.resumeOnVisible();
-            this.resumeOnVisible = null;
-        }
+        this.holdWhileHidden();
     }
 
     execute(cycles) {
@@ -348,14 +345,13 @@ export class EmulationLoop extends EventTarget {
         }
     }
 
-    handleVisibilityChange() {
+    holdWhileHidden() {
         const { processor } = this;
-        if (document.visibilityState === "hidden") {
-            if (this.lockstep) return;
-            const keepRunningWhenHidden =
-                processor.tapeInterface.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
-            if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.hold("the hidden tab");
-        } else if (this.resumeOnVisible) {
+        const motorOn = processor.tapeInterface.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
+        const holdWanted = document.visibilityState === "hidden" && !this.lockstep && !motorOn;
+        if (holdWanted && !this.resumeOnVisible) {
+            this.resumeOnVisible = this.hold("the hidden tab");
+        } else if (!holdWanted && this.resumeOnVisible) {
             this.resumeOnVisible();
             this.resumeOnVisible = null;
         }
