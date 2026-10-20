@@ -1188,9 +1188,10 @@ describe("MediaWindow", () => {
 
         beforeEach(() => stubNavigation(urlState));
 
-        it("switches machine without asking on a booting click, leaving word for the next page", async () => {
+        it("switches machine without asking on a booting shift-click, leaving word for the next page", async () => {
             await openWith([paradroid]);
-            row().click();
+            setTick(false);
+            row().dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
             await vi.waitFor(() =>
                 expect(navigatedTo()).toBe(
                     "https://bbc.example/?autoboot&disc1=bitshifters:bs-paradroid.ssd&model=Master",
