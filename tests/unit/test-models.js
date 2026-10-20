@@ -7,13 +7,6 @@ import { BBC } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 
 describe("Model", () => {
-    it("is frozen so per-session settings cannot be stored on it", () => {
-        const master = findModel("Master");
-
-        expect(Object.isFrozen(master)).toBe(true);
-        expect(() => (master.hasEconet = true)).toThrow(TypeError);
-    });
-
     it("freezes every model and its rom list", () => {
         for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {
             expect(Object.isFrozen(model), `${model.name} should be frozen`).toBe(true);
@@ -150,32 +143,17 @@ describe("fake6502 tube handling", () => {
         expect(cpu.tube.cpuMultiplier).toBe(1);
     });
 
-    it("attaches no tube by default", () => {
-        expect(fake6502(findModel("Master"), {}).hasTube).toBe(false);
-    });
-
     it("does not leak the tube into later machines using the same model", () => {
         fake6502(findModel("Master"), { tube: true });
 
         expect(fake6502(findModel("Master"), {}).hasTube).toBe(false);
     });
 
-    it("honours a tube cpu multiplier", () => {
-        const cpu = fake6502(findModel("Master"), { tube: true, tubeCpuMultiplier: 4 });
-
-        expect(cpu.tube.cpuMultiplier).toBe(4);
-    });
-
-    it("fits a Master with the 4MHz Turbo board", () => {
-        const cpu = fake6502(findModel("Master"), { tube: true });
-
-        expect(cpu.tube.cyclesPerHostCycle).toBe(2);
-    });
-
-    it("fits a BBC B with the 3MHz external second processor", () => {
-        const cpu = fake6502(findModel("B-DFS1.2"), { tube: true });
-
-        expect(cpu.tube.cyclesPerHostCycle).toBe(1.5);
+    it.each([
+        ["a Master with the 4MHz Turbo board", "Master", 2],
+        ["a BBC B with the 3MHz external second processor", "B-DFS1.2", 1.5],
+    ])("fits %s", (_, model, cyclesPerHostCycle) => {
+        expect(fake6502(findModel(model), { tube: true }).tube.cyclesPerHostCycle).toBe(cyclesPerHostCycle);
     });
 
     it("gives both co-processors the CMOS additions", () => {

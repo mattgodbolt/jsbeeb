@@ -30,10 +30,7 @@ describe("Atom hardware", () => {
 
         it("should mirror PPIA port C at 0xB006", async () => {
             await bootAtom();
-            // The 8255 only decodes A0-A1, so 0xB006 mirrors 0xB002.
-            // Verify via computed comparison: if mirroring works, the
-            // two reads return the same value (result=1, BASIC true).
-            // If broken, 0xB006 returns open bus (0xB0) ≠ port C value.
+            // The 8255 decodes only A0-A1; unmirrored, &B006 would read open bus, &B0.
             await typeAndCapture("A=?#B006");
             await typeAndCapture("B=?#B002");
             const output = await typeAndCapture("PRINT A=B");
