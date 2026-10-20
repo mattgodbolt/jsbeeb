@@ -32,6 +32,7 @@ describe("MachineSession tapes", () => {
         const fromBytes = new MachineSession("B-DFS1.2");
         await fromFile.loadTape(Welcome);
         await fromBytes.loadTape(Welcome, new Uint8Array(readFileSync(Welcome)));
+        expect(tapeDeck(fromBytes).tape).toBeDefined();
         expect(tapeDeck(fromFile).tape).toEqual(tapeDeck(fromBytes).tape);
     });
 
