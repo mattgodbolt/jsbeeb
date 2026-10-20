@@ -280,16 +280,19 @@ describe("AtomSoundChip", () => {
             );
         });
 
-        it("sounds the restored level, so the next edge after a restore is heard", () => {
+        it("sounds the restored level, settled, so the next edge after a restore is heard", () => {
             const { chip: saved, scheduler } = makeAtomSoundChip();
             saved.speakerGenerator.pushBit(1, 10, 0);
             scheduler.epoch = 100;
             const snapshot = saved.snapshotState();
 
             const { chip, scheduler: restoredScheduler } = makeAtomSoundChip();
+            chip.speakerGenerator.pushBit(1, 10, 0);
+            restoredScheduler.epoch = 20;
+            render(chip, 10);
             chip.restoreState(snapshot);
-            chip.speakerGenerator.pushBit(0, 30, 0);
-            restoredScheduler.epoch = 40;
+            chip.speakerGenerator.pushBit(0, 50, 0);
+            restoredScheduler.epoch = 60;
             const out = render(chip, 20);
             expect(out.slice(0, 15).every((v) => Math.abs(v) < 0.01)).toBe(true);
             expect(out[15]).toBeLessThan(-0.1);
