@@ -853,21 +853,24 @@ describe("MachineSession disc images", () => {
 });
 
 describe("MachineSession VideoNuLA", () => {
+    // Palette mode on, for a VideoNuLA; a stock ULA takes it as a plain control register write.
+    const NulaPaletteModeOn = 0x11;
+    const Mode7UlaControl = 0x4a;
     const UlaFlashBit = 0x01;
 
     it.each([
-        ["has a stock video ULA unless one is asked for", undefined, 0x10, 0],
-        ["fits a VideoNuLA when asked", { hasVideoNula: true }, 0x4a, 1],
+        ["has a stock video ULA unless one is asked for", undefined, 0xff, NulaPaletteModeOn, 0],
+        ["fits a VideoNuLA when asked", { hasVideoNula: true }, ~UlaFlashBit, Mode7UlaControl, 1],
     ])(
         "%s",
-        async (_, opts, ulaControl, paletteMode) => {
+        async (_, opts, ulaControlMask, ulaControl, paletteMode) => {
             const session = await bootedSession("B-DFS1.2", opts);
-            await session.type("?&FE22=&11");
+            await session.type(`?&FE22=&${NulaPaletteModeOn.toString(16)}`);
             await session.runUntilPrompt();
             const { video } = session.snapshot({ includeRoms: false }).machine;
             session.destroy();
 
-            expect(video.ulactrl & ~UlaFlashBit).toBe(ulaControl);
+            expect(video.ulactrl & ulaControlMask).toBe(ulaControl);
             expect(video.ula.paletteMode).toBe(paletteMode);
         },
         BootTimeout,
