@@ -184,7 +184,8 @@ export class Adc {
         const source = this.channelSources[channel];
         const val = this.fixedValue ?? (source ? source.getValue(channel) : AdcCentreValue);
 
-        this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
+        // The AUG puts the result's top two bits in status bits 5 and 4, leaving the channel in bits 1 and 0.
+        this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x30);
         this.low = val & 0xff;
         this.high = (val >>> 8) & 0xff;
         this.sysvia.setcb1(false);

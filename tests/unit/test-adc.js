@@ -307,23 +307,16 @@ describe("ADC", () => {
             expect(adc.high).toBe(0x22); // (0x2222 >>> 8) & 0xff
         });
 
-        it("should update status bits correctly after conversion", () => {
-            // Set channel 2
-            adc.write(0, 0x02);
-
-            // Simulate conversion completion
+        it.each([
+            [0, 0x3fff, 0x00],
+            [1, 0xffff, 0x30],
+            [2, 0x5fff, 0x10],
+            [3, 0xbfff, 0x20],
+        ])("reports channel %i and its result's top two bits in the status", (channel, value, topBits) => {
+            adc.setChannelSource(channel, { getValue: () => value, dispose: () => {} });
+            adc.write(0, channel);
             adc.onComplete();
-
-            // Get the expected value from our mock source
-            const expectedValue = mockGamepadSource.getValue(2);
-
-            // The status should have:
-            // - bits 0-3: channel number (0)
-            // - bit 6: end of conversion bit (1)
-            // - bits 4-5: ((0x5fff >>> 10) & 0x03) = 0x01 (shifted to bit position)
-            const expectedStatus = (0x00 & 0x0f) | 0x40 | ((expectedValue >>> 10) & 0x03);
-
-            expect(adc.status).toBe(expectedStatus);
+            expect(adc.read(0)).toBe(channel | 0x40 | topBits);
         });
     });
 });
