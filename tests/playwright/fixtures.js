@@ -15,7 +15,7 @@ const AutoRepeatDelayAddress = 0x254;
 const EmulatedCycles =
     "(window.processor.cycleSeconds * window.processor.model.cyclesPerSecond + window.processor.currentCycles)";
 const MachineStopped = 'document.getElementById("debug-pause").disabled';
-const AnyKeyDown = "window.processor.sysvia.keys.some((column) => column.some(Boolean))";
+const AnyKeyDown = "window.processor.sysvia.hasAnyKeyDown()";
 const LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
 // test:e2e builds with a dummy measurement id; an empty gtag.js leaves the stub's dataLayer for the tests to read.
 // Without the fonts stylesheet the page is laid out in the fallback font, the same on every run.
