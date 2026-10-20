@@ -111,7 +111,7 @@ const loadHeadOnDrive0 = (fdc) => sendCommand(fdc, WriteRegCmd, MmioWrite, LoadH
 
 const specifyAsDfs = (fdc) => sendCommand(fdc, SpecifyCmd, Initialisation, 12, 10, DfsHeadLoadUnload);
 
-// The defaults are DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load, unload after 12 revolutions.
+// The defaults are DFS 1.20's: 24 ms steps, 20 ms settle, 64 ms head load.
 function dfsFdc({
     stepRate = 12,
     settleTime = 10,
@@ -346,7 +346,7 @@ describe("Intel 8271 tests", function () {
         function readyFdc({ cpu = fake6502(), indexHighAtSelection = false } = {}) {
             const { fdc, scheduler, drive } = makeFdc({ cpu });
             drive.indexPulse = indexHighAtSelection;
-            // The head stays loaded after a command, so reading the status does not deselect the drive.
+            // So that reading the status does not unload the head and deselect the drive.
             specifyAsDfs(fdc);
             loadHeadOnDrive0(fdc);
             const indexPulse = () => {
@@ -548,7 +548,7 @@ describe("Intel 8271 tests", function () {
     });
 
     describe("peeking", () => {
-        it("shows the data byte without lowering need-data, as reading it does", () => {
+        it("shows the data byte without lowering need-data, as reading it does, with the head already on the track", () => {
             const { fdc, scheduler, readFirstByte } = dfsFdc();
             readFirstByte(5);
             sendCommand(fdc, ReadDataCmd, 5, 0, OneSectorOf256Bytes);

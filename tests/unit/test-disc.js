@@ -638,12 +638,13 @@ describe("a disc's snapshot", () => {
         expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(before);
     });
 
-    it("takes each snapshot's tracks as they were then, written or not", () => {
+    it("shares a clean track with the snapshot before it, and copies a written one", () => {
         const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), ssdImage(20), false);
         const track1 = disc.getTrack(false, 1).pulses2Us.slice();
         const first = disc.snapshotState();
         write(disc, 0, 0x12345678);
         const second = disc.snapshotState();
+        expect(second.tracks["false:1"]).toBe(first.tracks["false:1"]);
         write(disc, 1, 0xdeadbeef);
 
         disc.restoreState(first);

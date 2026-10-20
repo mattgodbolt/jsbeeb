@@ -12,7 +12,6 @@ export function sectorData() {
     return new Uint8Array(SectorBytes).map((_, i) => i & 0xff);
 }
 
-/** One sector at the builder's position: its gaps, ID field and data field, each with its CRC. */
 export function appendFmSector(
     builder,
     {

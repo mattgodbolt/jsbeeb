@@ -10,8 +10,10 @@ import {
     toSsdOrDsd,
 } from "../../src/disc.js";
 import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
-import { fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
+import { SectorBytes, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
 import * as fs from "node:fs";
+
+const TrackBytes = 10 * SectorBytes;
 
 const EliteHfe = fs.readFileSync("public/discs/elite.hfe");
 let sharedElite = null;
@@ -133,7 +135,7 @@ describe("telling a 40 track HFE from an 80 track one", () => {
     });
 
     it("takes an 80 track disc at its word", () => {
-        expect(sniffSurfaceLayout(reloaded(countingImage(80 * 10 * 256, false))).is40Track).toBe(false);
+        expect(sniffSurfaceLayout(reloaded(countingImage(80 * TrackBytes, false))).is40Track).toBe(false);
     });
 
     it("judges a disc whose sides disagree on the one that boots", () => {
@@ -181,17 +183,22 @@ describe("telling a 40 track HFE from an 80 track one", () => {
 describe("HFE export", function () {
     it.each([
         ["Elite, protection and all", elite],
-        ["a single sided SSD", () => countingImage(10 * 256, false)],
-        ["a double sided DSD", () => countingImage(3 * 2 * 10 * 256, true)],
+        ["a single sided SSD", () => countingImage(TrackBytes, false)],
+        ["a double sided DSD", () => countingImage(3 * 2 * TrackBytes, true)],
         ["an MFM track", () => mfmDiscWithSector()],
-    ])("reloads the sectors of %s as they were", (_, makeDisc) => {
-        const disc = makeDisc();
-        expectSameSectors(disc, reloaded(disc));
-    });
+    ])(
+        "reloads the sectors of %s as they were",
+        (_, makeDisc) => {
+            const disc = makeDisc();
+            expectSameSectors(disc, reloaded(disc));
+        },
+        // Every track of both sides is decoded twice, which coverage instrumentation slows a lot.
+        60000,
+    );
 
     it.each([
         ["single", () => fmDiscWithSector(), 1, 1],
-        ["double", () => countingImage(10 * 256, true), 80, 2],
+        ["double", () => countingImage(TrackBytes, true), 80, 2],
     ])("writes a v3 header for a %s sided disc", (_, makeDisc, tracks, sides) => {
         const hfeData = toHfe(makeDisc());
         expect(new TextDecoder("ascii").decode(hfeData.slice(0, 8))).toBe("HXCHFEV3");
