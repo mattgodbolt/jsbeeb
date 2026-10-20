@@ -185,17 +185,18 @@ and a snapshot of a few hundred KB once per join. Any option that charges per me
 | Small always-on box running a relay       | Simplest relay; flat cost                                     | A server to keep patched and up; one region                                                                    |
 
 The recommendation is WebRTC with the host as hub and sequencer, and a small Lambda for rendezvous only (see
-v0). The protocol stays transport-agnostic: the session code talks to a channel, so the tests can run two
-or more headless machines exchanging messages in-process with no server at all, and a local stand-in for the
-rendezvous endpoint is enough to try two browsers on one machine. If too many people cannot connect
-directly, a hosted TURN service is the next step, and one of the relays above is the fallback after that.
+v0). The protocol stays transport-agnostic: the session code talks to a link (`src/web/session-transport.js` opens
+them over WebRTC), so the tests can run two or more headless machines exchanging messages in-process with no server
+at all (`tests/helpers/session-link.js`), and a local stand-in for the rendezvous endpoint is enough to try two
+browsers on one machine. If too many people cannot connect directly, a hosted TURN service is the next step, and
+one of the relays above is the fallback after that.
 
 ## v0
 
 The smallest session worth having, on the machines in the scope above, built in `src/lockstep.js` (the
-protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`, whose sessions reach the page
-(its notices, lights and pane, visibility, going and reloading) only through `src/web/session-page.js`.
-`?server=<room>` hosts and
+protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`, whose sessions reach the other
+machines only through the links `src/web/session-transport.js` opens, and the page (its notices, lights and pane,
+visibility, going and reloading) only through `src/web/session-page.js`. `?server=<room>` hosts and
 `?client=<room>` joins. Shared session in the More menu does either without editing the URL: Start hosting
 hosts the machine as it is, in a room with a generated name and without touching the URL, so a reload ends the
 session; Join takes a room's name or the link and goes to its `?client=` URL, keeping the page's own `localToPage`

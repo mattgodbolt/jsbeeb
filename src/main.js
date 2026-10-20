@@ -49,6 +49,7 @@ import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { gzipCodec, hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
 import { sessionPage } from "./web/session-page.js";
+import { webRtcTransport } from "./web/session-transport.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
@@ -438,7 +439,6 @@ async function startAsTheUrlAsks() {
                 version,
             });
         } else if (!(await startAsTheUrlAsks())) return;
-        const rendezvous = createRendezvousClient();
         const sessionContext = {
             processor,
             model,
@@ -446,7 +446,7 @@ async function startAsTheUrlAsks() {
             loop,
             keyboard,
             version,
-            rendezvous,
+            transport: webRtcTransport(createRendezvousClient()),
             codec: gzipCodec,
             page: sessionPage(urlState),
         };

@@ -2,10 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-    AnswerTimeoutMs,
-    ConnectTimeoutMs,
-    IceGatheringTimeoutMs,
-    MaxConnectingGuests,
     MinResyncIntervalMs,
     SessionFailures,
     SessionGuest,
@@ -22,12 +18,12 @@ import { RendezvousError } from "../../src/web/rendezvous-client.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { LockstepHost, MaxGuestLagSeconds, stateHash } from "../../src/lockstep.js";
 import { AdcCentreValue } from "../../src/adc.js";
-import { OfferLifetimeSeconds } from "../../rendezvous/handler.js";
 import { Cmos } from "../../src/cmos.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { ParamTypes, parseQueryString } from "../../src/url-params.js";
 import { Parameters, takenFromHostValues, urlParamType } from "../../src/web/parameters.js";
 import { sentEvents } from "./helpers.js";
+import { inProcessTransport } from "../helpers/session-link.js";
 
 const CyclesPerSecond = 2000000;
 const MsPerMinute = 60 * 1000;
@@ -110,32 +106,38 @@ describe("sessionInput", () => {
     });
 });
 
-class FakeEvents {
-    constructor() {
-        this.listeners = {};
-    }
-
-    addEventListener(type, listener) {
-        if (!this.listeners[type]) this.listeners[type] = [];
-        this.listeners[type].push(listener);
-    }
-
-    emit(type, event = {}) {
-        for (const listener of this.listeners[type] ?? []) listener(event);
-    }
-}
-
-class FakeChannel extends FakeEvents {
-    constructor() {
-        super();
-        this.readyState = "open";
+// A link whose other end the test plays: what the session sends on it is kept, and what the test emits reaches the
+// session at once.
+class FakeLink {
+    constructor({ open = true } = {}) {
+        this.listener = null;
         this.sent = [];
         this.full = false;
+        this.open = open;
+        this.closed = false;
     }
 
     send(data) {
+        if (!this.isOpen()) throw new Error("the channel is not open");
         if (this.full) throw new Error("send queue is full");
         this.sent.push(data);
+    }
+
+    isOpen() {
+        return this.open && !this.closed;
+    }
+
+    close() {
+        this.closed = true;
+    }
+
+    async stats() {
+        return { rttMs: 85, route: "srflx/srflx" };
+    }
+
+    emit(type, event) {
+        if (type === "message") this.listener.message(event.data);
+        else this.listener.closed("its channel closed");
     }
 
     messages() {
@@ -158,67 +160,37 @@ class FakeChannel extends FakeEvents {
     }
 }
 
-let peers;
-
-class FakePeer extends FakeEvents {
-    constructor() {
-        super();
-        this.localDescription = { sdp: "local sdp" };
-        this.iceGatheringState = "complete";
-        this.closed = false;
-        peers.push(this);
-    }
-
-    async setRemoteDescription() {}
-    async setLocalDescription() {}
-    async createAnswer() {
-        return {};
-    }
-    async createOffer() {
-        return {};
-    }
-
-    async getStats() {
-        return new Map(
-            [
-                { id: "T", type: "transport", selectedCandidatePairId: "P" },
-                {
-                    id: "P",
-                    type: "candidate-pair",
-                    localCandidateId: "L",
-                    remoteCandidateId: "R",
-                    currentRoundTripTime: 0.085,
-                },
-                { id: "L", type: "local-candidate", candidateType: "srflx", protocol: "udp" },
-                { id: "R", type: "remote-candidate", candidateType: "srflx" },
-            ].map((entry) => [entry.id, entry]),
-        );
-    }
-
-    createDataChannel() {
-        this.channel = new FakeChannel();
-        return this.channel;
-    }
-
-    close() {
-        this.closed = true;
-    }
-}
-
-const Candidate = "a=candidate:1 1 udp 2113937151 peer.local 54336 typ host";
-
-// A peer still looking for its ICE candidates, which finds one when told to.
-class GatheringPeer extends FakePeer {
-    constructor() {
-        super();
-        this.iceGatheringState = "gathering";
-        this.localDescription = { sdp: "v=0" };
-    }
-
-    find({ announced = true } = {}) {
-        this.localDescription = { sdp: `v=0\r\n${Candidate}` };
-        if (announced) this.emit("icecandidate", { candidate: {} });
-    }
+// A transport whose other ends are the test's: a host's guests arrive as the test offers them, and a guest's join
+// gives it a link at once.
+function fakeTransport(overrides = {}) {
+    const fake = {
+        links: [],
+        host: null,
+        listening: false,
+        createRoom: vi.fn(async () => "secret"),
+        listen: vi.fn((room, secret, host) => {
+            fake.host = host;
+            fake.listening = true;
+            return { close: () => (fake.listening = false) };
+        }),
+        join: vi.fn(async (room, id, listener) => {
+            listener.offered();
+            listener.answered();
+            const link = new FakeLink();
+            link.listener = listener;
+            fake.links.push(link);
+            return link;
+        }),
+        /** A guest of `id` connecting to the host, its link not yet open. */
+        offer(id) {
+            const link = new FakeLink({ open: false });
+            link.listener = fake.host.connecting(id, link);
+            fake.links.push(link);
+            return link;
+        },
+        ...overrides,
+    };
+    return fake;
 }
 
 function fakeProcessor({ cycles = 1000 } = {}) {
@@ -287,10 +259,11 @@ const welcomeAs = (fields) => ({
 
 function fakeContext({
     processor = fakeProcessor(),
-    rendezvous = {},
+    transport: sessionTransport = transport,
     model = {},
     takenFromHost = StockTakenFromHost,
     codec = plainCodec,
+    page: sessionPage = page,
 } = {}) {
     return {
         processor,
@@ -299,17 +272,9 @@ function fakeContext({
         loop: { setLockstep: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         version: "1.0",
-        rendezvous: {
-            createRoom: vi.fn(async () => "secret"),
-            deleteRoom: vi.fn(async () => {}),
-            listOffers: vi.fn(async () => []),
-            postAnswer: vi.fn(async () => {}),
-            postOffer: vi.fn(async () => {}),
-            getAnswer: vi.fn(async () => "answer sdp"),
-            ...rendezvous,
-        },
+        transport: sessionTransport,
         codec,
-        page,
+        page: sessionPage,
     };
 }
 
@@ -356,6 +321,7 @@ function fakePage() {
 }
 
 let page;
+let transport;
 const settle = () => vi.advanceTimersByTimeAsync(0);
 const panel = () => page.panels.at(-1);
 const desyncNotices = () => page.notices.filter((text) => text.includes("desync"));
@@ -369,10 +335,9 @@ let guests;
 
 beforeEach(() => {
     page = fakePage();
-    peers = [];
+    transport = fakeTransport();
     hosts = [];
     guests = [];
-    vi.stubGlobal("RTCPeerConnection", FakePeer);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
 });
 
@@ -386,24 +351,21 @@ afterEach(() => {
 });
 
 describe("SessionHost", () => {
-    async function hosting(offers = [{ guest: "g1", sdp: "offer" }], rendezvous = {}, codec = plainCodec) {
+    async function hosting({ codec = plainCodec } = {}) {
         const processor = fakeProcessor();
-        const listOffers = vi.fn(async () => offers.splice(0));
-        const context = fakeContext({ processor, rendezvous: { listOffers, ...rendezvous }, codec });
+        const context = fakeContext({ processor, codec });
         const host = new SessionHost(context, "room");
         hosts.push(host);
         await host.start();
-        await settle();
         return { host, processor, context };
     }
 
-    function connectTo(index) {
-        const channel = new FakeChannel();
-        peers[index].emit("datachannel", { channel });
+    function connect(id = `g${transport.links.length + 1}`) {
+        const channel = transport.offer(id);
+        channel.open = true;
+        channel.listener.opened();
         return channel;
     }
-
-    const connect = () => connectTo(peers.length - 1);
 
     async function joined() {
         const channel = connect();
@@ -415,13 +377,10 @@ describe("SessionHost", () => {
 
     it("notes being created, each guest connecting with how many are, and ending with how many came", async () => {
         const sent = sentEvents();
-        const { host } = await hosting([
-            { guest: "g1", sdp: "offer" },
-            { guest: "g2", sdp: "offer" },
-        ]);
-        connectTo(0);
+        const { host } = await hosting();
+        connect();
         await settle();
-        connectTo(1);
+        connect();
         await settle();
         host.close();
         expect(sent("session")).toEqual([
@@ -435,8 +394,10 @@ describe("SessionHost", () => {
     it("counts only the guests who joined when it ends", async () => {
         const sent = sentEvents();
         const { host } = await hosting();
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        const never = transport.offer("g1");
+        never.emit("close");
         host.close();
+        expect(never.closed).toBe(true);
         expect(sent("session").at(-1)).toEqual({ role: "host", stage: "ended", reason: "page_closed", peers: "0" });
     });
 
@@ -450,7 +411,7 @@ describe("SessionHost", () => {
     });
 
     it("holds the analogue inputs at the centre for the session, and gives back an ordinary page when it closes", async () => {
-        const { host, processor, context } = await hosting([]);
+        const { host, processor, context } = await hosting();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
         host.close();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
@@ -459,20 +420,25 @@ describe("SessionHost", () => {
         expect(processor.sysvia.cmos.bbcDateTime()).toBeInstanceOf(Date);
     });
 
-    it("opens its room again if it finds it gone, and says so if it cannot", async () => {
-        const gone = Object.assign(new Error("Rendezvous list offers failed with status 404"), { status: 404 });
-        const listOffers = vi.fn(async () => Promise.reject(gone));
-        const createRoom = vi.fn(async () => "secret");
-        const { host, context } = await hosting([], { listOffers, createRoom });
-        expect(createRoom).toHaveBeenCalledTimes(2);
-        createRoom.mockRejectedValue(new Error("Room already exists"));
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        const polls = listOffers.mock.calls.length;
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        expect(listOffers.mock.calls.length).toBe(polls);
-        expect(context.rendezvous.createRoom).toHaveBeenCalledTimes(3);
+    it("says and logs when its room had expired and is open again, or has gone for good", async () => {
+        const { host } = await hosting();
+        transport.host.reopened();
+        transport.host.gone(new Error("Room already exists"));
+        expect(page.notices.slice(-2)).toEqual([
+            `The room "room" had expired, and is open again.`,
+            `The room "room" has gone, so nobody else can join: Room already exists`,
+        ]);
+        expect(host.report().events.map(({ event }) => event)).toEqual(
+            expect.arrayContaining(["room reopened", "room gone"]),
+        );
+    });
+
+    it("listens on its room until it closes", async () => {
+        const { host } = await hosting();
+        expect(transport.listen).toHaveBeenCalledWith("room", "secret", expect.any(Object));
+        expect(transport.listening).toBe(true);
         host.close();
-        expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
+        expect(transport.listening).toBe(false);
     });
 
     it("welcomes a guest with its model, the settings a guest takes from it, its version and name, then sends the machine", async () => {
@@ -490,7 +456,7 @@ describe("SessionHost", () => {
 
     it("sends a joiner the commits made while its snapshot was compressed, after it", async () => {
         const codec = heldCodec();
-        const { host } = await hosting(undefined, {}, codec);
+        const { host } = await hosting({ codec });
         const channel = connect();
         await settle();
         host.execute(100);
@@ -511,15 +477,6 @@ describe("SessionHost", () => {
         expect(firstCommit).toBeGreaterThan(lastChunk);
     });
 
-    it("ignores a guest's second channel, which would cost another snapshot", async () => {
-        await hosting();
-        const channel = await joined();
-        const second = connect();
-        await settle();
-        expect(second.sent).toEqual([]);
-        expect(channel.snapshots()).toHaveLength(1);
-    });
-
     it("lets go of a departing guest's keys on every machine", async () => {
         const { host, processor } = await hosting();
         const channel = await joined();
@@ -530,7 +487,7 @@ describe("SessionHost", () => {
             [[4, 1], 1],
             [[4, 1], 0],
         ]);
-        expect(peers[0].closed).toBe(true);
+        expect(channel.closed).toBe(true);
     });
 
     describe("control", () => {
@@ -539,12 +496,9 @@ describe("SessionHost", () => {
         const keyA = { kind: "key", mapping: A, down: true };
         const sentOf = (channel, type) => channel.messages().filter((each) => each.type === type);
         async function twoGuests() {
-            const { host, processor } = await hosting([
-                { guest: "g1", sdp: "offer" },
-                { guest: "g2", sdp: "offer" },
-            ]);
-            const first = connectTo(0);
-            const second = connectTo(1);
+            const { host, processor } = await hosting();
+            const first = connect();
+            const second = connect();
             await settle();
             return { host, processor, first, second };
         }
@@ -593,15 +547,12 @@ describe("SessionHost", () => {
         });
 
         it("tells a guest joining after it was set, in its first roster", async () => {
-            const { host } = await hosting([
-                { guest: "g1", sdp: "offer" },
-                { guest: "g2", sdp: "offer" },
-            ]);
-            const first = connectTo(0);
+            const { host } = await hosting();
+            const first = connect();
             await settle();
             expect(first.snapshots()).toHaveLength(1);
             host.setTakeOnKey(true);
-            const second = connectTo(1);
+            const second = connect();
             await settle();
             expect(second.snapshots()).toHaveLength(1);
             expect(sentOf(second, "roster")[0]).toMatchObject({ takeOnKey: true });
@@ -1237,12 +1188,9 @@ describe("SessionHost", () => {
     });
 
     it("shows every guest the same lights, its own marked", async () => {
-        const { host } = await hosting([
-            { guest: "g1", sdp: "offer" },
-            { guest: "g2", sdp: "offer" },
-        ]);
-        const first = connectTo(0);
-        const second = connectTo(1);
+        const { host } = await hosting();
+        const first = connect();
+        const second = connect();
         await settle();
         expect(second.snapshots()).toHaveLength(1);
         first.emit("message", message({ type: "hello", name: "Kieran" }));
@@ -1264,12 +1212,9 @@ describe("SessionHost", () => {
     });
 
     it("says when a guest desyncs and why, once however often it asks, and plainly that a second is a bug", async () => {
-        await hosting([
-            { guest: "g1", sdp: "offer" },
-            { guest: "g2", sdp: "offer" },
-        ]);
-        const first = connectTo(0);
-        const second = connectTo(1);
+        await hosting();
+        const first = connect();
+        const second = connect();
         await settle();
         expect(second.snapshots()).toHaveLength(1);
         for (let i = 0; i < 3; ++i) first.emit("message", message({ type: "resync", reason: "state differs" }));
@@ -1318,7 +1263,7 @@ describe("SessionHost", () => {
         const channel = await joined();
         channel.full = true;
         expect(host.execute(100)).toBe(true);
-        expect(peers[0].closed).toBe(true);
+        expect(channel.closed).toBe(true);
     });
 
     it("sends a guest that keeps asking at most one snapshot per interval", async () => {
@@ -1332,9 +1277,23 @@ describe("SessionHost", () => {
         expect(channel.snapshots()).toHaveLength(2);
     });
 
+    it("sends a guest still connecting nothing at a jump, and its one snapshot once it opens", async () => {
+        const { host, processor } = await hosting();
+        const opening = transport.offer("g1");
+        processor.currentCycles = processor.targetCycles = 50;
+        host.execute(0);
+        await settle();
+        expect(opening.sent).toEqual([]);
+        expect(opening.closed).toBe(false);
+        opening.open = true;
+        opening.listener.opened();
+        await settle();
+        expect(opening.snapshots().map((snapshot) => snapshot.at)).toEqual([50]);
+    });
+
     it("sends a guest whose snapshot is still on its way the machine from after a jump instead", async () => {
         const codec = heldCodec();
-        const { host, processor } = await hosting(undefined, {}, codec);
+        const { host, processor } = await hosting({ codec });
         const channel = connect();
         await settle();
         expect(channel.messages()[0]).toMatchObject({ type: "welcome" });
@@ -1346,7 +1305,7 @@ describe("SessionHost", () => {
     });
 
     it("runs the clock from cycles, from the wall time here, starting again from it after a jump", async () => {
-        const { host, processor } = await hosting([]);
+        const { host, processor } = await hosting();
         const { cmos } = processor.sysvia;
         const started = Date.now();
         expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
@@ -1355,52 +1314,6 @@ describe("SessionHost", () => {
         processor.cycleSeconds = 20;
         host.execute(0);
         expect(cmos.bbcDateTime().getTime()).toBe(wallClockSecondMs(started));
-    });
-
-    it("opens only a few connections at a time, and frees the place of one that never completes", async () => {
-        const offers = Array.from({ length: MaxConnectingGuests + 2 }, (_, i) => ({ guest: `g${i}`, sdp: "offer" }));
-        await hosting([], { listOffers: vi.fn(async () => offers) });
-        expect(peers).toHaveLength(MaxConnectingGuests);
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        expect(peers.slice(0, MaxConnectingGuests).every((peer) => peer.closed)).toBe(true);
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        expect(peers).toHaveLength(MaxConnectingGuests + 2);
-    });
-
-    it("answers each offer once, even if answering it failed", async () => {
-        const offer = { guest: "g1", sdp: "offer" };
-        const postAnswer = vi.fn(async () =>
-            Promise.reject(new Error("Rendezvous post answer failed with status 500")),
-        );
-        await hosting([], { listOffers: vi.fn(async () => [offer]), postAnswer });
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        expect(postAnswer).toHaveBeenCalledTimes(1);
-        expect(peers).toHaveLength(1);
-    });
-
-    it("answers with the candidates it found, however long the first took", async () => {
-        vi.stubGlobal("RTCPeerConnection", GatheringPeer);
-        const { context } = await hosting();
-        await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
-        expect(context.rendezvous.postAnswer).not.toHaveBeenCalled();
-        peers[0].find();
-        await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
-        expect(context.rendezvous.postAnswer).toHaveBeenCalledWith(
-            "room",
-            "secret",
-            "g1",
-            expect.stringContaining(Candidate),
-        );
-    });
-
-    it("sends no answer to a guest it gave up on while still gathering", async () => {
-        vi.stubGlobal("RTCPeerConnection", GatheringPeer);
-        const { context } = await hosting();
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs - IceGatheringTimeoutMs / 2);
-        peers[0].find();
-        await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
-        expect(peers[0].closed).toBe(true);
-        expect(context.rendezvous.postAnswer).not.toHaveBeenCalled();
     });
 });
 
@@ -1433,7 +1346,7 @@ describe("SessionGuest", () => {
         const guest = new SessionGuest(context, "room");
         guests.push(guest);
         await guest.start();
-        const channel = peers[0].channel;
+        const channel = context.transport.links[0];
         const deliver = async (messages) => {
             messages.forEach((each) => channel.emit("message", each));
             await settle();
@@ -1444,71 +1357,12 @@ describe("SessionGuest", () => {
 
     const resyncsAsked = (channel) => channel.messages().filter((each) => each.type === "resync").length;
 
-    it("waits for an offer's answer for less time than the rendezvous keeps the offer", () => {
-        expect(AnswerTimeoutMs).toBeLessThan(OfferLifetimeSeconds * 1000);
-    });
-
-    describe("its offer", () => {
-        function offering({ foundBeforeLooking = false } = {}) {
-            vi.stubGlobal(
-                "RTCPeerConnection",
-                class extends GatheringPeer {
-                    async setLocalDescription() {
-                        if (foundBeforeLooking) this.find({ announced: false });
-                    }
-                },
-            );
-            const context = fakeContext();
-            const guest = new SessionGuest(context, "room");
-            guests.push(guest);
-            const started = guest.start();
-            return { started, postOffer: context.rendezvous.postOffer };
-        }
-
-        it("waits for a first candidate however long it takes, then as long again for more", async () => {
-            const { started, postOffer } = offering();
-            await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
-            expect(postOffer).not.toHaveBeenCalled();
-            peers[0].find();
-            await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs - 1);
-            expect(postOffer).not.toHaveBeenCalled();
-            await vi.advanceTimersByTimeAsync(1);
-            expect(postOffer).toHaveBeenCalledWith("room", expect.any(String), expect.stringContaining(Candidate));
-            await started;
-        });
-
-        it("counts from a candidate already found when it starts waiting", async () => {
-            const { started, postOffer } = offering({ foundBeforeLooking: true });
-            await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
-            expect(postOffer).toHaveBeenCalledWith("room", expect.any(String), expect.stringContaining(Candidate));
-            await started;
-        });
-
-        it("goes as soon as gathering is complete", async () => {
-            const { started, postOffer } = offering();
-            peers[0].find();
-            peers[0].iceGatheringState = "complete";
-            peers[0].emit("icegatheringstatechange");
-            await settle();
-            expect(postOffer).toHaveBeenCalledWith("room", expect.any(String), expect.stringContaining(Candidate));
-            await started;
-        });
-
-        it("gives up when no candidate comes, since nothing could connect", async () => {
-            const { started, postOffer } = offering();
-            const failed = expect(started).rejects.toThrow("found no address to connect from");
-            await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-            await failed;
-            expect(postOffer).not.toHaveBeenCalled();
-        });
-    });
-
     it("says its name to the host, and calls the host by the one it was welcomed with", async () => {
         const context = fakeContext();
         const guest = new SessionGuest(context, "room", "Kieran");
         guests.push(guest);
         await guest.start();
-        const { channel } = peers[0];
+        const [channel] = transport.links;
         expect(channel.messages()[0]).toEqual({ type: "hello", name: "Kieran" });
         channel.emit("message", message(welcomeAs({ model: context.model.name, name: "Matt" })));
         expect(panel().peers[0].label).toBe("Matt");
@@ -1622,11 +1476,10 @@ describe("SessionGuest", () => {
 
         it("notes a host that never answers as a timeout", async () => {
             vi.spyOn(console, "error").mockImplementation(() => {});
-            startSessionFromUrl(
-                { client: "there" },
-                fakeContext({ rendezvous: { getAnswer: vi.fn(async () => null) } }),
-            );
-            await vi.advanceTimersByTimeAsync(AnswerTimeoutMs + 1000);
+            const timedOut = Object.assign(new Error("the host isn't answering"), { sessionFailure: "timeout" });
+            const join = vi.fn(async () => Promise.reject(timedOut));
+            startSessionFromUrl({ client: "there" }, fakeContext({ transport: fakeTransport({ join }) }));
+            await settle();
             expect(sent("session")).toEqual([
                 { role: "guest", stage: "created" },
                 { role: "guest", stage: "failed", reason: "timeout" },
@@ -1936,7 +1789,7 @@ describe("SessionGuest", () => {
 
     it("goes back to running on its own if it cannot join", async () => {
         const context = fakeContext({
-            rendezvous: { postOffer: vi.fn(async () => Promise.reject(new Error("No such room"))) },
+            transport: fakeTransport({ join: vi.fn(async () => Promise.reject(new Error("No such room"))) }),
         });
         await expect(new SessionGuest(context, "room").start()).rejects.toThrow("No such room");
         expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
@@ -2124,6 +1977,105 @@ describe("SessionGuest", () => {
     });
 });
 
+describe("a host and its guests, joined in-process", () => {
+    const MsCycles = CyclesPerSecond / 1000;
+
+    async function session(names) {
+        const transport = inProcessTransport();
+        const hostContext = fakeContext({ transport, page: fakePage() });
+        const host = new SessionHost(hostContext, "room", "Matt");
+        hosts.push(host);
+        await host.start();
+        const joined = [];
+        for (const name of names) {
+            const context = fakeContext({ transport, page: fakePage(), processor: fakeProcessor({ cycles: 0 }) });
+            const guest = new SessionGuest(context, "room", name);
+            guests.push(guest);
+            await guest.start();
+            await settle();
+            joined.push({
+                guest,
+                context,
+                run: (cycles) => context.loop.setLockstep.mock.calls.at(-1)[0].execute(cycles),
+            });
+        }
+        return { host, hostContext, guests: joined };
+    }
+
+    const panelOf = (context) => context.page.panels.at(-1);
+
+    it("welcomes each guest by name with the host's machine, and each sees the others", async () => {
+        const { host, hostContext, guests } = await session(["Kieran", "Ana"]);
+        for (const { context } of guests) expect(context.processor.currentCycles).toBe(1000);
+        const joining = guests[0].guest.report().events.map(({ event }) => event);
+        expect(joining.indexOf("connected")).toBeLessThan(joining.indexOf("welcome"));
+        expect(panelOf(hostContext).peers.map(({ label }) => label)).toEqual(["Matt (you)", "Kieran", "Ana"]);
+        expect(host.connectedCount()).toBe(2);
+        host.showStatus();
+        await settle();
+        expect(panelOf(guests[1].context).peers.map(({ label }) => label)).toEqual(["Matt", "Kieran", "Ana (you)"]);
+    });
+
+    it("runs every guest's machine to where the host's has gone", async () => {
+        const { host, guests } = await session(["Kieran", "Ana"]);
+        host.execute(500);
+        host.execute(700);
+        await settle();
+        for (const { context, run } of guests) {
+            run(5000);
+            expect(context.processor.currentCycles).toBe(2200);
+        }
+    });
+
+    it("puts a guest's key into the host's machine and every guest's, on the cycle it was stamped with", async () => {
+        const { host, hostContext, guests } = await session(["Kieran", "Ana"]);
+        guests[0].context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
+        await settle();
+        host.execute(CyclesPerSecond);
+        await settle();
+        expect(hostContext.processor.sysvia.setMapped).toHaveBeenCalledWith([4, 1], 1);
+        for (const { context, run } of guests) {
+            run(2 * CyclesPerSecond);
+            expect(context.processor.sysvia.setMapped).toHaveBeenCalledWith([4, 1], 1);
+        }
+        expect(host.report().events.find(({ event }) => event === "input")).toMatchObject({
+            guest: guests[0].guest.id,
+            cycle: expect.any(Number),
+        });
+        expect(host.report().events.find(({ event }) => event === "input").cycle).toBeGreaterThan(
+            1000 + 100 * MsCycles,
+        );
+    });
+
+    it("lets go of a guest's keys when its page goes, on every machine", async () => {
+        const { host, hostContext, guests } = await session(["Kieran", "Ana"]);
+        guests[0].context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
+        await settle();
+        host.execute(CyclesPerSecond);
+        guests[0].context.page.hide();
+        await settle();
+        host.execute(0);
+        await settle();
+        guests[1].run(2 * CyclesPerSecond);
+        for (const { processor } of [hostContext, guests[1].context]) {
+            expect(processor.sysvia.setMapped.mock.calls).toEqual([
+                [[4, 1], 1],
+                [[4, 1], 0],
+            ]);
+        }
+        expect(panelOf(hostContext).peers.at(-1)).toMatchObject({ label: "Kieran", state: "left" });
+    });
+
+    it("leaves each guest's machine running on its own when the host goes", async () => {
+        const { host, guests } = await session(["Kieran"]);
+        host.close();
+        await settle();
+        expect(guests[0].guest.left).toBe(true);
+        expect(guests[0].context.loop.setLockstep).toHaveBeenLastCalledWith(null);
+        expect(guests[0].context.page.notices).toContain("Lost the host; the machine carries on here on its own.");
+    });
+});
+
 describe("startSessionFromUrl", () => {
     async function started(params, contextOptions) {
         const context = fakeContext(contextOptions);
@@ -2131,18 +2083,18 @@ describe("startSessionFromUrl", () => {
         if (session instanceof SessionGuest) guests.push(session);
         else if (session) hosts.push(session);
         await settle();
-        return context.rendezvous;
+        return context.transport;
     }
 
     it("hosts with ?server=, which wins over ?client=", async () => {
-        const rendezvous = await started({ server: "here", client: "there" });
-        expect(rendezvous.createRoom).toHaveBeenCalledWith("here");
-        expect(rendezvous.postOffer).not.toHaveBeenCalled();
+        const { createRoom, join } = await started({ server: "here", client: "there" });
+        expect(createRoom).toHaveBeenCalledWith("here");
+        expect(join).not.toHaveBeenCalled();
     });
 
     it("joins with ?client=", async () => {
-        const rendezvous = await started({ client: "there" });
-        expect(rendezvous.postOffer).toHaveBeenCalledWith("there", expect.any(String), "local sdp");
+        const { join } = await started({ client: "there" });
+        expect(join).toHaveBeenCalledWith("there", expect.any(String), expect.any(Object));
     });
 
     it("shows a guest's session in the lights as it joins, under a name of its own", async () => {
@@ -2165,10 +2117,10 @@ describe("startSessionFromUrl", () => {
         ["an offer already waiting", 409, "this page is already waiting to join; reload it to try again"],
         ["anything else", 500, "Rendezvous post offer failed with status 500"],
     ])("says what went wrong in plain words for %s", async (_, status, why) => {
-        const postOffer = vi.fn(async () => {
+        const join = vi.fn(async () => {
             throw new RendezvousError("Rendezvous post offer failed with status " + status, status);
         });
-        await started({ client: "there" }, { rendezvous: { postOffer } });
+        await started({ client: "there" }, { transport: fakeTransport({ join }) });
         expect(page.notices).toContain(`The session couldn't start: ${why}.`);
     });
 
@@ -2177,7 +2129,7 @@ describe("startSessionFromUrl", () => {
             throw new RendezvousError("Rendezvous create room failed with status 404", 404);
         });
         const sent = sentEvents();
-        await started({ server: "here" }, { rendezvous: { createRoom } });
+        await started({ server: "here" }, { transport: fakeTransport({ createRoom }) });
         expect(page.notices).toContain("The session couldn't start: the shared session service isn't available here.");
         expect(sent("session").at(-1)).toEqual({ role: "host", stage: "failed", reason: "service_unavailable" });
     });
@@ -2187,7 +2139,7 @@ describe("startSessionFromUrl", () => {
             throw new RendezvousError("Rendezvous create room failed with status 409", 409);
         });
         const sent = sentEvents();
-        await started({ server: "here" }, { rendezvous: { createRoom } });
+        await started({ server: "here" }, { transport: fakeTransport({ createRoom }) });
         expect(page.notices).toContain(`The session couldn't start: a room called "here" is already open.`);
         expect(sent("session").at(-1)).toEqual({ role: "host", stage: "failed", reason: "room_taken" });
     });
@@ -2200,10 +2152,10 @@ describe("startSessionFromUrl", () => {
     ])("notes a refusal of %i to join as %s, with none of its words", async (status, reason) => {
         const sent = sentEvents();
         vi.spyOn(console, "error").mockImplementation(() => {});
-        const postOffer = vi.fn(async () => {
+        const join = vi.fn(async () => {
             throw new RendezvousError(`Rendezvous post offer failed with status ${status}`, status);
         });
-        await started({ client: "there" }, { rendezvous: { postOffer } });
+        await started({ client: "there" }, { transport: fakeTransport({ join }) });
         expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "failed", reason });
     });
 
@@ -2218,9 +2170,9 @@ describe("startSessionFromUrl", () => {
         ["an Atom", { server: "here" }, { model: { isAtom: true } }],
         ["a second processor", { server: "here" }, { processor: Object.assign(fakeProcessor(), { hasTube: true }) }],
     ])("starts nothing for %s", async (_, params, contextOptions) => {
-        const rendezvous = await started(params, contextOptions);
-        expect(rendezvous.createRoom).not.toHaveBeenCalled();
-        expect(peers).toEqual([]);
+        const { createRoom, join } = await started(params, contextOptions);
+        expect(createRoom).not.toHaveBeenCalled();
+        expect(join).not.toHaveBeenCalled();
     });
 });
 
@@ -2236,9 +2188,9 @@ describe("hostSession", () => {
         const host = await hostSession(context, "matt");
         hosts.push(host);
         await settle();
-        expect(context.rendezvous.createRoom).toHaveBeenCalledOnce();
-        expect(context.rendezvous.createRoom).toHaveBeenCalledWith(expect.stringMatching(/^[a-z]+-[a-z]+-[a-z]+$/));
-        expect(context.rendezvous.createRoom.mock.calls[0][0]).toBe(host.room);
+        expect(context.transport.createRoom).toHaveBeenCalledOnce();
+        expect(context.transport.createRoom).toHaveBeenCalledWith(expect.stringMatching(/^[a-z]+-[a-z]+-[a-z]+$/));
+        expect(context.transport.createRoom.mock.calls[0][0]).toBe(host.room);
         expect(host.name).toBe("matt");
         expect(panel().opens).toBe(1);
         expect(window.location.href).toBe(before);
@@ -2246,7 +2198,7 @@ describe("hostSession", () => {
 
     it("tries another name when the one it made up is taken", async () => {
         const createRoom = vi.fn(async () => "secret").mockRejectedValueOnce(taken());
-        const host = await hostSession(fakeContext({ rendezvous: { createRoom } }), "matt");
+        const host = await hostSession(fakeContext({ transport: fakeTransport({ createRoom }) }), "matt");
         hosts.push(host);
         await settle();
         expect(createRoom).toHaveBeenCalledTimes(2);
@@ -2264,7 +2216,7 @@ describe("hostSession", () => {
         const createRoom = vi.fn(async () => {
             throw error();
         });
-        const context = fakeContext({ rendezvous: { createRoom } });
+        const context = fakeContext({ transport: fakeTransport({ createRoom }) });
         expect(await hostSession(context, "matt")).toBeNull();
         await settle();
         expect(createRoom).toHaveBeenCalledTimes(tries);
@@ -2284,7 +2236,7 @@ describe("hostSession", () => {
         const createRoom = vi.fn(async () => {
             throw new RendezvousError(`Rendezvous create room failed with status ${status}`, status);
         });
-        expect(await hostSession(fakeContext({ rendezvous: { createRoom } }), "matt")).toBeNull();
+        expect(await hostSession(fakeContext({ transport: fakeTransport({ createRoom }) }), "matt")).toBeNull();
         expect(sent("session")).toEqual([{ role: "host", stage: "failed", reason }]);
     });
 
@@ -2292,7 +2244,7 @@ describe("hostSession", () => {
         const context = fakeContext({ model: { isAtom: true } });
         expect(await hostSession(context, "matt")).toBeNull();
         await settle();
-        expect(context.rendezvous.createRoom).not.toHaveBeenCalled();
+        expect(context.transport.createRoom).not.toHaveBeenCalled();
     });
 });
 
