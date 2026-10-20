@@ -10,7 +10,7 @@ import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
-import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
+import { MediaLoader } from "./web/media-loader.js";
 import { SthSource } from "./web/sth-source.js";
 import { HfeSource } from "./web/hfe-source.js";
 import { BitshiftersSource } from "./web/bitshifters-source.js";
@@ -21,7 +21,7 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
+import { EmulationLoop } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
@@ -43,7 +43,7 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
-import { bootModeOf, parseMediaParams, processAutobootParams, processDriveTrackParams } from "./url-params.js";
+import { processDriveTrackParams } from "./url-params.js";
 import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
 import { gzipCodec, hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
@@ -55,6 +55,7 @@ import { SymbolSets } from "./symbol-sets.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
 import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
+import { hostAndRun, startAsTheUrlAsks, startupPlan } from "./web/startup.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
 
@@ -70,13 +71,7 @@ if (benchmarkPage) silenceAnalytics();
 configureAnalytics();
 installIcons();
 labelPageShortcuts();
-let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
-
-let discImage = BuiltInImages[0].file;
-let secondDiscImage = null;
-const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
-if (queryDiscImage) discImage = queryDiscImage;
-if (querySecondDisc) secondDiscImage = querySecondDisc;
+const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 const extraRoms = [];
@@ -357,68 +352,9 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 // Start it up.
 // ------------------------------------------------------------------------
 
-const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
-if (parsedQuery.loadBasic) needsAutoboot = "";
-
-// The boot disc is described while the machine starts, so a link that boots a disc without
-// naming a model can be switched to the machine the disc needs before the boot.
-const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? media.describe(discImage) : null;
-/** @returns {Promise<boolean>} whether the page is on its way to the machine its boot disc needs */
-const switchForBootDisc = async (d) =>
-    !!d &&
-    !machineSwitch.satisfies(d) &&
-    machineSwitch.switchFor(d, media.slots.drive(0), { boot: true, replace: true });
-const startPromise = machine.start({
-    media,
-    autoBoot,
-    discImage,
-    discImageInUrl: !!queryDiscImage,
-    secondDiscImage,
-    tape: parsedQuery.tape,
-    mmcImage,
-    loadBasic: parsedQuery.loadBasic,
-    embedBasic: parsedQuery.embedBasic,
-    basicNeedsRun,
-});
-
-/** @returns {Promise<boolean>} false when the page is reloading as the machine its boot disc needs */
-async function startAsTheUrlAsks() {
-    if (await switchForBootDisc(await bootDisc)) return false;
-    noteMachineStart(
-        settings,
-        parsedQuery,
-        { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
-        audioHandler.ready,
-    );
-    if (hasVideoNula) noteFeature(VideoNulaFeature, "fitted");
-
-    switch (needsAutoboot) {
-        case "boot":
-            autoBoot.boot();
-            break;
-        case "type":
-            autoBoot.type(autoType);
-            break;
-        case "chain":
-            autoBoot.chainTape();
-            break;
-        case "run":
-            autoBoot.runTape();
-            break;
-        default:
-            break;
-    }
-
-    if (parsedQuery.patch) {
-        dbgr.setPatch(parsedQuery.patch);
-    }
-
-    // Restore the state a cross-model reload stashed, if there is one.
-    await snapshots.restorePendingState();
-
-    if (loop.mode !== RunMode.debugging) loop.go();
-    return true;
-}
+// Described while the machine starts, so a switch to the machine the disc needs comes before the boot.
+const bootDisc = plan.mayNeedAnotherModel ? media.describe(plan.media.discImage) : null;
+const startPromise = machine.start({ media, autoBoot, ...plan.media });
 
 (async () => {
     try {
@@ -438,7 +374,23 @@ async function startAsTheUrlAsks() {
                 commit,
                 version,
             });
-        } else if (!(await startAsTheUrlAsks())) return;
+        } else {
+            const started = await startAsTheUrlAsks(plan, {
+                bootDisc,
+                machineSwitch,
+                drive0: media.slots.drive(0),
+                renderer: display.canvas.renderer,
+                noteStart: (details) => {
+                    noteMachineStart(settings, parsedQuery, details, audioHandler.ready);
+                    if (hasVideoNula) noteFeature(VideoNulaFeature, "fitted");
+                },
+                autoBoot,
+                dbgr,
+                snapshots,
+                loop,
+            });
+            if (!started) return;
+        }
         const sessionContext = {
             processor,
             model,
@@ -453,11 +405,7 @@ async function startAsTheUrlAsks() {
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
             refusal: sessionRefusal(sessionContext),
-            host: async (name) => {
-                const session = await hostSession(sessionContext, name);
-                if (session) loop.go();
-                return session;
-            },
+            host: hostAndRun(loop, (name) => hostSession(sessionContext, name)),
             join: (room, name) => window.location.assign(joinLink(room, name, urlState.params)),
         });
     } catch (error) {
