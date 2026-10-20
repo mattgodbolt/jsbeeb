@@ -13,6 +13,10 @@ const defaultCmos = Object.freeze([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
+// The RTC holds a two-digit year and MOS 3.20 prints it after a fixed century (LDA #&19 at &9880 in ROM 15);
+// the ROM jsbeeb ships has that byte patched to &20 (#362), so every year it shows is 20yy.
+const MosCentury = 2000;
+
 function toBcd(value) {
     return parseInt(value.toString(10), 16);
 }
@@ -185,7 +189,7 @@ export class Cmos {
                     case 8:
                         return toBcd(current.getMonth() + 1);
                     case 9:
-                        return toBcd(current.getFullYear());
+                        return toBcd(current.getFullYear() % 100);
                 }
             } else {
                 return this.store[this.cmosAddr] & 0xff;
@@ -224,19 +228,17 @@ export class Cmos {
                     // cycle/ I'm probably being dumb. Or else I should emulate the clock "properly" but
                     // that seems like an awful lot of work.
                     // case 6:
-                    //     dayOffset = (bbcTime.getDay() - fromBcd(portApins - 1)) % 7;
+                    //     dayOffset = (bbcTime.getDay() - (fromBcd(portApins) - 1)) % 7;
                     //     break;
                     case 7:
                         bbcTime.setDate(fromBcd(portApins));
                         break;
                     case 8:
-                        bbcTime.setMonth(fromBcd(portApins - 1));
+                        bbcTime.setMonth(fromBcd(portApins) - 1);
                         break;
-                    case 9: {
-                        const yearBase = fromBcd(portApins) > 80 ? 1900 : 2000;
-                        bbcTime.setFullYear(fromBcd(portApins) + yearBase);
+                    case 9:
+                        bbcTime.setFullYear(MosCentury + fromBcd(portApins));
                         break;
-                    }
                 }
                 const secondsNow = Math.floor(this.now() / 1000) * 1000;
                 this.timeOffset = bbcTime.getTime() - secondsNow;
