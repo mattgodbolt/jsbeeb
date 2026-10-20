@@ -994,6 +994,7 @@ export class SessionGuest {
         this.keysForControl = [];
         this.lastCommitMs = 0;
         this.left = false;
+        this.closing = new AbortController();
         this.log = new SessionLog({
             role: "guest",
             room,
@@ -1063,10 +1064,15 @@ export class SessionGuest {
         channel.binaryType = "arraybuffer";
         channel.addEventListener("message", ({ data }) => this.fromHost(data));
         channel.addEventListener("close", () => this.hostLeft());
-        window.addEventListener("pagehide", () => {
-            this.send({ type: "bye" });
-            if (!this.left) noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
-        });
+        window.addEventListener(
+            "pagehide",
+            () => {
+                if (this.left) return;
+                this.send({ type: "bye" });
+                noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
+            },
+            { signal: this.closing.signal },
+        );
         await pc.setLocalDescription(await pc.createOffer());
         notify(`Joining "${this.room}"...`);
         await rendezvous.postOffer(this.room, this.id, await gatheredDescription(pc));
@@ -1406,6 +1412,7 @@ export class SessionGuest {
 
     leave(reason = "couldn't join") {
         this.left = true;
+        this.closing.abort();
         this.sequencer = null;
         this.stopWatchingPage();
         this.leftReason = reason;
