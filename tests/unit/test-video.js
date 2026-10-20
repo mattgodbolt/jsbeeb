@@ -445,17 +445,34 @@ describe("Video", () => {
         });
 
         it("comes back enabled and in its power-on state after a power-on reset", () => {
+            const fresh = makeVideo({ hasVideoNula: true }).video;
             ({ video, cpu } = makeVideo({ hasVideoNula: true }));
-            video.ula.write(2, NulaPaletteModeOn);
+            for (const write of [NulaPaletteModeOn, NulaHorizontalOffsetOne, 0x31, 0x61, 0x71, 0x8f])
+                video.ula.write(2, write);
+            for (const byte of NulaColourZeroFullRed) video.ula.write(3, byte);
             video.ula.write(2, NulaDisable);
 
             video.reset(cpu, video.sysvia, true);
 
-            expect(video.ula.paletteMode).toBe(0);
-            video.ula.write(0, 0x08);
+            expect(video.ula.snapshotState()).toEqual(fresh.ula.snapshotState());
+            expect(video.ulaPal).toEqual(fresh.ulaPal);
+        });
+
+        it("stays disabled through BREAK", () => {
+            ({ video, cpu } = makeVideo({ hasVideoNula: true }));
+            video.ula.write(2, NulaDisable);
+
+            video.reset(cpu, video.sysvia, false);
+
+            video.ula.write(2, 0x1c);
+            expect(video.ulactrl).toBe(0x1c);
+        });
+
+        it("still folds &FE22 onto &FE20 on a stock ULA after a power-on reset", () => {
+            video.reset(cpu, video.sysvia, true);
+
             video.ula.write(2, NulaPaletteModeOn);
-            expect(video.ula.paletteMode).toBe(1);
-            expect(video.ulactrl).toBe(0x08);
+            expect(video.ulactrl).toBe(NulaPaletteModeOn);
         });
     });
 
