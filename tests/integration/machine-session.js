@@ -5,7 +5,7 @@ import { MachineSession } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { RepoRoot } from "./helpers.js";
-import { BootTimeout, bootedSession } from "./machine-session-shared.js";
+import { BootTimeout, bootedSession } from "../helpers/machine-session.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;

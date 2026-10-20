@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { AutobootMaxFrames, MachineSession } from "../../src/machine-session.js";
 import { BBC } from "../../src/keymap.js";
-import { BootTimeout, bootedSession } from "./machine-session-shared.js";
+import { BootTimeout, bootedSession } from "../helpers/machine-session.js";
 
 describe("MachineSession autoboot", () => {
     const WelcomeBootMessage = "This message was automatically loaded.";

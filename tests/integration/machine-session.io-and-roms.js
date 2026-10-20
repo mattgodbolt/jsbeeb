@@ -4,7 +4,7 @@ import path from "node:path";
 import { MachineSession } from "../../src/machine-session.js";
 import { BBC } from "../../src/keymap.js";
 import { RepoRoot } from "./helpers.js";
-import { BootTimeout, CyclesPerSecond, bootedSession } from "./machine-session-shared.js";
+import { BootTimeout, CyclesPerSecond, bootedSession } from "../helpers/machine-session.js";
 
 describe("MachineSession tapes", () => {
     afterEach(() => vi.restoreAllMocks());
