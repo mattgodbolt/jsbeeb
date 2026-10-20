@@ -486,6 +486,7 @@ export class AtomPPIA extends PPIA {
         this.lastSpeakerBit = state.lastSpeakerBit;
         // Which held key was forcing shift is not saved, so the matrix's shift is taken as the shift key's.
         const [shiftCol, shiftRow] = ATOM.SHIFT;
-        this.shift.restore({ physicalShiftDown: !!this.keys[shiftCol][shiftRow], forcedShift: null });
+        this.shift.clear();
+        this.shift.physicalShiftDown = !!this.keys[shiftCol][shiftRow];
     }
 }

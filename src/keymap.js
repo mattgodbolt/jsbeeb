@@ -693,12 +693,18 @@ export class ShiftOverride {
         }
     }
 
+    // Shared-session peers exchange this, and only the package version must match between them,
+    // so the field names stay those of the SysVia's keyboard state.
     state() {
-        return { physicalShiftDown: this.physicalShiftDown, forcedShift: this.forcedShift };
+        return {
+            physicalShiftDown: this.physicalShiftDown,
+            shiftOverrideActive: this.forcedShift !== null,
+            shiftOverrideDesiredShift: !!this.forcedShift,
+        };
     }
 
-    restore({ physicalShiftDown, forcedShift }) {
+    restore({ physicalShiftDown, shiftOverrideActive, shiftOverrideDesiredShift }) {
         this.physicalShiftDown = physicalShiftDown;
-        this.forcedShift = forcedShift;
+        this.forcedShift = shiftOverrideActive ? shiftOverrideDesiredShift : null;
     }
 }

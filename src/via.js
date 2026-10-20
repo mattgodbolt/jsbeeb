@@ -694,13 +694,13 @@ export class SysVia extends Via {
     keyboardState() {
         return {
             keys: this.keys.map((column) => Array.from(column)),
-            shift: this.shift.state(),
+            ...this.shift.state(),
         };
     }
 
     restoreKeyboard(state) {
         state.keys.forEach((column, col) => this.keys[col].set(column));
-        this.shift.restore(state.shift);
+        this.shift.restore(state);
         this.updateKeys();
     }
 
