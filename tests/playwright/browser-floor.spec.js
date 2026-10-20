@@ -23,7 +23,7 @@ const analyticsCalls = (page, command) =>
 const unsupportedBrowserEvents = async (page) =>
     (await analyticsCalls(page, "event")).filter((call) => call[1] === "unsupported_browser");
 
-test("a supported browser loads gtag.js once and sees no message, even for an error once main.js has started", async ({
+test("a supported browser loads gtag.js once, reports the machine starting, and sees no message, even for an error once main.js has started", async ({
     beeb,
     page,
 }) => {
@@ -31,6 +31,18 @@ test("a supported browser loads gtag.js once and sees no message, even for an er
     await beeb.expectScreenText(">");
     await expect(page.locator('script[src^="https://www.googletagmanager.com/gtag/js?id="]')).toHaveCount(1);
     expect(await analyticsCalls(page, "config"), "main.js's config").toHaveLength(1);
+    await expect
+        .poll(async () => (await analyticsCalls(page, "event")).filter((call) => call[1] === "machine_start"))
+        .toEqual([
+            [
+                "event",
+                "machine_start",
+                expect.objectContaining({
+                    renderer: expect.stringMatching(/^(webgl|canvas2d)$/),
+                    audio: expect.stringMatching(/^(ok|unavailable)$/),
+                }),
+            ],
+        ]);
     await page.evaluate(() => {
         const bundle = document.querySelector('script[type="module"]').src;
         window.dispatchEvent(new ErrorEvent("error", { filename: bundle }));

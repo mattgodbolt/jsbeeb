@@ -23,6 +23,7 @@ const LightsBarViewports = [
     { width: 1100, height: 650, lines: 2 },
 ];
 const Oswrch = 0xffee;
+const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
@@ -101,19 +102,25 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     await page.evaluate((address) => window.processor.debugInstruction.add((pc) => pc === address), Oswrch);
     await beeb.pressKey("a");
     const credit = page.locator("#debug-symbols");
-    await expect(credit).toContainText("names from");
+    const goTo = async (address) => {
+        const box = page.locator("#goto-dis-addr-form .goto-addr");
+        await box.fill(`$${address.toString(16)}`);
+        await box.press("Enter");
+    };
+    // Both sets in, so neither arriving later can redraw the line under the checks.
+    await goTo(BasicOswrchCall);
+    await expect(credit).toContainText("MOS 1.20");
+    await expect(credit).toContainText("BASIC II");
     const panelWidth = () => page.locator("#debug").evaluate((panel) => panel.getBoundingClientRect().width);
     const creditedWidth = await panelWidth();
     await credit.evaluate((line) => line.append(" · a set with a long title".repeat(20)));
     expect(await panelWidth()).toBe(creditedWidth);
-    const box = page.locator("#goto-dis-addr-form .goto-addr");
-    await box.fill(`$${Unnamed.toString(16)}`);
-    await box.press("Enter");
+    await goTo(Unnamed);
     await expect(credit).toHaveCSS("visibility", "hidden");
     expect(await panelWidth()).toBe(creditedWidth);
 });
 
-test("a state saved at a breakpoint, loaded on another machine, stops there in the debugger until continued", async ({
+test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
     page,
 }) => {
@@ -129,20 +136,28 @@ test("a state saved at a breakpoint, loaded on another machine, stops there in t
     const download = page.waitForEvent("download");
     await page.locator("#save-state").dispatchEvent("click");
     const saved = await (await download).path();
+    await page.click("#debug-play");
+    await beeb.expectRunningPast(savedAt.cycles);
+
+    // Each load starts with the machine running and the debugger shut. The play button comes on as soon as the load
+    // holds the machine, before the state is in; the debugger opening is what says it is.
+    const loadAndContinue = async () => {
+        await page.setInputFiles("#load-state", saved);
+        await expect(page.locator("#debug")).toBeVisible();
+        expect(await where()).toEqual(savedAt);
+        await expect(page.locator("#debug-play")).toBeEnabled();
+        await expect(stoppedAtOswrch).toHaveText(/^ffee /);
+        const loaded = await beeb.expectHeld();
+        await page.click("#debug-play");
+        await beeb.expectRunningPast(loaded);
+        await expect.poll(pc).not.toBe(Oswrch);
+    };
+
+    await loadAndContinue();
 
     await beeb.open("?model=Master");
     await beeb.expectScreenText(">");
-    await page.setInputFiles("#load-state", saved);
-    // The play button comes on as soon as the load holds the machine, before the state is in; the debugger opening is
-    // what says it is.
-    await expect(page.locator("#debug")).toBeVisible();
-    expect(await where()).toEqual(savedAt);
-    await expect(page.locator("#debug-play")).toBeEnabled();
-    await expect(stoppedAtOswrch).toHaveText(/^ffee /);
-    const loaded = await beeb.expectHeld();
-    await page.click("#debug-play");
-    await beeb.expectRunningPast(loaded);
-    await expect.poll(pc).not.toBe(Oswrch);
+    await loadAndContinue();
 });
 
 test("Alt+M opens the media window with the search box focused, and while the window has the keyboard the machine gets none of it", async ({
@@ -330,7 +345,8 @@ for (const { source, ref, served, needs } of [
         await expect(page).toHaveURL(/autoboot/);
         expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
         await beeb.expectDrive0(served.split("/").pop());
-        await beeb.expectNotOnScreen("BASIC");
+        // The stand-in is Elite, whose loader refuses a Master: only a boot gets it to say so.
+        await beeb.expectScreenText("This program is only suitable for a BBC Micro");
     });
 }
 
