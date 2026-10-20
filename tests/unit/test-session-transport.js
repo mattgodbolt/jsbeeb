@@ -160,7 +160,7 @@ describe("webRtcTransport, as a host listens", () => {
         return fakeRendezvous({ listOffers: vi.fn(async () => offers.splice(0)) });
     };
 
-    it("tells the host a link is open only once its channel opens, refusing sends until then, and why it closed", async () => {
+    it("opens a link only with its channel, refusing sends until then, and says why it closed", async () => {
         const { links, listeners } = listen(offering("g1"));
         await settle();
         expect(() => links[0].send("hello")).toThrow("the channel is not open");
@@ -294,7 +294,7 @@ describe("webRtcTransport, as a guest joins", () => {
         expect(AnswerTimeoutMs).toBeLessThan(OfferLifetimeSeconds * 1000);
     });
 
-    it("tells of its offer and answer, hands over the link once its channel opens, then what comes and why it closed", async () => {
+    it("tells of offer and answer, hands over the link once open, then what comes and why it closed", async () => {
         const rendezvous = fakeRendezvous({ getAnswer: vi.fn(async () => "answer sdp").mockResolvedValueOnce(null) });
         const listener = recorder();
         let link = null;
