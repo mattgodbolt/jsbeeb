@@ -18,6 +18,21 @@ const KeyboardSinks = `#${PasteBoxId}, #media-panel, .goto-addr`;
 const ShortcutSinks = `#${PasteBoxId}`;
 const inKeyboardSink = () => !!document.activeElement?.closest(KeyboardSinks);
 
+function inputMethodResetter() {
+    const textField = document.createElement("textarea");
+    textField.tabIndex = -1;
+    textField.setAttribute("aria-hidden", "true");
+    textField.style.cssText = "position: fixed; left: -100px; width: 1px; height: 1px; opacity: 0";
+    document.body.append(textField);
+    // Chrome resets the input method when focus moves into a text field and out again.
+    return () => {
+        const focused = document.activeElement;
+        textField.focus({ preventScroll: true });
+        textField.blur();
+        focused?.focus({ preventScroll: true });
+    };
+}
+
 /**
  * Builds the emulated keyboard and wires the browser's shortcuts around it,
  * exposing it as `keyboard` for whoever needs the machine's keys.
@@ -38,6 +53,7 @@ export class KeyboardSetup {
             inputEnabledFunction: inKeyboardSink,
             shortcutsBlockedFunction: () => !!document.activeElement?.closest(ShortcutSinks),
             runningFunction: () => loop.isRunning(),
+            resetInputMethodFunction: inputMethodResetter(),
             keyLayout,
         }));
         keyboard.addEventListener("notice", showNotice);

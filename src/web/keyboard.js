@@ -3,7 +3,6 @@ import { Typist } from "../typist.js";
 
 export const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 const InputMethodKeyCode = 229;
-const KeyTapMs = 100;
 const KeypadNavigationKeys = new Set([
     keyCodes.END,
     keyCodes.HOME,
@@ -27,6 +26,7 @@ const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMetho
  * @property {Object} processor - The processor instance
  * @property {Function} inputEnabledFunction - A function to check if input is enabled
  * @property {Function} runningFunction - Whether the machine is running, and so takes keys
+ * @property {Function} [resetInputMethodFunction] - Drops a dead key the host's input method is holding
  * @property {string} [keyLayout="physical"] - The keyboard layout
  */
 
@@ -45,6 +45,7 @@ export class Keyboard extends EventTarget {
             inputEnabledFunction,
             shortcutsBlockedFunction,
             runningFunction,
+            resetInputMethodFunction = () => {},
             keyLayout = "physical",
         } = config;
 
@@ -53,6 +54,7 @@ export class Keyboard extends EventTarget {
         this.inputEnabledFunction = inputEnabledFunction;
         this.shortcutsBlockedFunction = shortcutsBlockedFunction ?? (() => false);
         this.runningFunction = runningFunction;
+        this.resetInputMethodFunction = resetInputMethodFunction;
 
         this.keyInterface = processor.keyboardInterface;
         this.typist = new Typist(processor);
@@ -217,17 +219,12 @@ export class Keyboard extends EventTarget {
             return null;
         }
 
+        if (isComposing(evt)) return null;
         const machineKey = this._machineKey(evt);
         this.input.keyDown(machineKey, evt.shiftKey);
-        const release = () => this.input.keyUp(machineKey);
-        if (isComposing(evt)) {
-            // A composed press may get no key up (X11 sends none); there, if held, it repeats as an ordinary press.
-            setTimeout(() => {
-                if (this.releases.get(code) === release) this._letGo(code);
-            }, KeyTapMs);
-            return release;
-        }
-        if (evt.key !== "Dead") return release;
+        if (evt.key !== "Dead") return () => this.input.keyUp(machineKey);
+        // Otherwise X11 composes the next key with it: that key arrives as "Process" with no key up.
+        this.resetInputMethodFunction();
         this.heldDeadKeys.add(code);
         return () => {
             this.heldDeadKeys.delete(code);
@@ -246,14 +243,12 @@ export class Keyboard extends EventTarget {
             if (!isDown(evt) && !codes.includes(code)) up.push(...codes);
         }
         if (isComposing(evt)) up.push(...this.heldDeadKeys);
-        for (const heldCode of up) this._letGo(heldCode);
-    }
-
-    _letGo(code) {
-        const release = this.releases.get(code);
-        if (!release) return;
-        this.releases.delete(code);
-        release();
+        for (const heldCode of up) {
+            const release = this.releases.get(heldCode);
+            if (!release) continue;
+            this.releases.delete(heldCode);
+            release();
+        }
     }
 
     /**
@@ -278,12 +273,14 @@ export class Keyboard extends EventTarget {
      * Special handling for Mac's Caps Lock key behavior
      */
     handleMacCapsLock() {
+        const CAPS_LOCK_DELAY = 100;
+
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
         this.input.keyDown(keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.input.keyUp(keyCodes.CAPSLOCK), KeyTapMs);
+        setTimeout(() => this.input.keyUp(keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (this.saidCapsLockIsTapped) return;
         this.saidCapsLockIsTapped = true;
