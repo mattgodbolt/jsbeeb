@@ -58,18 +58,15 @@ describe("knowing whether a disc keeps its changes", () => {
     beforeEach(() => vi.spyOn(globalThis.console, "log").mockImplementation(() => {}));
     afterEach(() => vi.restoreAllMocks());
 
-    it("says no for a disc loaded without anywhere to write back to", () => {
-        expect(discFor("test.ssd", ssdImage(800), undefined, DiscLayout.contiguous).savesChanges).toBe(false);
-    });
+    const adfsImage = new Uint8Array(80 * 16 * SectorSize);
 
-    it("says yes once a writeback is wired up", () => {
-        expect(discFor("test.ssd", ssdImage(800), () => {}, DiscLayout.contiguous).savesChanges).toBe(true);
-    });
-
-    it("says no for the ADFS formats, which discard the writeback they are handed", () => {
-        const adfsImage = new Uint8Array(80 * 16 * SectorSize);
-        for (const name of ["test.adf", "test.adl"])
-            expect(discFor(name, adfsImage, () => {}, DiscLayout.contiguous).savesChanges).toBe(false);
+    it.each([
+        ["no for a disc loaded without anywhere to write back to", "test.ssd", ssdImage(800), undefined, false],
+        ["yes once a writeback is wired up", "test.ssd", ssdImage(800), () => {}, true],
+        ["no for ADFS, which discards the writeback it is handed", "test.adf", adfsImage, () => {}, false],
+        ["no for ADFS large, which discards the writeback it is handed", "test.adl", adfsImage, () => {}, false],
+    ])("says %s", (_, name, image, onChange, expected) => {
+        expect(discFor(name, image, onChange, DiscLayout.contiguous).savesChanges).toBe(expected);
     });
 });
 
