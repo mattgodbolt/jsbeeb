@@ -8,7 +8,7 @@ const PasteBoxId = "paste-text";
 /** The eight accessibility switches, on the number keys. */
 const SwitchKeys = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"];
 
-const NotTypedIntoInputs = ["checkbox", "radio", "range", "file", "color", "button", "submit", "reset"];
+const NotTypedIntoInputs = ["checkbox", "radio", "range", "file", "color", "button", "submit", "reset", "image"];
 const TypingTargets = [
     "textarea",
     "select",

@@ -195,10 +195,10 @@ describe("KeyboardSetup", () => {
             const typeKey = (key) => setup.keyPress(new KeyboardEvent("keypress", { key, cancelable: true }));
 
             it.each([
-                ["g", "a debugger goto box", "debug", "#goto-dis-addr-form .goto-addr", RunMode.debugging],
-                ["g", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused],
-                ["n", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused],
-            ])("%s stays in %s, and drives the machine from elsewhere", (key, _, from, field, mode) => {
+                ["g", "a debugger goto box", "debug", "#goto-dis-addr-form .goto-addr", RunMode.debugging, "go"],
+                ["g", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "go"],
+                ["n", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "step"],
+            ])("%s stays in %s, and drives the machine from elsewhere", (key, _, from, field, mode, call) => {
                 domFromIndexHtml(from);
                 loop.mode = mode;
 
@@ -206,9 +206,23 @@ describe("KeyboardSetup", () => {
                 typeKey(key);
                 expect(loop.mode).toBe(mode);
 
+                expect(loop[call]).not.toHaveBeenCalled();
+
                 document.activeElement.blur();
                 typeKey(key);
-                expect(loop.mode).not.toBe(mode);
+                expect(loop[call]).toHaveBeenCalledTimes(1);
+            });
+
+            it("leaves the debugger's letters to a field being typed into", () => {
+                domFromIndexHtml("session-dialog");
+                loop.mode = RunMode.debugging;
+                document.getElementById("session-name").focus();
+
+                const j = new KeyboardEvent("keypress", { key: "j", cancelable: true });
+                setup.keyPress(j);
+
+                expect(dbgr.keyPress).not.toHaveBeenCalled();
+                expect(j.defaultPrevented).toBe(false);
             });
 
             it("still resumes the machine from a control that takes no typing", () => {
