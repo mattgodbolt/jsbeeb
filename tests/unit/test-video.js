@@ -18,6 +18,10 @@ const NulaPaletteModeOn = 0x11;
 const NulaPaletteModeOff = 0x10;
 const NulaDisable = 0x50;
 const NulaHorizontalOffsetOne = 0x21;
+const NulaLeftBlankOne = 0x31;
+const NulaAttributeModeOne = 0x61;
+const NulaAttributeTextOn = 0x71;
+const NulaFlashOffColours8To11 = 0x80;
 const LogicalZeroAsPhysicalZero = 0x07;
 const NulaColourZeroFullRed = [0x0f, 0x00];
 
@@ -447,7 +451,14 @@ describe("Video", () => {
         it("comes back enabled and in its power-on state after a power-on reset", () => {
             const fresh = makeVideo({ hasVideoNula: true }).video;
             ({ video, cpu } = makeVideo({ hasVideoNula: true }));
-            for (const write of [NulaPaletteModeOn, NulaHorizontalOffsetOne, 0x31, 0x61, 0x71, 0x8f])
+            for (const write of [
+                NulaPaletteModeOn,
+                NulaHorizontalOffsetOne,
+                NulaLeftBlankOne,
+                NulaAttributeModeOne,
+                NulaAttributeTextOn,
+                NulaFlashOffColours8To11,
+            ])
                 video.ula.write(2, write);
             for (const byte of NulaColourZeroFullRed) video.ula.write(3, byte);
             video.ula.write(2, NulaDisable);
