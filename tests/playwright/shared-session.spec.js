@@ -21,7 +21,7 @@ async function typeLine(beeb, text) {
 
 test("a guest joins a hosted session, and what either types reaches both machines", async ({ browser, beeb }) => {
     test.setTimeout(SessionTestTimeoutMs);
-    const room = `e2e-${Date.now()}`;
+    const room = `e2e-${crypto.randomUUID()}`;
     await beeb.open(`?server=${room}`);
     await beeb.expectScreenText("BASIC");
     // Before the guest joins, so its copy of the machine has it too.
@@ -50,7 +50,7 @@ test("a guest without the host's VideoNuLA reloads with one, joins and runs the 
     beeb,
 }) => {
     test.setTimeout(SessionTestTimeoutMs);
-    const room = `e2e-${Date.now()}`;
+    const room = `e2e-${crypto.randomUUID()}`;
     await beeb.open(`?server=${room}&hasVideoNula`);
     await beeb.expectScreenText("BASIC");
     await beeb.disableAutoRepeat();
@@ -147,7 +147,7 @@ test("a paused machine that could not host stays paused, and Shared session offe
 
 test("a guest takes control, both type, and the host takes it back", async ({ browser, beeb }) => {
     test.setTimeout(SessionTestTimeoutMs);
-    const room = `e2e-control-${Date.now()}`;
+    const room = `e2e-control-${crypto.randomUUID()}`;
     await beeb.open(`?server=${room}`);
     await beeb.expectScreenText("BASIC");
     await beeb.disableAutoRepeat();
@@ -185,7 +185,7 @@ test("control passes between guests, and comes back to the host when the guest i
     beeb,
 }) => {
     test.setTimeout(SessionTestTimeoutMs);
-    const room = `e2e-handover-${Date.now()}`;
+    const room = `e2e-handover-${crypto.randomUUID()}`;
     await beeb.open(`?server=${room}`);
     await beeb.expectScreenText("BASIC");
     await beeb.disableAutoRepeat();

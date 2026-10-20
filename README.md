@@ -286,7 +286,8 @@ site to make it smaller and faster to load when it's deployed to [https://bbc.xa
 Google Analytics is only on the deployed site: the deploy job builds with `GA_MEASUREMENT_ID` set from the repository
 variable of that name, and every other build (`npm start`, a clone's own build, the tests and the desktop app) has no
 analytics on the page and sends nothing. `npm run test:e2e` builds with a dummy id and answers Google's requests
-itself, so it can check what the page would send.
+itself, so it can check what the page would send; it answers every other outside request from the stand-ins in
+`tests/playwright/offline`, and blocks anything else and reports it as one of the page's problems.
 
 ## Running as a Desktop Application
 

@@ -1,0 +1,136 @@
+{
+  "format": 1,
+  "title": "BBC BASIC II",
+  "licence": "MIT",
+  "source": "https://github.com/acornaeology/bbc-basic/blob/57b291c7fdfefc933c1a3f52dd97bac3de2ce06a/versions/basic-2/output/basic-2.json",
+  "notice": "The names are acornaeology's, under this licence:\n\nMIT License\n\nCopyright (c) 2026 Acornaeology\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+  "madeFrom": ["45bd55dc0f6f0f8f1fe9e2481de7def2"],
+  "home": "https://acornaeology.uk/bbc-basic/2.html",
+  "nameLink": "https://acornaeology.uk/bbc-basic/{place}",
+  "globals": {},
+  "regions": {
+    "low": {
+      "start": "0x8000",
+      "end": "0x9000",
+      "minAnchors": 2,
+      "anchors": [
+        {
+          "at": "0x8000",
+          "bytes": "c901f01f60ea"
+        },
+        {
+          "at": "0x8810",
+          "bytes": "4c3887d025202188"
+        }
+      ],
+      "symbols": {
+        "print_done": "0x8d80",
+        "print_semicolon": "0x8d83",
+        "stmt_print": "0x8d9a",
+        "print_comma": "0x8da6",
+        "print_field_loop": "0x8dad",
+        "print_pad_loop": "0x8db5",
+        "print_item": "0x8dbb",
+        "print_set_hex": "0x8dc1",
+        "print_next": "0x8dc3",
+        "print_check_sep": "0x8dd2",
+        "print_num_pad": "0x8e08",
+        "print_string": "0x8e0e",
+        "print_string_loop": "0x8e14",
+        "print_tab_error": "0x8e21",
+        "print_tab_xy": "0x8e24",
+        "print_tab_x": "0x8e40",
+        "print_spc": "0x8e58",
+        "print_spc_count": "0x8e5b",
+        "print_spc_loop": "0x8e5f",
+        "print_spc_newline": "0x8e67",
+        "print_sync": "0x8e6a",
+        "print_special_item": "0x8e70",
+        "return_6": "0x8e89",
+        "print_special_skip": "0x8e8a",
+        "missing_quote": "0x8e98",
+        "print_inline_char": "0x8ea4",
+        "print_inline_loop": "0x8ea7",
+        "stmt_clg": "0x8ebd",
+        "stmt_cls": "0x8ec4",
+        "cls_send": "0x8ecc",
+        "stmt_call": "0x8ed2",
+        "call_block_init": "0x8ee0"
+      }
+    },
+    "middle": {
+      "start": "0x9000",
+      "end": "0xb000",
+      "minAnchors": 4,
+      "anchors": [
+        {
+          "at": "0x900d",
+          "bytes": "a518850ca000"
+        },
+        {
+          "at": "0x9805",
+          "bytes": "1860a50b8519"
+        },
+        {
+          "at": "0xa002",
+          "bytes": "88b90006c930"
+        },
+        {
+          "at": "0xa801",
+          "bytes": "20daa1f002100c"
+        }
+      ],
+      "symbols": {}
+    },
+    "high": {
+      "start": "0xb000",
+      "end": "0xc000",
+      "minAnchors": 2,
+      "anchors": [
+        {
+          "at": "0xb023",
+          "bytes": "a9006020adaf"
+        },
+        {
+          "at": "0xb81f",
+          "bytes": "840aa426a52a"
+        }
+      ],
+      "symbols": {}
+    }
+  },
+  "places": {
+    "call_block_init": "2.html#addr-8EE0",
+    "cls_send": "2.html#addr-8ECC",
+    "missing_quote": "2.html#addr-8E98",
+    "print_check_sep": "2.html#addr-8DD2",
+    "print_comma": "2.html#addr-8DA6",
+    "print_done": "2.html#addr-8D80",
+    "print_field_loop": "2.html#addr-8DAD",
+    "print_inline_char": "2.html#addr-8EA4",
+    "print_inline_loop": "2.html#addr-8EA7",
+    "print_item": "2.html#addr-8DBB",
+    "print_next": "2.html#addr-8DC3",
+    "print_num_pad": "2.html#addr-8E08",
+    "print_pad_loop": "2.html#addr-8DB5",
+    "print_semicolon": "2.html#addr-8D83",
+    "print_set_hex": "2.html#addr-8DC1",
+    "print_spc": "2.html#addr-8E58",
+    "print_spc_count": "2.html#addr-8E5B",
+    "print_spc_loop": "2.html#addr-8E5F",
+    "print_spc_newline": "2.html#addr-8E67",
+    "print_special_item": "2.html#addr-8E70",
+    "print_special_skip": "2.html#addr-8E8A",
+    "print_string": "2.html#addr-8E0E",
+    "print_string_loop": "2.html#addr-8E14",
+    "print_sync": "2.html#addr-8E6A",
+    "print_tab_error": "2.html#addr-8E21",
+    "print_tab_x": "2.html#addr-8E40",
+    "print_tab_xy": "2.html#addr-8E24",
+    "return_6": "2.html#addr-8E89",
+    "stmt_call": "2.html#addr-8ED2",
+    "stmt_clg": "2.html#addr-8EBD",
+    "stmt_cls": "2.html#addr-8EC4",
+    "stmt_print": "2.html#addr-8D9A"
+  }
+}
