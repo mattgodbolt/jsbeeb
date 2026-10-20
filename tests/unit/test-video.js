@@ -451,6 +451,7 @@ describe("Video", () => {
         it("comes back enabled and in its power-on state after a power-on reset", () => {
             const fresh = makeVideo({ hasVideoNula: true }).video;
             ({ video, cpu } = makeVideo({ hasVideoNula: true }));
+            for (const v of [fresh, video]) v.ula.write(1, LogicalZeroAsPhysicalZero);
             for (const write of [
                 NulaPaletteModeOn,
                 NulaHorizontalOffsetOne,
