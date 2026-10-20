@@ -306,20 +306,21 @@ A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option;
 
 ### Sound chip (`state.soundChip`)
 
-| Field             | Type         | Description                                    |
-| ----------------- | ------------ | ---------------------------------------------- |
-| `registers`       | Uint16Array  | 4 channel tone/noise period registers          |
-| `counter`         | Float32Array | 4 channel counters                             |
-| `outputBit`       | boolean[]    | 4 channel output states                        |
-| `volume`          | Float32Array | 4 channel volume levels                        |
-| `lfsr`            | number       | Noise generator linear feedback shift register |
-| `latchedRegister` | number       | Last latched register address                  |
-| `residual`        | number       | Sub-sample residual (float)                    |
-| `sineOn`          | boolean      | Sine tone generator active                     |
-| `sineStep`        | number       | Sine generator step size                       |
-| `sineTime`        | number       | Sine generator phase                           |
-| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)        |
-| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)       |
+| Field             | Type         | Description                                          |
+| ----------------- | ------------ | ---------------------------------------------------- |
+| `registers`       | Uint16Array  | 4 channel tone/noise period registers                |
+| `counter`         | Float32Array | 4 channel counters                                   |
+| `outputBit`       | boolean[]    | 4 channel output states                              |
+| `volume`          | Float32Array | 4 channel volume levels                              |
+| `lfsr`            | number       | Noise generator linear feedback shift register       |
+| `latchedRegister` | number       | Last latched register address                        |
+| `residual`        | number       | Sub-sample residual (float)                          |
+| `sineOn`          | boolean      | Sine tone generator active                           |
+| `sineStep`        | number       | Sine generator step size                             |
+| `sineTime`        | number       | Sine generator phase                                 |
+| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)              |
+| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)             |
+| `speakerBit`      | number       | Atom only: the speaker's level, 0 or 1 (0 if absent) |
 
 ### ACIA (`state.acia`)
 
