@@ -19,8 +19,10 @@ describe.each([
     { model: "B-US", banner: "Acorn OS", vsyncAddress: 0xdcec },
     { model: "B-German", banner: "Acorn OS 32K", vsyncAddress: 0xdd15 },
 ])("the $model MOS", ({ model, banner, vsyncAddress }) => {
-    it("boots to BASIC with its own banner and runs a line", async () => {
-        const machine = new TestMachine(model);
+    it("boots to BASIC with its own banner, runs a line and changes mode without touching a VideoNuLA", async () => {
+        const onMissingVideoNula = vi.fn();
+        const video = new Video(false, new Uint32Array(FramebufferPixels), () => {}, { onMissingVideoNula });
+        const machine = new TestMachine(model, { video });
         await machine.initialise();
         await machine.runUntilInput(10);
         expect(screenLines(machine)).toEqual([banner, "Acorn DFS", "BASIC", ">"]);
@@ -28,6 +30,10 @@ describe.each([
         await machine.type("PRINT 6*7");
         await machine.runUntilInput(10);
         expect(screenLines(machine).slice(-2)).toEqual(["42", ">"]);
+
+        await machine.type("MODE 2");
+        await machine.runUntilInput(10);
+        expect(onMissingVideoNula).not.toHaveBeenCalled();
     });
 
     it("stops at its vertical sync interrupt", async () => {
@@ -45,21 +51,18 @@ it("will not wait for the vertical sync of an OS it does not know", async () => 
     await expect(machine.runUntilVblank()).rejects.toThrow("BBC Master 128 (DFS)");
 });
 
-it.each(["B-DFS1.2", "B-US", "B-German", "Master", "MasterADFS"])(
-    "the %s MOS boots and changes mode without touching a VideoNuLA",
-    async (model) => {
-        const onMissingVideoNula = vi.fn();
-        const video = new Video(model.startsWith("Master"), new Uint32Array(FramebufferPixels), () => {}, {
-            onMissingVideoNula,
-        });
-        const machine = new TestMachine(model, { video });
-        await machine.initialise();
-        await machine.runUntilInput(10);
-        await machine.type("MODE 2");
-        await machine.runUntilInput(10);
-        expect(onMissingVideoNula).not.toHaveBeenCalled();
-    },
-);
+it.each(["Master", "MasterADFS"])("the %s MOS boots and changes mode without touching a VideoNuLA", async (model) => {
+    const onMissingVideoNula = vi.fn();
+    const video = new Video(true, new Uint32Array(FramebufferPixels), () => {}, {
+        onMissingVideoNula,
+    });
+    const machine = new TestMachine(model, { video });
+    await machine.initialise();
+    await machine.runUntilInput(10);
+    await machine.type("MODE 2");
+    await machine.runUntilInput(10);
+    expect(onMissingVideoNula).not.toHaveBeenCalled();
+});
 
 describe("the Master's TIME$", () => {
     it.each([

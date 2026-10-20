@@ -1,6 +1,5 @@
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
-import assert from "assert";
 import { hexbyte } from "../../src/hex.js";
 
 describe("test read-modify-write behaviour", function () {
@@ -22,11 +21,11 @@ describe("test read-modify-write behaviour", function () {
     };
     it("should match on 65C12", async () => {
         const result = await doTest("Master");
-        assert.strictEqual(result, "f4ff0a16 eaeadee9 f2fe0a16 c3ced9e5");
+        expect(result).toBe("f4ff0a16 eaeadee9 f2fe0a16 c3ced9e5");
     });
     it("should match on 6502", async () => {
         const result = await doTest();
-        assert.strictEqual(result, "f2fe0a16 eaeadae6 f2fe0a16 c1cdd9e5");
+        expect(result).toBe("f2fe0a16 eaeadae6 f2fe0a16 c1cdd9e5");
     });
 });
 
@@ -60,10 +59,9 @@ CALL &2000`;
         await testMachine.runUntilInput();
         await testMachine.loadBasic(source);
 
-        testMachine.captureText((elem) => console.log(`emulator output: ${elem.text}`));
         await testMachine.type("RUN");
         await testMachine.runUntilInput();
-        assert.equal(testMachine.readbyte(0x70), 252);
-        assert.equal(testMachine.readbyte(0x71), 0);
+        expect(testMachine.readbyte(0x70)).toBe(252);
+        expect(testMachine.readbyte(0x71)).toBe(0);
     });
 });
