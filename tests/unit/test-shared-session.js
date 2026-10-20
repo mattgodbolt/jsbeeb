@@ -360,15 +360,15 @@ describe("SessionHost", () => {
         return { host, processor, context };
     }
 
-    function connect(id = `g${transport.links.length + 1}`) {
-        const channel = transport.offer(id);
+    function connect(name) {
+        const channel = transport.offer(`g${transport.links.length + 1}`);
         channel.open = true;
-        channel.listener.opened();
+        channel.emit("message", message({ type: "hello", name }));
         return channel;
     }
 
-    async function joined() {
-        const channel = connect();
+    async function joined(name) {
+        const channel = connect(name);
         await settle();
         return channel;
     }
@@ -1112,8 +1112,8 @@ describe("SessionHost", () => {
 
     it("takes one name from a guest, and at most one summary per half interval", async () => {
         const { host } = await hosting();
-        const channel = await joined();
-        for (const name of ["Kieran", "Matt (you)"]) channel.emit("message", message({ type: "hello", name }));
+        const channel = await joined("Kieran");
+        channel.emit("message", message({ type: "hello", name: "Matt (you)" }));
         for (let i = 0; i < 3; ++i) channel.emit("message", message({ type: "stats", stats: { lagMs: i } }));
         vi.advanceTimersByTime(StatsIntervalMs);
         channel.emit("message", message({ type: "stats", stats: { lagMs: 9 } }));
@@ -1170,20 +1170,17 @@ describe("SessionHost", () => {
 
     it("calls each guest by the name it gives", async () => {
         const { host } = await hosting();
-        const channel = await joined();
-        channel.emit("message", message({ type: "hello", name: "Kieran" }));
+        await joined("Kieran");
         expect(panel().peers[1].label).toBe("Kieran");
         expect(host.report().events).toContainEqual(expect.objectContaining({ event: "hello", name: "Kieran" }));
     });
 
     it("shows every guest the same lights, its own marked", async () => {
         const { host } = await hosting();
-        const first = connect();
-        const second = connect();
+        const first = connect("Kieran");
+        const second = connect("Ana");
         await settle();
         expect(second.snapshots()).toHaveLength(1);
-        first.emit("message", message({ type: "hello", name: "Kieran" }));
-        second.emit("message", message({ type: "hello", name: "Ana" }));
         const lastRoster = (channel) =>
             channel
                 .messages()
@@ -1266,17 +1263,18 @@ describe("SessionHost", () => {
         expect(channel.snapshots()).toHaveLength(2);
     });
 
-    it("sends a guest still connecting nothing at a jump, and its one snapshot once it opens", async () => {
+    it("sends a guest nothing, even at a jump, until it has said hello, then welcomes it with the machine as it is", async () => {
         const { host, processor } = await hosting();
         const opening = transport.offer("g1");
+        opening.open = true;
         processor.currentCycles = processor.targetCycles = 50;
         host.execute(0);
         await settle();
         expect(opening.sent).toEqual([]);
         expect(opening.closed).toBe(false);
-        opening.open = true;
-        opening.listener.opened();
+        opening.emit("message", message({ type: "hello", name: "Kieran" }));
         await settle();
+        expect(opening.messages()[0]).toMatchObject({ type: "welcome" });
         expect(opening.snapshots().map((snapshot) => snapshot.at)).toEqual([50]);
     });
 

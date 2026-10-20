@@ -625,12 +625,13 @@ export class SessionHost {
         this.log.record("offer", { guest: id });
         this.showStatus();
         return {
-            opened: () => this.welcome(guest),
             message: (data) => this.fromGuest(guest, data),
             closed: (reason) => this.drop(guest, reason),
         };
     }
 
+    // Sent once the guest has said hello: Chrome calls a channel the guest opened open before it can carry anything,
+    // and silently drops what is sent on it until it can.
     welcome(guest) {
         const { model, takenFromHost, version } = this.context;
         const welcome = { type: "welcome", model: model.name, takenFromHost, version, name: this.name };
@@ -671,7 +672,7 @@ export class SessionHost {
             guest.saidHello = true;
             guest.name = cleanName(message.name);
             this.log.record("hello", { guest: guest.id, name: guest.name });
-            this.showStatus();
+            this.welcome(guest);
         } else if (message.type === "stats" && this.log.elapsed() - guest.statsMs < MinGuestStatsIntervalMs) {
             ++guest.statsDropped;
         } else if (message.type === "stats") {

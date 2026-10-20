@@ -249,7 +249,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   so before the S3 sync, as it already uploads assets before the HTML that names them.
 - **Voice:** not in v0; use a separate call (Zoom, Discord, whatever people already have).
 - **Names:** `?name=`, or the name in the Shared session dialog, says what to call you; without it you get a random one.
-  A guest says its name as it connects and the host gives its own in the welcome.
+  A guest says its name as it connects, and the host sends nothing until it has, then gives its own in the welcome
+  (`SessionHost.welcome` has why).
 - **Seeing how it goes:** a session readout in the lights at the foot of the page has a light per guest on the host
   and one for the host on a guest: unlit while it joins, green while it keeps up, amber while it is more than 100 ms
   behind or stutters, or for the second after it desynced, red once it falls silent or leaves, each named in its

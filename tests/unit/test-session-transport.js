@@ -119,7 +119,6 @@ function recorder() {
     const heard = [];
     return {
         heard,
-        opened: () => heard.push(["opened"]),
         offered: () => heard.push(["offered"]),
         answered: () => heard.push(["answered"]),
         message: (data) => heard.push(["message", data]),
@@ -179,7 +178,7 @@ describe("webRtcTransport, as a host listens", () => {
         expect(links[0].isOpen()).toBe(false);
         channel.open();
         await settle();
-        expect(listeners[0].heard).toEqual([["opened"]]);
+        expect(links[0].isOpen()).toBe(true);
         links[0].send("hello");
         channel.emit("message", { data: "hi" });
         expect(channel.sent).toEqual(["hello"]);
@@ -197,7 +196,7 @@ describe("webRtcTransport, as a host listens", () => {
         peers[0].emit("datachannel", { channel: second });
         await settle();
         second.emit("message", { data: "hi" });
-        expect(listeners[0].heard).toEqual([["opened"]]);
+        expect(listeners[0].heard).toEqual([]);
     });
 
     it("tells the host nothing more of a link the host has closed", async () => {
@@ -210,7 +209,7 @@ describe("webRtcTransport, as a host listens", () => {
         channel.emit("message", { data: "late" });
         channel.emit("close");
         expect(peers[0].closed).toBe(true);
-        expect(listeners[0].heard).toEqual([["opened"]]);
+        expect(listeners[0].heard).toEqual([]);
     });
 
     it("gives up on a guest whose channel never opens", async () => {
