@@ -93,14 +93,14 @@ describe("benchmark page", () => {
 
         afterEach(teardownDom);
 
-        const refusal = async (name, { model = "B-DFS1.2", query = {}, fitted = {} } = {}) => {
+        const refusal = async (name, { query = {}, fitted = {} } = {}) => {
             const target = {};
             const page = new BenchmarkPage(name, {
                 target,
                 readWorkload: async (wanted) => workloads.find((workload) => workload.name === wanted),
             });
             await page.run({
-                processor: { model: { name: model } },
+                processor: { model: { name: "B-DFS1.2" } },
                 audioHandler: { mute: () => {} },
                 modals: { show: () => {} },
                 parsedQuery: { benchmark: name, ...query },
