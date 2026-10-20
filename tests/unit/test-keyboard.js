@@ -1,4 +1,4 @@
-import { expect, describe, test, beforeEach, vi } from "vitest";
+import { expect, describe, test, beforeEach, afterEach, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
@@ -337,13 +337,20 @@ describe("Keyboard", () => {
         const deadKey = (extra = {}) => keyEvent(keyCodes.APOSTROPHE, "Dead", { shiftKey: true, ...extra });
         const composedEnter = () => keyEvent(keyCodes.ENTER, "Process", { keyCode: 229 });
 
-        beforeEach(() => (running = true));
+        beforeEach(() => {
+            running = true;
+            vi.useFakeTimers();
+        });
+        afterEach(() => vi.useRealTimers());
 
         test("lets go of a dead key whose key up never arrives when the next key is composed", () => {
             keyboard.keyDown(deadKey());
             keyboard.keyDown(composedEnter());
 
-            expect(mockSysvia.keyDown.mock.calls).toEqual([[keyCodes.APOSTROPHE, true]]);
+            expect(mockSysvia.keyDown.mock.calls).toEqual([
+                [keyCodes.APOSTROPHE, true],
+                [keyCodes.ENTER, false],
+            ]);
             expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE]]);
         });
 
@@ -371,21 +378,58 @@ describe("Keyboard", () => {
             keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
             keyboard.keyDown(deadKey());
             keyboard.keyDown(keyEvent(keyCodes.ENTER, "Process", { keyCode: 229, shiftKey: true }));
+            vi.runAllTimers();
             keyboard.keyDown(keyEvent(keyCodes.A, "a"));
 
-            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE], [keyCodes.SHIFT_LEFT]]);
-            expect(mockSysvia.keyDown).not.toHaveBeenCalledWith(keyCodes.ENTER, expect.anything());
+            expect(mockSysvia.keyUp.mock.calls).toEqual([
+                [keyCodes.APOSTROPHE],
+                [keyCodes.ENTER],
+                [keyCodes.SHIFT_LEFT],
+            ]);
         });
 
         test.each([
             ["Process", { key: "Process", keyCode: 229 }],
             ["keyCode 229", { key: "Enter", keyCode: 229 }],
-        ])("ignores a key the input method has composed into, by %s", (_, fields) => {
+        ])("taps a key the input method has composed into, by %s, when its key up never comes", (_, fields) => {
             keyboard.keyDown(keyEvent(keyCodes.ENTER, fields.key, { keyCode: fields.keyCode }));
-            keyboard.keyUp(keyEvent(keyCodes.ENTER, "Enter"));
-
-            expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+            expect(mockSysvia.keyDown.mock.calls).toEqual([[keyCodes.ENTER, false]]);
             expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+
+            vi.runAllTimers();
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.ENTER]]);
+        });
+
+        test("lets go of a composed key once, on its key up, when that comes first", () => {
+            keyboard.keyDown(composedEnter());
+            keyboard.keyUp(keyEvent(keyCodes.ENTER, "Enter"));
+            vi.runAllTimers();
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.ENTER]]);
+        });
+
+        test("holds a composed key again once it repeats, until its key up", () => {
+            keyboard.keyDown(composedEnter());
+            vi.runAllTimers();
+            keyboard.keyDown(keyEvent(keyCodes.ENTER, "Enter", { repeat: true }));
+            keyboard.keyDown(keyEvent(keyCodes.ENTER, "Enter", { repeat: true }));
+            vi.runAllTimers();
+            expect(mockSysvia.keyDown.mock.calls).toEqual([
+                [keyCodes.ENTER, false],
+                [keyCodes.ENTER, false],
+            ]);
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.ENTER]]);
+
+            keyboard.keyUp(keyEvent(keyCodes.ENTER, "Enter"));
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.ENTER], [keyCodes.ENTER]]);
+        });
+
+        test("does not let go of a fresh press of a composed key when the first one's tap ends", () => {
+            keyboard.keyDown(composedEnter());
+            keyboard.keyDown(keyEvent(keyCodes.ENTER, "Enter"));
+            vi.runAllTimers();
+
+            expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.ENTER]]);
         });
     });
 

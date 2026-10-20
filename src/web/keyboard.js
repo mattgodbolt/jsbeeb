@@ -3,6 +3,7 @@ import { Typist } from "../typist.js";
 
 export const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 const InputMethodKeyCode = 229;
+const KeyTapMs = 100;
 const KeypadNavigationKeys = new Set([
     keyCodes.END,
     keyCodes.HOME,
@@ -216,10 +217,17 @@ export class Keyboard extends EventTarget {
             return null;
         }
 
-        if (isComposing(evt)) return null;
         const machineKey = this._machineKey(evt);
         this.input.keyDown(machineKey, evt.shiftKey);
-        if (evt.key !== "Dead") return () => this.input.keyUp(machineKey);
+        const release = () => this.input.keyUp(machineKey);
+        if (isComposing(evt)) {
+            // X11 sends no key up for a composed press; its repeats, if held, arrive as ordinary presses.
+            setTimeout(() => {
+                if (this.releases.get(code) === release) this._letGo(code);
+            }, KeyTapMs);
+            return release;
+        }
+        if (evt.key !== "Dead") return release;
         this.heldDeadKeys.add(code);
         return () => {
             this.heldDeadKeys.delete(code);
@@ -238,12 +246,14 @@ export class Keyboard extends EventTarget {
             if (!isDown(evt) && !codes.includes(code)) up.push(...codes);
         }
         if (isComposing(evt)) up.push(...this.heldDeadKeys);
-        for (const heldCode of up) {
-            const release = this.releases.get(heldCode);
-            if (!release) continue;
-            this.releases.delete(heldCode);
-            release();
-        }
+        for (const heldCode of up) this._letGo(heldCode);
+    }
+
+    _letGo(code) {
+        const release = this.releases.get(code);
+        if (!release) return;
+        this.releases.delete(code);
+        release();
     }
 
     /**
@@ -268,14 +278,12 @@ export class Keyboard extends EventTarget {
      * Special handling for Mac's Caps Lock key behavior
      */
     handleMacCapsLock() {
-        const CAPS_LOCK_DELAY = 100;
-
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
         this.input.keyDown(keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.input.keyUp(keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
+        setTimeout(() => this.input.keyUp(keyCodes.CAPSLOCK), KeyTapMs);
 
         if (this.saidCapsLockIsTapped) return;
         this.saidCapsLockIsTapped = true;
