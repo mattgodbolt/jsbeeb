@@ -11,7 +11,7 @@ export function startupPlan(parsedQuery) {
     const { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
     const { discImage, secondDiscImage, mmcImage } = parseMediaParams(parsedQuery);
     const { loadBasic, embedBasic, tape, model, patch } = parsedQuery;
-    // A BASIC program in the URL is the boot; run is the only autoboot it keeps.
+    // A BASIC program in the URL is the boot, which basicNeedsRun says whether to run.
     const autoboot = loadBasic ? "" : needsAutoboot;
     return {
         media: {
@@ -27,7 +27,6 @@ export function startupPlan(parsedQuery) {
         autoboot,
         autoType,
         bootMode: bootModeOf(parsedQuery),
-        // Only a link that boots a disc without naming a model is switched to the machine the disc needs.
         mayNeedAnotherModel: autoboot === "boot" && !model,
         patch,
     };
@@ -73,7 +72,6 @@ export async function startAsTheUrlAsks(
 
     if (plan.patch) dbgr.setPatch(plan.patch);
 
-    // Restore the state a cross-model reload stashed, if there is one.
     await snapshots.restorePendingState();
 
     if (loop.mode !== RunMode.debugging) loop.go();

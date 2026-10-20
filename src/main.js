@@ -352,6 +352,7 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 // Start it up.
 // ------------------------------------------------------------------------
 
+// Described while the machine starts, so a switch to the machine the disc needs comes before the boot.
 const bootDisc = plan.mayNeedAnotherModel ? media.describe(plan.media.discImage) : null;
 const startPromise = machine.start({ media, autoBoot, ...plan.media });
 

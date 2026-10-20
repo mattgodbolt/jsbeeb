@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { BuiltInImages } from "../../src/web/media-loader.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
+import { MediaSlots } from "../../src/web/media-slots.js";
 import { MachineRequirements } from "../../src/web/media-catalogue.js";
 import { findModel } from "../../src/models.js";
 import { hostAndRun, startAsTheUrlAsks, startupPlan } from "../../src/web/startup.js";
@@ -94,7 +95,7 @@ describe("startAsTheUrlAsks", () => {
                 urlState,
                 modals: {},
             }),
-            drive0: { urlParamsFor: (ref) => ({ disc: undefined, disc1: ref }) },
+            drive0: new MediaSlots({ urlState }).drive(0),
             renderer: "webgl",
             noteStart: (details) => log.push(["noteStart", details]),
             autoBoot: {
@@ -129,13 +130,13 @@ describe("startAsTheUrlAsks", () => {
     });
 
     it.each([
-        ["autotype=RUN", ["type", "RUN"]],
-        ["autochain", "chain"],
-        ["autorun", "run"],
-    ])("for %s does %j", async (query, action) => {
+        ["autotype=RUN", "type", ["type", "RUN"]],
+        ["autochain", "chain", "chain"],
+        ["autorun", "run", "run"],
+    ])("for %s does only %j", async (query, bootMode, action) => {
         const { started, log } = start(query);
         await started;
-        expect(log).toContainEqual(action);
+        expect(log).toEqual([["noteStart", { boot_mode: bootMode, renderer: "webgl" }], action, "restore", "go"]);
     });
 
     it("leaves the machine paused when the restored state was saved in the debugger", async () => {
