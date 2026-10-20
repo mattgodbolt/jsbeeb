@@ -5,10 +5,23 @@ import { NmiSource } from "../../src/6502.js";
 // The ULA's M flag, which lets pending R3 data raise the parasite's NMI.
 const TubeStatusEnableParasiteNmiFromR3 = 0x08;
 
+async function masterWithTube(options = {}) {
+    const machine = new TestMachine("Master", { tube: true, ...options });
+    await machine.initialise();
+    return machine;
+}
+
+/** A Master whose parasite has run for a while, with a snapshot taken there. */
+async function runningParasite() {
+    const machine = await masterWithTube();
+    const cpu = machine.processor;
+    cpu.execute(200 * 1000);
+    return { cpu, state: cpu.snapshotState() };
+}
+
 describe("Tube co-processor", () => {
     it("runs the parasite processor alongside the host", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
+        const machine = await masterWithTube();
         const parasite = machine.processor.tube;
         const startPc = parasite.pc;
 
@@ -29,12 +42,7 @@ describe("Tube co-processor", () => {
     });
 
     it("restores the parasite to exactly where it was", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
-        const cpu = machine.processor;
-        cpu.execute(200 * 1000);
-
-        const state = cpu.snapshotState();
+        const { cpu, state } = await runningParasite();
         cpu.execute(200 * 1000);
         cpu.restoreState(state);
 
@@ -42,12 +50,7 @@ describe("Tube co-processor", () => {
     });
 
     it("keeps the parasite running identically after a restore", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
-        const cpu = machine.processor;
-        cpu.execute(200 * 1000);
-
-        const state = cpu.snapshotState();
+        const { cpu, state } = await runningParasite();
         cpu.execute(100 * 1000);
         const expected = { pc: cpu.tube.pc, memory: cpu.tube.memory.slice() };
 
@@ -59,11 +62,7 @@ describe("Tube co-processor", () => {
     });
 
     it("raises a parasite NMI the restored state was owed but had not seen", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
-        const cpu = machine.processor;
-        cpu.execute(200 * 1000);
-        const state = cpu.snapshotState();
+        const { cpu, state } = await runningParasite();
 
         // As an imported snapshot can be: the ULA is holding an NMI request with NMI enabled, but the
         // parasite's own idea of the line predates it.
@@ -79,11 +78,7 @@ describe("Tube co-processor", () => {
     });
 
     it("takes a snapshot without a latched request back to the register 3 condition", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
-        const cpu = machine.processor;
-        cpu.execute(200 * 1000);
-        const state = cpu.snapshotState();
+        const { cpu, state } = await runningParasite();
 
         // As a snapshot taken before the ULA latched its request would be.
         delete state.tube.ula.parasiteNmi;
@@ -97,8 +92,7 @@ describe("Tube co-processor", () => {
     });
 
     it("does not take a latched NMI across a parasite reset", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
+        const machine = await masterWithTube();
         const parasite = machine.processor.tube;
         parasite.setNmi(NmiSource.tube, true);
         expect(parasite._nmiEdge).toBe(true);
@@ -110,11 +104,7 @@ describe("Tube co-processor", () => {
     });
 
     it("resets the parasite when restoring state that has none", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
-        const cpu = machine.processor;
-        cpu.execute(200 * 1000);
-        const state = cpu.snapshotState();
+        const { cpu, state } = await runningParasite();
         delete state.tube; // as a pre-v3 snapshot would be
 
         cpu.restoreState(state);
@@ -124,8 +114,7 @@ describe("Tube co-processor", () => {
     });
 
     it("boots the language across the tube at the default speed", async () => {
-        const machine = new TestMachine("Master", { tube: true });
-        await machine.initialise();
+        const machine = await masterWithTube();
         machine.startCapture();
 
         await machine.runFor(4 * 1000 * 1000);
@@ -148,8 +137,7 @@ describe("Tube co-processor", () => {
     });
 
     it("passes the requested multiplier on to the parasite", async () => {
-        const machine = new TestMachine("Master", { tube: true, tubeCpuMultiplier: 4 });
-        await machine.initialise();
+        const machine = await masterWithTube({ tubeCpuMultiplier: 4 });
 
         expect(machine.processor.tube.cpuMultiplier).toBe(4);
     });
