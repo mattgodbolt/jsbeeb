@@ -12,9 +12,11 @@ const Enable = 0x04;
 const Interrupts = 0x08;
 const DataReady = 0xd0;
 const FrameSize = 860;
-const FirstRowOffset = 3 * 43;
 const RowSize = 43;
-const CyclesPerField = 50001;
+const FirstRowOffset = 3 * RowSize;
+const PollThresholdCycles = 50000;
+const CyclesPerField = PollThresholdCycles + 1;
+const GraceFields = 10;
 
 /**
  * A broadcast whose every byte in frame f reads `channel * 16 + f + 1`, so a row shows which
@@ -103,9 +105,9 @@ describe("TeletextAdaptor", () => {
 
     describe("fields", () => {
         it("latches data ready once a field's worth of cycles has passed", () => {
-            adaptor.polltime(CyclesPerField - 2);
+            adaptor.polltime(PollThresholdCycles);
             expect(dataReady()).toBe(0);
-            adaptor.polltime(2);
+            adaptor.polltime(1);
             expect(dataReady()).toBe(DataReady);
         });
 
@@ -113,10 +115,19 @@ describe("TeletextAdaptor", () => {
             cpu.resetLine = false;
             nextField();
             cpu.resetLine = true;
-            nextField();
+            adaptor.polltime((GraceFields + 1) * PollThresholdCycles);
             expect(dataReady()).toBe(0);
-            adaptor.polltime(10 * (CyclesPerField - 1));
+            adaptor.polltime(1);
             expect(dataReady()).toBe(DataReady);
+        });
+
+        it("starts each field's data at the top of row 0", () => {
+            adaptor.write(Row, 0);
+            adaptor.write(Data, 0x42);
+            adaptor.write(Row, 5);
+            adaptor.write(Data, 0x55);
+            nextField();
+            expect(adaptor.read(Data)).toBe(0x42);
         });
     });
 
@@ -230,6 +241,8 @@ describe("TeletextAdaptor", () => {
 
             expect([adaptor.read(Status), irq(), ...readRow(0, 2)]).toEqual([0x0f, false, 0, 0]);
             expect(loadData).toHaveBeenLastCalledWith("teletext/txt0.dat");
+            sendChannel(0, 1);
+            await settle();
             nextField();
             expect([irq(), ...readRow(0, 2)]).toEqual([false, 0, 0]);
         });

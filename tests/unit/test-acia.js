@@ -290,6 +290,25 @@ describe("Acia", () => {
             expect(restored.read(0) & Tdre).toBe(Tdre);
         });
 
+        it("polls RS423 at the restored receive rate", () => {
+            const scheduler = new Scheduler();
+            const { acia } = createScheduledAcia(scheduler, EightBitsOneStopNoParity, 75);
+            acia.setSerialReceive(75);
+            const restored = new Acia({ interrupt: 0, model: BbcModel }, quiet, scheduler);
+            restored.restoreState(acia.snapshotState());
+            const polledAt = [];
+            restored.setRs423Handler({
+                onTransmit: () => {},
+                tryReceive: () => {
+                    polledAt.push(scheduler.epoch);
+                    return -1;
+                },
+            });
+            restored.selectRs423(true);
+            scheduler.polltime(2 * ByteCyclesAt75Baud);
+            expect(polledAt[1] - polledAt[0]).toBe(ByteCyclesAt75Baud);
+        });
+
         it("reasserts the IRQ it was holding", () => {
             const scheduler = new Scheduler();
             const { cpu, acia } = createScheduledAcia(scheduler, ReceiveInterruptEnable | EightBitsOneStopNoParity, 75);

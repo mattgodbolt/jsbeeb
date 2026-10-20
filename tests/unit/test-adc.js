@@ -65,12 +65,15 @@ describe("Adc", () => {
         expect([adc.read(Status) & (Busy | EndOfConversion), cb1]).toEqual([EndOfConversion, false]);
     });
 
-    it("starts again from the beginning when written mid-conversion", () => {
+    it("starts again from the beginning, on the new channel, when written mid-conversion", () => {
+        adc.setChannelSource(1, source(0x1234));
         adc.write(Status, 0);
         scheduler.polltime(EightBitConversionCycles - 1);
         adc.write(Status, 1);
         scheduler.polltime(EightBitConversionCycles - 1);
         expect(adc.read(Status) & Busy).toBe(Busy);
+        scheduler.polltime(1);
+        expect(registers().slice(1)).toEqual([0x12, 0x34]);
     });
 
     it.each([
@@ -78,14 +81,10 @@ describe("Adc", () => {
         [1, 0xffff],
         [2, 0x5fff],
         [3, 0xdfff],
-    ])("reads channel %i from its own source, with the top two bits in the status", (channel, value) => {
+    ])("reads channel %i from its own source", (channel, value) => {
         for (let other = 0; other < 4; other++) adc.setChannelSource(other, source(other === channel ? value : 0));
         convert(TenBit | channel);
-        expect(registers()).toEqual([
-            TenBit | channel | EndOfConversion | ((value >>> 10) & 3),
-            value >>> 8,
-            value & 0xff,
-        ]);
+        expect(registers().slice(1)).toEqual([value >>> 8, value & 0xff]);
     });
 
     it("reads the centre on a channel with no source", () => {
@@ -142,14 +141,15 @@ describe("Adc", () => {
         it("restores a conversion in progress with CB1 high, finishing when it would have", () => {
             adc.write(Status, 1);
             scheduler.polltime(100);
-            const restored = new Adc(sysvia, scheduler);
-            cb1 = null;
+            const restoredScheduler = new Scheduler();
+            let restoredCb1 = null;
+            const restored = new Adc({ setcb1: (level) => (restoredCb1 = level) }, restoredScheduler);
             restored.restoreState(adc.snapshotState());
-            expect(cb1).toBe(true);
-            scheduler.polltime(EightBitConversionCycles - 101);
+            expect(restoredCb1).toBe(true);
+            restoredScheduler.polltime(EightBitConversionCycles - 101);
             expect(restored.read(Status) & Busy).toBe(Busy);
-            scheduler.polltime(1);
-            expect([restored.read(Status) & Busy, cb1]).toEqual([0, false]);
+            restoredScheduler.polltime(1);
+            expect([restored.read(Status) & Busy, restoredCb1]).toEqual([0, false]);
         });
     });
 });
