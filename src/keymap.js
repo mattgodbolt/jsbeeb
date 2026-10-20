@@ -665,3 +665,40 @@ export function getKeyMap(keyLayout) {
 
     return keys2;
 }
+
+/**
+ * Who holds SHIFT on a key matrix driven by mappings from a key map. A mapping of
+ * `[col, row, shiftOverride]` forces SHIFT to its override while that key is down; otherwise
+ * SHIFT follows the mapped shift key. Keys set on the matrix directly are left alone.
+ */
+export class ShiftOverride {
+    constructor([shiftCol, shiftRow]) {
+        this.shiftCol = shiftCol;
+        this.shiftRow = shiftRow;
+        this.clear();
+    }
+
+    clear() {
+        this.physicalShiftDown = false;
+        this.forcedShift = null;
+    }
+
+    setMapped(keys, [col, row, shiftOverride], val) {
+        keys[col][row] = val;
+        const isShiftKey = shiftOverride === undefined && col === this.shiftCol && row === this.shiftRow;
+        if (isShiftKey) this.physicalShiftDown = !!val;
+        if (shiftOverride !== undefined) this.forcedShift = val ? shiftOverride : null;
+        if (isShiftKey || shiftOverride !== undefined || this.forcedShift !== null) {
+            keys[this.shiftCol][this.shiftRow] = (this.forcedShift ?? this.physicalShiftDown) ? 1 : 0;
+        }
+    }
+
+    state() {
+        return { physicalShiftDown: this.physicalShiftDown, forcedShift: this.forcedShift };
+    }
+
+    restore({ physicalShiftDown, forcedShift }) {
+        this.physicalShiftDown = physicalShiftDown;
+        this.forcedShift = forcedShift;
+    }
+}

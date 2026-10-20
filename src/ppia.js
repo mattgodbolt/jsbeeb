@@ -1,4 +1,5 @@
 import { ATOM, getKeyMapAtom } from "./keymap-atom.js";
+import { ShiftOverride } from "./keymap.js";
 
 // 8255 Programmable Peripheral Interface Adapter for the Acorn Atom.
 // Reference: http://mdfs.net/Docs/Comp/Acorn/Atom/atap25.htm
@@ -219,8 +220,7 @@ export class AtomPPIA extends PPIA {
         }
 
         this.setKeyLayout(initialLayout);
-        this.physicalShiftDown = false;
-        this.shiftOverride = null;
+        this.shift = new ShiftOverride(ATOM.SHIFT);
 
         this.keyboardEnabled = true;
         // The Atom has no lock lights. Report caps lock as "on" and shift
@@ -256,8 +256,7 @@ export class AtomPPIA extends PPIA {
                 this.keys[i][j] = 0;
             }
         }
-        this.physicalShiftDown = false;
-        this.shiftOverride = null;
+        this.shift.clear();
         this.updateKeys();
     }
 
@@ -278,19 +277,7 @@ export class AtomPPIA extends PPIA {
         if (!this.keyboardEnabled) return;
         const colrow = this.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) return;
-        const [col, row, shiftOverride] = colrow;
-        const [shiftCol, shiftRow] = ATOM.SHIFT;
-
-        this.keys[col][row] = val;
-        const isShiftKey = shiftOverride === undefined && col === shiftCol && row === shiftRow;
-        if (isShiftKey) this.physicalShiftDown = !!val;
-        if (shiftOverride !== undefined) this.shiftOverride = val ? shiftOverride : null;
-        // A key with a shift override holds the Atom's shift its own way while it is down; otherwise
-        // only the shift key moves it, which leaves alone a shift held through the raw entry points.
-        if (isShiftKey || shiftOverride !== undefined || this.shiftOverride !== null) {
-            const shiftPressed = this.shiftOverride === null ? this.physicalShiftDown : this.shiftOverride;
-            this.keys[shiftCol][shiftRow] = shiftPressed ? 1 : 0;
-        }
+        this.shift.setMapped(this.keys, colrow, val);
         this.updateKeys();
     }
 
@@ -499,7 +486,6 @@ export class AtomPPIA extends PPIA {
         this.lastSpeakerBit = state.lastSpeakerBit;
         // Which held key was forcing shift is not saved, so the matrix's shift is taken as the shift key's.
         const [shiftCol, shiftRow] = ATOM.SHIFT;
-        this.shiftOverride = null;
-        this.physicalShiftDown = !!this.keys[shiftCol][shiftRow];
+        this.shift.restore({ physicalShiftDown: !!this.keys[shiftCol][shiftRow], forcedShift: null });
     }
 }
