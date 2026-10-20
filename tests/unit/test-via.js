@@ -37,8 +37,8 @@ describe("Via snapshotState / restoreState", () => {
         ACR = 0xb,
         PCR = 0xc,
         IER = 0xe;
-    const AcrT1ContinuousOnPb7ShiftOutUnderT2Latching = 0xd3;
-    const PcrCa2HighCb2PulsingOnRisingEdges = 0xbf;
+    const AcrT1ContinuousOnPb7ShiftOutFreeRunningT2Latching = 0xd3;
+    const PcrCa1Cb1RisingCa2HighCb2PulseOnWrite = 0xbf;
     const IerSetTimers = 0xe0;
 
     let scheduler, cpu;
@@ -65,7 +65,7 @@ describe("Via snapshotState / restoreState", () => {
     function driveMidCb2PulseWithTimersRunning(via) {
         via.write(DDRA, 0xf0);
         via.write(DDRB, 0x0f);
-        via.write(ACR, AcrT1ContinuousOnPb7ShiftOutUnderT2Latching);
+        via.write(ACR, AcrT1ContinuousOnPb7ShiftOutFreeRunningT2Latching);
         via.write(IER, IerSetTimers);
         via.write(T1CL, 0x34);
         via.write(T1CH, 0x01);
@@ -74,7 +74,7 @@ describe("Via snapshotState / restoreState", () => {
         via.write(SR, 0x55);
         via.write(ORB, 0x06);
         scheduler.polltime(1001);
-        via.write(PCR, PcrCa2HighCb2PulsingOnRisingEdges);
+        via.write(PCR, PcrCa1Cb1RisingCa2HighCb2PulseOnWrite);
         via.setca1(true);
         via.setcb1(true);
         via.write(ORA, 0x42);

@@ -30,6 +30,7 @@ describe("Acia snapshotState / restoreState", () => {
                 driven.write(0, ReceiveInterruptEightBitWord);
                 driven.setSerialReceive(9600);
                 driven.setSerialTransmit(1200);
+                scheduler.polltime(1000);
                 driven.write(1, 0x42);
                 driven.receive(0x5a);
                 driven.setTape({ poll: () => 100 });
