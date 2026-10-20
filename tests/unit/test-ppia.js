@@ -187,6 +187,7 @@ describe("AtomPPIA", () => {
             scheduler.polltime(100);
             expect(polls).toBe(2);
             expect(ppia.motorOn).toBe(false);
+            expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
         });
 
         it("stops the motor when rewinding", () => {

@@ -45,6 +45,8 @@ function takesNmi(cpu) {
 const AdlcControl1 = 0xfea0;
 const AdlcControl2 = 0xfea1;
 const AdlcTxFifo = 0xfea2;
+const AdlcStatus1 = 0xfea0;
+const AdlcIrqFlag = 0x80;
 const RxTxInterruptsEnabled = 0x06;
 const RxTxReset = 0xc0;
 const PrioritisedStatus = 0x01;
@@ -277,10 +279,12 @@ describe("Cpu6502 econet NMI line", () => {
 
     it("follows the ADLC's IRQ flag", () => {
         raiseAdlcIrq(cpu);
+        expect(cpu.readDevice(AdlcStatus1) & AdlcIrqFlag).toBe(AdlcIrqFlag);
         expect(cpu.nmi).toBe(true);
         expect(takesNmi(cpu)).toBe(true);
 
         clearAdlcIrq(cpu);
+        expect(cpu.readDevice(AdlcStatus1) & AdlcIrqFlag).toBe(0);
         expect(cpu.nmi).toBe(false);
     });
 
@@ -302,6 +306,7 @@ describe("Cpu6502 econet NMI line", () => {
         for (let i = 0; i < 3; i++) cpu.writeDevice(AdlcTxFifo, 0x55);
         cpu.polltime(1);
 
+        expect(cpu.readDevice(AdlcStatus1) & AdlcIrqFlag).toBe(AdlcIrqFlag);
         expect(takesNmi(cpu)).toBe(true);
     });
 

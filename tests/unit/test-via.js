@@ -216,6 +216,7 @@ describe("Via CA2 write handshake", () => {
 
         via.write(register, WrittenByte);
         expect(via[line]).toBe(false);
+        expect(events).toEqual([{ level: false, output: true }]);
 
         scheduler.polltime(PulseWidthCycles - 1);
         expect(via[line]).toBe(false);
