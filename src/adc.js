@@ -5,7 +5,7 @@
  * @typedef {import('./analogue-source.js').AnalogueSource} AnalogueSource
  */
 export const AdcCentreValue = 0x8000;
-// The uPD7002 converts to 12 bits, so the AUG gives bits 3-0 of the low byte as always zero.
+// The uPD7002 converts to 12 bits; the AUG gives bits 3-0 of the low byte as always zero.
 const LowByteResultBits = 0xf0;
 
 export class Adc {
