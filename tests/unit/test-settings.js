@@ -289,11 +289,23 @@ describe("Settings", () => {
 
     describe("mapLegacyModels", () => {
         it.each([
-            ["MasterTurbo", { model: "MasterTurbo" }, { model: "Master", coProcessor: true }],
-            ["BMusic5000", { model: "BMusic5000" }, { model: "B-DFS1.2", hasMusic5000: true }],
-            ["BTeletext", { model: "BTeletext" }, { model: "B-DFS1.2", hasTeletextAdaptor: true }],
-            ["nothing in a query with no model", { autoboot: true }, { autoboot: true }],
-        ])("splits %s into a model and its fitting", (_, query, mapped) => {
+            [
+                "splits MasterTurbo into the Master and a co-processor",
+                { model: "MasterTurbo" },
+                { model: "Master", coProcessor: true },
+            ],
+            [
+                "splits BMusic5000 into the B and a Music 5000",
+                { model: "BMusic5000" },
+                { model: "B-DFS1.2", hasMusic5000: true },
+            ],
+            [
+                "splits BTeletext into the B and a teletext adaptor",
+                { model: "BTeletext" },
+                { model: "B-DFS1.2", hasTeletextAdaptor: true },
+            ],
+            ["leaves a query with no model alone", { autoboot: true }, { autoboot: true }],
+        ])("%s", (_, query, mapped) => {
             mapLegacyModels(query);
             expect(query).toEqual(mapped);
         });
