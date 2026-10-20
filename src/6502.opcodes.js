@@ -1002,6 +1002,7 @@ const { opcodes: opcodes65c02, undocumented: undocumented65c02 } = splitUndocume
 });
 
 const PrevInstructionWindow = 64;
+const PcInRunScore = 10;
 const CommonInstructions =
     /RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC/;
 const UncommonInstructions = /,\s*([XY]|X\))$/;
@@ -1111,14 +1112,13 @@ class Disassemble6502 {
     prevInstruction(address, pc) {
         address &= 0xffff;
         const windowStart = Math.max(address - PrevInstructionWindow, 0);
-        // A run's score is its first instruction's plus that of the run from where that instruction ends, so working
-        // down from the target scores every starting point with one disassembly each.
+        // A run's score is its first instruction's plus that of the run from where that instruction ends.
         const runs = new Array(address - windowStart);
         for (let addr = address - 1; addr >= windowStart; addr--) {
             if (!this.isDocumented(addr)) continue;
             const [text, next] = this.disassemble(addr);
             const isCommon = CommonInstructions.test(text) && !UncommonInstructions.test(text);
-            const score = (addr === pc ? 10 : 0) + (isCommon ? 1 : 0);
+            const score = (addr === pc ? PcInRunScore : 0) + (isCommon ? 1 : 0);
             if (next === address) {
                 runs[addr - windowStart] = { score, last: addr };
             } else if (next < address) {
