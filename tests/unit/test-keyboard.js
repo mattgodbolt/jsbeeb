@@ -1,9 +1,8 @@
 import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
-import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
 import { BBC, keyCodes, userKeymap } from "../../src/keymap.js";
-import { findModel } from "../../src/models.js";
+import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
 
 describe("Keyboard", () => {
     let keyboard;
@@ -25,29 +24,8 @@ describe("Keyboard", () => {
     const breakKey = () => keyEvent(keyCodes.F12, "F12");
 
     beforeEach(() => {
-        mockSysvia = {
-            keyDown: vi.fn(),
-            keyUp: vi.fn(),
-            clearKeys: vi.fn(),
-            disableKeyboard: vi.fn(),
-            enableKeyboard: vi.fn(),
-            keyToggleRaw: vi.fn(),
-            setKeyLayout: vi.fn(),
-            capsLockLight: false,
-            shiftLockLight: false,
-        };
-
-        mockProcessor = {
-            model: findModel("B-DFS1.2"),
-            sysvia: mockSysvia,
-            keyboardInterface: mockSysvia,
-            setKeyLayout: vi.fn(),
-            scheduler: new Scheduler(),
-            setReset: vi.fn(),
-            peripheralCyclesPerSecond: 2000000,
-            cycleSeconds: 0,
-            currentCycles: 0,
-        };
+        mockProcessor = fakeKeyboardProcessor();
+        mockSysvia = mockProcessor.sysvia;
 
         mockInputEnabledFunction = vi.fn().mockReturnValue(false);
         running = false;
@@ -211,7 +189,6 @@ describe("Keyboard", () => {
 
     test("brings a key held through a paste back once the paste is over", () => {
         const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
-        mockSysvia.keyUpRaw = vi.fn();
         running = true;
         keyboard.keyDown(key);
 
@@ -488,28 +465,8 @@ describe("Keyboard Atom adapter", () => {
     let mockProcessor;
 
     beforeEach(() => {
-        mockAtomPPIA = {
-            keyDown: vi.fn(),
-            keyUp: vi.fn(),
-            clearKeys: vi.fn(),
-            disableKeyboard: vi.fn(),
-            enableKeyboard: vi.fn(),
-            keyToggleRaw: vi.fn(),
-            setKeyLayout: vi.fn(),
-        };
-
-        mockProcessor = {
-            model: findModel("Atom"),
-            atomppia: mockAtomPPIA,
-            keyboardInterface: mockAtomPPIA,
-            setKeyLayout: vi.fn(),
-            sysvia: { keyDown: vi.fn(), keyUp: vi.fn() },
-            scheduler: new Scheduler(),
-            setReset: vi.fn(),
-            peripheralCyclesPerSecond: 1000000,
-            cycleSeconds: 0,
-            currentCycles: 0,
-        };
+        mockProcessor = fakeKeyboardProcessor("Atom");
+        mockAtomPPIA = mockProcessor.atomppia;
 
         keyboard = new Keyboard({
             processor: mockProcessor,
