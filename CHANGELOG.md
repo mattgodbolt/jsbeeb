@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.10.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.0...v2.10.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* a Return pressed after a dead key reaches the machine, held as long as it is held ([#1412](https://github.com/mattgodbolt/jsbeeb/issues/1412)) ([babfb56](https://github.com/mattgodbolt/jsbeeb/commit/babfb56f9af5731dd86cab5fcf72026aee3dee31))
+* a shared session's offer and answer wait for a first ICE candidate, however long it takes ([#1411](https://github.com/mattgodbolt/jsbeeb/issues/1411)) ([a390603](https://github.com/mattgodbolt/jsbeeb/commit/a39060395281f58a8e866b3a5208c164b4db175c))
+* a wider help dialog that fits a desktop screen and scrolls under its header on smaller screens, and ⌥ for Alt on a Mac ([#1378](https://github.com/mattgodbolt/jsbeeb/issues/1378)) ([ff1c3ec](https://github.com/mattgodbolt/jsbeeb/commit/ff1c3ec1d0fd061b6a4402463feeba6605d37f62))
+* an 8271 seek with the head unloaded reaches no drive, and a seek to track 0 then gives up with &14 ([#1403](https://github.com/mattgodbolt/jsbeeb/issues/1403)) ([2eb4d1b](https://github.com/mattgodbolt/jsbeeb/commit/2eb4d1bff03ccc8713761ef3c2fa7dd4657b2405))
+* benchmark workloads state the fittings they run on, the page refuses a machine fitted otherwise, and CI checks they are current ([#1398](https://github.com/mattgodbolt/jsbeeb/issues/1398)) ([3cbbae6](https://github.com/mattgodbolt/jsbeeb/commit/3cbbae63e3186ab96a84ff0e4a729db7cf167828))
+* both disc drives turn while the motor line is on, not only the selected one ([#1390](https://github.com/mattgodbolt/jsbeeb/issues/1390)) ([627586e](https://github.com/mattgodbolt/jsbeeb/commit/627586ed68f766f1827fea22d7dda046a4097805))
+* debug read hooks see the value of zero page and stack reads ([#1408](https://github.com/mattgodbolt/jsbeeb/issues/1408)) ([d39676e](https://github.com/mattgodbolt/jsbeeb/commit/d39676e549a910b5067730094bd6405b93982a92)), closes [#1399](https://github.com/mattgodbolt/jsbeeb/issues/1399)
+* the drive noise follows a snapshot restore and stops when the motor does ([#1397](https://github.com/mattgodbolt/jsbeeb/issues/1397)) ([8e4b9b1](https://github.com/mattgodbolt/jsbeeb/commit/8e4b9b19e82dceca05915bf99b587b32e4977fdf))
+* the emulation loop owns why the machine is stopped ([#1386](https://github.com/mattgodbolt/jsbeeb/issues/1386)) ([47290de](https://github.com/mattgodbolt/jsbeeb/commit/47290de8e93be25e1cdaa8b383939112ead006be))
+* the WD1770's status shows a write-protected disc after a restore, seek or step ([#1382](https://github.com/mattgodbolt/jsbeeb/issues/1382)) ([d7ada41](https://github.com/mattgodbolt/jsbeeb/commit/d7ada41a7868309cf6f40bf0a78f3fa7a68b1b17))
+* writing the WD1770's drive control register mid-command no longer stops the emulator ([#1384](https://github.com/mattgodbolt/jsbeeb/issues/1384)) ([9598cb7](https://github.com/mattgodbolt/jsbeeb/commit/9598cb7047d2f792580b8cbe15b8fffb7bb8528b))
+
 ## [2.10.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.9.0...v2.10.0) (2026-10-19)
 
 
