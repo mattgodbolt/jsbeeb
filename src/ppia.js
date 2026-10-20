@@ -118,9 +118,10 @@ class PPIA {
                 break;
             case CREG: {
                 this.creg = val & 0xff;
-                // 8255 CREG: D7=1 is mode-set, ignored: port directions stay as the Atom ROM sets them (#1436).
+                // 8255 CREG: D7=1 is mode-set, ignored, as port directions are fixed at what the Atom ROM's
+                // reset selects (#1436).
                 // D7=0 is Bit Set/Reset (BSR) for individual port C output bits.
-                if (val & 0x80) break; // mode-set: no action needed
+                if (val & 0x80) break;
 
                 // BSR: set or clear a single port C output bit.
                 // NOTE: Simplified: only handles bits 2 (speaker) and 3 (CSS),
