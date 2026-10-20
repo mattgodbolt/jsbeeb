@@ -394,9 +394,10 @@ describe("Keyboard", () => {
         ])("taps a key the input method has composed into, by %s, when its key up never comes", (_, fields) => {
             keyboard.keyDown(keyEvent(keyCodes.ENTER, fields.key, { keyCode: fields.keyCode }));
             expect(mockSysvia.keyDown.mock.calls).toEqual([[keyCodes.ENTER, false]]);
-            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
 
-            vi.runAllTimers();
+            vi.advanceTimersByTime(99);
+            expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(1);
             expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.ENTER]]);
         });
 
