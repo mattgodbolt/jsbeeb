@@ -912,6 +912,25 @@ describe("SessionHost", () => {
             expect(keys[1][1] - 3000).toBeGreaterThanOrEqual(40 * MsCycles);
         });
 
+        it("puts BREAK in at once, ahead of keys of its own still waiting", async () => {
+            showLights();
+            const { host, first, second } = await twoGuests();
+            document.querySelector("#session-pane .session-take-on-key").click();
+            first.emit("message", message({ type: "take" }));
+            first.emit("message", commit(1000, 3000));
+            host.input(keyA);
+            vi.advanceTimersByTime(84);
+            host.input(keyAUp);
+            first.emit("message", message({ type: "released", at: 3000, waiting: [] }));
+            host.execute(5000);
+            host.input({ kind: "break", down: true });
+            host.execute(100);
+            const breakCommit = sentOf(second, "commit").find(({ inputs }) =>
+                inputs.some(({ kind }) => kind === "break"),
+            );
+            expect(breakCommit.at).toBe(3000);
+        });
+
         it("puts in at once two keys this page presses together, as a machine of its own would", async () => {
             const { host, second } = await twoGuests();
             host.input(keyA);
@@ -1708,6 +1727,7 @@ describe("SessionGuest", () => {
             expect(keys[0]).toEqual([true, handoverAt]);
             const release = keys.find(([down]) => !down);
             const retap = keys.findLast(([down]) => down);
+            expect(release[1] - handoverAt).toBeGreaterThanOrEqual(40 * MsCycles);
             expect(retap[1]).toBeGreaterThan(release[1]);
         });
 
