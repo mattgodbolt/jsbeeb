@@ -709,7 +709,7 @@ describe("SessionHost", () => {
             ).toMatchObject({ guest: "host" });
             const before = sentOf(second, "commit").length;
             host.execute(100);
-            expect(sentOf(second, "commit").length).toBeGreaterThan(before);
+            await vi.waitFor(() => expect(sentOf(second, "commit").length).toBeGreaterThan(before));
         });
 
         const keyAUp = { kind: "key", mapping: A, down: false };
