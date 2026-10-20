@@ -269,7 +269,7 @@ describe("EmulationLoop", () => {
         expect(loop.isRunning()).toBe(false);
     });
 
-    it("leaves Play enabled after an error the processor throws", () => {
+    it("enables Play and disables Pause after an error the processor throws", () => {
         domFromIndexHtml("debug-pause", "debug-play");
         const loop = make();
         new RunControls({ loop });
