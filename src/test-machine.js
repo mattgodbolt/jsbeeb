@@ -212,7 +212,11 @@ export class TestMachine {
      */
     addBreakpoint(type, address, { bank }, onHit) {
         const cpu = this.processor;
-        const debugHook = { execute: cpu.debugInstruction, read: cpu.debugRead, write: cpu.debugWrite }[type];
+        const debugHook = new Map([
+            ["execute", cpu.debugInstruction],
+            ["read", cpu.debugRead],
+            ["write", cpu.debugWrite],
+        ]).get(type);
         if (!debugHook) throw new Error(`Unknown breakpoint type: ${type}`);
         return debugHook.add((addr, value) => {
             if (addr !== address || (type === "execute" && cpu.resumingFromStop)) return false;
