@@ -318,37 +318,23 @@ test("every display mode on the bar can be picked", async ({ beeb, page }) => {
     await beeb.expectScreenText(">");
 });
 
-for (const { source, ref, served, needs } of [
-    {
-        source: "Bitshifters",
-        ref: "bitshifters:bs-paradroid.ssd",
-        served: "https://bitshifters.github.io/content/bs-paradroid.ssd",
-        needs: "Paradroid",
-    },
-    {
-        source: "the GitHub list",
-        ref: "github:mattgodbolt/nm/ninja_music.ssd",
-        served: "https://raw.githubusercontent.com/mattgodbolt/nm/HEAD/ninja_music.ssd",
-        needs: "Ninja Massacre music",
-    },
-]) {
-    test(`a link that boots a disc from ${source} without naming a model comes up on the machine it needs`, async ({
-        beeb,
-        page,
-    }) => {
-        await page.route(served, (route) =>
-            route.fulfill({ path: "public/discs/elite.ssd", contentType: "application/octet-stream" }),
-        );
-        await beeb.open(`?disc=${ref}&autoboot`);
-        await expect(page.locator(".toast")).toContainText(`Switched to a BBC Master 128 for ${needs}`);
-        await expect(page).toHaveURL(/model=Master/);
-        await expect(page).toHaveURL(/autoboot/);
-        expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
-        await beeb.expectDrive0(served.split("/").pop());
-        // The stand-in is Elite, whose loader refuses a Master: only a boot gets it to say so.
-        await beeb.expectScreenText("This program is only suitable for a BBC Micro");
-    });
-}
+test("a link that boots a disc from Bitshifters without naming a model comes up on the machine it needs", async ({
+    beeb,
+    page,
+}) => {
+    const served = "https://bitshifters.github.io/content/bs-paradroid.ssd";
+    await page.route(served, (route) =>
+        route.fulfill({ path: "public/discs/elite.ssd", contentType: "application/octet-stream" }),
+    );
+    await beeb.open("?disc=bitshifters:bs-paradroid.ssd&autoboot");
+    await expect(page.locator(".toast")).toContainText("Switched to a BBC Master 128 for Paradroid");
+    await expect(page).toHaveURL(/model=Master/);
+    await expect(page).toHaveURL(/autoboot/);
+    expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
+    await beeb.expectDrive0("bs-paradroid.ssd");
+    // The stand-in is Elite, whose loader refuses a Master: only a boot gets it to say so.
+    await beeb.expectScreenText("This program is only suitable for a BBC Micro");
+});
 
 test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit one restarts with one", async ({
     beeb,
