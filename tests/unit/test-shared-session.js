@@ -925,10 +925,15 @@ describe("SessionHost", () => {
             host.execute(5000);
             host.input({ kind: "break", down: true });
             host.execute(100);
-            const breakCommit = sentOf(second, "commit").find(({ inputs }) =>
-                inputs.some(({ kind }) => kind === "break"),
+            host.execute(CyclesPerSecond);
+            const keys = sentOf(second, "commit").flatMap(({ at, inputs }) =>
+                inputs.map(({ kind, down }) => [kind, down, at]),
             );
-            expect(breakCommit.at).toBe(3000);
+            expect(keys).toEqual([
+                ["key", true, 3000],
+                ["break", true, 3000],
+                ["key", false, 3000 + 40 * MsCycles],
+            ]);
         });
 
         it("puts in at once two keys this page presses together, as a machine of its own would", async () => {

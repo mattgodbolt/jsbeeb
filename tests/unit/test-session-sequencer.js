@@ -234,7 +234,7 @@ describe("Sequencer", () => {
 
 describe("KeyStamper", () => {
     const UpTo = 100000;
-    // Both in milliseconds past UpTo.
+    // Cycles in and out as milliseconds past UpTo.
     const stamp = (keys, nowMs, { roundTripMs = 200, sinceCommitMs = 0, upToMs = 0 } = {}) =>
         (keys.stamp({ upTo: UpTo + upToMs * MsCycles, roundTripMs, sinceCommitMs, nowMs }) - UpTo) / MsCycles;
     const follow = (keys, cycleMs, nowMs, heldBack) =>
