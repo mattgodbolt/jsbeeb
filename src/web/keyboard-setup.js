@@ -29,7 +29,7 @@ function inputMethodResetter() {
         const focused = document.activeElement;
         textField.focus({ preventScroll: true });
         textField.blur();
-        focused?.focus({ preventScroll: true });
+        focused?.focus({ preventScroll: true, focusVisible: false });
     };
 }
 
