@@ -3,6 +3,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { attachDriveNoise, DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 const SectorsPerTrack = 10;
 const SectorSize = 256;
@@ -425,6 +426,26 @@ describe("spindle motor", () => {
         expect(scheduler.headroom()).not.toBe(Scheduler.MaxHeadroom);
         scheduler.polltime(ms(100));
         expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
+    });
+
+    it("brings back its head, its spin and its disc from a snapshot", () => {
+        const withDisc = () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+            drive.setDisc(eightyTrackDisc());
+            return {
+                drive,
+                scheduler,
+                snapshotState: () => drive.snapshotState(),
+                restoreState: (state) => drive.restoreState(state),
+            };
+        };
+        return expectSnapshotRoundTrips(withDisc, ({ drive, scheduler }) => {
+            drive.selectSide(true);
+            drive.seekOneTrack(1);
+            drive.startSpinning();
+            scheduler.polltime(ms(150));
+        });
     });
 
     it("carries its speed through a snapshot", () => {

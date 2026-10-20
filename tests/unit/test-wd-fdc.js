@@ -5,6 +5,7 @@ import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 const ControlRegister = 0;
 const CommandRegister = 4;
@@ -574,6 +575,35 @@ describe("WD1770 FDC tests", () => {
             fdc.write(ControlRegister, ControlRunningDrive1);
             expect(fdc.motorOn).toEqual([false, true]);
         });
+
+        const snapshotting = (options) => () => {
+            const rig = makeFdc(options());
+            return Object.assign(rig, {
+                snapshotState: () => rig.fdc.snapshotState(),
+                restoreState: (state) => rig.fdc.restoreState(state),
+            });
+        };
+
+        it("brings back a sector read part way through from a snapshot that JSON can carry", async () => {
+            const reading = snapshotting(() => ({ disc: mfmDiscWithSector({ data: sectorData() }) }));
+            let saved;
+            await expectSnapshotRoundTrips(reading, ({ fdc, scheduler }) => {
+                fdc.write(SectorRegister, 0);
+                fdc.write(CommandRegister, ReadSectorCommand);
+                scheduler.polltime(RevolutionTicks / 2);
+                saved = fdc.snapshotState();
+            });
+            expect(BigInt(JSON.parse(JSON.stringify(saved)).markDetector)).not.toBe(0n);
+        });
+
+        it("brings back its registers from a snapshot with no drive selected", () =>
+            expectSnapshotRoundTrips(
+                snapshotting(() => ({ control: ControlRunningNoDrive })),
+                ({ fdc }) => {
+                    fdc.write(TrackRegister, 42);
+                    fdc.write(SectorRegister, 7);
+                },
+            ));
 
         it("turns both drives after restoring a snapshot in which only the selected one turned", () => {
             const original = makeFdc({ disc: blankDisc() });

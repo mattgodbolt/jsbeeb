@@ -12,8 +12,10 @@ import {
     toSsdOrDsd,
 } from "../../src/disc.js";
 import * as fs from "node:fs";
+import { crc32 } from "../../src/archive.js";
 import { ssdImage } from "./helpers.js";
 import { discFor } from "../../src/fdc.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -761,5 +763,46 @@ describe("restoring a state's written tracks", () => {
             dirtyTracks: { "false:3": { pulses2Us: track.pulses2Us.slice(), length: track.length } },
         });
         expect(written).toEqual([[false, 3]]);
+    });
+});
+
+describe("a disc's snapshot", () => {
+    const write = (disc, track, pulses) => {
+        disc.writePulses(false, track, 0, pulses);
+        disc.flushWrites();
+    };
+
+    it("brings back the tracks as they were when it was taken", () =>
+        expectSnapshotRoundTrips(unobservedDisc, (disc) => write(disc, 0, 0x12345678)));
+
+    it("puts back a track written since it was taken", () => {
+        const disc = unobservedDisc();
+        const before = disc.getTrack(false, 0).pulses2Us[0];
+        const state = disc.snapshotState();
+
+        write(disc, 0, 0xdeadbeef);
+        disc.restoreState(state);
+
+        expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(before);
+    });
+
+    it("shares a clean track with the snapshot before it, and copies a written one", () => {
+        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), ssdImage(20), false);
+        const first = disc.snapshotState().tracks;
+
+        write(disc, 0, 0x12345678);
+        const second = disc.snapshotState().tracks;
+
+        expect(second["false:0"]).not.toBe(first["false:0"]);
+        expect(second["false:0"].pulses2Us[0]).toBe(0x12345678);
+        expect(second["false:1"]).toBe(first["false:1"]);
+    });
+
+    it("keeps the image it was loaded from, and that image's CRC", () => {
+        const image = ssdImage();
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        disc.setOriginalImage(image);
+        expect(disc.originalImageData).toBe(image);
+        expect(disc.originalImageCrc32).toBe(crc32(image));
     });
 });
