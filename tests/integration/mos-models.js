@@ -69,12 +69,17 @@ describe("the Master's TIME$", () => {
         { set: "Tue,20 Oct 2026.12:34:00", shown: "Tue,20 Oct 2026.12:34" },
         { set: "Tue,28 Dec 1999.23:58:00", shown: "Mon,28 Dec 2099.23:58" },
         { set: "Sat,15 Mar 1980.01:02:00", shown: "Fri,15 Mar 2080.01:02" },
-    ])("reads back $set as $shown", async ({ set, shown }) => {
+        { from: "Sun,01 Feb 2026.12:00:00", set: "Tue,31 Mar 2026.12:00:00", shown: "Tue,31 Mar 2026.12:00" },
+        { from: "Wed,15 Apr 2026.12:00:00", set: "Fri,31 Jul 2026.12:00:00", shown: "Fri,31 Jul 2026.12:00" },
+        { from: "Sun,01 Feb 2026.12:00:00", set: "Tue,29 Feb 2028.12:00:00", shown: "Tue,29 Feb 2028.12:00" },
+    ])("reads back $set as $shown", async ({ from, set, shown }) => {
         const machine = new TestMachine("Master");
         await machine.initialise();
         await machine.runUntilInput(10);
-        await machine.type(`TIME$="${set}"`);
-        await machine.runUntilInput(10);
+        for (const time of [from, set].filter(Boolean)) {
+            await machine.type(`TIME$="${time}"`);
+            await machine.runUntilInput(10);
+        }
         await machine.type("PRINT LEFT$(TIME$, 21)");
         await machine.runUntilInput(10);
         expect(screenLines(machine).slice(-2)).toEqual([shown, ">"]);
