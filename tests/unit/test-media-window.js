@@ -1289,6 +1289,38 @@ describe("MediaWindow", () => {
             await vi.waitFor(() => expect(window.isOpen).toBe(false));
             expect(deps.processor.reset).not.toHaveBeenCalled();
         });
+
+        it("switches without asking on a shift-click with Autoboot unticked", async () => {
+            startTicked = false;
+            await openWith([paradroid]);
+            row().dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true }));
+            await vi.waitFor(() =>
+                expect(navigatedTo()).toBe(
+                    "https://bbc.example/?autoboot&disc1=bitshifters:bs-paradroid.ssd&model=Master",
+                ),
+            );
+            expect(confirm).not.toHaveBeenCalled();
+        });
+
+        it("asks on a plain click with Autoboot unticked", async () => {
+            startTicked = false;
+            confirm.mockResolvedValue(false);
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            await openWith([paradroid]);
+            row().click();
+            await vi.waitFor(() => expect(deps.media.loadDiscImage).toHaveBeenCalledWith(paradroid.ref, "auto"));
+            expect(confirm).toHaveBeenCalled();
+        });
+
+        it("asks for the other drive even with Autoboot ticked, since only drive 0 boots, and leaves the boot behind", async () => {
+            urlState.set({ autoboot: true });
+            confirm.mockResolvedValue(true);
+            await openWith([paradroid]);
+            document.querySelector("#media-list .media-target").click();
+            await vi.waitFor(() =>
+                expect(navigatedTo()).toBe("https://bbc.example/?disc2=bitshifters:bs-paradroid.ssd&model=Master"),
+            );
+        });
     });
 
     describe("the page as a drop zone", () => {

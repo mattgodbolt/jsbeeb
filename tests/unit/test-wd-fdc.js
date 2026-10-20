@@ -594,6 +594,12 @@ describe("WD1770 FDC tests", () => {
                 saved = fdc.snapshotState();
             });
             expect(BigInt(JSON.parse(JSON.stringify(saved)).markDetector)).not.toBe(0n);
+
+            const restored = reading();
+            restored.fdc.restoreState(JSON.parse(JSON.stringify(saved)));
+            expect(() => {
+                while (restored.fdc.read(CommandRegister) & StatusBusy) restored.scheduler.polltime(PollTicks);
+            }).not.toThrow();
         });
 
         it("brings back its registers from a snapshot with no drive selected", () =>

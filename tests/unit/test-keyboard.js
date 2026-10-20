@@ -433,6 +433,19 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
+    test("runs a shortcut once however long it is held, even when its repeats outlast a blur", () => {
+        const handler = vi.fn();
+        keyboard.registerKeyHandler(keyCodes.T, handler, { alt: true, ctrl: false });
+        const altT = (repeat) => keyEvent(keyCodes.T, "", { altKey: true, repeat });
+
+        keyboard.keyDown(altT(false));
+        keyboard.keyDown(altT(true));
+        keyboard.clearKeys();
+        keyboard.keyDown(altT(true));
+
+        expect(handler.mock.calls.filter(([down]) => down)).toHaveLength(1);
+    });
+
     test("keeps the keyboard from the machine while a paste types, until Escape cancels it", () => {
         running = true;
         keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
