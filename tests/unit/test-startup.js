@@ -165,7 +165,7 @@ describe("startAsTheUrlAsks", () => {
         });
         await expect(started).resolves.toBe(true);
         expect(urlState.navigatedTo).toBeNull();
-        expect(log).toContain("boot");
+        expect(log).toEqual([["noteStart", { boot_mode: "boot", renderer: "webgl" }], "boot", "restore", "go"]);
     });
 });
 
