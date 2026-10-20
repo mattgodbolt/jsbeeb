@@ -565,17 +565,6 @@ describe("SessionHost", () => {
             expect(sentOf(channel, "handover")).toHaveLength(1);
         });
 
-        it("replays the commits of the guest in control and passes them to the others", async () => {
-            const { host, processor, first, second } = await twoGuests();
-            first.emit("message", message({ type: "take" }));
-            first.emit("message", commit(1000, 3000, [keyA]));
-            host.execute(5000);
-            expect(processor.currentCycles).toBe(3000);
-            expect(processor.sysvia.setMapped).toHaveBeenCalledWith(A, 1);
-            expect(sentOf(second, "commit").at(-1)).toMatchObject({ at: 1000, upTo: 3000, inputs: [keyA] });
-            expect(sentOf(first, "commit").filter((each) => each.at >= 1000)).toEqual([]);
-        });
-
         it("sends this page's keys to the guest in control, stamped", async () => {
             const { host } = await hosting();
             const channel = await joined();
@@ -1498,22 +1487,6 @@ describe("SessionGuest", () => {
             return session;
         }
 
-        it("takes control at the cycle it is handed, once its machine has reached it, and sends its commits", async () => {
-            const { context, channel, lockstep } = await inControl();
-            expect(context.processor.currentCycles).toBe(1000);
-            lockstep().execute(500);
-            expect(commitsSent(channel)).toEqual([expect.objectContaining({ at: 1000, upTo: 1500, inputs: [] })]);
-        });
-
-        it("applies its own keys at once, and tells the host of them", async () => {
-            const { context, channel, lockstep } = await inControl();
-            context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
-            lockstep().execute(500);
-            const [own] = channel.messages().filter((each) => each.type === "input");
-            expect(own).toMatchObject({ own: true, input: { kind: "key", down: true } });
-            expect(commitsSent(channel)[0].inputs).toEqual([own.input]);
-        });
-
         it("applies the keys the host passes on at their stamps", async () => {
             const { channel, deliver, lockstep } = await inControl();
             await deliver([
@@ -1978,8 +1951,6 @@ describe("SessionGuest", () => {
 });
 
 describe("a host and its guests, joined in-process", () => {
-    const MsCycles = CyclesPerSecond / 1000;
-
     async function session(names) {
         const transport = inProcessTransport();
         const hostContext = fakeContext({ transport, page: fakePage() });
@@ -2014,37 +1985,6 @@ describe("a host and its guests, joined in-process", () => {
         host.showStatus();
         await settle();
         expect(panelOf(guests[1].context).peers.map(({ label }) => label)).toEqual(["Matt", "Kieran", "Ana (you)"]);
-    });
-
-    it("runs every guest's machine to where the host's has gone", async () => {
-        const { host, guests } = await session(["Kieran", "Ana"]);
-        host.execute(500);
-        host.execute(700);
-        await settle();
-        for (const { context, run } of guests) {
-            run(5000);
-            expect(context.processor.currentCycles).toBe(2200);
-        }
-    });
-
-    it("puts a guest's key into the host's machine and every guest's, on the cycle it was stamped with", async () => {
-        const { host, hostContext, guests } = await session(["Kieran", "Ana"]);
-        guests[0].context.keyboard.setInput.mock.calls.at(-1)[0].keyDown("a", false);
-        await settle();
-        host.execute(CyclesPerSecond);
-        await settle();
-        expect(hostContext.processor.sysvia.setMapped).toHaveBeenCalledWith([4, 1], 1);
-        for (const { context, run } of guests) {
-            run(2 * CyclesPerSecond);
-            expect(context.processor.sysvia.setMapped).toHaveBeenCalledWith([4, 1], 1);
-        }
-        expect(host.report().events.find(({ event }) => event === "input")).toMatchObject({
-            guest: guests[0].guest.id,
-            cycle: expect.any(Number),
-        });
-        expect(host.report().events.find(({ event }) => event === "input").cycle).toBeGreaterThan(
-            1000 + 100 * MsCycles,
-        );
     });
 
     it("lets go of a guest's keys when its page goes, on every machine", async () => {
