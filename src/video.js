@@ -60,6 +60,11 @@ class Ula {
         this.reset();
     }
 
+    powerOn() {
+        this.disabled = !this.hasVideoNula;
+        this.reset();
+    }
+
     reset() {
         this.collook.set(NulaDefaultPalette);
         this.flash.fill(1);
@@ -632,10 +637,11 @@ export class Video {
         if (this.ula.hasVideoNula) this.ulaPal.set(state.ulaPal);
     }
 
-    reset(cpu, via) {
+    reset(cpu, via, hard) {
         this.cpu = cpu;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
+        if (hard) this.ula.powerOn();
         if (this.video6847 && cpu) {
             this.video6847.reset(cpu, cpu.atomppia);
         }
