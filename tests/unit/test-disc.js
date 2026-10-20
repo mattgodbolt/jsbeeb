@@ -16,6 +16,7 @@ import { crc32 } from "../../src/archive.js";
 import { ssdImage } from "./helpers.js";
 import { discFor } from "../../src/fdc.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -26,16 +27,12 @@ describe("BitWindow64", function () {
         return window;
     }
 
-    it("holds the last 64 bits shifted in", () => {
-        const window = shiftIn(new BitWindow64(), 0xaaaa448944894489n);
-        expect(window.hi).toBe(0xaaaa4489);
-        expect(window.lo).toBe(0x44894489);
-    });
-
-    it("keeps both halves unsigned as bits cross bit 31 and bit 63", () => {
-        const window = shiftIn(new BitWindow64(), 0xffffffffffffffffn);
-        expect(window.hi).toBe(0xffffffff);
-        expect(window.lo).toBe(0xffffffff);
+    it.each([
+        [0xaaaa448944894489n, 0xaaaa4489, 0x44894489],
+        [0xffffffffffffffffn, 0xffffffff, 0xffffffff],
+    ])("holds the last 64 bits shifted in, both halves unsigned: %s", (value, hi, lo) => {
+        const window = shiftIn(new BitWindow64(), value);
+        expect([window.hi, window.lo]).toEqual([hi, lo]);
     });
 
     it("returns the bit leaving bit 63", () => {
@@ -51,177 +48,72 @@ describe("BitWindow64", function () {
         expect(window.equals(0xaaaa4488, 0x44894489)).toBe(false);
     });
 
-    it("counts a run of nibbles ending at bit 0", () => {
-        expect(shiftIn(new BitWindow64(), 0x1234567988888888n).countTrailingNibbles(0x8)).toBe(8);
-    });
-
-    it("counts a run continuing into the high half", () => {
-        expect(shiftIn(new BitWindow64(), 0x1234567888888888n).countTrailingNibbles(0x8)).toBe(9);
-        expect(shiftIn(new BitWindow64(), 0x1238888888888888n).countTrailingNibbles(0x8)).toBe(13);
-        expect(shiftIn(new BitWindow64(), 0x8888888888888888n).countTrailingNibbles(0x8)).toBe(16);
-    });
-
-    it("counts nothing when the lowest nibble differs", () => {
-        expect(shiftIn(new BitWindow64(), 0x8888888888888880n).countTrailingNibbles(0x8)).toBe(0);
+    it.each([
+        [0x1234567988888888n, 8],
+        [0x1234567888888888n, 9],
+        [0x1238888888888888n, 13],
+        [0x8888888888888888n, 16],
+        [0x8888888888888880n, 0],
+    ])("counts the run of 8 nibbles ending at bit 0 of %s as %i", (value, expected) => {
+        expect(shiftIn(new BitWindow64(), value).countTrailingNibbles(0x8)).toBe(expected);
     });
 });
 
 describe("IBM disc format tests", function () {
-    it("calculates FM crcs", () => {
-        let crc = IbmDiscFormat.crcInit(false);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x12);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x34);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x56);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x70);
-        expect(crc).toBe(0xb1e4);
+    it.each([
+        [false, 0xb1e4],
+        [true, 0x9d39],
+    ])("calculates crcs with MFM %s", (isMfm, expected) => {
+        let crc = IbmDiscFormat.crcInit(isMfm);
+        for (const byte of [0x12, 0x34, 0x56, 0x70]) crc = IbmDiscFormat.crcAddByte(crc, byte);
+        expect(crc).toBe(expected);
     });
-    it("calculates MFM crcs", () => {
-        let crc = IbmDiscFormat.crcInit(true);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x12);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x34);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x56);
-        crc = IbmDiscFormat.crcAddByte(crc, 0x70);
-        expect(crc).toBe(0x9d39);
+
+    it.each([
+        [0xff, 0x00, 0x88888888],
+        [0xff, 0xff, 0xaaaaaaaa],
+        [0xc7, 0xfe, 0xaa222aa8],
+        [0x00, 0x00, 0x00000000],
+    ])("converts FM clocks %i and data %i to and from pulses", (clocks, data, pulses) => {
+        expect(IbmDiscFormat.fmTo2usPulses(clocks, data)).toBe(pulses);
+        expect(IbmDiscFormat._2usPulsesToFm(pulses)).toEqual({ clocks, data, iffyPulses: false });
     });
-    it("converts to FM pulses", () => {
-        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0x00)).toBe(0x88888888);
-        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0xff)).toBe(0xaaaaaaaa);
-        expect(IbmDiscFormat.fmTo2usPulses(0xc7, 0xfe)).toBe(0xaa222aa8);
-    });
-    it("converts from FM pulses", () => {
-        expect(IbmDiscFormat._2usPulsesToFm(0x88888888)).toEqual({
-            clocks: 0xff,
-            data: 0x00,
-            iffyPulses: false,
-        });
-        expect(IbmDiscFormat._2usPulsesToFm(0xaaaaaaaa)).toEqual({
-            clocks: 0xff,
-            data: 0xff,
-            iffyPulses: false,
-        });
-        expect(IbmDiscFormat._2usPulsesToFm(0xaa222aa8)).toEqual({
-            clocks: 0xc7,
-            data: 0xfe,
-            iffyPulses: false,
-        });
+
+    it("flags FM pulses off the bit cells as iffy", () => {
         expect(IbmDiscFormat._2usPulsesToFm(0xaa222aa8 | 0x05)).toEqual({
             clocks: 0xc7,
             data: 0xfe,
             iffyPulses: true,
         });
     });
-    it("reads back what it wrote in FM", () => {
-        for (const [clocks, data] of [
-            [0xff, 0x00],
-            [0xff, 0xff],
-            [IbmDiscFormat.markClockPattern, IbmDiscFormat.idMarkDataPattern],
-            [0x00, 0x00],
-        ]) {
-            expect(IbmDiscFormat._2usPulsesToFm(IbmDiscFormat.fmTo2usPulses(clocks, data))).toEqual({
-                clocks,
-                data,
-                iffyPulses: false,
-            });
-        }
-    });
-    it("converts to MFM pulses", () => {
-        expect(IbmDiscFormat.mfmTo2usPulses(false, 0x00)).toEqual({ lastBit: false, pulses: 0xaaaa });
-        expect(IbmDiscFormat.mfmTo2usPulses(true, 0x00)).toEqual({ lastBit: false, pulses: 0x2aaa });
-        expect(IbmDiscFormat.mfmTo2usPulses(false, 0xff)).toEqual({ lastBit: true, pulses: 0x5555 });
-        expect(IbmDiscFormat.mfmTo2usPulses(true, 0xff)).toEqual({ lastBit: true, pulses: 0x5555 });
-        expect(IbmDiscFormat.mfmTo2usPulses(false, 0x37)).toEqual({ lastBit: true, pulses: 0xa515 });
-        expect(IbmDiscFormat.mfmTo2usPulses(true, 0x37)).toEqual({ lastBit: true, pulses: 0x2515 });
-    });
-    it("Converts from MFM pulses", () => {
-        expect(IbmDiscFormat._2usPulsesToMfm(0xaaaa)).toBe(0);
-        expect(IbmDiscFormat._2usPulsesToMfm(0x2aaa)).toBe(0);
-        expect(IbmDiscFormat._2usPulsesToMfm(0x5555)).toBe(0xff);
-        expect(IbmDiscFormat._2usPulsesToMfm(0xa515)).toBe(0x37);
-        expect(IbmDiscFormat._2usPulsesToMfm(0x2515)).toBe(0x37);
-    });
-    it("checks gaps between MFM pulses", () => {
-        expect(IbmDiscFormat.checkPulse(0.0, true)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(3.49, true)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(4.51, true)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(7.49, true)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(8.51, true)).toBe(false);
 
-        expect(IbmDiscFormat.checkPulse(4.0, true)).toBe(true);
-        expect(IbmDiscFormat.checkPulse(5.51, true)).toBe(true);
-        expect(IbmDiscFormat.checkPulse(6.0, true)).toBe(true);
-        expect(IbmDiscFormat.checkPulse(6.49, true)).toBe(true);
-        expect(IbmDiscFormat.checkPulse(8.0, true)).toBe(true);
+    it.each([
+        [false, 0x00, false, 0xaaaa],
+        [true, 0x00, false, 0x2aaa],
+        [false, 0xff, true, 0x5555],
+        [true, 0xff, true, 0x5555],
+        [false, 0x37, true, 0xa515],
+        [true, 0x37, true, 0x2515],
+    ])("converts MFM after a %s bit, data %i to and from pulses", (previousBit, data, lastBit, pulses) => {
+        expect(IbmDiscFormat.mfmTo2usPulses(previousBit, data)).toEqual({ lastBit, pulses });
+        expect(IbmDiscFormat._2usPulsesToMfm(pulses)).toBe(data);
     });
-    it("checks gaps between FM pulses", () => {
-        expect(IbmDiscFormat.checkPulse(0.0, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(3.49, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(4.51, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(5.51, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(6.0, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(6.49, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(7.49, false)).toBe(false);
-        expect(IbmDiscFormat.checkPulse(8.51, false)).toBe(false);
 
-        expect(IbmDiscFormat.checkPulse(4.0, false)).toBe(true);
-        expect(IbmDiscFormat.checkPulse(8.0, false)).toBe(true);
+    it.each([
+        [true, [4.0, 5.51, 6.0, 6.49, 8.0], [0.0, 3.49, 4.51, 7.49, 8.51]],
+        [false, [4.0, 8.0], [0.0, 3.49, 4.51, 5.51, 6.0, 6.49, 7.49, 8.51]],
+    ])("checks gaps between pulses with MFM %s", (isMfm, good, bad) => {
+        for (const gap of good) expect(IbmDiscFormat.checkPulse(gap, isMfm), `${gap}`).toBe(true);
+        for (const gap of bad) expect(IbmDiscFormat.checkPulse(gap, isMfm), `${gap}`).toBe(false);
     });
 });
 
 describe("Disc builder tests", () => {
-    const someData = new Uint8Array(256);
-    someData.fill(0x33);
-    it("builds an FM track whose CRCs check", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        const builder = disc.buildTrack(false, 0);
-        builder
-            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
-            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
-            .resetCrc()
-            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
-            .appendFmByte(0) // track
-            .appendFmByte(0)
-            .appendFmByte(0) // sector
-            .appendFmByte(1)
-            .appendCrc()
-            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
-            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
-            .resetCrc()
-            .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
-            .appendFmChunk(someData)
-            .appendCrc()
-            .fillFmByte(0xff);
-
-        const sectors = disc.getTrack(false, 0).findSectors();
-        expect(sectors).toHaveLength(1);
-        expect(sectors[0].hasHeaderCrcError).toBe(false);
-        expect(sectors[0].hasDataCrcError).toBe(false);
-    });
-
-    it("builds an MFM track whose CRCs check", () => {
-        const disc = new Disc(true, new DiscConfig());
-        const builder = disc.buildTrack(false, 0);
-        builder
-            .appendRepeatMfmByte(0x4e, 60)
-            .appendRepeatMfmByte(0x00, 12)
-            .resetCrc()
-            .appendMfm3xA1Sync()
-            .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
-            .appendMfmByte(0) // track
-            .appendMfmByte(0)
-            .appendMfmByte(0) // sector
-            .appendMfmByte(1)
-            .appendCrc()
-            .appendRepeatMfmByte(0x4e, 22)
-            .appendRepeatMfmByte(0x00, 12)
-            .resetCrc()
-            .appendMfm3xA1Sync()
-            .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
-            .appendMfmChunk(someData)
-            .appendCrc()
-            .appendRepeatMfmByte(0x4e, 24)
-            .fillMfmByte(0x4e);
-
-        const sectors = disc.getTrack(false, 0).findSectors();
+    it.each([
+        ["FM", fmDiscWithSector],
+        ["MFM", mfmDiscWithSector],
+    ])("builds an %s track whose CRCs check", (_, discWithSector) => {
+        const sectors = discWithSector().getTrack(false, 0).findSectors();
         expect(sectors).toHaveLength(1);
         expect(sectors[0].hasHeaderCrcError).toBe(false);
         expect(sectors[0].hasDataCrcError).toBe(false);
@@ -242,81 +134,41 @@ describe("Disc builder tests", () => {
         expect(disc.isDoubleSided).toBe(true);
     });
 
-    it("should build from FM pulses", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        const builder = disc.buildTrack(false, 0);
-        const pulses = [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8];
-        builder.buildFromPulses(pulses, false);
-        expect(builder.track.length).toBe(1);
-    });
-
-    it("should build from MFM pulses", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        const builder = disc.buildTrack(false, 0);
-        const pulses = [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6];
-        builder.buildFromPulses(pulses, true);
+    it.each([
+        ["FM", false, [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8]],
+        ["MFM", true, [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6]],
+    ])("should build from %s pulses", (_, isMfm, pulses) => {
+        const builder = new Disc(true, new DiscConfig(), "test.ssd").buildTrack(false, 0);
+        builder.buildFromPulses(pulses, isMfm);
         expect(builder.track.length).toBe(1);
     });
 });
 
-describe(
-    "SSD loader tests",
-    {
-        timeout: 60000, // roundtripping elite can be slow
-    },
-    function () {
-        const data = fs.readFileSync("public/discs/elite.ssd");
-        it("should load Elite", () => {
-            const disc = new Disc(true, new DiscConfig(), "test.ssd");
-            loadSsd(disc, data, false);
-            expect(disc.tracksUsed).toBe(80);
-        });
-        it("should roundtrip Elite", () => {
-            const disc = new Disc(true, new DiscConfig(), "test.ssd");
-            loadSsd(disc, data, false);
-            const ssdSaved = toSsdOrDsd(disc);
-            // // Check the first few bytes, else a diff blows things up
-            const maxDiff = 50;
-            expect(ssdSaved.slice(0, maxDiff)).toEqual(new Uint8Array(data.slice(0, maxDiff)));
+describe("SSD loader tests", function () {
+    it("should load and roundtrip Elite", { timeout: 60000 }, () => {
+        const data = new Uint8Array(fs.readFileSync("public/discs/elite.ssd"));
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, data, false);
+        expect(disc.tracksUsed).toBe(80);
 
-            // But also check everything else; and the padding should be all zeros.
-            expect(ssdSaved.length >= data.length).toBe(true);
-            for (let i = 0; i < data.length; ++i) {
-                expect(ssdSaved[i]).toBe(data[i]);
-            }
-            for (let i = data.length; i < ssdSaved.length; ++i) {
-                expect(ssdSaved[i]).toBe(0);
-            }
-        });
-        it("should load an SSD whose size is not a multiple of sector size", () => {
-            // Create data that's not a multiple of 256 bytes (e.g., 2.5 sectors worth)
-            const sectorSize = 256;
-            const oddSize = sectorSize * 2 + 100;
-            const oddData = new Uint8Array(oddSize);
-            for (let i = 0; i < oddSize; i++) oddData[i] = i & 0xff;
+        const ssdSaved = toSsdOrDsd(disc);
+        expect(ssdSaved.slice(0, data.length)).toEqual(data);
+        expect(ssdSaved.slice(data.length).every((byte) => byte === 0)).toBe(true);
+    });
 
-            const disc = new Disc(true, new DiscConfig(), "test.ssd");
-            loadSsd(disc, oddData, false);
+    it("should load an SSD whose size is not a multiple of sector size", () => {
+        const oddData = new Uint8Array(256 * 2 + 100).map((_, i) => i & 0xff);
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, oddData, false);
 
-            const sectors = disc.getTrack(false, 0).findSectors();
-            expect(sectors.length).toBe(10);
-            for (const sector of sectors) {
-                expect(sector.hasHeaderCrcError).toBe(false);
-                expect(sector.hasDataCrcError).toBe(false);
-            }
-        });
-        it("should have sane tracks", () => {
-            const disc = new Disc(true, new DiscConfig(), "test.ssd");
-            loadSsd(disc, data, false);
-            const sectors = disc.getTrack(false, 0).findSectors();
-            expect(sectors.length).toBe(10);
-            for (const sector of sectors) {
-                expect(sector.hasHeaderCrcError).toBe(false);
-                expect(sector.hasDataCrcError).toBe(false);
-            }
-        });
-    },
-);
+        const sectors = disc.getTrack(false, 0).findSectors();
+        expect(sectors.length).toBe(10);
+        for (const sector of sectors) {
+            expect(sector.hasHeaderCrcError).toBe(false);
+            expect(sector.hasDataCrcError).toBe(false);
+        }
+    });
+});
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
@@ -713,12 +565,12 @@ describe("erasing a track", () => {
 
     it("offers the erasure to the next snapshot", () => {
         const disc = unobservedDisc();
-        const before = disc.snapshotState().tracks;
+        disc.snapshotState();
 
         disc.eraseTrack(false, 1);
+        disc.restoreState(disc.snapshotState());
 
-        // Without this the track comes back at the next rewind.
-        expect(disc.snapshotState().tracks["false:1"]).not.toBe(before["false:1"]);
+        expect(disc.getTrack(false, 1).findSectors()).toEqual([]);
     });
 });
 
@@ -786,16 +638,19 @@ describe("a disc's snapshot", () => {
         expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(before);
     });
 
-    it("shares a clean track with the snapshot before it, and copies a written one", () => {
+    it("takes each snapshot's tracks as they were then, written or not", () => {
         const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), ssdImage(20), false);
-        const first = disc.snapshotState().tracks;
-
+        const track1 = disc.getTrack(false, 1).pulses2Us.slice();
+        const first = disc.snapshotState();
         write(disc, 0, 0x12345678);
-        const second = disc.snapshotState().tracks;
+        const second = disc.snapshotState();
+        write(disc, 1, 0xdeadbeef);
 
-        expect(second["false:0"]).not.toBe(first["false:0"]);
-        expect(second["false:0"].pulses2Us[0]).toBe(0x12345678);
-        expect(second["false:1"]).toBe(first["false:1"]);
+        disc.restoreState(first);
+        expect(disc.getTrack(false, 0).pulses2Us[0]).not.toBe(0x12345678);
+        disc.restoreState(second);
+        expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(0x12345678);
+        expect(disc.getTrack(false, 1).pulses2Us).toEqual(track1);
     });
 
     it("keeps the image it was loaded from, and that image's CRC", () => {
