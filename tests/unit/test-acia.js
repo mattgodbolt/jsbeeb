@@ -81,7 +81,8 @@ describe("Acia", () => {
                 scheduler.polltime(TapePollCycles);
                 return polledTape.poll.mock.calls.length > before;
             };
-            return { acia, tape, isPolled };
+            const nothingBooked = () => scheduler.headroom() === Scheduler.MaxHeadroom;
+            return { acia, tape, scheduler, isPolled, nothingBooked };
         };
 
         it("runs the tape from the relay alone, PLAY being down to begin with", () => {
@@ -93,10 +94,11 @@ describe("Acia", () => {
         });
 
         it("holds the tape still while STOP is down, whatever the relay does", () => {
-            const { acia, isPolled } = withTape();
+            const { acia, isPolled, nothingBooked } = withTape();
             acia.setMotor(true);
             acia.pressStop();
             expect(acia.tapeRunning).toBe(false);
+            expect(nothingBooked()).toBe(true);
             expect(isPolled()).toBe(false);
             acia.setMotor(false);
             acia.setMotor(true);
@@ -107,22 +109,26 @@ describe("Acia", () => {
         });
 
         it("starts a tape put in while the relay is on, and stops when it is taken out", () => {
-            const { acia, isPolled } = withTape();
+            const { acia, isPolled, nothingBooked } = withTape();
             acia.setMotor(true);
             const another = { poll: vi.fn(() => TapePollCycles), rewind: vi.fn() };
             acia.setTape(another);
             expect(another.poll).toHaveBeenCalled();
             expect(isPolled(another)).toBe(true);
             acia.setTape(undefined);
+            expect(acia.tapeRunning).toBe(false);
+            expect(nothingBooked()).toBe(true);
             expect(isPolled(another)).toBe(false);
         });
 
         it("leaves a tape put in with the relay off until the relay comes on, then polls it when it asks", () => {
-            const { acia, tape, isPolled } = withTape();
+            const { acia, tape, scheduler, isPolled } = withTape();
             expect(isPolled()).toBe(false);
             acia.setMotor(true);
             expect(tape.poll).toHaveBeenCalledTimes(1);
-            expect(isPolled()).toBe(true);
+            scheduler.polltime(TapePollCycles - 1);
+            expect(tape.poll).toHaveBeenCalledTimes(1);
+            scheduler.polltime(1);
             expect(tape.poll).toHaveBeenCalledTimes(2);
         });
 
