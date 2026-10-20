@@ -220,7 +220,8 @@ describe("MediaWindow", () => {
             ],
             ["drive 1's slot", () => bay(1).querySelector(".bay-slot").click(), () => bay(1), bayFolded],
             ["the deck's window", () => byId("deck-window").click(), () => byId("deck-window"), deckFolded],
-            ["the Into control", () => aim("1"), () => bay(1), bayFolded],
+            ["the Into control at drive 1", () => aim("1"), () => bay(1), bayFolded],
+            ["the Into control at the deck", () => aim("tape"), () => byId("deck-window"), deckFolded],
         ])("aims the list from %s, unfolding the target, ready to type into", (_, act, target, folded) => {
             make();
             act();
