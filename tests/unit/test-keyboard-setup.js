@@ -110,36 +110,28 @@ describe("KeyboardSetup", () => {
     describe("pasting", () => {
         beforeEach(() => domFromIndexHtml("paste-form"));
 
-        it("goes to the machine when nothing on the page has focus", () => {
-            document.body.dispatchEvent(pasteEvent("PRINT 1\n"));
-            expect(actions.paste).toHaveBeenCalledWith("PRINT 1\n");
-        });
+        const focusedInput = (type) => {
+            const input = document.body.appendChild(document.createElement("input"));
+            input.type = type;
+            input.focus();
+            return input;
+        };
 
-        it("goes to the machine from the paste box", () => {
-            const box = document.getElementById("paste-text");
-            box.focus();
-            box.dispatchEvent(pasteEvent("*CAT"));
-            expect(actions.paste).toHaveBeenCalledWith("*CAT");
+        it.each([
+            ["the page at large", () => document.body, true],
+            ["the paste box", () => document.getElementById("paste-text"), true],
+            ["a control that takes no typing", () => focusedInput("checkbox"), true],
+            ["any other field being typed into", () => focusedInput("text"), false],
+        ])("from %s goes to the machine: %s", (_, target, reaches) => {
+            const from = target();
+            from.focus();
+            from.dispatchEvent(pasteEvent("*CAT"));
+            expect(actions.paste.mock.calls).toEqual(reaches ? [["*CAT"]] : []);
         });
 
         it("ignores a paste event that carries no clipboard", () => {
             document.body.dispatchEvent(new Event("paste", { bubbles: true, cancelable: true }));
             expect(actions.paste).not.toHaveBeenCalled();
-        });
-
-        it("is left to any other field being typed into", () => {
-            const field = document.body.appendChild(document.createElement("input"));
-            field.focus();
-            field.dispatchEvent(pasteEvent("not for the Beeb"));
-            expect(actions.paste).not.toHaveBeenCalled();
-        });
-
-        it("goes to the machine from a control that takes no typing", () => {
-            const checkbox = document.body.appendChild(document.createElement("input"));
-            checkbox.type = "checkbox";
-            checkbox.focus();
-            checkbox.dispatchEvent(pasteEvent("*CAT"));
-            expect(actions.paste).toHaveBeenCalledWith("*CAT");
         });
     });
 
