@@ -8,11 +8,7 @@ import { fakeUrlState, sentEvents, stubNavigation, teardownDom, toasts } from ".
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
-afterEach(() => {
-    window.history.replaceState(null, "", window.location.pathname);
-    sessionStorage.clear();
-    return teardownDom();
-});
+afterEach(teardownDom);
 
 describe("MachineSwitch", () => {
     let deps;
