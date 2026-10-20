@@ -28,7 +28,7 @@ class CapturingVideo extends Video {
 
     async capture(testMachine) {
         this._capturing = true;
-        // Typing can leave the CPU on the vsync handler, which then counts as a vblank before any paint.
+        // A run that stopped between a frame's paint and the OS reaching its vsync handler meets the handler first.
         for (let tries = 0; this._capturing && tries < 2; tries++) await testMachine.runUntilVblank();
         if (this._capturing) throw new Error("Should have captured by now");
         return this._captureSharp.removeAlpha().png().toBuffer();
