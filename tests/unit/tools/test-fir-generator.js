@@ -66,12 +66,11 @@ describe("FIR generator", () => {
             expect(Math.max(...taps)).toBe(taps[(ShaderTaps - 1) / 2]);
         });
 
-        it("is 3 dB down at 0.83 MHz", () => {
-            expect(crossingMhz(taps, -3)).toBeCloseTo(0.83, 1);
-        });
-
-        it("is 6 dB down at 1.15 MHz", () => {
-            expect(crossingMhz(taps, -6)).toBeCloseTo(1.15, 1);
+        it.each([
+            [3, 0.83],
+            [6, 1.15],
+        ])("is %i dB down at %f MHz", (db, mhz) => {
+            expect(crossingMhz(taps, -db)).toBeCloseTo(mhz, 1);
         });
 
         it("barely touches the low chroma band", () => {
@@ -91,12 +90,11 @@ describe("FIR generator", () => {
             for (const line of lines) expect(line.startsWith("  FIR[")).toBe(true);
         });
 
-        it("rejects an even number of taps", () => {
-            expect(() => generateFirCoefficients(20, 1, "")).toThrow();
-        });
-
-        it("rejects a cutoff beyond Nyquist", () => {
-            expect(() => generateFirCoefficients(21, 9, "")).toThrow();
+        it.each([
+            ["an even number of taps", 20, 1, "numTaps must be a positive odd number, got 20"],
+            ["a cutoff beyond Nyquist", 21, 9, "cutoffMhz must be between 0 and 8 MHz (Nyquist), got 9"],
+        ])("rejects %s", (_, taps, cutoffMhz, message) => {
+            expect(() => generateFirCoefficients(taps, cutoffMhz, "")).toThrow(message);
         });
     });
 });
