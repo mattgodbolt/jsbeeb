@@ -41,6 +41,17 @@ describe("Adc", () => {
         expect(registers()).toEqual([EndOfConversion, 0, 0]);
     });
 
+    it.each([
+        [0, 0x3fff, 0x00],
+        [1, 0xffff, 0x30],
+        [2, 0x5fff, 0x10],
+        [3, 0xbfff, 0x20],
+    ])("reports channel %i and its result's top two bits in the status", (channel, value, topBits) => {
+        adc.setChannelSource(channel, source(value));
+        convert(channel);
+        expect(adc.read(Status)).toBe(channel | EndOfConversion | topBits);
+    });
+
     it.each([4, 5, 6, 7])("answers at %i as at the register four below", (addr) => {
         adc.setChannelSource(1, source(0x1234));
         convert(1);
