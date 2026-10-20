@@ -260,23 +260,17 @@ describe("lockstep sessions", () => {
             return { host, lockstep, guest, commits, desyncs };
         }
 
-        it("gives the guest the host's discs, never writing to its own", async () => {
+        it("gives the guest the host's discs, even in a drive it had empty, never writing to its own", async () => {
             const image = "discs/elite.ssd";
             const data = await fdc.load(image);
-            const guestDiscs = [];
+            const guestDisc = fdc.discFor(image, data, () => {});
             const { host, guest } = await pair({
                 prepareHost: ({ processor }) => processor.fdc.loadDisc(1, fdc.discFor(image, data)),
-                prepareGuest: ({ processor }) => {
-                    for (const drive of [0, 1]) {
-                        guestDiscs.push(fdc.discFor(image, data, () => {}));
-                        processor.fdc.loadDisc(drive, guestDiscs[drive]);
-                    }
-                },
+                prepareGuest: ({ processor }) => processor.fdc.loadDisc(0, guestDisc),
             });
             const [emptied, shared] = guest.machine.processor.fdc.drives;
-            expect(guestDiscs.every((disc) => disc.savesChanges)).toBe(true);
+            expect(guestDisc.savesChanges).toBe(true);
             expect(emptied.disc).toBeUndefined();
-            expect(guestDiscs).not.toContain(shared.disc);
             expect(shared.disc.savesChanges).toBe(false);
             const firstTrack = (drive) => drive.disc.getTrack(false, 0).pulses2Us;
             expect(firstTrack(shared)).toEqual(firstTrack(host.processor.fdc.drives[1]));

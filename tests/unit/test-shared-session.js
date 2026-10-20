@@ -637,7 +637,9 @@ describe("SessionHost", () => {
             happen(session);
             await settle();
             expect(session.first.snapshots()).toHaveLength(2);
-            expect(session.first.snapshots()[1].rtcBaseMs === before.rtcBaseMs).toBe(keepsClock);
+            const after = session.first.snapshots()[1].rtcBaseMs;
+            if (keepsClock) expect(after).toBe(before.rtcBaseMs);
+            else expect(after).not.toBe(before.rtcBaseMs);
         });
 
         it("leaves control with a guest that keeps sending commits", async () => {
@@ -1836,7 +1838,7 @@ describe("startSessionFromUrl", () => {
         ],
         ["a host whose room is already open", "server", 409, `a room called "there" is already open`, "room_taken"],
     ])(
-        "says what went wrong in plain words for %s, and notes it with none of them",
+        "says what went wrong in plain words for %s, and notes it without its words",
         async (_, role, status, why, reason) => {
             const sent = sentEvents();
             vi.spyOn(console, "error").mockImplementation(() => {});
