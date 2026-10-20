@@ -43,31 +43,3 @@ test("runs a workload, publishes its result for a script, then runs the machine"
     await page.locator("#benchmark .modal-footer .benchmark-close").click();
     await beeb.expectRunningPast(held);
 });
-
-test("a workload for another model fails, saying which model it needs", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=master-shadow");
-    const { status, error } = await benchmarkRecord(page);
-    expect({ status, error }).toEqual({
-        status: "failed",
-        error: "The master-shadow workload runs on the Master: add &model=Master to the URL",
-    });
-    await expect(page.locator("#benchmark .benchmark-status")).toContainText("add &model=Master");
-});
-
-test("a parameter that changes what is measured is refused", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=elite&frameSkip=2");
-    const { status, error } = await benchmarkRecord(page);
-    expect({ status, error }).toEqual({
-        status: "failed",
-        error: "frameSkip would change what is measured; take it out of the URL",
-    });
-});
-
-test("a machine fitted otherwise than the workload is refused", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=elite&hasVideoNula=true");
-    const { status, error } = await benchmarkRecord(page);
-    expect({ status, error }).toEqual({
-        status: "failed",
-        error: "The elite workload runs with hasVideoNula=false; set that in the URL",
-    });
-});

@@ -105,7 +105,8 @@ async function leaveAtStart(workload, processor, slots) {
  * `result` and its `line`, or the `error`; its `done` resolves to the record when the run ends either way.
  */
 export class BenchmarkPage {
-    constructor(workload, { target = window } = {}) {
+    constructor(workload, { target = window, readWorkload: read = readWorkload } = {}) {
+        this.readWorkload = read;
         let finish;
         this.record = { workload, status: "running", done: new Promise((resolve) => (finish = resolve)) };
         this.finish = finish;
@@ -127,7 +128,7 @@ export class BenchmarkPage {
             const refused = MeasureChangingParams.filter((param) => Object.hasOwn(parsedQuery, param));
             if (refused.length)
                 throw new Error(`${refused.join(", ")} would change what is measured; take it out of the URL`);
-            const workload = await readWorkload(name);
+            const workload = await this.readWorkload(name);
             if (!isSameModel(workload.model, processor.model.name)) {
                 throw new Error(
                     `The ${name} workload runs on the ${workload.model}: add &model=${workload.model} to the URL`,
