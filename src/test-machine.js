@@ -202,8 +202,9 @@ export class TestMachine {
     /**
      * Stop any run when the CPU executes, reads or writes `address`, only
      * while sideways `bank` is paged in there if one is given, calling
-     * `onHit` first with the byte read or written. Returns the debug hook,
-     * whose `remove()` ends the watch.
+     * `onHit` first with the byte read or written. It never fires for the
+     * instruction the CPU resumes at after a stop. Returns the debug hook, whose
+     * `remove()` ends the watch.
      * @param {"execute"|"read"|"write"} type
      * @param {number} address
      * @param {Object} [opts]

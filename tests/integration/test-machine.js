@@ -23,19 +23,22 @@ describe("TestMachine", () => {
         expect(mode7Text(machine)).toContain("BASIC");
     });
 
-    it.each([
+    const hex = (value) => value.toString(16).toUpperCase();
+    for (const [model, romsel, address, bank, paged] of [
         ["Master", 0x04, 0x8000, 4, true],
         ["Master", 0x04, 0x9000, 5, false],
         ["Master", 0x84, 0x8000, 4, false],
         ["Master", 0x84, 0x8fff, 4, false],
         ["Master", 0x84, 0x9000, 4, true],
         ["B-DFS1.2", 0x84, 0x8000, 4, true],
-    ])("on a %s with ROMSEL %i, address %i shows bank %i: %s", (model, romsel, address, bank, paged) => {
-        const machine = new TestMachine(model);
-        machine.processor.romSelect(romsel);
+    ]) {
+        it(`on a ${model} with ROMSEL &${hex(romsel)}, bank ${bank} is ${paged ? "" : "not "}paged at &${hex(address)}`, () => {
+            const machine = new TestMachine(model);
+            machine.processor.romSelect(romsel);
 
-        expect(machine.isBankPagedAt(bank, address)).toBe(paged);
-    });
+            expect(machine.isBankPagedAt(bank, address)).toBe(paged);
+        });
+    }
 });
 
 describe("TestMachine debug stops", () => {
