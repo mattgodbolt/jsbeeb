@@ -202,21 +202,20 @@ export class TestMachine {
     /**
      * Stop any run when the CPU executes, reads or writes `address`, only
      * while sideways `bank` is paged in there if one is given, calling
-     * `onHit` first with the byte read or written. It never fires for the
-     * instruction the CPU resumes at after a stop. Returns the debug hook, whose
-     * `remove()` ends the watch.
+     * `onHit` first with the byte read or written. An execute breakpoint
+     * never fires for the instruction the CPU resumes at after a stop.
+     * Returns the debug hook, whose `remove()` ends the watch.
      * @param {"execute"|"read"|"write"} type
      * @param {number} address
-     * @param {Object} [opts]
-     * @param {number} [opts.bank]
-     * @param {function(number=): void} [onHit]
+     * @param {{bank: (number|undefined)}} opts
+     * @param {function(number=): void} onHit
      */
-    addBreakpoint(type, address, { bank } = {}, onHit = () => {}) {
+    addBreakpoint(type, address, { bank }, onHit) {
         const cpu = this.processor;
         const debugHook = { execute: cpu.debugInstruction, read: cpu.debugRead, write: cpu.debugWrite }[type];
         if (!debugHook) throw new Error(`Unknown breakpoint type: ${type}`);
         return debugHook.add((addr, value) => {
-            if (cpu.resumingFromStop || addr !== address) return false;
+            if (addr !== address || (type === "execute" && cpu.resumingFromStop)) return false;
             if (bank !== undefined && !this.isBankPagedAt(bank, address)) return false;
             onHit(type === "execute" ? undefined : value);
             return true;
