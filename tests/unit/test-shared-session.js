@@ -298,16 +298,19 @@ const wallClockSecondMs = (fromMs = Date.now()) =>
     Math.floor((fromMs - new Date().getTimezoneOffset() * MsPerMinute) / 1000) * 1000;
 
 let hosts;
+let guests;
 
 beforeEach(() => {
     peers = [];
     hosts = [];
+    guests = [];
     vi.stubGlobal("RTCPeerConnection", FakePeer);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
 });
 
 afterEach(() => {
     for (const host of hosts) host.close();
+    for (const guest of guests) guest.leave();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -1390,6 +1393,7 @@ describe("SessionGuest", () => {
     async function joining(contextOptions) {
         const context = fakeContext(contextOptions);
         const guest = new SessionGuest(context, "room");
+        guests.push(guest);
         await guest.start();
         const channel = peers[0].channel;
         const deliver = (messages) => messages.forEach((each) => channel.emit("message", each));
@@ -1414,7 +1418,9 @@ describe("SessionGuest", () => {
                 },
             );
             const context = fakeContext();
-            const started = new SessionGuest(context, "room").start();
+            const guest = new SessionGuest(context, "room");
+            guests.push(guest);
+            const started = guest.start();
             return { started, postOffer: context.rendezvous.postOffer };
         }
 
@@ -1459,7 +1465,9 @@ describe("SessionGuest", () => {
     it("says its name to the host, and calls the host by the one it was welcomed with", async () => {
         showLights();
         const context = fakeContext();
-        await new SessionGuest(context, "room", "Kieran").start();
+        const guest = new SessionGuest(context, "room", "Kieran");
+        guests.push(guest);
+        await guest.start();
         const { channel } = peers[0];
         expect(channel.messages()[0]).toEqual({ type: "hello", name: "Kieran" });
         channel.emit("message", message(welcomeAs({ model: context.model.name, name: "Matt" })));
@@ -1545,15 +1553,22 @@ describe("SessionGuest", () => {
             ]);
         });
 
-        it("notes its own page closing as the end", async () => {
-            const closings = () => sent("session").filter(({ reason }) => reason === "page_closed").length;
-            // Earlier tests' guests still listen on the same window.
+        it("notes its own page closing as the end, once", async () => {
+            const { channel } = await joining();
             window.dispatchEvent(new Event("pagehide"));
-            const earlier = closings();
-            await joining();
-            window.dispatchEvent(new Event("pagehide"));
-            expect(closings()).toBe(2 * earlier + 1);
-            expect(sent("session").at(-1)).toEqual({ role: "guest", stage: "ended", reason: "page_closed" });
+            expect(sent("session").filter(({ reason }) => reason === "page_closed")).toEqual([
+                { role: "guest", stage: "ended", reason: "page_closed" },
+            ]);
+            expect(channel.messages().filter(({ type }) => type === "bye")).toHaveLength(1);
+        });
+
+        it("stops listening for its page going once it has left", async () => {
+            const listening = vi.spyOn(window, "addEventListener");
+            const { channel } = await joining();
+            const [, , { signal }] = listening.mock.calls.find(([type]) => type === "pagehide");
+            expect(signal.aborted).toBe(false);
+            channel.emit("close");
+            expect(signal.aborted).toBe(true);
         });
 
         it("notes failing on something from the host it cannot read as a protocol failure", async () => {
@@ -2042,13 +2057,14 @@ describe("SessionGuest", () => {
         expect(context.loop.setLockstep).not.toHaveBeenLastCalledWith(null);
     });
 
-    it("reloads as the host's model, by the page's own URL builder", async () => {
+    it("reloads as the host's model, by the page's own URL builder, saying goodbye once", async () => {
         const { context, channel } = await joining();
         channel.emit("message", message(welcomeAs({ model: "BBC Master 128 (DFS)" })));
+        window.dispatchEvent(new Event("pagehide"));
         expect(context.urlState.urlWith).toHaveBeenCalledWith(
             expect.objectContaining({ model: "BBC Master 128 (DFS)" }),
         );
-        expect(channel.messages().at(-1)).toEqual({ type: "bye" });
+        expect(channel.messages().filter(({ type }) => type === "bye")).toHaveLength(1);
     });
 
     const differentValue = (name) =>
@@ -2101,7 +2117,9 @@ describe("SessionGuest", () => {
 describe("startSessionFromUrl", () => {
     async function started(params, contextOptions) {
         const context = fakeContext(contextOptions);
-        startSessionFromUrl(params, context);
+        const session = startSessionFromUrl(params, context);
+        if (session instanceof SessionGuest) guests.push(session);
+        else if (session) hosts.push(session);
         await settle();
         return context.rendezvous;
     }
