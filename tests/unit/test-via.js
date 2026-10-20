@@ -310,64 +310,15 @@ describe("SysVia natural keyboard shift override", () => {
         return via.keys[bbcKey[0]][bbcKey[1]] === 1;
     }
 
-    it("holds no BBC shift for a `^`, which the BBC prints unshifted", () => {
+    it("holds the BBC's shift off for a shifted `^` and gives it back on release", () => {
         via.keyDown(keyCodes.SHIFT_LEFT, false);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-
         via.keyDown("^", true);
         expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-    });
-
-    it("gives the shift key back when the character is released", () => {
-        via.keyDown(keyCodes.SHIFT_LEFT, false);
-        via.keyDown("^", true);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
 
         via.keyUp("^");
         expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(false);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-    });
-
-    it("keeps the shift suppressed when shift is let go first", () => {
-        via.keyDown(keyCodes.SHIFT_LEFT, false);
-        via.keyDown("^", true);
-
-        via.keyUp(keyCodes.SHIFT_LEFT);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-
-        via.keyUp("^");
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-    });
-
-    it('holds BBC shift for a `"`, which the BBC prints shifted', () => {
-        via.keyDown('"', false);
-        expect(bbcKeyPressed(BBC.K2)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-    });
-
-    it("leaves shift alone for the space bar, which prints the same either way", () => {
-        via.keyDown(" ", true);
-        via.keyDown(keyCodes.SHIFT_LEFT, true);
-
-        expect(bbcKeyPressed(BBC.SPACE)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-    });
-
-    it("leaves shift alone when the host is already holding what the BBC wants", () => {
-        // A `"` is shifted on both, so nothing needs correcting and nothing else should suffer.
-        via.keyDown(keyCodes.SHIFT_LEFT, true);
-        via.keyDown('"', true);
-        via.keyDown("A", true);
-
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-        expect(bbcKeyPressed(BBC.A)).toBe(true);
-    });
-
-    it("asks for no shift either way for a plain digit", () => {
-        via.keyDown("6", false);
-        expect(bbcKeyPressed(BBC.K6)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
     });
 });
 

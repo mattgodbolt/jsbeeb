@@ -7,6 +7,7 @@ import {
     getKeyMap,
     hostKeyCodes,
     keyCodes,
+    ShiftOverride,
     stringToBBCKeys,
     userKeymap,
 } from "../../src/keymap.js";
@@ -146,6 +147,17 @@ describe("How the Atom alone types a character", function () {
     });
 });
 
+describe("The BBC's natural key map", function () {
+    it("holds the BBC's shift its own way where it disagrees with the host's", function () {
+        const keyMap = getKeyMap("natural");
+        expect(keyMap[true]["^"]).toEqual([...BBC.HAT_TILDE, false]);
+        expect(keyMap[false]['"']).toEqual([...BBC.K2, true]);
+        expect(keyMap[true]['"']).toEqual(BBC.K2);
+        expect(keyMap[false]["6"]).toEqual(BBC.K6);
+        expect(keyMap[true][" "]).toEqual(BBC.SPACE);
+    });
+});
+
 describe("The Atom's key map", function () {
     const Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -199,5 +211,61 @@ describe("The Atom's key map", function () {
         const keyMap = getKeyMapAtom("gaming");
         expect(keyMap[false][keyCodes.K0]).toEqual(ATOM.K0);
         expect(keyMap[false][keyCodes.CAPSLOCK]).toEqual(ATOM.CTRL);
+    });
+});
+
+describe("ShiftOverride", function () {
+    const Shift = [0, 0];
+    const Mappings = { S: Shift, P: [1, 0], N: [2, 0, false], Y: [3, 0, true] };
+
+    function makeMatrix() {
+        return Object.values(Mappings).map(() => new Uint8Array(1));
+    }
+
+    function shiftAfter(shift, keys, step) {
+        shift.setMapped(keys, Mappings[step[0]], step[1] === "+" ? 1 : 0);
+        return keys[Shift[0]][Shift[1]];
+    }
+
+    // Each step is a key (S the shift key, P plain, N and Y forcing SHIFT off and on), + or - for
+    // down or up, and the SHIFT the matrix then holds.
+    it.each([
+        ["follows the shift key", "S+1 P+1 P-1 S-0"],
+        ["forces SHIFT off while a key is down, then gives the shift key back", "S+1 N+0 N-1"],
+        ["keeps SHIFT forced when the shift key goes first", "S+1 N+0 S-0 N-0"],
+        ["holds a forced SHIFT through a plain key", "Y+1 P+1 P-1 Y-0"],
+        ["lets the later of two forcing keys win, and its release end the force", "S+1 Y+1 N+0 N-1"],
+        ["ends the force on the release of the earlier of two forcing keys too", "S+1 Y+1 N+0 Y-1"],
+    ])("%s", function (_, steps) {
+        const keys = makeMatrix();
+        const shift = new ShiftOverride(Shift);
+        for (const step of steps.split(" ")) expect(shiftAfter(shift, keys, step), step).toBe(Number(step[2]));
+    });
+
+    it("leaves a SHIFT set on the matrix directly to plain keys", function () {
+        const keys = makeMatrix();
+        keys[Shift[0]][Shift[1]] = 1;
+        expect(shiftAfter(new ShiftOverride(Shift), keys, "P+")).toBe(1);
+    });
+
+    it("forgets a forced SHIFT on clear", function () {
+        const shift = new ShiftOverride(Shift);
+        shiftAfter(shift, makeMatrix(), "Y+");
+        shift.clear();
+        expect(shiftAfter(shift, makeMatrix(), "P+")).toBe(0);
+    });
+
+    it.each([
+        ["Y", 1],
+        ["N", 0],
+    ])("carries the SHIFT %s forces through state and restore", function (forcingKey, forcedShift) {
+        const shift = new ShiftOverride(Shift);
+        shiftAfter(shift, makeMatrix(), `${forcingKey}+`);
+        const carried = new ShiftOverride(Shift);
+        carried.restore(shift.state());
+
+        const keys = makeMatrix();
+        keys[Shift[0]][Shift[1]] = 1 - forcedShift;
+        expect(shiftAfter(carried, keys, "P+")).toBe(forcedShift);
     });
 });

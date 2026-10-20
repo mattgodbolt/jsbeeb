@@ -1,4 +1,4 @@
-import { BBC, getKeyMap } from "./keymap.js";
+import { BBC, getKeyMap, ShiftOverride } from "./keymap.js";
 
 export const KeyMatrixSize = 16;
 
@@ -667,9 +667,7 @@ export class SysVia extends Via {
         this.mouseButton1 = false;
         this.mouseButton2 = false;
         this.keyboardEnabled = true;
-        this._physicalShiftDown = false;
-        this._shiftOverrideActive = false;
-        this._shiftOverrideDesiredShift = false;
+        this.shift = new ShiftOverride(BBC.SHIFT);
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
@@ -696,17 +694,13 @@ export class SysVia extends Via {
     keyboardState() {
         return {
             keys: this.keys.map((column) => Array.from(column)),
-            physicalShiftDown: this._physicalShiftDown,
-            shiftOverrideActive: this._shiftOverrideActive,
-            shiftOverrideDesiredShift: this._shiftOverrideDesiredShift,
+            ...this.shift.state(),
         };
     }
 
     restoreKeyboard(state) {
         state.keys.forEach((column, col) => this.keys[col].set(column));
-        this._physicalShiftDown = state.physicalShiftDown;
-        this._shiftOverrideActive = state.shiftOverrideActive;
-        this._shiftOverrideDesiredShift = state.shiftOverrideDesiredShift;
+        this.shift.restore(state);
         this.updateKeys();
     }
 
@@ -739,9 +733,7 @@ export class SysVia extends Via {
                 this.keys[i][j] = false;
             }
         }
-        this._physicalShiftDown = false;
-        this._shiftOverrideActive = false;
-        this._shiftOverrideDesiredShift = false;
+        this.shift.clear();
         this.updateKeys();
     }
 
@@ -770,31 +762,7 @@ export class SysVia extends Via {
 
     setMapped(mapping, val) {
         if (!this.keyboardEnabled) return;
-        const [col, row, bbcShiftOverride] = mapping;
-        const [shiftCol, shiftRow] = BBC.SHIFT;
-
-        this.keys[col][row] = val;
-
-        const isPhysicalShiftKey = col === shiftCol && row === shiftRow && bbcShiftOverride === undefined;
-
-        if (isPhysicalShiftKey) {
-            this._physicalShiftDown = !!val;
-        }
-
-        if (bbcShiftOverride !== undefined) {
-            this._shiftOverrideActive = !!val;
-            this._shiftOverrideDesiredShift = bbcShiftOverride;
-        }
-
-        // When a shift override is active, force BBC SHIFT to the desired
-        // state; otherwise follow the physical shift key.
-        // Note: keyDownRaw/keyUpRaw bypass this logic intentionally as they
-        // are used by gamepad/paste code that manages shift independently.
-        if (this._shiftOverrideActive || isPhysicalShiftKey || bbcShiftOverride !== undefined) {
-            const shiftPressed = this._shiftOverrideActive ? this._shiftOverrideDesiredShift : this._physicalShiftDown;
-            this.keys[shiftCol][shiftRow] = shiftPressed ? 1 : 0;
-        }
-
+        this.shift.setMapped(this.keys, mapping, val);
         this.updateKeys();
     }
 

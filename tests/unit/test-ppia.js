@@ -298,56 +298,14 @@ describe("AtomPPIA natural keyboard shift override", () => {
         return ppia.keys[atomKey[0]][atomKey[1]] === 1;
     }
 
-    it("holds no Atom shift for a `@`, which the Atom prints unshifted", () => {
+    it("holds the Atom's shift off for a shifted `@` and gives it back on release", () => {
         ppia.keyDown(keyCodes.SHIFT_LEFT, false);
         ppia.keyDown("@", true);
-
         expect(atomKeyPressed(ATOM.AT)).toBe(true);
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
 
-    it("gives the shift key back when the character is released", () => {
-        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
-        ppia.keyDown("@", true);
         ppia.keyUp("@");
-
         expect(atomKeyPressed(ATOM.AT)).toBe(false);
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
-    });
-
-    it("keeps the shift suppressed when shift is let go first", () => {
-        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
-        ppia.keyDown("@", true);
-
-        ppia.keyUp(keyCodes.SHIFT_LEFT);
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-
-        ppia.keyUp("@");
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
-
-    it("holds Atom shift for a `=`, which the Atom prints shifted", () => {
-        ppia.keyDown("=", false);
-
-        expect(atomKeyPressed(ATOM.MINUS_EQUALS)).toBe(true);
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
-    });
-
-    it("keeps the override while a plain key is pressed and released under it", () => {
-        ppia.keyDown("=", false);
-        ppia.keyDown("a", false);
-        ppia.keyUp("a");
-
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
-        ppia.keyUp("=");
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
-
-    it("leaves shift alone for the space bar, which prints the same either way", () => {
-        ppia.keyDown(" ", true);
-        ppia.keyDown(keyCodes.SHIFT_LEFT, true);
-
-        expect(atomKeyPressed(ATOM.SPACE)).toBe(true);
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
     });
 
@@ -357,13 +315,6 @@ describe("AtomPPIA natural keyboard shift override", () => {
         ppia.keyDown("a", false);
 
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
-
-    it("leaves a shift held through the raw entry points alone", () => {
-        ppia.keyDownRaw(ATOM.SHIFT);
-        ppia.keyDown("a", false);
-
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
     });
 
     it("does not carry an override across a restore", () => {
