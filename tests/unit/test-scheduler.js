@@ -36,10 +36,10 @@ describe("Scheduler tests", function () {
     });
 
     it.each([
-        [0, "bc"],
-        [1, "ac"],
-        [2, "ab"],
-    ])("cancels the task at %i of three on the same cycle", (index, expected) => {
+        ["first", 0, "bc"],
+        ["middle", 1, "ac"],
+        ["last", 2, "ab"],
+    ])("cancels the %s of three tasks on the same cycle", (_, index, expected) => {
         const s = new Scheduler();
         const { tasks, called } = recordingTasks(s, [2, 2, 2]);
         tasks[index].cancel();

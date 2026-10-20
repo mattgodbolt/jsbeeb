@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { isBemSnapshot, parseBemSnapshot } from "../../src/bem-snapshot.js";
 
 const BemSnapshotSize = 327885;
+const BemModelB = 3;
 
 function makeMinimalBemSnapshot(overrides = {}) {
     const buffer = new ArrayBuffer(BemSnapshotSize);
@@ -9,8 +10,7 @@ function makeMinimalBemSnapshot(overrides = {}) {
     const bytes = new Uint8Array(buffer);
 
     bytes.set(new TextEncoder().encode("BEMSNAP1"), 0);
-    // 3 is a BBC Model B.
-    view.setUint8(8, overrides.model ?? 3);
+    view.setUint8(8, overrides.model ?? BemModelB);
     view.setUint8(9, overrides.a ?? 0x42);
     view.setUint8(10, overrides.x ?? 0x10);
     view.setUint8(11, overrides.y ?? 0x20);
