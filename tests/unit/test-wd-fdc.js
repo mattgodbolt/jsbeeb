@@ -590,13 +590,14 @@ describe("WD1770 FDC tests", () => {
             await expectSnapshotRoundTrips(reading, ({ fdc, scheduler }) => {
                 fdc.write(SectorRegister, 0);
                 fdc.write(CommandRegister, ReadSectorCommand);
-                scheduler.polltime(RevolutionTicks / 2);
+                while (!(fdc.read(CommandRegister) & StatusDrq)) scheduler.polltime(PollTicks);
                 saved = fdc.snapshotState();
             });
             expect(BigInt(JSON.parse(JSON.stringify(saved)).markDetector)).not.toBe(0n);
 
             const restored = reading();
             restored.fdc.restoreState(JSON.parse(JSON.stringify(saved)));
+            expect(restored.fdc.read(CommandRegister) & StatusBusy).toBe(StatusBusy);
             expect(() => {
                 while (restored.fdc.read(CommandRegister) & StatusBusy) restored.scheduler.polltime(PollTicks);
             }).not.toThrow();
