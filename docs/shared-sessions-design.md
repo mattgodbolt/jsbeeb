@@ -187,9 +187,10 @@ and a snapshot of a few hundred KB once per join. Any option that charges per me
 The recommendation is WebRTC with the host as hub and sequencer, and a small Lambda for rendezvous only (see
 v0). The protocol stays transport-agnostic: the session code talks to a link (`src/web/session-transport.js` opens
 them over WebRTC), so the tests can run two or more headless machines exchanging messages in-process with no server
-at all (`tests/helpers/session-link.js`), and a local stand-in for the rendezvous endpoint is enough to try two
-browsers on one machine. If too many people cannot connect directly, a hosted TURN service is the next step, and
-one of the relays above is the fallback after that.
+at all (`tests/helpers/session-link.js`, which `tests/integration/shared-session.js` uses to pass control between
+real machines), and a local stand-in for the rendezvous endpoint is enough to try two browsers on one machine. If
+too many people cannot connect directly, a hosted TURN service is the next step, and one of the relays above is the
+fallback after that.
 
 ## v0
 
