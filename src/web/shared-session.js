@@ -18,21 +18,10 @@ import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { buildUrlFromParams } from "../url-params.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
-import { reloadAsMachine } from "./machine-switch.js";
 import { matchesHost, parameterFor, readTakenFromHost, urlParamType } from "./parameters.js";
-import {
-    connectionStats,
-    IntervalStats,
-    numbersFrom,
-    rounded,
-    SessionLog,
-    StatsIntervalMs,
-    watchPage,
-} from "./session-log.js";
-import { LaggingMs, PeerStates, peerState, SessionPanel } from "./session-panel.js";
+import { connectionStats, IntervalStats, numbersFrom, rounded, SessionLog, StatsIntervalMs } from "./session-log.js";
+import { LaggingMs, PeerStates, peerState } from "./session-panel.js";
 import { KeyStamper, Sequencer } from "./session-sequencer.js";
-import { downloadBlob } from "./dom-utils.js";
-import { toast } from "./toast.js";
 import { note } from "./analytics.js";
 import { countBucket } from "./analytics-filters.js";
 
@@ -48,7 +37,6 @@ export const MinResyncIntervalMs = 2000;
 export const MaxConnectingGuests = 4;
 const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
-const ToastTitle = "Shared session";
 const RoomGone = 404;
 const RoomTaken = 409;
 const TooManyOffers = 429;
@@ -110,17 +98,12 @@ function noteStage(role, stage, { reason, peers } = {}) {
     note("session", { role, stage, reason, peers: peers === undefined ? undefined : countBucket(peers) });
 }
 
-function notify(message) {
-    console.log(`Shared session: ${message}`);
-    toast(message, { title: ToastTitle });
-}
-
 /**
  * Tells this person of the session's `desyncs`th desync: `what` desynced, and why. A second is a bug rather than a
  * blip, so it asks for the report from `other` too; any after are only logged, so a machine that keeps desyncing
  * does not bury the page in toasts.
  */
-function announceDesync(desyncs, what, reason, other) {
+function announceDesync(notify, desyncs, what, reason, other) {
     if (desyncs === 1) notify(`${what}: ${reason}. Resyncing; please save a session report.`);
     if (desyncs === 2) {
         notify(
@@ -269,11 +252,11 @@ function parsed(data) {
  * @property {object} takenFromHost - the page's takenFromHostValues, as its start gave them
  * @property {import("./emulation-loop.js").EmulationLoop} loop
  * @property {import("./keyboard.js").Keyboard} keyboard
- * @property {import("./url-state.js").UrlState} urlState
  * @property {string} version
  * @property {ReturnType<typeof import("./rendezvous-client.js").createRendezvousClient>} rendezvous
  * @property {{compress: function(string): Promise<Uint8Array>, decompress: function(Uint8Array): Promise<string>}} codec
  * - how a snapshot is packed for the wire: `gzipCodec`
+ * @property {import("./session-page.js").SessionPage} page
  */
 
 export class SessionHost {
@@ -286,6 +269,7 @@ export class SessionHost {
         this.secret = null;
         this.polling = true;
         this.closed = false;
+        this.closing = new AbortController();
         this.log = new SessionLog({ role: "host", room, name, model: context.model.name, version: context.version });
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
@@ -313,7 +297,7 @@ export class SessionHost {
         this.lastCommitMs = 0;
         // Whether a key press takes control, for everyone: the host's to set, and sent to every guest.
         this.takeOnKey = false;
-        this.panel = new SessionPanel({ ...sessionPane(this), setTakeOnKey: (on) => this.setTakeOnKey(on) });
+        this.panel = context.page.panel(this, (on) => this.setTakeOnKey(on));
         this.panel.showTakeOnKey(this.takeOnKey);
     }
 
@@ -325,19 +309,19 @@ export class SessionHost {
 
     /** @param {string} [secret] the room's, if it has been made already */
     async start(secret) {
-        const { processor, loop, keyboard, rendezvous } = this.context;
+        const { processor, loop, keyboard, rendezvous, page } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
         this.secret = secret ?? (await rendezvous.createRoom(this.room));
         this.sequence();
         loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
-        window.addEventListener("pagehide", () => this.close());
-        notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`);
+        page.onPageHide(() => this.close(), this.closing.signal);
+        page.notify(`Hosting "${this.room}". Guests join at ${page.joinLink(this.room)}`);
         this.panel.open();
         this.log.record("hosting");
         noteStage(this.log.details.role, "created");
-        this.stopWatchingPage = watchPage(this.log, () => this.stats);
+        this.stopWatchingPage = page.watch(this.log, () => this.stats);
         this.poll();
     }
 
@@ -441,6 +425,7 @@ export class SessionHost {
             }
             this.log.record("desync", { guest: guest.id, reason, ...evidence });
             announceDesync(
+                this.context.page.notify,
                 ++this.desyncs,
                 `This machine desynced from ${guestName(guest)}, which was in control, and took control back`,
                 reason,
@@ -501,7 +486,7 @@ export class SessionHost {
         if (!this.controller) return;
         const former = this.controller;
         this.log.record("control", { guest: "host", reason });
-        notify(`The host has control again: ${reason}.`);
+        this.context.page.notify(`The host has control again: ${reason}.`);
         this.controller = null;
         this.releasing = false;
         this.heldBack.unshift(...this.forwarded.splice(0));
@@ -519,7 +504,7 @@ export class SessionHost {
     takeBackNow(reason, { jumped = false, unreplayed = this.replay?.commits ?? [], announce = true } = {}) {
         if (this.sequencer) return;
         this.log.record("control", { guest: "host", reason });
-        if (announce) notify(`The host has taken control back: ${reason}.`);
+        if (announce) this.context.page.notify(`The host has taken control back: ${reason}.`);
         this.controller = null;
         this.releasing = false;
         this.taker = null;
@@ -591,7 +576,7 @@ export class SessionHost {
             }
         }
         this.stats.tick("frames");
-        if (document.hidden) this.stats.count("hiddenFrames");
+        if (this.context.page.hidden()) this.stats.count("hiddenFrames");
         const summary = this.stats.take();
         if (summary) {
             this.log.record("stats", summary);
@@ -683,10 +668,10 @@ export class SessionHost {
     async reopenRoom() {
         try {
             this.secret = await this.context.rendezvous.createRoom(this.room);
-            notify(`The room "${this.room}" had expired, and is open again.`);
+            this.context.page.notify(`The room "${this.room}" had expired, and is open again.`);
             this.log.record("room reopened");
         } catch (error) {
-            notify(`The room "${this.room}" has gone, so nobody else can join: ${error.message}`);
+            this.context.page.notify(`The room "${this.room}" has gone, so nobody else can join: ${error.message}`);
             this.log.record("room gone", { reason: error.message });
             this.polling = false;
         }
@@ -758,7 +743,7 @@ export class SessionHost {
                 if (!this.sendTo(guest, JSON.stringify(welcome))) return;
                 guest.welcomed = true;
                 this.sendSnapshot(guest);
-                notify(`A guest joined (${this.connectedCount()} connected).`);
+                this.context.page.notify(`A guest joined (${this.connectedCount()} connected).`);
                 this.log.record("joined", { guest: guest.id });
                 ++this.guestsJoined;
                 noteStage(this.log.details.role, "connected", { peers: this.connectedCount() });
@@ -822,7 +807,7 @@ export class SessionHost {
         if (!guest.ready || guest.resyncTimer) return;
         this.log.record("resync asked", { guest: guest.id, reason });
         const name = guestName(guest);
-        announceDesync(++this.desyncs, `${name} desynced`, reason, `${name}'s machine`);
+        announceDesync(this.context.page.notify, ++this.desyncs, `${name} desynced`, reason, `${name}'s machine`);
         const waitMs = guest.lastSnapshotMs + MinResyncIntervalMs - Date.now();
         if (waitMs <= 0) {
             this.sendSnapshot(guest);
@@ -934,7 +919,8 @@ export class SessionHost {
         clearTimeout(guest.resyncTimer);
         this.releaseKeys(guest);
         guest.pc.close();
-        if (guest.welcomed) notify(`${guest.name ?? "A guest"} left (${this.connectedCount()} connected).`);
+        if (guest.welcomed)
+            this.context.page.notify(`${guest.name ?? "A guest"} left (${this.connectedCount()} connected).`);
     }
 
     // A page kept for the back button comes back as an ordinary one. The keys let go
@@ -943,6 +929,7 @@ export class SessionHost {
         if (this.closed) return;
         this.closed = true;
         this.polling = false;
+        this.closing.abort();
         this.stopWatchingPage?.();
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
@@ -1007,14 +994,14 @@ export class SessionGuest {
             version: context.version,
         });
         this.stats = new IntervalStats();
-        this.stopWatchingPage = watchPage(this.log, () => this.stats);
+        this.stopWatchingPage = context.page.watch(this.log, () => this.stats);
         this.lastStats = null;
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
         this.takeOnKey = false;
         this.desyncs = 0;
-        this.panel = new SessionPanel(sessionPane(this));
+        this.panel = context.page.panel(this);
         this.showStatus();
     }
 
@@ -1067,17 +1054,13 @@ export class SessionGuest {
         channel.binaryType = "arraybuffer";
         channel.addEventListener("message", ({ data }) => this.fromHost(data));
         channel.addEventListener("close", () => this.hostLeft());
-        window.addEventListener(
-            "pagehide",
-            () => {
-                if (this.left) return;
-                this.send({ type: "bye" });
-                noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
-            },
-            { signal: this.closing.signal },
-        );
+        this.context.page.onPageHide(() => {
+            if (this.left) return;
+            this.send({ type: "bye" });
+            noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
+        }, this.closing.signal);
         await pc.setLocalDescription(await pc.createOffer());
-        notify(`Joining "${this.room}"...`);
+        this.context.page.notify(`Joining "${this.room}"...`);
         await rendezvous.postOffer(this.room, this.id, await gatheredDescription(pc));
         this.log.record("offer");
         const answer = await this.awaitAnswer();
@@ -1140,7 +1123,7 @@ export class SessionGuest {
         const ran = cycleCount(processor) - before;
         const lagMs = lockstep.behind() / cyclesPerMs;
         stats.tick("frames");
-        if (document.hidden) stats.count("hiddenFrames");
+        if (this.context.page.hidden()) stats.count("hiddenFrames");
         if (catchingUp) stats.count("catchingUp");
         else if (lockstep.behind() === 0 && ran < cycles) stats.count("starved");
         stats.peak("maxLagMs", Math.round(lagMs));
@@ -1153,7 +1136,7 @@ export class SessionGuest {
     executeInControl(cycles) {
         const running = this.sequencer.execute(cycles);
         this.stats.tick("frames");
-        if (document.hidden) this.stats.count("hiddenFrames");
+        if (this.context.page.hidden()) this.stats.count("hiddenFrames");
         this.summarise(0);
         return running;
     }
@@ -1175,7 +1158,7 @@ export class SessionGuest {
         for (const { source, input, at } of this.keysForControl.splice(0))
             this.sequencer.queue(source, input, { from: source }, at);
         this.log.record("control", { at: cycleCount(processor) });
-        notify("You have control.");
+        this.context.page.notify("You have control.");
         this.showStatus();
     }
 
@@ -1336,7 +1319,7 @@ export class SessionGuest {
         if (!isSameModel(model, this.context.model.name) || !matchesHost(hostValues, this.context.takenFromHost)) {
             this.send({ type: "bye" });
             this.left = true;
-            reloadAsMachine(this.context.urlState, { model, ...hostValues }, { replace: true });
+            this.context.page.reloadAs({ model, ...hostValues });
         }
     }
 
@@ -1380,7 +1363,7 @@ export class SessionGuest {
             // The first summary would otherwise cover the whole of joining.
             this.stats = new IntervalStats();
             loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
-            notify(`Joined "${this.room}".`);
+            this.context.page.notify(`Joined "${this.room}".`);
             this.showStatus();
             this.panel.open();
         }
@@ -1393,12 +1376,12 @@ export class SessionGuest {
         this.log.record("desync", { reason, ...evidence });
         this.stats.count("desyncs");
         this.send({ type: "resync", reason });
-        announceDesync(++this.desyncs, "This machine desynced", reason, "the host");
+        announceDesync(this.context.page.notify, ++this.desyncs, "This machine desynced", reason, "the host");
     }
 
     hostLeft() {
         if (this.left) return;
-        notify("Lost the host; the machine carries on here on its own.");
+        this.context.page.notify("Lost the host; the machine carries on here on its own.");
         this.log.record("left", { reason: "lost the host" });
         noteStage(this.log.details.role, "ended", { reason: SessionFailures.hostLeft });
         this.leave("lost the host");
@@ -1407,7 +1390,7 @@ export class SessionGuest {
     /** @param {string} code what went wrong, one of `SessionFailures`; `reason` says it in words */
     fail(code, reason) {
         if (this.left) return;
-        notify(`Leaving the session: ${reason}.`);
+        this.context.page.notify(`Leaving the session: ${reason}.`);
         this.log.record("left", { reason });
         noteStage(this.log.details.role, "failed", { reason: code });
         this.leave(reason);
@@ -1490,34 +1473,6 @@ export function roomFrom(text) {
     return RoomName.test(room) ? room : null;
 }
 
-async function copyJoinLink(room) {
-    if (!navigator.clipboard) {
-        notify(`Copying needs https. Guests join at ${joinLink(room)}`);
-        return;
-    }
-    try {
-        await navigator.clipboard.writeText(joinLink(room));
-        toast("The link to join is on the clipboard.", { title: ToastTitle });
-    } catch (error) {
-        notify(`Couldn't copy the link (${error.message}). Guests join at ${joinLink(room)}`);
-    }
-}
-
-const sessionPane = (session) => ({
-    name: session.name,
-    link: joinLink(session.room),
-    saveReport: () => saveReport(session),
-    copyLink: () => copyJoinLink(session.room),
-    requestControl: () => session.requestControl(null),
-});
-
-function saveReport(session) {
-    const report = session.report();
-    const stamp = report.savedAt.replace(/[:.]/g, "-");
-    const blob = new Blob([JSON.stringify(report)], { type: "application/json" });
-    downloadBlob(blob, `jsbeeb-session-${report.role}-${stamp}.json`);
-}
-
 /** Why this machine cannot host or join a session, or null if it can. */
 export function sessionRefusal({ model, processor }) {
     if (model.isAtom || processor.hasTube)
@@ -1558,12 +1513,12 @@ function startFailure(error, room, host) {
     return { code: error.sessionFailure ?? SessionFailures.other, words: error.message };
 }
 
-function refused(refusal, host) {
+function refused(notify, refusal, host) {
     notify(refusal);
     noteStage(host ? "host" : "guest", "failed", { reason: SessionFailures.unsupportedMachine });
 }
 
-function failedToStart(error, room, host) {
+function failedToStart(notify, error, room, host) {
     const { code, words } = startFailure(error, room, host);
     notify(`The session couldn't start: ${words}.`);
     noteStage(host ? "host" : "guest", "failed", { reason: code });
@@ -1578,12 +1533,12 @@ function failedToStart(error, room, host) {
 function startSession(context, { host, room, name, secret }) {
     const refusal = sessionRefusal(context);
     if (refusal) {
-        refused(refusal, host);
+        refused(context.page.notify, refusal, host);
         return null;
     }
     const cleanedName = cleanName(name) ?? randomName();
     const session = host ? new SessionHost(context, room, cleanedName) : new SessionGuest(context, room, cleanedName);
-    session.start(secret).catch((error) => failedToStart(error, room, host));
+    session.start(secret).catch((error) => failedToStart(context.page.notify, error, room, host));
     return session;
 }
 
@@ -1596,7 +1551,7 @@ function startSession(context, { host, room, name, secret }) {
 export async function hostSession(context, name) {
     const refusal = sessionRefusal(context);
     if (refusal) {
-        refused(refusal, true);
+        refused(context.page.notify, refusal, true);
         return null;
     }
     for (let tries = 1; ; ++tries) {
@@ -1606,7 +1561,7 @@ export async function hostSession(context, name) {
             return startSession(context, { host: true, room, name, secret });
         } catch (error) {
             if (error.status === RoomTaken && tries < MaxRoomNameTries) continue;
-            failedToStart(error, room, true);
+            failedToStart(context.page.notify, error, room, true);
             return null;
         }
     }

@@ -193,7 +193,9 @@ directly, a hosted TURN service is the next step, and one of the relays above is
 ## v0
 
 The smallest session worth having, on the machines in the scope above, built in `src/lockstep.js` (the
-protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`. `?server=<room>` hosts and
+protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`, whose sessions reach the page
+(its notices, lights and pane, visibility, going and reloading) only through `src/web/session-page.js`.
+`?server=<room>` hosts and
 `?client=<room>` joins. Shared session in the More menu does either without editing the URL: Start hosting
 hosts the machine as it is, in a room with a generated name and without touching the URL, so a reload ends the
 session; Join takes a room's name or the link and goes to its `?client=` URL, keeping the page's own `localToPage`
