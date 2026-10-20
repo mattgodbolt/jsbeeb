@@ -159,20 +159,23 @@ describe("SoundChip snapshotState / restoreState", () => {
         );
     });
 
-    it("should shift the restored LFSR as the restored noise register says", () => {
-        const shiftTwenty = (chip) => {
-            for (let i = 0; i < 20; ++i) chip.shiftLfsr();
-        };
+    it.each([
+        ["white noise over periodic", WhiteNoiseFastestRate, PeriodicNoiseFastestRate],
+        ["periodic noise over white", PeriodicNoiseFastestRate, WhiteNoiseFastestRate],
+    ])("should shift a restored LFSR as the restored noise register says: %s", (_, savedNoise, restoredOverNoise) => {
+        const twentyShifts = (chip) =>
+            Array.from({ length: 20 }, () => {
+                chip.shiftLfsr();
+                return chip.lfsr;
+            });
         const { chip } = makeSoundChip();
-        chip.poke(WhiteNoiseFastestRate);
-        shiftTwenty(chip);
+        chip.poke(savedNoise);
+        twentyShifts(chip);
         const { chip: chip2 } = makeSoundChip();
-        chip2.poke(PeriodicNoiseFastestRate);
+        chip2.poke(restoredOverNoise);
 
         chip2.restoreState(chip.snapshotState());
-        shiftTwenty(chip);
-        shiftTwenty(chip2);
-        expect(chip2.lfsr).toBe(chip.lfsr);
+        expect(twentyShifts(chip2)).toEqual(twentyShifts(chip));
     });
 
     it("should zero the DC blocker for snapshots that predate it", () => {
