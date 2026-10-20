@@ -137,4 +137,15 @@ describe("Disassemble6502", () => {
         mem[0x1fff] = 0xad;
         expect(disassembler.prevInstruction(0x2002, 0x2000)).toBe(0x2000);
     });
+
+    it.each([
+        ["the earliest-starting run on a tie, here through JSR $41A9", 0x1ffd, [0x20, 0xa9, 0x41], undefined, 0x1ffd],
+        ["the overlapping LDA #$41 when pc is on it", 0x1ffd, [0x20, 0xa9, 0x41], 0x1ffe, 0x1ffe],
+        ["an instruction whose operand is data", 0x1ffd, [0x8d, 0x02, 0x02], undefined, 0x1ffd],
+        ["the byte before when the only runs overrun the target", 0x1fff, [0x20], 0x1fff, 0x1fff],
+        ["the byte before when nothing in the window decodes", 0x1fc0, new Array(0x40).fill(0x02), undefined, 0x1fff],
+    ])("before $2000 picks %s", (_, at, bytes, pc, expected) => {
+        mem.set(bytes, at);
+        expect(disassembler.prevInstruction(0x2000, pc)).toBe(expected);
+    });
 });
