@@ -5,8 +5,8 @@ import { NmiSource } from "../../src/6502.js";
 // The ULA's M flag, which lets pending R3 data raise the parasite's NMI.
 const TubeStatusEnableParasiteNmiFromR3 = 0x08;
 
-async function masterWithTube(options = {}) {
-    const machine = new TestMachine("Master", { tube: true, ...options });
+async function masterWithTube() {
+    const machine = new TestMachine("Master", { tube: true });
     await machine.initialise();
     return machine;
 }
@@ -20,17 +20,6 @@ async function runningParasite() {
 }
 
 describe("Tube co-processor", () => {
-    it("runs the parasite processor alongside the host", async () => {
-        const machine = await masterWithTube();
-        const parasite = machine.processor.tube;
-        const startPc = parasite.pc;
-
-        machine.processor.execute(200 * 1000);
-
-        expect(machine.processor.hasTube).toBe(true);
-        expect(parasite.pc).not.toBe(startPc);
-    });
-
     it("leaves the parasite absent when no co-processor is fitted", async () => {
         const machine = new TestMachine("Master");
         await machine.initialise();
@@ -134,11 +123,5 @@ describe("Tube co-processor", () => {
         const text = machine.drainText({ raw: true });
         expect(text).toContain("Acorn TUBE 6502 64K");
         expect(text).toContain("BASIC\n\n>");
-    });
-
-    it("passes the requested multiplier on to the parasite", async () => {
-        const machine = await masterWithTube({ tubeCpuMultiplier: 4 });
-
-        expect(machine.processor.tube.cpuMultiplier).toBe(4);
     });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { DdNoise } from "../../src/ddnoise.js";
+import { stubAudioContext } from "../helpers/stub-audio-context.js";
 
 const Sounds = {
     motorOn: { duration: 0.37 },
@@ -15,26 +16,6 @@ const RunClickSeconds = 0.024209;
 const RunClicks = 73;
 const GrainLead = 0.006;
 const GrainFade = 0.002;
-
-function stubContext() {
-    return {
-        state: "running",
-        currentTime: 0,
-        createGain: () => ({
-            gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
-            connect: vi.fn(),
-            disconnect: vi.fn(),
-        }),
-        createBufferSource: () => ({
-            buffer: null,
-            loop: false,
-            onended: null,
-            connect: vi.fn(),
-            start: vi.fn(),
-            stop: vi.fn(),
-        }),
-    };
-}
 
 /** A DdNoise with the samples in place of loading them. */
 function loadedDdNoise(context) {
@@ -75,7 +56,7 @@ describe("DdNoise seeks", () => {
     });
 
     beforeEach(() => {
-        context = stubContext();
+        context = stubAudioContext();
         ddNoise = loadedDdNoise(context);
     });
 

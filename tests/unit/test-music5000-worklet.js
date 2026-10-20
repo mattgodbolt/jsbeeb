@@ -57,19 +57,25 @@ const firstFrame = ({ left }) => left[0] * FullScale;
 const framesFor = (ms) => Math.ceil((BoardSampleRate * ms) / 1000);
 const blocksBelow = (frames) => Math.floor(frames / BlockFrames);
 
-function expectStartsAt(ms, processorOptions, configure = () => {}) {
-    const m5000 = makeProcessor(processorOptions);
-    configure(m5000);
-    const target = framesFor(ms);
-    m5000.sendBlocks(blocksBelow(target));
-    expect(Array.from(m5000.process().left)).toEqual(new Array(Quantum).fill(0));
-    m5000.sendBlocks(1);
-    expect(firstFrame(m5000.process())).toBe(m5000.framesSent() - target);
-}
-
 describe("Music 5000 worklet", () => {
-    it("plays nothing until 20 ms is queued by default", () => {
-        expectStartsAt(20, undefined);
+    it.each([
+        ["20 ms by default", 20, undefined, () => {}],
+        ["the latency it was constructed with", 40, { targetLatencyMs: 40 }, () => {}],
+        [
+            "a latency set after construction",
+            200,
+            undefined,
+            (m5000) => m5000.send({ command: "setTargetLatency", targetLatencyMs: 200 }),
+        ],
+        ["250 ms when asked for more", 250, { targetLatencyMs: 1000 }, () => {}],
+    ])("plays nothing until it has queued %s", (_, ms, processorOptions, configure) => {
+        const m5000 = makeProcessor(processorOptions);
+        configure(m5000);
+        const target = framesFor(ms);
+        m5000.sendBlocks(blocksBelow(target));
+        expect(Array.from(m5000.process().left)).toEqual(new Array(Quantum).fill(0));
+        m5000.sendBlocks(1);
+        expect(firstFrame(m5000.process())).toBe(m5000.framesSent() - target);
     });
 
     it("plays the board's left and right samples on channels 0 and 1, scaled to full range", () => {
@@ -79,18 +85,6 @@ describe("Music 5000 worklet", () => {
         const first = m5000.framesSent() - framesFor(20);
         expect(left[1]).toBe((first + 1) / FullScale);
         expect(right[1]).toBe(-(first + 1) / FullScale);
-    });
-
-    it("starts at the target latency it is constructed with", () => {
-        expectStartsAt(40, { targetLatencyMs: 40 });
-    });
-
-    it("follows a new target latency", () => {
-        expectStartsAt(200, undefined, (m5000) => m5000.send({ command: "setTargetLatency", targetLatencyMs: 200 }));
-    });
-
-    it("caps the target latency at 250 ms", () => {
-        expectStartsAt(250, { targetLatencyMs: 1000 });
     });
 
     it("rejects an unknown command", () => {

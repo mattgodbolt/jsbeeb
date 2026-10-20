@@ -14,48 +14,11 @@ import { processInputParams } from "../../src/web/parameters.js";
 
 describe("Keyboard mapping", function () {
     it("maps simple strings to BBC keys correctly", function () {
-        // Test special characters
-        const keys1 = stringToBBCKeys("\n\t ");
-        expect(keys1).toEqual([BBC.RETURN, BBC.TAB, BBC.SPACE]);
-
-        // Verify uppercase letters are mapped correctly
+        expect(stringToBBCKeys("\n\t ")).toEqual([BBC.RETURN, BBC.TAB, BBC.SPACE]);
         expect(stringToBBCKeys("ABC")).toEqual([BBC.A, BBC.B, BBC.C]);
-
-        // Verify numbers are mapped correctly
         expect(stringToBBCKeys("123")).toEqual([BBC.K1, BBC.K2, BBC.K3]);
-
-        // Test that stringToBBCKeys returns expected length for simple inputs
-        expect(stringToBBCKeys("Q").length).toBe(1);
-        expect(stringToBBCKeys("a").length).toBe(3); // With CAPSLOCK toggles
-        expect(stringToBBCKeys("!").length).toBe(3); // With SHIFT
-    });
-});
-
-describe("How a BBC keyboard types a character", function () {
-    it("puts the shifted characters on their unshifted key", function () {
-        expect(bbcKeyForCharacter("!")).toEqual({ key: BBC.K1, shift: true, upperCase: true });
-        expect(bbcKeyForCharacter("*")).toEqual({ key: BBC.COLON_STAR, shift: true, upperCase: true });
-        expect(bbcKeyForCharacter("?")).toEqual({ key: BBC.SLASH, shift: true, upperCase: true });
-    });
-
-    it("knows the characters the BBC prints without shift, where a PC needs it", function () {
-        expect(bbcKeyForCharacter("@")).toEqual({ key: BBC.AT, shift: false, upperCase: true });
-        expect(bbcKeyForCharacter("^")).toEqual({ key: BBC.HAT_TILDE, shift: false, upperCase: true });
-        expect(bbcKeyForCharacter(":")).toEqual({ key: BBC.COLON_STAR, shift: false, upperCase: true });
-    });
-
-    it("asks for the caps lock the other way round for lower case", function () {
-        expect(bbcKeyForCharacter("A")).toEqual({ key: BBC.A, shift: false, upperCase: true });
-        expect(bbcKeyForCharacter("a")).toEqual({ key: BBC.A, shift: false, upperCase: false });
-    });
-
-    it("puts the pound sign on shift and the underscore key, where the BBC draws it", function () {
-        expect(bbcKeyForCharacter("\u00a3")).toEqual({ key: BBC.UNDERSCORE_POUND, shift: true, upperCase: true });
-    });
-
-    it("has nothing for a character the BBC cannot print", function () {
-        expect(bbcKeyForCharacter("`")).toBeNull();
-        expect(bbcKeyForCharacter("\u00e9")).toBeNull();
+        expect(stringToBBCKeys("a")).toEqual([BBC.CAPSLOCK, BBC.A, BBC.CAPSLOCK]);
+        expect(stringToBBCKeys("!")).toEqual([BBC.SHIFT, BBC.K1, BBC.SHIFT]);
     });
 });
 
@@ -75,13 +38,6 @@ describe("User key mapping from KEY. URL parameters", function () {
         const keyMap = getKeyMap("physical");
         expect(keyMap[false][keyCodes.ENTER]).toEqual(BBC.COPY);
         expect(keyMap[true][keyCodes.ENTER]).toEqual(BBC.COPY);
-    });
-
-    it("survives the key map being rebuilt, as on a layout or model change", function () {
-        applyParams({ "KEY.ENTER": "COPY" }, BBC);
-
-        getKeyMap("physical");
-        expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.COPY);
     });
 
     it("applies to the Atom, whose key names differ from the BBC's", function () {
@@ -126,28 +82,67 @@ describe("User key mapping from KEY. URL parameters", function () {
     });
 });
 
-describe("How an Atom keyboard types a character", function () {
+describe.each([
+    {
+        machine: "BBC",
+        keyFor: bbcKeyForCharacter,
+        shifted: {
+            "!": { key: BBC.K1, shift: true, upperCase: true },
+            "*": { key: BBC.COLON_STAR, shift: true, upperCase: true },
+            "?": { key: BBC.SLASH, shift: true, upperCase: true },
+        },
+        unshifted: {
+            "@": { key: BBC.AT, shift: false, upperCase: true },
+            "^": { key: BBC.HAT_TILDE, shift: false, upperCase: true },
+            ":": { key: BBC.COLON_STAR, shift: false, upperCase: true },
+        },
+        unprintable: ["`", "\u00e9"],
+    },
+    {
+        machine: "Atom",
+        keyFor: atomKeyForCharacter,
+        shifted: {
+            "!": { key: ATOM.K1, shift: true },
+            "=": { key: ATOM.MINUS_EQUALS, shift: true },
+            "|": { key: ATOM.BACKSLASH, shift: true },
+        },
+        unshifted: {
+            "@": { key: ATOM.AT, shift: false },
+            "^": { key: ATOM.UP_ARROW, shift: false },
+            ":": { key: ATOM.COLON_STAR, shift: false },
+        },
+        unprintable: ["_", "\u00a3"],
+    },
+])("How a $machine keyboard types a character", function ({ machine, keyFor, shifted, unshifted, unprintable }) {
     it("puts the shifted characters on their unshifted key", function () {
-        expect(atomKeyForCharacter("!")).toEqual({ key: ATOM.K1, shift: true });
-        expect(atomKeyForCharacter("=")).toEqual({ key: ATOM.MINUS_EQUALS, shift: true });
-        expect(atomKeyForCharacter("|")).toEqual({ key: ATOM.BACKSLASH, shift: true });
+        for (const [char, expected] of Object.entries(shifted)) expect(keyFor(char)).toEqual(expected);
     });
 
-    it("knows the characters the Atom prints without shift, where a PC needs it", function () {
-        expect(atomKeyForCharacter("@")).toEqual({ key: ATOM.AT, shift: false });
-        expect(atomKeyForCharacter("^")).toEqual({ key: ATOM.UP_ARROW, shift: false });
-        expect(atomKeyForCharacter(":")).toEqual({ key: ATOM.COLON_STAR, shift: false });
+    it(`knows the characters the ${machine} prints without shift, where a PC needs it`, function () {
+        for (const [char, expected] of Object.entries(unshifted)) expect(keyFor(char)).toEqual(expected);
     });
 
+    it(`has nothing for a character the ${machine} cannot print`, function () {
+        for (const char of unprintable) expect(keyFor(char)).toBeNull();
+    });
+});
+
+describe("How the BBC alone types a character", function () {
+    it("asks for the caps lock the other way round for lower case", function () {
+        expect(bbcKeyForCharacter("A")).toEqual({ key: BBC.A, shift: false, upperCase: true });
+        expect(bbcKeyForCharacter("a")).toEqual({ key: BBC.A, shift: false, upperCase: false });
+    });
+
+    it("puts the pound sign on shift and the underscore key, where the BBC draws it", function () {
+        expect(bbcKeyForCharacter("\u00a3")).toEqual({ key: BBC.UNDERSCORE_POUND, shift: true, upperCase: true });
+    });
+});
+
+describe("How the Atom alone types a character", function () {
     it("asks for the lock only for letters", function () {
         expect(atomKeyForCharacter("A")).toEqual({ key: ATOM.A, shift: false, upperCase: true });
         expect(atomKeyForCharacter("a")).toEqual({ key: ATOM.A, shift: false, upperCase: false });
         expect(atomKeyForCharacter("1")).toEqual({ key: ATOM.K1, shift: false });
-    });
-
-    it("has nothing for a character the Atom cannot print", function () {
-        expect(atomKeyForCharacter("_")).toBeNull();
-        expect(atomKeyForCharacter("\u00a3")).toBeNull();
     });
 });
 

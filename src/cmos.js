@@ -42,9 +42,7 @@ function utcView(date) {
         setSeconds: (value) => date.setUTCSeconds(value),
         setMinutes: (value) => date.setUTCMinutes(value),
         setHours: (value) => date.setUTCHours(value),
-        setDate: (value) => date.setUTCDate(value),
-        setMonth: (value) => date.setUTCMonth(value),
-        setFullYear: (value) => date.setUTCFullYear(value),
+        setFullYear: (year, month, day) => date.setUTCFullYear(year, month, day),
         getTime: () => date.getTime(),
     };
 }
@@ -99,6 +97,9 @@ export class Cmos {
         this.now = () => Date.now();
         this.utc = false;
         this.timeOffset = 0;
+        // The 146818 keeps the day, month and year in separate registers and checks none of them, so bytes that
+        // do not name a real day are held as written until they do.
+        this.heldDate = null;
         this.beforeSession = null;
 
         if (!this.store) {
@@ -125,11 +126,20 @@ export class Cmos {
 
     /**
      * The chip as a machine joining a shared session needs it: the settings, the offset a program set
-     * the clock to, and how far through an access the bus is.
+     * the clock to, any date registers held part way through setting it, and how far through an access the bus is.
      */
     sessionState() {
-        const { store, timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
-        return { store: [...store], timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr };
+        const { store, timeOffset, heldDate, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
+        return {
+            store: [...store],
+            timeOffset,
+            heldDate: heldDate && { ...heldDate },
+            enabled,
+            isRead,
+            addressSelect,
+            dataSelect,
+            cmosAddr,
+        };
     }
 
     /**
@@ -139,12 +149,13 @@ export class Cmos {
      */
     joinSession(state, now) {
         if (!this.beforeSession) {
-            const { persistence, store, utc, timeOffset } = this;
-            this.beforeSession = { persistence, store, now: this.now, utc, timeOffset };
+            const { persistence, store, utc, timeOffset, heldDate } = this;
+            this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate };
         }
-        const { store, timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
+        const { store, timeOffset, heldDate, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
         Object.assign(this, { timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr });
         this.store = [...store];
+        this.heldDate = heldDate && { ...heldDate };
         this.persistence = null;
         this.now = now;
         this.utc = true;
@@ -161,6 +172,38 @@ export class Cmos {
         const result = new Date(this.now() + this.timeOffset);
         result.setMilliseconds(0);
         return this.utc ? utcView(result) : result;
+    }
+
+    calendarRegisters(current) {
+        return (
+            this.heldDate ?? {
+                day: toBcd(current.getDate()),
+                month: toBcd(current.getMonth() + 1),
+                year: toBcd(current.getFullYear() % 100),
+            }
+        );
+    }
+
+    setTimeFrom(bbcTime) {
+        const secondsNow = Math.floor(this.now() / 1000) * 1000;
+        this.timeOffset = bbcTime.getTime() - secondsNow;
+    }
+
+    writeCalendar(field, value) {
+        const bbcTime = this.bbcDateTime();
+        const registers = { ...this.calendarRegisters(bbcTime), [field]: value };
+        const { day, month, year } = registers;
+        bbcTime.setFullYear(MosCentury + fromBcd(year), fromBcd(month) - 1, fromBcd(day));
+        const isRealDay =
+            toBcd(bbcTime.getDate()) === day &&
+            toBcd(bbcTime.getMonth() + 1) === month &&
+            toBcd(bbcTime.getFullYear() % 100) === year;
+        if (isRealDay) {
+            this.heldDate = null;
+            this.setTimeFrom(bbcTime);
+        } else {
+            this.heldDate = registers;
+        }
     }
 
     read() {
@@ -185,11 +228,11 @@ export class Cmos {
                     case 6:
                         return toBcd(current.getDay() + 1);
                     case 7:
-                        return toBcd(current.getDate());
+                        return this.calendarRegisters(current).day;
                     case 8:
-                        return toBcd(current.getMonth() + 1);
+                        return this.calendarRegisters(current).month;
                     case 9:
-                        return toBcd(current.getFullYear() % 100);
+                        return this.calendarRegisters(current).year;
                 }
             } else {
                 return this.store[this.cmosAddr] & 0xff;
@@ -216,32 +259,26 @@ export class Cmos {
                 switch (this.cmosAddr) {
                     case 0:
                         bbcTime.setSeconds(fromBcd(portApins));
+                        this.setTimeFrom(bbcTime);
                         break;
                     case 2:
                         bbcTime.setMinutes(fromBcd(portApins));
+                        this.setTimeFrom(bbcTime);
                         break;
                     case 4:
                         bbcTime.setHours(fromBcd(portApins));
+                        this.setTimeFrom(bbcTime);
                         break;
-                    // I tried some day offset stuff to lazily simulate the fact the day is separate
-                    // from the date, but I couldn't easily get it to work during the multi-write update
-                    // cycle/ I'm probably being dumb. Or else I should emulate the clock "properly" but
-                    // that seems like an awful lot of work.
-                    // case 6:
-                    //     dayOffset = (bbcTime.getDay() - (fromBcd(portApins) - 1)) % 7;
-                    //     break;
                     case 7:
-                        bbcTime.setDate(fromBcd(portApins));
+                        this.writeCalendar("day", portApins);
                         break;
                     case 8:
-                        bbcTime.setMonth(fromBcd(portApins) - 1);
+                        this.writeCalendar("month", portApins);
                         break;
                     case 9:
-                        bbcTime.setFullYear(MosCentury + fromBcd(portApins));
+                        this.writeCalendar("year", portApins);
                         break;
                 }
-                const secondsNow = Math.floor(this.now() / 1000) * 1000;
-                this.timeOffset = bbcTime.getTime() - secondsNow;
             }
         }
     }

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterAll, afterEach, beforeAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { MachineSession } from "../../src/machine-session.js";
@@ -153,24 +153,17 @@ describe("MachineSession breakpoints in sideways ROM", () => {
     const RunSecs = 5;
     const RomselBankMask = 0x0f;
     // A service ROM titled "T" whose service handler stores A at ServiceWrite and returns.
+    // prettier-ignore
     const ServiceRom = [
-        0,
-        0,
-        0,
-        0x4c,
-        0x0e,
-        0x80,
-        0x82,
-        0x0a,
-        0x01,
-        0x54,
-        0x00,
-        0x28,
-        0x43,
-        0x29,
-        0x85,
-        ServiceWrite,
-        0x60,
+        0, 0, 0, // no language entry
+        0x4c, 0x0e, 0x80, // JMP &800E
+        0x82, // ROM type: service, 6502
+        0x0a, // copyright offset
+        0x01, // version
+        0x54, 0x00, // "T"
+        0x28, 0x43, 0x29, // "(C)"
+        0x85, ServiceWrite, // STA ServiceWrite
+        0x60, // RTS
     ];
 
     async function sessionWithSpareRom() {
@@ -266,100 +259,85 @@ describe("MachineSession bank breakpoints on a Master with ANDY paged in", () =>
     const RunSecs = 1;
     const lo = (address) => address & 0xff;
     const hi = (address) => address >> 8;
+    const jmp = (address) => [0x4c, lo(address), hi(address)];
 
     // Pages in ANDY over SidewaysRamBank, writes a JMP-to-self into ANDY, then jumps to `target`.
+    // prettier-ignore
     const pageAndyAndJumpTo = (target) => [
-        0x78,
-        0xa9,
-        RomselWithAndy,
-        0x8d,
-        0x30,
-        0xfe,
-        ...[0x4c, lo(AndyLoop), hi(AndyLoop)].flatMap((byte, i) => [0xa9, byte, 0x8d, lo(AndyLoop + i), hi(AndyLoop)]),
-        0x4c,
-        lo(target),
-        hi(target),
+        0x78, // SEI
+        0xa9, RomselWithAndy, // LDA #RomselWithAndy
+        0x8d, 0x30, 0xfe, // STA &FE30
+        ...jmp(AndyLoop).flatMap((byte, i) => [0xa9, byte, 0x8d, lo(AndyLoop + i), hi(AndyLoop)]),
+        ...jmp(target),
     ];
 
-    async function sessionLooping(target) {
-        const session = await bootedSession("Master");
-        session.writeMemory(BankLoop, [0x4c, lo(BankLoop), hi(BankLoop)], { bank: SidewaysRamBank });
+    let session;
+    let booted;
+
+    beforeAll(async () => {
+        session = await bootedSession("Master");
+        booted = session.snapshot();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    afterEach(() => {
+        session.clearBreakpoints();
+        session.resetBreakpointHits();
+    });
+
+    async function loopingAt(target) {
+        session.restore(booted);
+        session.writeMemory(BankLoop, jmp(BankLoop), { bank: SidewaysRamBank });
         session.writeMemory(CodeAddress, pageAndyAndJumpTo(target));
         await session.type(`CALL &${CodeAddress.toString(16)}`);
-        return session;
     }
 
-    it(
-        "does not count ANDY at &8000 to &8FFF as the bank",
-        async () => {
-            const session = await sessionLooping(AndyLoop);
+    /** Each way of stopping at an address in a bank, resolving to whether it stopped there. */
+    const stoppingAt = {
+        runUntilAddress: (address) =>
+            session.runUntilAddress(address, RunSecs, { bank: SidewaysRamBank }).then(
+                () => true,
+                (error) => {
+                    expect(error.message).toMatch("did not hit appropriate breakpoint in time");
+                    return false;
+                },
+            ),
+        "an execute breakpoint": async (address) => {
+            const id = session.addBreakpoint("execute", address, { bank: SidewaysRamBank });
+            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+            const hit = completed ? null : { id, type: "execute", address, bank: SidewaysRamBank };
+            expect(session.hitBreakpoint()).toEqual(hit);
+            return !completed;
+        },
+    };
 
-            await expect(session.runUntilAddress(AndyLoop, RunSecs, { bank: SidewaysRamBank })).rejects.toThrow(
-                "did not hit appropriate breakpoint in time",
-            );
+    describe.each(Object.keys(stoppingAt))("given the bank, %s", (entryPoint) => {
+        const stopsAt = (address) => stoppingAt[entryPoint](address);
+
+        it("does not count ANDY at &8000 to &8FFF as the bank", async () => {
+            await loopingAt(AndyLoop);
+
+            expect(await stopsAt(AndyLoop)).toBe(false);
             expect(session.pagingState().romsel).toBe(RomselWithAndy);
             expect(session.registers().pc).toBe(AndyLoop);
-            session.destroy();
-        },
-        BootTimeout,
-    );
+        });
 
-    it(
-        "still counts &9000 to &BFFF as the bank",
-        async () => {
-            const session = await sessionLooping(BankLoop);
+        it("still counts &9000 to &BFFF as the bank", async () => {
+            await loopingAt(BankLoop);
 
-            await session.runUntilAddress(BankLoop, RunSecs, { bank: SidewaysRamBank });
-
+            expect(await stopsAt(BankLoop)).toBe(true);
             expect(session.registers().pc).toBe(BankLoop);
-            session.destroy();
-        },
-        BootTimeout,
-    );
+        });
+    });
 
-    it(
-        "does not break in ANDY on a breakpoint given the bank",
-        async () => {
-            const session = await sessionLooping(AndyLoop);
-            session.addBreakpoint("execute", AndyLoop, { bank: SidewaysRamBank });
+    it("does not break on a read in ANDY given the bank", async () => {
+        await loopingAt(AndyLoop);
+        session.addBreakpoint("read", AndyLoop + 1, { bank: SidewaysRamBank });
 
-            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
+        const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
 
-            expect(completed).toBe(true);
-            expect(session.hitBreakpoint()).toBeNull();
-            expect(session.registers().pc).toBe(AndyLoop);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "does not break on a read in ANDY given the bank",
-        async () => {
-            const session = await sessionLooping(AndyLoop);
-            session.addBreakpoint("read", AndyLoop + 1, { bank: SidewaysRamBank });
-
-            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
-
-            expect(completed).toBe(true);
-            expect(session.hitBreakpoint()).toBeNull();
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "breaks above ANDY on a breakpoint given the bank",
-        async () => {
-            const session = await sessionLooping(BankLoop);
-            const id = session.addBreakpoint("execute", BankLoop, { bank: SidewaysRamBank });
-
-            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
-
-            expect(completed).toBe(false);
-            expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: BankLoop, bank: SidewaysRamBank });
-            session.destroy();
-        },
-        BootTimeout,
-    );
+        expect(completed).toBe(true);
+        expect(session.hitBreakpoint()).toBeNull();
+    });
 });

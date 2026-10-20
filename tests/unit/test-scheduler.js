@@ -2,158 +2,49 @@ import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 
 describe("Scheduler tests", function () {
-    it("creates", function () {
-        new Scheduler();
-    });
-
-    it("handles simple cases", function () {
-        const s = new Scheduler();
-        let called = false;
-        const t = s.newTask(function () {
-            expect(called).toBe(false);
-            called = true;
+    const recordingTasks = (s, delays) => {
+        const called = [];
+        const tasks = delays.map((delay, i) => {
+            const task = s.newTask(() => called.push("abc"[i]));
+            task.schedule(delay);
+            return task;
         });
-        t.schedule(2);
-        expect(called).toBe(false);
-        s.polltime(1);
-        expect(called).toBe(false);
-        s.polltime(1);
-        expect(called).toBe(true);
-        s.polltime(1);
+        return { tasks, called: () => called.join("") };
+    };
+
+    it.each([[[1, 1, 1]], [[2, 2]], [[3, 3]]])("calls a task once, when its time comes, stepping by %j", (steps) => {
+        const s = new Scheduler();
+        let calls = 0;
+        s.newTask(() => ++calls).schedule(2);
+        let elapsed = 0;
+        for (const step of steps) {
+            s.polltime(step);
+            elapsed += step;
+            expect(calls).toBe(elapsed >= 2 ? 1 : 0);
+        }
     });
 
-    it("handles simple cases with a big step", function () {
+    it.each([
+        ["in the order registered when on the same cycle", [2, 2, 2], "abc"],
+        ["registered in reverse (CBA) order", [4, 3, 2], "cba"],
+        ["registered in CAB order", [3, 4, 2], "cab"],
+    ])("calls tasks %s", (_, delays, expected) => {
         const s = new Scheduler();
-        let called = false;
-        const t = s.newTask(function () {
-            expect(called).toBe(false);
-            called = true;
-        });
-        t.schedule(2);
-        expect(called).toBe(false);
-        s.polltime(2);
-        expect(called).toBe(true);
-        s.polltime(2);
-    });
-
-    it("handles simple cases with a big step past", function () {
-        const s = new Scheduler();
-        let called = false;
-        const t = s.newTask(function () {
-            expect(called).toBe(false);
-            called = true;
-        });
-        t.schedule(2);
-        expect(called).toBe(false);
-        s.polltime(3);
-        expect(called).toBe(true);
-        s.polltime(3);
-    });
-
-    it("calls callbacks in the order registered when occurring on same cycle", function () {
-        const s = new Scheduler();
-        let called = "";
-        s.newTask(function () {
-            called += "a";
-        }).schedule(2);
-        s.newTask(function () {
-            called += "b";
-        }).schedule(2);
-        s.newTask(function () {
-            called += "c";
-        }).schedule(2);
-        expect(called).toBe("");
-        s.polltime(1);
-        expect(called).toBe("");
-        s.polltime(1);
-        expect(called).toBe("abc");
-        s.polltime(1);
-    });
-
-    it("cancels first occurring event", function () {
-        const s = new Scheduler();
-        let called = "";
-        const a = s.newTask(function () {
-            called += "a";
-        });
-        a.schedule(2);
-        s.newTask(function () {
-            called += "b";
-        }).schedule(2);
-        s.newTask(function () {
-            called += "c";
-        }).schedule(2);
-        a.cancel();
-        s.polltime(2);
-        expect(called).toBe("bc");
-    });
-
-    it("cancels middle occurring event", function () {
-        const s = new Scheduler();
-        let called = "";
-        s.newTask(function () {
-            called += "a";
-        }).schedule(2);
-        const b = s.newTask(function () {
-            called += "b";
-        });
-        b.schedule(2);
-        s.newTask(function () {
-            called += "c";
-        }).schedule(2);
-        b.cancel();
-        s.polltime(2);
-        expect(called).toBe("ac");
-    });
-
-    it("cancels last occurring event", function () {
-        const s = new Scheduler();
-        let called = "";
-        s.newTask(function () {
-            called += "a";
-        }).schedule(2);
-        s.newTask(function () {
-            called += "b";
-        }).schedule(2);
-        const c = s.newTask(function () {
-            called += "c";
-        });
-        c.schedule(2);
-        c.cancel();
-        s.polltime(2);
-        expect(called).toBe("ab");
-    });
-
-    it("handle events registered in reverse (CBA) order", function () {
-        const s = new Scheduler();
-        let called = "";
-        s.newTask(function () {
-            called += "a";
-        }).schedule(4);
-        s.newTask(function () {
-            called += "b";
-        }).schedule(3);
-        s.newTask(function () {
-            called += "c";
-        }).schedule(2);
+        const { called } = recordingTasks(s, delays);
         s.polltime(10);
-        expect(called).toBe("cba");
+        expect(called()).toBe(expected);
     });
 
-    it("handle events registered in CAB order", function () {
+    it.each([
+        ["first", 0, "bc"],
+        ["middle", 1, "ac"],
+        ["last", 2, "ab"],
+    ])("cancels the %s of three tasks on the same cycle", (_, index, expected) => {
         const s = new Scheduler();
-        let called = "";
-        s.newTask(function () {
-            called += "a";
-        }).schedule(3);
-        s.newTask(function () {
-            called += "b";
-        }).schedule(4);
-        s.newTask(function () {
-            called += "c";
-        }).schedule(2);
-        s.polltime(10);
-        expect(called).toBe("cab");
+        const { tasks, called } = recordingTasks(s, [2, 2, 2]);
+        tasks[index].cancel();
+        s.polltime(2);
+        expect(called()).toBe(expected);
     });
 
     it("works properly with epochs", function () {
@@ -205,19 +96,7 @@ describe("Scheduler tests", function () {
             expect(s2.epoch).toBe(12345);
         });
 
-        it("should cancel existing tasks on restore", () => {
-            const s = new Scheduler();
-            const t = s.newTask(() => {});
-            t.schedule(100);
-            expect(t.scheduled()).toBe(true);
-
-            s.restoreState({ epoch: 5000 });
-            expect(t.scheduled()).toBe(false);
-            expect(s.epoch).toBe(5000);
-            expect(s.headroom()).toBe(Scheduler.MaxHeadroom);
-        });
-
-        it("should allow tasks to be re-registered after restore", () => {
+        it("should cancel existing tasks on restore, and allow them to be re-registered", () => {
             const s = new Scheduler();
             s.polltime(1000);
 
@@ -227,11 +106,10 @@ describe("Scheduler tests", function () {
             });
             t.schedule(100);
 
-            // Restore to a different epoch
             s.restoreState({ epoch: 5000 });
             expect(t.scheduled()).toBe(false);
+            expect(s.headroom()).toBe(Scheduler.MaxHeadroom);
 
-            // Re-register the task
             t.schedule(50);
             expect(t.scheduled()).toBe(true);
             expect(s.headroom()).toBe(50);

@@ -97,14 +97,8 @@ describe("Test other teletext test pages", () => {
         const video = new CapturingVideo();
         const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/611
-        // Red graphics, Flash, full-block graphic, Hold Graphics, Steady.
-        // The Steady code (at position 5) should take effect "Set At" — the
-        // held graphic displayed there should NOT flash. Without the fix, it
-        // flashes because Steady is incorrectly applied "Set After".
-        // Red gfx, Flash, two full-block graphics, Hold, Steady, then more blocks.
-        // Positions: [gfx][flash][block][block][hold][steady][block][block]
-        // While flashing text is hidden: blocks at pos 3-4 should be blanked (flashing),
-        // but pos 5 (Steady+held) and pos 6-7 should show red (Steady applies "Set At").
+        // Red graphics, Flash, two blocks, Hold, Steady, two blocks: with the flash hidden, the held
+        // block in the Steady cell shows, as Steady is Set At.
         await testMachine.type("CLS:VDU &91,&88,&BF,&BF,&9E,&89,&BF,&BF");
         await testMachine.runUntilInput();
         await compare(video, testMachine, `expected_steady_set_at_flash_0.png`, FlashHiddenField);

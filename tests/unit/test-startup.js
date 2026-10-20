@@ -12,11 +12,7 @@ import { fakeUrlState, stubNavigation, teardownDom } from "./helpers.js";
 
 const paradroid = { ref: "bitshifters:bs-paradroid.ssd", title: "Paradroid", requires: MachineRequirements.Master };
 
-afterEach(() => {
-    window.history.replaceState(null, "", window.location.pathname);
-    sessionStorage.clear();
-    return teardownDom();
-});
+afterEach(teardownDom);
 
 describe("startupPlan", () => {
     it("loads the page's own disc when the URL names none, and boots nothing", () => {

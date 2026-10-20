@@ -69,15 +69,14 @@ describe("snapshot media manifest", () => {
 });
 
 describe("isSnapshotFile", () => {
-    it("knows the state file extensions", () => {
-        expect(isSnapshotFile("state.snp")).toBe(true);
-        expect(isSnapshotFile("state.json")).toBe(true);
-        expect(isSnapshotFile("state.json.gz")).toBe(true);
-        expect(isSnapshotFile("elite.ssd")).toBe(false);
-    });
-
-    it("treats a uef that is not a BeebEm state as a tape", () => {
-        expect(isSnapshotFile("tape.uef", new Uint8Array([1, 2, 3]).buffer)).toBe(false);
+    it.each([
+        ["state.snp", true],
+        ["state.json", true],
+        ["state.json.gz", true],
+        ["elite.ssd", false],
+        ["tape.uef", false, new Uint8Array([1, 2, 3]).buffer],
+    ])("judges %s a state: %s", (name, isState, bytes) => {
+        expect(isSnapshotFile(name, bytes)).toBe(isState);
     });
 });
 
@@ -99,7 +98,7 @@ describe("SnapshotUI", () => {
             video: { paint: vi.fn() },
             media: {
                 loadDiscImage: vi.fn(),
-                slots: { drive: (index) => `drive ${index}`, put: vi.fn(), restored: vi.fn() },
+                slots: { restored: vi.fn() },
             },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
@@ -110,6 +109,17 @@ describe("SnapshotUI", () => {
     afterEach(teardownDom);
 
     const make = () => new SnapshotUI(deps);
+    const unreadable = new Uint8Array([0x00, 0x01, 0x02]).buffer;
+    const snapshotJson = (snapshot) =>
+        JSON.stringify({
+            format: "jsbeeb-snapshot",
+            version: 3,
+            model: "B-DFS1.2",
+            coProcessor: false,
+            state: {},
+            ...snapshot,
+        });
+    const snapshotBuffer = (snapshot) => new TextEncoder().encode(snapshotJson(snapshot)).buffer;
 
     it("notes saving and loading a state as the State menu's", async () => {
         const sent = sentEvents();
@@ -123,7 +133,7 @@ describe("SnapshotUI", () => {
             throw new Error("not this time");
         });
         await ui.saveState();
-        await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
+        await ui.loadStateFromFile(null, unreadable);
         expect(sent("feature_used")).toEqual([
             { feature: "state", action: "save" },
             { feature: "state", action: "load" },
@@ -131,39 +141,30 @@ describe("SnapshotUI", () => {
     });
 
     describe("loading a state", () => {
-        it("holds the emulator, reports a file it cannot read, and lets go", async () => {
-            await make().loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
-            expect(deps.loop.hold).toHaveBeenCalledWith("loading state");
-            expect(deps.modals.showError).toHaveBeenCalledWith("loading state", expect.anything());
-            expect(resume).toHaveBeenCalledTimes(1);
-        });
-
-        const snapshotBuffer = (snapshot) =>
-            new TextEncoder().encode(JSON.stringify({ format: "jsbeeb-snapshot", version: 3, state: {}, ...snapshot }))
-                .buffer;
-
-        it("stashes a state for another model and reloads as that machine, without the page's own boot", async () => {
-            deps.urlState = stubNavigation(fakeUrlState("?disc1=elite.ssd&autoboot"));
-            await make().loadStateFromFile(null, snapshotBuffer({ model: "Master", coProcessor: false }));
-            expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?disc1=elite.ssd&model=Master");
-            expect(window.location.hash).toBe("#navigated");
-            expect(JSON.parse(sessionStorage.getItem("jsbeeb-pending-state")).model).toBe("Master");
-            expect(deps.video.paint).not.toHaveBeenCalled();
-            expect(resume).toHaveBeenCalledTimes(1);
-            window.location.hash = "";
-        });
-
-        it("treats a co-processor mismatch as a machine change too", async () => {
-            deps.urlState = stubNavigation(fakeUrlState());
-            await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: true }));
-            expect(deps.urlState.navigatedTo).toBe("https://bbc.example/?model=B-DFS1.2&coProcessor");
-            expect(sessionStorage.getItem("jsbeeb-pending-state")).not.toBeNull();
-            window.location.hash = "";
-        });
+        it.each([
+            [
+                "another model",
+                "?disc1=elite.ssd&autoboot",
+                { model: "Master" },
+                "https://bbc.example/?disc1=elite.ssd&model=Master",
+            ],
+            ["a co-processor it lacks", "", { coProcessor: true }, "https://bbc.example/?model=B-DFS1.2&coProcessor"],
+        ])(
+            "stashes a state for %s and reloads as that machine, without the page's own boot",
+            async (_, search, snapshot, reloadedAs) => {
+                deps.urlState = stubNavigation(fakeUrlState(search));
+                await make().loadStateFromFile(null, snapshotBuffer(snapshot));
+                expect(deps.urlState.navigatedTo).toBe(reloadedAs);
+                expect(window.location.hash).toBe("#navigated");
+                expect(JSON.parse(sessionStorage.getItem("jsbeeb-pending-state"))).toMatchObject(snapshot);
+                expect(deps.video.paint).not.toHaveBeenCalled();
+                expect(resume).toHaveBeenCalledTimes(1);
+            },
+        );
 
         it("restores a matching state in place and repaints", async () => {
             deps.processor.restoreState = vi.fn();
-            await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: false }));
+            await make().loadStateFromFile(null, snapshotBuffer());
             expect(deps.processor.restoreState).toHaveBeenCalledWith({});
             expect(deps.video.paint).toHaveBeenCalledTimes(1);
             expect(deps.modals.showError).not.toHaveBeenCalled();
@@ -176,7 +177,7 @@ describe("SnapshotUI", () => {
             deps.processor.restoreState = () => {
                 deps.processor.debugInstruction.stopped = true;
             };
-            await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: false }));
+            await make().loadStateFromFile(null, snapshotBuffer());
             expect(deps.loop.stop).toHaveBeenCalledWith(true);
             expect(deps.video.paint).toHaveBeenCalledTimes(1);
             expect(resume).toHaveBeenCalledTimes(1);
@@ -184,13 +185,22 @@ describe("SnapshotUI", () => {
     });
 
     describe("failure with the real error dialog", () => {
-        let loop;
-        let modals;
-
-        const makeWithModals = () => {
+        it.each([
+            [
+                "save",
+                "saving state",
+                (ui) => {
+                    deps.processor.snapshotState = () => {
+                        throw new Error("saving went wrong");
+                    };
+                    return ui.saveState();
+                },
+            ],
+            ["load", "loading state", (ui) => ui.loadStateFromFile(null, unreadable)],
+        ])("keeps the emulator paused while the %s error shows, resuming on close", async (_, doing, fail) => {
             domFromIndexHtml("error-dialog", "are-you-sure");
             vi.useFakeTimers();
-            loop = {
+            const loop = {
                 holds: 0,
                 isRunning() {
                     return this.holds === 0;
@@ -204,161 +214,132 @@ describe("SnapshotUI", () => {
                     };
                 },
             };
-            modals = new Modals({ loop });
-            deps.loop = loop;
-            deps.modals = modals;
-            return new SnapshotUI(deps);
-        };
-
-        const expectPausedBehindDialogThenResumedOnClose = async () => {
+            const modals = new Modals({ loop });
+            Object.assign(deps, { loop, modals });
+            await fail(make());
             expect(loop.isRunning()).toBe(false);
             await vi.runAllTimersAsync();
             expect(modals.anyVisible()).toBe(true);
+            expect(document.querySelector("#error-dialog .context").textContent).toBe(doing);
             expect(loop.isRunning()).toBe(false);
             modals.hide("error-dialog");
             await vi.runAllTimersAsync();
             expect(modals.anyVisible()).toBe(false);
             expect(loop.isRunning()).toBe(true);
-        };
-
-        it("keeps the emulator paused while the save error shows, resuming on close", async () => {
-            const ui = makeWithModals();
-            deps.processor.snapshotState = vi.fn(() => {
-                throw new Error("saving went wrong");
-            });
-            await ui.saveState();
-            await expectPausedBehindDialogThenResumedOnClose();
-        });
-
-        it("keeps the emulator paused while the load error shows, resuming on close", async () => {
-            const ui = makeWithModals();
-            await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
-            await expectPausedBehindDialogThenResumedOnClose();
         });
     });
 
     describe("reloading a snapshot's media", () => {
-        it("does nothing for a snapshot with none", async () => {
-            await make().reloadSnapshotMedia(undefined);
-            expect(deps.media.slots.put).not.toHaveBeenCalled();
+        let fdc;
+        let slots;
+        let sent;
+
+        beforeEach(() => {
+            sent = sentEvents();
+            fdc = fakeFdc();
+            deps.urlState = fakeUrlState();
+            const drives = new Drives({
+                fdc,
+                driveTracks: [DriveTracks.auto, DriveTracks.auto],
+                urlState: deps.urlState,
+            });
+            slots = new MediaSlots({ loader: deps.media, drives, processor: { fdc }, urlState: deps.urlState });
+            deps.processor.fdc = fdc;
+            deps.media.slots = slots;
         });
 
-        it("reloads a URL-sourced disc from its source and names it in the URL", async () => {
-            const loaded = { name: "ELITE.ssd", originalImageCrc32: 0x1234 };
+        const ssd = (name) => discFor(name, ssdImage());
+        const crc = ssd("any.ssd").originalImageCrc32;
+        const reload = (manifest) => make().reloadSnapshotMedia(manifest);
+
+        it("does nothing for a snapshot with none", async () => {
+            await reload(undefined);
+            expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(fdc.drives.map((drive) => drive.disc)).toEqual([undefined, undefined]);
+        });
+
+        it("reloads a URL-sourced disc from its source and names it in the URL, but not as loaded recently", async () => {
+            const loaded = ssd("ELITE.ssd");
             deps.media.loadDiscImage.mockResolvedValue(loaded);
-            await make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 });
+            await reload({ disc1: "sth:ELITE.zip", disc1Crc32: crc });
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("sth:ELITE.zip", DiscLayout.contiguous);
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "sth:ELITE.zip", {
-                recent: false,
-                entry: "restore",
-            });
+            expect(fdc.drives[0].disc).toBe(loaded);
+            expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
+            expect(slots.recent.entries).toEqual([]);
+            expect(sent("media_load")).toEqual([expect.objectContaining({ slot: "drive0", entry: "restore" })]);
             expect(toasts()).toEqual([]);
         });
 
-        it("leaves the recently loaded list as it was", async () => {
-            const fdc = fakeFdc();
-            const urlState = fakeUrlState();
-            const drives = new Drives({ fdc, driveTracks: [DriveTracks.auto, DriveTracks.auto], urlState });
-            const slots = new MediaSlots({ loader: deps.media, drives, processor: { fdc }, urlState });
-            deps.media.slots = slots;
-            const loaded = discFor("ELITE.ssd", ssdImage());
-            loaded.setOriginalImage(ssdImage());
+        it("restores drive 1 alongside drive 0", async () => {
+            const loaded = ssd("B.ssd");
             deps.media.loadDiscImage.mockResolvedValue(loaded);
-            await make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: loaded.originalImageCrc32 });
-            expect(fdc.drives[0].disc).toBe(loaded);
-            expect(slots.recent.entries).toEqual([]);
+            await reload({ disc2: "b.ssd" });
+            expect(fdc.drives[1].disc).toBe(loaded);
+            expect(deps.urlState.params).toEqual({ disc2: "b.ssd" });
         });
 
         it("restores over a disc that keeps its changes at its source, however its bytes have moved on", async () => {
-            const loaded = { name: "mine.ssd", originalImageCrc32: 0x9999, savesChanges: true };
+            const loaded = ssd("mine.ssd");
+            loaded.addTrackWriteListener(() => {}, true);
             deps.media.loadDiscImage.mockResolvedValue(loaded);
-            await make().reloadSnapshotMedia({ disc1: "local:mine.ssd", disc1Crc32: 0x1234 });
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", loaded, "local:mine.ssd", {
-                recent: false,
-                entry: "restore",
-            });
+            await reload({ disc1: "local:mine.ssd", disc1Crc32: crc + 1 });
+            expect(fdc.drives[0].disc).toBe(loaded);
+            expect(slots.drive(0).ref).toBe("local:mine.ssd");
         });
 
         it("refuses to restore when the source has changed under the state", async () => {
-            deps.media.loadDiscImage.mockResolvedValue({ name: "ELITE.ssd", originalImageCrc32: 0x9999 });
-            await expect(make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 })).rejects.toThrow(
+            deps.media.loadDiscImage.mockResolvedValue(ssd("ELITE.ssd"));
+            await expect(reload({ disc1: "sth:ELITE.zip", disc1Crc32: crc + 1 })).rejects.toThrow(
                 "ELITE.ssd has changed since this state was saved",
             );
-            expect(deps.media.slots.put).not.toHaveBeenCalled();
+            expect(fdc.drives[0].disc).toBeUndefined();
         });
 
-        it("refuses to restore over an empty drive when the state has a CRC but no source", async () => {
-            await expect(make().reloadSnapshotMedia({ disc1Crc32: 0x1234 })).rejects.toThrow(
-                "does not record where the disc in drive 0 came from",
-            );
-            expect(deps.media.slots.put).not.toHaveBeenCalled();
-        });
-
-        it("refuses to restore over a different disc when the state has a CRC but no source", async () => {
-            deps.processor.fdc.drives[0].disc = { name: "other.ssd", originalImageCrc32: 0x9999 };
-            await expect(make().reloadSnapshotMedia({ disc1Crc32: 0x1234 })).rejects.toThrow(
+        it.each([
+            ["an empty drive", undefined, {}, "does not record where the disc in drive 0 came from"],
+            ["a different disc", { originalImageCrc32: 0x9999 }, {}, "does not hold a matching disc"],
+            [
+                "the matching disc laid out differently",
+                { originalImageCrc32: 0x1234, is40Track: true },
+                { disc1Layout: DiscLayout.contiguous },
                 "does not hold a matching disc",
-            );
-            expect(deps.media.slots.put).not.toHaveBeenCalled();
+            ],
+        ])("refuses a state with a CRC but no source over %s", async (_, inDrive, manifest, message) => {
+            fdc.drives[0].disc = inDrive;
+            await expect(reload({ disc1Crc32: 0x1234, ...manifest })).rejects.toThrow(message);
+            expect(fdc.drives[0].disc).toBe(inDrive);
         });
 
         it("accepts a sourceless state when the drive already holds the matching disc", async () => {
-            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageCrc32: 0x1234 };
-            await make().reloadSnapshotMedia({ disc1Crc32: 0x1234 });
-            expect(deps.media.slots.put).not.toHaveBeenCalled();
-        });
-
-        it("rejects a sourceless state when the matching disc is laid out differently", async () => {
-            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: true };
-            await expect(
-                make().reloadSnapshotMedia({ disc1Crc32: 0x1234, disc1Layout: DiscLayout.contiguous }),
-            ).rejects.toThrow("does not hold a matching disc");
+            const inDrive = { name: "elite.ssd", originalImageCrc32: 0x1234 };
+            fdc.drives[0].disc = inDrive;
+            await reload({ disc1Crc32: 0x1234 });
+            expect(fdc.drives[0].disc).toBe(inDrive);
+            expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
         });
 
         it("round-trips the media of a default-boot session", async () => {
-            const bootDisc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: false };
-            const ui = make();
-            const manifest = snapshotMedia({ driveSlots: [{ index: 0, media: bootDisc, ref: "elite.ssd" }] });
+            const bootDisc = ssd("elite.ssd");
+            slots.put(slots.drive(0), bootDisc, "elite.ssd", { inUrl: false });
+            const manifest = snapshotMedia(slots);
+            slots.eject(slots.drive(0));
             deps.media.loadDiscImage.mockResolvedValue(bootDisc);
-            await ui.reloadSnapshotMedia(manifest);
+            await reload(manifest);
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.contiguous);
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 0", bootDisc, "elite.ssd", {
-                recent: false,
-                entry: "restore",
-            });
+            expect(fdc.drives[0].disc).toBe(bootDisc);
+            expect(slots.drive(0).ref).toBe("elite.ssd");
         });
 
-        it("rebuilds an embedded local disc and keeps it out of the URL", async () => {
-            const imageData = ssdImage();
-            await make().reloadSnapshotMedia({
-                disc1ImageData: imageData,
-                disc1Name: "mine.ssd",
-                disc1Layout: DiscLayout.contiguous,
-            });
-            const [slot, loadedDisc, ref] = deps.media.slots.put.mock.calls[0];
-            expect(slot).toBe("drive 0");
-            expect(loadedDisc.name).toBe("mine.ssd");
-            expect(loadedDisc.originalImageData).toBeTruthy();
-            expect(ref).toBeUndefined();
-        });
-
-        it("rebuilds image data that was serialised as a plain object", async () => {
-            const imageData = ssdImage();
-            await make().reloadSnapshotMedia({
-                disc1ImageData: Object.fromEntries(imageData.entries()),
-                disc1Name: "mine.ssd",
-            });
-            expect(deps.media.slots.put).toHaveBeenCalled();
-        });
-
-        it("restores drive 1 alongside drive 0", async () => {
-            const loaded = { name: "B.ssd" };
-            deps.media.loadDiscImage.mockResolvedValue(loaded);
-            await make().reloadSnapshotMedia({ disc2: "b.ssd" });
-            expect(deps.media.slots.put).toHaveBeenCalledWith("drive 1", loaded, "b.ssd", {
-                recent: false,
-                entry: "restore",
-            });
+        it.each([
+            ["as bytes", (image) => image],
+            ["serialised as a plain object", (image) => Object.fromEntries(image.entries())],
+        ])("rebuilds an embedded local disc from its image %s and keeps it out of the URL", async (_, asSaved) => {
+            const image = ssdImage();
+            await reload({ disc1ImageData: asSaved(image), disc1Name: "mine.ssd", disc1Layout: DiscLayout.contiguous });
+            expect(fdc.drives[0].disc.name).toBe("mine.ssd");
+            expect(fdc.drives[0].disc.originalImageCrc32).toBe(crc);
+            expect(slots.drive(0).ref).toBeUndefined();
+            expect(deps.urlState.params).toEqual({});
         });
     });
 
@@ -371,16 +352,7 @@ describe("SnapshotUI", () => {
 
         it("picks up a stashed state, settles the machine, and forgets the stash", async () => {
             deps.processor.restoreState = vi.fn();
-            sessionStorage.setItem(
-                "jsbeeb-pending-state",
-                JSON.stringify({
-                    format: "jsbeeb-snapshot",
-                    version: 3,
-                    model: "B-DFS1.2",
-                    coProcessor: false,
-                    state: { stashed: true },
-                }),
-            );
+            sessionStorage.setItem("jsbeeb-pending-state", snapshotJson({ state: { stashed: true } }));
             await make().restorePendingState();
             expect(deps.processor.restoreState).toHaveBeenCalledWith({ stashed: true });
             expect(deps.processor.execute).toHaveBeenCalledWith(40000);
@@ -392,16 +364,7 @@ describe("SnapshotUI", () => {
             deps.processor.restoreState = () => {
                 deps.processor.debugInstruction.stopped = true;
             };
-            sessionStorage.setItem(
-                "jsbeeb-pending-state",
-                JSON.stringify({
-                    format: "jsbeeb-snapshot",
-                    version: 3,
-                    model: "B-DFS1.2",
-                    coProcessor: false,
-                    state: {},
-                }),
-            );
+            sessionStorage.setItem("jsbeeb-pending-state", snapshotJson());
             await make().restorePendingState();
             expect(deps.loop.stop).toHaveBeenCalledWith(true);
             expect(deps.processor.execute).not.toHaveBeenCalled();

@@ -111,6 +111,15 @@ describe("CMOS", () => {
         });
     });
 
+    const readClock = (target = cmos) =>
+        Object.fromEntries(
+            ["SECONDS", "MINUTES", "HOURS", "DAY_OF_WEEK", "DAY_OF_MONTH", "MONTH", "YEAR"].map((name) => [
+                name,
+                readRegister(CMOS_ADDR[name], target),
+            ]),
+        );
+    const toBcd = (value) => parseInt(value.toString(10), 16);
+
     describe("The real-time clock", () => {
         const testDateRegisters = {
             SECONDS: 0x56,
@@ -121,9 +130,6 @@ describe("CMOS", () => {
             MONTH: 0x04,
             YEAR: 0x23,
         };
-        const readClock = () =>
-            Object.fromEntries(Object.keys(testDateRegisters).map((name) => [name, readRegister(CMOS_ADDR[name])]));
-
         it("reads the time it is now", () => {
             expect(readClock()).toEqual(testDateRegisters);
         });
@@ -149,6 +155,46 @@ describe("CMOS", () => {
             ({ register, value, dayOfWeek }) => {
                 writeRegister(CMOS_ADDR[register], value);
                 expect(readClock()).toEqual({ ...testDateRegisters, [register]: value, DAY_OF_WEEK: dayOfWeek });
+            },
+        );
+
+        const lastDaysOfMonths = (year) =>
+            Array.from({ length: 12 }, (_, month) => ({
+                year,
+                month: month + 1,
+                day: new Date(year, month + 1, 0).getDate(),
+            }));
+
+        it.each([...lastDaysOfMonths(2023), ...lastDaysOfMonths(2024), { year: 2024, month: 1, day: 1 }])(
+            "reads back $day/$month/$year written in the MOS's order, from a clock in any month",
+            ({ year, month, day }) => {
+                for (let startMonth = 0; startMonth < 12; startMonth++) {
+                    vi.setSystemTime(new Date(2023, startMonth, 15, 12, 34, 56));
+                    const clock = new Cmos(null);
+                    for (const [register, value] of [
+                        ["DAY_OF_MONTH", day],
+                        ["MONTH", month],
+                        ["YEAR", year % 100],
+                    ])
+                        writeRegister(CMOS_ADDR[register], toBcd(value), clock);
+                    expect(readClock(clock), `from month ${startMonth + 1}`).toEqual({
+                        ...testDateRegisters,
+                        DAY_OF_WEEK: new Date(year, month - 1, day).getDay() + 1,
+                        DAY_OF_MONTH: toBcd(day),
+                        MONTH: toBcd(month),
+                        YEAR: toBcd(year % 100),
+                    });
+                }
+            },
+        );
+
+        it.each([0x31, 0x00, 0x1a, 0xa5].map((day) => ({ day, hex: day.toString(16).padStart(2, "0") })))(
+            "holds a day of the month of &$hex, which April lacks, as written while the time is set and runs",
+            ({ day }) => {
+                writeRegister(CMOS_ADDR.DAY_OF_MONTH, day);
+                writeRegister(CMOS_ADDR.HOURS, 0x13);
+                vi.advanceTimersByTime(1000);
+                expect(readClock()).toEqual({ ...testDateRegisters, HOURS: 0x13, SECONDS: 0x57, DAY_OF_MONTH: day });
             },
         );
 
@@ -214,9 +260,19 @@ describe("CMOS", () => {
             expect(cmos.read()).toBe(0x42);
         });
 
+        it("finishes setting a date the host is part way through", () => {
+            const host = new Cmos(null);
+            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31, host);
+            cmos.joinSession(host.sessionState(), () => Date.UTC(2023, 3, 15, 12, 0, 0));
+            writeRegister(CMOS_ADDR.MONTH, 0x05);
+            expect([readRegister(CMOS_ADDR.DAY_OF_MONTH), readRegister(CMOS_ADDR.MONTH)]).toEqual([0x31, 0x05]);
+        });
+
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
             vi.stubEnv("TZ", "America/New_York");
             writeRegister(CMOS_ADDR.HOURS, 0x10);
+            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
+            const ownClock = readClock();
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
             const store = [...defaultCmos];
             store[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
@@ -224,8 +280,7 @@ describe("CMOS", () => {
             cmos.joinSession(sessionState({ store }), () => 0);
             cmos.leaveSession();
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(ownSetting);
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x10);
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x34);
+            expect(readClock()).toEqual(ownClock);
             mockPersistence.save.mockClear();
             cmos.save();
             expect(mockPersistence.save).toHaveBeenCalled();

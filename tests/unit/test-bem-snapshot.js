@@ -2,20 +2,15 @@ import { describe, it, expect } from "vitest";
 import { isBemSnapshot, parseBemSnapshot } from "../../src/bem-snapshot.js";
 
 const BemSnapshotSize = 327885;
+const BemModelB = 3;
 
 function makeMinimalBemSnapshot(overrides = {}) {
     const buffer = new ArrayBuffer(BemSnapshotSize);
     const view = new DataView(buffer);
     const bytes = new Uint8Array(buffer);
 
-    // Signature
-    const sig = new TextEncoder().encode("BEMSNAP1");
-    bytes.set(sig, 0);
-
-    // Model (3 = BBC Model B)
-    view.setUint8(8, overrides.model ?? 3);
-
-    // CPU registers
+    bytes.set(new TextEncoder().encode("BEMSNAP1"), 0);
+    view.setUint8(8, overrides.model ?? BemModelB);
     view.setUint8(9, overrides.a ?? 0x42);
     view.setUint8(10, overrides.x ?? 0x10);
     view.setUint8(11, overrides.y ?? 0x20);
@@ -25,11 +20,7 @@ function makeMinimalBemSnapshot(overrides = {}) {
     view.setUint8(16, overrides.nmi ?? 0);
     view.setUint8(17, overrides.interrupt ?? 0);
     view.setUint32(18, overrides.cycles ?? 12345, true);
-
-    // fe30 (ROM select)
     view.setUint8(22, overrides.fe30 ?? 0x0f);
-
-    // RAM: write a marker byte
     if (overrides.ramByte !== undefined) {
         bytes[24 + (overrides.ramAddr ?? 0)] = overrides.ramByte;
     }
@@ -171,13 +162,15 @@ describe("b-em tube import", () => {
         const snapshot = await parseBemSnapshot(buffer);
 
         expect(snapshot.coProcessor).toBe(true);
-        expect(snapshot.state.tube.a).toBe(0x11);
-        expect(snapshot.state.tube.x).toBe(0x22);
-        expect(snapshot.state.tube.y).toBe(0x33);
-        expect(snapshot.state.tube.s).toBe(0x44);
-        expect(snapshot.state.tube.pc).toBe(0xf800);
-        expect(snapshot.state.tube.nmiLevel).toBe(true);
-        expect(snapshot.state.tube.romPaged).toBe(true);
+        expect(snapshot.state.tube).toMatchObject({
+            a: 0x11,
+            x: 0x22,
+            y: 0x33,
+            s: 0x44,
+            pc: 0xf800,
+            nmiLevel: true,
+            romPaged: true,
+        });
         expect(snapshot.state.tube.memory[0x1234]).toBe(0x99);
     });
 

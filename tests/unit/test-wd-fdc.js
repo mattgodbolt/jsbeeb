@@ -6,6 +6,17 @@ import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import {
+    MfmSectorGap,
+    SectorBytes,
+    SectorLengthCode,
+    appendFmSector,
+    appendMfmSector,
+    blankDisc,
+    fmDiscWithSector,
+    mfmDiscWithSector,
+    sectorData,
+} from "../helpers/disc-builders.js";
 
 const ControlRegister = 0;
 const CommandRegister = 4;
@@ -64,17 +75,9 @@ const MaxCommandTicks = 10 * RevolutionTicks;
 const MotorTimeoutTicks = 10 * RevolutionTicks;
 
 const IdMark = IbmDiscFormat.idMarkDataPattern;
-const DataMark = IbmDiscFormat.dataMarkDataPattern;
 const IndexMark = 0xfc;
 const FmIndexMarkClocks = 0xd7;
-const SectorLengthCode = 1;
-const SectorBytes = 256;
 const IndexMarkGap = 50;
-const SectorGap = 22;
-
-function blankDisc() {
-    return new Disc(true, new DiscConfig(), "test.ssd");
-}
 
 function protectedDisc() {
     return new Disc(false, new DiscConfig(), "protected.ssd");
@@ -132,72 +135,13 @@ function hex(bytes) {
     return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function sectorData() {
-    return new Uint8Array(SectorBytes).map((_, i) => i & 0xff);
-}
-
 // Runs whose MFM encoding contains the 0x00 then 0xc2 sync pattern at some bit offset.
 const DataMimickingC2Sync = [0x01, 0xfe, 0x29, 0x07, 0xf8, 0xa4];
-
-function appendFmSector(builder, { idMark = IdMark, dataMark = DataMark, sector = 0 }) {
-    return builder
-        .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
-        .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
-        .resetCrc()
-        .appendFmDataAndClocks(idMark, IbmDiscFormat.markClockPattern)
-        .appendFmByte(0)
-        .appendFmByte(0)
-        .appendFmByte(sector)
-        .appendFmByte(SectorLengthCode)
-        .appendCrc(false)
-        .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
-        .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
-        .resetCrc()
-        .appendFmDataAndClocks(dataMark, IbmDiscFormat.markClockPattern)
-        .appendFmChunk(sectorData())
-        .appendCrc(false);
-}
-
-function appendMfmSector(
-    builder,
-    { idMark = IdMark, dataMark = DataMark, sector = 0, lengthCode = SectorLengthCode, data = sectorData() },
-) {
-    return builder
-        .appendRepeatMfmByte(0x4e, SectorGap)
-        .appendRepeatMfmByte(0x00, 12)
-        .resetCrc()
-        .appendMfm3xA1Sync()
-        .appendMfmByte(idMark)
-        .appendMfmByte(0)
-        .appendMfmByte(0)
-        .appendMfmByte(sector)
-        .appendMfmByte(lengthCode)
-        .appendCrc(true)
-        .appendRepeatMfmByte(0x4e, SectorGap)
-        .appendRepeatMfmByte(0x00, 12)
-        .resetCrc()
-        .appendMfm3xA1Sync()
-        .appendMfmByte(dataMark)
-        .appendMfmChunk(data)
-        .appendCrc(true);
-}
 
 function appendMfmIndexMark(builder) {
     builder.appendRepeatMfmByte(0x4e, 60).appendRepeatMfmByte(0x00, 12);
     for (let i = 0; i < 3; ++i) builder.appendMfmPulses(IbmDiscFormat.mfmC2Sync);
     return builder.appendMfmByte(IndexMark).appendRepeatMfmByte(0x4e, IndexMarkGap);
-}
-
-function fmDiscWithSector(marks) {
-    const disc = blankDisc();
-    appendFmSector(disc.buildTrack(false, 0), marks).fillFmByte(0xff);
-    return disc;
-}
-
-function mfmDiscWithSector(marks) {
-    const disc = blankDisc();
-    appendMfmSector(disc.buildTrack(false, 0).appendRepeatMfmByte(0x4e, 60), marks).fillMfmByte(0x4e);
-    return disc;
 }
 
 /**
@@ -228,12 +172,17 @@ describe("WD1770 FDC tests", () => {
             expect(cpu.nmi).toBe(true);
         });
 
+        const seeking = () => {
+            const machine = makeFdc({ disc: blankDisc() });
+            machine.fdc.write(TrackRegister, 0);
+            machine.fdc.write(DataRegister, 40);
+            machine.fdc.write(CommandRegister, SeekCommand);
+            machine.scheduler.polltime(ShortWaitTicks);
+            return machine;
+        };
+
         it("aborts a seek in progress and interrupts for &D8", () => {
-            const { cpu, scheduler, fdc } = makeFdc({ disc: blankDisc() });
-            fdc.write(TrackRegister, 0);
-            fdc.write(DataRegister, 40);
-            fdc.write(CommandRegister, SeekCommand);
-            scheduler.polltime(ShortWaitTicks);
+            const { cpu, scheduler, fdc } = seeking();
             expect(fdc.read(StatusRegister) & StatusBusy).toBe(StatusBusy);
 
             fdc.write(CommandRegister, ForceInterrupt | 0x08);
@@ -273,20 +222,13 @@ describe("WD1770 FDC tests", () => {
             expect(cpu.nmi).toBe(false);
         });
 
-        it("accepts every combination of flags when idle", () => {
+        it.each([
+            ["when idle", () => makeFdc()],
+            ["during a seek", () => seeking()],
+            ["when idle with no drive selected", () => makeFdc({ control: ControlRunningNoDrive })],
+        ])("accepts every combination of flags %s", (_, setUp) => {
             for (const bits of AllFlagCombinations) {
-                const { fdc } = makeFdc();
-                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
-            }
-        });
-
-        it("accepts every combination of flags during a seek", () => {
-            for (const bits of AllFlagCombinations) {
-                const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
-                fdc.write(TrackRegister, 0);
-                fdc.write(DataRegister, 40);
-                fdc.write(CommandRegister, SeekCommand);
-                scheduler.polltime(ShortWaitTicks);
+                const { fdc } = setUp();
                 expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
             }
         });
@@ -311,11 +253,6 @@ describe("WD1770 FDC tests", () => {
             fdc.write(CommandRegister, ForceInterrupt);
             scheduler.polltime(ShortWaitTicks);
             expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
-        });
-
-        it("accepts a force interrupt with no drive selected when idle", () => {
-            const { fdc } = makeFdc({ control: ControlRunningNoDrive });
-            expect(() => fdc.write(CommandRegister, ForceInterrupt)).not.toThrow();
         });
 
         it.each([
@@ -371,50 +308,53 @@ describe("WD1770 FDC tests", () => {
         const StepInCommand = 0x48;
         const StepOutCommand = 0x68;
 
-        it("is the difference between the track asked for and the track register, at the command's rate, ending when the head stops", () => {
+        it.each([
+            {
+                name: "the difference between the track asked for and the track register, at the command's rate, ending when the head stops",
+                trackRegister: 5,
+                dataRegister: 35,
+                command: SeekCommand | StepRate12ms,
+                events: [[30, 12], "end after 30"],
+                finalTrack: 30,
+            },
+            {
+                name: "nothing for a seek outwards with the head already at track 0",
+                trackRegister: 5,
+                dataRegister: 0,
+                command: SeekCommand,
+                events: [],
+                finalTrack: 0,
+            },
+            {
+                name: "the distance the head steps out on a restore, whatever the track register says",
+                headTrack: 20,
+                trackRegister: 3,
+                command: RestoreCommand,
+                events: [[-20, 6], "end after 20"],
+                finalTrack: 0,
+            },
+            {
+                name: "one track for a step command, ending when it has stepped",
+                command: StepInCommand,
+                events: [[1, 6], "end after 1"],
+                finalTrack: 1,
+            },
+            {
+                name: "the step out from track 1 onto the edge, counted before the head has moved",
+                headTrack: 1,
+                command: StepOutCommand,
+                events: [[-1, 6], "end after 1"],
+                finalTrack: 0,
+            },
+        ])("is $name", ({ headTrack = 0, trackRegister, dataRegister, command, events, finalTrack }) => {
             const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            const events = seekNoises(drives[0]);
-            fdc.write(TrackRegister, 5);
-            fdc.write(DataRegister, 35);
-            runCommand(fdc, scheduler, SeekCommand | StepRate12ms);
-            expect(events).toEqual([[30, 12], "end after 30"]);
-        });
-
-        it("is nothing for a seek outwards with the head already at track 0", () => {
-            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            const events = seekNoises(drives[0]);
-            fdc.write(TrackRegister, 5);
-            fdc.write(DataRegister, 0);
-            runCommand(fdc, scheduler, SeekCommand);
-            expect(events).toEqual([]);
-            expect(drives[0].track).toBe(0);
-        });
-
-        it("is the distance the head steps out on a restore, whatever the track register says", () => {
-            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            for (let track = 0; track < 20; ++track) drives[0].seekOneTrack(1);
-            const events = seekNoises(drives[0]);
-            fdc.write(TrackRegister, 3);
-            runCommand(fdc, scheduler, RestoreCommand);
-            expect(events).toEqual([[-20, 6], "end after 20"]);
-            expect(drives[0].track).toBe(0);
-        });
-
-        it("is one track for a step command, ending when it has stepped", () => {
-            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            const events = seekNoises(drives[0]);
-            runCommand(fdc, scheduler, StepInCommand);
-            expect(events).toEqual([[1, 6], "end after 1"]);
-            expect(drives[0].track).toBe(1);
-        });
-
-        it("is the step out from track 1 onto the edge, counted before the head has moved", () => {
-            const { scheduler, fdc, drives } = makeFdc({ disc: blankDisc() });
-            drives[0].seekOneTrack(1);
-            const events = seekNoises(drives[0]);
-            runCommand(fdc, scheduler, StepOutCommand);
-            expect(events).toEqual([[-1, 6], "end after 1"]);
-            expect(drives[0].track).toBe(0);
+            for (let track = 0; track < headTrack; ++track) drives[0].seekOneTrack(1);
+            const seen = seekNoises(drives[0]);
+            if (trackRegister !== undefined) fdc.write(TrackRegister, trackRegister);
+            if (dataRegister !== undefined) fdc.write(DataRegister, dataRegister);
+            runCommand(fdc, scheduler, command);
+            expect(seen).toEqual(events);
+            expect(drives[0].track).toBe(finalTrack);
         });
     });
 
@@ -641,19 +581,14 @@ describe("WD1770 FDC tests", () => {
 
     describe("write protect", () => {
         it.each([
-            ["restore", RestoreCommand],
-            ["seek", SeekCommand],
-            ["step", StepOutWithUpdateCommand],
-        ])("shows a protected disc in the status after a %s", (_, command) => {
-            const { scheduler, fdc } = makeFdc({ disc: protectedDisc() });
+            ["a protected disc", "restore", protectedDisc, RestoreCommand, StatusWriteProtected],
+            ["a protected disc", "seek", protectedDisc, SeekCommand, StatusWriteProtected],
+            ["a protected disc", "step", protectedDisc, StepOutWithUpdateCommand, StatusWriteProtected],
+            ["a writable disc as unprotected", "restore", blankDisc, RestoreCommand, 0],
+        ])("shows %s in the status after a %s", (_, __, disc, command, expected) => {
+            const { scheduler, fdc } = makeFdc({ disc: disc() });
             const { status } = runCommand(fdc, scheduler, command);
-            expect(status & StatusWriteProtected).toBe(StatusWriteProtected);
-        });
-
-        it("shows a writable disc as unprotected after a restore", () => {
-            const { scheduler, fdc } = makeFdc({ disc: blankDisc() });
-            const { status } = runCommand(fdc, scheduler, RestoreCommand);
-            expect(status & StatusWriteProtected).toBe(0);
+            expect(status & StatusWriteProtected).toBe(expected);
         });
 
         it.each([
@@ -725,7 +660,7 @@ describe("WD1770 FDC tests", () => {
             rotateTrackBits(builder.track, 5);
             const { scheduler, fdc } = makeFdc({ disc });
             const { bytes } = runCommand(fdc, scheduler, ReadTrackCommand);
-            expect(hex(bytes)).toContain(`c2c2c2fc${"4e".repeat(IndexMarkGap + SectorGap)}0000`);
+            expect(hex(bytes)).toContain(`c2c2c2fc${"4e".repeat(IndexMarkGap + MfmSectorGap)}0000`);
             expect(hex(bytes)).toContain(`a1a1a1fe00000001`);
         });
 

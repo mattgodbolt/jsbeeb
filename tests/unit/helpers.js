@@ -163,6 +163,7 @@ export async function teardownDom() {
     vi.unstubAllEnvs();
     await disposeToasts();
     document.body.innerHTML = "";
+    window.history.replaceState(null, "", window.location.pathname);
     window.localStorage.clear();
     window.sessionStorage.clear();
 }
