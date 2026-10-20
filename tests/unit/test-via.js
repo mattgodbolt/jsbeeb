@@ -40,7 +40,7 @@ describe("Via snapshotState / restoreState", () => {
     const AcrT1ContinuousOnPb7ShiftOutFreeRunningT2Latching = 0xd3;
     const PcrCa1Cb1RisingCa2HighCb2PulseOnWrite = 0xbf;
     const IerSetTimers = 0xe0;
-    const LatchClearBit6 = 0x06,
+    const LatchSetBit6 = 0x0e,
         LatchSetBit3 = 0x0b;
 
     let scheduler, cpu;
@@ -74,7 +74,7 @@ describe("Via snapshotState / restoreState", () => {
         via.write(T2CL, 7);
         via.write(T2CH, 100);
         via.write(SR, 0x55);
-        via.write(ORB, LatchClearBit6);
+        via.write(ORB, LatchSetBit6);
         scheduler.polltime(1001);
         via.write(PCR, PcrCa1Cb1RisingCa2HighCb2PulseOnWrite);
         via.setca1(true);
