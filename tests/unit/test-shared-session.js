@@ -909,8 +909,7 @@ describe("SessionHost", () => {
     it("logs how long a snapshot took to take and to send, and watches the page while it hosts", async () => {
         const { host } = await hosting();
         await joined();
-        const { events } = host.report();
-        const snapshot = events.find((each) => each.event === "snapshot");
+        const [snapshot] = events(host, "snapshot");
         expect(snapshot).toMatchObject({ takeMs: expect.any(Number), tookMs: expect.any(Number) });
         expect(snapshot.takeMs).toBeLessThanOrEqual(snapshot.tookMs);
         expect(page.watching).toBe(host.log);
@@ -956,10 +955,8 @@ describe("SessionHost", () => {
         for (let i = 0; i < 3; ++i) channel.emit("message", message({ type: "stats", stats: { lagMs: i } }));
         vi.advanceTimersByTime(StatsIntervalMs);
         channel.emit("message", message({ type: "stats", stats: { lagMs: 9 } }));
-        const events = host.report().events;
-        expect(events.filter((each) => each.event === "hello").map((each) => each.name)).toEqual(["Kieran"]);
-        const summaries = events.filter((each) => each.event === "guest stats");
-        expect(summaries.map(({ lagMs, dropped }) => [lagMs, dropped])).toEqual([
+        expect(events(host, "hello").map((each) => each.name)).toEqual(["Kieran"]);
+        expect(events(host, "guest stats").map(({ lagMs, dropped }) => [lagMs, dropped])).toEqual([
             [0, 0],
             [9, 2],
         ]);
