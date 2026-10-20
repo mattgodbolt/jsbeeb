@@ -219,7 +219,7 @@ describe("parseUefSnapshot", () => {
             ({ state }) => [state.sysvia.IC32, state.sysvia.ier, state.sysvia.t1hit, state.uservia.IC32],
             [0xff, 0x80, true, undefined],
         ],
-        ["reads the video ULA's control register", { ulaControl: 0x9c }, (s) => s.state.video.ulactrl, 0x9c],
+        ["reads the video ULA's control register", { ulaControl: 0x4b }, (s) => s.state.video.ulactrl, 0x4b],
         [
             "reads the ULA palette as stored, without the hardware's XOR",
             { ulaPalette },
