@@ -267,20 +267,13 @@ describe("processInputParams", () => {
 });
 
 describe("tubeCpuSpeedLabel", () => {
-    const bbcB = findModel("B-DFS1.2");
-    const master = findModel("Master");
-
-    it("shows each machine's own second processor at 1x", () => {
-        expect(tubeCpuSpeedLabel(1, bbcB)).toBe("1x (3MHz)");
-        expect(tubeCpuSpeedLabel(1, master)).toBe("1x (4MHz)");
-    });
-
-    it("shows a fractional overclock", () => {
-        expect(tubeCpuSpeedLabel(1.6, bbcB)).toBe("1.6x (4.8MHz)");
-    });
-
-    it("keeps a repeating multiplier from a URL readable", () => {
-        expect(tubeCpuSpeedLabel(4 / 3, bbcB)).toBe("1.33x (4MHz)");
+    it.each([
+        ["a B's second processor at 1x", 1, "B-DFS1.2", "1x (3MHz)"],
+        ["a Master's second processor at 1x", 1, "Master", "1x (4MHz)"],
+        ["a fractional overclock", 1.6, "B-DFS1.2", "1.6x (4.8MHz)"],
+        ["a repeating multiplier from a URL, readably", 4 / 3, "B-DFS1.2", "1.33x (4MHz)"],
+    ])("shows %s", (_, multiplier, model, label) => {
+        expect(tubeCpuSpeedLabel(multiplier, findModel(model))).toBe(label);
     });
 });
 

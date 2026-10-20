@@ -2,94 +2,63 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { Config, fittedRoms, needsRestart, restartPending } from "../../src/web/config.js";
 import { allModels, findModel } from "../../src/models.js";
+import { Parameters } from "../../src/web/parameters.js";
 import { Settings } from "../../src/web/settings.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
 
 const menuText = (id) => document.getElementById(id).textContent.trim();
+const dialog = () => document.getElementById("configuration");
+const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
+const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
 
 describe("fittedRoms", () => {
     const master = findModel("Master");
-    const beeb = findModel("B-DFS1.2");
-    const none = { model: beeb, hasEconet: false, hasMusic5000: false, hasTeletextAdaptor: false };
+    const none = { model: findModel("B-DFS1.2"), hasEconet: false, hasMusic5000: false, hasTeletextAdaptor: false };
+    const everything = { model: master, hasEconet: true, hasMusic5000: true, hasTeletextAdaptor: true };
 
-    it("fits nothing when nothing is enabled", () => {
-        expect(fittedRoms(none)).toEqual([]);
-    });
-
-    it("fits the Music 5000 and teletext ROMs", () => {
-        expect(fittedRoms({ ...none, hasMusic5000: true })).toEqual(["ample.rom"]);
-        expect(fittedRoms({ ...none, hasTeletextAdaptor: true })).toEqual(["ats-3.0.rom"]);
-    });
-
-    it("fits ANFS only on a Master", () => {
-        expect(fittedRoms({ ...none, model: master, hasEconet: true })).toEqual(["master/anfs-4.25.rom"]);
-        expect(fittedRoms({ ...none, hasEconet: true })).toEqual([]);
-    });
-
-    it("orders the ROMs so bank allocation is predictable", () => {
-        const all = { model: master, hasEconet: true, hasMusic5000: true, hasTeletextAdaptor: true };
-
-        expect(fittedRoms(all)).toEqual(["master/anfs-4.25.rom", "ample.rom", "ats-3.0.rom"]);
+    it.each([
+        ["nothing when nothing is enabled", none, []],
+        ["the Music 5000 ROM", { ...none, hasMusic5000: true }, ["ample.rom"]],
+        ["the teletext ROM", { ...none, hasTeletextAdaptor: true }, ["ats-3.0.rom"]],
+        ["ANFS on a Master", { ...none, model: master, hasEconet: true }, ["master/anfs-4.25.rom"]],
+        ["no ANFS on a B", { ...none, hasEconet: true }, []],
+        ["everything in bank allocation order", everything, ["master/anfs-4.25.rom", "ample.rom", "ats-3.0.rom"]],
+    ])("fits %s", (_, fittings, roms) => {
+        expect(fittedRoms(fittings)).toEqual(roms);
     });
 
     it("gives the same answer however many times it is asked", () => {
-        const all = { model: master, hasEconet: true, hasMusic5000: true, hasTeletextAdaptor: true };
-
-        expect(fittedRoms(all)).toEqual(fittedRoms(all));
+        expect(fittedRoms(everything)).toEqual(fittedRoms(everything));
     });
 });
 
-describe("needsRestart", () => {
-    it("says no when nothing changed", () => {
-        expect(needsRestart({})).toBe(false);
+describe("what needs a restart", () => {
+    const parameters = { fitted: { field: { restart: true } }, live: { field: {} } };
+
+    it.each([
+        [{}, false],
+        [{ live: true }, false],
+        [{ fitted: true }, true],
+        [{ fitted: false }, true],
+        [{ live: true, fitted: true }, true],
+    ])("is needed for the changes %o: %s", (changed, needed) => {
+        expect(needsRestart(changed, parameters)).toBe(needed);
     });
 
-    it("says no for settings the running machine can follow", () => {
-        expect(needsRestart({ keyLayout: "natural", displayMode: "pal", speechOutput: true })).toBe(false);
+    it.each([
+        [{ fitted: false, live: 1 }, false],
+        [{ fitted: true, live: 1 }, true],
+        [{ fitted: false, live: 2 }, false],
+    ])("is pending for the settings %o on a machine built without the fitting: %s", (settings, pending) => {
+        expect(restartPending(settings, { fitted: false, live: 1 }, parameters)).toBe(pending);
     });
 
-    it("says yes for the model and the fittings", () => {
-        expect(needsRestart({ model: "Master" })).toBe(true);
-        expect(needsRestart({ coProcessor: true })).toBe(true);
-        expect(needsRestart({ hasEconet: true })).toBe(true);
-        expect(needsRestart({ hasMusic5000: true })).toBe(true);
-        expect(needsRestart({ hasTeletextAdaptor: true })).toBe(true);
-    });
-
-    it("says yes when turning a fitting off, not just on", () => {
-        expect(needsRestart({ coProcessor: false })).toBe(true);
-    });
-
-    it("says yes when a live setting changed alongside one that needs a restart", () => {
-        expect(needsRestart({ speechOutput: true, coProcessor: true })).toBe(true);
-    });
-});
-
-describe("restartPending", () => {
-    const running = {
-        model: "B-DFS1.2",
-        coProcessor: false,
-        hasEconet: false,
-        hasMusic5000: false,
-        hasTeletextAdaptor: false,
-    };
-
-    it("is not pending when the settings match the running machine", () => {
-        expect(restartPending({ ...running }, running)).toBe(false);
-    });
-
-    it("is pending when a fitting was added", () => {
-        expect(restartPending({ ...running, coProcessor: true }, running)).toBe(true);
-    });
-
-    it("stops being pending once the setting is put back", () => {
-        const changed = { ...running, hasMusic5000: true };
-        expect(restartPending(changed, running)).toBe(true);
-        expect(restartPending({ ...changed, hasMusic5000: false }, running)).toBe(false);
-    });
-
-    it("ignores settings the running machine can follow", () => {
-        expect(restartPending({ ...running, keyLayout: "natural" }, running)).toBe(false);
+    it("is needed for the model and the fittings, and nothing else", () => {
+        expect(
+            Object.keys(Parameters)
+                .filter((name) => Parameters[name].field?.restart)
+                .sort(),
+        ).toEqual(["coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor", "hasVideoNula", "model"]);
     });
 });
 
@@ -99,9 +68,6 @@ describe("Config", () => {
     let restartRequired;
     let config;
 
-    const dialog = () => document.getElementById("configuration");
-    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
-    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
     const modelDropdownText = () => menuText("bbc-model-dropdown");
     const restartPendingShown = () => !document.getElementById("restart-pending").classList.contains("d-none");
     const clickModel = (synonym) => document.querySelector(`.model-menu a[data-target="${synonym}"]`).click();
@@ -143,14 +109,6 @@ describe("Config", () => {
     });
 
     describe("opening the dialog", () => {
-        it("shows the settings as they are", () => {
-            openDialog();
-            expect(modelDropdownText()).toBe(findModel("B-DFS1.2").name);
-            expect(document.getElementById("hasMusic5000").checked).toBe(false);
-            expect(tubeSlider().disabled).toBe(true);
-            expect(restartPendingShown()).toBe(false);
-        });
-
         it("forgets a previous visit's changes", () => {
             openDialog();
             clickModel("Master");
@@ -262,20 +220,29 @@ describe("Config", () => {
     });
 
     describe("the dropdown pickers", () => {
-        it("saves a keyboard layout and shows it capitalised", () => {
+        it.each([
+            [
+                "a keyboard layout",
+                ".key-layout-menu a[data-value=natural]",
+                "keyLayoutDropdown",
+                "Natural",
+                "keyLayout",
+                "natural",
+            ],
+            [
+                "a microphone channel",
+                ".microphone-channel-option[data-value='2']",
+                "microphoneChannelDropdown",
+                "Channel 2",
+                "microphoneChannel",
+                2,
+            ],
+        ])("shows %s picked and saves it on close", (_, option, dropdown, shown, setting, saved) => {
             openDialog();
-            document.querySelector('.key-layout-menu a[data-value="natural"]').click();
-            expect(menuText("keyLayoutDropdown")).toBe("Natural");
+            document.querySelector(option).click();
+            expect(menuText(dropdown)).toBe(shown);
             closeDialog();
-            expect(settings.keyLayout).toBe("natural");
-        });
-
-        it("saves a microphone channel", () => {
-            openDialog();
-            document.querySelector('.microphone-channel-option[data-value="2"]').click();
-            expect(menuText("microphoneChannelDropdown")).toBe("Channel 2");
-            closeDialog();
-            expect(settings.microphoneChannel).toBe(2);
+            expect(settings[setting]).toBe(saved);
         });
 
         it("saves disabling the microphone as a change, not an omission", () => {
@@ -379,9 +346,6 @@ describe("the Settings form", () => {
         "&hasVideoNula=true" +
         "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&speechOutput=true";
 
-    const dialog = () => document.getElementById("configuration");
-    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
-    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
     const shown = (control) =>
         control.type === "checkbox"
             ? control.checked
