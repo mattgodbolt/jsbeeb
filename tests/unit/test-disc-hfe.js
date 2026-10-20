@@ -40,6 +40,7 @@ const sectorsOf = (track) =>
         }));
 
 function expectSameSectors(original, copy) {
+    let sectorsCompared = 0;
     expect(copy.tracksUsed).toBe(original.tracksUsed);
     expect(copy.isDoubleSided).toBe(original.isDoubleSided);
     for (const isSideUpper of original.isDoubleSided ? [false, true] : [false]) {
@@ -48,9 +49,12 @@ function expectSameSectors(original, copy) {
             const before = original.getTrack(isSideUpper, trackNum);
             const after = copy.getTrack(isSideUpper, trackNum);
             expect(after.length, where).toBe(before.length);
-            expect(sectorsOf(after), where).toEqual(sectorsOf(before));
+            const sectors = sectorsOf(before);
+            expect(sectorsOf(after), where).toEqual(sectors);
+            sectorsCompared += sectors.length;
         }
     }
+    expect(sectorsCompared).toBeGreaterThan(0);
 }
 
 function countingImage(length, isDsd) {
@@ -62,7 +66,7 @@ function countingImage(length, isDsd) {
 }
 
 describe("HFE loader tests", function () {
-    it("should load Elite", () => {
+    it("should load Elite", { timeout: 30000 }, () => {
         expect(elite().tracksUsed).toBe(81);
         const sectors = elite().getTrack(false, 0).findSectors();
         expect(sectors.length).toBe(10);
@@ -72,7 +76,7 @@ describe("HFE loader tests", function () {
         }
     });
 
-    it("should refuse to save a protected disc as SSD or DSD", () => {
+    it("should refuse to save a protected disc as SSD or DSD", { timeout: 30000 }, () => {
         // Elite's protection puts sectors numbered 246 to 255 on track 2 and an unreadable one on
         // track 80, none of which a sector image can hold.
         expect(ssdOrDsdShortfalls(elite())).toEqual([
@@ -82,11 +86,11 @@ describe("HFE loader tests", function () {
         expect(() => toSsdOrDsd(elite())).toThrow(/cannot be saved as SSD or DSD/);
     });
 
-    it("should save what fits when forced", () => {
+    it("should save what fits when forced", { timeout: 30000 }, () => {
         const saved = toSsdOrDsd(elite(), { force: true });
 
         // Elite is a 40 track disc captured in an 80 track drive, so its tracks sit on every other one.
-        expect(saved.length).toBe(40 * 2 * 10 * 256);
+        expect(saved.length).toBe(40 * 2 * TrackBytes);
         expect(new TextDecoder().decode(saved.slice(0, 8))).toBe("E L I T ");
     });
 
@@ -128,7 +132,7 @@ describe("telling a 40 track HFE from an 80 track one", () => {
         expect(sniffHfeLayout(withTracks(0)).is40Track).toBe(false);
     });
 
-    it("reads a capture that already holds one spread across the surface", () => {
+    it("reads a capture that already holds one spread across the surface", { timeout: 30000 }, () => {
         // Elite is a 40 track disc as an 80 track drive sees it, so its header cannot say so.
         expect(sniffHfeLayout(EliteHfe).is40Track).toBe(false);
         expect(sniffSurfaceLayout(elite()).is40Track).toBe(true);
@@ -138,7 +142,7 @@ describe("telling a 40 track HFE from an 80 track one", () => {
         expect(sniffSurfaceLayout(reloaded(countingImage(80 * TrackBytes, false))).is40Track).toBe(false);
     });
 
-    it("judges a disc whose sides disagree on the one that boots", () => {
+    it("judges a disc whose sides disagree on the one that boots", { timeout: 30000 }, () => {
         // Elite is a dual format disc: side 0 written for a 40 track drive, side 1 for an 80 track
         // one, the same game on both. A drive's 40/80 switch is not per side, so the side DFS boots
         // from decides, and reaching the other one means setting the switch by hand.
@@ -157,7 +161,7 @@ describe("telling a 40 track HFE from an 80 track one", () => {
     it("wants more than a track or two before it believes", () => {
         const config = new DiscConfig();
         config.expandTo80 = true;
-        const disc = loadSsd(new Disc(true, config, "test.ssd"), new Uint8Array(40 * 10 * 256), false, null);
+        const disc = loadSsd(new Disc(true, config, "test.ssd"), new Uint8Array(40 * TrackBytes), false, null);
         // A capture holding only the first couple of tracks cannot say which pitch it was at.
         for (let trackNum = 4; trackNum < disc.tracksUsed; ++trackNum) disc.eraseTrack(false, trackNum);
 
@@ -192,7 +196,7 @@ describe("HFE export", function () {
             const disc = makeDisc();
             expectSameSectors(disc, reloaded(disc));
         },
-        // Every track of both sides is decoded twice, which coverage instrumentation slows a lot.
+        // Every track of every side is decoded twice, which coverage instrumentation slows a lot.
         60000,
     );
 

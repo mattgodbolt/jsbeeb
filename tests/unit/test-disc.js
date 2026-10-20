@@ -157,7 +157,7 @@ describe("SSD loader tests", function () {
     });
 
     it("should load an SSD whose size is not a multiple of sector size", () => {
-        const oddData = new Uint8Array(256 * 2 + 100).map((_, i) => i & 0xff);
+        const oddData = new Uint8Array(SectorSize * 2 + 100).map((_, i) => i & 0xff);
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
         loadSsd(disc, oddData, false);
 
