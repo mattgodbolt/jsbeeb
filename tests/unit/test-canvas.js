@@ -259,6 +259,14 @@ describe("GlCanvas", () => {
         expect(() => new filterClass(gl)).toThrow(/compil/i);
         expect([...gl.live]).toEqual([]);
     });
+
+    it.each(filters)("releases its program and shaders when linking fails (%s)", (_name, filterClass) => {
+        const gl = recordingGl();
+        gl.getProgramParameter = () => false;
+
+        expect(() => new filterClass(gl)).toThrow(/Failed to link/);
+        expect([...gl.live]).toEqual([]);
+    });
 });
 
 describe("low latency canvas", () => {
@@ -443,7 +451,7 @@ describe("phosphor persistence", () => {
     });
 });
 
-describe("useBestFilter", () => {
+describe("falling back to passthrough", () => {
     // The 2D fallback is unreachable once a WebGL context exists, so a filter
     // that fails to build has to be replaced on the context we have.
     it.each([

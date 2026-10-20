@@ -86,6 +86,7 @@ describe("Display", () => {
         presentAll();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
         expect(fakeCanvas.paint.mock.calls[0].slice(0, 4)).toEqual([0, 30, FbWidth, 40]);
+        expect(fakeCanvas.paint.mock.calls[0][4]).toMatchObject({ lineBaseEven: 1, lineBaseOdd: 2 });
         expect(fakeCanvas.fb32[30 * FbWidth]).toBe(7);
     });
 
