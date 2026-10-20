@@ -56,12 +56,12 @@ describe.each([
     });
 
     it("rejects markers in the wrong order", () => {
-        expect(() => apply(`// END_${marker}\n// BEGIN_${marker}`)).toThrow();
+        expect(() => apply(`// END_${marker}\n// BEGIN_${marker}`)).toThrow("marker order");
     });
 
     it("rejects a lone marker", () => {
-        expect(() => apply(`// BEGIN_${marker}\n`)).toThrow();
-        expect(() => apply(`// END_${marker}\n`)).toThrow();
+        expect(() => apply(`// BEGIN_${marker}\n`)).toThrow("Unpaired");
+        expect(() => apply(`// END_${marker}\n`)).toThrow("Unpaired");
     });
 
     it("leaves the shipped shader with every tap initialised", () => {
@@ -82,7 +82,9 @@ describe("chroma FIR section", () => {
     });
 
     it("rejects a section that names no cutoff or tap count", () => {
-        expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n// END_FIR_COEFFICIENTS")).toThrow();
+        expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n// END_FIR_COEFFICIENTS")).toThrow(
+            "Could not parse FIR parameters",
+        );
     });
 });
 
