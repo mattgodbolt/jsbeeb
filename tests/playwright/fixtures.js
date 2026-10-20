@@ -14,9 +14,11 @@ const AutoRepeatDelayAddress = 0x254;
 // currentCycles wraps every emulated second; the seconds term keeps this monotonic.
 const EmulatedCycles =
     "(window.processor.cycleSeconds * window.processor.model.cyclesPerSecond + window.processor.currentCycles)";
+const MachineStopped = 'document.getElementById("debug-pause").disabled';
+const AnyKeyDown = "window.processor.sysvia.keys.some((column) => column.some(Boolean))";
 const LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
-// test:e2e builds with a dummy measurement id. An empty gtag.js leaves the stub's dataLayer for the tests to read
-// and sends nothing to Google.
+// test:e2e builds with a dummy measurement id; an empty gtag.js leaves the stub's dataLayer for the tests to read.
+// Without the fonts stylesheet the page is laid out in the fallback font, the same on every run.
 const EmptyResponses = [
     { host: /^www\.googletagmanager\.com$/, contentType: "text/javascript" },
     { host: /^fonts\.googleapis\.com$/, contentType: "text/css" },
@@ -29,7 +31,6 @@ export class Beeb {
     constructor(page) {
         this.page = page;
         this.problems = [];
-        this.unrouted = [];
         this.routed = Promise.all([
             page.route(
                 (url) => !LoopbackHosts.includes(url.hostname),
@@ -57,7 +58,7 @@ export class Beeb {
         if (empty) return route.fulfill({ contentType: empty.contentType, body: "" });
         const standIn = `${OfflineDir}${url.hostname}${url.pathname}`;
         if (existsSync(standIn)) return route.fulfill({ path: standIn });
-        this.unrouted.push(`${url.origin}${url.pathname}`);
+        this.problems.push(`unrouted request: ${url.origin}${url.pathname}`);
         return route.abort("blockedbyclient");
     }
 
@@ -99,9 +100,7 @@ export class Beeb {
         const until = await this.page.evaluate(
             `${EmulatedCycles} + window.processor.model.cyclesPerSecond * ${ms / 1000}`,
         );
-        await this.page.waitForFunction(
-            `${EmulatedCycles} >= ${until} || document.getElementById("debug-pause").disabled`,
-        );
+        await this.page.waitForFunction(`${EmulatedCycles} >= ${until} || ${MachineStopped}`);
     }
 
     /** Checks the emulator stays where it is over frames it would have run in, and returns where that is. */
@@ -120,12 +119,29 @@ export class Beeb {
             .toBeGreaterThan(cycles);
     }
 
-    /** Held, then let go, long enough for the OS's scans of the matrix to see both. */
+    /**
+     * Held, then let go, long enough for the OS's scans of the matrix to see both. Timed from when this page's own
+     * matrix changes: in a shared session a key reaches every machine at the cycle the one running the session
+     * applied it, so that is the clock the hold is measured on.
+     */
     async pressKey(key) {
         await this.page.keyboard.down(key);
-        await this.runFor(KeyScansEmulatedMs);
+        await this._keyScans(true);
         await this.page.keyboard.up(key);
+        await this._keyScans(false);
+    }
+
+    async _keyScans(down) {
+        await this.page.waitForFunction(`${AnyKeyDown} === ${down} || ${MachineStopped}`);
         await this.runFor(KeyScansEmulatedMs);
+    }
+
+    /** Pressed, and checked not to reach the machine. */
+    async expectKeyKept(key) {
+        await this.page.keyboard.down(key);
+        await this.runFor(KeyScansEmulatedMs);
+        expect(await this.page.evaluate(AnyKeyDown), `${key} reaching the machine`).toBe(false);
+        await this.page.keyboard.up(key);
     }
 
     disableAutoRepeat() {
@@ -179,7 +195,6 @@ export const test = base.extend({
     beeb: async ({ page }, use) => {
         const beeb = new Beeb(page);
         await use(beeb);
-        expect(beeb.unrouted, "requests that would have left this machine").toEqual([]);
         expect(beeb.problems, "errors the page logged").toEqual([]);
     },
 });

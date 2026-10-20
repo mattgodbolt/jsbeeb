@@ -271,7 +271,7 @@ test("the media window shows the drives, keeps the keyboard while focused, and g
     await expect(page.locator("#media-summary")).toHaveText("0: elite.ssd · 1: empty · tape: empty");
     await expect(page.locator('.bay[data-drive="0"] .bay-dfs')).toHaveText("Elite (05)");
     await page.focus("#media-close");
-    await beeb.pressKey("a");
+    await beeb.expectKeyKept("a");
     await page.keyboard.press("Escape");
     await expect(page.locator("#media-panel")).toBeHidden();
     await beeb.pressKey("b");
