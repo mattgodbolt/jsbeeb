@@ -97,8 +97,8 @@ export class Cmos {
         this.now = () => Date.now();
         this.utc = false;
         this.timeOffset = 0;
-        // The 146818 keeps the day, month and year in separate registers and checks none of them, so a day the
-        // month lacks (the MOS writes the day before the month) is held as written until the three name a real day.
+        // The 146818 keeps the day, month and year in separate registers and checks none of them, so bytes that
+        // do not name a real day are held as written until they do.
         this.heldDate = null;
         this.beforeSession = null;
 
@@ -174,12 +174,12 @@ export class Cmos {
         return this.utc ? utcView(result) : result;
     }
 
-    calendarDate(current) {
+    calendarRegisters(current) {
         return (
             this.heldDate ?? {
-                day: current.getDate(),
-                month: current.getMonth() + 1,
-                year: current.getFullYear() % 100,
+                day: toBcd(current.getDate()),
+                month: toBcd(current.getMonth() + 1),
+                year: toBcd(current.getFullYear() % 100),
             }
         );
     }
@@ -191,13 +191,18 @@ export class Cmos {
 
     writeCalendar(field, value) {
         const bbcTime = this.bbcDateTime();
-        const date = { ...this.calendarDate(bbcTime), [field]: value };
-        bbcTime.setFullYear(MosCentury + date.year, date.month - 1, date.day);
-        if (bbcTime.getDate() === date.day && bbcTime.getMonth() === date.month - 1) {
+        const registers = { ...this.calendarRegisters(bbcTime), [field]: value };
+        const { day, month, year } = registers;
+        bbcTime.setFullYear(MosCentury + fromBcd(year), fromBcd(month) - 1, fromBcd(day));
+        const isRealDay =
+            toBcd(bbcTime.getDate()) === day &&
+            toBcd(bbcTime.getMonth() + 1) === month &&
+            toBcd(bbcTime.getFullYear() % 100) === year;
+        if (isRealDay) {
             this.heldDate = null;
             this.setTimeFrom(bbcTime);
         } else {
-            this.heldDate = date;
+            this.heldDate = registers;
         }
     }
 
@@ -223,11 +228,11 @@ export class Cmos {
                     case 6:
                         return toBcd(current.getDay() + 1);
                     case 7:
-                        return toBcd(this.calendarDate(current).day);
+                        return this.calendarRegisters(current).day;
                     case 8:
-                        return toBcd(this.calendarDate(current).month);
+                        return this.calendarRegisters(current).month;
                     case 9:
-                        return toBcd(this.calendarDate(current).year);
+                        return this.calendarRegisters(current).year;
                 }
             } else {
                 return this.store[this.cmosAddr] & 0xff;
@@ -265,13 +270,13 @@ export class Cmos {
                         this.setTimeFrom(bbcTime);
                         break;
                     case 7:
-                        this.writeCalendar("day", fromBcd(portApins));
+                        this.writeCalendar("day", portApins);
                         break;
                     case 8:
-                        this.writeCalendar("month", fromBcd(portApins));
+                        this.writeCalendar("month", portApins);
                         break;
                     case 9:
-                        this.writeCalendar("year", fromBcd(portApins));
+                        this.writeCalendar("year", portApins);
                         break;
                 }
             }

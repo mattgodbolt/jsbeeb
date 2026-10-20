@@ -188,11 +188,14 @@ describe("CMOS", () => {
             },
         );
 
-        it("holds a date that does not exist as written, and keeps the time running", () => {
-            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
-            vi.advanceTimersByTime(1000);
-            expect(readClock()).toEqual({ ...testDateRegisters, SECONDS: 0x57, DAY_OF_MONTH: 0x31 });
-        });
+        it.each([0x31, 0x00, 0x1a, 0xa5].map((day) => ({ day, hex: day.toString(16).padStart(2, "0") })))(
+            "holds a day of the month of &$hex, which April lacks, as written and keeps the time running",
+            ({ day }) => {
+                writeRegister(CMOS_ADDR.DAY_OF_MONTH, day);
+                vi.advanceTimersByTime(1000);
+                expect(readClock()).toEqual({ ...testDateRegisters, SECONDS: 0x57, DAY_OF_MONTH: day });
+            },
+        );
 
         it("runs on from what was written, into the next year", () => {
             writeRegister(CMOS_ADDR.MONTH, 0x12);
@@ -256,16 +259,18 @@ describe("CMOS", () => {
             expect(cmos.read()).toBe(0x42);
         });
 
-        it("holds a date the host is part way through setting", () => {
+        it("finishes setting a date the host is part way through", () => {
             const host = new Cmos(null);
             writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31, host);
             cmos.joinSession(host.sessionState(), () => Date.UTC(2023, 3, 15, 12, 0, 0));
-            expect(readRegister(CMOS_ADDR.DAY_OF_MONTH)).toBe(0x31);
+            writeRegister(CMOS_ADDR.MONTH, 0x05);
+            expect([readRegister(CMOS_ADDR.DAY_OF_MONTH), readRegister(CMOS_ADDR.MONTH)]).toEqual([0x31, 0x05]);
         });
 
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
             vi.stubEnv("TZ", "America/New_York");
             writeRegister(CMOS_ADDR.HOURS, 0x10);
+            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
             const ownClock = readClock();
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
             const store = [...defaultCmos];
