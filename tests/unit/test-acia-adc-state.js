@@ -3,6 +3,13 @@ import { Acia } from "../../src/acia.js";
 import { Adc } from "../../src/adc.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { findModel } from "../../src/models.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+
+const ReceiveInterruptEightBitWord = 0x95;
+const CarrierPollsToRaiseDcd = 209;
+const StartEightBitConversionOnChannel1 = 0x01;
+const StartTenBitConversionOnChannel2 = 0x0a;
+const EightBitConversionCycles = 8000;
 
 describe("Acia snapshotState / restoreState", () => {
     let scheduler, cpu, acia;
@@ -14,29 +21,24 @@ describe("Acia snapshotState / restoreState", () => {
         acia = new Acia(cpu, toneGen, scheduler);
     });
 
-    it("should snapshot and restore register state", () => {
-        acia.sr = 0x82;
-        acia.cr = 0x15;
-        acia.dr = 0x42;
-        acia.rs423Selected = true;
-        acia.motorOn = true;
-        acia.tapeCarrierCount = 100;
-        acia.tapeDcdLineLevel = true;
-        acia.hadDcdHigh = true;
-
-        const snapshot = acia.snapshotState();
-
-        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
-        acia2.restoreState(snapshot);
-
-        expect(acia2.sr).toBe(0x82);
-        expect(acia2.cr).toBe(0x15);
-        expect(acia2.dr).toBe(0x42);
-        expect(acia2.rs423Selected).toBe(true);
-        expect(acia2.motorOn).toBe(true);
-        expect(acia2.tapeCarrierCount).toBe(100);
-        expect(acia2.tapeDcdLineLevel).toBe(true);
-        expect(acia2.hadDcdHigh).toBe(true);
+    it("round-trips an ACIA sending, receiving and running a tape with its carrier up", async () => {
+        const quiet = { mute: () => {}, tone: () => {} };
+        const relayNoise = { motorOn: () => {}, motorOff: () => {} };
+        await expectSnapshotRoundTrips(
+            () => new Acia(cpu, quiet, scheduler, relayNoise),
+            (driven) => {
+                driven.write(0, ReceiveInterruptEightBitWord);
+                driven.setSerialReceive(9600);
+                driven.setSerialTransmit(1200);
+                scheduler.polltime(1000);
+                driven.write(1, 0x42);
+                driven.receive(0x5a);
+                driven.setTape({ poll: () => 100 });
+                driven.setMotor(true);
+                for (let i = 0; i < CarrierPollsToRaiseDcd; ++i) driven.setTapeCarrier(true);
+                driven.selectRs423(true);
+            },
+        );
     });
 
     it("keeps the recorder's PLAY latch, and restores an older snapshot with PLAY down", () => {
@@ -52,7 +54,7 @@ describe("Acia snapshotState / restoreState", () => {
         expect(acia2.playPressed).toBe(true);
     });
 
-    it("should snapshot and restore serial rate", () => {
+    it("derives the byte times from the restored rates", () => {
         acia.setSerialReceive(9600);
         acia.setSerialTransmit(1200);
 
@@ -60,31 +62,8 @@ describe("Acia snapshotState / restoreState", () => {
         const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
         acia2.restoreState(snapshot);
 
-        expect(acia2.serialReceiveRate).toBe(9600);
         expect(acia2.serialReceiveCyclesPerByte).toBe(acia.serialReceiveCyclesPerByte);
-        expect(acia2.serialTransmitRate).toBe(1200);
         expect(acia2.serialTransmitCyclesPerByte).toBe(acia.serialTransmitCyclesPerByte);
-    });
-
-    it("should snapshot scheduled task offsets", () => {
-        // Schedule the tx complete task
-        acia.txCompleteTask.schedule(500);
-
-        const snapshot = acia.snapshotState();
-        expect(snapshot.txCompleteTaskOffset).toBe(500);
-        expect(snapshot.runTapeTaskOffset).toBeNull();
-        expect(snapshot.runRs423TaskOffset).toBeNull();
-    });
-
-    it("should restore and re-register tasks", () => {
-        acia.txCompleteTask.schedule(500);
-        const snapshot = acia.snapshotState();
-
-        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
-        acia2.restoreState(snapshot);
-
-        expect(acia2.txCompleteTask.scheduled()).toBe(true);
-        expect(acia2.txCompleteTask.expireEpoch).toBe(scheduler.epoch + 500);
     });
 
     it("should restore interrupt state", () => {
@@ -104,49 +83,18 @@ describe("Acia snapshotState / restoreState", () => {
 });
 
 describe("Adc snapshotState / restoreState", () => {
-    let scheduler, sysvia, adc;
-
-    beforeEach(() => {
-        scheduler = new Scheduler();
-        sysvia = { setcb1: () => {} };
-        adc = new Adc(sysvia, scheduler);
-    });
-
-    it("should snapshot and restore register state", () => {
-        adc.status = 0x83;
-        adc.low = 0xab;
-        adc.high = 0xcd;
-
-        const snapshot = adc.snapshotState();
-        const adc2 = new Adc(sysvia, scheduler);
-        adc2.restoreState(snapshot);
-
-        expect(adc2.status).toBe(0x83);
-        expect(adc2.low).toBe(0xab);
-        expect(adc2.high).toBe(0xcd);
-    });
-
-    it("should snapshot task offset when conversion in progress", () => {
-        // Trigger a conversion
-        adc.write(0, 0x08); // 10-bit conversion
-        expect(adc.task.scheduled()).toBe(true);
-
-        const snapshot = adc.snapshotState();
-        expect(snapshot.taskOffset).not.toBeNull();
-        expect(snapshot.taskOffset).toBeGreaterThan(0);
-    });
-
-    it("should snapshot null task offset when idle", () => {
-        const snapshot = adc.snapshotState();
-        expect(snapshot.taskOffset).toBeNull();
-    });
-
-    it("should restore and re-register task", () => {
-        const snapshot = { status: 0x83, low: 0, high: 0, taskOffset: 1000 };
-        const adc2 = new Adc(sysvia, scheduler);
-        adc2.restoreState(snapshot);
-
-        expect(adc2.task.scheduled()).toBe(true);
-        expect(adc2.task.expireEpoch).toBe(scheduler.epoch + 1000);
+    it("round-trips a converter part way through its second conversion", async () => {
+        const scheduler = new Scheduler();
+        const sysvia = { setcb1: () => {} };
+        await expectSnapshotRoundTrips(
+            () => new Adc(sysvia, scheduler),
+            (adc) => {
+                adc.setFixedValue(0x1234);
+                adc.write(0, StartEightBitConversionOnChannel1);
+                scheduler.polltime(EightBitConversionCycles);
+                adc.write(0, StartTenBitConversionOnChannel2);
+                scheduler.polltime(100);
+            },
+        );
     });
 });
