@@ -464,38 +464,12 @@ export class MachineSession {
      */
     addBreakpoint(type, address, { bank } = {}) {
         requireBank(bank);
-        const cpu = this._machine.processor;
-        const inBank = () => bank === undefined || this._machine.isBankPagedAt(bank, address);
         const id = this._nextBreakpointId++;
         const bp = { type, address, bank, hit: false, id, value: undefined };
-
-        if (type === "execute") {
-            bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address && inBank() && !cpu.resumingFromStop) {
-                    bp.hit = true;
-                    return true;
-                }
-            });
-        } else if (type === "read") {
-            bp.hook = cpu.debugRead.add((addr, val) => {
-                if (addr === address && inBank()) {
-                    bp.hit = true;
-                    bp.value = val;
-                    return true;
-                }
-            });
-        } else if (type === "write") {
-            bp.hook = cpu.debugWrite.add((addr, val) => {
-                if (addr === address && inBank()) {
-                    bp.hit = true;
-                    bp.value = val;
-                    return true;
-                }
-            });
-        } else {
-            throw new Error(`Unknown breakpoint type: ${type}`);
-        }
-
+        bp.hook = this._machine.addBreakpoint(type, address, { bank }, (value) => {
+            bp.hit = true;
+            bp.value = value;
+        });
         this._breakpoints.set(id, bp);
         return id;
     }
