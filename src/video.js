@@ -176,9 +176,7 @@ class Ula {
         if (val & 8 && this.video.ulactrl & 1 && this.flash[(val & 7) ^ 7]) {
             colour = this.collook[val & 0xf];
         }
-        if (this.video.ulaPal[index] !== colour) {
-            this.video.ulaPal[index] = colour;
-        }
+        this.video.ulaPal[index] = colour;
     }
 
     // NULA control register (&FE22).
@@ -257,9 +255,7 @@ class Ula {
             if (palVal & 8 && flashEnabled && this.flash[(palVal & 7) ^ 7]) {
                 colour = this.collook[palVal & 0xf];
             }
-            if (video.ulaPal[i] !== colour) {
-                video.ulaPal[i] = colour;
-            }
+            video.ulaPal[i] = colour;
         }
     }
 }
