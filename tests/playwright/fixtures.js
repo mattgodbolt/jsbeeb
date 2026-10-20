@@ -85,12 +85,6 @@ export class Beeb {
         await expect.poll(() => this.screenText(), { message: `"${text}" on the screen`, timeout }).toContain(text);
     }
 
-    async expectNotOnScreen(text, timeout = BootTimeoutMs) {
-        await expect
-            .poll(() => this.screenText(), { message: `"${text}" to leave the screen`, timeout })
-            .not.toContain(text);
-    }
-
     cycles() {
         return this.page.evaluate(EmulatedCycles);
     }
