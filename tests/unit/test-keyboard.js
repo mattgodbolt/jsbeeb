@@ -509,7 +509,7 @@ describe("stringToATOMKeys", () => {
         ["ABC", [ATOM.A, ATOM.B, ATOM.C]],
         ["a b", [ATOM.LOCK, ATOM.A, ATOM.SPACE, ATOM.B, ATOM.LOCK]],
         ["a'b", [ATOM.LOCK, ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B, ATOM.LOCK]],
-    ])("toggles LOCK only where %s changes case between letters", (text, keys) => {
+    ])("types %s with LOCK pressed only to change case, and left on at the end", (text, keys) => {
         expect(stringToATOMKeys(text)).toEqual(keys);
     });
 });

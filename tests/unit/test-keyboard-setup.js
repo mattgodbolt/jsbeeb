@@ -118,11 +118,11 @@ describe("KeyboardSetup", () => {
         };
 
         it.each([
-            ["the page at large", () => document.body, true],
-            ["the paste box", () => document.getElementById("paste-text"), true],
-            ["a control that takes no typing", () => focusedInput("checkbox"), true],
-            ["any other field being typed into", () => focusedInput("text"), false],
-        ])("from %s goes to the machine: %s", (_, target, reaches) => {
+            ["the page at large", true, () => document.body],
+            ["the paste box", true, () => document.getElementById("paste-text")],
+            ["a control that takes no typing", true, () => focusedInput("checkbox")],
+            ["any other field being typed into", false, () => focusedInput("text")],
+        ])("from %s goes to the machine: %s", (_, reaches, target) => {
             const from = target();
             from.focus();
             from.dispatchEvent(pasteEvent("*CAT"));

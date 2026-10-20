@@ -54,14 +54,11 @@ describe("what needs a restart", () => {
     });
 
     it("is needed for the model and the fittings, and nothing else", () => {
-        expect(Object.keys(Parameters).filter((name) => Parameters[name].field?.restart)).toEqual([
-            "model",
-            "coProcessor",
-            "hasMusic5000",
-            "hasTeletextAdaptor",
-            "hasEconet",
-            "hasVideoNula",
-        ]);
+        expect(
+            Object.keys(Parameters)
+                .filter((name) => Parameters[name].field?.restart)
+                .sort(),
+        ).toEqual(["coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor", "hasVideoNula", "model"]);
     });
 });
 
@@ -224,15 +221,23 @@ describe("Config", () => {
 
     describe("the dropdown pickers", () => {
         it.each([
-            [".key-layout-menu a[data-value=natural]", "keyLayoutDropdown", "Natural", "keyLayout", "natural"],
             [
+                "a keyboard layout",
+                ".key-layout-menu a[data-value=natural]",
+                "keyLayoutDropdown",
+                "Natural",
+                "keyLayout",
+                "natural",
+            ],
+            [
+                "a microphone channel",
                 ".microphone-channel-option[data-value='2']",
                 "microphoneChannelDropdown",
                 "Channel 2",
                 "microphoneChannel",
                 2,
             ],
-        ])("shows a pick from %s and saves it on close", (option, dropdown, shown, setting, saved) => {
+        ])("shows %s picked and saves it on close", (_, option, dropdown, shown, setting, saved) => {
             openDialog();
             document.querySelector(option).click();
             expect(menuText(dropdown)).toBe(shown);
