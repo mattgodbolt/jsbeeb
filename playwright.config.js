@@ -51,13 +51,7 @@ export default defineConfig({
         launchOptions: {
             // Playwright's own headless switches already mute audio and keep
             // shared memory out of /dev/shm; these are what the app needs on top.
-            // A shared session's peers offer their host addresses as they are, not
-            // as mDNS names that only a multicast query on the network resolves.
-            args: [
-                ...GlArgs[Gl],
-                "--autoplay-policy=no-user-gesture-required",
-                "--disable-features=WebRtcHideLocalIpsWithMdns",
-            ],
+            args: [...GlArgs[Gl], "--autoplay-policy=no-user-gesture-required"],
         },
     },
     projects: [
