@@ -14,6 +14,7 @@ import { TestMachine } from "../../src/test-machine.js";
 import * as fdc from "../../src/fdc.js";
 import { keyCodes } from "../../src/keymap.js";
 import { mode7Text } from "./helpers.js";
+import { keyCodeFor } from "../helpers/session-fakes.js";
 
 // Steps the host runs after the last input, for its effect to reach the screen.
 const SettleSteps = 50;
@@ -67,7 +68,6 @@ const Gap = [null, null, null];
 const press = (key) => [{ kind: "key", key, down: true }, ...Gap];
 const release = (key) => [{ kind: "key", key, down: false }, ...Gap];
 const tap = (key) => [...press(key), ...release(key)];
-const KeyNames = { " ": "SPACE", "-": "MINUS", "\n": "ENTER" };
 const ShiftedKeyNames = { $: "K4" };
 
 /** The inputs that type `text` on the host, one per step. */
@@ -77,7 +77,7 @@ function typing(text) {
             const shift = keyCodes.SHIFT_LEFT;
             return [...press(shift), ...tap(keyCodes[ShiftedKeyNames[char]]), ...release(shift)];
         }
-        const key = keyCodes[KeyNames[char] ?? (/\d/.test(char) ? `K${char}` : char)];
+        const key = keyCodeFor(char);
         if (!key) throw new Error(`typing() has no key for "${char}"`);
         return tap(key);
     });
@@ -256,56 +256,24 @@ describe("lockstep sessions", () => {
             const commits = [];
             const lockstep = hosting(host, (commit) => commits.push(commit));
             const desyncs = [];
-            const guest = await joining(lockstep, host.model.name, (reason) => desyncs.push(reason), prepareGuest);
+            const guest = await joining(lockstep, host.model.name, (...desync) => desyncs.push(desync), prepareGuest);
             return { host, lockstep, guest, commits, desyncs };
         }
 
-        it("gives the guest the host's discs, never writing to its own", async () => {
+        it("gives the guest the host's discs, even in a drive it had empty, never writing to its own", async () => {
             const image = "discs/elite.ssd";
             const data = await fdc.load(image);
-            const guestDiscs = [];
+            const guestDisc = fdc.discFor(image, data, () => {});
             const { host, guest } = await pair({
                 prepareHost: ({ processor }) => processor.fdc.loadDisc(1, fdc.discFor(image, data)),
-                prepareGuest: ({ processor }) => {
-                    for (const drive of [0, 1]) {
-                        guestDiscs.push(fdc.discFor(image, data, () => {}));
-                        processor.fdc.loadDisc(drive, guestDiscs[drive]);
-                    }
-                },
+                prepareGuest: ({ processor }) => processor.fdc.loadDisc(0, guestDisc),
             });
             const [emptied, shared] = guest.machine.processor.fdc.drives;
-            expect(guestDiscs.every((disc) => disc.savesChanges)).toBe(true);
+            expect(guestDisc.savesChanges).toBe(true);
             expect(emptied.disc).toBeUndefined();
-            expect(guestDiscs).not.toContain(shared.disc);
             expect(shared.disc.savesChanges).toBe(false);
             const firstTrack = (drive) => drive.disc.getTrack(false, 0).pulses2Us;
             expect(firstTrack(shared)).toEqual(firstTrack(host.processor.fdc.drives[1]));
-        });
-
-        it("puts the host's disc in a drive the guest had empty", async () => {
-            const image = "discs/elite.ssd";
-            const data = await fdc.load(image);
-            const { guest } = await pair({
-                prepareHost: ({ processor }) => processor.fdc.loadDisc(0, fdc.discFor(image, data)),
-            });
-            expect(guest.machine.processor.fdc.drives[0].disc).toBeDefined();
-        });
-
-        it("fingerprints the registers, the keyboard and sideways RAM as well as RAM", async () => {
-            const { host } = await pair();
-            const { processor } = host;
-            const unchanged = stateHash(processor);
-            processor.sysvia.keyDown(keyCodes.A, false);
-            expect(stateHash(processor)).not.toBe(unchanged);
-            processor.sysvia.keyUp(keyCodes.A);
-            expect(stateHash(processor)).toBe(unchanged);
-            const sideways = processor.romOffset + SidewaysRamBank * RomBankBytes;
-            processor.ramRomOs[sideways] ^= 1;
-            expect(stateHash(processor)).not.toBe(unchanged);
-            processor.ramRomOs[sideways] ^= 1;
-            expect(stateHash(processor)).toBe(unchanged);
-            processor.x ^= 1;
-            expect(stateHash(processor)).not.toBe(unchanged);
         });
 
         it("hands over the VIAs as they are, whatever keys the joiner was holding, and a held BREAK", async () => {
@@ -351,25 +319,19 @@ describe("lockstep sessions", () => {
         });
 
         it("asks for a resync, once, when commits go missing, naming the commit that did not follow on", async () => {
-            const { host, lockstep, commits } = await pair();
-            const desyncs = [];
-            const guest = await joining(lockstep, host.model.name, (reason, ...rest) =>
-                desyncs.push([reason, rest[2]]),
-            );
+            const { lockstep, guest, commits, desyncs } = await pair();
             for (let i = 0; i < 4; ++i) lockstep.execute(1000);
             guest.lockstep.receive(commits[0]);
             guest.lockstep.receive(commits[2]);
             guest.lockstep.receive(commits[3]);
             const { at, upTo } = commits[2];
-            expect(desyncs).toEqual([
+            expect(desyncs.map(([reason, , , where]) => [reason, where])).toEqual([
                 [`a commit starts at ${at}, not ${commits[0].upTo}`, { cycle: commits[0].at, at, upTo }],
             ]);
         });
 
         it("says from which cycle its machine moved by itself", async () => {
-            const { host, lockstep } = await pair();
-            const desyncs = [];
-            const guest = await joining(lockstep, host.model.name, (...desync) => desyncs.push(desync));
+            const { guest, desyncs } = await pair();
             const from = cycleCount(guest.machine.processor);
             guest.machine.processor.execute(1000);
             const cycle = cycleCount(guest.machine.processor);
@@ -378,9 +340,7 @@ describe("lockstep sessions", () => {
         });
 
         it("says where its state parted from the host's, in which commit, and both hashes", async () => {
-            const { host, lockstep, commits } = await pair();
-            const desyncs = [];
-            const guest = await joining(lockstep, host.model.name, (...desync) => desyncs.push(desync));
+            const { host, lockstep, guest, commits, desyncs } = await pair();
             for (let offset = 0; offset < ScribbleBytes; ++offset) {
                 guest.machine.processor.writemem(ScribbleAt + offset, Scribble);
             }

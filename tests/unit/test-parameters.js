@@ -332,10 +332,11 @@ describe("the settings a session guest takes from its host", () => {
         expect(readTakenFromHost({}).cpuMultiplier).toBeUndefined();
     });
 
-    it("refuses a host's value this page would not take from its own URL", () => {
+    it("refuses a host's value this page would not take from its own URL, and takes one of the wrong type as none", () => {
         expect(readTakenFromHost({ tubeCpuMultiplier: 0 })).toBeNull();
         expect(readTakenFromHost({ stationId: 1e21 })).toBeNull();
         expect(readTakenFromHost({ tubeCpuMultiplier: 2 })).toMatchObject({ tubeCpuMultiplier: 2 });
+        expect(readTakenFromHost({ cpuMultiplier: "2" }).cpuMultiplier).toBeUndefined();
     });
 
     it("carries one marked in any table, with nothing else to change", () => {

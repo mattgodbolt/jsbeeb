@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { Cmos } from "../../src/cmos.js";
 import { IntervalStats, SessionLog, StatsIntervalMs } from "../../src/web/session-log.js";
 import { KeyStamper, MaxWaitingKeys, Sequencer } from "../../src/web/session-sequencer.js";
+import { CyclesPerSecond, fakeProcessor } from "../helpers/session-fakes.js";
 
-const CyclesPerSecond = 2000000;
 const MsCycles = CyclesPerSecond / 1000;
 const Start = 1000;
 const Mappings = { A: [4, 1], B: [5, 2] };
@@ -25,39 +24,8 @@ const keyText = ({ mapping, down }, cycle) => {
     return `${name}${down ? "+" : "-"}${msAt(cycle)}`;
 };
 
-function fakeProcessor() {
-    return {
-        cycleSeconds: 0,
-        currentCycles: Start,
-        targetCycles: Start,
-        model: { cyclesPerSecond: CyclesPerSecond, swram: [] },
-        a: 0,
-        x: 0,
-        y: 0,
-        s: 0,
-        pc: 0,
-        p: { asByte: () => 0 },
-        ramRomOs: new Uint8Array(16),
-        romOffset: 16,
-        setReset() {},
-        sysvia: { keys: [], setMapped() {}, cmos: new Cmos(null) },
-        // As at a breakpoint: the CPU stops here, short of its target.
-        stopAt: Infinity,
-        execute(count) {
-            this.targetCycles += count;
-            if (this.targetCycles > this.stopAt) {
-                this.currentCycles = this.stopAt;
-                this.stopAt = Infinity;
-                return false;
-            }
-            this.currentCycles = Math.max(this.currentCycles, this.targetCycles);
-            return true;
-        },
-    };
-}
-
 function sequencing() {
-    const processor = fakeProcessor();
+    const processor = fakeProcessor({ cycles: Start });
     const clock = { ms: 0 };
     const now = () => clock.ms;
     const log = new SessionLog({}, now);
