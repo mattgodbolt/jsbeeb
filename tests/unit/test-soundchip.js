@@ -295,6 +295,19 @@ describe("AtomSoundChip", () => {
             expect(out[15]).toBeLessThan(-0.1);
         });
 
+        it("restores a snapshot from before the speaker was saved with the speaker low", () => {
+            const { chip, scheduler } = makeAtomSoundChip();
+            const snapshot = chip.snapshotState();
+            delete snapshot.speakerBit;
+            chip.speakerGenerator.pushBit(1, 10, 0);
+            chip.restoreState(snapshot);
+            chip.speakerGenerator.pushBit(1, 30, 0);
+            scheduler.epoch = 40;
+            const out = render(chip, 20);
+            expect(out.slice(0, 15).every((v) => v === 0)).toBe(true);
+            expect(out[15]).toBeGreaterThan(0.1);
+        });
+
         it("drops the transitions it was still to play", () => {
             const { chip, scheduler } = makeAtomSoundChip();
             const snapshot = chip.snapshotState();
