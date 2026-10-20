@@ -443,6 +443,20 @@ describe("Video", () => {
             video.ula.write(2, 0x1c);
             expect(video.ulactrl).toBe(0x1c);
         });
+
+        it("comes back enabled and in its power-on state after a power-on reset", () => {
+            ({ video, cpu } = makeVideo({ hasVideoNula: true }));
+            video.ula.write(2, NulaPaletteModeOn);
+            video.ula.write(2, NulaDisable);
+
+            video.reset(cpu, video.sysvia, true);
+
+            expect(video.ula.paletteMode).toBe(0);
+            video.ula.write(0, 0x08);
+            video.ula.write(2, NulaPaletteModeOn);
+            expect(video.ula.paletteMode).toBe(1);
+            expect(video.ulactrl).toBe(0x08);
+        });
     });
 
     describe("NULA palette mode", () => {
