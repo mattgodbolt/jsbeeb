@@ -133,6 +133,14 @@ describe("KeyboardSetup", () => {
             field.dispatchEvent(pasteEvent("not for the Beeb"));
             expect(actions.paste).not.toHaveBeenCalled();
         });
+
+        it("goes to the machine from a control that takes no typing", () => {
+            const checkbox = document.body.appendChild(document.createElement("input"));
+            checkbox.type = "checkbox";
+            checkbox.focus();
+            checkbox.dispatchEvent(pasteEvent("*CAT"));
+            expect(actions.paste).toHaveBeenCalledWith("*CAT");
+        });
     });
 
     it("passes focus through a text field and back on a dead key", () => {
@@ -183,18 +191,47 @@ describe("KeyboardSetup", () => {
             expect(actions.openMedia).not.toHaveBeenCalled();
         });
 
-        it("leaves a debugger goto box its g, which elsewhere resumes the machine", () => {
-            domFromIndexHtml("debug");
-            loop.mode = RunMode.debugging;
-            const typeG = () => setup.keyPress(new KeyboardEvent("keypress", { key: "g", cancelable: true }));
+        describe("the pause's and the debugger's keys", () => {
+            const typeKey = (key) => setup.keyPress(new KeyboardEvent("keypress", { key, cancelable: true }));
 
-            document.querySelector("#goto-dis-addr-form .goto-addr").focus();
-            typeG();
-            expect(loop.mode).toBe(RunMode.debugging);
+            it.each([
+                ["g", "a debugger goto box", "debug", "#goto-dis-addr-form .goto-addr", RunMode.debugging, "go"],
+                ["g", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "go"],
+                ["n", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "step"],
+            ])("%s stays in %s, and drives the machine from elsewhere", (key, _, from, field, mode, call) => {
+                domFromIndexHtml(from);
+                loop.mode = mode;
 
-            document.activeElement.blur();
-            typeG();
-            expect(loop.mode).toBe(RunMode.running);
+                document.querySelector(field).focus();
+                typeKey(key);
+                expect(loop.mode).toBe(mode);
+
+                expect(loop[call]).not.toHaveBeenCalled();
+
+                document.activeElement.blur();
+                typeKey(key);
+                expect(loop[call]).toHaveBeenCalledTimes(1);
+            });
+
+            it("leaves the debugger's letters to a field being typed into", () => {
+                domFromIndexHtml("session-dialog");
+                loop.mode = RunMode.debugging;
+                document.getElementById("session-name").focus();
+
+                const j = new KeyboardEvent("keypress", { key: "j", cancelable: true });
+                setup.keyPress(j);
+
+                expect(dbgr.keyPress).not.toHaveBeenCalled();
+                expect(j.defaultPrevented).toBe(false);
+            });
+
+            it("still resumes the machine from a control that takes no typing", () => {
+                domFromIndexHtml("speaker-amount");
+                loop.mode = RunMode.paused;
+                document.getElementById("speaker-amount").focus();
+                typeKey("g");
+                expect(loop.mode).toBe(RunMode.running);
+            });
         });
 
         it("keeps a held shortcut's repeats out of the media window it just opened", () => {
