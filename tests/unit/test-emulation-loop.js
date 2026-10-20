@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TickMs } from "../../src/emulation-tick.js";
 import { EmulationLoop, RunMode } from "../../src/web/emulation-loop.js";
+import { RunControls } from "../../src/web/run-controls.js";
 import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
@@ -251,16 +252,35 @@ describe("EmulationLoop", () => {
     it("notes an error the processor throws, stops into the debugger and throws it on", () => {
         const sent = sentEvents();
         const loop = started();
+        const onRunning = vi.fn();
+        loop.addEventListener("running", onRunning);
         deps.processor.execute.mockImplementation(() => {
             throw new Error("bad opcode");
         });
         expect(() => vi.advanceTimersByTime(TickMs)).toThrow("bad opcode");
         expect(loop.isRunning()).toBe(false);
+        expect(onRunning).toHaveBeenCalledTimes(1);
+        expect(deps.processor.stop).toHaveBeenCalled();
+        expect(deps.audioHandler.mute).toHaveBeenCalled();
         expect(deps.dbgr.debug).toHaveBeenCalledWith(0x1234);
         expect(sent("js_error")).toEqual([expect.objectContaining({ where: "loop", message: "bad opcode" })]);
         expect(loop.mode).toBe(RunMode.debugging);
         loop.hold("the test")();
         expect(loop.isRunning()).toBe(false);
+    });
+
+    it("leaves Play enabled after an error the processor throws", () => {
+        domFromIndexHtml("debug-pause", "debug-play");
+        const loop = make();
+        new RunControls({ loop });
+        loop.go();
+        vi.advanceTimersByTime(0);
+        deps.processor.execute.mockImplementation(() => {
+            throw new Error("bad opcode");
+        });
+        expect(() => vi.advanceTimersByTime(TickMs)).toThrow("bad opcode");
+        expect(document.getElementById("debug-play").disabled).toBe(false);
+        expect(document.getElementById("debug-pause").disabled).toBe(true);
     });
 
     describe("the run mode", () => {

@@ -323,7 +323,6 @@ export class EmulationLoop extends EventTarget {
                         snapshotMs,
                     );
             } catch (e) {
-                this.running = false;
                 noteError("loop", e);
                 this.stop(true);
                 throw e;
