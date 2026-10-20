@@ -26,12 +26,11 @@ const RoomGone = 404;
 
 /**
  * What a link tells the end it belongs to: `message` with each string or ArrayBuffer that comes, and `closed` with
- * why when the other end goes. A host's end is told when it has `opened`, and `closed` too if it never does; a
- * guest's is told when its offer has been posted and its answer has come, and one that never opens rejects `join`.
+ * why when the other end goes, or, for a host's end, never opens; a guest's is told when its offer has been posted
+ * and its answer has come, and one that never opens rejects `join`.
  * @typedef {object} LinkListener
  * @property {function(string|ArrayBuffer): void} message
  * @property {function(string): void} closed
- * @property {function(): void} [opened]
  * @property {function(): void} [offered]
  * @property {function(): void} [answered]
  */
@@ -158,10 +157,7 @@ export function webRtcTransport(rendezvous) {
                     listenTo(channel, listener, () => closed);
                     channel.addEventListener("close", () => fail("its channel closed"));
                     opened(channel).then(
-                        () => {
-                            connecting.delete(link);
-                            if (!closed) listener.opened();
-                        },
+                        () => connecting.delete(link),
                         () => fail("its channel never opened"),
                     );
                 });

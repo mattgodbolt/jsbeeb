@@ -45,7 +45,6 @@ function linkPair() {
         guest,
         open() {
             host.open = guest.open = true;
-            host.listener.opened();
         },
     };
 }
