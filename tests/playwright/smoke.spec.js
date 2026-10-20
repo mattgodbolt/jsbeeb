@@ -171,17 +171,8 @@ test("a state saved at a breakpoint loads paused there in the debugger, on this 
     page,
 }) => {
     const pc = () => page.evaluate(() => window.processor.pc);
+    const where = async () => ({ pc: await pc(), cycles: await beeb.cycles() });
     const stoppedAtOswrch = page.locator("#disassembly .highlight .dis_addr");
-    const loadAndContinue = async (file) => {
-        await page.setInputFiles("#load-state", file);
-        await expect(page.locator("#debug-play")).toBeEnabled();
-        await expect(stoppedAtOswrch).toHaveText(/^ffee /);
-        expect(await pc()).toBe(Oswrch);
-        const loaded = await beeb.expectHeld();
-        await page.click("#debug-play");
-        await beeb.expectRunningPast(loaded);
-        await expect.poll(pc).not.toBe(Oswrch);
-    };
     await beeb.open();
     await beeb.expectScreenText(">");
     await page.evaluate((address) => {
@@ -189,9 +180,26 @@ test("a state saved at a breakpoint loads paused there in the debugger, on this 
     }, Oswrch);
     await beeb.pressKey("a");
     await expect(stoppedAtOswrch).toHaveText(/^ffee /);
+    const savedAt = await where();
     const download = page.waitForEvent("download");
     await page.locator("#save-state").dispatchEvent("click");
     const saved = await (await download).path();
+    await page.click("#debug-play");
+    await beeb.expectRunningPast(savedAt.cycles);
+
+    // Each load starts with the machine running and the debugger shut. The play button comes on as soon as the load
+    // holds the machine, before the state is in; the debugger opening is what says it is.
+    const loadAndContinue = async (file) => {
+        await page.setInputFiles("#load-state", file);
+        await expect(page.locator("#debug")).toBeVisible();
+        expect(await where()).toEqual(savedAt);
+        await expect(page.locator("#debug-play")).toBeEnabled();
+        await expect(stoppedAtOswrch).toHaveText(/^ffee /);
+        const loaded = await beeb.expectHeld();
+        await page.click("#debug-play");
+        await beeb.expectRunningPast(loaded);
+        await expect.poll(pc).not.toBe(Oswrch);
+    };
 
     await loadAndContinue(saved);
 
@@ -506,6 +514,8 @@ test("a drive bay shows one thing at a time: the note when empty, the jacket whe
     await beeb.expectScreenText(">");
     await page.click("#navbarMedia");
     await expect(page.locator("#media-panel")).toBeVisible();
+    // The archives' listing arriving redraws the bays from the drives, undoing a state forced on one before it.
+    await expect(page.locator("#media-count")).not.toBeEmpty();
     const visible = (selector) => page.locator(`.bay[data-drive="0"] ${selector}`).isVisible();
     const shown = async () => ({ note: await visible(".empty-note"), jacket: await visible(".jacket") });
     // The page boots with a disc in drive 0; ejecting it is the empty state.
