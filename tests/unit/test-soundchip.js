@@ -272,6 +272,39 @@ describe("AtomSoundChip", () => {
         expect(out.every((v) => v === 0)).toBe(true);
     });
 
+    describe("snapshotState / restoreState", () => {
+        it("round-trips the speaker's level", async () => {
+            await expectSnapshotRoundTrips(
+                () => makeAtomSoundChip().chip,
+                (chip) => chip.speakerGenerator.pushBit(1, 10, 0),
+            );
+        });
+
+        it("sounds the restored level, so the next edge after a restore is heard", () => {
+            const { chip: saved, scheduler } = makeAtomSoundChip();
+            saved.speakerGenerator.pushBit(1, 10, 0);
+            scheduler.epoch = 100;
+            const snapshot = saved.snapshotState();
+
+            const { chip, scheduler: restoredScheduler } = makeAtomSoundChip();
+            chip.restoreState(snapshot);
+            chip.speakerGenerator.pushBit(0, 30, 0);
+            restoredScheduler.epoch = 40;
+            const out = render(chip, 20);
+            expect(out.slice(0, 15).every((v) => Math.abs(v) < 0.01)).toBe(true);
+            expect(out[15]).toBeLessThan(-0.1);
+        });
+
+        it("drops the transitions it was still to play", () => {
+            const { chip, scheduler } = makeAtomSoundChip();
+            const snapshot = chip.snapshotState();
+            chip.speakerGenerator.pushBit(1, 100, 0);
+            chip.restoreState(snapshot);
+            scheduler.epoch = 200;
+            expect(render(chip, 100).every((v) => v === 0)).toBe(true);
+        });
+    });
+
     it("has no BBC tone channels", () => {
         const { chip, scheduler } = makeAtomSoundChip();
         const period = 100;
@@ -372,6 +405,27 @@ describe("SoundChip events", () => {
         const { chip: renderer } = makeAtomSoundChip();
         renderer.applyEvent(events[0]);
         expect(renderer.bitChange).toEqual([{ bit: 1, cycles: 10 + 0.5 * 1000000 }]);
+    });
+
+    it("should carry an Atom restore's speaker level to the renderer", () => {
+        const events = [];
+        const scheduler = new Scheduler();
+        const chip = new AtomSoundChip(() => {}, { onEvent: (event) => events.push(event) });
+        chip.setScheduler(scheduler);
+        const { chip: renderer } = makeAtomSoundChip();
+        const out = new Float32Array(20);
+
+        chip.updateSpeaker(true, 10, 0);
+        const snapshot = chip.snapshotState();
+        chip.updateSpeaker(false, 20, 0);
+        for (const event of events.splice(0)) renderer.applyEvent(event);
+        renderer.renderAt(0, out, 0, out.length);
+
+        chip.restoreState(snapshot);
+        chip.updateSpeaker(false, 30, 0);
+        for (const event of events.splice(0)) renderer.applyEvent(event);
+        renderer.renderAt(0, out, 0, out.length);
+        expect(out[15]).toBeLessThan(-0.1);
     });
 });
 

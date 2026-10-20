@@ -456,6 +456,7 @@ export class AtomSoundChip extends SoundChip {
         };
 
         this.bitChange = [];
+        this.speakerBit = 0.0;
         this.currentSpeakerBit = 0.0;
         this._speakerPrevIn = 0;
         this._speakerPrevOut = 0;
@@ -483,9 +484,24 @@ export class AtomSoundChip extends SoundChip {
         super.renderAt(cycle, out, offset, length);
     }
 
+    snapshotState() {
+        return { ...super.snapshotState(), speakerBit: this.speakerBit };
+    }
+
+    restoreState(state) {
+        this.bitChange = [];
+        this.speakerBit = this.currentSpeakerBit = state.speakerBit ?? 0.0;
+        // Held at its level, so the DC blocker has settled.
+        this._speakerPrevIn = this.currentSpeakerBit * speakerVolume;
+        this._speakerPrevOut = 0;
+        this._speakerCycleOffset = 0;
+        super.restoreState(state);
+    }
+
     speakerReset() {
         this._emit("speakerReset", true);
         this.bitChange = [];
+        this.speakerBit = 0.0;
         this.currentSpeakerBit = 0.0;
         this._speakerPrevIn = 0;
         this._speakerPrevOut = 0;
@@ -523,6 +539,7 @@ export class AtomSoundChip extends SoundChip {
     updateSpeaker(value, microCycle, seconds) {
         const cycles = microCycle + seconds / this.secondsPerCycle;
         const bit = value ? 1.0 : 0.0;
+        this.speakerBit = bit;
         if (this._onEvent) this._onEvent({ cycle: cycles, kind: "bit", value: bit });
         else this.bitChange.push({ bit, cycles });
     }
