@@ -139,7 +139,7 @@ Ranked by how much they would bite.
    be fetchable by everyone: `sth:` and URLs are, embedded local files are, a `gd:` Google Drive reference is not
    without the viewer's own authorisation. v0 sidesteps this by sending the images themselves.
 6. **Local controls that change state.** Rewind, loading a state, the debugger, fast-as-possible and fast
-   tape, hidden-tab pause (`EmulationLoop.handleVisibilityChange`), media changes and reset all act on one peer's
+   tape, hidden-tab pause (`EmulationLoop.holdWhileHidden`), media changes and reset all act on one peer's
    machine. In a session each either becomes a session event (reset, disc change, perhaps rewind for everyone)
    or is turned off for guests. A hidden guest tab must not stall everybody, and with a sequencer that only
    waits on time it does not. A hidden host tab is different, because the host is the sequencer: today the loop

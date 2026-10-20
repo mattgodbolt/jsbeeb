@@ -540,6 +540,7 @@ describe("EmulationLoop", () => {
             loop.setLockstep(lockstepStub());
             hide();
             loop.setLockstep(null);
+            loop.setLockstep(null);
             expect(loop.isRunning()).toBe(false);
             show();
             expect(loop.isRunning()).toBe(true);
