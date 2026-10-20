@@ -6,6 +6,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { findModel } from "../../src/models.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 const AtomModel = findModel("Atom");
 
@@ -291,6 +292,28 @@ describe("Intel 8271 tests", function () {
 
         it("with the head loaded first, as the DFS does, finds it", () => {
             expect(seekToZeroFromTrack20(loadHead | driveSelect1)).toMatchObject({ result: 0, track: 0 });
+        });
+
+        it("brings back a seek part way through from a snapshot", () => {
+            const seeking = () => {
+                const scheduler = new Scheduler();
+                const cpu = fake6502();
+                const drive = new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond);
+                drive.setDisc(Disc.createBlank());
+                const fdc = new IntelFdc(cpu, scheduler, [drive]);
+                return {
+                    fdc,
+                    scheduler,
+                    snapshotState: () => fdc.snapshotState(),
+                    restoreState: (state) => fdc.restoreState(state),
+                };
+            };
+            return expectSnapshotRoundTrips(seeking, ({ fdc, scheduler }) => {
+                sendCommand(fdc, specifyCmd, initialisation, 0, 0, dfsHeadLoadUnload);
+                sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | driveSelect1);
+                sendCommand(fdc, seekCmd, 40);
+                scheduler.polltime(ms(10 * StepMs));
+            });
         });
 
         it.each([false, true])(

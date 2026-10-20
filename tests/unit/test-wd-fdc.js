@@ -5,6 +5,7 @@ import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 const ControlRegister = 0;
 const CommandRegister = 4;
@@ -566,6 +567,48 @@ describe("WD1770 FDC tests", () => {
             fdc.write(ControlRegister, ControlRunningDrive1);
             expect(fdc.motorOn).toEqual([false, true]);
         });
+
+        const snapshotting = (options) => () => {
+            const rig = makeFdc(options());
+            return Object.assign(rig, {
+                snapshotState: () => rig.fdc.snapshotState(),
+                restoreState: (state) => rig.fdc.restoreState(state),
+            });
+        };
+
+        it("brings back a sector read part way through from a snapshot that JSON can carry", async () => {
+            const reading = snapshotting(() => ({ disc: mfmDiscWithSector({ data: sectorData() }) }));
+            const pollUntil = ({ fdc, scheduler }, done) => {
+                const start = scheduler.epoch;
+                while (!done()) {
+                    if (fdc.read(CommandRegister) & StatusDrq) fdc.read(DataRegister);
+                    scheduler.polltime(PollTicks);
+                    if (scheduler.epoch - start > MaxCommandTicks) throw new Error("The read never got there");
+                }
+            };
+            let saved;
+            await expectSnapshotRoundTrips(reading, (rig) => {
+                rig.fdc.write(SectorRegister, 0);
+                rig.fdc.write(CommandRegister, ReadSectorCommand);
+                pollUntil(rig, () => rig.fdc.read(CommandRegister) & StatusDrq);
+                saved = rig.fdc.snapshotState();
+            });
+
+            const restored = reading();
+            restored.fdc.restoreState(JSON.parse(JSON.stringify(saved)));
+            expect(restored.fdc.read(CommandRegister) & StatusBusy).toBe(StatusBusy);
+            pollUntil(restored, () => !(restored.fdc.read(CommandRegister) & StatusBusy));
+            expect(restored.fdc.read(CommandRegister) & (StatusRecordNotFound | StatusCrcError)).toBe(0);
+        });
+
+        it("brings back its registers from a snapshot with no drive selected", () =>
+            expectSnapshotRoundTrips(
+                snapshotting(() => ({ control: ControlRunningNoDrive })),
+                ({ fdc }) => {
+                    fdc.write(TrackRegister, 42);
+                    fdc.write(SectorRegister, 7);
+                },
+            ));
 
         it("turns both drives after restoring a snapshot in which only the selected one turned", () => {
             const original = makeFdc({ disc: blankDisc() });

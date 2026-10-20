@@ -6,6 +6,7 @@ import { IntelFdc } from "../../src/intel-fdc.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { ssdImage } from "./helpers.js";
+import { crc32 } from "../../src/archive.js";
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
@@ -22,6 +23,13 @@ describe("loading a disc image", () => {
     // Every load says what it made of the image.
     beforeEach(() => vi.spyOn(globalThis.console, "log").mockImplementation(() => {}));
     afterEach(() => vi.restoreAllMocks());
+
+    it("keeps only the CRC of the image it loaded", () => {
+        const image = ssdImage();
+        const disc = discFor("test.ssd", image);
+        expect(disc.originalImageCrc32).toBe(crc32(image));
+        expect(disc.originalImageData).toBeNull();
+    });
 
     it("lays a 40 track image out for a 40 track drive", () => {
         expect(discFor("test.ssd", ssdImage(400)).is40Track).toBe(true);
