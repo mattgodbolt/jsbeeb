@@ -28,20 +28,17 @@ class CapturingVideo extends Video {
 
     async capture(testMachine) {
         this._capturing = true;
-        await testMachine.runUntilVblank();
+        // Typing can leave the CPU on the vsync handler, which then counts as a vblank before any paint.
+        for (let tries = 0; this._capturing && tries < 2; tries++) await testMachine.runUntilVblank();
         if (this._capturing) throw new Error("Should have captured by now");
         return this._captureSharp.removeAlpha().png().toBuffer();
     }
 }
 
-async function setupCeefaxTestMachine(video) {
-    const testMachine = new TestMachine(null, { video: video });
+async function bootedMachine(video) {
+    const testMachine = new TestMachine(null, { video });
     await testMachine.initialise();
     await testMachine.runUntilInput();
-    await testMachine.loadDisc("discs/eng_test.ssd");
-    await testMachine.type("*EXEC !BOOT");
-    // The drive has to spin up before the page can load, and the load takes a second or so.
-    await testMachine.runFor(4 * 1000 * 1000);
     return testMachine;
 }
 
@@ -72,36 +69,25 @@ async function compare(video, testMachine, expectedName, field) {
 }
 
 describe("Test Ceefax test page", () => {
-    it("should match the Ceefax test page (no flash)", async () => {
+    it("should match the Ceefax test page with flash hidden and shown, before and after reveal", async () => {
         const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
-        await compare(video, testMachine, `expected_flash_0.png`, FlashHiddenField);
-    });
-    it("should match the Ceefax test page (flash)", async () => {
-        const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
+        const testMachine = await bootedMachine(video);
+        await testMachine.loadDisc("discs/eng_test.ssd");
+        await testMachine.type("*EXEC !BOOT");
+        // The drive has to spin up before the page can load, and the load takes a second or so.
+        await testMachine.runFor(4 * 1000 * 1000);
         await compare(video, testMachine, `expected_flash_1.png`, FlashShownField);
-    });
-    it("should match the Ceefax test page after reveal (no flash)", async () => {
-        const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
-        await testMachine.type(" ");
-        await compare(video, testMachine, `expected_reveal_flash_0.png`, FlashHiddenField);
-    });
-    it("should match the Ceefax test page after reveal (flash)", async () => {
-        const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
+        await compare(video, testMachine, `expected_flash_0.png`, FlashHiddenField);
         await testMachine.type(" ");
         await compare(video, testMachine, `expected_reveal_flash_1.png`, FlashShownField);
+        await compare(video, testMachine, `expected_reveal_flash_0.png`, FlashHiddenField);
     });
 });
 
 describe("Test other teletext test pages", () => {
     it("should work with hoglet's test case", async () => {
         const video = new CapturingVideo();
-        const testMachine = new TestMachine(null, { video: video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
+        const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/316
         await testMachine.type("VDU &91,&61,&9E,&92,&93,&94,&81,&91,&91,10,13");
         await testMachine.runUntilInput();
@@ -109,9 +95,7 @@ describe("Test other teletext test pages", () => {
     });
     it("should apply Steady as Set At, not Set After (bug 611)", async () => {
         const video = new CapturingVideo();
-        const testMachine = new TestMachine(null, { video: video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
+        const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/611
         // Red graphics, Flash, full-block graphic, Hold Graphics, Steady.
         // The Steady code (at position 5) should take effect "Set At" — the
@@ -127,9 +111,7 @@ describe("Test other teletext test pages", () => {
     });
     it("should work with the alternative engineer test page bug 469", async () => {
         const video = new CapturingVideo();
-        const testMachine = new TestMachine(null, { video: video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
+        const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/469
         // Taken from the 7th line of the engineer test page from b2.
         await testMachine.type(
