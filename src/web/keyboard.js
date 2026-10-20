@@ -223,7 +223,7 @@ export class Keyboard extends EventTarget {
         const machineKey = this._machineKey(evt);
         this.input.keyDown(machineKey, evt.shiftKey);
         if (evt.key !== "Dead") return () => this.input.keyUp(machineKey);
-        // Otherwise the host's input method composes the next key with it, which arrives as "Process" with no key up.
+        // Stops the host's input method composing the next key with this one, as "Process" with no key up.
         this.resetInputMethodFunction();
         this.heldDeadKeys.add(code);
         return () => {
