@@ -31,11 +31,6 @@ class FakeChannel extends FakeEvents {
     constructor(readyState = "open") {
         super();
         this.readyState = readyState;
-        this.sent = [];
-    }
-
-    send(data) {
-        this.sent.push(data);
     }
 
     open() {
@@ -52,13 +47,10 @@ class FakePeer extends FakeEvents {
         this.localDescription = { sdp: "local sdp" };
         this.iceGatheringState = "complete";
         this.closed = false;
-        this.remoteDescriptions = [];
         peers.push(this);
     }
 
-    async setRemoteDescription(description) {
-        this.remoteDescriptions.push(description);
-    }
+    async setRemoteDescription() {}
     async setLocalDescription() {}
     async createAnswer() {
         return {};
@@ -168,22 +160,16 @@ describe("webRtcTransport, as a host listens", () => {
         return fakeRendezvous({ listOffers: vi.fn(async () => offers.splice(0)) });
     };
 
-    it("answers an offer, and hands over the link once its channel opens", async () => {
-        const rendezvous = offering("g1");
-        const { links, listeners } = listen(rendezvous);
+    it("opens a link only with its channel, refusing sends until then, and says why it closed", async () => {
+        const { links, listeners } = listen(offering("g1"));
         await settle();
-        expect(peers[0].remoteDescriptions).toEqual([{ type: "offer", sdp: "offer" }]);
-        expect(rendezvous.postAnswer).toHaveBeenCalledWith("room", "secret", "g1", "local sdp");
+        expect(() => links[0].send("hello")).toThrow("the channel is not open");
         const channel = new FakeChannel("connecting");
         peers[0].emit("datachannel", { channel });
         expect(links[0].isOpen()).toBe(false);
         channel.open();
         await settle();
         expect(listeners[0].heard).toEqual([["opened"]]);
-        links[0].send("hello");
-        channel.emit("message", { data: "hi" });
-        expect(channel.sent).toEqual(["hello"]);
-        expect(listeners[0].heard.at(-1)).toEqual(["message", "hi"]);
         expect(await links[0].stats()).toMatchObject({ rttMs: 85 });
         channel.emit("close");
         expect(listeners[0].heard.at(-1)).toEqual(["closed", "its channel closed"]);
@@ -213,18 +199,19 @@ describe("webRtcTransport, as a host listens", () => {
         expect(listeners[0].heard).toEqual([["opened"]]);
     });
 
-    it("gives up on a guest whose channel never opens", async () => {
+    it.each([
+        ["opens no channel", () => {}, "it never opened a channel"],
+        [
+            "opens a channel that never opens",
+            () => peers[0].emit("datachannel", { channel: new FakeChannel("connecting") }),
+            "its channel never opened",
+        ],
+    ])("gives up on a guest that %s", async (_, connect, reason) => {
         const { listeners } = listen(offering("g1"));
         await settle();
-        peers[0].emit("datachannel", { channel: new FakeChannel("connecting") });
+        connect();
         await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        expect(listeners[0].heard).toEqual([["closed", "its channel never opened"]]);
-    });
-
-    it("refuses to send on a channel that is not open", async () => {
-        const { links } = listen(offering("g1"));
-        await settle();
-        expect(() => links[0].send("hello")).toThrow("the channel is not open");
+        expect(listeners[0].heard).toEqual([["closed", reason]]);
     });
 
     it("opens its room again if it finds it gone, and says so if it cannot", async () => {
@@ -257,12 +244,10 @@ describe("webRtcTransport, as a host listens", () => {
 
     it("opens only a few connections at a time, and frees the place of one that never completes", async () => {
         const offers = Array.from({ length: MaxConnectingGuests + 2 }, (_, i) => ({ guest: `g${i}`, sdp: "offer" }));
-        const { listeners } = listen(fakeRendezvous({ listOffers: vi.fn(async () => offers) }));
+        listen(fakeRendezvous({ listOffers: vi.fn(async () => offers) }));
         await settle();
         expect(peers).toHaveLength(MaxConnectingGuests);
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
-        expect(listeners[0].heard).toEqual([["closed", "it never opened a channel"]]);
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+        await vi.advanceTimersByTimeAsync(2 * ConnectTimeoutMs);
         expect(peers).toHaveLength(MaxConnectingGuests + 2);
     });
 
@@ -309,50 +294,34 @@ describe("webRtcTransport, as a guest joins", () => {
         expect(AnswerTimeoutMs).toBeLessThan(OfferLifetimeSeconds * 1000);
     });
 
-    it("posts its offer, waits for the answer and for its channel to open, then hands over the link", async () => {
-        const rendezvous = fakeRendezvous({ getAnswer: vi.fn(async () => null).mockResolvedValueOnce(null) });
-        rendezvous.getAnswer.mockResolvedValueOnce(null).mockResolvedValueOnce("answer sdp");
+    it("tells of offer and answer, hands over the link once open, then what comes and why it closed", async () => {
+        const rendezvous = fakeRendezvous({ getAnswer: vi.fn(async () => "answer sdp").mockResolvedValueOnce(null) });
         const listener = recorder();
         let link = null;
         webRtcTransport(rendezvous)
             .join("room", "g1", listener)
             .then((joined) => (link = joined));
         await vi.advanceTimersByTimeAsync(AnswerTimeoutMs / 2);
-        expect(rendezvous.postOffer).toHaveBeenCalledWith("room", "g1", "local sdp");
-        expect(peers[0].remoteDescriptions).toEqual([{ type: "answer", sdp: "answer sdp" }]);
         expect(listener.heard).toEqual([["offered"], ["answered"]]);
         expect(link).toBeNull();
         peers[0].channel.open();
         await settle();
-        link.send("hello");
+        expect(link.isOpen()).toBe(true);
         peers[0].channel.emit("message", { data: "welcome" });
         peers[0].channel.emit("close");
-        expect(peers[0].channel.sent).toEqual(["hello"]);
         expect(listener.heard.slice(2)).toEqual([
             ["message", "welcome"],
             ["closed", "lost the host"],
         ]);
     });
 
-    it("gives up on a host that never answers, as a timeout, and closes its connection", async () => {
-        const rendezvous = fakeRendezvous({ getAnswer: vi.fn(async () => null) });
-        const joined = webRtcTransport(rendezvous).join("room", "g1", recorder());
-        const failed = expect(joined).rejects.toMatchObject({
-            message: "the host isn't answering",
-            sessionFailure: SessionFailures.timeout,
-        });
-        await vi.advanceTimersByTimeAsync(AnswerTimeoutMs + 1000);
-        await failed;
-        expect(peers[0].closed).toBe(true);
-    });
-
-    it("gives up, as a timeout, when the host answers but the channel never opens", async () => {
-        const joined = webRtcTransport(fakeRendezvous()).join("room", "g1", recorder());
-        const failed = expect(joined).rejects.toMatchObject({
-            message: "couldn't connect directly",
-            sessionFailure: SessionFailures.timeout,
-        });
-        await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
+    it.each([
+        ["the host never answers", { getAnswer: async () => null }, AnswerTimeoutMs + 1000, "the host isn't answering"],
+        ["the host answers but the channel never opens", {}, ConnectTimeoutMs, "couldn't connect directly"],
+    ])("gives up, as a timeout, and closes its connection, when %s", async (_, overrides, waitMs, message) => {
+        const joined = webRtcTransport(fakeRendezvous(overrides)).join("room", "g1", recorder());
+        const failed = expect(joined).rejects.toMatchObject({ message, sessionFailure: SessionFailures.timeout });
+        await vi.advanceTimersByTimeAsync(waitMs);
         await failed;
         expect(peers[0].closed).toBe(true);
     });

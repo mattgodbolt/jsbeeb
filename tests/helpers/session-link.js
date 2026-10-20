@@ -3,8 +3,7 @@
 // the host's first message reaches it, as a channel opens before anything comes on it.
 
 class LinkEnd {
-    constructor(stats) {
-        this.connectionStats = stats;
+    constructor() {
         this.listener = null;
         this.other = null;
         this.open = false;
@@ -31,14 +30,14 @@ class LinkEnd {
     }
 
     stats() {
-        return Promise.resolve(this.connectionStats);
+        return Promise.resolve({ rttMs: 0, route: "host/host" });
     }
 }
 
 /** The host's end and a guest's end of one link, open once `open()` is called. */
-export function linkPair({ rttMs = 0 } = {}) {
-    const host = new LinkEnd({ rttMs, route: "host/host" });
-    const guest = new LinkEnd({ rttMs, route: "host/host" });
+function linkPair() {
+    const host = new LinkEnd();
+    const guest = new LinkEnd();
     host.other = guest;
     guest.other = host;
     return {
