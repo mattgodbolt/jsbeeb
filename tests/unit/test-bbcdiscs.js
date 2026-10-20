@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BbcDiscArchive, byTitle, describe as describeDisc, Provenance } from "../../src/bbcdiscs.js";
-import { bytesResponse, manifestResponse } from "./helpers.js";
+import { bytesResponse, describeManifestCatalogue, manifestResponse } from "./helpers.js";
 
 const ArchiveBase = "https://bbc.xania.org/archive/bbcdiscs";
 
@@ -97,19 +97,6 @@ describe("BbcDiscArchive", () => {
         expect(catalogue[0].provenance).toBe(Provenance.Captured);
     });
 
-    it("rejects the catalogue promise when the manifest is missing", async () => {
-        vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 404 });
-        await expect(archive().catalogue()).rejects.toThrow("404");
-    });
-
-    it("only fetches the manifest once across repeated opens", async () => {
-        const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([entry()]));
-        const subject = archive();
-        await subject.catalogue();
-        await subject.catalogue();
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-    });
-
     it("doesn't refetch an archive that is legitimately empty", async () => {
         const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([]));
         const subject = archive();
@@ -129,22 +116,8 @@ describe("BbcDiscArchive", () => {
         expect(await archive().fetch("B88911B2-BF6048A8.hfe")).toEqual(hfe);
     });
 
-    it("throws when a disc is missing so the caller can report it", async () => {
-        vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 404 });
-        vi.spyOn(console, "log").mockImplementation(() => {});
-        await expect(archive().fetch("nope.hfe")).rejects.toMatchObject({
-            message: expect.stringContaining("404"),
-            loadFailure: "not_found",
-        });
-    });
-
-    it("can be pointed at another prefix for testing", async () => {
-        const seen = [];
-        vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-            seen.push(url);
-            return manifestResponse([]);
-        });
-        await new BbcDiscArchive("https://example.com/test").catalogue();
-        expect(seen).toEqual(["https://example.com/test/hfe/manifest.json"]);
-    });
+    describeManifestCatalogue(
+        () => new BbcDiscArchive("https://example.com/test"),
+        "https://example.com/test/hfe/manifest.json",
+    );
 });

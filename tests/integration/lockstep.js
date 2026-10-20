@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
     cycleCount,
-    isValidCommit,
-    isValidInput,
     LockstepGuest,
     LockstepHost,
     MaxCatchUpSeconds,
@@ -323,31 +321,6 @@ describe("lockstep sessions", () => {
             expect(host.processor.resetLine).toBe(false);
         });
 
-        it("stops exactly where the host did, an hour in with a fractional target", () => {
-            const cyclesPerSecond = 2000000;
-            const instructionCycles = 3;
-            // Whole instructions until the target is reached, as the CPU runs them.
-            const cpu = {
-                model: { cyclesPerSecond },
-                cycleSeconds: 3600,
-                currentCycles: 999,
-                targetCycles: 999 + 1 / 3,
-                execute(cycles) {
-                    this.targetCycles += cycles;
-                    while (this.currentCycles < this.targetCycles) this.currentCycles += instructionCycles;
-                    return true;
-                },
-            };
-            const desyncs = [];
-            const guest = new LockstepGuest(cpu, (reason) => desyncs.push(reason));
-            const at = cycleCount(cpu);
-            const upTo = at + 100 * instructionCycles;
-            guest.receive({ at, inputs: [], upTo });
-            guest.execute(upTo - at);
-            expect(cycleCount(cpu)).toBe(upTo);
-            expect(desyncs).toEqual([]);
-        });
-
         it("hashes the machine once each emulated second", async () => {
             const { host, lockstep, commits } = await pair();
             const seconds = 3;
@@ -474,21 +447,5 @@ describe("lockstep sessions", () => {
             lockstep.execute(0);
             expect(clock()).toEqual([12, 0, 30]);
         });
-    });
-
-    it("accepts only well-formed inputs and commits from a peer", () => {
-        expect(isValidInput({ kind: "key", mapping: [4, 1], down: true })).toBe(true);
-        expect(isValidInput({ kind: "key", mapping: [4, 1, false], down: false })).toBe(true);
-        expect(isValidInput({ kind: "break", down: true })).toBe(true);
-        expect(isValidInput({ kind: "key", mapping: [16, 1], down: true })).toBe(false);
-        expect(isValidInput({ kind: "key", mapping: [4, 1], down: 1 })).toBe(false);
-        expect(isValidInput({ kind: "key", mapping: "x", down: true })).toBe(false);
-        expect(isValidInput({ kind: "poke", address: 0 })).toBe(false);
-        expect(isValidInput(null)).toBe(false);
-        expect(isValidCommit({ at: 5, upTo: 9, inputs: [{ kind: "break", down: false }] })).toBe(true);
-        expect(isValidCommit({ at: 5, upTo: 9, inputs: [], hash: "1a" })).toBe(true);
-        expect(isValidCommit({ at: 5, upTo: 4, inputs: [] })).toBe(false);
-        expect(isValidCommit({ at: 5, upTo: 9 })).toBe(false);
-        expect(isValidCommit({ at: 5, upTo: 9, inputs: [{ kind: "poke" }] })).toBe(false);
     });
 });

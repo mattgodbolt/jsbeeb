@@ -4,7 +4,7 @@ import * as fs from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { StairwayToHell } from "../../src/sth.js";
-import { bytesResponse, manifestResponse } from "./helpers.js";
+import { bytesResponse, describeManifestCatalogue, manifestResponse } from "./helpers.js";
 
 const ARCHIVE_BASE = "https://bbc.xania.org/archive/sth";
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,30 +38,6 @@ describe("StairwayToHell", () => {
         expect(seen).toEqual([`${ARCHIVE_BASE}/tapeimages/manifest.json`]);
     });
 
-    it("fetches the catalogue once", async () => {
-        const fetchSpy = vi
-            .spyOn(globalThis, "fetch")
-            .mockResolvedValue(manifestResponse([{ path: "Acornsoft/Elite.zip", size: 1, mtime: null }]));
-        const sth = new StairwayToHell();
-        await sth.catalogue();
-        await sth.catalogue();
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it("rejects when the manifest cannot be fetched", async () => {
-        vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 503 });
-        await expect(new StairwayToHell().catalogue()).rejects.toThrow("503");
-    });
-
-    it("rejects a manifest that has no files array", async () => {
-        vi.spyOn(globalThis, "fetch").mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: async () => ({ schemaVersion: 1 }),
-        });
-        await expect(new StairwayToHell().catalogue()).rejects.toThrow("files array");
-    });
-
     it("URL-encodes path components when fetching a file", async () => {
         // An empty archive, which the unzip rejects; only the URL matters here.
         const seen = [];
@@ -77,17 +53,6 @@ describe("StairwayToHell", () => {
         expect(seen).toEqual([`${ARCHIVE_BASE}/diskimages/Daxis/Daxis%5Bdroids%5D-demo.zip`]);
     });
 
-    it.each([
-        ["a status the server sends", async () => ({ ok: false, status: 500 }), "http"],
-        ["no response at all", async () => Promise.reject(new TypeError("Failed to fetch")), "network"],
-    ])("fails a file on %s as %s", async (_, response, reason) => {
-        vi.spyOn(globalThis, "fetch").mockImplementation(response);
-        vi.spyOn(console, "log").mockImplementation(() => {});
-        await expect(new StairwayToHell().fetch("Mandarin/Lancelot.zip")).rejects.toMatchObject({
-            loadFailure: reason,
-        });
-    });
-
     it("returns the name of the file found inside the zip, not the zip's own path", async () => {
         const zip = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
         vi.spyOn(globalThis, "fetch").mockResolvedValue(bytesResponse(zip));
@@ -97,4 +62,6 @@ describe("StairwayToHell", () => {
         expect(data instanceof Uint8Array).toBe(true);
         expect(String.fromCharCode(...data)).toBe("This is a test SSD file\n");
     });
+
+    describeManifestCatalogue(() => new StairwayToHell(), `${ARCHIVE_BASE}/diskimages/manifest.json`);
 });
