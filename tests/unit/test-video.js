@@ -4,6 +4,7 @@ import {
     FakeVideo,
     Video,
     VDISPENABLE,
+    HDISPENABLE,
     EVERYTHINGENABLED,
     OPAQUE_BLACK,
     LineCountPeriod,
@@ -245,6 +246,18 @@ describe("Video", () => {
             video.polltime(1);
 
             expect(fetched).toHaveBeenCalledWith(0x45);
+        });
+
+        it("neither feeds nor clocks it inside the border of a skipped frame", () => {
+            const advanced = vi.spyOn(video.teletext, "advance");
+            video.frameSkipCount = 2;
+            video.frameCount = 1;
+            video.dispEnabled = VDISPENABLE | HDISPENABLE;
+
+            video.polltime(1);
+
+            expect(fetched).not.toHaveBeenCalled();
+            expect(advanced).not.toHaveBeenCalled();
         });
 
         it("feeds it nothing outside the vertical display", () => {

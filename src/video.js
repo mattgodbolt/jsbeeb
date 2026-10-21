@@ -1140,7 +1140,7 @@ export class Video {
             const paints = (insideBorder || this.cursorDrawIndex) && frameShown;
             // IC37/IC36: during H blanking with V display active, always feed
             // the SAA5050 pipeline with the video bus data, forcing bit 6 high.
-            // On real hardware IC37/IC36 operates regardless of ULA mode —
+            // On real hardware IC37/IC36 operates regardless of ULA mode;
             // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
             // Hardware also clocks the chip there, which we do not: our row reset fires
             // too early relative to the pipeline for that to come out right, and adding
@@ -1155,7 +1155,7 @@ export class Video {
                 if (insideBorder && frameShown) {
                     // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
-                    // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
+                    // do not model the MA13 gate yet, so it is fed and clocked unconditionally. The chip is
                     // clocked here and painted later, so a control code seen while the ULA shows
                     // bitmap still takes effect.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546

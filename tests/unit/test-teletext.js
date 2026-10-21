@@ -4,6 +4,7 @@ import { makeFast32 } from "../../src/binary.js";
 
 const PixelsPerCell = 16;
 const PipelineDelay = 3;
+const ControlCodeCount = 0x20;
 
 const RedAlpha = 0x01;
 const Flash = 0x08;
@@ -348,7 +349,7 @@ describe("Teletext", () => {
                 chip.applyControlCode(code);
                 return JSON.stringify(chip.snapshotState()) !== JSON.stringify(state);
             });
-        const codes = [...Array(Space).keys()];
+        const codes = [...Array(ControlCodeCount).keys()];
 
         expect(codes.filter(changesState)).toEqual(StateChangingControlCodes);
     });
@@ -397,7 +398,9 @@ describe("Teletext", () => {
     it("continues identically from a restored snapshot", () => {
         const continuation = [SolidBlock, WhiteGraphics, SolidBlock, NewBackground, Space, SolidBlock];
         renderCells([BlueGraphics, Flash, SeparatedGraphics, SolidBlock, HoldGraphics, Conceal]);
+        [RedGraphics, LetterA, WhiteGraphics].forEach((byte) => teletext.fetchData(byte));
         const state = teletext.snapshotState();
+        expect(state.dataQueue).toEqual([Space, RedGraphics, LetterA, WhiteGraphics]);
         const expected = renderCells(continuation).map((cell) => [...cell]);
 
         teletext = new Teletext();
