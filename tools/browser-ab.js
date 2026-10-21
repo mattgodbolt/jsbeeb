@@ -292,15 +292,13 @@ function benchmarkUrl(side, workload) {
     return `${side.url}?${query}`;
 }
 
-function withTimeout(promise, what) {
+function orTimedOut(record) {
     let timer;
-    const timeout = new Promise((_, reject) => {
-        timer = setTimeout(
-            () => reject(new Error(`${what} took longer than ${SampleTimeoutMs / 1000} s`)),
-            SampleTimeoutMs,
-        );
+    const timeout = new Promise((resolve) => {
+        const error = `it took longer than ${SampleTimeoutMs / 1000} s`;
+        timer = setTimeout(() => resolve({ status: "timeout", error }), SampleTimeoutMs);
     });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    return Promise.race([record, timeout]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -314,15 +312,14 @@ async function runPage(browsers, side, workload, { started = async () => {}, fin
         page.on("pageerror", (error) => errors.push(error.message));
         await page.goto(benchmarkUrl(side, workload));
         await started(page);
-        const record = await withTimeout(
+        const record = await orTimedOut(
             page.evaluate(async () => {
                 if (!window.jsbeebBenchmark) return { status: "missing", error: "the page has no ?benchmark mode" };
                 const { status, error, result } = await window.jsbeebBenchmark.done;
                 return { status, error, result };
             }),
-            `The ${workload.name} benchmark on ${side.url}`,
         );
-        await finished(page);
+        if (record.status === "done") await finished(page);
         const pageErrors = errors.length ? ` (the page's errors: ${errors.join("; ")})` : "";
         if (record.status !== "done") {
             throw new Error(`The ${workload.name} benchmark on ${side.spec} failed: ${record.error}${pageErrors}`);

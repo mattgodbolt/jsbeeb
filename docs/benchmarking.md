@@ -91,8 +91,8 @@ the default, as a person runs it; `video`, without the copy and present; or `cpu
 virtual MHz, from its median emulated second, or with `--statistic total` from all ten. The page's seconds
 play the part of the Node runner's slices, a hundred times coarser. The pairs, the statistics, the stopping rule
 and the result line are the Node runner's; the line ends with the browser, its version and the renderer, and the
-run stops if any page differs from the first in renderer, display, cross-origin isolation or user agent. `--json FILE` writes each
-sample's every emulated second for each pass as well.
+run stops if any page differs from the first in renderer, display, cross-origin isolation or user agent.
+`--json FILE` writes each sample's every emulated second for each pass as well.
 
 The browser is a project from `playwright.config.js` (`--project`): `chrome`, the system Chrome headless, by
 default, as the e2e suite uses; `chromium`, `firefox` or `webkit` once `npx playwright install` has fetched it.
@@ -131,5 +131,5 @@ fresh throughput sample of side `"a"` or `"b"`; `sampleUntilResolved` alternates
 summarises, and `describeComparison` prints the line. The browser A/B supplies a `sample` that opens a fresh
 page on that side's build and reads the `?benchmark` result, and so reports the same result in the same shape.
 `tools/ab-sides.js` holds what else the two share: checking out a ref with its packages, the workloads each side
-has, and the options for when to stop. A caller that allows fewer than `FewestDecisivePairs` (8) pairs can get a result
-with no interval: its bounds are 0 and `Infinity` (`null` in JSON), and so is the minimum detectable change.
+has, and the options for when to stop. A caller that allows fewer than `FewestDecisivePairs` (8) pairs can get a
+result with no interval: its bounds are 0 and `Infinity` (`null` in JSON), and so is the minimum detectable change.
