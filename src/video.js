@@ -1098,6 +1098,7 @@ export class Video {
     ////////////////////
     // Main drawing routine
     polltime(clocks) {
+        const regs = this.regs;
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
@@ -1119,26 +1120,23 @@ export class Video {
             }
 
             // Latch next line screen address in case we are in the last line of a character row
-            if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
+            if (this.horizCounter === regs[1]) this.nextLineStartAddr = this.addr;
 
             // Handle end of horizontal displayed.
             // Make sure to account for display enable skew.
             // Also, the last scanline character never displays.
-            if (
-                this.horizCounter === this.regs[1] + displayEnablePos ||
-                this.horizCounter === this.regs[0] + displayEnablePos
-            ) {
+            if (this.horizCounter === regs[1] + displayEnablePos || this.horizCounter === regs[0] + displayEnablePos) {
                 this.dispEnableClear(HDISPENABLE | SKEWDISPENABLE);
             }
 
             // Initiate HSync.
-            if (this.horizCounter === this.regs[2] && !this.inHSync) {
+            if (this.horizCounter === regs[2] && !this.inHSync) {
                 this.inHSync = true;
                 this.hpulseCounter = 0;
             }
 
             // Handle VSync.
-            const r7Hit = this.vertCounter === this.regs[7];
+            const r7Hit = this.vertCounter === regs[7];
             if (r7Hit || this.inLineVSync || this.inHalfLineVSync) this.clockVSync(r7Hit);
 
             // TODO(#876) this will be cleaner if we rework skew to have fetch
@@ -1163,9 +1161,9 @@ export class Video {
                         this.addr === this.cursorPos &&
                         this.cursorOn &&
                         !this.cursorOff &&
-                        this.horizCounter < this.regs[1]
+                        this.horizCounter < regs[1]
                     ) {
-                        this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
+                        this.cursorDrawIndex = 3 - ((regs[8] >>> 6) & 3);
                     }
                 }
 
@@ -1249,7 +1247,7 @@ export class Video {
             if (this.checkVertAdjust) {
                 this.checkVertAdjust = false;
                 if (this.endOfMainLatched) {
-                    if (this.vertAdjustCounter === this.regs[5]) {
+                    if (this.vertAdjustCounter === regs[5]) {
                         this.endOfVertAdjustLatched = true;
                     }
                     this.vertAdjustCounter++;
@@ -1264,7 +1262,7 @@ export class Video {
             // Testing indicates that the latch is set here at exactly C0=1.
             // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
             if (this.horizCounter === 1) {
-                if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) {
+                if (this.vertCounter === regs[4] && this.scanlineCounter === regs[9]) {
                     this.endOfMainLatched = true;
                     this.vertAdjustCounter = 0;
                 }
@@ -1274,7 +1272,7 @@ export class Video {
             }
 
             // Handle horizontal total.
-            if (this.horizCounter === this.regs[0]) {
+            if (this.horizCounter === regs[0]) {
                 this.endOfScanline();
                 this.horizCounter = 0;
                 this.dispEnableSet(HDISPENABLE);
@@ -1290,7 +1288,7 @@ export class Video {
             // We do this after the render and various counter increments
             // because there seems to be a 1 character delay between setting
             // R6=C4 and display actually stopping.
-            const r6Hit = this.vertCounter === this.regs[6];
+            const r6Hit = this.vertCounter === regs[6];
             if (r6Hit && !this.firstScanline && this.dispEnabled & VDISPENABLE) {
                 this.dispEnableClear(VDISPENABLE);
                 // Perhaps surprisingly, this happens here. Both cursor
