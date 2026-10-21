@@ -753,19 +753,20 @@ export class Video {
         this.lineGridUlaDoubled = encodeLineGrid(texelsWide, true);
     }
 
-    blitFb(dat, destOffset, numPixels) {
+    blitFb(dat, destOffset, numPixels, doubledLines = false) {
         destOffset |= 0;
         const offset = table4bppOffset(this.ulaMode, dat);
         const fb32 = this.fb32;
         const colourLookup = this.pixelColours();
         const table4bpp = this.table4bpp;
-        // Take advantage of numPixels being either 8 or 16
-        if (numPixels === 8) {
-            for (let i = 0; i < 8; ++i) {
-                fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
+        if (doubledLines) {
+            for (let i = 0; i < numPixels; ++i) {
+                const colour = colourLookup[table4bpp[offset + i]];
+                fb32[destOffset + i] = colour;
+                fb32[destOffset + 1024 + i] = colour;
             }
         } else {
-            for (let i = 0; i < 16; ++i) {
+            for (let i = 0; i < numPixels; ++i) {
                 fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
             }
         }
@@ -1211,11 +1212,13 @@ export class Video {
                                 // See https://github.com/mattgodbolt/jsbeeb/issues/546
                                 this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
                             }
+                            if (doubledLines) {
+                                const fb32 = this.fb32;
+                                const end = offset + this.pixelsPerChar;
+                                for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
+                            }
                         } else {
-                            this.blitFb(dat, offset, this.pixelsPerChar);
-                        }
-                        if (doubledLines) {
-                            this.fb32.copyWithin(offset + 1024, offset, offset + this.pixelsPerChar);
+                            this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
                         }
                     }
                     if (this.cursorDrawIndex) {
