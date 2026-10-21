@@ -2,6 +2,8 @@ import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
 
+const QueueBits = 7;
+
 export class Teletext {
     constructor() {
         this.prevCol = 0;
@@ -19,7 +21,8 @@ export class Teletext {
         this.cellFlash = false;
         this.cellConceal = false;
         this.cellPalette = 0;
-        this.dataQueue = new Uint8Array(4);
+        // Four 7-bit bytes, oldest in the low bits; 28 bits stay a small integer in V8.
+        this.dataQueue = 0;
         this.scanlineCounter = 0;
         this.levelDEW = false;
         this.levelDISPTMG = false;
@@ -181,7 +184,7 @@ export class Teletext {
             flashTime: this.flashTime,
             heldChar: this.heldChar,
             holdChar: this.holdChar,
-            dataQueue: [...this.dataQueue],
+            dataQueue: [0, 1, 2, 3].map((i) => (this.dataQueue >>> (i * QueueBits)) & 0x7f),
             scanlineCounter: this.scanlineCounter,
             levelDEW: this.levelDEW,
             levelDISPTMG: this.levelDISPTMG,
@@ -207,7 +210,7 @@ export class Teletext {
         this.flashTime = state.flashTime;
         this.heldChar = state.heldChar;
         this.holdChar = state.holdChar;
-        this.dataQueue.set(state.dataQueue);
+        this.dataQueue = state.dataQueue.reduce((queue, byte, i) => queue | ((byte & 0x7f) << (i * QueueBits)), 0);
         this.scanlineCounter = state.scanlineCounter;
         this.levelDEW = state.levelDEW;
         this.levelDISPTMG = state.levelDISPTMG;
@@ -311,11 +314,7 @@ export class Teletext {
     }
 
     fetchData(data) {
-        // `copyWithin` over four bytes costs more than the moves it saves.
-        this.dataQueue[0] = this.dataQueue[1];
-        this.dataQueue[1] = this.dataQueue[2];
-        this.dataQueue[2] = this.dataQueue[3];
-        this.dataQueue[3] = data & 0x7f;
+        this.dataQueue = (this.dataQueue >>> QueueBits) | ((data & 0x7f) << (3 * QueueBits));
     }
 
     setDEW(level) {
@@ -397,7 +396,7 @@ export class Teletext {
      * to the character state, and latch how the resulting cell should look.
      */
     advance() {
-        let data = this.dataQueue[0];
+        let data = this.dataQueue & 0x7f;
 
         this.oldDbl = this.dbl;
 
