@@ -18,12 +18,13 @@ A and B are git refs or paths to existing checkouts. A ref is checked out into a
 temp directory, or `--work-dir`, made if missing) that is removed afterwards, also on Ctrl-C, SIGTERM or SIGHUP
 (the npm script `exec`s Node, so a SIGTERM sent to npm reaches it). When the lock files match apart from the
 package's own version, its `node_modules` is a link to the nearest one in or above this checkout whose
-`.package-lock.json` (npm's record of what it installed) has every package this checkout's lock file names; when
-they differ, it gets its own `npm ci`. A path is used as it is, uncommitted changes and all, so an agent can
-compare its working tree against a worktree of the commit it started from; it needs its packages installed (or a
-`node_modules` in a directory above it, as a worktree under `.claude/worktrees` finds the main checkout's). Both
-sides need the benchmark workloads, so neither can predate them. A run killed outright (`kill -9`) leaves its
-worktrees behind; `git worktree prune` after deleting their directories tidies them up.
+`.package-lock.json` (npm's record of what it installed) has every non-optional package this checkout's lock file
+names, at its locked version; when they differ, it gets its own `npm ci`. A path is used as it is, uncommitted
+changes and all, so an agent can compare its working tree against a worktree of the commit it started from; it
+needs its packages installed (or a `node_modules` in a directory above it, as a worktree under `.claude/worktrees`
+finds the main checkout's). Both sides need the benchmark workloads, so neither can predate them. A run killed
+outright (`kill -9`) leaves its worktrees behind; `git worktree prune` after deleting their directories tidies them
+up.
 
 With no workloads named, every workload in A's manifest runs, one after another. `--fake-video` measures the
 CPU and peripherals without rendering video; the difference from a run without it is the video's cost.

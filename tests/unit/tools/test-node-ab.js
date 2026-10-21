@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -154,7 +154,7 @@ describe("comparableLock", () => {
 });
 
 describe("installedNodeModules", () => {
-    it("passes over a nearer node_modules that does not hold the locked install", () => {
+    it("passes over a nearer node_modules holding a different version of a locked package", () => {
         const packages = {
             "": { name: "jsbeeb" },
             "node_modules/pako": { version: "2.1.0" },
@@ -165,7 +165,8 @@ describe("installedNodeModules", () => {
         writeFileSync(path.join(checkout, "package-lock.json"), JSON.stringify({ packages }));
         const stray = path.join(scratch, "main", ".claude", "worktrees", "node_modules");
         mkdirSync(stray);
-        symlinkSync(path.join(scratch, "gone"), path.join(stray, "pako"));
+        const stale = { ...packages, "node_modules/pako": { version: "2.0.4" } };
+        writeFileSync(path.join(stray, ".package-lock.json"), JSON.stringify({ packages: stale }));
         const install = path.join(scratch, "main", "node_modules");
         mkdirSync(install);
         const { "node_modules/fsevents": _skipped, ...installed } = packages;
