@@ -6,35 +6,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { TickMs } from "../src/emulation-tick.js";
-import { median } from "./ab-stats.js";
-
-const MsPerSecond = 1000;
-export const SlicesPerSecond = MsPerSecond / TickMs;
-
-/**
- * Runs `measureSecs` emulated seconds in browser-tick slices after `warmupSecs` of the same, timing each slice.
- * @param {import('../src/6502.js').Cpu6502} cpu
- * @param {{warmupSecs: number, measureSecs: number}} options
- * @returns {{cycles: number, totalMs: number, sliceMs: number[]}}
- */
-export function timeSlices(cpu, { warmupSecs, measureSecs }) {
-    const { cyclesPerSecond } = cpu.model;
-    const sliceCycles = Math.round((cyclesPerSecond * TickMs) / MsPerSecond);
-    const warmupSlices = Math.round(warmupSecs * SlicesPerSecond);
-    for (let slice = 0; slice < warmupSlices; slice++) cpu.execute(sliceCycles);
-    const slices = Math.round(measureSecs * SlicesPerSecond);
-    const sliceMs = new Array(slices);
-    const start = performance.now();
-    let sliceStart = start;
-    for (let slice = 0; slice < slices; slice++) {
-        cpu.execute(sliceCycles);
-        const now = performance.now();
-        sliceMs[slice] = now - sliceStart;
-        sliceStart = now;
-    }
-    return { cycles: slices * sliceCycles, totalMs: sliceStart - start, sliceMs };
-}
+import { sampleWorkload } from "./ab-sample.js";
 
 async function main() {
     const { values } = parseArgs({
@@ -48,18 +20,12 @@ async function main() {
     });
     const machineModule = pathToFileURL(path.join(values.root, "src", "benchmark-machine.js")).href;
     const { benchmarkMachine } = await import(machineModule);
-    const { cpu } = await benchmarkMachine(values.workload, { fakeVideo: values["fake-video"] });
-    const { cycles, totalMs, sliceMs } = timeSlices(cpu, {
+    return sampleWorkload(benchmarkMachine, {
+        workload: values.workload,
+        fakeVideo: values["fake-video"],
         warmupSecs: Number(values["warmup-secs"]),
         measureSecs: Number(values["measure-secs"]),
     });
-    const sliceCycles = cycles / sliceMs.length;
-    return {
-        mhz: cycles / totalMs / MsPerSecond,
-        medianSliceMhz: sliceCycles / median(sliceMs) / MsPerSecond,
-        cycles,
-        totalMs,
-    };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

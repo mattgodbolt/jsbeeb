@@ -99,6 +99,7 @@ describe("parseOptions", () => {
             measureSecs: 10,
             statistic: "median",
             fakeVideo: false,
+            engine: "node",
             diagnostics: [],
         });
     });
@@ -130,6 +131,9 @@ describe("parseOptions", () => {
         [["a", "b", "--measure-secs", "1.234"], `--measure-secs takes seconds in whole ${TickMs} ms ticks`],
         [["a", "b", "--measure-secs", "0"], `--measure-secs takes seconds in whole ${TickMs} ms ticks`],
         [["a", "b", "--warmup-secs=-1"], `--warmup-secs takes seconds in whole ${TickMs} ms ticks`],
+        [["a", "b", "--engine", "d8"], '--engine is one of node, v8, spidermonkey, javascriptcore, not "d8"'],
+        [["a", "b", "--shell", "/bin/js"], "--shell needs an --engine other than node"],
+        [["a", "b", "--engine", "v8", "--cpu-prof", "a"], "--cpu-prof and --trace-deopt are Node's flags"],
     ])("refuses %j before anything runs", (args, message) => {
         expect(() => parseOptions(args)).toThrow(message);
     });
