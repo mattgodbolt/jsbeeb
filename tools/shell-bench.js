@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { build } from "vite";
+import { SampleSecsDefaults, wholeSlices } from "./ab-sample.js";
 
 const ToolsDir = path.dirname(fileURLToPath(import.meta.url));
 const RepoRoot = path.resolve(ToolsDir, "..");
@@ -24,8 +24,8 @@ const NodeStandIns = {
     util: ["inspect"],
 };
 const JsvuDir = path.join(os.homedir(), ".jsvu");
-/** The engines, as jsvu names them, and Node itself. */
-export const Engines = ["node", "v8", "spidermonkey", "javascriptcore"];
+/** The engines with a shell, as jsvu names them. */
+export const ShellEngines = ["v8", "spidermonkey", "javascriptcore"];
 
 function nodeStandIns() {
     return {
@@ -66,6 +66,7 @@ function importMetaUrls() {
  */
 export async function bundleSide(root, file) {
     const sideModule = path.join(root, "src", "benchmark-machine.js");
+    const { build } = await import("vite");
     await build({
         configFile: false,
         publicDir: false,
@@ -88,23 +89,39 @@ export async function bundleSide(root, file) {
  * recorded, unless `shell` names a binary.
  * @param {string} engine
  * @param {string} [shell]
+ * @param {string} [jsvuDir]
  * @returns {{binary: string, description: string}}
  */
-export function findShell(engine, shell) {
+export function findShell(engine, shell, jsvuDir = JsvuDir) {
     if (shell) return { binary: path.resolve(shell), description: `${engine} (${path.resolve(shell)})` };
-    const binary = path.join(JsvuDir, "bin", engine);
+    const binary = path.join(jsvuDir, "bin", engine);
     if (!existsSync(binary)) {
         throw new Error(`No ${binary}; install it with npx jsvu --engines=${engine}, or name a binary with --shell`);
     }
-    const status = JSON.parse(readFileSync(path.join(JsvuDir, "status.json"), "utf8"));
-    return { binary, description: `${engine} ${status[engine]}` };
+    const statusFile = path.join(jsvuDir, "status.json");
+    const version = existsSync(statusFile) && JSON.parse(readFileSync(statusFile, "utf8"))[engine];
+    return { binary, description: `${engine} ${version || "(version unknown)"}` };
 }
 
 const running = new Set();
 
 /** Kills any shell still running a sample, with whatever it started. */
 export function killShells() {
-    for (const child of running) process.kill(-child.pid);
+    for (const child of running) {
+        try {
+            process.kill(-child.pid);
+        } catch {
+            running.delete(child);
+        }
+    }
+}
+
+function parseReply(lastLine) {
+    try {
+        return JSON.parse(lastLine);
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -118,7 +135,7 @@ export function killShells() {
 export function runShellSample(binary, bundle, workload, { fakeVideo, warmupSecs, measureSecs }) {
     const options = JSON.stringify({ workload, fakeVideo, warmupSecs, measureSecs });
     return new Promise((resolve, reject) => {
-        // Its own process group, since jsvu's wrapper scripts do not exec the shell they start.
+        // Its own process group, since not every jsvu wrapper script execs the shell it starts.
         const child = spawn(binary, [bundle, "--", options], { detached: true, stdio: ["ignore", "pipe", "inherit"] });
         running.add(child);
         let output = "";
@@ -127,8 +144,7 @@ export function runShellSample(binary, bundle, workload, { fakeVideo, warmupSecs
         child.on("error", reject);
         child.on("close", (code, signal) => {
             running.delete(child);
-            const lastLine = output.trim().split("\n").at(-1);
-            const reply = lastLine.startsWith("{") ? JSON.parse(lastLine) : null;
+            const reply = parseReply(output.trim().split("\n").at(-1));
             if (reply?.result) resolve(reply.result);
             else {
                 const why = reply?.error ?? `${output.trim() || "no output"}\nexited (${signal ?? code})`;
@@ -138,6 +154,9 @@ export function runShellSample(binary, bundle, workload, { fakeVideo, warmupSecs
     });
 }
 
+const usage = () => `Usage: npm run benchmark:shell -- --engine ${ShellEngines.join("|")} [--shell PATH]
+    [--root CHECKOUT] [--fake-video] [--warmup-secs S] [--measure-secs S] [workload ...]`;
+
 async function main() {
     const { values, positionals } = parseArgs({
         allowPositionals: true,
@@ -146,14 +165,16 @@ async function main() {
             shell: { type: "string" },
             root: { type: "string", default: RepoRoot },
             "fake-video": { type: "boolean", default: false },
-            "warmup-secs": { type: "string", default: "5" },
-            "measure-secs": { type: "string", default: "10" },
+            "warmup-secs": { type: "string", default: SampleSecsDefaults["warmup-secs"] },
+            "measure-secs": { type: "string", default: SampleSecsDefaults["measure-secs"] },
         },
     });
-    if (!Engines.slice(1).includes(values.engine)) {
-        throw new Error(`Usage: npm run benchmark:shell -- --engine ${Engines.slice(1).join("|")} [--shell PATH]
-    [--root CHECKOUT] [--fake-video] [--warmup-secs S] [--measure-secs S] [workload ...]`);
-    }
+    if (!ShellEngines.includes(values.engine)) throw new Error(usage());
+    const settings = {
+        fakeVideo: values["fake-video"],
+        warmupSecs: wholeSlices(values, "warmup-secs", 0),
+        measureSecs: wholeSlices(values, "measure-secs", 1),
+    };
     const { binary, description } = findShell(values.engine, values.shell);
     const root = path.resolve(values.root);
     const workloads =
@@ -163,14 +184,17 @@ async function main() {
                   ({ name }) => name,
               );
     const dir = mkdtempSync(path.join(os.tmpdir(), "jsbeeb-shell-bench-"));
+    const cleanUp = () => {
+        killShells();
+        rmSync(dir, { recursive: true, force: true });
+        process.exit(1);
+    };
+    process.once("SIGINT", cleanUp);
+    process.once("SIGTERM", cleanUp);
+    process.once("SIGHUP", cleanUp);
     try {
         const bundle = path.join(dir, "bundle.js");
         await bundleSide(root, bundle);
-        const settings = {
-            fakeVideo: values["fake-video"],
-            warmupSecs: Number(values["warmup-secs"]),
-            measureSecs: Number(values["measure-secs"]),
-        };
         for (const workload of workloads) {
             const { mhz, medianSliceMhz } = await runShellSample(binary, bundle, workload, settings);
             console.log(
@@ -184,7 +208,6 @@ async function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     main().catch((error) => {
-        killShells();
         console.error(error.message);
         process.exit(1);
     });

@@ -73,7 +73,7 @@ The same A/B runs in the engines' own shells, without a browser: V8's `d8`, Spid
 JavaScriptCore's `jsc` (Safari). [jsvu](https://github.com/GoogleChromeLabs/jsvu) installs them in `~/.jsvu`:
 
 ```sh
-npx jsvu --os=linux64 --engines=v8,spidermonkey,javascriptcore
+npx jsvu --os=default --engines=v8,spidermonkey,javascriptcore
 npm run benchmark:ab -- <A> <B> [workload ...] --engine spidermonkey
 npm run benchmark:shell -- --engine javascriptcore [workload ...]
 ```
@@ -83,7 +83,8 @@ not install. Each side is bundled once (`tools/shell-bench.js`), with this check
 side's `src/benchmark-machine.js`, and each sample is a fresh shell running that bundle. `tools/shell-host.js`
 supplies what the shells lack: file reading, the few Node functions the machine's code reaches, and the browser's
 `TextDecoder`, `atob` and `EventTarget`. The result line and the JSON (`engine`) give jsvu's version of the
-engine. `--cpu-prof` and `--trace-deopt` are Node's, so they need `--engine node`. `npm run benchmark:shell` prints each workload's speed once, for a quick look.
+engine. `--cpu-prof` and `--trace-deopt` are Node's, so they need `--engine node`.
+`npm run benchmark:shell` prints each workload's speed once, for a quick look.
 
 ## Keeping runs quiet
 

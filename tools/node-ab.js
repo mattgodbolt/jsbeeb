@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Compares the emulator's speed in Node between two commits (or two checkouts), alternating fresh processes
-// from each side until the ratio's confidence interval resolves. See usage() and docs/benchmarking.md.
+// Compares the emulator's speed in Node, or in an engine's shell, between two commits (or two checkouts),
+// alternating fresh processes from each side until the ratio's confidence interval resolves. See usage() and docs/benchmarking.md.
 import { execFileSync, fork } from "node:child_process";
 import {
     closeSync,
@@ -21,8 +21,8 @@ import { parseArgs } from "node:util";
 
 import { TickMs } from "../src/emulation-tick.js";
 import { describeComparison, FewestDecisivePairs, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
-import { SlicesPerSecond } from "./ab-sample.js";
-import { bundleSide, Engines, findShell, killShells, runShellSample } from "./shell-bench.js";
+import { SampleSecsDefaults, wholeSlices } from "./ab-sample.js";
+import { bundleSide, findShell, killShells, runShellSample, ShellEngines } from "./shell-bench.js";
 
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SampleScript = path.join(RepoRoot, "tools", "node-ab-sample.js");
@@ -35,15 +35,13 @@ const Diagnostics = [
     { option: "cpu-prof", flag: "--cpu-prof" },
     { option: "trace-deopt", flag: "--trace-deopt" },
 ];
-// Decimal seconds are not exact in binary: 1.1 s is 110.00000000000001 slices.
-const SliceTolerance = 1e-6;
+const Engines = ["node", ...ShellEngines];
 
 const Defaults = {
     "min-pairs": "8",
     "max-pairs": "30",
     horizon: "2",
-    "warmup-secs": "5",
-    "measure-secs": "10",
+    ...SampleSecsDefaults,
     statistic: "median",
     "out-dir": "node-ab-out",
     engine: "node",
@@ -83,15 +81,6 @@ function wholeNumber(options, name, least) {
         throw new Error(`--${name} takes a whole number of at least ${least}, not "${options[name]}"`);
     }
     return value;
-}
-
-function wholeSlices(options, name, least) {
-    const exact = Number(options[name]) * SlicesPerSecond;
-    const slices = Math.round(exact);
-    if (!(Math.abs(exact - slices) < SliceTolerance) || slices < least) {
-        throw new Error(`--${name} takes seconds in whole ${TickMs} ms ticks, not "${options[name]}"`);
-    }
-    return slices / SlicesPerSecond;
 }
 
 /**
@@ -394,12 +383,13 @@ async function main() {
         return 0;
     }
     const created = [];
-    const bundleDir = mkdtempSync(path.join(os.tmpdir(), "jsbeeb-shell-ab-"));
+    let bundleDir = null;
+    const removeBundles = () => bundleDir && rmSync(bundleDir, { recursive: true, force: true });
     const cleanUp = () => {
         for (const child of running) child.kill();
         killShells();
         removeWorktrees(created);
-        rmSync(bundleDir, { recursive: true, force: true });
+        removeBundles();
         process.exit(1);
     };
     process.once("SIGINT", cleanUp);
@@ -415,6 +405,7 @@ async function main() {
         for (const [index, side] of sides.entries()) {
             console.error(`${Sides[index].toUpperCase()}: ${side.spec} at ${side.root}`);
         }
+        if (settings.engine !== "node") bundleDir = mkdtempSync(path.join(os.tmpdir(), "jsbeeb-shell-ab-"));
         const runner = await sampleRunner(sides, settings, bundleDir);
         const results = await compare(runner, names, settings);
         // Written before the diagnostic runs as well as after, so a failure in them keeps the timings.
@@ -447,7 +438,7 @@ async function main() {
         return 0;
     } finally {
         removeWorktrees(created);
-        rmSync(bundleDir, { recursive: true, force: true });
+        removeBundles();
     }
 }
 

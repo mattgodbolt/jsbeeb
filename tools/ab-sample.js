@@ -5,6 +5,27 @@ import { median } from "./ab-stats.js";
 
 const MsPerSecond = 1000;
 export const SlicesPerSecond = MsPerSecond / TickMs;
+// Decimal seconds are not exact in binary: 1.1 s is 110.00000000000001 slices.
+const SliceTolerance = 1e-6;
+
+/** The emulated seconds a sample warms up for and then times, as the command lines take them. */
+export const SampleSecsDefaults = { "warmup-secs": "5", "measure-secs": "10" };
+
+/**
+ * `options[name]`, in seconds, checked to be a whole number of ticks and at least `least` of them.
+ * @param {object} options
+ * @param {string} name
+ * @param {number} least
+ * @returns {number}
+ */
+export function wholeSlices(options, name, least) {
+    const exact = Number(options[name]) * SlicesPerSecond;
+    const slices = Math.round(exact);
+    if (!(Math.abs(exact - slices) < SliceTolerance) || slices < least) {
+        throw new Error(`--${name} takes seconds in whole ${TickMs} ms ticks, not "${options[name]}"`);
+    }
+    return slices / SlicesPerSecond;
+}
 
 /**
  * Runs `measureSecs` emulated seconds in browser-tick slices after `warmupSecs` of the same, timing each slice.

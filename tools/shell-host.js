@@ -21,7 +21,7 @@ function bytesToLatin1(bytes) {
     return chunks.join("");
 }
 
-function atob(base64) {
+export function atob(base64) {
     const out = [];
     let bits = 0;
     let bitCount = 0;
@@ -36,20 +36,20 @@ function atob(base64) {
     return out.join("");
 }
 
-class Event {
+export class Event {
     constructor(type) {
         this.type = type;
     }
 }
 
-class CustomEvent extends Event {
+export class CustomEvent extends Event {
     constructor(type, { detail = null } = {}) {
         super(type);
         this.detail = detail;
     }
 }
 
-class EventTarget {
+export class EventTarget {
     #listeners = new Map();
 
     addEventListener(type, listener) {
@@ -67,6 +67,12 @@ class EventTarget {
     }
 }
 
+export class Utf8Decoder {
+    decode(bytes) {
+        return decodeURIComponent(escape(bytesToLatin1(bytes)));
+    }
+}
+
 // jsc's performance.now() ticks in 20 microseconds, a few percent of a slice; preciseTime() is in seconds.
 if (globalThis.preciseTime) globalThis.performance.now = () => globalThis.preciseTime() * MsPerSecond;
 globalThis.Event ??= Event;
@@ -74,11 +80,7 @@ globalThis.CustomEvent ??= CustomEvent;
 globalThis.EventTarget ??= EventTarget;
 globalThis.console ??= { log: globalThis.print, warn: globalThis.print, error: globalThis.print };
 globalThis.atob ??= atob;
-globalThis.TextDecoder ??= class {
-    decode(bytes) {
-        return decodeURIComponent(escape(bytesToLatin1(bytes)));
-    }
-};
+globalThis.TextDecoder ??= Utf8Decoder;
 
 // Every path the bundle reads is absolute, so these need no working directory.
 function normalise(file) {
