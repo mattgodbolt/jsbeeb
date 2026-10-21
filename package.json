@@ -116,6 +116,7 @@
     "benchmark": "vitest bench --config vitest.bench.config.js --silent=true --reporter=verbose",
     "benchmark:workloads": "node tools/make-benchmark-workloads.js",
     "benchmark:ab": "exec node tools/node-ab.js",
+    "benchmark:shell": "exec node tools/shell-bench.js",
     "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
     "mirror-sth:check": "node tools/mirror-sth.js --index-only",
     "mirror-sth:upload": "npm-run-all mirror-sth:upload:*",

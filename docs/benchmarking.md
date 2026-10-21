@@ -67,6 +67,25 @@ timed ones, under that V8 flag, so the profiling never slows a timed run. The `.
 in Chrome DevTools' Performance panel) and `.deopt.log` files go in `--out-dir` (`node-ab-out`), named by side,
 ref and workload.
 
+## Engine shells
+
+The same A/B runs in the engines' own shells, without a browser: V8's `d8`, SpiderMonkey's `js` (Firefox) and
+JavaScriptCore's `jsc` (Safari). [jsvu](https://github.com/GoogleChromeLabs/jsvu) installs them in `~/.jsvu`:
+
+```sh
+npx jsvu --os=default --engines=v8,spidermonkey,javascriptcore
+npm run benchmark:ab -- <A> <B> [workload ...] --engine spidermonkey
+npm run benchmark:shell -- --engine javascriptcore [workload ...]
+```
+
+`--engine` is `v8`, `spidermonkey` or `javascriptcore` (jsvu's names), and `--shell PATH` names a shell jsvu did
+not install. Each side is bundled once (`tools/shell-bench.js`), with this checkout's sampling code around the
+side's `src/benchmark-machine.js`, and each sample is a fresh shell running that bundle. `tools/shell-host.js`
+supplies what the shells lack: file reading, the few Node functions the machine's code reaches, and the browser's
+`TextDecoder`, `atob` and `EventTarget`. The result line and the JSON (`engine`) give jsvu's version of the
+engine. `--cpu-prof` and `--trace-deopt` are Node's, so they need `--engine node`.
+`npm run benchmark:shell` prints each workload's speed once, for a quick look.
+
 ## Keeping runs quiet
 
 - Run nothing else heavy at the same time: a build, a test suite or a second A/B run on the same machine

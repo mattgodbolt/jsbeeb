@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Compares the emulator's speed in Node between two commits (or two checkouts), alternating fresh processes
-// from each side until the ratio's confidence interval resolves. See usage() and docs/benchmarking.md.
+// Compares the emulator's speed in Node, or in an engine's shell, between two commits (or two checkouts),
+// alternating fresh processes from each side until the ratio's confidence interval resolves. See usage() and
+// docs/benchmarking.md.
 import { execFileSync, fork } from "node:child_process";
 import {
     closeSync,
@@ -21,7 +22,8 @@ import { parseArgs } from "node:util";
 
 import { TickMs } from "../src/emulation-tick.js";
 import { describeComparison, FewestDecisivePairs, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
-import { SlicesPerSecond } from "./node-ab-sample.js";
+import { SampleSecsDefaults, wholeSlices } from "./ab-sample.js";
+import { bundleSide, findShell, killShells, runShellSample, ShellEngines } from "./shell-bench.js";
 
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SampleScript = path.join(RepoRoot, "tools", "node-ab-sample.js");
@@ -34,17 +36,16 @@ const Diagnostics = [
     { option: "cpu-prof", flag: "--cpu-prof" },
     { option: "trace-deopt", flag: "--trace-deopt" },
 ];
-// Decimal seconds are not exact in binary: 1.1 s is 110.00000000000001 slices.
-const SliceTolerance = 1e-6;
+const Engines = ["node", ...ShellEngines];
 
 const Defaults = {
     "min-pairs": "8",
     "max-pairs": "30",
     horizon: "2",
-    "warmup-secs": "5",
-    "measure-secs": "10",
+    ...SampleSecsDefaults,
     statistic: "median",
     "out-dir": "node-ab-out",
+    engine: "node",
 };
 
 function usage() {
@@ -63,10 +64,13 @@ Options:
   --statistic median|total
                         a sample's throughput from its median slice, or from the total time (default
                         ${Defaults.statistic}); see docs/benchmarking.md
+  --engine ${Engines.join("|")}
+                        run the samples in Node or in that engine's shell (default ${Defaults.engine})
+  --shell PATH          the shell binary for --engine (default jsvu's, in ~/.jsvu/bin)
   --json FILE           write the full result as JSON
-  --cpu-prof a|b|both   after timing, one more run per workload of that side under --cpu-prof
+  --cpu-prof a|b|both   after timing, one more run per workload of that side under --cpu-prof (Node only)
   --trace-deopt a|b|both
-                        after timing, one more run per workload of that side under --trace-deopt
+                        after timing, one more run per workload of that side under --trace-deopt (Node only)
   --out-dir DIR         where profiles and deopt logs go (default ${Defaults["out-dir"]})
   --work-dir DIR        where the worktrees for refs are made (default the system temp directory)
   -h, --help            this text`;
@@ -78,15 +82,6 @@ function wholeNumber(options, name, least) {
         throw new Error(`--${name} takes a whole number of at least ${least}, not "${options[name]}"`);
     }
     return value;
-}
-
-function wholeSlices(options, name, least) {
-    const exact = Number(options[name]) * SlicesPerSecond;
-    const slices = Math.round(exact);
-    if (!(Math.abs(exact - slices) < SliceTolerance) || slices < least) {
-        throw new Error(`--${name} takes seconds in whole ${TickMs} ms ticks, not "${options[name]}"`);
-    }
-    return slices / SlicesPerSecond;
 }
 
 /**
@@ -106,6 +101,8 @@ export function parseOptions(args) {
             "warmup-secs": { type: "string", default: Defaults["warmup-secs"] },
             "measure-secs": { type: "string", default: Defaults["measure-secs"] },
             statistic: { type: "string", default: Defaults.statistic },
+            engine: { type: "string", default: Defaults.engine },
+            shell: { type: "string" },
             json: { type: "string" },
             "cpu-prof": { type: "string" },
             "trace-deopt": { type: "string" },
@@ -123,6 +120,10 @@ export function parseOptions(args) {
     if (!Object.hasOwn(Statistics, options.statistic)) {
         throw new Error(`--statistic is median or total, not "${options.statistic}"`);
     }
+    if (!Engines.includes(options.engine)) {
+        throw new Error(`--engine is one of ${Engines.join(", ")}, not "${options.engine}"`);
+    }
+    if (options.shell && options.engine === "node") throw new Error("--shell needs an --engine other than node");
     const diagnostics = [];
     for (const { option, flag } of Diagnostics) {
         const which = options[option];
@@ -131,6 +132,9 @@ export function parseOptions(args) {
             throw new Error(`--${option} takes a, b or both, not "${which}"`);
         }
         for (const side of DiagnosticSides[which]) diagnostics.push({ option, flag, side });
+    }
+    if (diagnostics.length > 0 && options.engine !== "node") {
+        throw new Error("--cpu-prof and --trace-deopt are Node's flags, so they need --engine node");
     }
     const [specA, specB, ...workloads] = positionals;
     return {
@@ -144,6 +148,8 @@ export function parseOptions(args) {
         measureSecs: wholeSlices(options, "measure-secs", 1),
         fakeVideo: options["fake-video"],
         statistic: options.statistic,
+        engine: options.engine,
+        shell: options.shell,
         json: options.json,
         diagnostics,
         outDir: options["out-dir"],
@@ -297,6 +303,29 @@ function runSample(root, workload, settings, { execArgv = [], stdoutFile = null 
     });
 }
 
+/**
+ * How each sample runs: a fresh Node process, or a fresh `shell` (from findShell) running a bundle of the side
+ * made in `bundleDir`.
+ * @returns {Promise<{description: string, sample: function(number, string): Promise<object>}>} `sample` takes
+ *     the side's index and the workload
+ */
+async function sampleRunner(sides, settings, shell, bundleDir) {
+    if (!shell) {
+        return {
+            description: `Node ${process.version}`,
+            sample: (index, name) => runSample(sides[index].root, name, settings),
+        };
+    }
+    const { binary, description } = shell;
+    const bundles = [];
+    for (const [index, { root }] of sides.entries()) {
+        const bundle = path.join(bundleDir, `${Sides[index]}.js`);
+        await bundleSide(root, bundle);
+        bundles.push(bundle);
+    }
+    return { description, sample: (index, name) => runShellSample(binary, bundles[index], name, settings) };
+}
+
 async function diagnosticRuns(sides, names, settings) {
     if (settings.diagnostics.length === 0) return [];
     const outDir = path.resolve(settings.outDir);
@@ -321,21 +350,21 @@ async function diagnosticRuns(sides, names, settings) {
     return written;
 }
 
-async function compare(sides, names, settings) {
+async function compare(runner, names, settings) {
     const key = Statistics[settings.statistic];
     const { minPairs, maxPairs, horizon } = settings;
     const results = [];
     for (const name of names) {
         const raw = [];
         const sample = async (side) => {
-            const result = await runSample(sides[Sides.indexOf(side)].root, name, settings);
+            const result = await runner.sample(Sides.indexOf(side), name);
             raw.push({ side, ...result });
             return result[key];
         };
         const onPair = ({ pairs, ratio, low, high }) =>
             console.error(`  ${name} ${pairs} pairs: ${ratio.toFixed(3)} [${low.toFixed(3)}, ${high.toFixed(3)}]`);
         const result = await sampleUntilResolved({ sample, onPair, minPairs, maxPairs, horizon });
-        console.log(describeComparison(name, result, `Node ${process.version}`));
+        console.log(describeComparison(name, result, runner.description));
         results.push({ workload: name, ...result, raw });
     }
     return results;
@@ -356,9 +385,13 @@ async function main() {
         return 0;
     }
     const created = [];
+    let bundleDir = null;
+    const removeBundles = () => bundleDir && rmSync(bundleDir, { recursive: true, force: true });
     const cleanUp = () => {
         for (const child of running) child.kill();
+        killShells();
         removeWorktrees(created);
+        removeBundles();
         process.exit(1);
     };
     process.once("SIGINT", cleanUp);
@@ -367,6 +400,7 @@ async function main() {
     if (settings.json) assertWritableFile(settings.json);
     if (settings.diagnostics.length > 0) mkdirSync(settings.outDir, { recursive: true });
     try {
+        const shell = settings.engine === "node" ? null : findShell(settings.engine, settings.shell);
         const sides = settings.specs.map((spec) => prepareSide(spec, settings.workDir, created));
         const names =
             settings.workloads.length > 0 ? settings.workloads : readManifest(sides[0].root).map(({ name }) => name);
@@ -374,7 +408,9 @@ async function main() {
         for (const [index, side] of sides.entries()) {
             console.error(`${Sides[index].toUpperCase()}: ${side.spec} at ${side.root}`);
         }
-        const results = await compare(sides, names, settings);
+        if (shell) bundleDir = mkdtempSync(path.join(os.tmpdir(), "jsbeeb-shell-ab-"));
+        const runner = await sampleRunner(sides, settings, shell, bundleDir);
+        const results = await compare(runner, names, settings);
         // Written before the diagnostic runs as well as after, so a failure in them keeps the timings.
         const writeReport = (files) => {
             if (!settings.json) return;
@@ -392,6 +428,7 @@ async function main() {
                     horizonPercent: horizon * PercentPerUnit,
                 },
                 node: process.version,
+                engine: runner.description,
                 results,
                 files,
             };
@@ -404,6 +441,7 @@ async function main() {
         return 0;
     } finally {
         removeWorktrees(created);
+        removeBundles();
     }
 }
 
