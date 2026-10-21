@@ -118,11 +118,14 @@ A run cleans up its worktrees, builds, servers and browsers when it ends, also o
   other load take its time.
 - A laptop on mains power with little else running gives about ±1% between samples; a busy desktop gives
   several times that, with whole samples stalled.
-- CPU frequency scaling and thermal throttling move every sample. On Linux, the `performance` governor
-  (`cpupower frequency-set -g performance`) holds the clock up; the alternating pairs keep a slow drift from
-  favouring either side, but not a sudden change.
-- A browser's samples vary much more than Node's, the software renderer's present most of all, so the
-  browser A/B needs a quieter machine or more pairs to see the same change.
+- Clock speed moves every sample: turbo drops as other cores get busy, and a hot machine throttles. The
+  alternating pairs keep a slow drift from favouring either side, but not a sudden change. Under Linux's
+  `intel_pstate` driver the `powersave` governor still runs a busy core at full speed, so changing the
+  governor makes little difference to a sustained run.
+- A browser's samples vary much more than Node's, on a quiet machine as much as a busy one: each emulated
+  second in a page varies by 10 to 25%, and the `video` and `cpu` passes also settle at a different speed in
+  each page. With the defaults the browser A/B resolves about 4% on the `full` pass; seeing 2% takes about
+  four times the pairs (`--max-pairs 120`).
 
 ## Sharing the statistics
 
