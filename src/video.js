@@ -846,7 +846,7 @@ export class Video {
             // Address offset by scanline is ignored.
             // On model B only, there's a quirk for reading 0x3c00.
             // See: http://www.retrosoftware.co.uk/forum/viewtopic.php?f=73&t=1011
-            memAddr = (addr & 0x3ff) | ((addr & 0x800) !== 0 || this.isMaster ? 0x7c00 : 0x3c00);
+            memAddr = (addr & 0x3ff) | (addr & 0x800 || this.isMaster ? 0x7c00 : 0x3c00);
         } else {
             // Emulate IC32/IC39 address translation: adjust MA11..MA8 on overflow before composing the DRAM address.
             let adjustedHigh = (addr >>> 8) & 0x0f;
@@ -1146,14 +1146,13 @@ export class Video {
             // too early relative to the pipeline for that to come out right, and adding
             // `advance()` alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
-            const clocksTeletext = insideBorder && frameShown;
-            const feedsTeletext = clocksTeletext || (vertDisplayed && !insideBorder);
+            const feedsTeletext = insideBorder ? frameShown : vertDisplayed;
             if (paints || feedsTeletext) {
                 const dat = this.readVideoMem();
                 if (feedsTeletext) {
                     this.teletext.fetchData(insideBorder ? dat : dat | 0x40);
                 }
-                if (clocksTeletext) {
+                if (insideBorder && frameShown) {
                     // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
                     // do not model the MA13 gate yet, so this feeds unconditionally. The chip is

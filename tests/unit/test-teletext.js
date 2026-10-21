@@ -350,7 +350,7 @@ describe("Teletext", () => {
             });
         const codes = [...Array(Space).keys()];
 
-        expect(codes.filter((code) => (StateChangingControlCodes >>> code) & 1)).toEqual(codes.filter(changesState));
+        expect(codes.filter(changesState)).toEqual(StateChangingControlCodes);
     });
 
     describe("scanlines", () => {

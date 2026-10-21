@@ -9,7 +9,9 @@ const NewestQueueShift = (QueueLength - 1) * QueueBits;
 // Must name exactly the codes `applyControlCode` changes state for.
 export const StateChangingControlCodes = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31,
-].reduce((mask, code) => mask | (1 << code), 0);
+];
+// Not exported: V8 reads an exported binding through a module cell, which costs the hot path.
+const StateChangingControlCodeMask = StateChangingControlCodes.reduce((mask, code) => mask | (1 << code), 0);
 
 export class Teletext {
     constructor() {
@@ -409,7 +411,7 @@ export class Teletext {
         if (data < 0x20) {
             const wasGfx = this.gfx;
             const wasHoldChar = this.holdChar;
-            if ((StateChangingControlCodes >>> data) & 1) this.applyControlCode(data);
+            if ((StateChangingControlCodeMask >>> data) & 1) this.applyControlCode(data);
             if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
                 data = this.heldChar;
                 this.curGlyphs = this.heldGlyphs;
