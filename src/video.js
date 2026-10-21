@@ -1141,11 +1141,26 @@ export class Video {
 
             // TODO(#876) this will be cleaner if we rework skew to have fetch
             // independent from render.
-            const insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
-            if ((insideBorder || this.cursorDrawIndex) && this.dispEnabled & FRAMESKIPENABLE) {
-                // Read data from address pointer if both horizontal and vertical display enabled.
+            const dispEnabled = this.dispEnabled;
+            const vertDisplayed = dispEnabled & VDISPENABLE;
+            const insideBorder = vertDisplayed && dispEnabled & HDISPENABLE;
+            const frameShown = dispEnabled & FRAMESKIPENABLE;
+            const paints = (insideBorder || this.cursorDrawIndex) && frameShown;
+            // IC37/IC36: during H blanking with V display active, always feed
+            // the SAA5050 pipeline with the video bus data, forcing bit 6 high.
+            // On real hardware IC37/IC36 operates regardless of ULA mode —
+            // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
+            // Hardware also clocks the chip there, which we do not: our row reset fires
+            // too early relative to the pipeline for that to come out right, and adding
+            // `advance()` alone moves three of the hardware reference pages. See
+            // https://github.com/mattgodbolt/jsbeeb/issues/874
+            const feedsTeletext = insideBorder ? frameShown : vertDisplayed;
+            if (paints || feedsTeletext) {
                 const dat = this.readVideoMem();
-                if (insideBorder) {
+                if (feedsTeletext) {
+                    this.teletext.fetchData(insideBorder ? dat : dat | 0x40);
+                }
+                if (insideBorder && frameShown) {
                     // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
                     // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
@@ -1153,7 +1168,6 @@ export class Video {
                     // bitmap still takes effect.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.fetchData(dat);
                     this.teletext.advance();
 
                     // Check cursor start.
@@ -1168,7 +1182,7 @@ export class Video {
                 }
 
                 // Render data depending on display enable state.
-                if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
+                if (paints && this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
                     let doubledLines = false;
                     let bitmapRow = this.bitmapY;
                     // There's a painting subtlety here: if we're in an
@@ -1223,18 +1237,6 @@ export class Video {
                         this.handleCursor(offset);
                     }
                 }
-            }
-
-            // IC37/IC36: during H blanking with V display active, always feed
-            // the SAA5050 pipeline with the video bus data, forcing bit 6 high.
-            // On real hardware IC37/IC36 operates regardless of ULA mode —
-            // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
-            // Hardware also clocks the chip here, which we do not: our row reset fires
-            // too early relative to the pipeline for that to come out right, and adding
-            // `advance()` alone moves three of the hardware reference pages. See
-            // https://github.com/mattgodbolt/jsbeeb/issues/874
-            if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
-                this.teletext.fetchData(this.readVideoMem() | 0x40);
             }
 
             // CRTC MA always increments, inside display border or not.
