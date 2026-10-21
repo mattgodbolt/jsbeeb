@@ -150,7 +150,7 @@ describe("Video", () => {
                     video.ulaMode = ulaMode;
                     for (let i = 0; i < 16; ++i) video.ulaPal[i] = 0xff000000 | (i * 0x111111);
                     fb.fill(0);
-                    video.blitFb(0b01010101, 0, pixelsPerChar);
+                    video.blitFb(0b01010101, 0, pixelsPerChar, false);
 
                     expect(shortestRun(fb, 0, pixelsPerChar)).toBe(texelsPerPixel(ulaMode));
                 }
@@ -512,7 +512,7 @@ describe("Video", () => {
             video.ula.collook.fill(NulaColour);
             for (const write of nulaWrites) video.ula.write(2, write);
 
-            video.blitFb(0xff, 0, pixels);
+            video.blitFb(0xff, 0, pixels, false);
 
             expect(Array.from(fb.subarray(0, pixels))).toEqual(Array(pixels).fill(expected));
         });
@@ -956,11 +956,11 @@ describe("Video", () => {
             });
             const video = v.video;
             const blitFb = video.blitFb.bind(video);
-            video.blitFb = (dat, offset, pixels) => {
+            video.blitFb = (dat, offset, numPixels, doubledLines) => {
                 const row = Math.floor(offset / 1024);
                 drawnUnder.set(row, video.hsyncCount);
-                if (video.doublesLines()) drawnUnder.set(row + 1, video.hsyncCount);
-                blitFb(dat, offset, pixels);
+                if (doubledLines) drawnUnder.set(row + 1, video.hsyncCount);
+                blitFb(dat, offset, numPixels, doubledLines);
             };
             program(v);
             v.run(SettleFrames * ClocksPerFrame);
