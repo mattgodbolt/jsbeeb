@@ -15,11 +15,11 @@ beforeEach(() => {
 afterEach(() => rmSync(scratch, { recursive: true, force: true }));
 
 describe("findShell", () => {
-    it("takes a named binary as it is", () => {
-        expect(findShell("spidermonkey", "/opt/js")).toEqual({
-            binary: "/opt/js",
-            description: "spidermonkey (/opt/js)",
-        });
+    it("takes a named binary as it is, if it is there", () => {
+        const js = path.join(scratch, "js");
+        writeFileSync(js, "");
+        expect(findShell("spidermonkey", js)).toEqual({ binary: js, description: `spidermonkey (${js})` });
+        expect(() => findShell("spidermonkey", path.join(scratch, "nojs"))).toThrow("No shell at");
     });
 
     it("finds jsvu's install and the version jsvu recorded", () => {

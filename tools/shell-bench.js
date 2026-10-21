@@ -93,7 +93,11 @@ export async function bundleSide(root, file) {
  * @returns {{binary: string, description: string}}
  */
 export function findShell(engine, shell, jsvuDir = JsvuDir) {
-    if (shell) return { binary: path.resolve(shell), description: `${engine} (${path.resolve(shell)})` };
+    if (shell) {
+        const binary = path.resolve(shell);
+        if (!existsSync(binary)) throw new Error(`No shell at ${binary}`);
+        return { binary, description: `${engine} (${binary})` };
+    }
     const binary = path.join(jsvuDir, "bin", engine);
     if (!existsSync(binary)) {
         throw new Error(`No ${binary}; install it with npx jsvu --engines=${engine}, or name a binary with --shell`);

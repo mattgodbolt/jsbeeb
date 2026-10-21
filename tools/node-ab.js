@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Compares the emulator's speed in Node, or in an engine's shell, between two commits (or two checkouts),
-// alternating fresh processes from each side until the ratio's confidence interval resolves. See usage() and docs/benchmarking.md.
+// alternating fresh processes from each side until the ratio's confidence interval resolves. See usage() and
+// docs/benchmarking.md.
 import { execFileSync, fork } from "node:child_process";
 import {
     closeSync,
@@ -303,18 +304,19 @@ function runSample(root, workload, settings, { execArgv = [], stdoutFile = null 
 }
 
 /**
- * How each sample runs: a fresh Node process, or a fresh shell running a bundle of the side made in `bundleDir`.
+ * How each sample runs: a fresh Node process, or a fresh `shell` (from findShell) running a bundle of the side
+ * made in `bundleDir`.
  * @returns {Promise<{description: string, sample: function(number, string): Promise<object>}>} `sample` takes
  *     the side's index and the workload
  */
-async function sampleRunner(sides, settings, bundleDir) {
-    if (settings.engine === "node") {
+async function sampleRunner(sides, settings, shell, bundleDir) {
+    if (!shell) {
         return {
             description: `Node ${process.version}`,
             sample: (index, name) => runSample(sides[index].root, name, settings),
         };
     }
-    const { binary, description } = findShell(settings.engine, settings.shell);
+    const { binary, description } = shell;
     const bundles = [];
     for (const [index, { root }] of sides.entries()) {
         const bundle = path.join(bundleDir, `${Sides[index]}.js`);
@@ -398,6 +400,7 @@ async function main() {
     if (settings.json) assertWritableFile(settings.json);
     if (settings.diagnostics.length > 0) mkdirSync(settings.outDir, { recursive: true });
     try {
+        const shell = settings.engine === "node" ? null : findShell(settings.engine, settings.shell);
         const sides = settings.specs.map((spec) => prepareSide(spec, settings.workDir, created));
         const names =
             settings.workloads.length > 0 ? settings.workloads : readManifest(sides[0].root).map(({ name }) => name);
@@ -405,8 +408,8 @@ async function main() {
         for (const [index, side] of sides.entries()) {
             console.error(`${Sides[index].toUpperCase()}: ${side.spec} at ${side.root}`);
         }
-        if (settings.engine !== "node") bundleDir = mkdtempSync(path.join(os.tmpdir(), "jsbeeb-shell-ab-"));
-        const runner = await sampleRunner(sides, settings, bundleDir);
+        if (shell) bundleDir = mkdtempSync(path.join(os.tmpdir(), "jsbeeb-shell-ab-"));
+        const runner = await sampleRunner(sides, settings, shell, bundleDir);
         const results = await compare(runner, names, settings);
         // Written before the diagnostic runs as well as after, so a failure in them keeps the timings.
         const writeReport = (files) => {
