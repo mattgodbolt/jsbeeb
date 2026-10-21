@@ -1,5 +1,5 @@
 // The statistics of an A/B speed comparison, with no Node or browser dependencies, so the Node runner
-// (tools/node-ab.js) and the browser one (#1340) report the same thing in the same shape. A runner supplies
+// (tools/node-ab.js) and the browser one (tools/browser-ab.js) report the same thing in the same shape. A runner supplies
 // one function that takes a fresh sample of a side's throughput; this alternates the sides, decides when to
 // stop and summarises.
 

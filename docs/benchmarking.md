@@ -2,8 +2,9 @@
 
 How to tell whether a change makes the emulator faster. The workloads are the snapshots in
 `public/benchmarks` (see `src/benchmark-workloads.js`); `npm run benchmark` gives a quick look at their speed in
-Node, the page's `?benchmark=<workload>` mode measures them in a browser (see the README), and the A/B runner
-below says whether a difference between two commits is real.
+Node, the page's `?benchmark=<workload>` mode measures them in a browser (see the README), and the A/B runners
+below say whether a difference between two commits is real: the Node one quickly, as a proxy (in Node or in
+the engines' own shells), and the browser one where it matters.
 
 ## Node A/B runner
 
@@ -69,7 +70,7 @@ ref and workload.
 
 ## Engine shells
 
-The same A/B runs in the engines' own shells, without a browser: V8's `d8`, SpiderMonkey's `js` (Firefox) and
+The Node A/B also runs in the engines' own shells, without a browser: V8's `d8`, SpiderMonkey's `js` (Firefox) and
 JavaScriptCore's `jsc` (Safari). [jsvu](https://github.com/GoogleChromeLabs/jsvu) installs them in `~/.jsvu`:
 
 ```sh
@@ -86,6 +87,47 @@ supplies what the shells lack: file reading, the few Node functions the machine'
 engine. `--cpu-prof` and `--trace-deopt` are Node's, so they need `--engine node`.
 `npm run benchmark:shell` prints each workload's speed once, for a quick look.
 
+## Browser A/B runner
+
+```sh
+npm run benchmark:browser-ab -- <A> <B> [workload ...] [options]
+```
+
+The same comparison in a browser, driving the page's `?benchmark=<workload>` mode. A and B are git refs, paths to
+checkouts (taken as for the Node runner) or paths to pages already built (a `dist` folder). Each checkout, a ref's
+worktree included, is built with its own `vite` into a folder of its own in `--work-dir`, without analytics, and
+removed afterwards; a built page is used as it is. Both sides are then served from the same in-process server on
+two loopback ports, with the same headers, so the only difference between them is the build. Nothing else is
+fetched: requests off the loopback address are refused. `npm run benchmark:browser-ab -- --help` lists the
+options.
+
+Each sample is a fresh page in a fresh browser context, so no side inherits the other's compiled JavaScript or
+page caches (the GPU process, and its compiled shaders, outlive a context); `--fresh browser` launches a whole
+browser per sample instead. On a busy desktop neither gave the
+lower spread between samples, so the cheaper one is the default. The page restores the workload, warms up and
+times ten emulated seconds in three passes (see the README); a sample's throughput is its `--pass` (`full`,
+the default, as a person runs it; `video`, without the copy and present; or `cpu`, with fake video) in
+virtual MHz, from its median emulated second, or with `--statistic total` from all ten. The page's seconds
+play the part of the Node runner's slices, a hundred times coarser. The pairs, the statistics, the stopping rule
+and the result line are the Node runner's; the line ends with the browser, its version and the renderer, and the
+run stops if any page differs from the first in renderer, display, cross-origin isolation or user agent.
+`--json FILE` writes each sample's every emulated second for each pass as well.
+
+The browser is a project from `playwright.config.js` (`--project`): `chrome`, the system Chrome headless, by
+default, as the e2e suite uses; `chromium`, `firefox` or `webkit` once `npx playwright install` has fetched it.
+Firefox and WebKit are Playwright's patched builds, not the branded browsers, so their numbers compare two
+builds with each other and nothing more. Chrome draws with the software renderer (SwiftShader) unless
+`--gl hardware` asks for the GPU. Software is what CI uses and the same on any machine, but its present runs on
+the CPU and is about a third of the `full` pass's time on Elite; the GPU's present is closer to what people see,
+but varies with the GPU and its driver, and a Chrome that cannot reach the GPU never finishes the page (the
+sample times out after five minutes). `--pass video` leaves the present out altogether.
+
+`--cpu-prof a|b|both` loads one more page per workload of the chosen sides after the timed ones, with Chrome's
+profiler (through the DevTools protocol) running from when the page has loaded until its result is in, and writes
+the `.cpuprofile` to `--out-dir` (`browser-ab-out`). Open it in Chrome DevTools' Performance panel.
+
+A run cleans up its worktrees, builds, servers and browsers when it ends, also on Ctrl-C, SIGTERM or SIGHUP.
+
 ## Keeping runs quiet
 
 - Run nothing else heavy at the same time: a build, a test suite or a second A/B run on the same machine
@@ -95,15 +137,22 @@ engine. `--cpu-prof` and `--trace-deopt` are Node's, so they need `--engine node
   other load take its time.
 - A laptop on mains power with little else running gives about ±1% between samples; a busy desktop gives
   several times that, with whole samples stalled.
-- CPU frequency scaling and thermal throttling move every sample. On Linux, the `performance` governor
-  (`cpupower frequency-set -g performance`) holds the clock up; the alternating pairs keep a slow drift from
-  favouring either side, but not a sudden change.
+- Clock speed moves every sample: turbo drops as other cores get busy, and a hot machine throttles. The
+  alternating pairs keep a slow drift from favouring either side, but not a sudden change. Under Linux's
+  `intel_pstate` driver, what the `powersave` governor does depends on the energy-performance preference: with
+  `balance_performance` it lets busy cores turbo, while `balance_power` or `power` holds them lower. The
+  `performance` governor (`cpupower frequency-set -g performance`) takes the question away.
+- A browser's samples vary much more than Node's, on a quiet machine as much as a busy one: each emulated
+  second in a page varies by 8 to 25%, and the `video` and `cpu` passes also settle at a different speed in
+  each page. With the defaults the browser A/B resolves about 4% on the `full` pass; seeing 2% takes about
+  four times the pairs (`--max-pairs 120`, over half an hour a workload).
 
 ## Sharing the statistics
 
 `tools/ab-stats.js` has no Node or browser dependencies. A runner supplies `sample(side)`, which takes one
 fresh throughput sample of side `"a"` or `"b"`; `sampleUntilResolved` alternates the sides, stops and
-summarises, and `describeComparison` prints the line. The browser A/B (#1340) is meant to supply a `sample`
-that opens a fresh page on that side's build and reads the `?benchmark` result, and so to report the same
-result in the same shape. A caller that allows fewer than `FewestDecisivePairs` (8) pairs can get a result
-with no interval: its bounds are 0 and `Infinity` (`null` in JSON), and so is the minimum detectable change.
+summarises, and `describeComparison` prints the line. The browser A/B supplies a `sample` that opens a fresh
+page on that side's build and reads the `?benchmark` result, and so reports the same result in the same shape.
+`tools/ab-sides.js` holds what else the two share: checking out a ref with its packages, the workloads each side
+has, and the options for when to stop. A caller that allows fewer than `FewestDecisivePairs` (8) pairs can get a
+result with no interval: its bounds are 0 and `Infinity` (`null` in JSON), and so is the minimum detectable change.
