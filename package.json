@@ -7,7 +7,7 @@
   "name": "jsbeeb",
   "description": "Emulate a BBC Micro",
   "repository": "git@github.com:mattgodbolt/jsbeeb.git",
-  "version": "2.10.1",
+  "version": "2.10.2",
   "//engines": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
     "node": ">=24.15.0"
@@ -117,6 +117,7 @@
     "benchmark:workloads": "node tools/make-benchmark-workloads.js",
     "benchmark:ab": "exec node tools/node-ab.js",
     "benchmark:browser-ab": "exec node tools/browser-ab.js",
+    "benchmark:shell": "exec node tools/shell-bench.js",
     "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
     "mirror-sth:check": "node tools/mirror-sth.js --index-only",
     "mirror-sth:upload": "npm-run-all mirror-sth:upload:*",

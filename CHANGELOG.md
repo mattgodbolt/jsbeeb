@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.10.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.1...v2.10.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* a host welcomes a guest once it has said hello, as Chrome can drop what is sent the moment a guest's channel opens ([#1447](https://github.com/mattgodbolt/jsbeeb/issues/1447)) ([968da1d](https://github.com/mattgodbolt/jsbeeb/commit/968da1d6916f70c03aebc371aeab4788d5a0750d))
+* a power-on reset re-enables a VideoNuLA that software disabled ([#1444](https://github.com/mattgodbolt/jsbeeb/issues/1444)) ([3d89cd1](https://github.com/mattgodbolt/jsbeeb/commit/3d89cd177fe107aa92adc4d92fbff1dd07f07f5f))
+* an Atom hard reset takes the speaker's last level from the cleared port C latch ([#1461](https://github.com/mattgodbolt/jsbeeb/issues/1461)) ([096a982](https://github.com/mattgodbolt/jsbeeb/commit/096a982ab8d93154f71a1d0f8a11b9fe370f6aa9))
+* an error in the loop stops the machine like any other stop ([#1437](https://github.com/mattgodbolt/jsbeeb/issues/1437)) ([5a0143d](https://github.com/mattgodbolt/jsbeeb/commit/5a0143d6420e0fcc9e0ead201fc4f7f49d54207b))
+* call the settings dialog settings everywhere, and place the : * key by position in help ([#1438](https://github.com/mattgodbolt/jsbeeb/issues/1438)) ([8eaf2ec](https://github.com/mattgodbolt/jsbeeb/commit/8eaf2ecd93210a6ebe0e533dd54d0a0747667bfa)), closes [#1404](https://github.com/mattgodbolt/jsbeeb/issues/1404)
+* hold the machine when a shared session ends in a hidden tab ([#1451](https://github.com/mattgodbolt/jsbeeb/issues/1451)) ([43df695](https://github.com/mattgodbolt/jsbeeb/commit/43df695bf47a2d2fc5e5f62bc9396fe5010f1cf5))
+* keep the Master RTC working after writing October, and read the year as two digits ([#1452](https://github.com/mattgodbolt/jsbeeb/issues/1452)) ([1e26700](https://github.com/mattgodbolt/jsbeeb/commit/1e26700bbdc65fd1c916f8d4468c724c08193e5c))
+* restoring an Atom state restores the speaker's level ([#1442](https://github.com/mattgodbolt/jsbeeb/issues/1442)) ([2a76b51](https://github.com/mattgodbolt/jsbeeb/commit/2a76b51d07147995032413d4ba102539b5a81f21))
+* score the debugger's previous-instruction guess in one pass ([#1470](https://github.com/mattgodbolt/jsbeeb/issues/1470)) ([a12b8ed](https://github.com/mattgodbolt/jsbeeb/commit/a12b8edee75b4434a866cc7dac3e35aa528f2bc0))
+* the ADC status register reports the result's top bits in bits 5 and 4, not over the channel ([#1422](https://github.com/mattgodbolt/jsbeeb/issues/1422)) ([d88bc37](https://github.com/mattgodbolt/jsbeeb/commit/d88bc373ce95edace3e020f3dae1b754debbb1eb))
+* the ADC's low byte reads bits 3-0 as zero ([#1440](https://github.com/mattgodbolt/jsbeeb/issues/1440)) ([18caa5b](https://github.com/mattgodbolt/jsbeeb/commit/18caa5b2527918b16bbe3bad48309c65be827c06))
+* the Master clock keeps a 31st set while it reads a shorter month ([#1466](https://github.com/mattgodbolt/jsbeeb/issues/1466)) ([36a20a1](https://github.com/mattgodbolt/jsbeeb/commit/36a20a1dc2b7811cd2362b33042afea3eda459a9))
+* typing g or n into any text field leaves a paused machine paused ([#1441](https://github.com/mattgodbolt/jsbeeb/issues/1441)) ([69a945b](https://github.com/mattgodbolt/jsbeeb/commit/69a945b50542f3da9ef3784d47360804ccd58d2d))
+
 ## [2.10.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.0...v2.10.1) (2026-10-20)
 
 
