@@ -959,7 +959,7 @@ describe("Video", () => {
             video.blitFb = (dat, offset, numPixels, doubledLines) => {
                 const row = Math.floor(offset / 1024);
                 drawnUnder.set(row, video.hsyncCount);
-                if (video.doublesLines()) drawnUnder.set(row + 1, video.hsyncCount);
+                if (doubledLines) drawnUnder.set(row + 1, video.hsyncCount);
                 blitFb(dat, offset, numPixels, doubledLines);
             };
             program(v);
