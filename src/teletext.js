@@ -3,6 +3,10 @@ import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
 
 const QueueBits = 7;
+// The control codes `applyControlCode` acts on; the others leave the state alone.
+const ActingControlCodes = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31,
+].reduce((mask, code) => mask | (1 << code), 0);
 
 export class Teletext {
     constructor() {
@@ -238,10 +242,7 @@ export class Teletext {
         }
     }
 
-    handleControlCode(data) {
-        const wasGfx = this.gfx;
-        const wasHoldChar = this.holdChar;
-
+    applyControlCode(data) {
         switch (data) {
             case 1:
             case 2:
@@ -302,15 +303,6 @@ export class Teletext {
                 this.holdChar = false;
                 break;
         }
-        if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
-            data = this.heldChar;
-            this.curGlyphs = this.heldGlyphs;
-        } else {
-            this.heldChar = 0x20;
-            data = 0x20;
-        }
-
-        return data;
     }
 
     fetchData(data) {
@@ -406,7 +398,16 @@ export class Teletext {
         let flashThisCell = this.flash;
         let concealThisCell = this.conceal;
         if (data < 0x20) {
-            data = this.handleControlCode(data);
+            const wasGfx = this.gfx;
+            const wasHoldChar = this.holdChar;
+            if ((ActingControlCodes >>> data) & 1) this.applyControlCode(data);
+            if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
+                data = this.heldChar;
+                this.curGlyphs = this.heldGlyphs;
+            } else {
+                this.heldChar = 0x20;
+                data = 0x20;
+            }
         } else if (this.gfx) {
             if (data & 0x20) {
                 this.heldChar = data;
