@@ -14,12 +14,13 @@ npm run benchmark:ab -- <A> <B> [workload ...] [options]
 npm runs it from the checkout's root, so relative paths (a side, `--json`, `--out-dir`, `--work-dir`) are taken
 from there. `npm run -s` leaves out npm's own banner lines, for a script reading the output.
 
-A and B are git refs or paths to existing checkouts. A ref is checked out into a temporary worktree (in the
-system temp directory, or `--work-dir`) that is removed afterwards, also on Ctrl-C, SIGTERM or SIGHUP (the npm
-script `exec`s Node, so a SIGTERM sent to npm reaches it); its `node_modules` is a link to the one Node finds
-for this checkout (in it or a directory above) when the lock files match apart from the package's own version,
-and its own `npm ci` otherwise. A path is used as it is, uncommitted changes and all, so an agent can compare
-its working tree against a worktree of the commit it started from; it needs its packages installed (or a
+A and B are git refs or paths to existing checkouts. A ref is checked out into a temporary worktree (in the system
+temp directory, or `--work-dir`, made if missing) that is removed afterwards, also on Ctrl-C, SIGTERM or SIGHUP
+(the npm script `exec`s Node, so a SIGTERM sent to npm reaches it). When the lock files match apart from the
+package's own version, its `node_modules` is a link to the nearest one in or above this checkout whose
+`.package-lock.json` (npm's record of what it installed) has every package this checkout's lock file names; when
+they differ, it gets its own `npm ci`. A path is used as it is, uncommitted changes and all, so an agent can
+compare its working tree against a worktree of the commit it started from; it needs its packages installed (or a
 `node_modules` in a directory above it, as a worktree under `.claude/worktrees` finds the main checkout's). Both
 sides need the benchmark workloads, so neither can predate them. A run killed outright (`kill -9`) leaves its
 worktrees behind; `git worktree prune` after deleting their directories tidies them up.
@@ -49,10 +50,10 @@ verdict is decided, after at least `--min-pairs` (8), or at `--max-pairs` (30):
 - **same**: the 99% interval lies within `--horizon` (2%) of 1.
 - **unresolved**: neither, at the cap.
 
-The verdict uses a 99% interval because it is checked after every pair, and each look is another chance of a
-false "faster" or "slower"; with 99% an A/A run ends in one about 5% of the time. For 7 pairs or fewer no 99%
-interval exists. The minimum detectable change is the change that this many pairs, this noisy, would call
-faster or slower four times in five.
+The verdict uses a 99% interval because it is checked after every pair, and each look is another chance of a false
+"faster" or "slower"; with 99% an A/A run ends in one about 5% of the time. For 7 pairs or fewer no 99% interval
+exists; the progress line printed after each pair shows the 95% one, which exists from 6 pairs. The minimum
+detectable change is the change that this many pairs, this noisy, would call faster or slower four times in five.
 
 One line per workload is printed, and `--json FILE` writes the full result for scripts: each side's ref and
 sha (a path's sha gains `-dirty` with uncommitted changes to tracked files), the settings, and per workload

@@ -170,12 +170,27 @@ export function comparableLock(text) {
     return JSON.stringify({ ...rest, packages: { ...packages, "": ownPackage } });
 }
 
-// The node_modules Node finds for this checkout, which for a worktree inside another checkout can be that one's.
-function ownNodeModules() {
-    for (let dir = RepoRoot; ; dir = path.dirname(dir)) {
+const readJson = (file) => JSON.parse(readFileSync(file, "utf8"));
+
+// npm records what it installed in node_modules/.package-lock.json, which leaves out optional packages it skipped.
+function installsLock(nodeModules, lockedPackages) {
+    const installedLock = path.join(nodeModules, ".package-lock.json");
+    if (!existsSync(installedLock)) return false;
+    const installed = readJson(installedLock).packages;
+    return Object.entries(lockedPackages).every(
+        ([name, { version, optional }]) => name === "" || optional || installed[name]?.version === version,
+    );
+}
+
+/** The nearest node_modules in or above `root` that holds the install its package-lock.json describes. */
+export function installedNodeModules(root) {
+    const lockedPackages = readJson(path.join(root, "package-lock.json")).packages;
+    for (let dir = root; ; dir = path.dirname(dir)) {
         const candidate = path.join(dir, "node_modules");
-        if (existsSync(candidate)) return candidate;
-        if (path.dirname(dir) === dir) throw new Error(`No node_modules in or above ${RepoRoot}; run npm ci`);
+        if (installsLock(candidate, lockedPackages)) return candidate;
+        if (path.dirname(dir) === dir) {
+            throw new Error(`No node_modules in or above ${root} holds its package-lock.json's install; run npm ci`);
+        }
     }
 }
 
@@ -184,7 +199,7 @@ function ownNodeModules() {
 function provideNodeModules(dir) {
     const lock = (checkout) => comparableLock(readFileSync(path.join(checkout, "package-lock.json"), "utf8"));
     if (lock(dir) === lock(RepoRoot)) {
-        symlinkSync(ownNodeModules(), path.join(dir, "node_modules"), "dir");
+        symlinkSync(installedNodeModules(RepoRoot), path.join(dir, "node_modules"), "dir");
         return;
     }
     console.error(`${dir}: package-lock.json differs from this checkout's, so running npm ci there`);
@@ -212,6 +227,7 @@ function prepareSide(spec, workDir, created) {
     } catch (error) {
         throw new Error(`"${spec}" is neither a checkout with benchmark workloads nor a git ref`, { cause: error });
     }
+    mkdirSync(workDir, { recursive: true });
     const root = mkdtempSync(path.join(workDir, `jsbeeb-node-ab-${fileLabel(spec)}-`));
     try {
         git("worktree", "add", "--detach", root, sha);
