@@ -10,6 +10,7 @@ import {
     checkoutSha,
     checkWorkloads,
     comparableLock,
+    installedNodeModules,
     parseOptions,
 } from "../../../tools/node-ab.js";
 
@@ -149,6 +150,29 @@ describe("comparableLock", () => {
 
     it("sees a changed dependency", () => {
         expect(comparableLock(lock("2.8.0", "2.1.1"))).not.toBe(comparableLock(lock("2.8.0", "2.1.0")));
+    });
+});
+
+describe("installedNodeModules", () => {
+    it("passes over a nearer node_modules holding a different version of a locked package", () => {
+        const packages = {
+            "": { name: "jsbeeb" },
+            "node_modules/pako": { version: "2.1.0" },
+            "node_modules/fsevents": { version: "2.3.3", optional: true },
+        };
+        const checkout = path.join(scratch, "main", ".claude", "worktrees", "agent");
+        mkdirSync(checkout, { recursive: true });
+        writeFileSync(path.join(checkout, "package-lock.json"), JSON.stringify({ packages }));
+        const stray = path.join(scratch, "main", ".claude", "worktrees", "node_modules");
+        mkdirSync(stray);
+        const stale = { ...packages, "node_modules/pako": { version: "2.0.4" } };
+        writeFileSync(path.join(stray, ".package-lock.json"), JSON.stringify({ packages: stale }));
+        const install = path.join(scratch, "main", "node_modules");
+        mkdirSync(install);
+        const { "node_modules/fsevents": _skipped, ...installed } = packages;
+        writeFileSync(path.join(install, ".package-lock.json"), JSON.stringify({ packages: installed }));
+
+        expect(installedNodeModules(checkout)).toBe(install);
     });
 });
 
