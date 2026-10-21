@@ -839,29 +839,21 @@ export class Video {
     }
 
     readVideoMem() {
-        if (this.addr & 0x2000) {
+        const addr = this.addr;
+        let memAddr;
+        if (addr & 0x2000) {
             // Mode 7 chunky addressing mode if MA13 set.
             // Address offset by scanline is ignored.
             // On model B only, there's a quirk for reading 0x3c00.
             // See: http://www.retrosoftware.co.uk/forum/viewtopic.php?f=73&t=1011
-            let memAddr = this.addr & 0x3ff;
-            if (this.addr & 0x800 || this.isMaster) {
-                memAddr |= 0x7c00;
-            } else {
-                memAddr |= 0x3c00;
-            }
-            return this.cpu.videoRead(memAddr);
+            memAddr = (addr & 0x3ff) | (addr & 0x800 || this.isMaster ? 0x7c00 : 0x3c00);
         } else {
             // Emulate IC32/IC39 address translation: adjust MA11..MA8 on overflow before composing the DRAM address.
-            const ma = this.addr & 0x1fff;
-            const raLow = this.externalRowAddress() & 0x07;
-            let adjustedHigh = (ma >>> 8) & 0x0f;
-            if (ma & 0x1000) {
-                adjustedHigh = (adjustedHigh - this.screenSubtract) & 0x0f;
-            }
-            const hiResAddr = ((adjustedHigh << 11) | ((ma & 0xff) << 3) | raLow) & 0x7fff;
-            return this.cpu.videoRead(hiResAddr);
+            let adjustedHigh = (addr >>> 8) & 0x0f;
+            if (addr & 0x1000) adjustedHigh = (adjustedHigh - this.screenSubtract) & 0x0f;
+            memAddr = (adjustedHigh << 11) | ((addr & 0xff) << 3) | (this.externalRowAddress() & 0x07);
         }
+        return this.cpu.videoRead(memAddr);
     }
 
     clockVSync(r7Hit) {
