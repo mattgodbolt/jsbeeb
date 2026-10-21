@@ -753,7 +753,7 @@ export class Video {
         this.lineGridUlaDoubled = encodeLineGrid(texelsWide, true);
     }
 
-    blitFb(dat, destOffset, numPixels, doubledLines = false) {
+    blitFb(dat, destOffset, numPixels, doubledLines) {
         destOffset |= 0;
         const offset = table4bppOffset(this.ulaMode, dat);
         const fb32 = this.fb32;
