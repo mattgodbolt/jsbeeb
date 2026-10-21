@@ -956,11 +956,11 @@ describe("Video", () => {
             });
             const video = v.video;
             const blitFb = video.blitFb.bind(video);
-            video.blitFb = (dat, offset, pixels) => {
+            video.blitFb = (dat, offset, ...rest) => {
                 const row = Math.floor(offset / 1024);
                 drawnUnder.set(row, video.hsyncCount);
                 if (video.doublesLines()) drawnUnder.set(row + 1, video.hsyncCount);
-                blitFb(dat, offset, pixels);
+                blitFb(dat, offset, ...rest);
             };
             program(v);
             v.run(SettleFrames * ClocksPerFrame);
