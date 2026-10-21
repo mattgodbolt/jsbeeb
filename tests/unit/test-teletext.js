@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { Teletext } from "../../src/teletext.js";
+import { StateChangingControlCodes, Teletext } from "../../src/teletext.js";
 import { makeFast32 } from "../../src/binary.js";
 
 const PixelsPerCell = 16;
@@ -334,6 +334,23 @@ describe("Teletext", () => {
             expect(backgroundOnly(cells[2])).toBe(true);
             expect(solidOnly(cells[3], White)).toBe(true);
         });
+    });
+
+    // Between them the two starting states give every implemented code something to change.
+    it("calls out exactly the control codes that change state", () => {
+        const fresh = teletext.snapshotState();
+        renderCells([RedGraphics, Flash, DoubleHeight, SeparatedGraphics, HoldGraphics, Conceal, NewBackground]);
+        const startStates = [fresh, teletext.snapshotState()];
+        const changesState = (code) =>
+            startStates.some((state) => {
+                const chip = new Teletext();
+                chip.restoreState(state);
+                chip.applyControlCode(code);
+                return JSON.stringify(chip.snapshotState()) !== JSON.stringify(state);
+            });
+        const codes = [...Array(Space).keys()];
+
+        expect(codes.filter((code) => (StateChangingControlCodes >>> code) & 1)).toEqual(codes.filter(changesState));
     });
 
     describe("scanlines", () => {

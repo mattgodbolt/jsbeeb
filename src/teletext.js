@@ -2,9 +2,12 @@ import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
 
+const QueueLength = 4;
 const QueueBits = 7;
-// The control codes `applyControlCode` acts on; the others leave the state alone.
-const ActingControlCodes = [
+const QueueByteMask = (1 << QueueBits) - 1;
+const NewestQueueShift = (QueueLength - 1) * QueueBits;
+// Must name exactly the codes `applyControlCode` changes state for.
+export const StateChangingControlCodes = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31,
 ].reduce((mask, code) => mask | (1 << code), 0);
 
@@ -188,7 +191,10 @@ export class Teletext {
             flashTime: this.flashTime,
             heldChar: this.heldChar,
             holdChar: this.holdChar,
-            dataQueue: [0, 1, 2, 3].map((i) => (this.dataQueue >>> (i * QueueBits)) & 0x7f),
+            dataQueue: Array.from(
+                { length: QueueLength },
+                (_, i) => (this.dataQueue >>> (i * QueueBits)) & QueueByteMask,
+            ),
             scanlineCounter: this.scanlineCounter,
             levelDEW: this.levelDEW,
             levelDISPTMG: this.levelDISPTMG,
@@ -214,7 +220,10 @@ export class Teletext {
         this.flashTime = state.flashTime;
         this.heldChar = state.heldChar;
         this.holdChar = state.holdChar;
-        this.dataQueue = state.dataQueue.reduce((queue, byte, i) => queue | ((byte & 0x7f) << (i * QueueBits)), 0);
+        this.dataQueue = state.dataQueue.reduce(
+            (queue, byte, i) => queue | ((byte & QueueByteMask) << (i * QueueBits)),
+            0,
+        );
         this.scanlineCounter = state.scanlineCounter;
         this.levelDEW = state.levelDEW;
         this.levelDISPTMG = state.levelDISPTMG;
@@ -306,7 +315,7 @@ export class Teletext {
     }
 
     fetchData(data) {
-        this.dataQueue = (this.dataQueue >>> QueueBits) | ((data & 0x7f) << (3 * QueueBits));
+        this.dataQueue = (this.dataQueue >>> QueueBits) | ((data & QueueByteMask) << NewestQueueShift);
     }
 
     setDEW(level) {
@@ -388,7 +397,7 @@ export class Teletext {
      * to the character state, and latch how the resulting cell should look.
      */
     advance() {
-        let data = this.dataQueue & 0x7f;
+        let data = this.dataQueue & QueueByteMask;
 
         this.oldDbl = this.dbl;
 
@@ -400,7 +409,7 @@ export class Teletext {
         if (data < 0x20) {
             const wasGfx = this.gfx;
             const wasHoldChar = this.holdChar;
-            if ((ActingControlCodes >>> data) & 1) this.applyControlCode(data);
+            if ((StateChangingControlCodes >>> data) & 1) this.applyControlCode(data);
             if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
                 data = this.heldChar;
                 this.curGlyphs = this.heldGlyphs;
