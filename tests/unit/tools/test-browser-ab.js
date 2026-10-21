@@ -85,7 +85,16 @@ describe("checkSamePage", () => {
     ])("stops the run when the sides' pages differ in %s", (field, value) => {
         const seen = {};
         checkSamePage(seen, "a", page);
-        expect(() => checkSamePage(seen, "b", { ...page, [field]: value })).toThrow("The sides' pages ran differently");
+        expect(() => checkSamePage(seen, "b", { ...page, [field]: value })).toThrow(
+            "A page of B ran differently from the first",
+        );
+    });
+
+    it("stops the run when a later page of the same side differs", () => {
+        const seen = {};
+        checkSamePage(seen, "a", page);
+        checkSamePage(seen, "b", page);
+        expect(() => checkSamePage(seen, "b", { ...page, renderer: "canvas" })).toThrow("A page of B");
     });
 });
 

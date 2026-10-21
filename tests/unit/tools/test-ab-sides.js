@@ -9,6 +9,7 @@ import {
     checkoutSha,
     checkWorkloads,
     comparableLock,
+    gitEnv,
     installedNodeModules,
 } from "../../../tools/ab-sides.js";
 
@@ -58,7 +59,7 @@ describe("checkoutSha", () => {
     const git = (...args) =>
         execFileSync("git", ["-C", scratch, "-c", "user.name=t", "-c", "user.email=t@t", ...args], {
             encoding: "utf8",
-            env: Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_"))),
+            env: gitEnv,
         }).trim();
 
     beforeEach(() => {

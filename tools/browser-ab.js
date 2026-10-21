@@ -30,7 +30,7 @@ import {
     Sides,
 } from "./ab-sides.js";
 import { describeComparison, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
-import { checkGl, GlArgs } from "./chrome-gl.js";
+import { checkGl, chromeArgs } from "./chrome-gl.js";
 
 const BrowserTypes = { chromium, firefox, webkit };
 const Passes = ["full", "video", "cpu"];
@@ -40,7 +40,6 @@ const DiagnosticSides = { a: ["a"], b: ["b"], both: ["a", "b"] };
 const LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
 // For a page that never finishes, as one does when Chrome cannot reach the GPU that --gl hardware asks for.
 const SampleTimeoutMs = 5 * 60 * 1000;
-const KHzPerMHz = 1000;
 const ContentTypes = {
     ".css": "text/css",
     ".gz": "application/gzip",
@@ -163,13 +162,12 @@ export function parseOptions(args, projects = playwrightConfig.projects) {
  * seconds' total time.
  */
 export function throughput(result, pass, statistic) {
-    const cyclesPerSecond = result.mhz * result.passes.full.ms.median * KHzPerMHz;
     const seconds = result.samples[pass].map(({ ms }) => ms);
     const ms =
         statistic === "median"
             ? result.passes[pass].ms.median
             : seconds.reduce((sum, each) => sum + each, 0) / seconds.length;
-    return cyclesPerSecond / ms / KHzPerMHz;
+    return (result.mhz * result.passes.full.ms.median) / ms;
 }
 
 const isBuiltPage = (spec) =>
@@ -254,7 +252,7 @@ class Browsers {
 
     async launch() {
         const { browserName, channel, gl } = this.settings;
-        const args = browserName === "chromium" ? [...GlArgs[gl], "--autoplay-policy=no-user-gesture-required"] : [];
+        const args = browserName === "chromium" ? chromeArgs(gl) : [];
         const browser = await BrowserTypes[browserName].launch({
             channel,
             args,
@@ -318,14 +316,16 @@ async function runPage(browsers, side, workload, { started = async () => {}, fin
         await started(page);
         const record = await withTimeout(
             page.evaluate(async () => {
+                if (!window.jsbeebBenchmark) return { status: "missing", error: "the page has no ?benchmark mode" };
                 const { status, error, result } = await window.jsbeebBenchmark.done;
                 return { status, error, result };
             }),
             `The ${workload.name} benchmark on ${side.url}`,
         );
         await finished(page);
+        const pageErrors = errors.length ? ` (the page's errors: ${errors.join("; ")})` : "";
         if (record.status !== "done") {
-            throw new Error(`The ${workload.name} benchmark on ${side.spec} ${record.status}: ${record.error}`);
+            throw new Error(`The ${workload.name} benchmark on ${side.spec} failed: ${record.error}${pageErrors}`);
         }
         if (errors.length) console.error(`Errors on ${side.spec}'s page: ${errors.join("; ")}`);
         return { result: record.result, browserVersion: browser.version() };
@@ -335,13 +335,13 @@ async function runPage(browsers, side, workload, { started = async () => {}, fin
 }
 
 /**
- * Records in `seen` what `side`'s page first said it ran on, and throws once the two sides' differ in anything
- * but the build.
+ * Throws if `side`'s page says it ran on anything but what the run's first page did, which `seen.first` records.
  */
 export function checkSamePage(seen, side, { renderer, display, crossOriginIsolated, userAgent }) {
-    seen[side] ??= JSON.stringify({ renderer, display, crossOriginIsolated, userAgent });
-    if (seen.a && seen.b && seen.a !== seen.b) {
-        throw new Error(`The sides' pages ran differently: A ${seen.a}, B ${seen.b}`);
+    const ranOn = JSON.stringify({ renderer, display, crossOriginIsolated, userAgent });
+    seen.first ??= ranOn;
+    if (ranOn !== seen.first) {
+        throw new Error(`A page of ${side.toUpperCase()} ran differently from the first: ${ranOn}, not ${seen.first}`);
     }
 }
 
@@ -382,7 +382,7 @@ async function compare(sides, workloads, browsers, settings) {
         console.log(describeComparison(workload.name, result, engine));
         results.push({ workload: workload.name, ...result, raw });
     }
-    return { results, engine, page: seen.a ? JSON.parse(seen.a) : null };
+    return { results, engine, page: seen.first ? JSON.parse(seen.first) : null };
 }
 
 async function profileRuns(sides, workloads, browsers, settings) {

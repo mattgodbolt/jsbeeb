@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-import { checkGl, GlArgs, hasGpu } from "./tools/chrome-gl.js";
+import { checkGl, chromeArgs, hasGpu } from "./tools/chrome-gl.js";
 import { workersFor } from "./tools/test-workers.js";
 
 // The preview of dist/ the tests drive, on a port of its own so a dev server
@@ -39,7 +39,7 @@ export default defineConfig({
         launchOptions: {
             // Playwright's own headless switches already mute audio and keep
             // shared memory out of /dev/shm; these are what the app needs on top.
-            args: [...GlArgs[Gl], "--autoplay-policy=no-user-gesture-required"],
+            args: chromeArgs(Gl),
         },
     },
     projects: [

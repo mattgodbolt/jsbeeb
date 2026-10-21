@@ -89,9 +89,9 @@ lower spread between samples, so the cheaper one is the default. The page restor
 times ten emulated seconds in three passes (see the README); a sample's throughput is its `--pass` (`full`,
 the default, as a person runs it; `video`, without the copy and present; or `cpu`, with fake video) in
 virtual MHz, from its median emulated second, or with `--statistic total` from all ten. The page's seconds
-are the counterpart of the Node runner's slices. The pairs, the statistics, the stopping rule and the result line
-are the Node runner's; the line ends with the browser, its version and the renderer, and the run stops if the two
-sides' pages differ in renderer, display, cross-origin isolation or user agent. `--json FILE` writes each
+play the part of the Node runner's slices, a hundred times coarser. The pairs, the statistics, the stopping rule
+and the result line are the Node runner's; the line ends with the browser, its version and the renderer, and the
+run stops if any page differs from the first in renderer, display, cross-origin isolation or user agent. `--json FILE` writes each
 sample's every emulated second for each pass as well.
 
 The browser is a project from `playwright.config.js` (`--project`): `chrome`, the system Chrome headless, by
@@ -121,8 +121,8 @@ A run cleans up its worktrees, builds, servers and browsers when it ends, also o
 - CPU frequency scaling and thermal throttling move every sample. On Linux, the `performance` governor
   (`cpupower frequency-set -g performance`) holds the clock up; the alternating pairs keep a slow drift from
   favouring either side, but not a sudden change.
-- A browser's emulated seconds vary much more than Node's slices, the software renderer's present most of
-  all, so the browser A/B needs a quieter machine or more pairs to see the same change.
+- A browser's samples vary much more than Node's, the software renderer's present most of all, so the
+  browser A/B needs a quieter machine or more pairs to see the same change.
 
 ## Sharing the statistics
 
