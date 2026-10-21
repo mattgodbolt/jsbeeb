@@ -1,6 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { readdirSync } from "node:fs";
-
+import { checkGl, GlArgs, hasGpu } from "./tools/chrome-gl.js";
 import { workersFor } from "./tools/test-workers.js";
 
 // The preview of dist/ the tests drive, on a port of its own so a dev server
@@ -15,19 +14,7 @@ const BaseUrl = process.env.BASE_URL;
 // machine with one, Chrome is pointed at it instead, which takes a filter's
 // shader compile from tens of seconds to an instant.
 // E2E_GL=software or E2E_GL=hardware overrides the choice.
-const GlArgs = {
-    software: ["--use-gl=angle", "--use-angle=swiftshader"],
-    hardware: ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"],
-};
-const hasGpu = () => {
-    try {
-        return readdirSync("/dev/dri").some((node) => /^(card|renderD)\d+$/.test(node));
-    } catch {
-        return false;
-    }
-};
-const Gl = process.env.E2E_GL ?? (process.env.CI || !hasGpu() ? "software" : "hardware");
-if (!GlArgs[Gl]) throw new Error(`E2E_GL must be one of ${Object.keys(GlArgs).join(", ")}, not "${Gl}"`);
+const Gl = checkGl(process.env.E2E_GL ?? (process.env.CI || !hasGpu() ? "software" : "hardware"), "E2E_GL");
 
 export default defineConfig({
     testDir: "tests/playwright",
@@ -59,6 +46,9 @@ export default defineConfig({
         { name: "chrome", use: { channel: "chrome" } },
         // For a machine without Chrome; needs `npx playwright install chromium` first.
         { name: "chromium" },
+        // Playwright's patched engines, not branded Firefox or Safari; each needs `npx playwright install` first.
+        { name: "firefox", use: { browserName: "firefox", launchOptions: {} } },
+        { name: "webkit", use: { browserName: "webkit", launchOptions: {} } },
     ],
     webServer: BaseUrl
         ? undefined
