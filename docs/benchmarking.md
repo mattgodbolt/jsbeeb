@@ -82,8 +82,9 @@ two loopback ports, with the same headers, so the only difference between them i
 fetched: requests off the loopback address are refused. `npm run benchmark:browser-ab -- --help` lists the
 options.
 
-Each sample is a fresh page in a fresh browser context, so no side inherits the other's compiled code or
-caches; `--fresh browser` launches a whole browser per sample instead. On a busy desktop neither gave the
+Each sample is a fresh page in a fresh browser context, so no side inherits the other's compiled JavaScript or
+page caches (the GPU process, and its compiled shaders, outlive a context); `--fresh browser` launches a whole
+browser per sample instead. On a busy desktop neither gave the
 lower spread between samples, so the cheaper one is the default. The page restores the workload, warms up and
 times ten emulated seconds in three passes (see the README); a sample's throughput is its `--pass` (`full`,
 the default, as a person runs it; `video`, without the copy and present; or `cpu`, with fake video) in

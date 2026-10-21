@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+
 import { checkGl, GlArgs, hasGpu } from "./tools/chrome-gl.js";
 import { workersFor } from "./tools/test-workers.js";
 
@@ -47,6 +48,7 @@ export default defineConfig({
         // For a machine without Chrome; needs `npx playwright install chromium` first.
         { name: "chromium" },
         // Playwright's patched engines, not branded Firefox or Safari; each needs `npx playwright install` first.
+        // An empty launchOptions leaves out the Chrome switches above.
         { name: "firefox", use: { browserName: "firefox", launchOptions: {} } },
         { name: "webkit", use: { browserName: "webkit", launchOptions: {} } },
     ],

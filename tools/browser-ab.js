@@ -18,6 +18,7 @@ import {
     checkWorkloads,
     existingCheckout,
     fileLabel,
+    gitEnv,
     installedNodeModules,
     isCheckout,
     ManifestName,
@@ -174,13 +175,12 @@ export function throughput(result, pass, statistic) {
 const isBuiltPage = (spec) =>
     existsSync(path.join(spec, "index.html")) && existsSync(path.join(spec, "benchmarks", ManifestName));
 
-// Each side is built by its own vite, with no analytics, into a folder of its own.
 function build(side, workDir, created) {
     mkdirSync(workDir, { recursive: true });
     const dist = mkdtempSync(path.join(workDir, `jsbeeb-browser-ab-dist-${side.label}-`));
     created.push(dist);
     const vite = path.join(installedNodeModules(side.root), "vite", "bin", "vite.js");
-    const { GA_MEASUREMENT_ID: _analytics, ...env } = process.env;
+    const { GA_MEASUREMENT_ID: _analytics, ...env } = gitEnv;
     console.error(`Building ${side.spec} into ${dist}`);
     execFileSync(process.execPath, [vite, "build", "--outDir", dist, "--emptyOutDir", "--logLevel", "warn"], {
         cwd: side.root,
@@ -229,7 +229,9 @@ export function serve(dir) {
         }
         const contentType = ContentTypes[path.extname(file).toLowerCase()] ?? "application/octet-stream";
         response.writeHead(200, { "Content-Type": contentType, "Cache-Control": "no-store" });
-        createReadStream(file).pipe(response);
+        createReadStream(file)
+            .on("error", () => response.destroy())
+            .pipe(response);
     });
     return new Promise((resolve, reject) => {
         server.once("error", reject);
@@ -239,6 +241,9 @@ export function serve(dir) {
         });
     });
 }
+
+/** Whether a request for `url` would leave the machine; nothing a workload runs comes from elsewhere. */
+export const isOffsite = (url) => url.hostname !== "" && !LoopbackHosts.includes(url.hostname);
 
 class Browsers {
     constructor(settings) {
@@ -258,7 +263,10 @@ class Browsers {
             handleSIGHUP: false,
         });
         this.open.add(browser);
-        browser.once("disconnected", () => this.open.delete(browser));
+        browser.once("disconnected", () => {
+            this.open.delete(browser);
+            if (this.shared === browser) this.shared = null;
+        });
         return browser;
     }
 
@@ -267,17 +275,13 @@ class Browsers {
         const fresh = this.settings.fresh === "browser";
         const browser = fresh ? await this.launch() : (this.shared ??= await this.launch());
         const context = await browser.newContext({ viewport: playwrightConfig.use.viewport });
-        // Nothing the workload runs comes from elsewhere; fonts and the like are kept off the network.
-        await context.route(
-            (url) => !LoopbackHosts.includes(url.hostname),
-            (route) => route.abort("blockedbyclient"),
-        );
+        await context.route(isOffsite, (route) => route.abort("blockedbyclient"));
         const page = await context.newPage();
         const close = async () => {
             await context.close();
             if (fresh) await browser.close();
         };
-        return { browser, context, page, close };
+        return { browser, page, close };
     }
 
     async closeAll() {
@@ -330,9 +334,16 @@ async function runPage(browsers, side, workload, { started = async () => {}, fin
     }
 }
 
-/** What each side's page says it ran on, which should be the same for both apart from the commit. */
-const pageSetting = ({ renderer, display, crossOriginIsolated, userAgent }) =>
-    JSON.stringify({ renderer, display, crossOriginIsolated, userAgent });
+/**
+ * Records in `seen` what `side`'s page first said it ran on, and throws once the two sides' differ in anything
+ * but the build.
+ */
+export function checkSamePage(seen, side, { renderer, display, crossOriginIsolated, userAgent }) {
+    seen[side] ??= JSON.stringify({ renderer, display, crossOriginIsolated, userAgent });
+    if (seen.a && seen.b && seen.a !== seen.b) {
+        throw new Error(`The sides' pages ran differently: A ${seen.a}, B ${seen.b}`);
+    }
+}
 
 async function compare(sides, workloads, browsers, settings) {
     const { minPairs, maxPairs, horizon, pass, statistic } = settings;
@@ -345,10 +356,7 @@ async function compare(sides, workloads, browsers, settings) {
             const { result, browserVersion } = await runPage(browsers, sides[Sides.indexOf(side)], workload);
             const gl = settings.browserName === "chromium" ? ` with ${settings.gl} GL` : "";
             engine ??= `${settings.project} ${browserVersion}${gl}, ${result.renderer}`;
-            seen[side] ??= pageSetting(result);
-            if (seen.a && seen.b && seen.a !== seen.b) {
-                throw new Error(`The sides' pages ran differently: A ${seen.a}, B ${seen.b}`);
-            }
+            checkSamePage(seen, side, result);
             const mhz = throughput(result, pass, statistic);
             const { commit, crossOriginIsolated, renderer } = result;
             const secondsMs = Object.fromEntries(

@@ -12,9 +12,9 @@ export const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 export const BenchmarksPath = path.join("public", "benchmarks");
 export const ManifestName = "workloads.json";
 export const Sides = ["a", "b"];
-export const ShortShaLength = 10;
+const ShortShaLength = 10;
 
-export const PairDefaults = { "min-pairs": "8", "max-pairs": "30", horizon: "2" };
+const PairDefaults = { "min-pairs": "8", "max-pairs": "30", horizon: "2" };
 
 export const pairOptionsHelp = `  --min-pairs N         pairs taken before the result may stop early, at least ${FewestDecisivePairs} (default ${PairDefaults["min-pairs"]})
   --max-pairs N         the most pairs taken per workload, at least ${FewestDecisivePairs} (default ${PairDefaults["max-pairs"]})
@@ -27,7 +27,7 @@ export const pairOptionSpecs = {
     horizon: { type: "string", default: PairDefaults.horizon },
 };
 
-export function wholeNumber(options, name, least) {
+function wholeNumber(options, name, least) {
     const value = Number(options[name]);
     if (!Number.isInteger(value) || value < least) {
         throw new Error(`--${name} takes a whole number of at least ${least}, not "${options[name]}"`);
@@ -45,7 +45,7 @@ export function pairOptions(options) {
 }
 
 // Run from a git hook, GIT_DIR and GIT_INDEX_FILE would point every command at the hook's repository, not `dir`.
-const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
+export const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
 const gitIn = (dir, ...args) =>
     execFileSync("git", ["-C", dir, ...args], {
         encoding: "utf8",

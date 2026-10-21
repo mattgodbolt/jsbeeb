@@ -33,6 +33,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `test:same-answer -- --record` if its hashes move
 - `npm run benchmark:ab -- <A> <B> [workload ...]` - Whether B is faster than A in Node, with a confidence interval,
   from fresh processes alternating between two refs or checkouts; see `docs/benchmarking.md`
+- `npm run benchmark:browser-ab -- <A> <B> [workload ...]` - The same in headless Chrome (or another Playwright
+  project): builds each side, serves both and alternates fresh pages of `?benchmark`; see `docs/benchmarking.md`
 - `npm run test:same-answer` - Run each benchmark workload for 100 frames and compare hashes of its state (framebuffer,
   registers, memory, cycles, sound, peripherals) against `tests/same-answer-hashes.json`, naming the parts that
   differ; `-- --record` rewrites the file after an intended change. A few seconds, for an optimisation's inner loop:
