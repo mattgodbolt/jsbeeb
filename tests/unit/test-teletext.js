@@ -401,8 +401,10 @@ describe("Teletext", () => {
         const SnapshotChance = 0.01;
         const FrameChance = 0.03;
         const MaxBlankingFeeds = 30;
-        // A line nothing reads is the one the log skips.
-        const ShownChance = 0.5;
+        // Lines nothing reads, which the log skips, should be common: the bit turns on less readily than off.
+        const TeletextOnChance = 0.005;
+        const TeletextOffChance = 0.02;
+        const StrayPaintChance = 0.01;
         // Fewer feeds than the pipeline is long leave the line's last bytes for the next line to run.
         const ShortBlankingChance = 0.5;
         const ShortBlankingFeeds = 3;
@@ -443,8 +445,8 @@ describe("Teletext", () => {
 
         it("forgets what it logged when a snapshot is restored", () => {
             const fresh = new Teletext().snapshotState();
-            teletext.setDISPTMG(true);
-            for (const byte of [RedGraphics, Space, Space, Space]) teletext.logClocked(byte);
+            logLine([RedGraphics, Space, Space, Space]);
+            teletext.logClocked(LetterA);
             teletext.restoreState(fresh);
 
             expect(teletext.snapshotState()).toEqual(fresh);
@@ -476,29 +478,43 @@ describe("Teletext", () => {
             };
             const expectSameSnapshot = () => expect(logged.snapshotState()).toEqual(eager.snapshotState());
 
+            // As the video does: with the ULA's teletext bit set it runs the chip directly, catching up as the bit
+            // turns on, and paints it.
+            let teletextBit = false;
+            const feedClocked = (byte) => {
+                eager.fetchData(byte);
+                eager.advance();
+                if (teletextBit) {
+                    logged.fetchData(byte);
+                    logged.advance();
+                } else {
+                    logged.logClocked(byte);
+                }
+            };
+            const feed = (byte) => {
+                eager.fetchData(byte);
+                if (teletextBit) logged.fetchData(byte);
+                else logged.logFed(byte);
+            };
+            const paint = (line, cell) => {
+                const half = random() < 0.5 ? "emit" : "emitSecondHalf";
+                eager[half](eagerCell, 0);
+                logged[half](loggedCell, 0);
+                if (!eagerCell.every((pixel, i) => pixel === loggedCell[i])) {
+                    expect({ line, cell, pixels: [...loggedCell] }).toEqual({ line, cell, pixels: [...eagerCell] });
+                }
+            };
+
             for (let line = 0; line < Lines; ++line) {
                 const cells = random() < LongLineChance ? LongLineCells : 1 + pick(MaxCellsPerLine);
-                const shown = random() < ShownChance;
-                const shownFrom = pick(cells + 1);
-                const shownTo = shown ? shownFrom + pick(cells + 1 - shownFrom) : shownFrom;
                 both((chip) => chip.setDISPTMG(true));
                 for (let cell = 0; cell < cells; ++cell) {
-                    const byte = Bytes[pick(Bytes.length)];
-                    eager.fetchData(byte);
-                    eager.advance();
-                    logged.logClocked(byte);
-                    if (cell >= shownFrom && cell < shownTo) {
-                        const paint = random() < 0.5 ? "emit" : "emitSecondHalf";
-                        eager[paint](eagerCell, 0);
-                        logged[paint](loggedCell, 0);
-                        if (!eagerCell.every((pixel, i) => pixel === loggedCell[i])) {
-                            expect({ line, cell, pixels: [...loggedCell] }).toEqual({
-                                line,
-                                cell,
-                                pixels: [...eagerCell],
-                            });
-                        }
+                    if (random() < (teletextBit ? TeletextOffChance : TeletextOnChance)) {
+                        if (!teletextBit) logged.catchUp();
+                        teletextBit = !teletextBit;
                     }
+                    feedClocked(Bytes[pick(Bytes.length)]);
+                    if (teletextBit || random() < StrayPaintChance) paint(line, cell);
                     if (random() < SnapshotChance) expectSameSnapshot();
                     if (random() < RestoreChance) {
                         const state = eager.snapshotState();
@@ -514,11 +530,7 @@ describe("Teletext", () => {
                     both((chip) => chip.setDEW(false));
                 }
                 const maxFeeds = random() < ShortBlankingChance ? ShortBlankingFeeds : MaxBlankingFeeds;
-                for (let feeds = pick(maxFeeds); feeds > 0; --feeds) {
-                    const byte = Bytes[pick(Bytes.length)] | FedBit;
-                    eager.fetchData(byte);
-                    logged.logFed(byte);
-                }
+                for (let feeds = pick(maxFeeds); feeds > 0; --feeds) feed(Bytes[pick(Bytes.length)] | FedBit);
             }
             expectSameSnapshot();
         });

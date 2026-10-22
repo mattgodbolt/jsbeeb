@@ -52,10 +52,6 @@ export class Teletext {
         // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked.
         this.log = new Uint8Array(LogCapacity);
         this.logLength = 0;
-        // Once something reads the chip on a line it is likely to read every cell, so it runs each byte as it
-        // arrives, until a line passes with nothing read.
-        this.eager = false;
-        this.readThisLine = false;
         // The cell `advance` latches outlives the line reset, and a snapshot saves part of it. So the last
         // line skipped by `skipLine` is kept with the state it started from, until a clocked byte replaces
         // that cell.
@@ -194,7 +190,7 @@ export class Teletext {
     }
 
     snapshotState() {
-        this.bringUpToDate();
+        this.catchUp();
         // Encode glyph table references as strings for serialization
         let nextGlyphsName, curGlyphsName, heldGlyphsName;
         for (const [name, table] of [
@@ -254,8 +250,6 @@ export class Teletext {
         this.levelRA0 = state.levelRA0;
         this.logLength = 0;
         this.skippedLogLength = 0;
-        this.eager = false;
-        this.readThisLine = false;
 
         const glyphMap = {
             normal: this.normalGlyphs,
@@ -364,40 +358,22 @@ export class Teletext {
 
     /** Feeds `data` and clocks the chip, as `fetchData` then `advance` do, by the time anything reads the chip. */
     logClocked(data) {
-        if (this.eager) {
-            this.fetchData(data);
-            this.advance();
-            return;
-        }
         if (this.logLength === LogCapacity) this.catchUp();
         this.log[this.logLength++] = data | ClockedEntry;
     }
 
     /** Feeds `data` without clocking the chip, as `fetchData` does, by the time anything reads the chip. */
     logFed(data) {
-        if (this.eager) {
-            this.fetchData(data);
-            return;
-        }
         if (this.logLength === LogCapacity) this.catchUp();
         this.log[this.logLength++] = data & 0x7f;
     }
 
-    bringUpToDate() {
-        this.catchUp();
-        this.replaySkippedLine();
-    }
-
-    runEagerly() {
-        this.bringUpToDate();
-        this.eager = true;
-    }
-
+    /** Runs everything logged, so the chip is as if each byte had been run as it arrived. */
     catchUp() {
         const length = this.logLength;
-        if (length === 0) return;
         this.logLength = 0;
         if (this.replayLog(this.log, length)) this.skippedLogLength = 0;
+        this.replaySkippedLine();
     }
 
     // Returns whether any entry clocked the chip.
@@ -509,8 +485,6 @@ export class Teletext {
         }
 
         this.skipLine();
-        this.eager = this.readThisLine;
-        this.readThisLine = false;
         this.col = 7;
         this.bg = 0;
         this.holdChar = false;
@@ -602,8 +576,7 @@ export class Teletext {
      * per scanline or per field, not per character.
      */
     emit(buf, offset) {
-        if (!this.eager) this.runEagerly();
-        this.readThisLine = true;
+        if (this.logLength !== 0) this.catchUp();
         const scanline = this.glyphScanline();
 
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
@@ -624,8 +597,7 @@ export class Teletext {
 
     // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
-        if (!this.eager) this.runEagerly();
-        this.readThisLine = true;
+        if (this.logLength !== 0) this.catchUp();
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];

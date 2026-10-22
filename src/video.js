@@ -171,6 +171,8 @@ class Ula {
         if (newMode !== this.video.ulaMode) {
             this.video.ulaMode = newMode;
         }
+        // While the teletext bit is set the render loop runs the SAA5050 directly, so what it logged runs first.
+        if (val & 2 && !this.video.teletextMode) this.video.teletext.catchUp();
         this.video.teletextMode = !!(val & 2);
         this.video.updateLineGridUla();
     }
@@ -1198,10 +1200,16 @@ export class Video {
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
                     // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
                     // clocked here and painted later, so a control code seen while the ULA shows
-                    // bitmap still takes effect.
+                    // bitmap still takes effect. Without the teletext bit nothing reads the chip
+                    // until it is set, so it logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.logClocked(dat);
+                    if (this.teletextMode) {
+                        this.teletext.fetchData(dat);
+                        this.teletext.advance();
+                    } else {
+                        this.teletext.logClocked(dat);
+                    }
 
                     // Check cursor start.
                     if (
@@ -1266,11 +1274,16 @@ export class Video {
             // On real hardware IC37/IC36 operates regardless of ULA mode —
             // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
             // Hardware also clocks the chip here, which we do not: our row reset fires
-            // too early relative to the pipeline for that to come out right, and logging
-            // this byte as clocked alone moves three of the hardware reference pages. See
+            // too early relative to the pipeline for that to come out right, and clocking
+            // it here alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
             if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
-                this.teletext.logFed(this.readVideoMem() | 0x40);
+                const fed = this.readVideoMem() | 0x40;
+                if (this.teletextMode) {
+                    this.teletext.fetchData(fed);
+                } else {
+                    this.teletext.logFed(fed);
+                }
             }
 
             // CRTC MA always increments, inside display border or not.
