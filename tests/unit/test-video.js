@@ -369,6 +369,8 @@ describe("Video", () => {
         const TeletextFromColumn = 16;
         const TeletextToColumn = 32;
         const SnapshotRow = 5;
+        const BlankingColumn = 50;
+        const DisplayedRows = 25;
         const PaintsToRun = 3;
 
         // A MODE 7 shaped frame without interlace: ten scanline rows line the CRTC's rows up with the chip's.
@@ -379,7 +381,7 @@ describe("Video", () => {
             r.writeCrtc(3, 0x24); // Sync widths
             r.writeCrtc(4, 30); // Vertical total
             r.writeCrtc(5, 2); // Vertical adjust
-            r.writeCrtc(6, 25); // Vertical displayed
+            r.writeCrtc(6, DisplayedRows); // Vertical displayed
             r.writeCrtc(7, 27); // Vsync position
             r.writeCrtc(8, 0); // No interlace
             r.writeCrtc(9, 9); // Scanlines per character row
@@ -464,7 +466,7 @@ describe("Video", () => {
 
         it.each([
             ["part way along a line", TeletextFromColumn - 1],
-            ["in the blanking after a line", 50],
+            ["in the blanking after a line", BlankingColumn],
         ])("continues identically from a snapshot taken %s", (_, column) => {
             const driver = switchedMidLine(RedAlpha);
             const straight = teletextRig(driver);
@@ -480,7 +482,7 @@ describe("Video", () => {
             runUntilPaints(restored, paintsAtRestore + 1);
             const continued = restored.paints.at(-1);
 
-            for (let row = SnapshotRow + 1; row < 25; ++row) {
+            for (let row = SnapshotRow + 1; row < DisplayedRows; ++row) {
                 expect(coloursOnRow(continued, row)).toEqual(coloursOnRow(straight.paints.at(-1), row));
             }
             expect(coloursOnRow(continued, SnapshotRow + 1).has(teletextColour(restored, RedForeground))).toBe(true);
