@@ -27,9 +27,9 @@ const WasmPageBytes = 65536;
 
 const TableOffset = 0;
 const PaletteOffset = TableOffset + Table4bppBytes;
-const LineGridOffset = PaletteOffset + PaletteEntries * 4;
+const LineGridOffset = PaletteOffset + PaletteEntries * WordBytes;
 const RecordsOffset = LineGridOffset + LineGridRows;
-const FramebufferOffset = RecordsOffset + PendingCapacity * 4;
+const FramebufferOffset = RecordsOffset + PendingCapacity * WordBytes;
 // A doubled cell on the last row writes the row below it, and a cell may run past the end of its row.
 const FramebufferOverrunBytes = 2 * RowBytes;
 
@@ -384,7 +384,7 @@ const DrainModule = new WebAssembly.Module(
 export class VideoDrain {
     /** @param {number} framebufferPixels */
     constructor(framebufferPixels) {
-        const bytes = FramebufferOffset + framebufferPixels * 4 + FramebufferOverrunBytes;
+        const bytes = FramebufferOffset + framebufferPixels * WordBytes + FramebufferOverrunBytes;
         const pages = Math.ceil(bytes / WasmPageBytes);
         const memory = new WebAssembly.Memory({ initial: pages, maximum: pages });
         const { buffer } = memory;

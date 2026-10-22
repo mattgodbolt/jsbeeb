@@ -9,7 +9,9 @@ A BBC Micro and other 8-bit Acorn emulator written in JavaScript and running in 
 (with sideways RAM, and with the US or German MOS), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card
 interface), along with a number of different peripherals.
 
-jsbeeb supports the browser versions listed under `browserslist` in [package.json](package.json).
+jsbeeb supports the browser versions listed under `browserslist` in [package.json](package.json), with WebAssembly
+enabled: the video renderer is a WebAssembly module, so a browser with it switched off (Safari's Lockdown Mode, or a
+policy that disables it) cannot run the emulator.
 
 ## Table of Contents
 
