@@ -109,6 +109,27 @@ function programExternallySyncedTiming(v) {
     v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
 }
 
+const Mode4 = 0x88;
+const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
+
+// MODE 7's vertical timing: with interlace sync and video the scanline
+// counter steps by two, so R9 must be even for rows to end at all.
+function programInterlaceSyncAndVideoFrame(v) {
+    programCommonTiming(v);
+    v.writeCrtc(4, 30); // Vertical total
+    v.writeCrtc(5, 2); // Vertical adjust
+    v.writeCrtc(6, 25); // Vertical displayed
+    v.writeCrtc(7, 27); // Vsync position
+    v.writeCrtc(8, 3); // Interlace sync and video
+    v.writeCrtc(9, 18); // Scanlines per character row
+}
+
+// R6 above R4 stops the frame counter, so every field is drawn doubled onto both rows.
+function programStuckInterlaceSyncAndVideoFrame(v) {
+    programInterlaceSyncAndVideoFrame(v);
+    v.writeCrtc(6, 40);
+}
+
 describe("Video", () => {
     let rig;
     let video;
@@ -268,7 +289,6 @@ describe("Video", () => {
 
     // See Video.repaintSecondHalfOfCell.
     describe("ULA writes half way through a 1MHz cell", () => {
-        const Mode4 = 0x88;
         const Mode4Teletext = 0x8a;
         const Mode0 = 0x9c;
         const Red = 0xffff0000;
@@ -278,7 +298,6 @@ describe("Video", () => {
         const HalfCell = 8;
         // A set pixel in a two colour mode is logical colour 15.
         const SetPixelsGreen = 0xf0 | (7 ^ 2);
-        const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
         const offset = 100 * FbWidth + 100;
 
         // Leaves the beam at the start of a cell with the body about to run on the next tick.
@@ -385,6 +404,21 @@ describe("Video", () => {
 
             expect(firstHalf()).toEqual(Array(HalfCell).fill(inverted(Red)));
             expect(secondHalf()).toEqual(Array(HalfCell).fill(inverted(Green)));
+        });
+
+        it("keeps the cursor inverted over the repainted half of a field stuck doubling its rows", () => {
+            video.interlacedSyncAndVideo = true;
+            video.lastRenderWasEven = video.isEvenRender;
+            video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
+            video.cursorOnThisFrame = true;
+            video.cursorDrawIndex = 3;
+            video.polltime(1);
+
+            video.ula.write(1, SetPixelsGreen);
+
+            const cursorCell = [...Array(HalfCell).fill(inverted(Red)), ...Array(HalfCell).fill(inverted(Green))];
+            expect(cell()).toEqual(cursorCell);
+            expect(cell(offset + FbWidth)).toEqual(cursorCell);
         });
     });
 
@@ -827,18 +861,6 @@ describe("Video", () => {
             v.writeCrtc(8, 1);
         }
 
-        // MODE 7's vertical timing: with interlace sync and video the scanline
-        // counter steps by two, so R9 must be even for rows to end at all.
-        function programInterlaceSyncAndVideoFrame(v) {
-            programCommonTiming(v);
-            v.writeCrtc(4, 30); // Vertical total
-            v.writeCrtc(5, 2); // Vertical adjust
-            v.writeCrtc(6, 25); // Vertical displayed
-            v.writeCrtc(7, 27); // Vsync position
-            v.writeCrtc(8, 3); // Interlace sync and video
-            v.writeCrtc(9, 18); // Scanlines per character row
-        }
-
         // The line and phase bases of each painted frame, read as main.js reads them.
         function paintedBases(program, frames) {
             const painted = [];
@@ -932,14 +954,7 @@ describe("Video", () => {
             ["without interlace", programNonInterlacedFrame],
             ["with interlace sync", programInterlaceSyncFrame],
             ["with interlace sync and video", programInterlaceSyncAndVideoFrame],
-            // R6 above R4 stops the frame counter, so every field is drawn doubled onto both rows.
-            [
-                "with interlace sync and video stuck on one field",
-                (v) => {
-                    programInterlaceSyncAndVideoFrame(v);
-                    v.writeCrtc(6, 40);
-                },
-            ],
+            ["with interlace sync and video stuck on one field", programStuckInterlaceSyncAndVideoFrame],
         ])("should decode every row to the line it was drawn under %s", (_, program) => {
             const drawnUnder = new Map();
             const mismatches = [];
@@ -972,6 +987,54 @@ describe("Video", () => {
             expect(paints).toBeGreaterThan(2);
             expect(drawnUnder.size).toBeGreaterThan(200);
             expect(mismatches).toEqual([]);
+        });
+    });
+
+    describe("the cursor with interlace sync and video", () => {
+        const SetPixelsRed = 0xf0 | (7 ^ 1);
+        const Red = 0xff0000ff;
+        const Sentinel = 0xff123456;
+        const InvertedRed = inverted(Red);
+
+        // The last few painted frames of a cursor on the first cell of a red screen. Each paint
+        // refills the framebuffer with a sentinel, so a frame shows which rows its field drew.
+        function paintedFrames(program) {
+            const frames = [];
+            const v = makeVideo({
+                onPaint: (video) => {
+                    frames.push(new Uint32Array(video.fb32));
+                    video.fb32.fill(Sentinel);
+                },
+            });
+            program(v);
+            v.writeCrtc(10, 0); // Cursor from scanline 0, steady
+            v.writeCrtc(11, 31); // Cursor to the end of the row
+            for (const reg of [12, 13, 14, 15]) v.writeCrtc(reg, 0); // Screen and cursor at address 0
+            v.video.ula.write(0, Mode4);
+            v.video.ula.write(1, SetPixelsRed);
+            v.cpu.data = 0xff;
+            v.run(16 * ClocksPerFrame);
+            expect(frames.length).toBeGreaterThan(3);
+            return frames.slice(-3);
+        }
+
+        const pixelsOf = (frame, colour) => frame.reduce((at, pixel, i) => (pixel === colour ? [...at, i] : at), []);
+        const otherRowOfPair = (i) => (Math.floor(i / FbWidth) ^ 1) * FbWidth + (i % FbWidth);
+
+        it("doubles the cursor with the cells under it when stuck on one field", () => {
+            for (const frame of paintedFrames(programStuckInterlaceSyncAndVideoFrame)) {
+                const cursor = pixelsOf(frame, InvertedRed);
+                expect(cursor).not.toEqual([]);
+                expect(cursor.filter((i) => frame[otherRowOfPair(i)] !== InvertedRed)).toEqual([]);
+            }
+        });
+
+        it("inverts only its own field's rows when the fields alternate", () => {
+            for (const frame of paintedFrames(programInterlaceSyncAndVideoFrame)) {
+                expect(frame).toContain(InvertedRed);
+                expect(frame).toContain(Sentinel);
+                expect(frame).not.toContain(inverted(Sentinel));
+            }
         });
     });
 
