@@ -26,7 +26,9 @@ const Oswrch = 0xffee;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
 const OsScreenMode = 0x355;
-const FramesToClearModeSeven = 2;
+// A field's rows are cleared at the flyback after the next field's, so the MODE 7 field the mode changed in is gone
+// only after the frame count has gone up three times.
+const FramesToClearModeSeven = 3;
 const RgbBits = 0xffffff;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
