@@ -25,7 +25,13 @@ describe("RewindUI", () => {
             if (tag === "canvas") element.getContext = () => FakeContext;
             return element;
         });
-        video = { fb32: new Uint32Array(1024 * 625), frameCount: 0, clearPaintBuffer: () => {}, paint: vi.fn() };
+        video = {
+            fb32: new Uint32Array(1024 * 625),
+            frameCount: 0,
+            clearPaintBuffer: () => {},
+            renderPending: () => {},
+            paint: vi.fn(),
+        };
         processor = {
             snapshotState: vi.fn(() => ({ live: true })),
             restoreState: vi.fn(),

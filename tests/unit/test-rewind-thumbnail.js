@@ -23,6 +23,7 @@ function createMockVideo() {
         fb32: new Uint32Array(1024 * 625),
         frameCount: 0,
         clearPaintBuffer: vi.fn(),
+        renderPending: vi.fn(),
     };
 }
 

@@ -101,6 +101,7 @@ export function renderThumbnails(processor, snapshots, video, captureInterval, s
         for (let i = 0; i < snapshots.length; i++) {
             processor.restoreState(snapshots[i]);
             executeUntilFrame(processor, video);
+            video.renderPending();
             const canvas = captureThumbnail(video.fb32);
             const stepsFromNewest = snapshots.length - 1 - i;
             const ageSeconds = Math.round((stepsFromNewest * captureInterval) / framesPerSecond);

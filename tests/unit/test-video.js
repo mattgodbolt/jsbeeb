@@ -23,6 +23,7 @@ const NulaAttributeModeOne = 0x61;
 const NulaAttributeTextOn = 0x71;
 const NulaFlashOffColours8To11 = 0x80;
 const LogicalZeroAsPhysicalZero = 0x07;
+const TwoMhzClock = 0x10;
 const NulaColourZeroFullRed = [0x0f, 0x00];
 
 const FbWidth = 1024;
@@ -112,6 +113,25 @@ function programExternallySyncedTiming(v) {
 const Mode4 = 0x88;
 const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
 
+function programNulaColour(v, index, red, green, blue) {
+    v.video.ula.write(3, (index << 4) | red);
+    v.video.ula.write(3, (green << 4) | blue);
+}
+
+// Draws one cell of `byte` at the framebuffer's origin, in the ULA's mode and palette.
+function drawCellAtOrigin(v, byte) {
+    const { video } = v;
+    video.dispEnabled = EVERYTHINGENABLED;
+    video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell
+    video.horizCounter = 10;
+    video.bitmapX = -8;
+    video.bitmapY = 0;
+    video.oddClock = false;
+    v.cpu.data = byte;
+    v.run(1);
+    video.renderPending();
+}
+
 // MODE 7's vertical timing: with interlace sync and video the scanline
 // counter steps by two, so R9 must be even for rows to end at all.
 function programInterlaceSyncAndVideoFrame(v) {
@@ -165,15 +185,20 @@ describe("Video", () => {
             expect(decodeLineGrid(video.lineGridUla).texelsWide).toBe(texelsWide);
         });
 
-        it("records the width blitFb actually writes", () => {
+        it("records the width a cell is actually drawn at", () => {
+            const r = makeVideo({ hasVideoNula: true });
+            for (let colour = 0; colour < 16; ++colour) programNulaColour(r, colour, colour, colour, colour);
+            r.video.ula.write(2, NulaPaletteModeOn);
             for (let ulaMode = 0; ulaMode <= 3; ++ulaMode) {
-                for (const pixelsPerChar of [8, 16]) {
-                    video.ulaMode = ulaMode;
-                    for (let i = 0; i < 16; ++i) video.ulaPal[i] = 0xff000000 | (i * 0x111111);
-                    fb.fill(0);
-                    video.blitFb(0b01010101, 0, pixelsPerChar, false);
+                for (const [pixelsPerChar, clockBit] of [
+                    [8, TwoMhzClock],
+                    [16, 0],
+                ]) {
+                    r.video.ula.write(0, (ulaMode << 2) | clockBit);
+                    r.fb.fill(0);
+                    drawCellAtOrigin(r, 0b01010101);
 
-                    expect(shortestRun(fb, 0, pixelsPerChar)).toBe(texelsPerPixel(ulaMode));
+                    expect(shortestRun(r.fb, 0, pixelsPerChar)).toBe(texelsPerPixel(ulaMode));
                 }
             }
         });
@@ -291,7 +316,8 @@ describe("Video", () => {
     describe("ULA writes half way through a 1MHz cell", () => {
         const Mode4Teletext = 0x8a;
         const Mode0 = 0x9c;
-        const Red = 0xffff0000;
+        const Red = 0xff0000ff;
+        const PhysicalRed = 1;
         const Green = 0xff00ff00;
         const AllPixelsSet = 0xff;
         const CellWidth = 16;
@@ -309,10 +335,13 @@ describe("Video", () => {
             video.bitmapY = 100;
             video.oddClock = false;
             cpu.data = AllPixelsSet;
-            video.ulaPal.fill(Red);
+            for (let logical = 0; logical < 16; ++logical) video.ula.write(1, (logical << 4) | (PhysicalRed ^ 7));
         });
 
-        const cell = (at = offset) => Array.from(fb.subarray(at, at + CellWidth));
+        const cell = (at = offset) => {
+            video.renderPending();
+            return Array.from(fb.subarray(at, at + CellWidth));
+        };
         const firstHalf = () => cell().slice(0, HalfCell);
         const secondHalf = () => cell().slice(HalfCell);
 
@@ -364,6 +393,7 @@ describe("Video", () => {
             video.ula.write(0, Mode4);
             video.polltime(1);
             video.bitmapY = -1;
+            video.renderPending();
             const before = fb.slice();
 
             video.ula.write(0, Mode4Teletext);
@@ -419,6 +449,142 @@ describe("Video", () => {
             const cursorCell = [...Array(HalfCell).fill(inverted(Red)), ...Array(HalfCell).fill(inverted(Green))];
             expect(cell()).toEqual(cursorCell);
             expect(cell(offset + FbWidth)).toEqual(cursorCell);
+        });
+    });
+
+    describe("the cursor", () => {
+        const Mode4WithCursor = 0x88;
+        const AllPixelsSet = 0xff;
+        const White = 0xffffffff;
+        const InvertedWhite = 0xff000000;
+        const CellWidth = 16;
+        const offset = 100 * FbWidth + 100;
+
+        beforeEach(() => {
+            video.ula.write(0, Mode4WithCursor);
+            video.dispEnabled = EVERYTHINGENABLED;
+            video.regs[7] = 30;
+            video.horizCounter = 10;
+            video.bitmapX = 92;
+            video.bitmapY = 100;
+            video.oddClock = false;
+            video.cursorOnThisFrame = true;
+            video.cursorDrawIndex = 3;
+            cpu.data = AllPixelsSet;
+        });
+
+        const rows = () => {
+            video.renderPending();
+            return [offset, offset + FbWidth].map((at) => Array.from(fb.subarray(at, at + CellWidth)));
+        };
+
+        it("inverts both rows of a cell on doubled scanlines", () => {
+            video.polltime(1);
+            expect(rows()).toEqual([Array(CellWidth).fill(InvertedWhite), Array(CellWidth).fill(InvertedWhite)]);
+        });
+
+        // The cell is doubled onto the second row, but the cursor follows the scanline doubling alone.
+        it("inverts only the first row when a field stuck with interlace sync and video doubles its rows", () => {
+            rig.writeCrtc(8, 3);
+            video.isEvenRender = video.lastRenderWasEven = true;
+            video.polltime(1);
+            expect(rows()).toEqual([Array(CellWidth).fill(InvertedWhite), Array(CellWidth).fill(White)]);
+        });
+    });
+
+    // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.
+    describe("raster effects", () => {
+        const RasterFrames = 6;
+        const MaxClocksBetweenWrites = 40;
+        const CursorBits = [0x00, 0x20, 0x40, 0x60, 0x80, 0xe0];
+        const NulaControls = [NulaPaletteModeOn, NulaPaletteModeOff, 0x80, 0x90];
+        const FnvOffsetBasis = 0x811c9dc5;
+        const FnvPrime = 0x01000193;
+
+        function seededRandom(seed) {
+            let state = seed;
+            return () => {
+                state = (state + 0x6d2b79f5) | 0;
+                let t = Math.imul(state ^ (state >>> 15), state | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+            };
+        }
+
+        function frameHash(v) {
+            let hash = FnvOffsetBasis;
+            for (const word of v.fb32) hash = Math.imul(hash ^ word, FnvPrime);
+            for (const row of v.lineGrid) hash = Math.imul(hash ^ row, FnvPrime);
+            return hash >>> 0;
+        }
+
+        function paintedHashes(program, { seed, hasVideoNula }) {
+            const hashes = [];
+            const r = makeVideo({ hasVideoNula, onPaint: (v) => hashes.push(frameHash(v)) });
+            const random = seededRandom(seed);
+            const pick = (n) => Math.floor(random() * n);
+            r.cpu.videoRead = (addr) => Math.imul(addr ^ 0x5bd1e995, 0x27d4eb2d) >>> 24;
+            program(r);
+            r.writeCrtc(10, 0); // a steady cursor from the top scanline
+            r.writeCrtc(11, 7);
+            const writes = [
+                () => r.video.ula.write(1, pick(256)),
+                () =>
+                    r.video.ula.write(
+                        0,
+                        CursorBits[pick(CursorBits.length)] |
+                            (pick(2) << 4) |
+                            (pick(4) << 2) |
+                            (pick(16) ? 0 : 0x02) |
+                            pick(2),
+                    ),
+                () => {
+                    r.writeCrtc(14, pick(0x0a));
+                    r.writeCrtc(15, pick(256));
+                },
+                () => r.video.ula.write(2, NulaControls[pick(NulaControls.length)] | pick(16)),
+                () => r.video.ula.write(3, pick(256)),
+            ];
+            const choices = hasVideoNula ? writes.length : writes.length - 2;
+            for (let clocks = 0; clocks < RasterFrames * ClocksPerFrame;) {
+                const gap = 1 + pick(MaxClocksBetweenWrites);
+                r.run(gap);
+                clocks += gap;
+                writes[pick(choices)]();
+            }
+            return hashes;
+        }
+
+        it.each([
+            [
+                "on doubled rows",
+                programStandardFrame,
+                { seed: 1, hasVideoNula: false },
+                [2206297541, 2206297541, 3715053517, 1521760581, 2101663941],
+            ],
+            [
+                "on doubled rows with a VideoNuLA",
+                programStandardFrame,
+                { seed: 2, hasVideoNula: true },
+                [2206297541, 2206297541, 2165725467, 508035057, 977855931],
+            ],
+            [
+                "with interlace sync and video",
+                programInterlaceSyncAndVideoFrame,
+                { seed: 3, hasVideoNula: true },
+                [2206297541, 2206297541, 2970356859, 595029415, 4284534895],
+            ],
+            [
+                "with interlace sync and video stuck on one field",
+                (v) => {
+                    programInterlaceSyncAndVideoFrame(v);
+                    v.writeCrtc(6, 40);
+                },
+                { seed: 4, hasVideoNula: true },
+                [2206297541, 2206297541, 730136291, 3463620181, 4286257725],
+            ],
+        ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
+            expect(paintedHashes(program, options)).toEqual(expected);
         });
     });
 
@@ -526,7 +692,9 @@ describe("Video", () => {
 
     describe("NULA palette mode", () => {
         const UlaColour = 0xffaa0000;
+        const UlaColourIndex = 3;
         const NulaColour = 0xff0000bb;
+        const AllPixelsColour15 = 0xff;
 
         it.each([
             ["the ULA palette, through its XOR 7 mapping, by default", 0x1c, 8, [], UlaColour],
@@ -540,15 +708,16 @@ describe("Video", () => {
                 UlaColour,
             ],
         ])("draws with %s", (_, ctrl, pixels, nulaWrites, expected) => {
-            ({ video, fb } = makeVideo({ hasVideoNula: true }));
-            video.ula.write(0, ctrl);
-            video.ulaPal.fill(UlaColour);
-            video.ula.collook.fill(NulaColour);
-            for (const write of nulaWrites) video.ula.write(2, write);
+            const r = makeVideo({ hasVideoNula: true });
+            r.video.ula.write(0, ctrl);
+            programNulaColour(r, UlaColourIndex, 0x0, 0x0, 0xa);
+            programNulaColour(r, 15, 0xb, 0x0, 0x0);
+            r.video.ula.write(1, 0xf0 | (UlaColourIndex ^ 7));
+            for (const write of nulaWrites) r.video.ula.write(2, write);
 
-            video.blitFb(0xff, 0, pixels, false);
+            drawCellAtOrigin(r, AllPixelsColour15);
 
-            expect(Array.from(fb.subarray(0, pixels))).toEqual(Array(pixels).fill(expected));
+            expect(Array.from(r.fb.subarray(0, pixels))).toEqual(Array(pixels).fill(expected));
         });
     });
 
@@ -956,36 +1125,47 @@ describe("Video", () => {
             ["with interlace sync and video", programInterlaceSyncAndVideoFrame],
             ["with interlace sync and video stuck on one field", programStuckInterlaceSyncAndVideoFrame],
         ])("should decode every row to the line it was drawn under %s", (_, program) => {
-            const drawnUnder = new Map();
+            // Every pixel of a cell shows the low bits of the hsync count it was fetched under, as a NuLA colour.
+            const LineBits = 0xf;
+            const colourOfLineBits = (bits) =>
+                (0xff000000 | (0x55 << 16) | (((15 - bits) * 0x11) << 8) | (bits * 0x11)) >>> 0;
+            const lineBitsOfColour = new Map(
+                Array.from({ length: LineBits + 1 }, (_, bits) => [colourOfLineBits(bits), bits]),
+            );
+            const spread = (bits) => ((bits & 1) << 1) | ((bits & 2) << 2) | ((bits & 4) << 3) | ((bits & 8) << 4);
+            const cellOfLineBits = (bits) => spread(bits) | (spread(bits) >> 1);
+
             const mismatches = [];
+            let checking = false;
             let paints = 0;
+            let rowsChecked = 0;
             const v = makeVideo({
+                hasVideoNula: true,
                 onPaint: (video) => {
+                    if (!checking) return;
                     paints++;
-                    for (const [row, line] of drawnUnder) {
+                    for (let row = 0; row < 625; ++row) {
+                        const rowPixels = v.fb.subarray(row * FbWidth, (row + 1) * FbWidth);
+                        const pixel = rowPixels.find((colour) => colour !== OPAQUE_BLACK);
+                        if (pixel === undefined) continue;
+                        rowsChecked++;
                         const base = row & 1 ? video.lineBaseOdd : video.lineBaseEven;
-                        const decoded = (base + (row >> 1)) % LineCountPeriod;
+                        const decoded = ((base + (row >> 1)) % LineCountPeriod) & LineBits;
+                        const line = lineBitsOfColour.get(pixel);
                         if (decoded !== line) mismatches.push({ row, line, decoded });
                     }
                 },
             });
-            const video = v.video;
-            const blitFb = video.blitFb.bind(video);
-            video.blitFb = (dat, offset, numPixels, doubledLines) => {
-                const row = Math.floor(offset / 1024);
-                drawnUnder.set(row, video.hsyncCount);
-                if (doubledLines) drawnUnder.set(row + 1, video.hsyncCount);
-                blitFb(dat, offset, numPixels, doubledLines);
-            };
+            for (let bits = 0; bits <= LineBits; ++bits) programNulaColour(v, bits, bits, 15 - bits, 5);
+            v.video.ula.write(2, NulaPaletteModeOn);
+            v.cpu.videoRead = () => cellOfLineBits(v.video.hsyncCount & LineBits);
             program(v);
             v.run(SettleFrames * ClocksPerFrame);
-            drawnUnder.clear();
-            mismatches.length = 0;
-            paints = 0;
+            checking = true;
             v.run(6 * ClocksPerFrame);
 
             expect(paints).toBeGreaterThan(2);
-            expect(drawnUnder.size).toBeGreaterThan(200);
+            expect(rowsChecked).toBeGreaterThan(200 * paints);
             expect(mismatches).toEqual([]);
         });
     });

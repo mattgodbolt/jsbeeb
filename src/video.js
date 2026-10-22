@@ -20,6 +20,18 @@ export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
 
+// A pending bitmap cell is its video byte under its framebuffer offset, and a cursor record
+// is the offset of a cell to invert. Offsets count from one row up, where an odd field starts.
+const PendingRowBias = 1;
+const PendingOffsetShift = 8;
+const PendingOffsetMask = 0xfffff;
+const PendingByteMask = 0xff;
+const PendingCursor = 1 << 28;
+const PendingCapacity = 1 << 16;
+// Two records a clock, for a cell and its cursor, over the 128 clocks a line can draw.
+const MaxPendingPerLine = 256;
+const CursorInvert = 0x00ffffff;
+
 // How far off nominal (4433618.75 Hz) the subcarrier runs, as measured on Matt's
 // BBC Master 128. Exactly nominal, a 312-line frame advances the subcarrier by
 // half a cycle to four decimal places, so the cross-colour left by the decoder
@@ -85,6 +97,7 @@ class Ula {
     write(addr, val) {
         addr |= 0;
         val |= 0;
+        this.video.renderPending();
         let reg = addr & 3;
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
@@ -303,6 +316,7 @@ class Crtc {
                     this.video.vpulseWidth = (val & 0xf0) >>> 4;
                     break;
                 case 8: {
+                    this.video.renderPending();
                     this.video.interlacedSyncAndVideo = (val & 3) === 3;
                     this.video.updateVSync();
                     const skew = (val & 0x30) >>> 4;
@@ -356,6 +370,75 @@ function lerp(col1, col2, alpha) {
 
 function table4bppOffset(ulamode, byte) {
     return (ulamode << 12) | (byte << 4);
+}
+
+function invertCell(fb32, offset, pixelsPerChar, doubledLines) {
+    for (let i = 0; i < pixelsPerChar; ++i) fb32[offset + i] ^= CursorInvert;
+    if (doubledLines) {
+        for (let i = 1024; i < 1024 + pixelsPerChar; ++i) fb32[offset + i] ^= CursorInvert;
+    }
+}
+
+/**
+ * Draws pending records into fb32, in order. Adjacent cells form a run, which is drawn on its
+ * first row and copied to the second at once when lines are doubled.
+ * @param {Int32Array} records
+ * @param {number} count
+ * @param {Uint32Array} fb32
+ * @param {Uint8Array} lineGrid
+ * @param {Uint8Array} table4bpp
+ * @param {number} modeBase the table4bpp offset of byte 0 in the ULA mode
+ * @param {Uint32Array} palette
+ * @param {number} pixelsPerChar
+ * @param {boolean} doubledLines
+ * @param {boolean} cursorDoubled whether the cursor inverts the second row too
+ * @param {number} lineGridValue
+ */
+function renderPendingCells(
+    records,
+    count,
+    fb32,
+    lineGrid,
+    table4bpp,
+    modeBase,
+    palette,
+    pixelsPerChar,
+    doubledLines,
+    cursorDoubled,
+    lineGridValue,
+) {
+    const rowMask = doubledLines ? ~1024 : ~0;
+    const biasedOrigin = PendingRowBias * 1024;
+    let i = 0;
+    while (i < count) {
+        let record = records[i];
+        const start = (((record >>> PendingOffsetShift) & PendingOffsetMask) - biasedOrigin) & rowMask;
+        if (start < 0) {
+            ++i;
+            continue;
+        }
+        if (record & PendingCursor) {
+            invertCell(fb32, start, pixelsPerChar, cursorDoubled);
+            ++i;
+            continue;
+        }
+        let end = start;
+        for (;;) {
+            const source = modeBase | ((record & PendingByteMask) << 4);
+            for (let p = 0; p < pixelsPerChar; ++p) fb32[end + p] = palette[table4bpp[source + p]];
+            end += pixelsPerChar;
+            if (++i === count) break;
+            const next = records[i];
+            if ((next >> PendingOffsetShift) - (record >> PendingOffsetShift) !== pixelsPerChar) break;
+            record = next;
+        }
+        const row = start >>> 10;
+        lineGrid[row] = lineGridValue;
+        if (doubledLines) {
+            lineGrid[row + 1] = lineGridValue;
+            fb32.copyWithin(start + 1024, start, end);
+        }
+    }
 }
 
 ////////////////////
@@ -452,6 +535,9 @@ export class Video {
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
+        // Bitmap cells wait here until something needs the framebuffer; see renderPending.
+        this.pendingCells = new Int32Array(PendingCapacity);
+        this.pendingCount = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -502,6 +588,7 @@ export class Video {
     }
 
     snapshotState() {
+        this.renderPending();
         return {
             regs: this.regs.slice(),
             bitmapX: this.bitmapX,
@@ -565,6 +652,7 @@ export class Video {
     }
 
     restoreState(state) {
+        this.pendingCount = 0;
         this.regs.set(state.regs);
         this.bitmapX = state.bitmapX;
         this.bitmapY = state.bitmapY;
@@ -634,6 +722,7 @@ export class Video {
     }
 
     reset(cpu, via, hard) {
+        this.renderPending();
         this.cpu = cpu;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
@@ -644,6 +733,7 @@ export class Video {
     }
 
     paint() {
+        this.renderPending();
         this.paint_ext(this.leftBorder, this.topBorder, 1024 - this.rightBorder, 625 - this.bottomBorder);
     }
 
@@ -666,6 +756,7 @@ export class Video {
     }
 
     flyback() {
+        this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();
         // Decided per field, before the clear: the CRTC frames of one field can
@@ -701,6 +792,8 @@ export class Video {
         }
     }
 
+    // In an interlace mode with R6>R4 we get stuck painting just an odd or even
+    // frame, so scanlines are doubled up to avoid a ghost half frame.
     doublesLines() {
         return (this.doubledScanlines && !this.interlacedSyncAndVideo) || this.isEvenRender === this.lastRenderWasEven;
     }
@@ -715,6 +808,7 @@ export class Video {
     // frame below it: this frame above the beam, the last one under it, as a
     // camera would see.
     debugPaint() {
+        this.renderPending();
         if (!this.debugPrevScreen) {
             this.debugPrevScreen = new Uint32Array(1024 * 768);
         }
@@ -753,23 +847,35 @@ export class Video {
         this.lineGridUlaDoubled = encodeLineGrid(texelsWide, true);
     }
 
-    blitFb(dat, destOffset, numPixels, doubledLines) {
-        destOffset |= 0;
-        const offset = table4bppOffset(this.ulaMode, dat);
-        const fb32 = this.fb32;
-        const colourLookup = this.pixelColours();
-        const table4bpp = this.table4bpp;
-        if (doubledLines) {
-            for (let i = 0; i < numPixels; ++i) {
-                const colour = colourLookup[table4bpp[offset + i]];
-                fb32[destOffset + i] = colour;
-                fb32[destOffset + 1024 + i] = colour;
-            }
-        } else {
-            for (let i = 0; i < numPixels; ++i) {
-                fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
-            }
-        }
+    /**
+     * Draws the bitmap cells the beam has passed into fb32. It reads the ULA's state as it is now,
+     * so it runs before anything changes that state, and before anything else draws or reads the
+     * framebuffer.
+     */
+    renderPending() {
+        const count = this.pendingCount;
+        if (count === 0) return;
+        this.pendingCount = 0;
+        const doubledLines = this.doublesLines();
+        renderPendingCells(
+            this.pendingCells,
+            count,
+            this.fb32,
+            this.lineGrid,
+            this.table4bpp,
+            table4bppOffset(this.ulaMode, 0),
+            this.pixelColours(),
+            this.pixelsPerChar,
+            doubledLines,
+            this.cursorDoubled(),
+            doubledLines ? this.lineGridUlaDoubled : this.lineGridUla,
+        );
+    }
+
+    // Unlike the cells under it, the cursor is not doubled onto the second row of a field stuck
+    // doubling its rows with interlace sync and video.
+    cursorDoubled() {
+        return this.doubledScanlines && !this.interlacedSyncAndVideo;
     }
 
     // The second half of a 16 pixel cell, for the 1MHz repaint.
@@ -789,10 +895,10 @@ export class Video {
         return this.ula.paletteMode ? this.ula.collook : this.ulaPal;
     }
 
-    handleCursor(offset) {
+    handleCursor() {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
-            this.invertForCursor(offset, 0);
-            this.cursorInvertedOffset = offset;
+            this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
+            this.cursorInvertedOffset = this.beamOffset();
         } else {
             this.cursorInvertedOffset = -1;
         }
@@ -801,12 +907,50 @@ export class Video {
 
     invertForCursor(offset, fromPixel) {
         for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
-            this.fb32[offset + i] ^= 0x00ffffff;
+            this.fb32[offset + i] ^= CursorInvert;
         }
         if (this.doublesLines()) {
             for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
-                this.fb32[offset + 1024 + i] ^= 0x00ffffff;
+                this.fb32[offset + 1024 + i] ^= CursorInvert;
             }
+        }
+    }
+
+    pendingBeamOffset() {
+        return ((this.bitmapY + PendingRowBias) * 1024 + this.bitmapX) << PendingOffsetShift;
+    }
+
+    beamOffset() {
+        const bitmapRow = this.doublesLines() ? this.bitmapY & ~1 : this.bitmapY;
+        return bitmapRow * 1024 + this.bitmapX;
+    }
+
+    paintTeletextCell() {
+        this.renderPending();
+        const doubledLines = this.doublesLines();
+        const offset = this.beamOffset();
+        const bitmapRow = offset >> 10;
+        if (doubledLines) {
+            this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
+            this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
+        } else {
+            this.lineGrid[bitmapRow] = this.lineGridUla;
+        }
+        if (this.halfClock) {
+            // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
+            this.teletext.emit(this.fb32, offset);
+        } else {
+            // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
+            // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
+            // at ABUG 2026-03-13; the mechanism is not established, as the
+            // Model B ULA has no connection to the SAA5050 at all.
+            // See https://github.com/mattgodbolt/jsbeeb/issues/546
+            this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
+        }
+        if (doubledLines) {
+            const fb32 = this.fb32;
+            const end = offset + this.pixelsPerChar;
+            for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
         }
     }
 
@@ -1043,6 +1187,7 @@ export class Video {
     handleHSync() {
         this.hpulseCounter = (this.hpulseCounter + 1) & 0x0f;
         if (this.hpulseCounter === this.hpulseWidth >>> 1) {
+            if (this.pendingCount > PendingCapacity - MaxPendingPerLine) this.renderPending();
             // Start at -8 because the +8 is added before the pixel render.
             this.bitmapX = -8;
 
@@ -1169,58 +1314,16 @@ export class Video {
 
                 // Render data depending on display enable state.
                 if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
-                    let doubledLines = false;
-                    let bitmapRow = this.bitmapY;
-                    // There's a painting subtlety here: if we're in an
-                    // interlace mode but R6>R4 then we'll get stuck
-                    // painting just an odd or even frame, so we double up
-                    // scanlines to avoid a ghost half frame. This is
-                    // doublesLines(), inlined for speed.
-                    if (
-                        (this.doubledScanlines && !this.interlacedSyncAndVideo) ||
-                        this.isEvenRender === this.lastRenderWasEven
-                    ) {
-                        doubledLines = true;
-                        bitmapRow &= ~1;
-                    }
-
-                    const offset = bitmapRow * 1024 + this.bitmapX;
                     this.cellData = dat;
-
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
-                        // Note this row's logical pixel size for display
-                        // filters; see video-filters/pixel-grid.js. The ULA half
-                        // of the descriptor is precomputed on register writes so
-                        // this stays a store or two in the hottest loop we have.
-                        if (doubledLines) {
-                            this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
-                            this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
-                        } else {
-                            this.lineGrid[bitmapRow] = this.lineGridUla;
-                        }
                         if (this.teletextMode) {
-                            if (this.halfClock) {
-                                // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
-                                this.teletext.emit(this.fb32, offset);
-                            } else {
-                                // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
-                                // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
-                                // at ABUG 2026-03-13; the mechanism is not established, as the
-                                // Model B ULA has no connection to the SAA5050 at all.
-                                // See https://github.com/mattgodbolt/jsbeeb/issues/546
-                                this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
-                            }
-                            if (doubledLines) {
-                                const fb32 = this.fb32;
-                                const end = offset + this.pixelsPerChar;
-                                for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
-                            }
+                            this.paintTeletextCell();
                         } else {
-                            this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
+                            this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
                         }
                     }
                     if (this.cursorDrawIndex) {
-                        this.handleCursor(offset);
+                        this.handleCursor();
                     }
                 }
             }
