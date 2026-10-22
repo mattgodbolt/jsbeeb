@@ -803,7 +803,7 @@ export class Video {
         for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
             this.fb32[offset + i] ^= 0x00ffffff;
         }
-        if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
+        if (this.doublesLines()) {
             for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
                 this.fb32[offset + 1024 + i] ^= 0x00ffffff;
             }
