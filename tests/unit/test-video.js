@@ -263,7 +263,7 @@ describe("Video", () => {
     });
 
     describe("feeding the SAA5050", () => {
-        const pipelineHead = () => video.teletext.snapshotState().dataQueue.at(-1);
+        const newestFed = () => video.teletext.snapshotState().dataQueue.at(-1);
 
         beforeEach(() => {
             video.dispEnabled = EVERYTHINGENABLED;
@@ -280,7 +280,7 @@ describe("Video", () => {
 
             video.polltime(1);
 
-            expect(pipelineHead()).toBe(0x42);
+            expect(newestFed()).toBe(0x42);
             expect(emitted).not.toHaveBeenCalled();
         });
 
@@ -291,13 +291,13 @@ describe("Video", () => {
 
             video.polltime(1);
 
-            expect(pipelineHead()).toBe(0x45);
+            expect(newestFed()).toBe(0x45);
         });
 
         it("feeds it nothing outside the vertical display", () => {
             video.dispEnabled = 0;
             video.polltime(1);
-            expect(pipelineHead()).toBe(0);
+            expect(newestFed()).toBe(0);
         });
 
         // The "TTX trick": with the teletext bit set in a 2MHz mode the SAA5050 outputs black.

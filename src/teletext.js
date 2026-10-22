@@ -43,7 +43,7 @@ export class Teletext {
         this.cellFlash = false;
         this.cellConceal = false;
         this.cellPalette = 0;
-        this.dataQueue = new Uint8Array(4);
+        this.dataQueue = new Uint8Array(PipelineLength);
         this.scanlineCounter = 0;
         this.levelDEW = false;
         this.levelDISPTMG = false;
@@ -368,7 +368,10 @@ export class Teletext {
         this.log[this.logLength++] = data & 0x7f;
     }
 
-    /** Runs everything logged, so the chip is as if each byte had been run as it arrived. */
+    /**
+     * Runs everything logged, so the chip is as if each byte had been run as it arrived. Painting the chip, or
+     * running it directly with `fetchData` and `advance`, must come after this once anything has been logged.
+     */
     catchUp() {
         const length = this.logLength;
         this.logLength = 0;
@@ -392,7 +395,7 @@ export class Teletext {
 
     /**
      * Brings the log to the end of a line without running it, for the DISPTMG reset that follows: that
-     * reset leaves only the pipeline and whether a double height code reached its head.
+     * reset leaves the pipeline, whether a double height code reached its head, and the latched cell.
      */
     skipLine() {
         const length = this.logLength;
@@ -576,7 +579,6 @@ export class Teletext {
      * per scanline or per field, not per character.
      */
     emit(buf, offset) {
-        if (this.logLength !== 0) this.catchUp();
         const scanline = this.glyphScanline();
 
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
@@ -597,7 +599,6 @@ export class Teletext {
 
     // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
-        if (this.logLength !== 0) this.catchUp();
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];

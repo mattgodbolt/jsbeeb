@@ -404,7 +404,6 @@ describe("Teletext", () => {
         // Lines nothing reads, which the log skips, should be common: the bit turns on less readily than off.
         const TeletextOnChance = 0.005;
         const TeletextOffChance = 0.02;
-        const StrayPaintChance = 0.01;
         // Fewer feeds than the pipeline is long leave the line's last bytes for the next line to run.
         const ShortBlankingChance = 0.5;
         const ShortBlankingFeeds = 3;
@@ -437,6 +436,7 @@ describe("Teletext", () => {
             for (let i = 0; i < LinesPerRow - 2; ++i) logLine(line);
             logLine([...line, code]);
             logLine(line);
+            teletext.catchUp();
 
             const cells = renderCells([WhiteGraphics, SolidBlock]);
 
@@ -514,7 +514,7 @@ describe("Teletext", () => {
                         teletextBit = !teletextBit;
                     }
                     feedClocked(Bytes[pick(Bytes.length)]);
-                    if (teletextBit || random() < StrayPaintChance) paint(line, cell);
+                    if (teletextBit) paint(line, cell);
                     if (random() < SnapshotChance) expectSameSnapshot();
                     if (random() < RestoreChance) {
                         const state = eager.snapshotState();
