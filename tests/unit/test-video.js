@@ -515,12 +515,14 @@ describe("Video", () => {
             expect(r.fb[offset]).toBe(Red);
         });
 
-        it("are dropped by a restore", () => {
+        it("are drawn in the palette they were passed in when a restore changes it", () => {
+            const Red = 0xff0000ff;
+            const PhysicalRed = 1;
             const saved = video.snapshotState();
+            video.ula.write(1, 0xf0 | (PhysicalRed ^ 7));
             passCell(rig);
             video.restoreState(saved);
-            video.renderPending();
-            expect(fb[offset]).toBe(OPAQUE_BLACK);
+            expect(fb[offset]).toBe(Red);
         });
 
         // A 1MHz cell at the right edge of the line above an odd field spills onto row 0.

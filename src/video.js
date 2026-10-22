@@ -28,7 +28,7 @@ const PendingOffsetMask = 0xfffff;
 const PendingByteMask = 0xff;
 const PendingCursor = 1 << 28;
 // Flyback drains, and a field records at most 313 lines (bitmapY below 625 in steps of two) of 128
-// cells and four cursor inverts.
+// cells and a few cursor inverts.
 const PendingCapacity = 1 << 16;
 const CursorInvert = 0x00ffffff;
 
@@ -685,7 +685,7 @@ export class Video {
     }
 
     restoreState(state) {
-        this.pendingCount = 0;
+        this.renderPending();
         this.regs.set(state.regs);
         this.bitmapX = state.bitmapX;
         this.bitmapY = state.bitmapY;
