@@ -401,6 +401,10 @@ describe("Teletext", () => {
         const SnapshotChance = 0.01;
         const FrameChance = 0.03;
         const MaxBlankingFeeds = 30;
+        // Fewer feeds than the pipeline is long leave the line's last bytes for the next line to run.
+        const ShortBlankingChance = 0.5;
+        const ShortBlankingFeeds = 3;
+        const RestoreChance = 0.01;
         const Bit7 = 0x80;
         const FedBit = 0x40;
         const Bytes = [
@@ -413,6 +417,19 @@ describe("Teletext", () => {
             LetterA,
             SolidBlock,
         ];
+
+        it("runs a line longer than the log holds", () => {
+            const random = seededRandom(1);
+            const eager = new Teletext();
+            const logged = new Teletext();
+            for (let cell = 0; cell < LongLineCells; ++cell) {
+                const byte = Bytes[Math.floor(random() * Bytes.length)];
+                eager.fetchData(byte);
+                eager.advance();
+                logged.logClocked(byte);
+            }
+            expect(logged.snapshotState()).toEqual(eager.snapshotState());
+        });
 
         it.each([1, 2, 3, 4, 5, 6, 7, 8])("draws and snapshots as running each byte at once, seed %i", (seed) => {
             const random = seededRandom(seed);
@@ -450,6 +467,10 @@ describe("Teletext", () => {
                         }
                     }
                     if (random() < SnapshotChance) expectSameSnapshot();
+                    if (random() < RestoreChance) {
+                        const state = eager.snapshotState();
+                        both((chip) => chip.restoreState(structuredClone(state)));
+                    }
                 }
                 if (random() >= NoResetChance) both((chip) => chip.setDISPTMG(false));
                 if (random() < SnapshotChance * 10) expectSameSnapshot();
@@ -459,7 +480,8 @@ describe("Teletext", () => {
                     both((chip) => chip.setDEW(true));
                     both((chip) => chip.setDEW(false));
                 }
-                for (let feeds = pick(MaxBlankingFeeds); feeds > 0; --feeds) {
+                const maxFeeds = random() < ShortBlankingChance ? ShortBlankingFeeds : MaxBlankingFeeds;
+                for (let feeds = pick(maxFeeds); feeds > 0; --feeds) {
                     const byte = Bytes[pick(Bytes.length)] | FedBit;
                     eager.fetchData(byte);
                     logged.logFed(byte);
