@@ -109,6 +109,9 @@ function programExternallySyncedTiming(v) {
     v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
 }
 
+const Mode4 = 0x88;
+const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
+
 // MODE 7's vertical timing: with interlace sync and video the scanline
 // counter steps by two, so R9 must be even for rows to end at all.
 function programInterlaceSyncAndVideoFrame(v) {
@@ -286,7 +289,6 @@ describe("Video", () => {
 
     // See Video.repaintSecondHalfOfCell.
     describe("ULA writes half way through a 1MHz cell", () => {
-        const Mode4 = 0x88;
         const Mode4Teletext = 0x8a;
         const Mode0 = 0x9c;
         const Red = 0xffff0000;
@@ -296,7 +298,6 @@ describe("Video", () => {
         const HalfCell = 8;
         // A set pixel in a two colour mode is logical colour 15.
         const SetPixelsGreen = 0xf0 | (7 ^ 2);
-        const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
         const offset = 100 * FbWidth + 100;
 
         // Leaves the beam at the start of a cell with the body about to run on the next tick.
@@ -990,11 +991,10 @@ describe("Video", () => {
     });
 
     describe("the cursor with interlace sync and video", () => {
-        const Mode4CursorOnFirstCell = 0x88;
         const SetPixelsRed = 0xf0 | (7 ^ 1);
-        const InvertedRed = 0xffffff00;
+        const Red = 0xff0000ff;
         const Sentinel = 0xff123456;
-        const InvertedSentinel = 0xffedcba9;
+        const InvertedRed = inverted(Red);
 
         // The last few painted frames of a cursor on the first cell of a red screen. Each paint
         // refills the framebuffer with a sentinel, so a frame shows which rows its field drew.
@@ -1010,10 +1010,11 @@ describe("Video", () => {
             v.writeCrtc(10, 0); // Cursor from scanline 0, steady
             v.writeCrtc(11, 31); // Cursor to the end of the row
             for (const reg of [12, 13, 14, 15]) v.writeCrtc(reg, 0); // Screen and cursor at address 0
-            v.video.ula.write(0, Mode4CursorOnFirstCell);
+            v.video.ula.write(0, Mode4);
             v.video.ula.write(1, SetPixelsRed);
             v.cpu.data = 0xff;
             v.run(16 * ClocksPerFrame);
+            expect(frames.length).toBeGreaterThan(3);
             return frames.slice(-3);
         }
 
@@ -1032,7 +1033,7 @@ describe("Video", () => {
             for (const frame of paintedFrames(programInterlaceSyncAndVideoFrame)) {
                 expect(frame).toContain(InvertedRed);
                 expect(frame).toContain(Sentinel);
-                expect(frame).not.toContain(InvertedSentinel);
+                expect(frame).not.toContain(inverted(Sentinel));
             }
         });
     });
