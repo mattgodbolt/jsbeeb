@@ -14,7 +14,7 @@ export const PendingCursor = 1 << 28;
 export const PendingCapacity = 1 << 16;
 export const CursorInvert = 0x00ffffff;
 
-export const Table4bppBytes = 4 * 256 * 16;
+const Table4bppBytes = 4 * 256 * 16;
 const PaletteEntries = 16;
 const RowPixels = 1024;
 const RowBytes = RowPixels * 4;
@@ -36,7 +36,7 @@ const PairsLow = lanes(range(0, 4).flatMap((i) => [2 * i, 2 * i + 1, 16 + 2 * i,
 const PairsHigh = lanes(range(4, 4).flatMap((i) => [2 * i, 2 * i + 1, 16 + 2 * i, 17 + 2 * i]));
 
 const DrainParams = ["count", "modeBase", "pixelsPerChar", "doubledLines", "cursorDoubled", "lineGridValue"];
-const ScalarLocals = {
+const DrainLocals = {
     i: "i32",
     record: "i32",
     raw: "i32",
@@ -50,6 +50,19 @@ const ScalarLocals = {
     at: "i32",
     span: "i32",
     rowsEnd: "i32",
+    plane0: "v128",
+    plane1: "v128",
+    plane2: "v128",
+    plane3: "v128",
+    indices: "v128",
+    byte0: "v128",
+    byte1: "v128",
+    byte2: "v128",
+    byte3: "v128",
+    bytes01: "v128",
+    bytes23: "v128",
+    low: "v128",
+    high: "v128",
 };
 
 // Records whose offset is negative lie on the line above an odd field; only a cell's right end, spilling onto
@@ -168,10 +181,107 @@ const InvertCursor = `
         br_if 0
     end`;
 
-// The line grid is written for the first cell of each run of adjacent cells, as the JS drain did.
-function drainCode(prologue, drawCell) {
+// The palette is split into planes, one byte of every colour in each, so that a cell's sixteen palette
+// indices select each byte of its pixels with one swizzle.
+const LowHalves = lanes([...range(0, 8), ...range(16, 8)]);
+const HighHalves = lanes([...range(8, 8), ...range(24, 8)]);
+
+function twoPlanes(byte, firstPlane, secondPlane) {
+    const bytesOfEightColours = lanes([
+        ...range(0, 8).map((i) => 4 * i + byte),
+        ...range(0, 8).map((i) => 4 * i + byte + 1),
+    ]);
     return `
-    ${prologue}
+    i32.const 0
+    v128.load offset=${PaletteOffset}
+    i32.const 0
+    v128.load offset=${PaletteOffset + 16}
+    i8x16.shuffle ${bytesOfEightColours}
+    local.set low
+    i32.const 0
+    v128.load offset=${PaletteOffset + 32}
+    i32.const 0
+    v128.load offset=${PaletteOffset + 48}
+    i8x16.shuffle ${bytesOfEightColours}
+    local.set high
+    local.get low
+    local.get high
+    i8x16.shuffle ${LowHalves}
+    local.set ${firstPlane}
+    local.get low
+    local.get high
+    i8x16.shuffle ${HighHalves}
+    local.set ${secondPlane}`;
+}
+
+const SplitPalette = twoPlanes(0, "plane0", "plane1") + twoPlanes(2, "plane2", "plane3");
+
+function storeFourPixels(vector, byteOffset) {
+    return `
+        local.get address
+        local.get ${vector}
+        v128.store offset=${FramebufferOffset + byteOffset}
+        local.get doubledLines
+        if
+            local.get address
+            local.get ${vector}
+            v128.store offset=${FramebufferOffset + RowBytes + byteOffset}
+        end`;
+}
+
+function eightPixels(interleave, byteOffset) {
+    return `
+        local.get byte0
+        local.get byte1
+        i8x16.shuffle ${interleave}
+        local.set bytes01
+        local.get byte2
+        local.get byte3
+        i8x16.shuffle ${interleave}
+        local.set bytes23
+        local.get bytes01
+        local.get bytes23
+        i8x16.shuffle ${PairsLow}
+        local.set low
+        local.get bytes01
+        local.get bytes23
+        i8x16.shuffle ${PairsHigh}
+        local.set high
+        ${storeFourPixels("low", byteOffset)}
+        ${storeFourPixels("high", byteOffset + 16)}`;
+}
+
+const DrawCell = `
+    local.get source
+    v128.load offset=${TableOffset}
+    local.set indices
+    local.get plane0
+    local.get indices
+    i8x16.swizzle
+    local.set byte0
+    local.get plane1
+    local.get indices
+    i8x16.swizzle
+    local.set byte1
+    local.get plane2
+    local.get indices
+    i8x16.swizzle
+    local.set byte2
+    local.get plane3
+    local.get indices
+    i8x16.swizzle
+    local.set byte3
+    ${eightPixels(InterleaveLow, 0)}
+    local.get pixelsPerChar
+    i32.const 16
+    i32.eq
+    if
+        ${eightPixels(InterleaveHigh, 32)}
+    end`;
+
+// The line grid is written for the first cell of each run of adjacent cells.
+const DrainCode = `
+    ${SplitPalette}
     i32.const -1
     local.get doubledLines
     i32.const 10
@@ -257,181 +367,14 @@ function drainCode(prologue, drawCell) {
             i32.const 2
             i32.shl
             local.set address
-            ${drawCell}
+            ${DrawCell}
             br 0
         end
     end`;
-}
 
-const ScalarCell = `
-    i32.const 0
-    local.set pixel
-    loop
-        local.get source
-        local.get pixel
-        i32.add
-        i32.load8_u offset=${TableOffset}
-        i32.const 2
-        i32.shl
-        i32.load offset=${PaletteOffset}
-        local.set colour
-        local.get address
-        local.get colour
-        i32.store offset=${FramebufferOffset}
-        local.get doubledLines
-        if
-            local.get address
-            local.get colour
-            i32.store offset=${FramebufferOffset + RowBytes}
-        end
-        local.get address
-        i32.const 4
-        i32.add
-        local.set address
-        local.get pixel
-        i32.const 1
-        i32.add
-        local.tee pixel
-        local.get pixelsPerChar
-        i32.lt_u
-        br_if 0
-    end`;
-
-// The palette is split into planes, one byte of every colour in each, so that a cell's sixteen palette
-// indices select each byte of its pixels with one swizzle.
-const SimdLocals = {
-    ...ScalarLocals,
-    plane0: "v128",
-    plane1: "v128",
-    plane2: "v128",
-    plane3: "v128",
-    indices: "v128",
-    byte0: "v128",
-    byte1: "v128",
-    byte2: "v128",
-    byte3: "v128",
-    bytes01: "v128",
-    bytes23: "v128",
-    low: "v128",
-    high: "v128",
-};
-
-const SplitPalette = `
-    i32.const 0
-    v128.load offset=${PaletteOffset}
-    i32.const 0
-    v128.load offset=${PaletteOffset + 16}
-    i8x16.shuffle ${lanes([...range(0, 8).map((i) => 4 * i), ...range(0, 8).map((i) => 4 * i + 1)])}
-    local.set low
-    i32.const 0
-    v128.load offset=${PaletteOffset + 32}
-    i32.const 0
-    v128.load offset=${PaletteOffset + 48}
-    i8x16.shuffle ${lanes([...range(0, 8).map((i) => 4 * i), ...range(0, 8).map((i) => 4 * i + 1)])}
-    local.set high
-    local.get low
-    local.get high
-    i8x16.shuffle ${lanes([...range(0, 8), ...range(16, 8)])}
-    local.set plane0
-    local.get low
-    local.get high
-    i8x16.shuffle ${lanes([...range(8, 8), ...range(24, 8)])}
-    local.set plane1
-    i32.const 0
-    v128.load offset=${PaletteOffset}
-    i32.const 0
-    v128.load offset=${PaletteOffset + 16}
-    i8x16.shuffle ${lanes([...range(0, 8).map((i) => 4 * i + 2), ...range(0, 8).map((i) => 4 * i + 3)])}
-    local.set low
-    i32.const 0
-    v128.load offset=${PaletteOffset + 32}
-    i32.const 0
-    v128.load offset=${PaletteOffset + 48}
-    i8x16.shuffle ${lanes([...range(0, 8).map((i) => 4 * i + 2), ...range(0, 8).map((i) => 4 * i + 3)])}
-    local.set high
-    local.get low
-    local.get high
-    i8x16.shuffle ${lanes([...range(0, 8), ...range(16, 8)])}
-    local.set plane2
-    local.get low
-    local.get high
-    i8x16.shuffle ${lanes([...range(8, 8), ...range(24, 8)])}
-    local.set plane3`;
-
-function storeFourPixels(vector, byteOffset) {
-    return `
-        local.get address
-        local.get ${vector}
-        v128.store offset=${FramebufferOffset + byteOffset}
-        local.get doubledLines
-        if
-            local.get address
-            local.get ${vector}
-            v128.store offset=${FramebufferOffset + RowBytes + byteOffset}
-        end`;
-}
-
-function eightPixels(interleave, byteOffset) {
-    return `
-        local.get byte0
-        local.get byte1
-        i8x16.shuffle ${interleave}
-        local.set bytes01
-        local.get byte2
-        local.get byte3
-        i8x16.shuffle ${interleave}
-        local.set bytes23
-        local.get bytes01
-        local.get bytes23
-        i8x16.shuffle ${PairsLow}
-        local.set low
-        local.get bytes01
-        local.get bytes23
-        i8x16.shuffle ${PairsHigh}
-        local.set high
-        ${storeFourPixels("low", byteOffset)}
-        ${storeFourPixels("high", byteOffset + 16)}`;
-}
-
-const SimdCell = `
-    local.get source
-    v128.load offset=${TableOffset}
-    local.set indices
-    local.get plane0
-    local.get indices
-    i8x16.swizzle
-    local.set byte0
-    local.get plane1
-    local.get indices
-    i8x16.swizzle
-    local.set byte1
-    local.get plane2
-    local.get indices
-    i8x16.swizzle
-    local.set byte2
-    local.get plane3
-    local.get indices
-    i8x16.swizzle
-    local.set byte3
-    ${eightPixels(InterleaveLow, 0)}
-    local.get pixelsPerChar
-    i32.const 16
-    i32.eq
-    if
-        ${eightPixels(InterleaveHigh, 32)}
-    end`;
-
-let compiledModule = null;
-
-function drainModule() {
-    compiledModule ??= new WebAssembly.Module(
-        assembleModule([
-            { name: "drainScalar", params: DrainParams, locals: ScalarLocals, code: drainCode("", ScalarCell) },
-            { name: "drainSimd", params: DrainParams, locals: SimdLocals, code: drainCode(SplitPalette, SimdCell) },
-        ]),
-    );
-    return compiledModule;
-}
+const DrainModule = new WebAssembly.Module(
+    assembleModule([{ name: "drain", params: DrainParams, locals: DrainLocals, code: DrainCode }]),
+);
 
 /**
  * The memory the bitmap renderer works in, holding the framebuffer, the line grid, the pending records,
@@ -450,15 +393,12 @@ export class VideoDrain {
         this.lineGrid = new Uint8Array(buffer, LineGridOffset, LineGridRows);
         this.records = new Int32Array(buffer, RecordsOffset, PendingCapacity);
         this.fb32 = new Int32Array(buffer, FramebufferOffset, framebufferPixels);
-        const { exports } = new WebAssembly.Instance(drainModule(), { env: { memory } });
+        const { exports } = new WebAssembly.Instance(DrainModule, { env: { memory } });
         /**
-         * Each draws the first `count` records, in order, in `palette`.
-         * @typedef {(count: number, modeBase: number, pixelsPerChar: number, doubledLines: boolean,
-         *     cursorDoubled: boolean, lineGridValue: number) => void} Drain
+         * Draws the first `count` records, in order, in `palette`.
+         * @type {(count: number, modeBase: number, pixelsPerChar: number, doubledLines: boolean,
+         *     cursorDoubled: boolean, lineGridValue: number) => void}
          */
-        /** @type {Record<string, Drain>} */
-        this.variants = { scalar: exports.drainScalar, simd: exports.drainSimd };
-        /** @type {Drain} */
-        this.drain = this.variants.simd;
+        this.drain = exports.drain;
     }
 }

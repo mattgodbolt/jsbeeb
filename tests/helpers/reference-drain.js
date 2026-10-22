@@ -131,22 +131,20 @@ function touchedSpan(records, count, length) {
 }
 
 /**
- * Has every drain of `videoDrain` run each Wasm variant from the same starting framebuffer and line grid, and
- * compare them with renderPendingCells over the part of the framebuffer the records reach. The last variant's
- * output is the one kept.
+ * Has every drain of `videoDrain` compare its framebuffer and line grid with renderPendingCells', over the part of
+ * the framebuffer the records reach.
  * @param {import("../../src/video-drain.js").VideoDrain} videoDrain
  * @returns {{drains: number, differences: string[]}} how many drains ran, and a description of each that differed
  */
 export function checkDrainsAgainstReference(videoDrain) {
     const checked = { drains: 0, differences: [] };
     const { fb32, lineGrid, records, table4bpp, palette } = videoDrain;
+    const wasmDrain = videoDrain.drain;
     const expectedFb32 = new Int32Array(fb32.length);
     videoDrain.drain = (count, modeBase, pixelsPerChar, doubledLines, cursorDoubled, lineGridValue) => {
         const [start, end] = touchedSpan(records, count, fb32.length);
-        const fb32Before = fb32.slice(start, end);
-        const lineGridBefore = lineGrid.slice();
+        expectedFb32.set(fb32.subarray(start, end), start);
         const expectedLineGrid = lineGrid.slice();
-        expectedFb32.set(fb32Before, start);
         renderPendingCells(
             records,
             count,
@@ -160,17 +158,13 @@ export function checkDrainsAgainstReference(videoDrain) {
             cursorDoubled,
             lineGridValue,
         );
-        for (const [name, drain] of Object.entries(videoDrain.variants)) {
-            fb32.set(fb32Before, start);
-            lineGrid.set(lineGridBefore);
-            drain(count, modeBase, pixelsPerChar, doubledLines, cursorDoubled, lineGridValue);
-            const pixel = firstDifference(expectedFb32, fb32, start, end);
-            const row = firstDifference(expectedLineGrid, lineGrid, 0, lineGrid.length);
-            if (pixel >= 0 || row >= 0) {
-                checked.differences.push(
-                    `${name}, drain ${checked.drains} of ${count} records: pixel ${pixel}, line grid row ${row}`,
-                );
-            }
+        wasmDrain(count, modeBase, pixelsPerChar, doubledLines, cursorDoubled, lineGridValue);
+        const pixel = firstDifference(expectedFb32, fb32, start, end);
+        const row = firstDifference(expectedLineGrid, lineGrid, 0, lineGrid.length);
+        if (pixel >= 0 || row >= 0) {
+            checked.differences.push(
+                `drain ${checked.drains} of ${count} records: pixel ${pixel}, line grid row ${row}`,
+            );
         }
         ++checked.drains;
     };
