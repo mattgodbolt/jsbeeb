@@ -2,11 +2,12 @@ import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
 
-// Bounds the log when no DISPTMG falling edge ends a line, as while R8 disables the display.
+// A line that ends logs at most 256 entries, one per character clock; this bounds the log when no DISPTMG
+// falling edge ends a line, as while R8 disables the display.
 const LogCapacity = 1024;
 const ClockedEntry = 0x80;
+const DataBits = 0x7f;
 const DoubleHeight = 13;
-const ClockedDoubleHeight = ClockedEntry | DoubleHeight;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
 
@@ -353,7 +354,7 @@ export class Teletext {
         this.dataQueue[0] = this.dataQueue[1];
         this.dataQueue[1] = this.dataQueue[2];
         this.dataQueue[2] = this.dataQueue[3];
-        this.dataQueue[3] = data & 0x7f;
+        this.dataQueue[3] = data & DataBits;
     }
 
     /** Feeds `data` and clocks the chip, as `fetchData` then `advance` do, by the time anything reads the chip. */
@@ -365,7 +366,7 @@ export class Teletext {
     /** Feeds `data` without clocking the chip, as `fetchData` does, by the time anything reads the chip. */
     logFed(data) {
         if (this.logLength === LogCapacity) this.catchUp();
-        this.log[this.logLength++] = data & 0x7f;
+        this.log[this.logLength++] = data & DataBits;
     }
 
     /**
@@ -404,9 +405,9 @@ export class Teletext {
         const log = this.log;
         const queue = this.dataQueue;
 
-        let lastClocked = length - 1;
-        while (lastClocked >= 0 && !(log[lastClocked] & ClockedEntry)) --lastClocked;
-        if (lastClocked >= 0) {
+        let anyClocked = false;
+        for (let i = length - 1; i >= 0 && !anyClocked; --i) anyClocked = !!(log[i] & ClockedEntry);
+        if (anyClocked) {
             this.skippedQueue.set(queue);
             copyLineState(this, this.skippedLineState);
             this.log = this.skippedLog;
@@ -419,7 +420,7 @@ export class Teletext {
             if (log[i] & ClockedEntry && queue[i + 1] === DoubleHeight) this.wasDbl = true;
         }
         for (let i = 0; i + PipelineLag < length; ++i) {
-            if (log[i] === ClockedDoubleHeight && log[i + PipelineLag] & ClockedEntry) {
+            if ((log[i] & DataBits) === DoubleHeight && log[i + PipelineLag] & ClockedEntry) {
                 this.wasDbl = true;
                 break;
             }
@@ -428,7 +429,7 @@ export class Teletext {
         if (length < PipelineLength) {
             for (let i = 0; i < length; ++i) this.fetchData(log[i]);
         } else {
-            for (let i = 0; i < PipelineLength; ++i) queue[i] = log[length - PipelineLength + i] & 0x7f;
+            for (let i = 0; i < PipelineLength; ++i) queue[i] = log[length - PipelineLength + i] & DataBits;
         }
     }
 

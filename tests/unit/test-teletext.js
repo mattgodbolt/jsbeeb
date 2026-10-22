@@ -443,6 +443,19 @@ describe("Teletext", () => {
             expect(backgroundOnly(cells[1])).toBe(blanked);
         });
 
+        it("counts a double height code that was only fed once a clocked byte runs it", () => {
+            const LinesPerRow = 10;
+            for (let i = 0; i < LinesPerRow - 1; ++i) logLine([Space, Space, Space, Space]);
+            teletext.setDISPTMG(true);
+            teletext.logFed(DoubleHeight);
+            logLine([Space, Space, Space]);
+            teletext.catchUp();
+
+            const cells = renderCells([WhiteGraphics, SolidBlock]);
+
+            expect(backgroundOnly(cells[1])).toBe(true);
+        });
+
         it("forgets what it logged when a snapshot is restored", () => {
             const fresh = new Teletext().snapshotState();
             logLine([RedGraphics, Space, Space, Space]);
