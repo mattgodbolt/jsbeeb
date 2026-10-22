@@ -424,17 +424,27 @@ export class Teletext {
 
     // Returns whether any entry clocked the chip.
     replayLog(log, length) {
+        const queue = this.dataQueue;
         let clocked = false;
+        // Each clocked entry runs the byte fed PipelineLag entries before it, from the pipeline for the first few.
         for (let i = 0; i < length; ++i) {
             const entry = log[i];
-            this.fetchData(entry);
-            if (entry & ClockedEntry) {
-                this.advance();
-                clocked = true;
-                if (entry & ShownEntry) this.paintShown(entry);
-            }
+            if (!(entry & ClockedEntry)) continue;
+            clocked = true;
+            this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
+            if (entry & ShownEntry) this.paintShown(entry);
         }
+        this.feedLast(log, length);
         return clocked;
+    }
+
+    // Leaves the pipeline as feeding the log's entries would.
+    feedLast(log, length) {
+        if (length < PipelineLength) {
+            for (let i = 0; i < length; ++i) this.fetchData(log[i]);
+        } else {
+            for (let i = 0; i < PipelineLength; ++i) this.dataQueue[i] = log[length - PipelineLength + i] & DataBits;
+        }
     }
 
     paintShown(entry) {
@@ -490,11 +500,7 @@ export class Teletext {
             }
         }
 
-        if (length < PipelineLength) {
-            for (let i = 0; i < length; ++i) this.fetchData(log[i]);
-        } else {
-            for (let i = 0; i < PipelineLength; ++i) queue[i] = log[length - PipelineLength + i] & DataBits;
-        }
+        this.feedLast(log, length);
     }
 
     // Recovers the cell latched by the last line `skipLine` passed over, leaving everything else as it is.
@@ -588,9 +594,12 @@ export class Teletext {
      * to the character state, and latch how the resulting cell should look.
      */
     advance() {
-        const line = this.line;
-        let data = this.dataQueue[0];
+        this.clockCharacter(this.dataQueue[0]);
+    }
 
+    /** Applies `data`, as the byte leaving the pipeline, to the character state and latches the cell it shows. */
+    clockCharacter(data) {
+        const line = this.line;
         this.oldDbl = line.dbl;
 
         this.prevCol = line.col;
@@ -652,9 +661,15 @@ export class Teletext {
         } else {
             let chardef = this.curGlyphs[this.cellGlyphIndex + scanline];
             const paletteIndex = this.cellPalette;
+            const colour = this.colour;
 
+            if (chardef === 0) {
+                const backgroundColour = colour[paletteIndex];
+                for (let pixel = 0; pixel < 16; ++pixel) buf[offset + pixel] = backgroundColour;
+                return;
+            }
             for (let pixel = 0; pixel < 16; ++pixel) {
-                buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
+                buf[offset + pixel] = colour[paletteIndex + (chardef & 3)];
                 chardef >>>= 2;
             }
         }
