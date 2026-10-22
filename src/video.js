@@ -1201,8 +1201,7 @@ export class Video {
                     // bitmap still takes effect.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.fetchData(dat);
-                    this.teletext.advance();
+                    this.teletext.logClocked(dat);
 
                     // Check cursor start.
                     if (
@@ -1267,11 +1266,11 @@ export class Video {
             // On real hardware IC37/IC36 operates regardless of ULA mode —
             // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
             // Hardware also clocks the chip here, which we do not: our row reset fires
-            // too early relative to the pipeline for that to come out right, and adding
-            // `advance()` alone moves three of the hardware reference pages. See
+            // too early relative to the pipeline for that to come out right, and logging
+            // this byte as clocked alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
             if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
-                this.teletext.fetchData(this.readVideoMem() | 0x40);
+                this.teletext.logFed(this.readVideoMem() | 0x40);
             }
 
             // CRTC MA always increments, inside display border or not.

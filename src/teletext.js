@@ -2,6 +2,34 @@ import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
 
+// Bounds the log when DISPTMG stays high, as with R8's display disable never cleared.
+const LogCapacity = 1024;
+const ClockedEntry = 0x80;
+const DoubleHeight = 13;
+const ClockedDoubleHeight = ClockedEntry | DoubleHeight;
+const PipelineLength = 4;
+const PipelineLag = PipelineLength - 1;
+
+// What `advance` reads on its way to a cell besides the pipeline. A DISPTMG falling edge resets all of it.
+const LineStateFields = [
+    "col",
+    "bg",
+    "sep",
+    "dbl",
+    "gfx",
+    "conceal",
+    "flash",
+    "holdChar",
+    "heldChar",
+    "nextGlyphs",
+    "heldGlyphs",
+    "wasDbl",
+];
+
+function copyLineState(from, to) {
+    for (const field of LineStateFields) to[field] = from[field];
+}
+
 export class Teletext {
     constructor() {
         this.prevCol = 0;
@@ -24,6 +52,17 @@ export class Teletext {
         this.levelDEW = false;
         this.levelDISPTMG = false;
         this.levelRA0 = false;
+
+        // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked.
+        this.log = new Uint8Array(LogCapacity);
+        this.logLength = 0;
+        // The cell `advance` latches outlives the line reset, and a snapshot saves part of it. So the last
+        // line skipped by `skipLine` is kept with the state it started from, until a clocked byte replaces
+        // that cell.
+        this.skippedLog = new Uint8Array(LogCapacity);
+        this.skippedLogLength = 0;
+        this.skippedQueue = new Uint8Array(PipelineLength);
+        this.skippedLineState = {};
 
         this.normalGlyphs = makeFast32(new Uint32Array(96 * 20));
         this.graphicsGlyphs = makeFast32(new Uint32Array(96 * 20));
@@ -155,6 +194,8 @@ export class Teletext {
     }
 
     snapshotState() {
+        this.catchUp();
+        this.replaySkippedLine();
         // Encode glyph table references as strings for serialization
         let nextGlyphsName, curGlyphsName, heldGlyphsName;
         for (const [name, table] of [
@@ -212,6 +253,8 @@ export class Teletext {
         this.levelDEW = state.levelDEW;
         this.levelDISPTMG = state.levelDISPTMG;
         this.levelRA0 = state.levelRA0;
+        this.logLength = 0;
+        this.skippedLogLength = 0;
 
         const glyphMap = {
             normal: this.normalGlyphs,
@@ -318,6 +361,93 @@ export class Teletext {
         this.dataQueue[3] = data & 0x7f;
     }
 
+    /** Latch `data` into the pipeline and clock the chip, as `fetchData` then `advance` do, when next read. */
+    logClocked(data) {
+        if (this.logLength === LogCapacity) this.catchUp();
+        this.log[this.logLength++] = data | ClockedEntry;
+    }
+
+    /** Latch `data` into the pipeline without clocking the chip, as `fetchData` does, when next read. */
+    logFed(data) {
+        if (this.logLength === LogCapacity) this.catchUp();
+        this.log[this.logLength++] = data & 0x7f;
+    }
+
+    catchUp() {
+        const length = this.logLength;
+        if (length === 0) return;
+        this.logLength = 0;
+        if (this.replayLog(this.log, length)) this.skippedLogLength = 0;
+    }
+
+    // Returns whether any entry clocked the chip.
+    replayLog(log, length) {
+        let clocked = false;
+        for (let i = 0; i < length; ++i) {
+            const entry = log[i];
+            this.fetchData(entry);
+            if (entry & ClockedEntry) {
+                this.advance();
+                clocked = true;
+            }
+        }
+        return clocked;
+    }
+
+    /**
+     * Brings the log to the end of a line without running it, for the DISPTMG reset that follows: that
+     * reset leaves only the pipeline and whether a double height code reached its head.
+     */
+    skipLine() {
+        const length = this.logLength;
+        if (length === 0) return;
+        this.logLength = 0;
+        const log = this.log;
+        const queue = this.dataQueue;
+
+        let lastClocked = length - 1;
+        while (lastClocked >= 0 && !(log[lastClocked] & ClockedEntry)) --lastClocked;
+        if (lastClocked >= 0) {
+            this.skippedQueue.set(queue);
+            copyLineState(this, this.skippedLineState);
+            this.log = this.skippedLog;
+            this.skippedLog = log;
+            this.skippedLogLength = length;
+        }
+
+        // Each clocked entry runs the byte fed PipelineLag entries before it.
+        for (let i = 0; i < Math.min(PipelineLag, length); ++i) {
+            if (log[i] & ClockedEntry && queue[i + 1] === DoubleHeight) this.wasDbl = true;
+        }
+        for (let at = log.indexOf(ClockedDoubleHeight); at >= 0 && at + PipelineLag < length;) {
+            if (log[at + PipelineLag] & ClockedEntry) {
+                this.wasDbl = true;
+                break;
+            }
+            at = log.indexOf(ClockedDoubleHeight, at + 1);
+        }
+
+        if (length < PipelineLength) {
+            for (let i = 0; i < length; ++i) this.fetchData(log[i]);
+        } else {
+            for (let i = 0; i < PipelineLength; ++i) queue[i] = log[length - PipelineLength + i] & 0x7f;
+        }
+    }
+
+    // Recovers the cell latched by the last line `skipLine` passed over, leaving everything else as it is.
+    replaySkippedLine() {
+        if (this.skippedLogLength === 0) return;
+        const lineState = {};
+        copyLineState(this, lineState);
+        const queue = this.dataQueue.slice();
+        copyLineState(this.skippedLineState, this);
+        this.dataQueue.set(this.skippedQueue);
+        this.replayLog(this.skippedLog, this.skippedLogLength);
+        copyLineState(lineState, this);
+        this.dataQueue.set(queue);
+        this.skippedLogLength = 0;
+    }
+
     setDEW(level) {
         // The SAA5050 input pin "DEW" is connected to the 6845 output pin
         // "VSYNC" and it is used to track frames.
@@ -359,6 +489,7 @@ export class Teletext {
             return;
         }
 
+        this.skipLine();
         this.col = 7;
         this.bg = 0;
         this.holdChar = false;
@@ -450,6 +581,7 @@ export class Teletext {
      * per scanline or per field, not per character.
      */
     emit(buf, offset) {
+        this.catchUp();
         const scanline = this.glyphScanline();
 
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
@@ -470,6 +602,7 @@ export class Teletext {
 
     // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
+        this.catchUp();
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];

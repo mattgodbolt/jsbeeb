@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Teletext } from "../../src/teletext.js";
 import { makeFast32 } from "../../src/binary.js";
+import { seededRandom } from "../helpers/seeded-random.js";
 
 const PixelsPerCell = 16;
 const PipelineDelay = 3;
@@ -387,5 +388,84 @@ describe("Teletext", () => {
         teletext.restoreState(state);
 
         expect(renderCells(continuation).map((cell) => [...cell])).toEqual(expected);
+    });
+
+    // The video logs the chip's input and runs it only when something reads it; nothing may tell the difference.
+    describe("run from its input log", () => {
+        const Lines = 400;
+        const MaxCellsPerLine = 120;
+        const LongLineChance = 0.02;
+        // Longer than the log holds, as when R8 keeps DISPTMG low.
+        const LongLineCells = 2500;
+        const NoResetChance = 0.1;
+        const SnapshotChance = 0.01;
+        const FrameChance = 0.03;
+        const MaxBlankingFeeds = 30;
+        const Bit7 = 0x80;
+        const FedBit = 0x40;
+        const Bytes = [
+            ...Array.from({ length: 32 }, (_, code) => code),
+            DoubleHeight,
+            DoubleHeight,
+            Bit7 | DoubleHeight,
+            Space,
+            Mosaic,
+            LetterA,
+            SolidBlock,
+        ];
+
+        it.each([1, 2, 3, 4, 5, 6, 7, 8])("draws and snapshots as running each byte at once, seed %i", (seed) => {
+            const random = seededRandom(seed);
+            const pick = (n) => Math.floor(random() * n);
+            const eager = new Teletext();
+            const logged = new Teletext();
+            const eagerCell = makeFast32(new Uint32Array(PixelsPerCell));
+            const loggedCell = makeFast32(new Uint32Array(PixelsPerCell));
+            const both = (action) => {
+                action(eager);
+                action(logged);
+            };
+            const expectSameSnapshot = () => expect(logged.snapshotState()).toEqual(eager.snapshotState());
+
+            for (let line = 0; line < Lines; ++line) {
+                const cells = random() < LongLineChance ? LongLineCells : 1 + pick(MaxCellsPerLine);
+                const shownFrom = pick(cells + 1);
+                const shownTo = shownFrom + pick(cells + 1 - shownFrom);
+                both((chip) => chip.setDISPTMG(true));
+                for (let cell = 0; cell < cells; ++cell) {
+                    const byte = Bytes[pick(Bytes.length)];
+                    eager.fetchData(byte);
+                    eager.advance();
+                    logged.logClocked(byte);
+                    if (cell >= shownFrom && cell < shownTo) {
+                        const paint = random() < 0.5 ? "emit" : "emitSecondHalf";
+                        eager[paint](eagerCell, 0);
+                        logged[paint](loggedCell, 0);
+                        if (!eagerCell.every((pixel, i) => pixel === loggedCell[i])) {
+                            expect({ line, cell, pixels: [...loggedCell] }).toEqual({
+                                line,
+                                cell,
+                                pixels: [...eagerCell],
+                            });
+                        }
+                    }
+                    if (random() < SnapshotChance) expectSameSnapshot();
+                }
+                if (random() >= NoResetChance) both((chip) => chip.setDISPTMG(false));
+                if (random() < SnapshotChance * 10) expectSameSnapshot();
+                const ra0 = !!pick(2);
+                both((chip) => chip.setRA0(ra0));
+                if (random() < FrameChance) {
+                    both((chip) => chip.setDEW(true));
+                    both((chip) => chip.setDEW(false));
+                }
+                for (let feeds = pick(MaxBlankingFeeds); feeds > 0; --feeds) {
+                    const byte = Bytes[pick(Bytes.length)] | FedBit;
+                    eager.fetchData(byte);
+                    logged.logFed(byte);
+                }
+            }
+            expectSameSnapshot();
+        });
     });
 });
