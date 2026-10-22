@@ -76,7 +76,7 @@ export const PendingCursor = 1 << 20;
 export const PendingRunWords = 2;
 // Flyback drains, and a field passes at most 313 rows (bitmapY below 625 in steps of two) of 128 cell positions. Each
 // position adds at most one cell, and two headers: a run starting there and a cursor.
-export const PendingCellCapacity = 1 << 16;
+const PendingCellCapacity = 1 << 16;
 const PendingRunCapacity = 2 * PendingCellCapacity;
 export const CursorInvert = 0x00ffffff;
 
@@ -92,7 +92,7 @@ const WideCellPixels = 16;
 const WasmPageBytes = 65536;
 const VectorBytes = 16;
 const RunBytes = PendingRunWords * WordBytes;
-const RunShift = 3;
+const RunShift = Math.log2(RunBytes);
 const FirstCellByte = WordBytes;
 
 const alignToVector = (offset) => Math.ceil(offset / VectorBytes) * VectorBytes;
