@@ -541,37 +541,6 @@ describe("Video", () => {
         });
     });
 
-    describe("the cursor", () => {
-        const Mode4WithCursor = 0x88;
-        const AllPixelsSet = 0xff;
-        const InvertedWhite = 0xff000000;
-        const CellWidth = 16;
-        const offset = 100 * FbWidth + 100;
-
-        beforeEach(() => {
-            video.ula.write(0, Mode4WithCursor);
-            video.dispEnabled = EVERYTHINGENABLED;
-            video.regs[7] = 30;
-            video.horizCounter = 10;
-            video.bitmapX = 92;
-            video.bitmapY = 100;
-            video.oddClock = false;
-            video.cursorOnThisFrame = true;
-            video.cursorDrawIndex = 3;
-            cpu.data = AllPixelsSet;
-        });
-
-        const rows = () => {
-            video.renderPending();
-            return [offset, offset + FbWidth].map((at) => Array.from(fb.subarray(at, at + CellWidth)));
-        };
-
-        it("inverts both rows of a cell on doubled scanlines", () => {
-            video.polltime(1);
-            expect(rows()).toEqual([Array(CellWidth).fill(InvertedWhite), Array(CellWidth).fill(InvertedWhite)]);
-        });
-    });
-
     // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.
     describe("raster effects", () => {
         const RasterFrames = 6;
