@@ -1,8 +1,9 @@
 import { jsDrain, PendingOffsetMask, PendingOffsetShift } from "../../src/video-drain.js";
 
-// A record draws from the row above its biased offset, and onto the next row, a cell or so beyond it.
+// A record draws from up to two rows above its biased offset (one for the bias, one for doubling's rounding) to a
+// wide cell beyond it.
 const RecordReachBefore = 2 * 1024;
-const RecordReachAfter = 1024 + 32;
+const RecordReachAfter = 16;
 
 function firstDifference(expected, actual, start, end) {
     for (let i = start; i < end; ++i) if (expected[i] !== actual[i]) return i;

@@ -17,8 +17,9 @@
 //                                        indices are 16 consecutive bytes at (mode << 12) | (byte << 4).
 //   16384    64                          palette: 16 colours, each an RGBA word (R in the lowest byte), copied in
 //                                        by Video before each drain.
-//   16448    1024                        line grid: one byte per framebuffer row, the lineGridValue of the last
-//                                        drain that drew a run starting on it.
+//   16448    1024                        line grid: one byte per framebuffer row, the pixel size it was drawn at
+//                                        (see pixel-grid.js); the drain writes it for bitmap runs, Video for
+//                                        teletext rows.
 //   17472    262144                      records: up to 65536 pending records, one i32 each.
 //   279616   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
 //            + 8192                      overrun: room for a doubled cell's second row below the last row, and a
@@ -128,9 +129,10 @@ const DrainLocals = {
 // Memory accesses address the shared memory: the address popped plus the instruction's constant offset, so
 // `i32.load offset=FramebufferOffset` with pixel * 4 on the stack reads fb32[pixel].
 
-// A cell on the line above an odd field: start is negative, and only the pixels at or after offset 0 (the right end,
-// spilling onto row 0, and the row below when doubled) are drawn, one pixel at a time. A cursor record inverts them
-// instead. Pairs with drawClipped in JS.
+// A cell on the line above an odd field: start is negative, on row -1, or row -2 when doubling rounds it down to an
+// even row. The loops visit the cell's pixels on its row and, when doubled, the row below; only those at or after
+// offset 0 (the cell's right end, spilling past the end of row -1 onto row 0) are drawn, one pixel at a time. A cursor
+// record inverts them instead. Pairs with drawClipped in JS.
 const DrawClipped = `
     local.get doubledLines              ;; [doubledLines], 0 or 1
     i32.const 1
@@ -144,11 +146,11 @@ const DrawClipped = `
         local.get start
         local.get pixel
         i32.add
-        local.tee at                    ;; at = start + pixel, on row -1; [at]
+        local.tee at                    ;; at = start + pixel, on the cell's row; [at]
         local.get span
         i32.add
         local.set rowsEnd               ;; rowsEnd = at + span
-        loop                            ;; for at on row -1, then row 0, (then row 1 when doubled)
+        loop                            ;; for at on the cell's row (then the row below when doubled)
             local.get at
             i32.const 0
             i32.ge_s                    ;; [at >= 0]
@@ -455,7 +457,7 @@ const DrainModule = compileDrainModule();
 /** The drain this browser runs: "wasm" when it can compile the module, else "js". */
 export const PreferredDrain = DrainModule ? "wasm" : "js";
 
-function drawClipped({ fb32, table4bpp, palette }, record, start, source, pixelsPerChar, doubledLines) {
+function drawClipped({ fb32, table4bpp, palette }, record, source, start, pixelsPerChar, doubledLines) {
     const span = (Number(doubledLines) + 1) << RowShift;
     for (let pixel = 0; pixel < pixelsPerChar; ++pixel) {
         const rowsEnd = start + pixel + span;
@@ -502,7 +504,7 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
         const source = modeBase + ((record & PendingByteMask) << TableRowShift);
         ++i;
         if (start < 0) {
-            drawClipped(views, record, start, source, pixelsPerChar, doubledLines);
+            drawClipped(views, record, source, start, pixelsPerChar, doubledLines);
             expected = -1;
             continue;
         }

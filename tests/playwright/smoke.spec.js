@@ -26,6 +26,8 @@ const Oswrch = 0xffee;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
 const OsScreenMode = 0x355;
+const FramesToClearModeSeven = 2;
+const RgbBits = 0xffffff;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     const headerBar = async (width) => {
@@ -363,12 +365,16 @@ for (const [wasm, drain] of [
         if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
         await beeb.open(`?autotype=${encodeURIComponent("MODE 1\n")}`);
         await expect.poll(() => page.evaluate((at) => window.processor?.readmem(at), OsScreenMode)).toBe(1);
+        const modeSetFrame = await page.evaluate(() => window.processor.video.frameCount);
+        await expect
+            .poll(() => page.evaluate(() => window.processor.video.frameCount))
+            .toBeGreaterThanOrEqual(modeSetFrame + FramesToClearModeSeven);
         expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
-        const drawnSoFar = () => {
+        const drawnSoFar = (rgbBits) => {
             const { video } = window.processor;
             video.renderPending();
-            return video.fb32.some((pixel) => (pixel & 0xffffff) !== 0);
+            return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
         };
-        await expect.poll(() => page.evaluate(drawnSoFar)).toBe(true);
+        await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
     });
 }
