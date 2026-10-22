@@ -27,9 +27,9 @@ const PendingOffsetShift = 8;
 const PendingOffsetMask = 0xfffff;
 const PendingByteMask = 0xff;
 const PendingCursor = 1 << 28;
+// Flyback drains, and a field records at most 313 lines (bitmapY below 625 in steps of two) of 128
+// cells and four cursor inverts.
 const PendingCapacity = 1 << 16;
-// Two records a clock, for a cell and its cursor, over the 128 clocks a line can draw.
-const MaxPendingPerLine = 256;
 const CursorInvert = 0x00ffffff;
 
 // How far off nominal (4433618.75 Hz) the subcarrier runs, as measured on Matt's
@@ -379,6 +379,29 @@ function invertCell(fb32, offset, pixelsPerChar, doubledLines) {
     }
 }
 
+// A cell on the line above an odd field, whose right end spills onto row 0.
+function drawClippedCell(
+    fb32,
+    record,
+    start,
+    table4bpp,
+    modeBase,
+    palette,
+    pixelsPerChar,
+    doubledLines,
+    cursorDoubled,
+) {
+    const cursor = (record & PendingCursor) !== 0;
+    const secondRow = cursor ? cursorDoubled : doubledLines;
+    const source = modeBase | ((record & PendingByteMask) << 4);
+    for (let p = 0; p < pixelsPerChar; ++p) {
+        for (let at = start + p; at < start + p + (secondRow ? 2048 : 1024); at += 1024) {
+            if (at < 0) continue;
+            fb32[at] = cursor ? fb32[at] ^ CursorInvert : palette[table4bpp[source + p]];
+        }
+    }
+}
+
 /**
  * Draws pending records into fb32, in order. Adjacent cells form a run, which is drawn on its
  * first row and copied to the second at once when lines are doubled.
@@ -414,6 +437,17 @@ function renderPendingCells(
         let record = records[i];
         const start = (((record >>> PendingOffsetShift) & PendingOffsetMask) - biasedOrigin) & rowMask;
         if (start < 0) {
+            drawClippedCell(
+                fb32,
+                record,
+                start,
+                table4bpp,
+                modeBase,
+                palette,
+                pixelsPerChar,
+                doubledLines,
+                cursorDoubled,
+            );
             ++i;
             continue;
         }
@@ -535,7 +569,6 @@ export class Video {
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
-        // Bitmap cells wait here until something needs the framebuffer; see renderPending.
         this.pendingCells = new Int32Array(PendingCapacity);
         this.pendingCount = 0;
 
@@ -849,8 +882,8 @@ export class Video {
 
     /**
      * Draws the bitmap cells the beam has passed into fb32. It reads the ULA's state as it is now,
-     * so it runs before anything changes that state, and before anything else draws or reads the
-     * framebuffer.
+     * so it runs before anything changes that state or reads the framebuffer. Teletext draws
+     * without it: with every ULA write draining, nothing is pending while the teletext bit is set.
      */
     renderPending() {
         const count = this.pendingCount;
@@ -897,8 +930,13 @@ export class Video {
 
     handleCursor() {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
-            this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
-            this.cursorInvertedOffset = this.beamOffset();
+            const offset = this.beamOffset();
+            if (this.teletextMode) {
+                this.invertForCursor(offset, 0);
+            } else {
+                this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
+            }
+            this.cursorInvertedOffset = offset;
         } else {
             this.cursorInvertedOffset = -1;
         }
@@ -1156,7 +1194,6 @@ export class Video {
     handleHSync() {
         this.hpulseCounter = (this.hpulseCounter + 1) & 0x0f;
         if (this.hpulseCounter === this.hpulseWidth >>> 1) {
-            if (this.pendingCount > PendingCapacity - MaxPendingPerLine) this.renderPending();
             // Start at -8 because the +8 is added before the pixel render.
             this.bitmapX = -8;
 

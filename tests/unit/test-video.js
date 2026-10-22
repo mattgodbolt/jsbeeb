@@ -8,6 +8,7 @@ import {
     OPAQUE_BLACK,
     LineCountPeriod,
     PalPhasePerLine,
+    MinPaintedFrameRows,
 } from "../../src/video.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../helpers/line-grid.js";
@@ -452,6 +453,92 @@ describe("Video", () => {
         });
     });
 
+    describe("cells the beam has passed", () => {
+        const White = 0xffffffff;
+        const AllPixelsSet = 0xff;
+        const offset = 100 * FbWidth + 100;
+
+        const passCell = (r) => {
+            Object.assign(r.video, {
+                dispEnabled: EVERYTHINGENABLED,
+                horizCounter: 10,
+                bitmapX: 92,
+                bitmapY: 100,
+                oddClock: false,
+            });
+            r.video.regs[7] = 30;
+            r.cpu.data = AllPixelsSet;
+            r.run(1);
+        };
+
+        it.each([
+            ["an R8 write", (r) => r.writeCrtc(8, 0)],
+            ["a snapshot", (r) => r.video.snapshotState()],
+            [
+                "a flyback too early in the field to paint",
+                (r) => {
+                    r.video.bitmapY = MinPaintedFrameRows - 2;
+                    r.video.flyback();
+                },
+            ],
+        ])("are drawn by %s", (_, event) => {
+            passCell(rig);
+            expect(fb[offset]).toBe(OPAQUE_BLACK);
+            event(rig);
+            expect(fb[offset]).toBe(White);
+        });
+
+        it.each([
+            ["paint", (r) => r.video.paint()],
+            [
+                "debugPaint",
+                (r) => {
+                    r.video.bitmapY = 400; // keep the beam's dot off the cell
+                    r.video.debugPaint();
+                },
+            ],
+        ])("are handed over by %s", (_, event) => {
+            let seen;
+            const r = makeVideo({ onPaint: (v) => (seen = v.fb32[offset] >>> 0) });
+            passCell(r);
+            event(r);
+            expect(seen).toBe(White);
+        });
+
+        it("are drawn in the palette they were passed in when a power-on reset changes it", () => {
+            const Red = 0xff0000ff;
+            const r = makeVideo({ hasVideoNula: true });
+            programNulaColour(r, 15, 0xf, 0x0, 0x0);
+            r.video.ula.write(2, NulaPaletteModeOn);
+            passCell(r);
+            r.video.reset(r.cpu, { cb2changecallback: null, setVBlankInt: () => {} }, true);
+            expect(r.fb[offset]).toBe(Red);
+        });
+
+        it("are dropped by a restore", () => {
+            const saved = video.snapshotState();
+            passCell(rig);
+            video.restoreState(saved);
+            video.renderPending();
+            expect(fb[offset]).toBe(OPAQUE_BLACK);
+        });
+
+        // A 1MHz cell at the right edge of the line above an odd field spills onto row 0.
+        it.each([
+            ["single", 3],
+            ["doubled", 0],
+        ])("spill onto row 0 from above an odd field on %s rows", (_, r8) => {
+            rig.writeCrtc(8, r8);
+            video.ula.write(0, 0x00);
+            passCell(rig);
+            Object.assign(video, { bitmapX: 1008, bitmapY: -1, oddClock: false });
+            rig.run(1);
+            video.renderPending();
+            expect(Array.from(fb.subarray(0, 8))).toEqual(Array(8).fill(White));
+            expect(fb[8]).toBe(OPAQUE_BLACK);
+        });
+    });
+
     describe("the cursor", () => {
         const Mode4WithCursor = 0x88;
         const AllPixelsSet = 0xff;
@@ -557,10 +644,13 @@ describe("Video", () => {
 
         it.each([
             [
-                "on doubled rows",
-                programStandardFrame,
+                "with interlace sync on a stock ULA",
+                (v) => {
+                    programStandardFrame(v);
+                    v.writeCrtc(8, 1);
+                },
                 { seed: 1, hasVideoNula: false },
-                [2206297541, 2206297541, 3715053517, 1521760581, 2101663941],
+                [2206297541, 2206297541, 3715053517, 1469768717, 3659289193],
             ],
             [
                 "on doubled rows with a VideoNuLA",
@@ -1125,15 +1215,17 @@ describe("Video", () => {
             ["with interlace sync and video", programInterlaceSyncAndVideoFrame],
             ["with interlace sync and video stuck on one field", programStuckInterlaceSyncAndVideoFrame],
         ])("should decode every row to the line it was drawn under %s", (_, program) => {
-            // Every pixel of a cell shows the low bits of the hsync count it was fetched under, as a NuLA colour.
-            const LineBits = 0xf;
-            const colourOfLineBits = (bits) =>
-                (0xff000000 | (0x55 << 16) | (((15 - bits) * 0x11) << 8) | (bits * 0x11)) >>> 0;
-            const lineBitsOfColour = new Map(
-                Array.from({ length: LineBits + 1 }, (_, bits) => [colourOfLineBits(bits), bits]),
-            );
-            const spread = (bits) => ((bits & 1) << 1) | ((bits & 2) << 2) | ((bits & 4) << 3) | ((bits & 8) << 4);
-            const cellOfLineBits = (bits) => spread(bits) | (spread(bits) >> 1);
+            // Each cell shows the low byte of the hsync count it was fetched under, as two pixels of
+            // NuLA colour: the high nibble, then the low one.
+            const TwoPixelsPerCell = 0x14;
+            const LineBits = 0xff;
+            const PixelsPerNibble = 4;
+            const colourOfNibble = (nibble) =>
+                (0xff000000 | (0x55 << 16) | (((15 - nibble) * 0x11) << 8) | (nibble * 0x11)) >>> 0;
+            const nibbleOfColour = new Map(Array.from({ length: 16 }, (_, nibble) => [colourOfNibble(nibble), nibble]));
+            const spread = (nibble) =>
+                ((nibble & 1) << 1) | ((nibble & 2) << 2) | ((nibble & 4) << 3) | ((nibble & 8) << 4);
+            const cellOfLineBits = (bits) => spread(bits >> 4) | (spread(bits & 0xf) >> 1);
 
             const mismatches = [];
             let checking = false;
@@ -1146,18 +1238,21 @@ describe("Video", () => {
                     paints++;
                     for (let row = 0; row < 625; ++row) {
                         const rowPixels = v.fb.subarray(row * FbWidth, (row + 1) * FbWidth);
-                        const pixel = rowPixels.find((colour) => colour !== OPAQUE_BLACK);
-                        if (pixel === undefined) continue;
+                        const x = rowPixels.findIndex((colour) => colour !== OPAQUE_BLACK);
+                        if (x < 0) continue;
                         rowsChecked++;
                         const base = row & 1 ? video.lineBaseOdd : video.lineBaseEven;
                         const decoded = ((base + (row >> 1)) % LineCountPeriod) & LineBits;
-                        const line = lineBitsOfColour.get(pixel);
+                        const line =
+                            (nibbleOfColour.get(rowPixels[x]) << 4) |
+                            nibbleOfColour.get(rowPixels[x + PixelsPerNibble]);
                         if (decoded !== line) mismatches.push({ row, line, decoded });
                     }
                 },
             });
-            for (let bits = 0; bits <= LineBits; ++bits) programNulaColour(v, bits, bits, 15 - bits, 5);
+            for (let nibble = 0; nibble < 16; ++nibble) programNulaColour(v, nibble, nibble, 15 - nibble, 5);
             v.video.ula.write(2, NulaPaletteModeOn);
+            v.video.ula.write(0, TwoPixelsPerCell);
             v.cpu.videoRead = () => cellOfLineBits(v.video.hsyncCount & LineBits);
             program(v);
             v.run(SettleFrames * ClocksPerFrame);
