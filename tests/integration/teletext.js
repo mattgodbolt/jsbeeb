@@ -8,7 +8,7 @@ import { expectPngToMatch } from "./png.js";
 
 class CapturingVideo extends Video {
     constructor() {
-        super(false, new Uint32Array(1024 * 1024), () => {});
+        super(false, 1024 * 1024, () => {});
         this.paint_ext = (left, top, right, bottom) => this._onPaint(left, top, right, bottom);
         this._capturing = false;
         this._captureSharp = null;
@@ -18,7 +18,7 @@ class CapturingVideo extends Video {
         if (this._capturing) {
             const width = right - left;
             const height = bottom - top;
-            const bufferCopy = new Uint8Array(this.fb32.buffer.slice(0));
+            const bufferCopy = new Uint8Array(this.fb32.buffer, this.fb32.byteOffset, this.fb32.byteLength).slice();
             this._captureSharp = sharp(bufferCopy, {
                 raw: { width: 1024, height: 1024, channels: 4 },
             }).extract({ left: left, top: top, width, height });

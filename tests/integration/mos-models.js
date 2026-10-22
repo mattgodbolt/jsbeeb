@@ -21,7 +21,7 @@ describe.each([
 ])("the $model MOS", ({ model, banner, vsyncAddress }) => {
     it("boots to BASIC with its own banner, runs a line and changes mode without touching a VideoNuLA", async () => {
         const onMissingVideoNula = vi.fn();
-        const video = new Video(false, new Uint32Array(FramebufferPixels), () => {}, { onMissingVideoNula });
+        const video = new Video(false, FramebufferPixels, () => {}, { onMissingVideoNula });
         const machine = new TestMachine(model, { video });
         await machine.initialise();
         await machine.runUntilInput(10);
@@ -37,7 +37,7 @@ describe.each([
     });
 
     it("stops at its vertical sync interrupt", async () => {
-        const video = new Video(false, new Uint32Array(FramebufferPixels), () => {});
+        const video = new Video(false, FramebufferPixels, () => {});
         const machine = new TestMachine(model, { video });
         await machine.initialise();
         await machine.runUntilVblank();
@@ -53,7 +53,7 @@ it("will not wait for the vertical sync of an OS it does not know", async () => 
 
 it.each(["Master", "MasterADFS"])("the %s MOS boots and changes mode without touching a VideoNuLA", async (model) => {
     const onMissingVideoNula = vi.fn();
-    const video = new Video(true, new Uint32Array(FramebufferPixels), () => {}, {
+    const video = new Video(true, FramebufferPixels, () => {}, {
         onMissingVideoNula,
     });
     const machine = new TestMachine(model, { video });

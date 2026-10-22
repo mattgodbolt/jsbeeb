@@ -14,6 +14,7 @@ import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { checkDrainsAgainstReference } from "../helpers/reference-drain.js";
 
 const NulaPaletteModeOn = 0x11;
 const NulaPaletteModeOff = 0x10;
@@ -41,12 +42,11 @@ const ClocksPerSecond = 2 * 1000 * 1000;
  * frame-driving tests read millions of times. `onPaint` sees the video the way main.js's paint callback does.
  */
 function makeVideo({ isMaster = false, onPaint = () => {}, onVBlank = () => {}, ...options } = {}) {
-    const fb = new Uint32Array(FbWidth * FbHeight);
     let paintCount = 0;
     let lastPaint;
     const video = new Video(
         isMaster,
-        fb,
+        FbWidth * FbHeight,
         function (...extent) {
             paintCount++;
             lastPaint = extent;
@@ -64,6 +64,7 @@ function makeVideo({ isMaster = false, onPaint = () => {}, onVBlank = () => {}, 
         },
     };
     video.reset(cpu, { cb2changecallback: null, setVBlankInt: onVBlank });
+    const fb = new Uint32Array(video.fb32.buffer, video.fb32.byteOffset, video.fb32.length);
     const rig = {
         video,
         fb,
@@ -570,6 +571,7 @@ describe("Video", () => {
         function paintedHashes(program, { seed, hasVideoNula }) {
             const hashes = [];
             const r = makeVideo({ hasVideoNula, onPaint: (v) => hashes.push(frameHash(v)) });
+            const checked = checkDrainsAgainstReference(r.video.drain);
             const random = seededRandom(seed);
             const pick = (n) => Math.floor(random() * n);
             r.cpu.videoRead = (addr) => Math.imul(addr ^ 0x5bd1e995, 0x27d4eb2d) >>> 24;
@@ -601,7 +603,7 @@ describe("Video", () => {
                 clocks += gap;
                 writes[pick(choices)]();
             }
-            return hashes;
+            return { hashes, checked };
         }
 
         it.each([
@@ -636,7 +638,10 @@ describe("Video", () => {
                 [2206297541, 2206297541, 2410138283, 180526969, 4265788461],
             ],
         ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
-            expect(paintedHashes(program, options)).toEqual(expected);
+            const { hashes, checked } = paintedHashes(program, options);
+            expect(hashes).toEqual(expected);
+            expect(checked.drains).toBeGreaterThan(0);
+            expect(checked.differences).toEqual([]);
         });
     });
 

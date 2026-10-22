@@ -13,7 +13,7 @@ const AtomCyclesBeforeSnapshot = 12345;
 const AtomCyclesAfterRestore = 5000;
 
 const withVideo = (model, options) =>
-    new TestMachine(model, { video: new Video(false, new Uint32Array(FbWidth * FbHeight), () => {}, options) });
+    new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
 const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
 
 describe("save state round trip", () => {

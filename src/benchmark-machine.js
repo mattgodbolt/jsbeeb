@@ -23,9 +23,7 @@ const FixedClockMs = Date.UTC(2026, 0, 1);
 export async function newBenchmarkMachine(model, fittings, { fakeVideo = false, onSoundEvent = () => {} } = {}) {
     const { coProcessor, hasMusic5000, hasTeletextAdaptor, hasEconet, hasVideoNula } = fittings;
     const { isMaster } = findModel(model);
-    const video = fakeVideo
-        ? new FakeVideo()
-        : new Video(isMaster, new Uint32Array(FbWidth * FbHeight), () => {}, { hasVideoNula });
+    const video = fakeVideo ? new FakeVideo() : new Video(isMaster, FbWidth * FbHeight, () => {}, { hasVideoNula });
     const soundChip = new SoundChip(null, { onEvent: onSoundEvent });
     const machine = new TestMachine(model, {
         video,

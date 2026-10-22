@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { benchmarkMachine, listBenchmarkWorkloads, newBenchmarkMachine } from "../../src/benchmark-machine.js";
 import { readWorkload, restoreWorkload } from "../../src/benchmark-workloads.js";
+import { checkDrainsAgainstReference } from "../helpers/reference-drain.js";
 
 const workloads = await listBenchmarkWorkloads();
 const OsRomResetVector = 0xfffc;
+const CheckedFrames = 100;
+const FramesPerSecond = 50;
 const FittedOn = {
     coProcessor: (cpu) => cpu.hasTube,
     hasMusic5000: (cpu) => cpu.hasMusic5000,
@@ -27,6 +30,14 @@ describe("benchmark workloads", () => {
             expect(cpu.onFastPath).toBe(true);
             expect(cpu.pc).toBe(workload.snapshot.state.pc);
             expect(cpu.currentCycles).toBe(workload.snapshot.state.currentCycles);
+        });
+
+        it("draws every pending cell as the JS reference drain does", async () => {
+            const { cpu } = await benchmarkMachine(name);
+            const checked = checkDrainsAgainstReference(cpu.video.drain);
+            for (let frame = 0; frame < CheckedFrames; ++frame)
+                cpu.execute(cpu.model.cyclesPerSecond / FramesPerSecond);
+            expect(checked.differences).toEqual([]);
         });
     });
 

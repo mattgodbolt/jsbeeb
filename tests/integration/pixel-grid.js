@@ -12,7 +12,7 @@ const FbHeight = 625;
  */
 class FrameCapturingVideo extends Video {
     constructor(isAtom) {
-        super(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom });
+        super(false, FbWidth * FbHeight, () => {}, { isAtom });
         this.wanted = false;
         this.frame = null;
         this.paint_ext = () => {

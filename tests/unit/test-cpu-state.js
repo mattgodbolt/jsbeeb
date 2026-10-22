@@ -12,8 +12,7 @@ import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 function makeCpu(model = TEST_6502) {
-    const fb32 = new Uint32Array(1024 * 768);
-    const video = new Video(false, fb32, () => {});
+    const video = new Video(false, 1024 * 768, () => {});
     const soundChip = new SoundChip(() => {});
     return new model.Cpu(model, { ...nullIo({ video, soundChip }), config: machineSpec() });
 }
