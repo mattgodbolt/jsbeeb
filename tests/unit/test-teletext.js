@@ -401,6 +401,8 @@ describe("Teletext", () => {
         const SnapshotChance = 0.01;
         const FrameChance = 0.03;
         const MaxBlankingFeeds = 30;
+        // A line nothing reads is the one the log skips.
+        const ShownChance = 0.5;
         // Fewer feeds than the pipeline is long leave the line's last bytes for the next line to run.
         const ShortBlankingChance = 0.5;
         const ShortBlankingFeeds = 3;
@@ -417,6 +419,36 @@ describe("Teletext", () => {
             LetterA,
             SolidBlock,
         ];
+
+        function logLine(bytes) {
+            teletext.setDISPTMG(true);
+            for (const byte of bytes) teletext.logClocked(byte);
+            teletext.setDISPTMG(false);
+        }
+
+        it.each([
+            ["blanks the next row", DoubleHeight, true],
+            ["leaves the next row alone", Space, false],
+        ])("given a double height code still in the pipeline at a row's last line, %s", (_, code, blanked) => {
+            const LinesPerRow = 10;
+            const line = [Space, Space, Space, Space, Space];
+            for (let i = 0; i < LinesPerRow - 2; ++i) logLine(line);
+            logLine([...line, code]);
+            logLine(line);
+
+            const cells = renderCells([WhiteGraphics, SolidBlock]);
+
+            expect(backgroundOnly(cells[1])).toBe(blanked);
+        });
+
+        it("forgets what it logged when a snapshot is restored", () => {
+            const fresh = new Teletext().snapshotState();
+            teletext.setDISPTMG(true);
+            for (const byte of [RedGraphics, Space, Space, Space]) teletext.logClocked(byte);
+            teletext.restoreState(fresh);
+
+            expect(teletext.snapshotState()).toEqual(fresh);
+        });
 
         it("runs a line longer than the log holds", () => {
             const random = seededRandom(1);
@@ -446,8 +478,9 @@ describe("Teletext", () => {
 
             for (let line = 0; line < Lines; ++line) {
                 const cells = random() < LongLineChance ? LongLineCells : 1 + pick(MaxCellsPerLine);
+                const shown = random() < ShownChance;
                 const shownFrom = pick(cells + 1);
-                const shownTo = shownFrom + pick(cells + 1 - shownFrom);
+                const shownTo = shown ? shownFrom + pick(cells + 1 - shownFrom) : shownFrom;
                 both((chip) => chip.setDISPTMG(true));
                 for (let cell = 0; cell < cells; ++cell) {
                     const byte = Bytes[pick(Bytes.length)];
