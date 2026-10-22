@@ -1,12 +1,24 @@
 import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
+import { encodeLineGrid } from "./video-filters/pixel-grid.js";
+import { OPAQUE_BLACK, RowPixels, RowShift } from "./video-drain.js";
 
 // A line that ends logs at most 256 entries, one per character clock; this bounds the log when no DISPTMG
 // falling edge ends a line, as while R8 disables the display.
 const LogCapacity = 1024;
-const ClockedEntry = 0x80;
 const DataBits = 0x7f;
+const ClockedEntry = 0x80;
+const ShownEntry = 0x100;
+// The "TTX trick", the teletext bit set with a 2MHz clock, shows a cell of black rather than the chip's output.
+const BlackEntry = 0x200;
+const DoubledEntry = 0x400;
+// A shown entry's framebuffer offset, signed: the line above an odd field is row -1.
+const OffsetShift = 11;
+const CellPixels = 16;
+const BlackCellPixels = 8;
+const LineGridSingle = encodeLineGrid(1, false);
+const LineGridDoubled = encodeLineGrid(1, true);
 const DoubleHeight = 13;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
@@ -48,13 +60,17 @@ export class Teletext {
         this.levelDISPTMG = false;
         this.levelRA0 = false;
 
-        // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked.
-        this.log = new Uint8Array(LogCapacity);
+        // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked, and the cells to paint
+        // where the clocked byte is shown.
+        this.log = new Int32Array(LogCapacity);
         this.logLength = 0;
+        this.logShows = false;
+        this.fb32 = new Int32Array(0);
+        this.lineGrid = new Uint8Array(0);
         // The cell `advance` latches outlives the line reset, and a snapshot saves part of it. So the last
         // line skipped by `skipLine` is kept with the state it started from, until a clocked byte replaces
         // that cell.
-        this.skippedLog = new Uint8Array(LogCapacity);
+        this.skippedLog = new Int32Array(LogCapacity);
         this.skippedLogLength = 0;
         this.skippedQueue = new Uint8Array(PipelineLength);
 
@@ -167,6 +183,7 @@ export class Teletext {
      * @param {Uint32Array} collook - 16-entry palette in ABGR format (0xffBBGGRR).
      */
     rebuildColours(collook) {
+        this.catchUpShown();
         const gamma = 1.0 / 2.2;
         for (let i = 0; i < 256; ++i) {
             const weight = (i & 3) / 3.0;
@@ -247,6 +264,7 @@ export class Teletext {
         this.levelDISPTMG = state.levelDISPTMG;
         this.levelRA0 = state.levelRA0;
         this.logLength = 0;
+        this.logShows = false;
         this.skippedLogLength = 0;
 
         const glyphMap = {
@@ -368,15 +386,40 @@ export class Teletext {
         this.log[this.logLength++] = data & DataBits;
     }
 
+    /** The framebuffer and line grid that shown cells are painted into. */
+    setOutput(fb32, lineGrid) {
+        this.fb32 = fb32;
+        this.lineGrid = lineGrid;
+    }
+
     /**
-     * Runs everything logged, so the chip is as if each byte had been run as it arrived. Painting the chip, or
-     * running it directly with `fetchData` and `advance`, must come after this once anything has been logged.
+     * Shows the cell the byte logged last clocks at `offset` in the framebuffer, painted when the log runs.
+     * @param {number} offset
+     * @param {boolean} doubledLines also paint the row below
+     * @param {boolean} black show black, as the "TTX trick" does, rather than the chip's output
+     */
+    showLatest(offset, doubledLines, black) {
+        this.log[this.logLength - 1] |=
+            (offset << OffsetShift) | ShownEntry | (doubledLines ? DoubledEntry : 0) | (black ? BlackEntry : 0);
+        this.logShows = true;
+    }
+
+    /**
+     * Runs everything logged, so the chip is as if each byte had been run as it arrived, and paints the cells it
+     * shows. Painting the chip, or running it directly with `fetchData` and `advance`, must come after this once
+     * anything has been logged.
      */
     catchUp() {
         const length = this.logLength;
         this.logLength = 0;
+        this.logShows = false;
         if (this.replayLog(this.log, length)) this.skippedLogLength = 0;
         this.replaySkippedLine();
+    }
+
+    /** Runs the log if it holds a cell to paint: before anything that changes how one paints, or reads the picture. */
+    catchUpShown() {
+        if (this.logShows) this.catchUp();
     }
 
     // Returns whether any entry clocked the chip.
@@ -388,9 +431,31 @@ export class Teletext {
             if (entry & ClockedEntry) {
                 this.advance();
                 clocked = true;
+                if (entry & ShownEntry) this.paintShown(entry);
             }
         }
         return clocked;
+    }
+
+    paintShown(entry) {
+        const fb32 = this.fb32;
+        const offset = entry >> OffsetShift;
+        const doubledLines = !!(entry & DoubledEntry);
+        const row = offset >> RowShift;
+        const lineGridValue = doubledLines ? LineGridDoubled : LineGridSingle;
+        this.lineGrid[row] = lineGridValue;
+        if (doubledLines) this.lineGrid[row + 1] = lineGridValue;
+        let pixels = CellPixels;
+        if (entry & BlackEntry) {
+            pixels = BlackCellPixels;
+            fb32.fill(OPAQUE_BLACK, offset, offset + pixels);
+        } else {
+            this.emit(fb32, offset);
+        }
+        if (doubledLines) {
+            const end = offset + pixels;
+            for (let i = offset; i < end; ++i) fb32[i + RowPixels] = fb32[i];
+        }
     }
 
     /**
@@ -459,6 +524,7 @@ export class Teletext {
             return;
         }
 
+        this.catchUpShown();
         this.scanlineCounter = 0;
         this.secondHalfOfDouble = false;
 
@@ -487,7 +553,11 @@ export class Teletext {
             return;
         }
 
-        this.skipLine();
+        if (this.logShows) {
+            this.catchUp();
+        } else {
+            this.skipLine();
+        }
         this.line.reset(this.normalGlyphs);
 
         this.scanlineCounter++;
@@ -509,6 +579,7 @@ export class Teletext {
         // The SAA5050 input pin "CRS" is connected to the 6845 output pin
         // "RA0", via a signal inverter, and it is used to select between a
         // normal scanline and a calculated smoothing scanline.
+        this.catchUpShown();
         this.levelRA0 = level;
     }
 

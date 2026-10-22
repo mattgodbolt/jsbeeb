@@ -65,11 +65,12 @@ export const PendingCursor = 1 << 28;
 // cells and a few cursor inverts.
 export const PendingCapacity = 1 << 16;
 export const CursorInvert = 0x00ffffff;
+export const OPAQUE_BLACK = 0xff000000;
 
 const Table4bppBytes = 4 * 256 * 16;
 const PaletteEntries = 16;
-const RowShift = 10;
-const RowPixels = 1 << RowShift;
+export const RowShift = 10;
+export const RowPixels = 1 << RowShift;
 const WordShift = 2;
 const WordBytes = 1 << WordShift;
 const RowBytes = RowPixels * WordBytes;

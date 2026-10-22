@@ -5,6 +5,7 @@ import { encodeLineGrid, texelsPerPixel } from "./video-filters/pixel-grid.js";
 import { makeFast32 } from "./binary.js";
 import {
     CursorInvert,
+    OPAQUE_BLACK,
     PendingCursor,
     PendingOffsetShift,
     PendingRowBias,
@@ -23,7 +24,7 @@ export const FRAMESKIPENABLE = 1 << 5;
 export const EVERYTHINGENABLED =
     VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
-export const OPAQUE_BLACK = 0xff000000;
+export { OPAQUE_BLACK };
 export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
@@ -171,8 +172,6 @@ class Ula {
         if (newMode !== this.video.ulaMode) {
             this.video.ulaMode = newMode;
         }
-        // While the teletext bit is set the render loop runs the SAA5050 directly, so what it logged runs first.
-        if (val & 2 && !this.video.teletextMode) this.video.teletext.catchUp();
         this.video.teletextMode = !!(val & 2);
         this.video.updateLineGridUla();
     }
@@ -462,6 +461,7 @@ export class Video {
         // faithfully. A row whose mode changes part way along keeps only the
         // last mode on it — enough for a raster split, not for a mid-line one.
         this.lineGrid = this.drain.lineGrid;
+        this.teletext.setOutput(this.fb32, this.lineGrid);
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
@@ -777,11 +777,12 @@ export class Video {
     }
 
     /**
-     * Draws the bitmap cells the beam has passed into fb32. It reads the ULA's state as it is now,
-     * so it runs before anything changes that state or reads the framebuffer. Teletext draws
-     * without it: with every ULA write draining, nothing is pending while the teletext bit is set.
+     * Draws the cells the beam has passed into fb32. It reads the ULA's state as it is now, so it
+     * runs before anything changes that state or reads the framebuffer. With every ULA write
+     * draining, bitmap and teletext cells are never pending together.
      */
     renderPending() {
+        this.teletext.catchUpShown();
         const count = this.pendingCount;
         if (count === 0) return;
         this.pendingCount = 0;
@@ -817,6 +818,7 @@ export class Video {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
             this.cursorInvertedOffset = this.beamOffset();
             if (this.teletextMode) {
+                this.teletext.catchUpShown();
                 this.invertForCursor(this.cursorInvertedOffset, 0);
             } else {
                 this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
@@ -842,21 +844,6 @@ export class Video {
         return ((this.bitmapY + PendingRowBias) * 1024 + this.bitmapX) << PendingOffsetShift;
     }
 
-    // A cell on the line above an odd field has a negative offset; only its spill onto row 0 lands.
-    paintTeletextCell(offset) {
-        if (this.halfClock) {
-            // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
-            this.teletext.emit(this.fb32, offset);
-        } else {
-            // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
-            // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
-            // at ABUG 2026-03-13; the mechanism is not established, as the
-            // Model B ULA has no connection to the SAA5050 at all.
-            // See https://github.com/mattgodbolt/jsbeeb/issues/546
-            this.fb32.fill(OPAQUE_BLACK, Math.max(offset, 0), Math.max(offset + this.pixelsPerChar, 0));
-        }
-    }
-
     beamOffset() {
         const bitmapRow = this.doublesLines() ? this.bitmapY & ~1 : this.bitmapY;
         return bitmapRow * 1024 + this.bitmapX;
@@ -872,6 +859,7 @@ export class Video {
         const offset = this.beamOffset();
         const halfCell = this.pixelsPerChar >>> 1;
         if (this.teletextMode) {
+            this.teletext.catchUp();
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {
             this.blitFbSecondHalf(this.cellData, offset);
@@ -1200,16 +1188,10 @@ export class Video {
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
                     // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
                     // clocked here and painted later, so a control code seen while the ULA shows
-                    // bitmap still takes effect. Without the teletext bit nothing reads the chip
-                    // until it is set, so it logs the bytes and runs them when read.
+                    // bitmap still takes effect. The chip logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    if (this.teletextMode) {
-                        this.teletext.fetchData(dat);
-                        this.teletext.advance();
-                    } else {
-                        this.teletext.logClocked(dat);
-                    }
+                    this.teletext.logClocked(dat);
 
                     // Check cursor start.
                     if (
@@ -1237,28 +1219,11 @@ export class Video {
                                 doubledLines = true;
                                 bitmapRow &= ~1;
                             }
-                            const offset = bitmapRow * 1024 + this.bitmapX;
-                            // Note this row's logical pixel size for display
-                            // filters; see video-filters/pixel-grid.js. The ULA half
-                            // of the descriptor is precomputed on register writes so
-                            // this stays a store or two in the hottest loop we have.
-                            if (doubledLines) {
-                                this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
-                                this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
-                            } else {
-                                this.lineGrid[bitmapRow] = this.lineGridUla;
-                            }
-                            this.paintTeletextCell(offset);
-                            if (doubledLines) {
-                                if (offset < 0) {
-                                    // The row to copy from is above the framebuffer.
-                                    this.paintTeletextCell(offset + 1024);
-                                } else {
-                                    const fb32 = this.fb32;
-                                    const end = offset + this.pixelsPerChar;
-                                    for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
-                                }
-                            }
+                            // With a 2MHz clock (the "TTX trick") the SAA5050 shows black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
+                            // at ABUG 2026-03-13; the mechanism is not established, as the
+                            // Model B ULA has no connection to the SAA5050 at all.
+                            // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                            this.teletext.showLatest(bitmapRow * 1024 + this.bitmapX, doubledLines, !this.halfClock);
                         } else {
                             this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
                         }
@@ -1278,12 +1243,7 @@ export class Video {
             // `advance()` alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
             if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
-                const fed = this.readVideoMem() | 0x40;
-                if (this.teletextMode) {
-                    this.teletext.fetchData(fed);
-                } else {
-                    this.teletext.logFed(fed);
-                }
+                this.teletext.logFed(this.readVideoMem() | 0x40);
             }
 
             // CRTC MA always increments, inside display border or not.
