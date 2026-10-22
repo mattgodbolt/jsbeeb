@@ -14,7 +14,7 @@ import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-import { checkDrainsAgainstReference } from "../helpers/reference-drain.js";
+import { checkDrainsAgainstJs } from "../helpers/compare-drains.js";
 
 const NulaPaletteModeOn = 0x11;
 const NulaPaletteModeOff = 0x10;
@@ -589,10 +589,10 @@ describe("Video", () => {
             return hash >>> 0;
         }
 
-        function paintedHashes(program, { seed, hasVideoNula }) {
+        function paintedHashes(program, { seed, hasVideoNula }, drainKind) {
             const hashes = [];
-            const r = makeVideo({ hasVideoNula, onPaint: (v) => hashes.push(frameHash(v)) });
-            const checked = checkDrainsAgainstReference(r.video.drain);
+            const r = makeVideo({ hasVideoNula, drainKind, onPaint: (v) => hashes.push(frameHash(v)) });
+            const checked = checkDrainsAgainstJs(r.video.drain);
             const random = seededRandom(seed);
             const pick = (n) => Math.floor(random() * n);
             r.cpu.videoRead = (addr) => Math.imul(addr ^ 0x5bd1e995, 0x27d4eb2d) >>> 24;
@@ -627,42 +627,48 @@ describe("Video", () => {
             return { hashes, checked };
         }
 
-        it.each([
-            [
-                "with interlace sync on a stock ULA",
-                (v) => {
-                    programStandardFrame(v);
-                    v.writeCrtc(8, 1);
-                },
-                { seed: 1, hasVideoNula: false },
-                [2206297541, 2206297541, 3715053517, 1469768717, 3659289193],
-            ],
-            [
-                "on doubled rows with a VideoNuLA",
-                programStandardFrame,
-                { seed: 2, hasVideoNula: true },
-                [2206297541, 2206297541, 2165725467, 508035057, 977855931],
-            ],
-            [
-                "with interlace sync and video",
-                programInterlaceSyncAndVideoFrame,
-                { seed: 3, hasVideoNula: true },
-                [2206297541, 2206297541, 2897231635, 595029415, 4284534895],
-            ],
-            [
-                "with interlace sync and video stuck on one field",
-                (v) => {
-                    programInterlaceSyncAndVideoFrame(v);
-                    v.writeCrtc(6, 40);
-                },
-                { seed: 4, hasVideoNula: true },
-                [2206297541, 2206297541, 2410138283, 180526969, 4265788461],
-            ],
-        ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
-            const { hashes, checked } = paintedHashes(program, options);
-            expect(hashes).toEqual(expected);
-            expect(checked.drains).toBeGreaterThan(0);
-            expect(checked.differences).toEqual([]);
+        it("runs the Wasm drain in Node", () => {
+            expect(video.drain.kind).toBe("wasm");
+        });
+
+        describe.each(["wasm", "js"])("on the %s drain", (drainKind) => {
+            it.each([
+                [
+                    "with interlace sync on a stock ULA",
+                    (v) => {
+                        programStandardFrame(v);
+                        v.writeCrtc(8, 1);
+                    },
+                    { seed: 1, hasVideoNula: false },
+                    [2206297541, 2206297541, 3715053517, 1469768717, 3659289193],
+                ],
+                [
+                    "on doubled rows with a VideoNuLA",
+                    programStandardFrame,
+                    { seed: 2, hasVideoNula: true },
+                    [2206297541, 2206297541, 2165725467, 508035057, 977855931],
+                ],
+                [
+                    "with interlace sync and video",
+                    programInterlaceSyncAndVideoFrame,
+                    { seed: 3, hasVideoNula: true },
+                    [2206297541, 2206297541, 2897231635, 595029415, 4284534895],
+                ],
+                [
+                    "with interlace sync and video stuck on one field",
+                    (v) => {
+                        programInterlaceSyncAndVideoFrame(v);
+                        v.writeCrtc(6, 40);
+                    },
+                    { seed: 4, hasVideoNula: true },
+                    [2206297541, 2206297541, 2410138283, 180526969, 4265788461],
+                ],
+            ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
+                const { hashes, checked } = paintedHashes(program, options, drainKind);
+                expect(hashes).toEqual(expected);
+                expect(checked.drains).toBeGreaterThan(0);
+                expect(checked.differences).toEqual([]);
+            });
         });
     });
 

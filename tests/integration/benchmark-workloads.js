@@ -1,10 +1,16 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { benchmarkMachine, listBenchmarkWorkloads, newBenchmarkMachine } from "../../src/benchmark-machine.js";
 import { readWorkload, restoreWorkload } from "../../src/benchmark-workloads.js";
-import { checkDrainsAgainstReference } from "../helpers/reference-drain.js";
+import { RepoRoot } from "../../src/test-machine.js";
+import { workloadHashes } from "../../tools/same-answer.js";
+import { checkDrainsAgainstJs } from "../helpers/compare-drains.js";
 
 const workloads = await listBenchmarkWorkloads();
+const RecordedHashes = JSON.parse(readFileSync(path.join(RepoRoot, "tests", "same-answer-hashes.json"), "utf8"));
 const OsRomResetVector = 0xfffc;
 const CheckedFrames = 100;
 const FramesPerSecond = 50;
@@ -32,12 +38,16 @@ describe("benchmark workloads", () => {
             expect(cpu.currentCycles).toBe(workload.snapshot.state.currentCycles);
         });
 
-        it("draws every pending cell as the JS reference drain does", async () => {
+        it("draws every pending cell as the JS drain does", async () => {
             const { cpu } = await benchmarkMachine(name);
-            const checked = checkDrainsAgainstReference(cpu.video.drain);
+            const checked = checkDrainsAgainstJs(cpu.video.drain);
             for (let frame = 0; frame < CheckedFrames; ++frame)
                 cpu.execute(cpu.model.cyclesPerSecond / FramesPerSecond);
             expect(checked.differences).toEqual([]);
+        });
+
+        it("ends in the state test:same-answer recorded when drawn by the JS drain", async () => {
+            expect(await workloadHashes(name, "js")).toEqual(RecordedHashes.workloads[name]);
         });
     });
 

@@ -3,7 +3,14 @@ import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
 import { encodeLineGrid, texelsPerPixel } from "./video-filters/pixel-grid.js";
 import { makeFast32 } from "./binary.js";
-import { CursorInvert, PendingCursor, PendingOffsetShift, PendingRowBias, VideoDrain } from "./video-drain.js";
+import {
+    CursorInvert,
+    PendingCursor,
+    PendingOffsetShift,
+    PendingRowBias,
+    PreferredDrain,
+    VideoDrain,
+} from "./video-drain.js";
 
 const noop = () => {};
 
@@ -368,10 +375,10 @@ export class Video {
         isMaster,
         framebufferPixels,
         paint_ext_param,
-        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null } = {},
+        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, drainKind } = {},
     ) {
         this.isMaster = isMaster;
-        this.drain = new VideoDrain(framebufferPixels);
+        this.drain = new VideoDrain(framebufferPixels, drainKind ?? PreferredDrain);
         this.fb32 = this.drain.fb32;
         this.collook = makeFast32(
             new Uint32Array([

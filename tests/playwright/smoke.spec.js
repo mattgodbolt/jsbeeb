@@ -25,6 +25,7 @@ const LightsBarViewports = [
 const Oswrch = 0xffee;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
+const OsScreenMode = 0x355;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     const headerBar = async (width) => {
@@ -353,3 +354,21 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
         .poll(() => noted.filter((text) => text.startsWith("event noted: feature_used")))
         .toEqual([expect.stringContaining("action=missing"), expect.stringContaining("action=fitted")]);
 });
+
+for (const [wasm, drain] of [
+    ["on", "wasm"],
+    ["switched off", "js"],
+]) {
+    test(`with WebAssembly ${wasm}, the bitmap modes are drawn by the ${drain} drain`, async ({ beeb, page }) => {
+        if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
+        await beeb.open(`?autotype=${encodeURIComponent("MODE 1\n")}`);
+        await expect.poll(() => page.evaluate((at) => window.processor?.readmem(at), OsScreenMode)).toBe(1);
+        expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
+        const drawnSoFar = () => {
+            const { video } = window.processor;
+            video.renderPending();
+            return video.fb32.some((pixel) => (pixel & 0xffffff) !== 0);
+        };
+        await expect.poll(() => page.evaluate(drawnSoFar)).toBe(true);
+    });
+}

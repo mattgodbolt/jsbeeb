@@ -1,5 +1,23 @@
 // Assembles WebAssembly modules from a flat, one instruction per line form of the text format, so that small
-// kernels need no compiler toolchain. Only the instructions the kernels use are known.
+// kernels need no compiler toolchain. Only the instructions the kernels use are known. `;;` starts a comment, as in
+// the text format.
+//
+// The binary format, as far as it is used here (https://webassembly.github.io/spec/core/binary/):
+// - The module is the magic "\0asm" and version 1, then sections, each a one byte id, its length in bytes and its
+//   contents. They must appear in id order: type (1), import (2), function (3), export (7), code (10).
+// - A vector is its element count followed by the elements. Counts, lengths, indices, alignments and offsets are
+//   unsigned LEB128: seven bits per byte, least significant first, the top bit set on every byte but the last.
+//   i32.const's operand is signed LEB128, which stops once the remaining bits are all copies of the last byte's
+//   bit 6, the sign.
+// - The type section lists function signatures (0x60, the parameter types, the result types), the function section
+//   gives each function its signature by index, and the code section holds the bodies in the same order.
+// - A body is its length, its local declarations (runs of count and type, after the parameters, which are the first
+//   locals) and its instructions, ending with `end`.
+// - An instruction is its opcode, one byte, or 0xfd and an LEB128 sub-opcode for SIMD, then its immediates. A
+//   memory access carries log2 of its natural alignment (only a hint) and a constant offset added to the address
+//   popped from the stack. A shuffle carries its sixteen lane indices as plain bytes.
+// - block, loop and if carry a block type; 0x40 is "takes and leaves nothing". A branch's depth counts enclosing
+//   blocks outwards from 0. Branching to a block or if jumps past its end; branching to a loop jumps to its start.
 
 const ValueTypes = { i32: 0x7f, v128: 0x7b };
 const EmptyBlockType = 0x40;
@@ -103,7 +121,7 @@ function immediates(kind, operands, naturalAlignment, localIndex, line) {
 function assembleBody(code, localIndex) {
     const bytes = [];
     for (const rawLine of code.split("\n")) {
-        const line = rawLine.trim();
+        const line = rawLine.split(";;")[0].trim();
         if (!line) continue;
         const [mnemonic, ...operands] = line.split(/\s+/);
         const instruction = Instructions[mnemonic];
