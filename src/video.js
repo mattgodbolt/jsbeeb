@@ -932,16 +932,14 @@ export class Video {
         if (!this.halfClock || !this.oddClock) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
-        const doubledLines = this.doublesLines();
-        const bitmapRow = doubledLines ? this.bitmapY & ~1 : this.bitmapY;
-        const offset = bitmapRow * 1024 + this.bitmapX;
+        const offset = this.beamOffset();
         const halfCell = this.pixelsPerChar >>> 1;
         if (this.teletextMode) {
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {
             this.blitFbSecondHalf(this.cellData, offset);
         }
-        if (doubledLines) {
+        if (this.doublesLines()) {
             this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);
         }
         if (this.cursorInvertedOffset === offset) {
