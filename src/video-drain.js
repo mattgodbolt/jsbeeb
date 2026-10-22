@@ -444,10 +444,14 @@ const DrainModuleBytes = assembleModule([{ name: "drain", params: DrainParams, l
 
 // Compiling fails where WebAssembly or its SIMD is switched off or forbidden, and then the JS drain is used.
 function compileDrainModule() {
-    if (typeof WebAssembly !== "object") return null;
+    if (typeof WebAssembly !== "object") {
+        console.info("WebAssembly is unavailable, so the video drain falls back to JavaScript");
+        return null;
+    }
     try {
         return new WebAssembly.Module(DrainModuleBytes);
-    } catch {
+    } catch (error) {
+        console.info(`Couldn't compile the Wasm video drain, so it falls back to JavaScript: ${error.message}`);
         return null;
     }
 }

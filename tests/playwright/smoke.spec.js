@@ -365,6 +365,8 @@ for (const [wasm, drain] of [
 ]) {
     test(`with WebAssembly ${wasm}, the bitmap modes are drawn by the ${drain} drain`, async ({ beeb, page }) => {
         if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
+        const logged = [];
+        page.on("console", (message) => logged.push(message.text()));
         await beeb.open(`?autotype=${encodeURIComponent("MODE 1\n")}`);
         await expect.poll(() => page.evaluate((at) => window.processor?.readmem(at), OsScreenMode)).toBe(1);
         const modeSetFrame = await page.evaluate(() => window.processor.video.frameCount);
@@ -378,5 +380,6 @@ for (const [wasm, drain] of [
             return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
         };
         await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
+        expect(logged.some((text) => text.includes("video drain falls back to JavaScript"))).toBe(drain === "js");
     });
 }
