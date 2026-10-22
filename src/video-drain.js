@@ -2,14 +2,16 @@
 // are two implementations of it, a WebAssembly SIMD function assembled at load and a plain JS one. They work on the
 // same memory and draw the same pixels; the Wasm is used wherever the browser can compile it, and the JS otherwise
 // (WebAssembly switched off, as in Safari's Lockdown Mode, or a content security policy that forbids compiling it).
-// The JS also documents the Wasm: DrawClipped, InvertCursor, DrawCell and DrainCode below pair with the JS functions
-// drawClipped, invertCursor, drawCell and jsDrain further down, step for step and with the same local names.
+// The JS also documents the Wasm: DrawClipped, InvertCursor, DrawCell, CellSource and DrainCode below pair with the JS
+// functions drawClipped, invertCursor, drawCell, cellSource and jsDrain further down, step for step and with the same
+// local names.
 //
 // THE MEMORY
 //
 // One block of memory holds everything the drain reads and writes. For the Wasm it is a WebAssembly.Memory created at
 // its final size and never grown (growing would detach its ArrayBuffer and every view of it); for the JS it is an
-// ArrayBuffer of the same size and layout. Video's fb32, lineGrid, table4bpp and pendingCells are views of it.
+// ArrayBuffer of the same size and layout. Video's fb32, lineGrid, table4bpp, pendingCells and pendingRuns are views
+// of it.
 //
 //   Offset   Size (bytes)                Region
 //   0        16384                       table4bpp: for each of the 4 ULA modes and 256 video bytes, the palette
@@ -20,27 +22,39 @@
 //   16448    1024                        line grid: one byte per framebuffer row, the pixel size it was drawn at
 //                                        (see pixel-grid.js); the drain writes it for bitmap runs, Video for
 //                                        teletext rows.
-//   17472    262144                      records: up to 65536 pending records, one i32 each.
-//   279616   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
+//   17472    65536                       cells: up to 65536 pending video bytes, one per cell, in beam order.
+//   83008    8 * (131072 + 1), padded    runs: up to 131072 pending headers, two i32 each, and one more after the
+//            to 16                       last for where its cells end.
+//   1131600  4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
 //            + 8192                      overrun: room for a doubled cell's second row below the last row, and a
 //                                        cell running past the end of its row.
 //
 // THE RECORDS
 //
-//   bits 0 to 7    the video byte the cell shows (ignored for a cursor record)
-//   bits 8 to 27   the cell's framebuffer offset in pixels, plus one row (1024) so an odd field's row -1 is positive
-//   bit 28         set for a cursor record: invert the cell already drawn there, rather than draw a byte
+// Within a scanline the beam moves pixelsPerChar pixels a cell, so Video records a run of adjacent cells as their
+// video bytes, one after another in the cells, and one header in the runs for the whole run. A header is two words:
 //
-// THE ALGORITHM, for each record in order
+//   word 0, the position:
+//     bits 0 to 19   the first cell's framebuffer offset in pixels, plus one row (1024) so an odd field's row -1 is
+//                    positive
+//     bit 20         set for a cursor: no cells, but the ULA inverts its output at that cell
+//   word 1           the index in the cells of the run's first cell
 //
-// 1. Decode: `raw` is the record shifted down 8 (the biased offset, and the cursor bit). `start` is the offset with
-//    the bias removed, rounded down to an even row when lines are doubled. `source` is where the cell's 16 palette
-//    indices are in table4bpp.
-// 2. A negative `start` is a cell on the line above an odd field; only its right end, spilling onto row 0, is drawn,
-//    pixel by pixel (drawClipped).
-// 3. A cursor record inverts the RGB of the cell's pixels, on both rows when lines are doubled (invertCursor).
-// 4. Otherwise it is a cell. Cells that follow on from the previous one (its `raw` plus pixelsPerChar) form a run;
-//    the first cell of a run writes the line grid for its row, and for the row below when lines are doubled.
+// A run's cells end where the next header's begin. Video writes the first-cell word of the header after the last, so
+// the last run ends there too. A cursor's header begins and ends where the next run begins, so it has no cells.
+//
+// THE ALGORITHM, for each header in order
+//
+// 1. Decode: `start` is the offset with the bias removed, rounded down to an even row when lines are doubled; the
+//    run's cells are `cell` up to `cellsEnd`.
+// 2. A cursor inverts the RGB of the pixels at start, as the ULA inverts whatever it outputs for the cursor's cells,
+//    on both rows when lines are doubled (invertCursor). On the line above an odd field only the pixels spilling onto
+//    row 0 are inverted (drawClipped).
+// 3. A negative `start` is a run on the line above an odd field; only each cell's right end, spilling onto row 0, is
+//    drawn, pixel by pixel (drawClipped).
+// 4. Otherwise the run writes the line grid for its row, and for the row below when lines are doubled, and draws each
+//    of its cells pixelsPerChar pixels on from the last. A cell's `source` is where its 16 palette indices are in
+//    table4bpp.
 // 5. The cell is drawn (drawCell). The JS looks each pixel's colour up through table4bpp and the palette. The Wasm
 //    does the whole cell with vectors:
 //    - Once per drain, SplitPalette splits the 16 palette colours into four 16-byte "planes": plane0 holds byte 0
@@ -57,13 +71,13 @@ import { assembleModule } from "./wasm-assembler.js";
 import { LineGridRows } from "./video-filters/pixel-grid.js";
 
 export const PendingRowBias = 1;
-export const PendingOffsetShift = 8;
 export const PendingOffsetMask = 0xfffff;
-export const PendingByteMask = 0xff;
-export const PendingCursor = 1 << 28;
-// Flyback drains, and a field records at most 313 lines (bitmapY below 625 in steps of two) of 128
-// cells and a few cursor inverts.
-export const PendingCapacity = 1 << 16;
+export const PendingCursor = 1 << 20;
+export const PendingRunWords = 2;
+// Flyback drains, and a field passes at most 313 rows (bitmapY below 625 in steps of two) of 128 cell positions. Each
+// position adds at most one cell, and two headers: a run starting there and a cursor.
+export const PendingCellCapacity = 1 << 16;
+const PendingRunCapacity = 2 * PendingCellCapacity;
 export const CursorInvert = 0x00ffffff;
 
 const Table4bppBytes = 4 * 256 * 16;
@@ -76,12 +90,19 @@ const RowBytes = RowPixels * WordBytes;
 const TableRowShift = 4;
 const WideCellPixels = 16;
 const WasmPageBytes = 65536;
+const VectorBytes = 16;
+const RunBytes = PendingRunWords * WordBytes;
+const RunShift = 3;
+const FirstCellByte = WordBytes;
+
+const alignToVector = (offset) => Math.ceil(offset / VectorBytes) * VectorBytes;
 
 const TableOffset = 0;
 const PaletteOffset = TableOffset + Table4bppBytes;
 const LineGridOffset = PaletteOffset + PaletteEntries * WordBytes;
-const RecordsOffset = LineGridOffset + LineGridRows;
-const FramebufferOffset = RecordsOffset + PendingCapacity * WordBytes;
+const CellsOffset = LineGridOffset + LineGridRows;
+const RunsOffset = CellsOffset + PendingCellCapacity;
+const FramebufferOffset = alignToVector(RunsOffset + (PendingRunCapacity + 1) * RunBytes);
 const FramebufferOverrunBytes = 2 * RowBytes;
 
 const range = (start, count) => Array.from({ length: count }, (_, i) => start + i);
@@ -94,14 +115,15 @@ const PairsHigh = lanes(range(4, 4).flatMap((i) => [2 * i, 2 * i + 1, 16 + 2 * i
 const LowHalves = lanes([...range(0, 8), ...range(16, 8)]);
 const HighHalves = lanes([...range(8, 8), ...range(24, 8)]);
 
-const DrainParams = ["count", "modeBase", "pixelsPerChar", "doubledLines", "lineGridValue"];
+const DrainParams = ["runCount", "modeBase", "pixelsPerChar", "doubledLines", "lineGridValue"];
 const DrainLocals = {
-    i: "i32",
-    record: "i32",
-    raw: "i32",
+    header: "i32",
+    headersEnd: "i32",
+    position: "i32",
+    cell: "i32",
+    cellsEnd: "i32",
     start: "i32",
     rowMask: "i32",
-    expected: "i32",
     source: "i32",
     address: "i32",
     pixel: "i32",
@@ -129,10 +151,10 @@ const DrainLocals = {
 // Memory accesses address the shared memory: the address popped plus the instruction's constant offset, so
 // `i32.load offset=FramebufferOffset` with pixel * 4 on the stack reads fb32[pixel].
 
-// A cell on the line above an odd field: start is negative, on row -1, or row -2 when doubling rounds it down to an
-// even row. The loops visit the cell's pixels on its row and, when doubled, the row below; only those at or after
-// offset 0 (the cell's right end, spilling past the end of row -1 onto row 0) are drawn, one pixel at a time. A cursor
-// record inverts them instead. Pairs with drawClipped in JS.
+// A cell or cursor on the line above an odd field: start is negative, on row -1, or row -2 when doubling rounds it
+// down to an even row. The loops visit the cell's pixels on its row and, when doubled, the row below; only those at
+// or after offset 0 (the cell's right end, spilling past the end of row -1 onto row 0) are drawn, one pixel at a time.
+// A cursor inverts them instead. Pairs with drawClipped in JS.
 const DrawClipped = `
     local.get doubledLines              ;; [doubledLines], 0 or 1
     i32.const 1
@@ -159,10 +181,10 @@ const DrawClipped = `
                 i32.const ${WordShift}
                 i32.shl
                 local.tee address       ;; address = at * 4, left on the stack for the store below; [address]
-                local.get record
+                local.get position
                 i32.const ${PendingCursor}
                 i32.and                 ;; [address, cursor bit]
-                if                      ;; a cursor record: invert what is there
+                if                      ;; a cursor: invert what is there
                     local.get address
                     i32.load offset=${FramebufferOffset}  ;; [address, fb32[at]]
                     i32.const ${CursorInvert}
@@ -198,7 +220,7 @@ const DrawClipped = `
         br_if 0                         ;; repeat the outer loop while pixel < pixelsPerChar
     end`;
 
-// Inverts the RGB of the cell's pixels at start, and of those a row below when lines are doubled. Pairs with
+// Inverts the RGB of the cell's pixels at start, and of those a row down when lines are doubled. Pairs with
 // invertCursor in JS.
 const InvertCursor = `
     local.get start
@@ -347,7 +369,32 @@ const DrawCell = `
         ${eightPixels(InterleaveHigh, 32)}
     end`;
 
-// drain(count, modeBase, pixelsPerChar, doubledLines, lineGridValue): the whole function. Pairs with jsDrain.
+// Sets source to where the palette indices of the video byte cells[cell] are in table4bpp. Pairs with cellSource in
+// JS.
+const CellSource = `
+        local.get modeBase
+        local.get cell
+        i32.load8_u offset=${CellsOffset}       ;; [modeBase, cells[cell]]
+        i32.const ${TableRowShift}
+        i32.shl
+        i32.add
+        local.set source                        ;; source = modeBase + (cells[cell] << 4)`;
+
+// Moves start on to the next cell, and repeats the enclosing loop while there is one.
+const NextCell = `
+        local.get start
+        local.get pixelsPerChar
+        i32.add
+        local.set start                         ;; start += pixelsPerChar
+        local.get cell
+        i32.const 1
+        i32.add
+        local.tee cell                          ;; [++cell]
+        local.get cellsEnd
+        i32.lt_u
+        br_if 0                                 ;; repeat while cell < cellsEnd`;
+
+// drain(runCount, modeBase, pixelsPerChar, doubledLines, lineGridValue): the whole function. Pairs with jsDrain.
 const DrainCode = `
     ${SplitPalette}
     i32.const -1
@@ -356,22 +403,30 @@ const DrainCode = `
     i32.shl                                 ;; [-1, 1024 when doubled, else 0]
     i32.xor
     local.set rowMask                       ;; rowMask = ~1024 when doubled, clearing a row's odd bit, else ~0
-    i32.const -1
-    local.set expected                      ;; no run yet; no raw is -1
+    local.get runCount
+    i32.const ${RunShift}
+    i32.shl
+    local.set headersEnd                    ;; headersEnd = runCount * 8, the bytes of headers to draw
     block                                   ;; br 1 from the loop body leaves this, ending the drain
-        loop                                ;; for each record; br 0 from its body is "continue"
-            local.get i
-            local.get count
+        loop                                ;; for each header; br 0 from its body is "continue"
+            local.get header
+            local.get headersEnd
             i32.ge_u
-            br_if 1                         ;; done when i >= count
-            local.get i
-            i32.const ${WordShift}
-            i32.shl
-            i32.load offset=${RecordsOffset}
-            local.tee record                ;; record = records[i]; [record]
-            i32.const ${PendingOffsetShift}
-            i32.shr_u
-            local.tee raw                   ;; raw = record >>> 8; [raw]
+            br_if 1                         ;; done when header >= headersEnd
+            local.get header
+            i32.load offset=${RunsOffset}
+            local.set position              ;; position = the header's word 0
+            local.get header
+            i32.load offset=${RunsOffset + FirstCellByte}
+            local.set cell                  ;; cell = its word 1, its first cell
+            local.get header
+            i32.load offset=${RunsOffset + RunBytes + FirstCellByte}
+            local.set cellsEnd              ;; cellsEnd = the next header's first cell
+            local.get header
+            i32.const ${RunBytes}
+            i32.add
+            local.set header                ;; header += 8, the next header
+            local.get position
             i32.const ${PendingOffsetMask}
             i32.and                         ;; [the biased offset]
             i32.const ${PendingRowBias * RowPixels}
@@ -379,63 +434,53 @@ const DrainCode = `
             local.get rowMask
             i32.and
             local.set start                 ;; start = offset & rowMask
-            local.get modeBase
-            local.get record
-            i32.const ${PendingByteMask}
+            local.get position
+            i32.const ${PendingCursor}
             i32.and
-            i32.const ${TableRowShift}
-            i32.shl
-            i32.add
-            local.set source                ;; source = modeBase + (video byte << 4)
-            local.get i
-            i32.const 1
-            i32.add
-            local.set i                     ;; ++i
+            if                              ;; a cursor
+                local.get start
+                i32.const 0
+                i32.lt_s
+                if                          ;; start < 0: the line above an odd field
+                    ${DrawClipped}
+                else
+                    ${InvertCursor}
+                end
+                br 1                        ;; continue (depth 0 is this if, 1 the loop)
+            end
             local.get start
             i32.const 0
             i32.lt_s
-            if                              ;; start < 0: the line above an odd field
-                ${DrawClipped}
-                i32.const -1
-                local.set expected          ;; the next cell starts a run
-                br 1                        ;; continue (depth 0 is this if, 1 the loop)
-            end
-            local.get record
-            i32.const ${PendingCursor}
-            i32.and
-            if                              ;; a cursor record
-                ${InvertCursor}
-                i32.const -1
-                local.set expected
+            if                              ;; start < 0: a run on the line above an odd field
+                loop                        ;; for each cell of the run
+                    ${CellSource}
+                    ${DrawClipped}
+                    ${NextCell}
+                end
                 br 1                        ;; continue
             end
-            local.get raw
-            local.get expected
-            i32.ne
-            if                              ;; the first cell of a run: mark its row(s) in the line grid
+            local.get start
+            i32.const ${RowShift}
+            i32.shr_u                       ;; [row]
+            local.get lineGridValue
+            i32.store8 offset=${LineGridOffset}           ;; lineGrid[row] = lineGridValue
+            local.get doubledLines
+            if                              ;; and the row below it when lines are doubled
                 local.get start
                 i32.const ${RowShift}
-                i32.shr_u                   ;; [row]
+                i32.shr_u
                 local.get lineGridValue
-                i32.store8 offset=${LineGridOffset}       ;; lineGrid[row] = lineGridValue
-                local.get doubledLines
-                if                          ;; and the row below it when lines are doubled
-                    local.get start
-                    i32.const ${RowShift}
-                    i32.shr_u
-                    local.get lineGridValue
-                    i32.store8 offset=${LineGridOffset + 1}   ;; lineGrid[row + 1] = lineGridValue
-                end
+                i32.store8 offset=${LineGridOffset + 1}   ;; lineGrid[row + 1] = lineGridValue
             end
-            local.get raw
-            local.get pixelsPerChar
-            i32.add
-            local.set expected              ;; expected = raw + pixelsPerChar, where a following cell would be
-            local.get start
-            i32.const ${WordShift}
-            i32.shl
-            local.set address               ;; address = start * 4
-            ${DrawCell}
+            loop                            ;; for each cell of the run
+                ${CellSource}
+                local.get start
+                i32.const ${WordShift}
+                i32.shl
+                local.set address           ;; address = start * 4
+                ${DrawCell}
+                ${NextCell}
+            end
             br 0                            ;; continue
         end
     end`;
@@ -461,13 +506,13 @@ const DrainModule = compileDrainModule();
 /** The drain this browser runs: "wasm" when it can compile the module, else "js". */
 export const PreferredDrain = DrainModule ? "wasm" : "js";
 
-function drawClipped({ fb32, table4bpp, palette }, record, source, start, pixelsPerChar, doubledLines) {
+function drawClipped({ fb32, table4bpp, palette }, position, source, start, pixelsPerChar, doubledLines) {
     const span = (Number(doubledLines) + 1) << RowShift;
     for (let pixel = 0; pixel < pixelsPerChar; ++pixel) {
         const rowsEnd = start + pixel + span;
         for (let at = start + pixel; at < rowsEnd; at += RowPixels) {
             if (at < 0) continue;
-            fb32[at] = record & PendingCursor ? fb32[at] ^ CursorInvert : palette[table4bpp[source + pixel]];
+            fb32[at] = position & PendingCursor ? fb32[at] ^ CursorInvert : palette[table4bpp[source + pixel]];
         }
     }
 }
@@ -487,48 +532,54 @@ function drawCell({ fb32, table4bpp, palette }, source, start, pixelsPerChar, do
     }
 }
 
+const cellSource = ({ cells }, modeBase, cell) => modeBase + (cells[cell] << TableRowShift);
+
 /**
- * Draws the first `count` records of `views`, in order, in its palette: the JS drain, the same as the Wasm one.
- * @param {{records: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, table4bpp: Uint8Array,
+ * Draws the first `runCount` headers of `views`, in order, in its palette: the JS drain, the same as the Wasm one.
+ * @param {{cells: Uint8Array, runs: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, table4bpp: Uint8Array,
  *     palette: Int32Array}} views
- * @param {number} count
+ * @param {number} runCount
  * @param {number} modeBase the table4bpp offset of byte 0 in the ULA mode
  * @param {number} pixelsPerChar
  * @param {boolean} doubledLines
  * @param {number} lineGridValue
  */
-export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lineGridValue) {
-    const { records, lineGrid } = views;
+export function jsDrain(views, runCount, modeBase, pixelsPerChar, doubledLines, lineGridValue) {
+    const { runs, lineGrid } = views;
     const rowMask = ~(Number(doubledLines) << RowShift);
-    let expected = -1;
-    for (let i = 0; i < count;) {
-        const record = records[i];
-        const raw = record >>> PendingOffsetShift;
-        const start = ((raw & PendingOffsetMask) - PendingRowBias * RowPixels) & rowMask;
-        const source = modeBase + ((record & PendingByteMask) << TableRowShift);
-        ++i;
+    for (let header = 0; header < runCount * PendingRunWords;) {
+        const position = runs[header];
+        let cell = runs[header + 1];
+        const cellsEnd = runs[header + PendingRunWords + 1];
+        header += PendingRunWords;
+        let start = ((position & PendingOffsetMask) - PendingRowBias * RowPixels) & rowMask;
+        if (position & PendingCursor) {
+            if (start < 0) {
+                drawClipped(views, position, 0, start, pixelsPerChar, doubledLines);
+            } else {
+                invertCursor(views, start, pixelsPerChar, doubledLines);
+            }
+            continue;
+        }
         if (start < 0) {
-            drawClipped(views, record, source, start, pixelsPerChar, doubledLines);
-            expected = -1;
+            do {
+                drawClipped(views, position, cellSource(views, modeBase, cell), start, pixelsPerChar, doubledLines);
+                start += pixelsPerChar;
+            } while (++cell < cellsEnd);
             continue;
         }
-        if (record & PendingCursor) {
-            invertCursor(views, start, pixelsPerChar, doubledLines);
-            expected = -1;
-            continue;
-        }
-        if (raw !== expected) {
-            lineGrid[start >>> RowShift] = lineGridValue;
-            if (doubledLines) lineGrid[(start >>> RowShift) + 1] = lineGridValue;
-        }
-        expected = raw + pixelsPerChar;
-        drawCell(views, source, start, pixelsPerChar, doubledLines);
+        lineGrid[start >>> RowShift] = lineGridValue;
+        if (doubledLines) lineGrid[(start >>> RowShift) + 1] = lineGridValue;
+        do {
+            drawCell(views, cellSource(views, modeBase, cell), start, pixelsPerChar, doubledLines);
+            start += pixelsPerChar;
+        } while (++cell < cellsEnd);
     }
 }
 
 /**
- * The memory the bitmap renderer works in, holding the framebuffer, the line grid, the pending records,
- * table4bpp and the palette, and the drain that draws the records. The memory never grows, so views
+ * The memory the bitmap renderer works in, holding the framebuffer, the line grid, the pending cells and runs,
+ * table4bpp and the palette, and the drain that draws them. The memory never grows, so views
  * of it stay valid.
  */
 export class VideoDrain {
@@ -546,11 +597,12 @@ export class VideoDrain {
         this.table4bpp = new Uint8Array(buffer, TableOffset, Table4bppBytes);
         this.palette = new Int32Array(buffer, PaletteOffset, PaletteEntries);
         this.lineGrid = new Uint8Array(buffer, LineGridOffset, LineGridRows);
-        this.records = new Int32Array(buffer, RecordsOffset, PendingCapacity);
+        this.cells = new Uint8Array(buffer, CellsOffset, PendingCellCapacity);
+        this.runs = new Int32Array(buffer, RunsOffset, (PendingRunCapacity + 1) * PendingRunWords);
         this.fb32 = new Int32Array(buffer, FramebufferOffset, framebufferPixels);
         /**
-         * Draws the first `count` records, in order, in `palette`.
-         * @type {(count: number, modeBase: number, pixelsPerChar: number, doubledLines: boolean,
+         * Draws the first `runCount` headers, in order, in `palette`.
+         * @type {(runCount: number, modeBase: number, pixelsPerChar: number, doubledLines: boolean,
          *     lineGridValue: number) => void}
          */
         this.drain = memory

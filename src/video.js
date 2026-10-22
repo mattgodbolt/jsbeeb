@@ -6,13 +6,15 @@ import { makeFast32 } from "./binary.js";
 import {
     CursorInvert,
     PendingCursor,
-    PendingOffsetShift,
     PendingRowBias,
+    PendingRunWords,
     PreferredDrain,
     VideoDrain,
 } from "./video-drain.js";
 
 const noop = () => {};
+// No cell is at a negative bitmapX, so no cell continues a run there.
+const NoPendingRun = -1;
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -463,8 +465,11 @@ export class Video {
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
-        this.pendingCells = this.drain.records;
-        this.pendingCount = 0;
+        this.pendingCells = this.drain.cells;
+        this.pendingCellCount = 0;
+        this.pendingRuns = this.drain.runs;
+        this.pendingRunCount = 0;
+        this.pendingRunNextX = NoPendingRun;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -780,13 +785,16 @@ export class Video {
      * without it: with every ULA write draining, nothing is pending while the teletext bit is set.
      */
     renderPending() {
-        const count = this.pendingCount;
-        if (count === 0) return;
-        this.pendingCount = 0;
+        const runCount = this.pendingRunCount;
+        if (runCount === 0) return;
+        this.pendingRuns[runCount * PendingRunWords + 1] = this.pendingCellCount;
+        this.pendingRunCount = 0;
+        this.pendingCellCount = 0;
+        this.pendingRunNextX = NoPendingRun;
         const doubledLines = this.doublesLines();
         this.drain.palette.set(this.pixelColours());
         this.drain.drain(
-            count,
+            runCount,
             table4bppOffset(this.ulaMode, 0),
             this.pixelsPerChar,
             doubledLines,
@@ -817,7 +825,8 @@ export class Video {
             if (this.teletextMode) {
                 this.invertForCursor(this.cursorInvertedOffset, 0);
             } else {
-                this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
+                this.addPendingRun(this.pendingBeamOffset() | PendingCursor);
+                this.pendingRunNextX = NoPendingRun;
             }
         } else {
             this.cursorInvertedOffset = -1;
@@ -837,7 +846,13 @@ export class Video {
     }
 
     pendingBeamOffset() {
-        return ((this.bitmapY + PendingRowBias) * 1024 + this.bitmapX) << PendingOffsetShift;
+        return (this.bitmapY + PendingRowBias) * 1024 + this.bitmapX;
+    }
+
+    addPendingRun(position) {
+        const header = this.pendingRunCount++ * PendingRunWords;
+        this.pendingRuns[header] = position;
+        this.pendingRuns[header + 1] = this.pendingCellCount;
     }
 
     beamOffset() {
@@ -1087,6 +1102,7 @@ export class Video {
             // The CRT vertical beam speed is constant, so this is actually
             // an approximation that works if hsyncs are spaced evenly.
             this.bitmapY += 2;
+            this.pendingRunNextX = NoPendingRun;
             this.hsyncCount = (this.hsyncCount + 1) % LineCountPeriod;
             this.subcarrierPhase = (this.subcarrierPhase + PalPhasePerLine) % 1;
 
@@ -1243,7 +1259,9 @@ export class Video {
                                 for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
                             }
                         } else {
-                            this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
+                            if (this.bitmapX !== this.pendingRunNextX) this.addPendingRun(this.pendingBeamOffset());
+                            this.pendingCells[this.pendingCellCount++] = dat;
+                            this.pendingRunNextX = this.bitmapX + this.pixelsPerChar;
                         }
                     }
                     if (this.cursorDrawIndex) {

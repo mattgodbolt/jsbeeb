@@ -526,6 +526,19 @@ describe("Video", () => {
             expect(fb[offset]).toBe(Red);
         });
 
+        it("start a new run on the next row where the last row's run would have gone on", () => {
+            const nextCellOnTheRowBelow = (100 + 2) * FbWidth + 100 + 8;
+            rig.writeCrtc(3, 0x24);
+            passCell(rig);
+            Object.assign(video, { inHSync: true, hpulseCounter: 1 }); // the pulse moves the beam down on this clock
+            rig.run(1);
+            video.bitmapX = 100;
+            rig.run(1);
+            video.renderPending();
+            expect(fb[nextCellOnTheRowBelow]).toBe(White);
+            expect(fb[offset + 8]).toBe(OPAQUE_BLACK);
+        });
+
         // A 1MHz cell at the right edge of the line above an odd field spills onto row 0.
         it.each([
             ["single", 3],
