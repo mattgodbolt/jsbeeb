@@ -20,8 +20,9 @@ export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
 
-// A pending bitmap cell is its video byte under its framebuffer offset, and a cursor record
-// is the offset of a cell to invert. Offsets count from one row up, where an odd field starts.
+// A pending bitmap cell is one the beam has passed but the drain has not yet drawn: its video byte
+// under its framebuffer offset. A cursor record is the offset of a cell to invert. An odd field
+// starts at bitmapY -1, so the stored row is biased by one to keep the offset unsigned.
 const PendingRowBias = 1;
 const PendingOffsetShift = 8;
 const PendingOffsetMask = 0xfffff;
@@ -380,22 +381,11 @@ function invertCell(fb32, offset, pixelsPerChar, doubledLines) {
 }
 
 // A cell on the line above an odd field, whose right end spills onto row 0.
-function drawClippedCell(
-    fb32,
-    record,
-    start,
-    table4bpp,
-    modeBase,
-    palette,
-    pixelsPerChar,
-    doubledLines,
-    cursorDoubled,
-) {
+function drawClippedCell(fb32, record, start, table4bpp, modeBase, palette, pixelsPerChar, doubledLines) {
     const cursor = (record & PendingCursor) !== 0;
-    const secondRow = cursor ? cursorDoubled : doubledLines;
     const source = modeBase | ((record & PendingByteMask) << 4);
     for (let p = 0; p < pixelsPerChar; ++p) {
-        for (let at = start + p; at < start + p + (secondRow ? 2048 : 1024); at += 1024) {
+        for (let at = start + p; at < start + p + (doubledLines ? 2048 : 1024); at += 1024) {
             if (at < 0) continue;
             fb32[at] = cursor ? fb32[at] ^ CursorInvert : palette[table4bpp[source + p]];
         }
@@ -414,7 +404,6 @@ function drawClippedCell(
  * @param {Uint32Array} palette
  * @param {number} pixelsPerChar
  * @param {boolean} doubledLines
- * @param {boolean} cursorDoubled whether the cursor inverts the second row too
  * @param {number} lineGridValue
  */
 function renderPendingCells(
@@ -427,7 +416,6 @@ function renderPendingCells(
     palette,
     pixelsPerChar,
     doubledLines,
-    cursorDoubled,
     lineGridValue,
 ) {
     const rowMask = doubledLines ? ~1024 : ~0;
@@ -437,22 +425,12 @@ function renderPendingCells(
         let record = records[i];
         const start = (((record >>> PendingOffsetShift) & PendingOffsetMask) - biasedOrigin) & rowMask;
         if (start < 0) {
-            drawClippedCell(
-                fb32,
-                record,
-                start,
-                table4bpp,
-                modeBase,
-                palette,
-                pixelsPerChar,
-                doubledLines,
-                cursorDoubled,
-            );
+            drawClippedCell(fb32, record, start, table4bpp, modeBase, palette, pixelsPerChar, doubledLines);
             ++i;
             continue;
         }
         if (record & PendingCursor) {
-            invertCell(fb32, start, pixelsPerChar, cursorDoubled);
+            invertCell(fb32, start, pixelsPerChar, doubledLines);
             ++i;
             continue;
         }
@@ -900,15 +878,8 @@ export class Video {
             this.pixelColours(),
             this.pixelsPerChar,
             doubledLines,
-            this.cursorDoubled(),
             doubledLines ? this.lineGridUlaDoubled : this.lineGridUla,
         );
-    }
-
-    // Unlike the cells under it, the cursor is not doubled onto the second row of a field stuck
-    // doubling its rows with interlace sync and video.
-    cursorDoubled() {
-        return this.doubledScanlines && !this.interlacedSyncAndVideo;
     }
 
     // The second half of a 16 pixel cell, for the 1MHz repaint.
@@ -930,13 +901,12 @@ export class Video {
 
     handleCursor() {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
-            const offset = this.beamOffset();
+            this.cursorInvertedOffset = this.beamOffset();
             if (this.teletextMode) {
-                this.invertForCursor(offset, 0);
+                this.invertForCursor(this.cursorInvertedOffset, 0);
             } else {
                 this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
             }
-            this.cursorInvertedOffset = offset;
         } else {
             this.cursorInvertedOffset = -1;
         }

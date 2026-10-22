@@ -544,7 +544,6 @@ describe("Video", () => {
     describe("the cursor", () => {
         const Mode4WithCursor = 0x88;
         const AllPixelsSet = 0xff;
-        const White = 0xffffffff;
         const InvertedWhite = 0xff000000;
         const CellWidth = 16;
         const offset = 100 * FbWidth + 100;
@@ -570,14 +569,6 @@ describe("Video", () => {
         it("inverts both rows of a cell on doubled scanlines", () => {
             video.polltime(1);
             expect(rows()).toEqual([Array(CellWidth).fill(InvertedWhite), Array(CellWidth).fill(InvertedWhite)]);
-        });
-
-        // The cell is doubled onto the second row, but the cursor follows the scanline doubling alone.
-        it("inverts only the first row when a field stuck with interlace sync and video doubles its rows", () => {
-            rig.writeCrtc(8, 3);
-            video.isEvenRender = video.lastRenderWasEven = true;
-            video.polltime(1);
-            expect(rows()).toEqual([Array(CellWidth).fill(InvertedWhite), Array(CellWidth).fill(White)]);
         });
     });
 
@@ -664,7 +655,7 @@ describe("Video", () => {
                 "with interlace sync and video",
                 programInterlaceSyncAndVideoFrame,
                 { seed: 3, hasVideoNula: true },
-                [2206297541, 2206297541, 2970356859, 595029415, 4284534895],
+                [2206297541, 2206297541, 2897231635, 595029415, 4284534895],
             ],
             [
                 "with interlace sync and video stuck on one field",
@@ -673,7 +664,7 @@ describe("Video", () => {
                     v.writeCrtc(6, 40);
                 },
                 { seed: 4, hasVideoNula: true },
-                [2206297541, 2206297541, 730136291, 3463620181, 4286257725],
+                [2206297541, 2206297541, 2410138283, 180526969, 4265788461],
             ],
         ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
             expect(paintedHashes(program, options)).toEqual(expected);
