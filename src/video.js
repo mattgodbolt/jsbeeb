@@ -1219,9 +1219,9 @@ export class Video {
                                 doubledLines = true;
                                 bitmapRow &= ~1;
                             }
-                            // With a 2MHz clock (the "TTX trick") the SAA5050 shows black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
-                            // at ABUG 2026-03-13; the mechanism is not established, as the
-                            // Model B ULA has no connection to the SAA5050 at all.
+                            // With a 2MHz clock (the "TTX trick") the SAA5050 shows black. Behaviour
+                            // confirmed by Rich Talbot-Watkins (RTW) at ABUG 2026-03-13; the mechanism
+                            // is not established, as the Model B ULA has no connection to the SAA5050 at all.
                             // See https://github.com/mattgodbolt/jsbeeb/issues/546
                             this.teletext.showLatest(bitmapRow * 1024 + this.bitmapX, doubledLines, !this.halfClock);
                         } else {

@@ -10,7 +10,6 @@ const LogCapacity = 1024;
 const DataBits = 0x7f;
 const ClockedEntry = 0x80;
 const ShownEntry = 0x100;
-// The "TTX trick", the teletext bit set with a 2MHz clock, shows a cell of black rather than the chip's output.
 const BlackEntry = 0x200;
 const DoubledEntry = 0x400;
 // A shown entry's framebuffer offset, signed: the line above an odd field is row -1.
