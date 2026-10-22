@@ -926,10 +926,9 @@ export class Video {
     }
 
     paintTeletextCell() {
-        this.renderPending();
         const doubledLines = this.doublesLines();
-        const offset = this.beamOffset();
-        const bitmapRow = offset >> 10;
+        const bitmapRow = doubledLines ? this.bitmapY & ~1 : this.bitmapY;
+        const offset = bitmapRow * 1024 + this.bitmapX;
         if (doubledLines) {
             this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
             this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
