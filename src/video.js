@@ -925,34 +925,6 @@ export class Video {
         return bitmapRow * 1024 + this.bitmapX;
     }
 
-    paintTeletextCell() {
-        const doubledLines = this.doublesLines();
-        const bitmapRow = doubledLines ? this.bitmapY & ~1 : this.bitmapY;
-        const offset = bitmapRow * 1024 + this.bitmapX;
-        if (doubledLines) {
-            this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
-            this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
-        } else {
-            this.lineGrid[bitmapRow] = this.lineGridUla;
-        }
-        if (this.halfClock) {
-            // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
-            this.teletext.emit(this.fb32, offset);
-        } else {
-            // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
-            // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
-            // at ABUG 2026-03-13; the mechanism is not established, as the
-            // Model B ULA has no connection to the SAA5050 at all.
-            // See https://github.com/mattgodbolt/jsbeeb/issues/546
-            this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
-        }
-        if (doubledLines) {
-            const fb32 = this.fb32;
-            const end = offset + this.pixelsPerChar;
-            for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
-        }
-    }
-
     // The render loop paints a whole 1MHz cell on one 2MHz tick and skips the next, but the ULA
     // output stage switches at 2MHz: a register write landing on the skipped tick changes the
     // second half of the cell just painted. See https://github.com/mattgodbolt/jsbeeb/issues/766
@@ -1316,7 +1288,43 @@ export class Video {
                     this.cellData = dat;
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                         if (this.teletextMode) {
-                            this.paintTeletextCell();
+                            let doubledLines = false;
+                            let bitmapRow = this.bitmapY;
+                            // This is doublesLines(), inlined for speed.
+                            if (
+                                (this.doubledScanlines && !this.interlacedSyncAndVideo) ||
+                                this.isEvenRender === this.lastRenderWasEven
+                            ) {
+                                doubledLines = true;
+                                bitmapRow &= ~1;
+                            }
+                            const offset = bitmapRow * 1024 + this.bitmapX;
+                            // Note this row's logical pixel size for display
+                            // filters; see video-filters/pixel-grid.js. The ULA half
+                            // of the descriptor is precomputed on register writes so
+                            // this stays a store or two in the hottest loop we have.
+                            if (doubledLines) {
+                                this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
+                                this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
+                            } else {
+                                this.lineGrid[bitmapRow] = this.lineGridUla;
+                            }
+                            if (this.halfClock) {
+                                // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
+                                this.teletext.emit(this.fb32, offset);
+                            } else {
+                                // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
+                                // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
+                                // at ABUG 2026-03-13; the mechanism is not established, as the
+                                // Model B ULA has no connection to the SAA5050 at all.
+                                // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                                this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
+                            }
+                            if (doubledLines) {
+                                const fb32 = this.fb32;
+                                const end = offset + this.pixelsPerChar;
+                                for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
+                            }
                         } else {
                             this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
                         }
