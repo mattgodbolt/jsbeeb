@@ -183,7 +183,6 @@ export class Teletext {
      * @param {Uint32Array} collook - 16-entry palette in ABGR format (0xffBBGGRR).
      */
     rebuildColours(collook) {
-        this.catchUpShown();
         const gamma = 1.0 / 2.2;
         for (let i = 0; i < 256; ++i) {
             const weight = (i & 3) / 3.0;
