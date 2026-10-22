@@ -16,8 +16,13 @@ export const CursorInvert = 0x00ffffff;
 
 const Table4bppBytes = 4 * 256 * 16;
 const PaletteEntries = 16;
-const RowPixels = 1024;
-const RowBytes = RowPixels * 4;
+const RowShift = 10;
+const RowPixels = 1 << RowShift;
+const WordShift = 2;
+const WordBytes = 1 << WordShift;
+const RowBytes = RowPixels * WordBytes;
+const TableRowShift = 4;
+const WideCellPixels = 16;
 const WasmPageBytes = 65536;
 
 const TableOffset = 0;
@@ -35,7 +40,7 @@ const InterleaveHigh = lanes(range(8, 8).flatMap((i) => [i, 16 + i]));
 const PairsLow = lanes(range(0, 4).flatMap((i) => [2 * i, 2 * i + 1, 16 + 2 * i, 17 + 2 * i]));
 const PairsHigh = lanes(range(4, 4).flatMap((i) => [2 * i, 2 * i + 1, 16 + 2 * i, 17 + 2 * i]));
 
-const DrainParams = ["count", "modeBase", "pixelsPerChar", "doubledLines", "cursorDoubled", "lineGridValue"];
+const DrainParams = ["count", "modeBase", "pixelsPerChar", "doubledLines", "lineGridValue"];
 const DrainLocals = {
     i: "i32",
     record: "i32",
@@ -72,19 +77,14 @@ const DrawClipped = `
     local.get record
     i32.const ${PendingByteMask}
     i32.and
-    i32.const 4
+    i32.const ${TableRowShift}
     i32.shl
     i32.add
     local.set source
-    local.get cursorDoubled
     local.get doubledLines
-    local.get record
-    i32.const ${PendingCursor}
-    i32.and
-    select
     i32.const 1
     i32.add
-    i32.const 10
+    i32.const ${RowShift}
     i32.shl
     local.set span
     i32.const 0
@@ -103,7 +103,7 @@ const DrawClipped = `
             i32.ge_s
             if
                 local.get at
-                i32.const 2
+                i32.const ${WordShift}
                 i32.shl
                 local.tee address
                 local.get record
@@ -120,7 +120,7 @@ const DrawClipped = `
                     local.get pixel
                     i32.add
                     i32.load8_u offset=${TableOffset}
-                    i32.const 2
+                    i32.const ${WordShift}
                     i32.shl
                     i32.load offset=${PaletteOffset}
                     local.set colour
@@ -147,7 +147,7 @@ const DrawClipped = `
 
 const InvertCursor = `
     local.get start
-    i32.const 2
+    i32.const ${WordShift}
     i32.shl
     local.set address
     i32.const 0
@@ -159,7 +159,7 @@ const InvertCursor = `
         i32.const ${CursorInvert}
         i32.xor
         i32.store offset=${FramebufferOffset}
-        local.get cursorDoubled
+        local.get doubledLines
         if
             local.get address
             local.get address
@@ -169,7 +169,7 @@ const InvertCursor = `
             i32.store offset=${FramebufferOffset + RowBytes}
         end
         local.get address
-        i32.const 4
+        i32.const ${WordBytes}
         i32.add
         local.set address
         local.get pixel
@@ -181,11 +181,11 @@ const InvertCursor = `
         br_if 0
     end`;
 
-// The palette is split into planes, one byte of every colour in each, so that a cell's sixteen palette
-// indices select each byte of its pixels with one swizzle.
 const LowHalves = lanes([...range(0, 8), ...range(16, 8)]);
 const HighHalves = lanes([...range(8, 8), ...range(24, 8)]);
 
+// The palette is split into planes, one byte of every colour in each, so that a cell's sixteen palette
+// indices select each byte of its pixels with one swizzle.
 function twoPlanes(byte, firstPlane, secondPlane) {
     const bytesOfEightColours = lanes([
         ...range(0, 8).map((i) => 4 * i + byte),
@@ -273,7 +273,7 @@ const DrawCell = `
     local.set byte3
     ${eightPixels(InterleaveLow, 0)}
     local.get pixelsPerChar
-    i32.const 16
+    i32.const ${WideCellPixels}
     i32.eq
     if
         ${eightPixels(InterleaveHigh, 32)}
@@ -284,7 +284,7 @@ const DrainCode = `
     ${SplitPalette}
     i32.const -1
     local.get doubledLines
-    i32.const 10
+    i32.const ${RowShift}
     i32.shl
     i32.xor
     local.set rowMask
@@ -297,7 +297,7 @@ const DrainCode = `
             i32.ge_u
             br_if 1
             local.get i
-            i32.const 2
+            i32.const ${WordShift}
             i32.shl
             i32.load offset=${RecordsOffset}
             local.tee record
@@ -338,14 +338,14 @@ const DrainCode = `
             i32.ne
             if
                 local.get start
-                i32.const 10
+                i32.const ${RowShift}
                 i32.shr_u
                 local.get lineGridValue
                 i32.store8 offset=${LineGridOffset}
                 local.get doubledLines
                 if
                     local.get start
-                    i32.const 10
+                    i32.const ${RowShift}
                     i32.shr_u
                     local.get lineGridValue
                     i32.store8 offset=${LineGridOffset + 1}
@@ -359,12 +359,12 @@ const DrainCode = `
             local.get record
             i32.const ${PendingByteMask}
             i32.and
-            i32.const 4
+            i32.const ${TableRowShift}
             i32.shl
             i32.add
             local.set source
             local.get start
-            i32.const 2
+            i32.const ${WordShift}
             i32.shl
             local.set address
             ${DrawCell}
@@ -397,7 +397,7 @@ export class VideoDrain {
         /**
          * Draws the first `count` records, in order, in `palette`.
          * @type {(count: number, modeBase: number, pixelsPerChar: number, doubledLines: boolean,
-         *     cursorDoubled: boolean, lineGridValue: number) => void}
+         *     lineGridValue: number) => void}
          */
         this.drain = exports.drain;
     }

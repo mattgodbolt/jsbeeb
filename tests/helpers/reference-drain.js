@@ -15,22 +15,11 @@ function invertCell(fb32, offset, pixelsPerChar, doubledLines) {
 }
 
 // A cell on the line above an odd field, whose right end spills onto row 0.
-function drawClippedCell(
-    fb32,
-    record,
-    start,
-    table4bpp,
-    modeBase,
-    palette,
-    pixelsPerChar,
-    doubledLines,
-    cursorDoubled,
-) {
+function drawClippedCell(fb32, record, start, table4bpp, modeBase, palette, pixelsPerChar, doubledLines) {
     const cursor = (record & PendingCursor) !== 0;
-    const secondRow = cursor ? cursorDoubled : doubledLines;
     const source = modeBase | ((record & PendingByteMask) << 4);
     for (let p = 0; p < pixelsPerChar; ++p) {
-        for (let at = start + p; at < start + p + (secondRow ? 2048 : 1024); at += 1024) {
+        for (let at = start + p; at < start + p + (doubledLines ? 2048 : 1024); at += 1024) {
             if (at < 0) continue;
             fb32[at] = cursor ? fb32[at] ^ CursorInvert : palette[table4bpp[source + p]];
         }
@@ -49,7 +38,6 @@ function drawClippedCell(
  * @param {Uint32Array} palette
  * @param {number} pixelsPerChar
  * @param {boolean} doubledLines
- * @param {boolean} cursorDoubled whether the cursor inverts the second row too
  * @param {number} lineGridValue
  */
 export function renderPendingCells(
@@ -62,7 +50,6 @@ export function renderPendingCells(
     palette,
     pixelsPerChar,
     doubledLines,
-    cursorDoubled,
     lineGridValue,
 ) {
     const rowMask = doubledLines ? ~1024 : ~0;
@@ -72,22 +59,12 @@ export function renderPendingCells(
         let record = records[i];
         const start = (((record >>> PendingOffsetShift) & PendingOffsetMask) - biasedOrigin) & rowMask;
         if (start < 0) {
-            drawClippedCell(
-                fb32,
-                record,
-                start,
-                table4bpp,
-                modeBase,
-                palette,
-                pixelsPerChar,
-                doubledLines,
-                cursorDoubled,
-            );
+            drawClippedCell(fb32, record, start, table4bpp, modeBase, palette, pixelsPerChar, doubledLines);
             ++i;
             continue;
         }
         if (record & PendingCursor) {
-            invertCell(fb32, start, pixelsPerChar, cursorDoubled);
+            invertCell(fb32, start, pixelsPerChar, doubledLines);
             ++i;
             continue;
         }
@@ -141,7 +118,7 @@ export function checkDrainsAgainstReference(videoDrain) {
     const { fb32, lineGrid, records, table4bpp, palette } = videoDrain;
     const wasmDrain = videoDrain.drain;
     const expectedFb32 = new Int32Array(fb32.length);
-    videoDrain.drain = (count, modeBase, pixelsPerChar, doubledLines, cursorDoubled, lineGridValue) => {
+    videoDrain.drain = (count, modeBase, pixelsPerChar, doubledLines, lineGridValue) => {
         const [start, end] = touchedSpan(records, count, fb32.length);
         expectedFb32.set(fb32.subarray(start, end), start);
         const expectedLineGrid = lineGrid.slice();
@@ -155,10 +132,9 @@ export function checkDrainsAgainstReference(videoDrain) {
             palette,
             pixelsPerChar,
             doubledLines,
-            cursorDoubled,
             lineGridValue,
         );
-        wasmDrain(count, modeBase, pixelsPerChar, doubledLines, cursorDoubled, lineGridValue);
+        wasmDrain(count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
         const pixel = firstDifference(expectedFb32, fb32, start, end);
         const row = firstDifference(expectedLineGrid, lineGrid, 0, lineGrid.length);
         if (pixel >= 0 || row >= 0) {

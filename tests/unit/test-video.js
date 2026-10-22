@@ -540,6 +540,27 @@ describe("Video", () => {
             expect(Array.from(fb.subarray(0, 8))).toEqual(Array(8).fill(White));
             expect(fb[8]).toBe(OPAQUE_BLACK);
         });
+
+        it.each([
+            ["single", 3],
+            ["doubled", 0],
+        ])("invert their spill onto row 0 under the cursor on %s rows", (_, r8) => {
+            const CursorOnFirstCell = 0x80;
+            rig.writeCrtc(8, r8);
+            video.ula.write(0, CursorOnFirstCell);
+            passCell(rig);
+            Object.assign(video, {
+                bitmapX: 1008,
+                bitmapY: -1,
+                oddClock: false,
+                cursorOnThisFrame: true,
+                cursorDrawIndex: 3,
+            });
+            rig.run(1);
+            video.renderPending();
+            expect(Array.from(fb.subarray(0, 8))).toEqual(Array(8).fill(OPAQUE_BLACK));
+            expect(fb[8]).toBe(OPAQUE_BLACK);
+        });
     });
 
     // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.

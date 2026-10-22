@@ -20,7 +20,6 @@ const Instructions = {
     end: [[0x0b]],
     br: [[0x0c], "depth"],
     br_if: [[0x0d], "depth"],
-    select: [[0x1b]],
     "local.get": [[0x20], "local"],
     "local.set": [[0x21], "local"],
     "local.tee": [[0x22], "local"],
@@ -104,7 +103,7 @@ function immediates(kind, operands, naturalAlignment, localIndex, line) {
 function assembleBody(code, localIndex) {
     const bytes = [];
     for (const rawLine of code.split("\n")) {
-        const line = rawLine.replace(/;;.*/, "").trim();
+        const line = rawLine.trim();
         if (!line) continue;
         const [mnemonic, ...operands] = line.split(/\s+/);
         const instruction = Instructions[mnemonic];
@@ -120,8 +119,7 @@ function assembleBody(code, localIndex) {
  * @property {string} name the name it is exported by
  * @property {string[]} params each an i32
  * @property {Record<string, "i32"|"v128">} locals
- * @property {string} code one instruction per line, with `;;` comments; locals are named, and the body's final
- *     `end` is implied
+ * @property {string} code one instruction per line; locals are named, and the body's final `end` is implied
  */
 
 /**
