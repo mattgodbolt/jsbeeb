@@ -425,6 +425,10 @@ export class Teletext {
     // Returns whether any entry clocked the chip.
     replayLog(log, length) {
         const queue = this.dataQueue;
+        // Everything a shown cell reads besides the cell catches the log up before it changes.
+        const glyphRow = this.glyphRow();
+        const doubleHeightGlyphRow = this.doubleHeightGlyphRow();
+        const hideFlashing = this.hideFlashing;
         let clocked = false;
         // Each clocked entry runs the byte fed PipelineLag entries before it, from the pipeline for the first few.
         for (let i = 0; i < length; ++i) {
@@ -432,7 +436,9 @@ export class Teletext {
             if (!(entry & ClockedEntry)) continue;
             clocked = true;
             this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
-            if (entry & ShownEntry) this.paintShown(entry);
+            if (entry & ShownEntry) {
+                this.paintShown(entry, this.oldDbl ? doubleHeightGlyphRow : glyphRow, hideFlashing);
+            }
         }
         this.feedLast(log, length);
         return clocked;
@@ -447,7 +453,7 @@ export class Teletext {
         }
     }
 
-    paintShown(entry) {
+    paintShown(entry, glyphRow, hideFlashing) {
         const fb32 = this.fb32;
         const offset = entry >> OffsetShift;
         const doubledLines = !!(entry & DoubledEntry);
@@ -460,7 +466,7 @@ export class Teletext {
             pixels = BlackCellPixels;
             fb32.fill(OPAQUE_BLACK, offset, offset + pixels);
         } else {
-            this.emit(fb32, offset);
+            this.paintCell(fb32, offset, glyphRow, hideFlashing);
         }
         if (doubledLines) {
             const end = offset + pixels;
@@ -632,18 +638,15 @@ export class Teletext {
     }
 
     glyphScanline() {
-        let scanline = this.scanlineCounter << 1;
-        if (this.levelRA0) {
-            scanline++;
-        }
+        return this.oldDbl ? this.doubleHeightGlyphRow() : this.glyphRow();
+    }
 
-        if (this.oldDbl) {
-            scanline = scanline >>> 1;
-            if (this.secondHalfOfDouble) {
-                scanline += 10;
-            }
-        }
-        return scanline;
+    glyphRow() {
+        return (this.scanlineCounter << 1) | (this.levelRA0 ? 1 : 0);
+    }
+
+    doubleHeightGlyphRow() {
+        return (this.glyphRow() >>> 1) + (this.secondHalfOfDouble ? 10 : 0);
     }
 
     /**
@@ -651,27 +654,28 @@ export class Teletext {
      * per scanline or per field, not per character.
      */
     emit(buf, offset) {
-        const scanline = this.glyphScanline();
+        this.paintCell(buf, offset, this.glyphScanline(), this.hideFlashing);
+    }
 
-        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
-            const backgroundColour = this.colour[this.cellPalette & 0xe0];
-            for (let i = 0; i < 16; ++i) {
-                buf[offset++] = backgroundColour;
-            }
-        } else {
-            let chardef = this.curGlyphs[this.cellGlyphIndex + scanline];
-            const paletteIndex = this.cellPalette;
-            const colour = this.colour;
-
-            if (chardef === 0) {
-                const backgroundColour = colour[paletteIndex];
-                for (let pixel = 0; pixel < 16; ++pixel) buf[offset + pixel] = backgroundColour;
-                return;
-            }
-            for (let pixel = 0; pixel < 16; ++pixel) {
-                buf[offset + pixel] = colour[paletteIndex + (chardef & 3)];
-                chardef >>>= 2;
-            }
+    // The latched cell, showing `glyphRow` of its glyph.
+    paintCell(buf, offset, glyphRow, hideFlashing) {
+        const colour = this.colour;
+        const paletteIndex = this.cellPalette;
+        if (this.cellConceal || (this.cellFlash && hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
+            const backgroundColour = colour[paletteIndex & 0xe0];
+            for (let pixel = 0; pixel < CellPixels; ++pixel) buf[offset + pixel] = backgroundColour;
+            return;
+        }
+        let chardef = this.curGlyphs[this.cellGlyphIndex + glyphRow];
+        // A pixel's colour index is two bits of the row on the cell's palette; with none set it is the background.
+        if (chardef === 0) {
+            const backgroundColour = colour[paletteIndex];
+            for (let pixel = 0; pixel < CellPixels; ++pixel) buf[offset + pixel] = backgroundColour;
+            return;
+        }
+        for (let pixel = 0; pixel < CellPixels; ++pixel) {
+            buf[offset + pixel] = colour[paletteIndex + (chardef & 3)];
+            chardef >>>= 2;
         }
     }
 
