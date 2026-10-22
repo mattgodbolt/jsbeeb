@@ -53,6 +53,7 @@ describe("Display", () => {
 
     const paintedFrom = (frameSkipCount = 0, frameCount = 0) => ({
         frameCount,
+        fb32: new Uint32Array(FbWidth * 625),
         lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
         lineBaseOdd: 2,
@@ -78,9 +79,10 @@ describe("Display", () => {
 
     it("coalesces paints into one present per animation frame", () => {
         const display = make();
-        display.videoFb32.fill(7);
-        display.onPaint(paintedFrom(), 0, 10, FbWidth, 20);
-        display.onPaint(paintedFrom(), 0, 30, FbWidth, 40);
+        const painted = paintedFrom();
+        painted.fb32.fill(7);
+        display.onPaint(painted, 0, 10, FbWidth, 20);
+        display.onPaint(painted, 0, 30, FbWidth, 40);
         expect(fakeCanvas.paint).not.toHaveBeenCalled();
         expect(rafCallbacks).toHaveLength(1);
         presentAll();
@@ -148,13 +150,13 @@ describe("Display", () => {
 
     it("copies only the rows it is told to, pixels and line grid alike, and presents the whole extent", () => {
         const display = make();
-        display.videoFb32.fill(3);
         const earlier = paintedFrom();
+        earlier.fb32.fill(3);
         earlier.lineGrid = new Uint8Array(LineGridRows).fill(5);
         display.onPaint(earlier, 0, 10, FbWidth, 100);
         presentAll();
-        display.videoFb32.fill(7);
         const partial = paintedFrom();
+        partial.fb32.fill(7);
         partial.lineGrid = new Uint8Array(LineGridRows).fill(9);
         display.onPaint(partial, 0, 10, FbWidth, 100, 40);
         presentAll();
@@ -295,6 +297,7 @@ describe("Display", () => {
     it("copies the interlace bases and line grid as it is painted, for the presenter", () => {
         const display = make();
         const from = {
+            fb32: new Uint32Array(FbWidth * 625),
             lineGrid: new Uint8Array([1, 2, 3]),
             lineBaseEven: 5,
             lineBaseOdd: 6,

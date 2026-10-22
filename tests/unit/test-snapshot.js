@@ -8,8 +8,7 @@ import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { typedArrayToBase64 } from "../../src/state-utils.js";
 
 function makeCpu(config = {}) {
-    const fb32 = new Uint32Array(1024 * 768);
-    const video = new Video(false, fb32, () => {});
+    const video = new Video(false, 1024 * 768, () => {});
     const soundChip = new SoundChip(() => {});
     return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec(config) });
 }

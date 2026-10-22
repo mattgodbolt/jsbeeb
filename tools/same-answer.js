@@ -106,11 +106,15 @@ function stateParts(cpu, trace) {
  * Runs the named workload for Frames frames in browser-tick slices on the fast path, and hashes each part of
  * the state it ends in, with the sound events it sent on the way.
  * @param {string} name
+ * @param {"wasm"|"js"|undefined} drainKind the video drain to run, PreferredDrain when undefined
  * @returns {Promise<Record<string, string>>}
  */
-export async function workloadHashes(name) {
+export async function workloadHashes(name, drainKind) {
     const trace = { registers: [], cycles: [], soundEvents: [] };
-    const { cpu } = await benchmarkMachine(name, { onSoundEvent: (event) => trace.soundEvents.push(event) });
+    const { cpu } = await benchmarkMachine(name, {
+        drainKind,
+        onSoundEvent: (event) => trace.soundEvents.push(event),
+    });
     trace.soundEvents.length = 0;
     assertFastPath(cpu);
     const { cyclesPerSecond } = cpu.model;

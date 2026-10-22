@@ -68,11 +68,8 @@ export class MachineSession {
         this.modelName = modelName;
         this._opts = opts;
 
-        // Raw RGBA framebuffer. The Video chip renders into _fb32 (cleared each frame).
         // _completeFb8 is a snapshot taken at paint time (the equivalent of the browser canvas)
         // and is what screenshot() reads from, always a complete frame, never mid-render.
-        this._fb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
-        this._fb32 = new Uint32Array(this._fb8.buffer);
         this._completeFb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._lastPaint = { minx: 0, miny: 0, maxx: FB_WIDTH, maxy: FB_HEIGHT };
         this._frameDirty = false;
@@ -83,17 +80,19 @@ export class MachineSession {
         const modelObj = findModel(modelName);
         this._isAtom = modelObj.isAtom;
         this._keyboardBufferOffsets = modelObj.isMaster ? MasterKeyboardBufferOffsets : KeyboardBufferOffsets;
+        const session = this;
         this._video = new Video(
             modelObj.isMaster,
-            this._fb32,
-            (minx, miny, maxx, maxy) => {
-                this._lastPaint = { minx, miny, maxx, maxy };
-                this._frameDirty = true;
-                // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
+            FB_WIDTH * FB_HEIGHT,
+            function (minx, miny, maxx, maxy) {
+                session._lastPaint = { minx, miny, maxx, maxy };
+                session._frameDirty = true;
+                // Snapshot the complete frame now, before clearPaintBuffer() wipes it.
                 // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
-                this._completeFb8.set(this._fb8);
-                this._frameCount++;
-                if (this._frameCount >= this._stopAtFrame) this._machine.processor.stop();
+                const { fb32 } = this;
+                session._completeFb8.set(new Uint8Array(fb32.buffer, fb32.byteOffset, fb32.byteLength));
+                session._frameCount++;
+                if (session._frameCount >= session._stopAtFrame) session._machine.processor.stop();
             },
             { isAtom: modelObj.isAtom, hasVideoNula: opts.hasVideoNula },
         );
@@ -695,7 +694,7 @@ export class MachineSession {
      */
     async screenshot() {
         // Read from _completeFb8, the last fully-painted frame snapshotted in paint_ext.
-        // _fb8/_fb32 is the live render buffer (cleared and partially refilled each frame).
+        // The video's fb32 is the live render buffer (cleared and partially refilled each frame).
         const { default: sharp } = await import("sharp");
         return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
@@ -733,7 +732,7 @@ export class MachineSession {
 
     /** Free any resources (currently just clears the framebuffer) */
     destroy() {
-        this._fb8.fill(0);
+        this._video.fb32.fill(0);
         this._pendingOutput = [];
     }
 }

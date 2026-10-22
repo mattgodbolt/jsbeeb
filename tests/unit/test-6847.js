@@ -163,7 +163,7 @@ const SnowAddr = 0x8123;
 
 describe("Video6847 snapshot", () => {
     function makeAtomVideo(mode = LinesPerRowMode) {
-        const video = new Video(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom: true });
+        const video = new Video(false, FbWidth * FbHeight, () => {}, { isAtom: true });
         const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
         const vblanks = [];
         const cpu = { model: { clockMhz: 1 }, videoRead: (addr) => ram[addr & 0x1fff] };

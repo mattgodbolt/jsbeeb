@@ -25,6 +25,11 @@ const LightsBarViewports = [
 const Oswrch = 0xffee;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
+const OsScreenMode = 0x355;
+// A field's rows are cleared at the flyback after the next field's, so the MODE 7 field the mode changed in is gone
+// only after the frame count has gone up three times.
+const FramesToClearModeSeven = 3;
+const RgbBits = 0xffffff;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     const headerBar = async (width) => {
@@ -353,3 +358,28 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
         .poll(() => noted.filter((text) => text.startsWith("event noted: feature_used")))
         .toEqual([expect.stringContaining("action=missing"), expect.stringContaining("action=fitted")]);
 });
+
+for (const [wasm, drain] of [
+    ["on", "wasm"],
+    ["switched off", "js"],
+]) {
+    test(`with WebAssembly ${wasm}, the bitmap modes are drawn by the ${drain} drain`, async ({ beeb, page }) => {
+        if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
+        const logged = [];
+        page.on("console", (message) => logged.push(message.text()));
+        await beeb.open(`?autotype=${encodeURIComponent("MODE 1\n")}`);
+        await expect.poll(() => page.evaluate((at) => window.processor?.readmem(at), OsScreenMode)).toBe(1);
+        const modeSetFrame = await page.evaluate(() => window.processor.video.frameCount);
+        await expect
+            .poll(() => page.evaluate(() => window.processor.video.frameCount))
+            .toBeGreaterThanOrEqual(modeSetFrame + FramesToClearModeSeven);
+        expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
+        const drawnSoFar = (rgbBits) => {
+            const { video } = window.processor;
+            video.renderPending();
+            return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
+        };
+        await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
+        expect(logged.some((text) => text.includes("video drain falls back to JavaScript"))).toBe(drain === "js");
+    });
+}

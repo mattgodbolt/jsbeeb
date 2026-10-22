@@ -1,8 +1,16 @@
 import { Teletext } from "./teletext.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
-import { encodeLineGrid, texelsPerPixel, LineGridRows } from "./video-filters/pixel-grid.js";
+import { encodeLineGrid, texelsPerPixel } from "./video-filters/pixel-grid.js";
 import { makeFast32 } from "./binary.js";
+import {
+    CursorInvert,
+    PendingCursor,
+    PendingOffsetShift,
+    PendingRowBias,
+    PreferredDrain,
+    VideoDrain,
+} from "./video-drain.js";
 
 const noop = () => {};
 
@@ -19,19 +27,6 @@ export const OPAQUE_BLACK = 0xff000000;
 export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
-
-// A pending bitmap cell is one the beam has passed but the drain has not yet drawn: its video byte
-// under its framebuffer offset. A cursor record is the offset of a cell to invert. An odd field
-// starts at bitmapY -1, so the stored row is biased by one to keep the offset unsigned.
-const PendingRowBias = 1;
-const PendingOffsetShift = 8;
-const PendingOffsetMask = 0xfffff;
-const PendingByteMask = 0xff;
-const PendingCursor = 1 << 28;
-// Flyback drains, and a field records at most 313 lines (bitmapY below 625 in steps of two) of 128
-// cells and a few cursor inverts.
-const PendingCapacity = 1 << 16;
-const CursorInvert = 0x00ffffff;
 
 // How far off nominal (4433618.75 Hz) the subcarrier runs, as measured on Matt's
 // BBC Master 128. Exactly nominal, a 312-line frame advances the subcarrier by
@@ -373,97 +368,18 @@ function table4bppOffset(ulamode, byte) {
     return (ulamode << 12) | (byte << 4);
 }
 
-function invertCell(fb32, offset, pixelsPerChar, doubledLines) {
-    for (let i = 0; i < pixelsPerChar; ++i) fb32[offset + i] ^= CursorInvert;
-    if (doubledLines) {
-        for (let i = 1024; i < 1024 + pixelsPerChar; ++i) fb32[offset + i] ^= CursorInvert;
-    }
-}
-
-// A cell on the line above an odd field, whose right end spills onto row 0.
-function drawClippedCell(fb32, record, start, table4bpp, modeBase, palette, pixelsPerChar, doubledLines) {
-    const cursor = (record & PendingCursor) !== 0;
-    const source = modeBase | ((record & PendingByteMask) << 4);
-    for (let p = 0; p < pixelsPerChar; ++p) {
-        for (let at = start + p; at < start + p + (doubledLines ? 2048 : 1024); at += 1024) {
-            if (at < 0) continue;
-            fb32[at] = cursor ? fb32[at] ^ CursorInvert : palette[table4bpp[source + p]];
-        }
-    }
-}
-
-/**
- * Draws pending records into fb32, in order. Adjacent cells form a run, which is drawn on its
- * first row and copied to the second at once when lines are doubled.
- * @param {Int32Array} records
- * @param {number} count
- * @param {Uint32Array} fb32
- * @param {Uint8Array} lineGrid
- * @param {Uint8Array} table4bpp
- * @param {number} modeBase the table4bpp offset of byte 0 in the ULA mode
- * @param {Uint32Array} palette
- * @param {number} pixelsPerChar
- * @param {boolean} doubledLines
- * @param {number} lineGridValue
- */
-function renderPendingCells(
-    records,
-    count,
-    fb32,
-    lineGrid,
-    table4bpp,
-    modeBase,
-    palette,
-    pixelsPerChar,
-    doubledLines,
-    lineGridValue,
-) {
-    const rowMask = doubledLines ? ~1024 : ~0;
-    const biasedOrigin = PendingRowBias * 1024;
-    let i = 0;
-    while (i < count) {
-        let record = records[i];
-        const start = (((record >>> PendingOffsetShift) & PendingOffsetMask) - biasedOrigin) & rowMask;
-        if (start < 0) {
-            drawClippedCell(fb32, record, start, table4bpp, modeBase, palette, pixelsPerChar, doubledLines);
-            ++i;
-            continue;
-        }
-        if (record & PendingCursor) {
-            invertCell(fb32, start, pixelsPerChar, doubledLines);
-            ++i;
-            continue;
-        }
-        let end = start;
-        for (;;) {
-            const source = modeBase | ((record & PendingByteMask) << 4);
-            for (let p = 0; p < pixelsPerChar; ++p) fb32[end + p] = palette[table4bpp[source + p]];
-            end += pixelsPerChar;
-            if (++i === count) break;
-            const next = records[i];
-            if ((next >> PendingOffsetShift) - (record >> PendingOffsetShift) !== pixelsPerChar) break;
-            record = next;
-        }
-        const row = start >>> 10;
-        lineGrid[row] = lineGridValue;
-        if (doubledLines) {
-            lineGrid[row + 1] = lineGridValue;
-            fb32.copyWithin(start + 1024, start, end);
-        }
-    }
-}
-
 ////////////////////
 // The video class
 export class Video {
     constructor(
         isMaster,
-        fb32_param,
+        framebufferPixels,
         paint_ext_param,
-        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null } = {},
+        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, drainKind } = {},
     ) {
         this.isMaster = isMaster;
-        this.fb32 = makeFast32(fb32_param);
+        this.drain = new VideoDrain(framebufferPixels, drainKind ?? PreferredDrain);
+        this.fb32 = this.drain.fb32;
         this.collook = makeFast32(
             new Uint32Array([
                 0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
@@ -543,11 +459,11 @@ export class Video {
         // character cell renders, so a mode change between rows is recorded
         // faithfully. A row whose mode changes part way along keeps only the
         // last mode on it — enough for a raster split, not for a mid-line one.
-        this.lineGrid = new Uint8Array(LineGridRows);
+        this.lineGrid = this.drain.lineGrid;
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
-        this.pendingCells = new Int32Array(PendingCapacity);
+        this.pendingCells = this.drain.records;
         this.pendingCount = 0;
 
         this.topBorder = 12;
@@ -560,7 +476,7 @@ export class Video {
         this.debugPrevScreen = null;
 
         this.table4bpp = (() => {
-            const t = new Uint8Array(4 * 256 * 16);
+            const t = this.drain.table4bpp;
             let i, b, temp, left;
             for (b = 0; b < 256; ++b) {
                 temp = b;
@@ -868,14 +784,10 @@ export class Video {
         if (count === 0) return;
         this.pendingCount = 0;
         const doubledLines = this.doublesLines();
-        renderPendingCells(
-            this.pendingCells,
+        this.drain.palette.set(this.pixelColours());
+        this.drain.drain(
             count,
-            this.fb32,
-            this.lineGrid,
-            this.table4bpp,
             table4bppOffset(this.ulaMode, 0),
-            this.pixelColours(),
             this.pixelsPerChar,
             doubledLines,
             doubledLines ? this.lineGridUlaDoubled : this.lineGridUla,
