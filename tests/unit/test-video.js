@@ -274,14 +274,12 @@ describe("Video", () => {
         });
 
         // See https://github.com/mattgodbolt/jsbeeb/issues/546 and https://github.com/mattgodbolt/jsbeeb/issues/832
-        it("feeds the chip in a bitmap mode too, but shows none of its output", () => {
-            const emitted = vi.spyOn(video.teletext, "emit");
+        it("feeds the chip in a bitmap mode too", () => {
             video.ula.write(0, 0x00);
 
             video.polltime(1);
 
             expect(newestFed()).toBe(0x42);
-            expect(emitted).not.toHaveBeenCalled();
         });
 
         // IC37/IC36 force bit 6 high during H blanking, so the chip sees a graphics character, not a control code.
@@ -302,16 +300,22 @@ describe("Video", () => {
 
         // The "TTX trick": with the teletext bit set in a 2MHz mode the SAA5050 outputs black.
         it("draws black instead of characters with the teletext bit set at 2MHz", () => {
-            const emitted = vi.spyOn(video.teletext, "emit");
+            const WhiteGraphics = 0x17;
+            const SolidBlock = 0x7f;
+            const PipelineCells = 3;
+            const TwoMhzCellPixels = 8;
             video.ula.write(0, 0x12);
             video.regs[7] = 30; // keep vsync, and the flyback that clears the framebuffer, away from the cell
             fb.fill(0xffffffff);
 
+            cpu.data = WhiteGraphics;
             video.polltime(1);
+            cpu.data = SolidBlock;
+            video.polltime(PipelineCells + 1);
             video.renderPending();
 
-            expect(emitted).not.toHaveBeenCalled();
-            expect(fb[100 * FbWidth + video.bitmapX]).toBe(OPAQUE_BLACK);
+            const cell = fb.subarray(100 * FbWidth + video.bitmapX, 100 * FbWidth + video.bitmapX + TwoMhzCellPixels);
+            expect([...cell]).toEqual(Array(TwoMhzCellPixels).fill(OPAQUE_BLACK));
         });
 
         describe("a cell above an odd field", () => {

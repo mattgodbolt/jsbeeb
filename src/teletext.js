@@ -427,6 +427,9 @@ export class Teletext {
         const glyphRow = this.glyphRow();
         const doubleHeightGlyphRow = this.doubleHeightGlyphRow();
         const hideFlashing = this.hideFlashing;
+        const fb32 = this.fb32;
+        const lineGrid = this.lineGrid;
+        const colour = this.colour;
         let clocked = false;
         // Each clocked entry runs the byte fed PipelineLag entries before it, from the pipeline for the first few.
         for (let i = 0; i < length; ++i) {
@@ -434,8 +437,41 @@ export class Teletext {
             if (!(entry & ClockedEntry)) continue;
             clocked = true;
             this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
-            if (entry & ShownEntry) {
-                this.paintShown(entry, this.oldDbl ? doubleHeightGlyphRow : glyphRow, hideFlashing);
+            if (!(entry & ShownEntry)) continue;
+
+            const offset = entry >> OffsetShift;
+            const doubledLines = !!(entry & DoubledEntry);
+            const lineGridValue = doubledLines ? LineGridDoubled : LineGridSingle;
+            lineGrid[offset >> RowShift] = lineGridValue;
+            if (doubledLines) lineGrid[(offset >> RowShift) + 1] = lineGridValue;
+            let cellPixels = CellPixels;
+            if (entry & BlackEntry) {
+                cellPixels = BlackCellPixels;
+                fb32.fill(OPAQUE_BLACK, offset, offset + cellPixels);
+            } else {
+                // Two bits a pixel, indexing the cell's palette; none set shows only the background.
+                let pixels = 0;
+                if (!(
+                    this.cellConceal ||
+                    (this.cellFlash && hideFlashing) ||
+                    (this.secondHalfOfDouble && !this.line.dbl)
+                )) {
+                    pixels = this.curGlyphs[this.cellGlyphIndex + (this.oldDbl ? doubleHeightGlyphRow : glyphRow)];
+                }
+                const palette = this.cellPalette;
+                if (pixels === 0) {
+                    const background = colour[palette];
+                    for (let pixel = 0; pixel < CellPixels; ++pixel) fb32[offset + pixel] = background;
+                } else {
+                    for (let pixel = 0; pixel < CellPixels; ++pixel) {
+                        fb32[offset + pixel] = colour[palette + (pixels & 3)];
+                        pixels >>>= 2;
+                    }
+                }
+            }
+            if (doubledLines) {
+                const end = offset + cellPixels;
+                for (let pixel = offset; pixel < end; ++pixel) fb32[pixel + RowPixels] = fb32[pixel];
             }
         }
         this.feedLast(log, length);
@@ -448,27 +484,6 @@ export class Teletext {
             for (let i = 0; i < length; ++i) this.fetchData(log[i]);
         } else {
             for (let i = 0; i < PipelineLength; ++i) this.dataQueue[i] = log[length - PipelineLength + i] & DataBits;
-        }
-    }
-
-    paintShown(entry, glyphRow, hideFlashing) {
-        const fb32 = this.fb32;
-        const offset = entry >> OffsetShift;
-        const doubledLines = !!(entry & DoubledEntry);
-        const row = offset >> RowShift;
-        const lineGridValue = doubledLines ? LineGridDoubled : LineGridSingle;
-        this.lineGrid[row] = lineGridValue;
-        if (doubledLines) this.lineGrid[row + 1] = lineGridValue;
-        let pixels = CellPixels;
-        if (entry & BlackEntry) {
-            pixels = BlackCellPixels;
-            fb32.fill(OPAQUE_BLACK, offset, offset + pixels);
-        } else {
-            this.paintCell(fb32, offset, glyphRow, hideFlashing);
-        }
-        if (doubledLines) {
-            const end = offset + pixels;
-            for (let i = offset; i < end; ++i) fb32[i + RowPixels] = fb32[i];
         }
     }
 
@@ -647,37 +662,7 @@ export class Teletext {
         return (this.glyphRow() >>> 1) + (this.secondHalfOfDouble ? 10 : 0);
     }
 
-    /**
-     * Paint the cell most recently latched by `advance`. Everything else read here changes
-     * per scanline or per field, not per character.
-     */
-    emit(buf, offset) {
-        this.paintCell(buf, offset, this.glyphScanline(), this.hideFlashing);
-    }
-
-    // The latched cell, showing `glyphRow` of its glyph.
-    paintCell(buf, offset, glyphRow, hideFlashing) {
-        const colour = this.colour;
-        const paletteIndex = this.cellPalette;
-        if (this.cellConceal || (this.cellFlash && hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
-            const backgroundColour = colour[paletteIndex & 0xe0];
-            for (let pixel = 0; pixel < CellPixels; ++pixel) buf[offset + pixel] = backgroundColour;
-            return;
-        }
-        let chardef = this.curGlyphs[this.cellGlyphIndex + glyphRow];
-        // A pixel's colour index is two bits of the row on the cell's palette; with none set it is the background.
-        if (chardef === 0) {
-            const backgroundColour = colour[paletteIndex];
-            for (let pixel = 0; pixel < CellPixels; ++pixel) buf[offset + pixel] = backgroundColour;
-            return;
-        }
-        for (let pixel = 0; pixel < CellPixels; ++pixel) {
-            buf[offset + pixel] = colour[paletteIndex + (chardef & 3)];
-            chardef >>>= 2;
-        }
-    }
-
-    // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
+    // The second half of the latched cell, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
@@ -693,10 +678,5 @@ export class Teletext {
                 chardef >>>= 2;
             }
         }
-    }
-
-    render(buf, offset) {
-        this.advance();
-        this.emit(buf, offset);
     }
 }

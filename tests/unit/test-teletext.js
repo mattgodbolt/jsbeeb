@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Teletext } from "../../src/teletext.js";
 import { makeFast32 } from "../../src/binary.js";
+import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
+import { RowPixels } from "../../src/video-drain.js";
 import { seededRandom } from "../helpers/seeded-random.js";
 
 const PixelsPerCell = 16;
@@ -35,18 +37,25 @@ describe("Teletext", () => {
         teletext = new Teletext();
     });
 
+    // Clocks each byte through the chip, showing the cell it clocks when `shown(index)` says to, and paints the
+    // shown cells side by side.
+    function paintCells(bytes, shown) {
+        const buffer = makeFast32(new Uint32Array(bytes.length * PixelsPerCell));
+        teletext.setOutput(buffer, new Uint8Array(LineGridRows));
+        bytes.forEach((byte, index) => {
+            teletext.logClocked(byte);
+            if (shown(index)) teletext.showLatest(index * PixelsPerCell, false, false);
+        });
+        teletext.catchUp();
+        return (index) => buffer.subarray(index * PixelsPerCell, (index + 1) * PixelsPerCell);
+    }
+
     // A space is a blank mosaic in graphics mode, so it becomes the held character: tests that care
     // what is held at the end of a row must flush the pipeline with something else.
     function renderCells(bytes, flushWith = Space) {
         const padded = [...bytes, ...Array(PipelineDelay).fill(flushWith)];
-        const buffer = makeFast32(new Uint32Array(padded.length * PixelsPerCell));
-        padded.forEach((byte, index) => {
-            teletext.fetchData(byte);
-            teletext.render(buffer, index * PixelsPerCell);
-        });
-        return bytes.map((_, index) =>
-            buffer.subarray((index + PipelineDelay) * PixelsPerCell, (index + PipelineDelay + 1) * PixelsPerCell),
-        );
+        const cellAt = paintCells(padded, () => true);
+        return bytes.map((_, index) => cellAt(index + PipelineDelay));
     }
 
     function backgroundOnly(cell, backgroundIndex = 0) {
@@ -155,17 +164,12 @@ describe("Teletext", () => {
         // running either way, so codes seen while a bitmap mode is displayed still take effect.
         // See https://github.com/mattgodbolt/jsbeeb/issues/832
         it("applies a colour code clocked in while nothing was painted", () => {
-            const buffer = makeFast32(new Uint32Array(PixelsPerCell));
-            // The pipeline is three cells deep, so the code is consumed several advances after
-            // it is fetched, and every one of those happens with no call to emit.
+            // The pipeline is three cells deep, so the code is consumed several clocks after
+            // it is fetched, and none of those cells is shown.
             const bytes = [RedGraphics, SolidBlock, Space, Space, Space];
-            bytes.forEach((byte, index) => {
-                teletext.fetchData(byte);
-                teletext.advance();
-                if (index === bytes.length - 1) teletext.emit(buffer, 0);
-            });
+            const cellAt = paintCells(bytes, (index) => index === bytes.length - 1);
 
-            expect(solidOnly(buffer, Red)).toBe(true);
+            expect(solidOnly(cellAt(bytes.length - 1), Red)).toBe(true);
         });
     });
 
@@ -295,12 +299,7 @@ describe("Teletext", () => {
 
     it("shows a byte three cells after it is fetched", () => {
         const bytes = [WhiteGraphics, SolidBlock, Space, Space, Space];
-        const buffer = makeFast32(new Uint32Array(bytes.length * PixelsPerCell));
-        bytes.forEach((byte, index) => {
-            teletext.fetchData(byte);
-            teletext.render(buffer, index * PixelsPerCell);
-        });
-        const cellAt = (index) => buffer.subarray(index * PixelsPerCell, (index + 1) * PixelsPerCell);
+        const cellAt = paintCells(bytes, () => true);
 
         expect(backgroundOnly(cellAt(3))).toBe(true);
         expect(solidOnly(cellAt(4), White)).toBe(true);
@@ -400,6 +399,8 @@ describe("Teletext", () => {
         const NoResetChance = 0.1;
         const SnapshotChance = 0.01;
         const FrameChance = 0.03;
+        // An interlaced field's vsync ends half way along a line.
+        const MidLineFrameChance = 0.001;
         const MaxBlankingFeeds = 30;
         // Lines nothing reads, which the log skips, should be common: the bit turns on less readily than off.
         const TeletextOnChance = 0.005;
@@ -408,6 +409,14 @@ describe("Teletext", () => {
         const ShortBlankingChance = 0.5;
         const ShortBlankingFeeds = 3;
         const RestoreChance = 0.01;
+        const RepaintChance = 0.05;
+        const ReadChance = 0.01;
+        const BlackChance = 0.05;
+        const DoubledChance = 0.3;
+        // The line above an odd field, whose cells show only what spills past its end.
+        const RowAboveChance = 0.05;
+        const FbRows = 8;
+        const CellsPerRow = RowPixels / PixelsPerCell;
         const Bit7 = 0x80;
         const FedBit = 0x40;
         const Bytes = [
@@ -417,8 +426,9 @@ describe("Teletext", () => {
             Bit7 | DoubleHeight,
             Space,
             Mosaic,
-            LetterA,
             SolidBlock,
+            // Letters differ between a glyph's even and odd rows, so they show RA0 and the scanline counter.
+            ...Array.from({ length: 8 }, (_, letter) => LetterA + letter),
         ];
 
         function logLine(bytes) {
@@ -483,6 +493,15 @@ describe("Teletext", () => {
             const pick = (n) => Math.floor(random() * n);
             const eager = new Teletext();
             const logged = new Teletext();
+            const pictures = new Map();
+            for (const chip of [eager, logged]) {
+                const picture = {
+                    fb: makeFast32(new Uint32Array(FbRows * RowPixels)),
+                    lineGrid: new Uint8Array(LineGridRows),
+                };
+                chip.setOutput(picture.fb, picture.lineGrid);
+                pictures.set(chip, picture);
+            }
             const eagerCell = makeFast32(new Uint32Array(PixelsPerCell));
             const loggedCell = makeFast32(new Uint32Array(PixelsPerCell));
             const both = (action) => {
@@ -490,47 +509,63 @@ describe("Teletext", () => {
                 action(logged);
             };
             const expectSameSnapshot = () => expect(logged.snapshotState()).toEqual(eager.snapshotState());
+            const expectSamePicture = (line) => {
+                logged.catchUpShown();
+                const [want, got] = [eager, logged].map((chip) => pictures.get(chip));
+                const pixel = want.fb.findIndex((value, i) => value !== got.fb[i]);
+                if (pixel >= 0)
+                    expect({ line, pixel, value: got.fb[pixel] }).toEqual({ line, pixel, value: want.fb[pixel] });
+                expect(got.lineGrid).toEqual(want.lineGrid);
+            };
 
-            // As the video does: with the ULA's teletext bit set it runs the chip directly, catching up as the bit
-            // turns on, and paints it.
+            // As the video does: it logs every byte, and while the ULA's teletext bit is set shows the cell each
+            // clocked byte latches. Running each byte at once is catching up after every one.
             let teletextBit = false;
-            const feedClocked = (byte) => {
-                eager.fetchData(byte);
-                eager.advance();
-                if (teletextBit) {
-                    logged.fetchData(byte);
-                    logged.advance();
-                } else {
-                    logged.logClocked(byte);
-                }
+            let doubledLines = false;
+            let row = 0;
+            const feedClocked = (byte, cell) => {
+                const offset = row * RowPixels + (cell % CellsPerRow) * PixelsPerCell;
+                const black = random() < BlackChance;
+                both((chip) => {
+                    chip.logClocked(byte);
+                    if (teletextBit) chip.showLatest(offset, doubledLines, black);
+                });
+                eager.catchUp();
             };
             const feed = (byte) => {
-                eager.fetchData(byte);
-                if (teletextBit) logged.fetchData(byte);
-                else logged.logFed(byte);
+                both((chip) => chip.logFed(byte));
+                eager.catchUp();
             };
-            const paint = (line, cell) => {
-                const half = random() < 0.5 ? "emit" : "emitSecondHalf";
-                eager[half](eagerCell, 0);
-                logged[half](loggedCell, 0);
+            const repaintSecondHalf = (line, cell) => {
+                both((chip) => {
+                    chip.catchUp();
+                    chip.emitSecondHalf(chip === eager ? eagerCell : loggedCell, 0);
+                });
                 if (!eagerCell.every((pixel, i) => pixel === loggedCell[i])) {
                     expect({ line, cell, pixels: [...loggedCell] }).toEqual({ line, cell, pixels: [...eagerCell] });
                 }
             };
 
+            const newField = () => {
+                both((chip) => chip.setDEW(true));
+                both((chip) => chip.setDEW(false));
+            };
+
             for (let line = 0; line < Lines; ++line) {
                 const cells = random() < LongLineChance ? LongLineCells : 1 + pick(MaxCellsPerLine);
+                doubledLines = random() < DoubledChance;
+                row = random() < RowAboveChance ? -1 : 2 * pick(FbRows / 2);
                 both((chip) => chip.setDISPTMG(true));
                 for (let cell = 0; cell < cells; ++cell) {
-                    if (random() < (teletextBit ? TeletextOffChance : TeletextOnChance)) {
-                        if (!teletextBit) logged.catchUp();
-                        teletextBit = !teletextBit;
-                    }
-                    feedClocked(Bytes[pick(Bytes.length)]);
-                    if (teletextBit) paint(line, cell);
+                    if (random() < (teletextBit ? TeletextOffChance : TeletextOnChance)) teletextBit = !teletextBit;
+                    feedClocked(Bytes[pick(Bytes.length)], cell);
+                    if (random() < MidLineFrameChance) newField();
+                    if (random() < RepaintChance) repaintSecondHalf(line, cell);
+                    if (random() < ReadChance) expectSamePicture(line);
                     if (random() < SnapshotChance) expectSameSnapshot();
                     if (random() < RestoreChance) {
                         const state = eager.snapshotState();
+                        logged.catchUpShown();
                         both((chip) => chip.restoreState(structuredClone(state)));
                     }
                 }
@@ -538,13 +573,12 @@ describe("Teletext", () => {
                 if (random() < SnapshotChance * 10) expectSameSnapshot();
                 const ra0 = !!pick(2);
                 both((chip) => chip.setRA0(ra0));
-                if (random() < FrameChance) {
-                    both((chip) => chip.setDEW(true));
-                    both((chip) => chip.setDEW(false));
-                }
+                if (random() < FrameChance) newField();
                 const maxFeeds = random() < ShortBlankingChance ? ShortBlankingFeeds : MaxBlankingFeeds;
                 for (let feeds = pick(maxFeeds); feeds > 0; --feeds) feed(Bytes[pick(Bytes.length)] | FedBit);
+                if (random() < ReadChance * 10) expectSamePicture(line);
             }
+            expectSamePicture(Lines);
             expectSameSnapshot();
         });
     });
