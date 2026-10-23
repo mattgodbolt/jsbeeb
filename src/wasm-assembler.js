@@ -55,6 +55,7 @@ const Instructions = {
     "i32.ge_u": [[0x4f]],
     "i32.add": [[0x6a]],
     "i32.sub": [[0x6b]],
+    "i32.mul": [[0x6c]],
     "i32.and": [[0x71]],
     "i32.xor": [[0x73]],
     "i32.shl": [[0x74]],

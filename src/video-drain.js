@@ -115,7 +115,7 @@ export const TeletextDoubled = 0x400;
 export const TeletextOffsetShift = 11;
 export const TeletextCellWords = 2;
 const TeletextCellBytesShift = Math.log2(TeletextCellWords * WordBytes);
-const TeletextCellPixels = 16;
+export const TeletextCellPixels = 16;
 const TeletextBlackPixels = 8;
 const TeletextColours = 256;
 const VectorBytes = 16;
@@ -521,8 +521,7 @@ const PaintTeletextLocals = {
 
 // A teletext cell on the line above an odd field: offset is negative. As DrawClipped does for a bitmap cell, it draws
 // only the pixels at or after offset 0, one at a time, on the cell's row and the row below when lines are doubled.
-// It writes no line grid: a doubled cell there is on row -2, so neither of its rows is in the framebuffer. Pairs with
-// paintClippedTeletextCell.
+// It writes no line grid, since none of the cell's rows is in the framebuffer. Pairs with paintClippedTeletextCell.
 const PaintClippedTeletextCell = `
     i32.const ${TeletextCellPixels}
     local.set cellPixels                ;; cellPixels = 16
@@ -555,8 +554,8 @@ const PaintClippedTeletextCell = `
             i32.and                     ;; [the cell's palette index]
             local.get pixels
             local.get pixel
-            i32.const 1
-            i32.shl
+            i32.const ${GlyphPixelBits}
+            i32.mul
             i32.shr_u
             i32.const ${GlyphPixelMask}
             i32.and                     ;; [palette, the pixel's two bits]

@@ -4,6 +4,7 @@ import {
     PendingOffsetMask,
     PendingOffsetShift,
     RowPixels,
+    TeletextCellPixels,
     TeletextCellWords,
     TeletextOffsetShift,
 } from "../../src/video-drain.js";
@@ -30,7 +31,6 @@ function touchedSpan(records, count, length) {
 }
 
 // A teletext cell paints from its offset to a cell beyond it on the row below.
-const TeletextCellPixels = 16;
 const TeletextReachAfter = RowPixels + TeletextCellPixels;
 
 function teletextSpan(cells, count, length) {

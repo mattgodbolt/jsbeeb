@@ -359,6 +359,12 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
         .toEqual([expect.stringContaining("action=missing"), expect.stringContaining("action=fitted")]);
 });
 
+const drawnSoFar = (rgbBits) => {
+    const { video } = window.processor;
+    video.renderPending();
+    return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
+};
+
 for (const [wasm, drain] of [
     ["on", "wasm"],
     ["switched off", "js"],
@@ -374,11 +380,6 @@ for (const [wasm, drain] of [
             .poll(() => page.evaluate(() => window.processor.video.frameCount))
             .toBeGreaterThanOrEqual(modeSetFrame + FramesToClearModeSeven);
         expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
-        const drawnSoFar = (rgbBits) => {
-            const { video } = window.processor;
-            video.renderPending();
-            return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
-        };
         await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
         expect(logged.some((text) => text.includes("video drain falls back to JavaScript"))).toBe(drain === "js");
     });
@@ -391,11 +392,6 @@ for (const [wasm, drain] of [
         await beeb.open();
         await beeb.expectScreenText("BASIC");
         expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
-        const paintedSoFar = (rgbBits) => {
-            const { video } = window.processor;
-            video.renderPending();
-            return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
-        };
-        await expect.poll(() => page.evaluate(paintedSoFar, RgbBits)).toBe(true);
+        await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
     });
 }
