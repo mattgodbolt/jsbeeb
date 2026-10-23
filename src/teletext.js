@@ -432,7 +432,7 @@ export class Teletext {
         const lineGrid = this.lineGrid;
         const colour = this.colour;
         let clocked = false;
-        // Each clocked entry runs the byte fed PipelineLag entries before it, from the pipeline for the first few.
+        // The first few clocked entries run bytes still in the pipeline; see skipLine.
         for (let i = 0; i < length; ++i) {
             const entry = log[i];
             if (!(entry & ClockedEntry)) continue;
