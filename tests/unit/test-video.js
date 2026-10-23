@@ -313,7 +313,6 @@ describe("Video", () => {
             expect(fb[100 * FbWidth + 100]).toBe(OPAQUE_BLACK);
         });
 
-        // A cell at the right edge of the line above an odd field spills onto row 0, as a bitmap cell does.
         describe("a cell above an odd field", () => {
             const White = 0xffffffff;
             const WhiteGraphics = 0x17;
@@ -325,7 +324,7 @@ describe("Video", () => {
             // Paints a solid white graphics block with the beam at (x, y), over a white frame.
             const paintCell = (ulaControl, r8, x, y) => {
                 rig.writeCrtc(8, r8);
-                video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell under test
+                rig.writeCrtc(7, 30);
                 video.ula.write(0, ulaControl);
                 for (const byte of [WhiteGraphics, SolidBlock, SolidBlock, SolidBlock]) video.teletext.fetchData(byte);
                 video.teletext.advance();
