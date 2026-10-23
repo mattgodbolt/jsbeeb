@@ -440,15 +440,19 @@ export class Teletext {
             this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
             if (!(entry & ShownEntry)) continue;
 
-            const offset = entry >> OffsetShift;
             const doubledLines = !!(entry & DoubledEntry);
             const lineGridValue = doubledLines ? LineGridDoubled : LineGridSingle;
-            lineGrid[offset >> RowShift] = lineGridValue;
-            if (doubledLines) lineGrid[(offset >> RowShift) + 1] = lineGridValue;
+            const shownOffset = entry >> OffsetShift;
+            lineGrid[shownOffset >> RowShift] = lineGridValue;
+            if (doubledLines) lineGrid[(shownOffset >> RowShift) + 1] = lineGridValue;
+            // A cell on the line above an odd field has a negative offset; only its spill onto row 0 lands, and
+            // doubled, that comes from the row below rather than a copy of the row above the framebuffer.
+            const copyBelow = doubledLines && shownOffset >= 0;
+            const offset = doubledLines && !copyBelow ? shownOffset + RowPixels : shownOffset;
             let cellPixels = CellPixels;
             if (entry & BlackEntry) {
                 cellPixels = BlackCellPixels;
-                fb32.fill(OPAQUE_BLACK, offset, offset + cellPixels);
+                fb32.fill(OPAQUE_BLACK, Math.max(offset, 0), Math.max(offset + cellPixels, 0));
             } else {
                 // Two bits a pixel, indexing the cell's palette; none set shows only the background.
                 let pixels = 0;
@@ -470,7 +474,7 @@ export class Teletext {
                     }
                 }
             }
-            if (doubledLines) {
+            if (copyBelow) {
                 const end = offset + cellPixels;
                 for (let pixel = offset; pixel < end; ++pixel) fb32[pixel + RowPixels] = fb32[pixel];
             }

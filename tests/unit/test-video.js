@@ -327,15 +327,19 @@ describe("Video", () => {
 
             // Paints a solid white graphics block with the beam at (x, y), over a white frame.
             const paintCell = (ulaControl, r8, x, y) => {
+                const FeedTicks = 8;
                 rig.writeCrtc(8, r8);
                 rig.writeCrtc(7, 30);
                 video.ula.write(0, ulaControl);
-                for (const byte of [WhiteGraphics, SolidBlock, SolidBlock, SolidBlock]) video.teletext.fetchData(byte);
-                video.teletext.advance();
+                cpu.data = WhiteGraphics;
+                video.polltime(1);
                 cpu.data = SolidBlock;
+                video.polltime(FeedTicks);
+                video.renderPending();
                 fb.fill(White);
                 Object.assign(video, { bitmapX: x, bitmapY: y, oddClock: false });
                 video.polltime(1);
+                video.renderPending();
             };
             const pixelsAt = (offset, count) => Array.from(fb.subarray(offset, offset + count));
 
