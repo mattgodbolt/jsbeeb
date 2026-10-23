@@ -461,7 +461,7 @@ export class Video {
         // faithfully. A row whose mode changes part way along keeps only the
         // last mode on it — enough for a raster split, not for a mid-line one.
         this.lineGrid = this.drain.lineGrid;
-        this.teletext.setOutput(this.fb32, this.lineGrid);
+        this.teletext.setOutput(this.drain);
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();

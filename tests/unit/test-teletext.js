@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Teletext } from "../../src/teletext.js";
 import { makeFast32 } from "../../src/binary.js";
-import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
-import { RowPixels } from "../../src/video-drain.js";
+import { OPAQUE_BLACK, RowPixels, VideoDrain } from "../../src/video-drain.js";
 import { seededRandom } from "../helpers/seeded-random.js";
 
 const PixelsPerCell = 16;
@@ -30,7 +29,7 @@ const Red = 1;
 const Blue = 4;
 const White = 7;
 
-describe("Teletext", () => {
+describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) => {
     let teletext;
 
     beforeEach(() => {
@@ -40,14 +39,14 @@ describe("Teletext", () => {
     // Clocks each byte through the chip, showing the cell it clocks when `shown(index)` says to, and paints the
     // shown cells side by side.
     function paintCells(bytes, shown) {
-        const buffer = makeFast32(new Uint32Array(bytes.length * PixelsPerCell));
-        teletext.setOutput(buffer, new Uint8Array(LineGridRows));
+        const drain = new VideoDrain(bytes.length * PixelsPerCell, drainKind);
+        teletext.setOutput(drain);
         bytes.forEach((byte, index) => {
             teletext.logClocked(byte);
             if (shown(index)) teletext.showLatest(index * PixelsPerCell, false, false);
         });
         teletext.catchUp();
-        return (index) => buffer.subarray(index * PixelsPerCell, (index + 1) * PixelsPerCell);
+        return (index) => drain.fb32.subarray(index * PixelsPerCell, (index + 1) * PixelsPerCell);
     }
 
     // A space is a blank mosaic in graphics mode, so it becomes the held character: tests that care
@@ -377,6 +376,31 @@ describe("Teletext", () => {
         expect(blanked).toBe(16);
     });
 
+    // Doubling rounds the line above an odd field down to row -2.
+    it.each([
+        ["single", -1, false],
+        ["doubled", -2, true],
+    ])("paints only the spill onto row 0 of a cell above an odd field on %s rows", (_, row, doubled) => {
+        const Spill = 8;
+        const BlackSpill = 4;
+        const drain = new VideoDrain(RowPixels, drainKind);
+        teletext.setOutput(drain);
+        for (const byte of [WhiteGraphics, ...Array(PipelineDelay + 1).fill(SolidBlock)]) teletext.logClocked(byte);
+        teletext.showLatest(row * RowPixels + RowPixels - Spill, doubled, false);
+        teletext.catchUp();
+        expect(solidOnly(drain.fb32.subarray(0, Spill), White)).toBe(true);
+        expect(drain.fb32.subarray(Spill).every((pixel) => pixel === 0)).toBe(true);
+
+        const blackDrain = new VideoDrain(RowPixels, drainKind);
+        teletext.setOutput(blackDrain);
+        teletext.logClocked(SolidBlock);
+        teletext.showLatest(row * RowPixels + RowPixels - BlackSpill, doubled, true);
+        teletext.catchUp();
+        const pixels = Array.from(blackDrain.fb32, (pixel) => pixel >>> 0);
+        expect(pixels.slice(0, BlackSpill)).toEqual(Array(BlackSpill).fill(OPAQUE_BLACK));
+        expect(pixels.slice(BlackSpill).every((pixel) => pixel === 0)).toBe(true);
+    });
+
     it("continues identically from a restored snapshot", () => {
         const continuation = [SolidBlock, WhiteGraphics, SolidBlock, NewBackground, Space, SolidBlock];
         renderCells([BlueGraphics, Flash, SeparatedGraphics, SolidBlock, HoldGraphics, Conceal]);
@@ -494,13 +518,14 @@ describe("Teletext", () => {
             const eager = new Teletext();
             const logged = new Teletext();
             const pictures = new Map();
-            for (const chip of [eager, logged]) {
-                const picture = {
-                    fb: makeFast32(new Uint32Array(FbRows * RowPixels)),
-                    lineGrid: new Uint8Array(LineGridRows),
-                };
-                chip.setOutput(picture.fb, picture.lineGrid);
-                pictures.set(chip, picture);
+            // The eager chip paints with the JS twin, so the logged one checks this drain's painter against it.
+            for (const [chip, kind] of [
+                [eager, "js"],
+                [logged, drainKind],
+            ]) {
+                const drain = new VideoDrain(FbRows * RowPixels, kind);
+                chip.setOutput(drain);
+                pictures.set(chip, { fb: drain.fb32, lineGrid: drain.lineGrid });
             }
             const eagerCell = makeFast32(new Uint32Array(PixelsPerCell));
             const loggedCell = makeFast32(new Uint32Array(PixelsPerCell));
