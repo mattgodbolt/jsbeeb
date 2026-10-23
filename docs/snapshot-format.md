@@ -135,7 +135,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `videoCycles`         | number     | Video cycle accumulator                                                                                       |
 | `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
 | `ram`                 | Uint8Array | RAM contents (128KB, excludes ROMs)                                                                           |
-| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em.             |
+| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.         |
 | `swRamBanks`          | object     | _(Optional)_ Sideways RAM, keyed by bank number, each value a 16KB `Uint8Array` (see below)                   |
 
 `swRamBanks` holds every bank the model has as sideways RAM (banks 0-7 on a B, 4-7 on a Master, none on a stock B or an Atom). It is left out when `roms` already carries every bank. On restore each bank present overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots written before it was saved lack it, and absent means sideways RAM keeps its current contents, so it needed no format version bump.

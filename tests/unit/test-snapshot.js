@@ -227,9 +227,15 @@ describe("Snapshot coordinator", () => {
 
         it("saves only the banks the model has as sideways RAM", () => {
             const { swRamBanks } = createSnapshot(cpu, model).state;
-            const ramBanks = model.swram.flatMap((isRam, bank) => (isRam ? [String(bank)] : []));
 
-            expect(Object.keys(swRamBanks)).toEqual(ramBanks);
+            expect(Object.keys(swRamBanks)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"]);
+        });
+
+        it("leaves the banks out of a snapshot that carries every ROM bank", () => {
+            const state = cpu.snapshotState({ includeRoms: true });
+
+            expect(state.roms).toBeDefined();
+            expect(state.swRamBanks).toBeUndefined();
         });
 
         it("leaves sideways RAM as it is when restoring a snapshot from before it was saved", () => {
