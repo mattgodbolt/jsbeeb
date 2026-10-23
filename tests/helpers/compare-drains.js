@@ -1,4 +1,11 @@
-import { jsDrain, PendingOffsetMask, PendingOffsetShift } from "../../src/video-drain.js";
+import {
+    jsDrain,
+    jsPaintTeletext,
+    PendingOffsetMask,
+    PendingOffsetShift,
+    RowPixels,
+    TeletextOffsetShift,
+} from "../../src/video-drain.js";
 
 // A record draws from up to two rows above its biased offset (one for the bias, one for doubling's rounding) to a
 // wide cell beyond it.
@@ -21,31 +28,63 @@ function touchedSpan(records, count, length) {
     return [Math.max(0, lowest - RecordReachBefore), Math.min(length, highest + RecordReachAfter)];
 }
 
+// A teletext cell paints from its offset to a wide cell beyond it on the row below.
+const TeletextReachAfter = RowPixels + 16;
+
+function teletextSpan(cells, count, length) {
+    let lowest = Infinity;
+    let highest = -Infinity;
+    for (let i = 0; i < count; ++i) {
+        const offset = cells[2 * i + 1] >> TeletextOffsetShift;
+        lowest = Math.min(lowest, offset);
+        highest = Math.max(highest, offset);
+    }
+    return [Math.max(0, lowest), Math.min(length, highest + TeletextReachAfter)];
+}
+
 /**
  * Has every drain of `videoDrain` compare its framebuffer and line grid with jsDrain's, over the part of the
- * framebuffer the records reach.
+ * framebuffer the records reach, and every teletext paint likewise with jsPaintTeletext's.
  * @param {import("../../src/video-drain.js").VideoDrain} videoDrain
  * @returns {{drains: number, differences: string[]}} how many drains ran, and a description of each that differed
  */
 export function checkDrainsAgainstJs(videoDrain) {
     const checked = { drains: 0, differences: [] };
-    const { fb32, lineGrid, records, table4bpp, palette } = videoDrain;
+    const { fb32, lineGrid, records, table4bpp, palette, teletextCells, teletextColour } = videoDrain;
     const drainUnderTest = videoDrain.drain;
-    const expected = { records, fb32: new Int32Array(fb32.length), lineGrid: lineGrid.slice(), table4bpp, palette };
+    const paintUnderTest = videoDrain.paintTeletext;
+    const expected = {
+        records,
+        fb32: new Int32Array(fb32.length),
+        lineGrid: lineGrid.slice(),
+        table4bpp,
+        palette,
+        teletextCells,
+        teletextColour,
+    };
+    const compare = (what, count, start, end) => {
+        const pixel = firstDifference(expected.fb32, fb32, start, end);
+        const row = firstDifference(expected.lineGrid, lineGrid, 0, lineGrid.length);
+        if (pixel >= 0 || row >= 0) {
+            checked.differences.push(`${what} ${checked.drains} of ${count}: pixel ${pixel}, line grid row ${row}`);
+        }
+        ++checked.drains;
+    };
     videoDrain.drain = (count, modeBase, pixelsPerChar, doubledLines, lineGridValue) => {
         const [start, end] = touchedSpan(records, count, fb32.length);
         expected.fb32.set(fb32.subarray(start, end), start);
         expected.lineGrid.set(lineGrid);
         jsDrain(expected, count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
         drainUnderTest(count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
-        const pixel = firstDifference(expected.fb32, fb32, start, end);
-        const row = firstDifference(expected.lineGrid, lineGrid, 0, lineGrid.length);
-        if (pixel >= 0 || row >= 0) {
-            checked.differences.push(
-                `drain ${checked.drains} of ${count} records: pixel ${pixel}, line grid row ${row}`,
-            );
-        }
-        ++checked.drains;
+        compare("drain", count, start, end);
+    };
+    videoDrain.paintTeletext = (count) => {
+        const [start, end] = teletextSpan(teletextCells, count, fb32.length);
+        expected.fb32.set(fb32.subarray(start, end), start);
+        expected.lineGrid.set(lineGrid);
+        jsPaintTeletext(expected, count);
+        paintUnderTest(count);
+        compare("teletext paint", count, start, end);
     };
     return checked;
 }

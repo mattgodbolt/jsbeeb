@@ -1,24 +1,16 @@
 import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
-import { encodeLineGrid } from "./video-filters/pixel-grid.js";
-import { OPAQUE_BLACK, RowPixels, RowShift } from "./video-drain.js";
+import { TeletextBlack, TeletextCellCapacity, TeletextDoubled, TeletextOffsetShift } from "./video-drain.js";
 
 // A line that ends logs at most 256 entries, one per character clock; this bounds the log when no DISPTMG
-// falling edge ends a line, as while R8 disables the display.
-const LogCapacity = 1024;
+// falling edge ends a line, as while R8 disables the display. Every entry can be a cell to paint.
+const LogCapacity = TeletextCellCapacity;
 const DataBits = 0x7f;
 const ClockedEntry = 0x80;
 const ShownEntry = 0x100;
-const BlackEntry = 0x200;
-const DoubledEntry = 0x400;
-// A shown entry's framebuffer offset, signed: the line above an odd field is a negative row.
-const OffsetShift = 11;
-const CellPixels = 16;
-const BlackCellPixels = 8;
-// MODE 7 is one texel per pixel: the chip paints each of its 16 texels a cell, at the framebuffer's own resolution.
-const LineGridSingle = encodeLineGrid(1, false);
-const LineGridDoubled = encodeLineGrid(1, true);
+// A shown entry is a painted cell's second word (see video-drain.js) once its low byte holds the palette index.
+const EntryLowByte = 0xff;
 const DoubleHeight = 13;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
@@ -65,8 +57,7 @@ export class Teletext {
         this.log = new Int32Array(LogCapacity);
         this.logLength = 0;
         this.logShows = false;
-        this.fb32 = new Int32Array(0);
-        this.lineGrid = new Uint8Array(0);
+        this.output = null;
         // The cell `clockCharacter` latches outlives the line reset, and a snapshot saves part of it. So the last
         // line skipped by `skipLine` is kept with the state it started from, until a clocked byte replaces
         // that cell.
@@ -385,10 +376,14 @@ export class Teletext {
         this.log[this.logLength++] = data & DataBits;
     }
 
-    /** The framebuffer and line grid that shown cells are painted into. */
-    setOutput(fb32, lineGrid) {
-        this.fb32 = fb32;
-        this.lineGrid = lineGrid;
+    /**
+     * Paints shown cells with `drain`, from now on in its teletextColour, which takes on the colours so far.
+     * @param {import("./video-drain.js").VideoDrain} drain
+     */
+    setOutput(drain) {
+        drain.teletextColour.set(this.colour);
+        this.colour = drain.teletextColour;
+        this.output = drain;
     }
 
     /**
@@ -399,7 +394,10 @@ export class Teletext {
      */
     showLatest(offset, doubledLines, black) {
         this.log[this.logLength - 1] |=
-            (offset << OffsetShift) | ShownEntry | (doubledLines ? DoubledEntry : 0) | (black ? BlackEntry : 0);
+            (offset << TeletextOffsetShift) |
+            ShownEntry |
+            (doubledLines ? TeletextDoubled : 0) |
+            (black ? TeletextBlack : 0);
         this.logShows = true;
     }
 
@@ -428,9 +426,8 @@ export class Teletext {
         const glyphRow = this.glyphRow();
         const doubleHeightGlyphRow = this.doubleHeightGlyphRow();
         const hideFlashing = this.hideFlashing;
-        const fb32 = this.fb32;
-        const lineGrid = this.lineGrid;
-        const colour = this.colour;
+        const cells = this.output?.teletextCells;
+        let cellWords = 0;
         let clocked = false;
         // The first few clocked entries run bytes still in the pipeline; see skipLine.
         for (let i = 0; i < length; ++i) {
@@ -440,45 +437,20 @@ export class Teletext {
             this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
             if (!(entry & ShownEntry)) continue;
 
-            const doubledLines = !!(entry & DoubledEntry);
-            const lineGridValue = doubledLines ? LineGridDoubled : LineGridSingle;
-            const shownOffset = entry >> OffsetShift;
-            lineGrid[shownOffset >> RowShift] = lineGridValue;
-            if (doubledLines) lineGrid[(shownOffset >> RowShift) + 1] = lineGridValue;
-            // A cell on the line above an odd field has a negative offset; only its spill onto row 0 lands, and
-            // doubled, that comes from the row below rather than a copy of the row above the framebuffer.
-            const copyBelow = doubledLines && shownOffset >= 0;
-            const offset = doubledLines && !copyBelow ? shownOffset + RowPixels : shownOffset;
-            let cellPixels = CellPixels;
-            if (entry & BlackEntry) {
-                cellPixels = BlackCellPixels;
-                fb32.fill(OPAQUE_BLACK, Math.max(offset, 0), Math.max(offset + cellPixels, 0));
-            } else {
-                // Two bits a pixel, indexing the cell's palette; none set shows only the background.
-                let pixels = 0;
-                if (!(
-                    this.cellConceal ||
-                    (this.cellFlash && hideFlashing) ||
-                    (this.secondHalfOfDouble && !this.line.dbl)
-                )) {
-                    pixels = this.curGlyphs[this.cellGlyphIndex + (this.oldDbl ? doubleHeightGlyphRow : glyphRow)];
-                }
-                const palette = this.cellPalette;
-                if (pixels === 0) {
-                    const background = colour[palette];
-                    for (let pixel = 0; pixel < CellPixels; ++pixel) fb32[offset + pixel] = background;
-                } else {
-                    for (let pixel = 0; pixel < CellPixels; ++pixel) {
-                        fb32[offset + pixel] = colour[palette + (pixels & 3)];
-                        pixels >>>= 2;
-                    }
-                }
+            // Two bits a pixel, indexing the cell's palette; none set shows only the background.
+            let pixels = 0;
+            if (!(
+                entry & TeletextBlack ||
+                this.cellConceal ||
+                (this.cellFlash && hideFlashing) ||
+                (this.secondHalfOfDouble && !this.line.dbl)
+            )) {
+                pixels = this.curGlyphs[this.cellGlyphIndex + (this.oldDbl ? doubleHeightGlyphRow : glyphRow)];
             }
-            if (copyBelow) {
-                const end = offset + cellPixels;
-                for (let pixel = offset; pixel < end; ++pixel) fb32[pixel + RowPixels] = fb32[pixel];
-            }
+            cells[cellWords++] = pixels;
+            cells[cellWords++] = (entry & ~EntryLowByte) | this.cellPalette;
         }
+        if (cellWords) this.output.paintTeletext(cellWords >> 1);
         this.feedLast(log, length);
         return clocked;
     }
