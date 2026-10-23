@@ -843,19 +843,21 @@ function paintClippedTeletextCell({ fb32, lineGrid, teletextColour }, pixels, in
     }
 }
 
-function paintBlackCell({ fb32 }, offset, doubled) {
-    for (let pixel = 0; pixel < TeletextBlackPixels; ++pixel) {
-        fb32[offset + pixel] = OPAQUE_BLACK;
-        if (doubled) fb32[offset + RowPixels + pixel] = OPAQUE_BLACK;
+function paintBlackCell(fb32, offset, doubled) {
+    const end = offset + (doubled ? RowPixels : 0) + TeletextBlackPixels;
+    for (let row = offset; row < end; row += RowPixels) {
+        for (let pixel = 0; pixel < TeletextBlackPixels; ++pixel) fb32[row + pixel] = OPAQUE_BLACK;
     }
 }
 
-function paintTeletextCell({ fb32, teletextColour }, pixels, info, offset, doubled) {
+function paintTeletextCell(fb32, teletextColour, pixels, info, offset, doubled) {
     const palette = info & TeletextPaletteMask;
     for (let pixel = 0; pixel < TeletextCellPixels; ++pixel) {
-        const colour = teletextColour[palette + ((pixels >>> (pixel * GlyphPixelBits)) & GlyphPixelMask)];
-        fb32[offset + pixel] = colour;
-        if (doubled) fb32[offset + RowPixels + pixel] = colour;
+        fb32[offset + pixel] = teletextColour[palette + (pixels & GlyphPixelMask)];
+        pixels >>>= GlyphPixelBits;
+    }
+    if (doubled) {
+        for (let pixel = offset; pixel < offset + TeletextCellPixels; ++pixel) fb32[pixel + RowPixels] = fb32[pixel];
     }
 }
 
@@ -865,7 +867,7 @@ function paintTeletextCell({ fb32, teletextColour }, pixels, info, offset, doubl
  * @param {number} count
  */
 export function jsPaintTeletext(views, count) {
-    const { teletextCells, lineGrid } = views;
+    const { teletextCells, teletextColour, fb32, lineGrid } = views;
     for (let i = 0; i < count; ++i) {
         const pixels = teletextCells[TeletextCellWords * i];
         const info = teletextCells[TeletextCellWords * i + 1];
@@ -883,10 +885,10 @@ export function jsPaintTeletext(views, count) {
             lineGrid[row] = LineGridTeletext;
         }
         if (info & TeletextBlack) {
-            paintBlackCell(views, offset, doubled);
+            paintBlackCell(fb32, offset, doubled);
             continue;
         }
-        paintTeletextCell(views, pixels, info, offset, doubled);
+        paintTeletextCell(fb32, teletextColour, pixels, info, offset, doubled);
     }
 }
 
