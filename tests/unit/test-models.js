@@ -14,7 +14,7 @@ describe("Model", () => {
         }
     });
 
-    it("gives the Atom no sideways RAM, so its snapshots carry none", () => {
+    it("gives the Atom no sideways RAM", () => {
         for (const model of allModels.filter(({ isAtom }) => isAtom)) {
             expect(
                 model.swram.some((isRam) => isRam),

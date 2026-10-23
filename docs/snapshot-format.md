@@ -545,4 +545,4 @@ The parasite's NMI does not. The ULA latches its request rather than presenting 
 
 - **No tape position** — tape playback position is not saved.
 - **BeebEm UEF co-processor state is not imported** — BeebEm records a tube type in its `EmuState` chunk, but jsbeeb does not read it, so a UEF save state taken with a second processor imports as host-only.
-- **ROMs not saved** (in jsbeeb-native snapshots) — ROMs are loaded from files and don't change at runtime. Imported b-em snapshots include ROMs in the optional `roms` field.
+- **ROMs not saved** (in jsbeeb-native snapshots) — ROMs are loaded from files and don't change at runtime. Sideways RAM is saved, in `swRamBanks`. Imported b-em snapshots and shared session joins include ROMs in the optional `roms` field.
