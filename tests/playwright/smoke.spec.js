@@ -382,4 +382,20 @@ for (const [wasm, drain] of [
         await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
         expect(logged.some((text) => text.includes("video drain falls back to JavaScript"))).toBe(drain === "js");
     });
+
+    test(`with WebAssembly ${wasm}, the MODE 7 boot screen is painted by the ${drain} drain`, async ({
+        beeb,
+        page,
+    }) => {
+        if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
+        await beeb.open();
+        await beeb.expectScreenText("BASIC");
+        expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
+        const paintedSoFar = (rgbBits) => {
+            const { video } = window.processor;
+            video.renderPending();
+            return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
+        };
+        await expect.poll(() => page.evaluate(paintedSoFar, RgbBits)).toBe(true);
+    });
 }
