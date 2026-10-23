@@ -31,21 +31,6 @@ class LineState {
         this.conceal = false;
         this.dbl = false;
     }
-
-    copyFrom(other) {
-        this.col = other.col;
-        this.bg = other.bg;
-        this.sep = other.sep;
-        this.dbl = other.dbl;
-        this.gfx = other.gfx;
-        this.conceal = other.conceal;
-        this.flash = other.flash;
-        this.holdChar = other.holdChar;
-        this.heldChar = other.heldChar;
-        this.nextGlyphs = other.nextGlyphs;
-        this.heldGlyphs = other.heldGlyphs;
-        this.wasDbl = other.wasDbl;
-    }
 }
 
 export class Teletext {
@@ -423,7 +408,7 @@ export class Teletext {
         for (let i = length - 1; i >= 0 && !anyClocked; --i) anyClocked = !!(log[i] & ClockedEntry);
         if (anyClocked) {
             this.skippedQueue.set(queue);
-            this.skippedLine.copyFrom(this.line);
+            Object.assign(this.skippedLine, this.line);
             this.log = this.skippedLog;
             this.skippedLog = log;
             this.skippedLogLength = length;
