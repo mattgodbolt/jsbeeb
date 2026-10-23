@@ -606,7 +606,7 @@ describe("Video", () => {
                 for (let paint = 0; paint < FramesCompared; ++paint) {
                     expect(differingPixels(lazy.paints[paint].fb, eager.paints[paint].fb)).toBe(0);
                 }
-                expect(lazy.checked.drains).toBeGreaterThan(0);
+                expect(lazy.checked.teletextPaints).toBeGreaterThan(0);
                 expect(lazy.checked.differences).toEqual([]);
 
                 while (lazy.video.vertCounter !== NulaRow || lazy.video.horizCounter !== NulaColumn + 4) lazy.step();

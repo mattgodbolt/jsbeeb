@@ -71,10 +71,11 @@
 //                  bit 9: the TTX trick's black cell, 8 black pixels, ignoring the glyph row and palette
 //                  bit 10: lines are doubled, so paint the row below as well
 //                  bits 11 to 31: the framebuffer offset, signed: the line above an odd field is a negative row
+//                  bit 8, the log's shown bit, is set and ignored
 //
 // The teletext painter, for each cell in order:
 // 1. A negative offset is a cell on the line above an odd field; only what spills onto row 0 is painted, pixel by
-//    pixel (paintClippedTeletextCell), as for a bitmap cell.
+//    pixel and with no line grid (paintClippedTeletextCell), as for a bitmap cell.
 // 2. Otherwise the cell's row, and the row below when lines are doubled, are marked in the line grid.
 // 3. A black cell is two stores of four black pixels (paintBlackCell).
 // 4. Otherwise one 128-bit load fetches the cell's four colours from teletext colour. For each byte of the glyph row,
@@ -112,15 +113,19 @@ export const TeletextPaletteMask = 0xff;
 export const TeletextBlack = 0x200;
 export const TeletextDoubled = 0x400;
 export const TeletextOffsetShift = 11;
-const TeletextCellWords = 2;
-const TeletextCellBytesShift = 3;
+export const TeletextCellWords = 2;
+const TeletextCellBytesShift = Math.log2(TeletextCellWords * WordBytes);
 const TeletextCellPixels = 16;
 const TeletextBlackPixels = 8;
 const TeletextColours = 256;
-const TeletextLaneBytes = 256 * 16;
+const VectorBytes = 16;
 const GlyphPixelBits = 2;
 const GlyphPixelMask = 3;
+const GlyphRowByteBits = 8;
 const GlyphRowByteMask = 0xff;
+const PixelsPerGlyphRowByte = GlyphRowByteBits / GlyphPixelBits;
+const TeletextLaneShift = Math.log2(VectorBytes);
+const TeletextLaneBytes = (GlyphRowByteMask + 1) << TeletextLaneShift;
 // MODE 7 is one texel per pixel: the chip paints each of its 16 texels a cell, at the framebuffer's own resolution.
 const LineGridTeletext = encodeLineGrid(1, false);
 const LineGridTeletextDoubled = encodeLineGrid(1, true);
@@ -516,25 +521,9 @@ const PaintTeletextLocals = {
 
 // A teletext cell on the line above an odd field: offset is negative. As DrawClipped does for a bitmap cell, it draws
 // only the pixels at or after offset 0, one at a time, on the cell's row and the row below when lines are doubled.
-// Of the line grid it writes only the row below, and only when that is row 0. Pairs with paintClippedTeletextCell.
+// It writes no line grid: a doubled cell there is on row -2, so neither of its rows is in the framebuffer. Pairs with
+// paintClippedTeletextCell.
 const PaintClippedTeletextCell = `
-    local.get offset
-    i32.const ${RowShift}
-    i32.shr_s
-    i32.const 1
-    i32.add
-    local.set row                       ;; row = the row below the cell's, signed
-    local.get doubled
-    if                                  ;; lines are doubled: the row below is the cell's too
-        local.get row
-        i32.const 0
-        i32.ge_s
-        if                              ;; and it is inside the framebuffer
-            local.get row
-            i32.const ${LineGridTeletextDoubled}
-            i32.store8 offset=${LineGridOffset}   ;; lineGrid[row] = LineGridTeletextDoubled
-        end
-    end
     i32.const ${TeletextCellPixels}
     local.set cellPixels                ;; cellPixels = 16
     local.get info
@@ -620,7 +609,7 @@ function storeTeletextPixels(vectors) {
                 (vector, index) => `
         local.get address
         local.get ${vector}
-        v128.store offset=${FramebufferOffset + rowOffset + 16 * index}`,
+        v128.store offset=${FramebufferOffset + rowOffset + VectorBytes * index}`,
             )
             .join("");
     return `${stores(0)}
@@ -643,11 +632,11 @@ function fourTeletextPixels(byte) {
     return `
         local.get cellColours                   ;; [the cell's four colours]
         local.get pixels
-        i32.const ${8 * byte}
+        i32.const ${GlyphRowByteBits * byte}
         i32.shr_u
         i32.const ${GlyphRowByteMask}
         i32.and                                 ;; [colours, byte ${byte} of the glyph row]
-        i32.const ${TableRowShift}
+        i32.const ${TeletextLaneShift}
         i32.shl
         v128.load offset=${TeletextLanesOffset} ;; [colours, the byte's lane pattern]
         i8x16.swizzle                           ;; four RGBA pixels
@@ -824,9 +813,7 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
     }
 }
 
-function paintClippedTeletextCell({ fb32, lineGrid, teletextColour }, pixels, info, offset, doubled) {
-    const row = (offset >> RowShift) + 1;
-    if (doubled && row >= 0) lineGrid[row] = LineGridTeletextDoubled;
+function paintClippedTeletextCell({ fb32, teletextColour }, pixels, info, offset, doubled) {
     const cellPixels = info & TeletextBlack ? TeletextBlackPixels : TeletextCellPixels;
     const span = doubled ? 2 * RowPixels : RowPixels;
     for (let pixel = 0; pixel < cellPixels; ++pixel) {
@@ -845,8 +832,8 @@ function paintClippedTeletextCell({ fb32, lineGrid, teletextColour }, pixels, in
 
 function paintBlackCell(fb32, offset, doubled) {
     const end = offset + (doubled ? RowPixels : 0) + TeletextBlackPixels;
-    for (let row = offset; row < end; row += RowPixels) {
-        for (let pixel = 0; pixel < TeletextBlackPixels; ++pixel) fb32[row + pixel] = OPAQUE_BLACK;
+    for (let rowStart = offset; rowStart < end; rowStart += RowPixels) {
+        for (let pixel = 0; pixel < TeletextBlackPixels; ++pixel) fb32[rowStart + pixel] = OPAQUE_BLACK;
     }
 }
 
@@ -895,19 +882,19 @@ export function jsPaintTeletext(views, count) {
 // For each byte of a glyph row, four two-bit pixels, the lanes that pick each pixel's RGBA bytes out of a vector of
 // its cell's four colours.
 function fillTeletextLanes(lanes) {
-    for (let byte = 0; byte < lanes.length >> TableRowShift; ++byte) {
-        for (let pixel = 0; pixel < 4; ++pixel) {
+    for (let byte = 0; byte < lanes.length >> TeletextLaneShift; ++byte) {
+        for (let pixel = 0; pixel < PixelsPerGlyphRowByte; ++pixel) {
             const colourByte = ((byte >>> (pixel * GlyphPixelBits)) & GlyphPixelMask) << WordShift;
             for (let channel = 0; channel < WordBytes; ++channel)
-                lanes[(byte << TableRowShift) + pixel * WordBytes + channel] = colourByte + channel;
+                lanes[(byte << TeletextLaneShift) + pixel * WordBytes + channel] = colourByte + channel;
         }
     }
 }
 
 /**
- * The memory the bitmap renderer works in, holding the framebuffer, the line grid, the pending records,
- * table4bpp and the palette, and the drain that draws the records. The memory never grows, so views
- * of it stay valid.
+ * The memory the bitmap and teletext renderers work in, holding the framebuffer, the line grid, the pending
+ * records, table4bpp, the palette and the SAA5050's colours, cells and lanes, with the drain that draws the records
+ * and the painter that paints the cells. The memory never grows, so views of it stay valid.
  */
 export class VideoDrain {
     /**

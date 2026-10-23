@@ -518,8 +518,12 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             const eager = new Teletext();
             const logged = new Teletext();
             const pictures = new Map();
-            for (const chip of [eager, logged]) {
-                const drain = new VideoDrain(FbRows * RowPixels, drainKind);
+            // The eager chip paints with the JS twin, so the logged one checks this drain's painter against it.
+            for (const [chip, kind] of [
+                [eager, "js"],
+                [logged, drainKind],
+            ]) {
+                const drain = new VideoDrain(FbRows * RowPixels, kind);
                 chip.setOutput(drain);
                 pictures.set(chip, { fb: drain.fb32, lineGrid: drain.lineGrid });
             }

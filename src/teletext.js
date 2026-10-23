@@ -1,7 +1,13 @@
 import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
-import { TeletextBlack, TeletextCellCapacity, TeletextDoubled, TeletextOffsetShift } from "./video-drain.js";
+import {
+    TeletextBlack,
+    TeletextCellCapacity,
+    TeletextDoubled,
+    TeletextOffsetShift,
+    TeletextPaletteMask,
+} from "./video-drain.js";
 
 // A line that ends logs at most 256 entries, one per character clock; this bounds the log when no DISPTMG
 // falling edge ends a line, as while R8 disables the display. Every entry can be a cell to paint.
@@ -9,8 +15,6 @@ const LogCapacity = TeletextCellCapacity;
 const DataBits = 0x7f;
 const ClockedEntry = 0x80;
 const ShownEntry = 0x100;
-// A shown entry is a painted cell's second word (see video-drain.js) once its low byte holds the palette index.
-const EntryLowByte = 0xff;
 const DoubleHeight = 13;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
@@ -448,7 +452,8 @@ export class Teletext {
                 pixels = this.curGlyphs[this.cellGlyphIndex + (this.oldDbl ? doubleHeightGlyphRow : glyphRow)];
             }
             cells[cellWords++] = pixels;
-            cells[cellWords++] = (entry & ~EntryLowByte) | this.cellPalette;
+            // A shown entry is a painted cell's second word (see video-drain.js) once its low byte holds the palette.
+            cells[cellWords++] = (entry & ~TeletextPaletteMask) | this.cellPalette;
         }
         if (cellWords) this.output.paintTeletext(cellWords >> 1);
         this.feedLast(log, length);
