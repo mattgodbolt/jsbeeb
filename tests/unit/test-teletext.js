@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Teletext } from "../../src/teletext.js";
 import { makeFast32 } from "../../src/binary.js";
-import { RowPixels, VideoDrain } from "../../src/video-drain.js";
+import { OPAQUE_BLACK, RowPixels, VideoDrain } from "../../src/video-drain.js";
 import { seededRandom } from "../helpers/seeded-random.js";
 
 const PixelsPerCell = 16;
@@ -374,6 +374,31 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         }
 
         expect(blanked).toBe(16);
+    });
+
+    // Doubling rounds the line above an odd field down to row -2.
+    it.each([
+        ["single", -1, false],
+        ["doubled", -2, true],
+    ])("paints only the spill onto row 0 of a cell above an odd field on %s rows", (_, row, doubled) => {
+        const Spill = 8;
+        const BlackSpill = 4;
+        const drain = new VideoDrain(RowPixels, drainKind);
+        teletext.setOutput(drain);
+        for (const byte of [WhiteGraphics, ...Array(PipelineDelay + 1).fill(SolidBlock)]) teletext.logClocked(byte);
+        teletext.showLatest(row * RowPixels + RowPixels - Spill, doubled, false);
+        teletext.catchUp();
+        expect(solidOnly(drain.fb32.subarray(0, Spill), White)).toBe(true);
+        expect(drain.fb32.subarray(Spill).every((pixel) => pixel === 0)).toBe(true);
+
+        const blackDrain = new VideoDrain(RowPixels, drainKind);
+        teletext.setOutput(blackDrain);
+        teletext.logClocked(SolidBlock);
+        teletext.showLatest(row * RowPixels + RowPixels - BlackSpill, doubled, true);
+        teletext.catchUp();
+        const pixels = Array.from(blackDrain.fb32, (pixel) => pixel >>> 0);
+        expect(pixels.slice(0, BlackSpill)).toEqual(Array(BlackSpill).fill(OPAQUE_BLACK));
+        expect(pixels.slice(BlackSpill).every((pixel) => pixel === 0)).toBe(true);
     });
 
     it("continues identically from a restored snapshot", () => {
