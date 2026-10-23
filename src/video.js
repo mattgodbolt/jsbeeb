@@ -840,6 +840,21 @@ export class Video {
         return ((this.bitmapY + PendingRowBias) * 1024 + this.bitmapX) << PendingOffsetShift;
     }
 
+    // A cell on the line above an odd field has a negative offset; only its spill onto row 0 lands.
+    paintTeletextCell(offset) {
+        if (this.halfClock) {
+            // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
+            this.teletext.emit(this.fb32, offset);
+        } else {
+            // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
+            // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
+            // at ABUG 2026-03-13; the mechanism is not established, as the
+            // Model B ULA has no connection to the SAA5050 at all.
+            // See https://github.com/mattgodbolt/jsbeeb/issues/546
+            this.fb32.fill(OPAQUE_BLACK, Math.max(offset, 0), Math.max(offset + this.pixelsPerChar, 0));
+        }
+    }
+
     beamOffset() {
         const bitmapRow = this.doublesLines() ? this.bitmapY & ~1 : this.bitmapY;
         return bitmapRow * 1024 + this.bitmapX;
@@ -1226,21 +1241,16 @@ export class Video {
                             } else {
                                 this.lineGrid[bitmapRow] = this.lineGridUla;
                             }
-                            if (this.halfClock) {
-                                // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
-                                this.teletext.emit(this.fb32, offset);
-                            } else {
-                                // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
-                                // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
-                                // at ABUG 2026-03-13; the mechanism is not established, as the
-                                // Model B ULA has no connection to the SAA5050 at all.
-                                // See https://github.com/mattgodbolt/jsbeeb/issues/546
-                                this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
-                            }
+                            this.paintTeletextCell(offset);
                             if (doubledLines) {
-                                const fb32 = this.fb32;
-                                const end = offset + this.pixelsPerChar;
-                                for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
+                                if (offset < 0) {
+                                    // The row to copy from is above the framebuffer.
+                                    this.paintTeletextCell(offset + 1024);
+                                } else {
+                                    const fb32 = this.fb32;
+                                    const end = offset + this.pixelsPerChar;
+                                    for (let i = offset; i < end; ++i) fb32[i + 1024] = fb32[i];
+                                }
                             }
                         } else {
                             this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
