@@ -18,7 +18,7 @@ class LineState {
         this.reset(glyphs);
     }
 
-    // A DISPTMG falling edge resets all of it but `wasDbl`, whether a double height code reached the pipeline's head.
+    // A DISPTMG falling edge; `setDISPTMG` clears `wasDbl` itself, once the row end has read it.
     reset(glyphs) {
         this.col = 7;
         this.bg = 0;
