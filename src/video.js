@@ -765,13 +765,10 @@ export class Video {
      * Recompute the ULA-dependent half of the line grid descriptor: everything
      * except whether this particular scanline was doubled. Called whenever the
      * ULA control register changes, so the render loop only has to store it.
-     *
-     * MODE 7 counts as one texel per pixel: the SAA5050 emulation writes each
-     * of its 16 texels per character individually, so its output is already at
-     * the framebuffer's own resolution.
+     * Teletext cells carry their own, from the SAA5050.
      */
     updateLineGridUla() {
-        const texelsWide = this.teletextMode ? 1 : texelsPerPixel(this.ulaMode);
+        const texelsWide = texelsPerPixel(this.ulaMode);
         this.lineGridUla = encodeLineGrid(texelsWide, false);
         this.lineGridUlaDoubled = encodeLineGrid(texelsWide, true);
     }
@@ -1239,8 +1236,8 @@ export class Video {
             // On real hardware IC37/IC36 operates regardless of ULA mode —
             // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
             // Hardware also clocks the chip here, which we do not: our row reset fires
-            // too early relative to the pipeline for that to come out right, and adding
-            // `advance()` alone moves three of the hardware reference pages. See
+            // too early relative to the pipeline for that to come out right, and clocking
+            // it here alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
             if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
                 this.teletext.logFed(this.readVideoMem() | 0x40);

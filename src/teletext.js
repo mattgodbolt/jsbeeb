@@ -12,17 +12,18 @@ const ClockedEntry = 0x80;
 const ShownEntry = 0x100;
 const BlackEntry = 0x200;
 const DoubledEntry = 0x400;
-// A shown entry's framebuffer offset, signed: the line above an odd field is row -1.
+// A shown entry's framebuffer offset, signed: the line above an odd field is a negative row.
 const OffsetShift = 11;
 const CellPixels = 16;
 const BlackCellPixels = 8;
+// MODE 7 is one texel per pixel: the chip paints each of its 16 texels a cell, at the framebuffer's own resolution.
 const LineGridSingle = encodeLineGrid(1, false);
 const LineGridDoubled = encodeLineGrid(1, true);
 const DoubleHeight = 13;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
 
-// What `advance` reads or changes besides the pipeline and the cell it latches.
+// What `clockCharacter` reads or changes besides the pipeline and the cell it latches.
 class LineState {
     constructor(glyphs) {
         this.wasDbl = false;
@@ -66,7 +67,7 @@ export class Teletext {
         this.logShows = false;
         this.fb32 = new Int32Array(0);
         this.lineGrid = new Uint8Array(0);
-        // The cell `advance` latches outlives the line reset, and a snapshot saves part of it. So the last
+        // The cell `clockCharacter` latches outlives the line reset, and a snapshot saves part of it. So the last
         // line skipped by `skipLine` is kept with the state it started from, until a clocked byte replaces
         // that cell.
         this.skippedLog = new Int32Array(LogCapacity);
@@ -372,7 +373,7 @@ export class Teletext {
         this.dataQueue[3] = data & DataBits;
     }
 
-    /** Feeds `data` and clocks the chip, as `fetchData` then `advance` do, by the time anything reads the chip. */
+    /** Feeds `data` and clocks the chip with the byte leaving the pipeline, by the time anything reads the chip. */
     logClocked(data) {
         if (this.logLength === LogCapacity) this.catchUp();
         this.log[this.logLength++] = data | ClockedEntry;
@@ -404,8 +405,8 @@ export class Teletext {
 
     /**
      * Runs everything logged, so the chip is as if each byte had been run as it arrived, and paints the cells it
-     * shows. Painting the chip, or running it directly with `fetchData` and `advance`, must come after this once
-     * anything has been logged.
+     * shows. Painting the chip, or feeding it directly with `fetchData`, must come after this once anything has been
+     * logged.
      */
     catchUp() {
         const length = this.logLength;
@@ -606,14 +607,6 @@ export class Teletext {
         // normal scanline and a calculated smoothing scanline.
         this.catchUpShown();
         this.levelRA0 = level;
-    }
-
-    /**
-     * Clock one character through the chip: take the oldest byte in the pipeline, apply it
-     * to the character state, and latch how the resulting cell should look.
-     */
-    advance() {
-        this.clockCharacter(this.dataQueue[0]);
     }
 
     /** Applies `data`, as the byte leaving the pipeline, to the character state and latches the cell it shows. */

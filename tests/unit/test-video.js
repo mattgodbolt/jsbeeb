@@ -183,7 +183,6 @@ describe("Video", () => {
             [0x14, 4],
             [0x18, 2],
             [0x1c, 1],
-            [0x02, 1],
         ])("gives display filters the texels per pixel %#x selects", (value, texelsWide) => {
             video.ula.write(0, value);
             expect(decodeLineGrid(video.lineGridUla).texelsWide).toBe(texelsWide);
@@ -469,6 +468,7 @@ describe("Video", () => {
             runUntilPaints(rig, PaintsToRun);
             const white = teletextColour(rig, WhiteForeground);
             const paint = rig.paints.at(-1);
+            expect(coloursOnRow(paint, BitmapRow).has(white)).toBe(false);
             expect(coloursOnRow(paint, BitmapRow + 1).has(white)).toBe(nextRowShown);
             expect(coloursOnRow(paint, BitmapRow + 2).has(white)).toBe(true);
         });

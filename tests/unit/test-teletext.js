@@ -481,8 +481,8 @@ describe("Teletext", () => {
             const logged = new Teletext();
             for (let cell = 0; cell < LongLineCells; ++cell) {
                 const byte = Bytes[Math.floor(random() * Bytes.length)];
-                eager.fetchData(byte);
-                eager.advance();
+                eager.logClocked(byte);
+                eager.catchUp();
                 logged.logClocked(byte);
             }
             expect(logged.snapshotState()).toEqual(eager.snapshotState());
