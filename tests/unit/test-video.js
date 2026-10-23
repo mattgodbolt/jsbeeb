@@ -312,6 +312,52 @@ describe("Video", () => {
             expect(emitted).not.toHaveBeenCalled();
             expect(fb[100 * FbWidth + 100]).toBe(OPAQUE_BLACK);
         });
+
+        describe("a cell above an odd field", () => {
+            const White = 0xffffffff;
+            const WhiteGraphics = 0x17;
+            const SolidBlock = 0x7f;
+            const Teletext = 0x02;
+            const TeletextAt2MHz = 0x12;
+            const Spill = 8;
+
+            // Paints a solid white graphics block with the beam at (x, y), over a white frame.
+            const paintCell = (ulaControl, r8, x, y) => {
+                rig.writeCrtc(8, r8);
+                rig.writeCrtc(7, 30);
+                video.ula.write(0, ulaControl);
+                for (const byte of [WhiteGraphics, SolidBlock, SolidBlock, SolidBlock]) video.teletext.fetchData(byte);
+                video.teletext.advance();
+                cpu.data = SolidBlock;
+                fb.fill(White);
+                Object.assign(video, { bitmapX: x, bitmapY: y, oddClock: false });
+                video.polltime(1);
+            };
+            const pixelsAt = (offset, count) => Array.from(fb.subarray(offset, offset + count));
+
+            it.each([
+                ["single", 3],
+                ["doubled", 0],
+            ])("paints the spill on %s rows", (_, r8) => {
+                paintCell(Teletext, r8, 100, 100);
+                const glyph = pixelsAt(100 * FbWidth + 108, Spill);
+                expect(glyph).not.toContain(White);
+
+                paintCell(Teletext, r8, 1008, -1);
+                expect(pixelsAt(0, Spill)).toEqual(glyph);
+                expect(fb[Spill]).toBe(White);
+            });
+
+            it.each([
+                ["single", 3],
+                ["doubled", 0],
+            ])("blackens only the spill with the teletext bit set at 2MHz on %s rows", (_, r8) => {
+                const HalfSpill = Spill / 2;
+                paintCell(TeletextAt2MHz, r8, 1012, -1);
+                expect(pixelsAt(0, HalfSpill)).toEqual(Array(HalfSpill).fill(OPAQUE_BLACK));
+                expect(fb.subarray(HalfSpill).every((pixel) => pixel === White)).toBe(true);
+            });
+        });
     });
 
     // See Video.repaintSecondHalfOfCell.
