@@ -69,7 +69,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 
 Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc or touchscreen state (`state.fdc` and `state.touchScreen` will be absent).
 
-B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
+B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots include only the sideways RAM banks they saved, in `swRamBanks`.
 
 ### Model compatibility
 
@@ -136,6 +136,9 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
 | `ram`                 | Uint8Array | RAM contents (128KB, excludes ROMs)                                                                           |
 | `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em.             |
+| `swRamBanks`          | object     | _(Optional)_ Sideways RAM, keyed by bank number, each value a 16KB `Uint8Array` (see below)                   |
+
+`swRamBanks` holds every bank the model has as sideways RAM (banks 0-7 on a B, 4-7 on a Master, none on a stock B or an Atom). It is left out when `roms` already carries every bank. On restore each bank present overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots written before it was saved lack it, and absent means sideways RAM keeps its current contents, so it needed no format version bump.
 
 **Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
 

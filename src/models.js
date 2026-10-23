@@ -120,7 +120,7 @@ function atomModel({ name, synonyms, os, banks }) {
         isMaster: false,
         clockMhz: 1,
         isAtom: true,
-        swram: beebSwram,
+        swram: noSwram,
         fdc: NoiseAwareIntelFdc,
         banks,
     });

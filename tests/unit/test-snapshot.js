@@ -201,6 +201,48 @@ describe("Snapshot coordinator", () => {
         });
     });
 
+    describe("sideways RAM", () => {
+        const SidewaysRamBank = 4;
+
+        function writeBank(machine, bank, value) {
+            machine.romSelect(bank);
+            machine.writemem(0x8000, value);
+            machine.writemem(0xbfff, value);
+        }
+
+        function readBank(machine, bank) {
+            machine.romSelect(bank);
+            return [machine.readmem(0x8000), machine.readmem(0xbfff)];
+        }
+
+        it("puts back what a sideways RAM bank held when the snapshot was taken", () => {
+            writeBank(cpu, SidewaysRamBank, 0x5a);
+            const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(cpu, model)));
+            writeBank(cpu, SidewaysRamBank, 0xa5);
+
+            restoreSnapshot(cpu, model, snapshot);
+
+            expect(readBank(cpu, SidewaysRamBank)).toEqual([0x5a, 0x5a]);
+        });
+
+        it("saves only the banks the model has as sideways RAM", () => {
+            const { swRamBanks } = createSnapshot(cpu, model).state;
+            const ramBanks = model.swram.flatMap((isRam, bank) => (isRam ? [String(bank)] : []));
+
+            expect(Object.keys(swRamBanks)).toEqual(ramBanks);
+        });
+
+        it("leaves sideways RAM as it is when restoring a snapshot from before it was saved", () => {
+            const snapshot = createSnapshot(cpu, model);
+            delete snapshot.state.swRamBanks;
+            writeBank(cpu, SidewaysRamBank, 0xa5);
+
+            restoreSnapshot(cpu, model, snapshot);
+
+            expect(readBank(cpu, SidewaysRamBank)).toEqual([0xa5, 0xa5]);
+        });
+    });
+
     describe("co-processor", () => {
         it("records that no co-processor was fitted", () => {
             expect(createSnapshot(cpu, model).coProcessor).toBe(false);

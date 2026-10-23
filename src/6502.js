@@ -20,6 +20,7 @@ function _set(byte, mask, set) {
 }
 
 const UnpeekableDevice = 0xff;
+const RomBankBytes = 16384;
 
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
@@ -1374,10 +1375,9 @@ export class Cpu6502 extends Base6502 {
             peripheralCycles: this.peripheralCycles,
             videoCycles: this.videoCycles,
             music5000PageSel: this.music5000PageSel,
-            // RAM only by default; pass includeRoms:true to also capture
-            // sideways ROM/RAM slots (adds ~256KB to the snapshot).
             ram: this.ramRomOs.slice(0, this.romOffset),
-            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * 16384) : undefined,
+            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * RomBankBytes) : undefined,
+            swRamBanks: includeRoms ? undefined : this.sidewaysRamBanks(),
             // Sub-component state
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
@@ -1391,6 +1391,15 @@ export class Cpu6502 extends Base6502 {
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
+    }
+
+    sidewaysRamBanks() {
+        const banks = {};
+        this.model.swram.forEach((isRam, bank) => {
+            const start = this.romOffset + bank * RomBankBytes;
+            if (isRam) banks[bank] = this.ramRomOs.slice(start, start + RomBankBytes);
+        });
+        return banks;
     }
 
     restoreState(state) {
@@ -1414,15 +1423,12 @@ export class Cpu6502 extends Base6502 {
 
         // 3. Memory
         this.ramRomOs.set(state.ram);
-        // Load ROMs if present (e.g. from BEM snapshot import)
         if (state.roms) {
-            this.ramRomOs.set(state.roms.slice(0, 16 * 16384), this.romOffset);
+            this.ramRomOs.set(state.roms.slice(0, 16 * RomBankBytes), this.romOffset);
         }
-        // Selectively overwrite individual sideways RAM banks (e.g. from BeebEm UEF import)
-        // without touching ROM banks that jsbeeb has already loaded.
         if (state.swRamBanks) {
             for (const [bank, data] of Object.entries(state.swRamBanks)) {
-                this.ramRomOs.set(data.slice(0, 16384), this.romOffset + Number(bank) * 16384);
+                this.ramRomOs.set(data.slice(0, RomBankBytes), this.romOffset + Number(bank) * RomBankBytes);
             }
         }
         this.videoDisplayPage = state.videoDisplayPage;
