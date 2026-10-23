@@ -1,17 +1,29 @@
 import { makeChars } from "./teletext_data.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 import { makeFast32 } from "./binary.js";
+import { encodeLineGrid } from "./video-filters/pixel-grid.js";
+import { OPAQUE_BLACK, RowPixels, RowShift } from "./video-drain.js";
 
 // A line that ends logs at most 256 entries, one per character clock; this bounds the log when no DISPTMG
 // falling edge ends a line, as while R8 disables the display.
 const LogCapacity = 1024;
-const ClockedEntry = 0x80;
 const DataBits = 0x7f;
+const ClockedEntry = 0x80;
+const ShownEntry = 0x100;
+const BlackEntry = 0x200;
+const DoubledEntry = 0x400;
+// A shown entry's framebuffer offset, signed: the line above an odd field is a negative row.
+const OffsetShift = 11;
+const CellPixels = 16;
+const BlackCellPixels = 8;
+// MODE 7 is one texel per pixel: the chip paints each of its 16 texels a cell, at the framebuffer's own resolution.
+const LineGridSingle = encodeLineGrid(1, false);
+const LineGridDoubled = encodeLineGrid(1, true);
 const DoubleHeight = 13;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
 
-// What `advance` reads or changes besides the pipeline and the cell it latches.
+// What `clockCharacter` reads or changes besides the pipeline and the cell it latches.
 class LineState {
     constructor(glyphs) {
         this.wasDbl = false;
@@ -48,13 +60,17 @@ export class Teletext {
         this.levelDISPTMG = false;
         this.levelRA0 = false;
 
-        // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked.
-        this.log = new Uint8Array(LogCapacity);
+        // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked, and the cells to paint
+        // where the clocked byte is shown.
+        this.log = new Int32Array(LogCapacity);
         this.logLength = 0;
-        // The cell `advance` latches outlives the line reset, and a snapshot saves part of it. So the last
+        this.logShows = false;
+        this.fb32 = new Int32Array(0);
+        this.lineGrid = new Uint8Array(0);
+        // The cell `clockCharacter` latches outlives the line reset, and a snapshot saves part of it. So the last
         // line skipped by `skipLine` is kept with the state it started from, until a clocked byte replaces
         // that cell.
-        this.skippedLog = new Uint8Array(LogCapacity);
+        this.skippedLog = new Int32Array(LogCapacity);
         this.skippedLogLength = 0;
         this.skippedQueue = new Uint8Array(PipelineLength);
 
@@ -247,6 +263,7 @@ export class Teletext {
         this.levelDISPTMG = state.levelDISPTMG;
         this.levelRA0 = state.levelRA0;
         this.logLength = 0;
+        this.logShows = false;
         this.skippedLogLength = 0;
 
         const glyphMap = {
@@ -356,7 +373,7 @@ export class Teletext {
         this.dataQueue[3] = data & DataBits;
     }
 
-    /** Feeds `data` and clocks the chip, as `fetchData` then `advance` do, by the time anything reads the chip. */
+    /** Feeds `data` and clocks the chip with the byte leaving the pipeline, by the time anything reads the chip. */
     logClocked(data) {
         if (this.logLength === LogCapacity) this.catchUp();
         this.log[this.logLength++] = data | ClockedEntry;
@@ -368,29 +385,111 @@ export class Teletext {
         this.log[this.logLength++] = data & DataBits;
     }
 
+    /** The framebuffer and line grid that shown cells are painted into. */
+    setOutput(fb32, lineGrid) {
+        this.fb32 = fb32;
+        this.lineGrid = lineGrid;
+    }
+
     /**
-     * Runs everything logged, so the chip is as if each byte had been run as it arrived. Painting the chip, or
-     * running it directly with `fetchData` and `advance`, must come after this once anything has been logged.
+     * Shows the cell the byte logged last clocks at `offset` in the framebuffer, painted when the log runs.
+     * @param {number} offset
+     * @param {boolean} doubledLines also paint the row below
+     * @param {boolean} black show black, as the "TTX trick" does, rather than the chip's output
+     */
+    showLatest(offset, doubledLines, black) {
+        this.log[this.logLength - 1] |=
+            (offset << OffsetShift) | ShownEntry | (doubledLines ? DoubledEntry : 0) | (black ? BlackEntry : 0);
+        this.logShows = true;
+    }
+
+    /**
+     * Runs everything logged, so the chip is as if each byte had been run as it arrived, and paints the cells it
+     * shows. Painting the chip, or feeding it directly with `fetchData`, must come after this once anything has been
+     * logged.
      */
     catchUp() {
         const length = this.logLength;
         this.logLength = 0;
+        this.logShows = false;
         if (this.replayLog(this.log, length)) this.skippedLogLength = 0;
         this.replaySkippedLine();
     }
 
+    /** Runs the log if it holds a cell to paint: before anything that changes how one paints, or reads the picture. */
+    catchUpShown() {
+        if (this.logShows) this.catchUp();
+    }
+
     // Returns whether any entry clocked the chip.
     replayLog(log, length) {
+        const queue = this.dataQueue;
+        // Everything a shown cell reads besides the cell catches the log up before it changes.
+        const glyphRow = this.glyphRow();
+        const doubleHeightGlyphRow = this.doubleHeightGlyphRow();
+        const hideFlashing = this.hideFlashing;
+        const fb32 = this.fb32;
+        const lineGrid = this.lineGrid;
+        const colour = this.colour;
         let clocked = false;
+        // The first few clocked entries run bytes still in the pipeline; see skipLine.
         for (let i = 0; i < length; ++i) {
             const entry = log[i];
-            this.fetchData(entry);
-            if (entry & ClockedEntry) {
-                this.advance();
-                clocked = true;
+            if (!(entry & ClockedEntry)) continue;
+            clocked = true;
+            this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
+            if (!(entry & ShownEntry)) continue;
+
+            const doubledLines = !!(entry & DoubledEntry);
+            const lineGridValue = doubledLines ? LineGridDoubled : LineGridSingle;
+            const shownOffset = entry >> OffsetShift;
+            lineGrid[shownOffset >> RowShift] = lineGridValue;
+            if (doubledLines) lineGrid[(shownOffset >> RowShift) + 1] = lineGridValue;
+            // A cell on the line above an odd field has a negative offset; only its spill onto row 0 lands, and
+            // doubled, that comes from the row below rather than a copy of the row above the framebuffer.
+            const copyBelow = doubledLines && shownOffset >= 0;
+            const offset = doubledLines && !copyBelow ? shownOffset + RowPixels : shownOffset;
+            let cellPixels = CellPixels;
+            if (entry & BlackEntry) {
+                cellPixels = BlackCellPixels;
+                fb32.fill(OPAQUE_BLACK, Math.max(offset, 0), Math.max(offset + cellPixels, 0));
+            } else {
+                // Two bits a pixel, indexing the cell's palette; none set shows only the background.
+                let pixels = 0;
+                if (!(
+                    this.cellConceal ||
+                    (this.cellFlash && hideFlashing) ||
+                    (this.secondHalfOfDouble && !this.line.dbl)
+                )) {
+                    pixels = this.curGlyphs[this.cellGlyphIndex + (this.oldDbl ? doubleHeightGlyphRow : glyphRow)];
+                }
+                const palette = this.cellPalette;
+                if (pixels === 0) {
+                    const background = colour[palette];
+                    for (let pixel = 0; pixel < CellPixels; ++pixel) fb32[offset + pixel] = background;
+                } else {
+                    for (let pixel = 0; pixel < CellPixels; ++pixel) {
+                        fb32[offset + pixel] = colour[palette + (pixels & 3)];
+                        pixels >>>= 2;
+                    }
+                }
+            }
+            if (copyBelow) {
+                const end = offset + cellPixels;
+                for (let pixel = offset; pixel < end; ++pixel) fb32[pixel + RowPixels] = fb32[pixel];
             }
         }
+        this.feedLast(log, length);
         return clocked;
+    }
+
+    // Leaves the pipeline as feeding the log's entries would.
+    feedLast(log, length) {
+        if (length < PipelineLength) {
+            for (let i = 0; i < length; ++i) this.fetchData(log[i]);
+        } else {
+            for (let i = 0; i < PipelineLength; ++i) this.dataQueue[i] = log[length - PipelineLength + i] & DataBits;
+        }
     }
 
     /**
@@ -425,11 +524,7 @@ export class Teletext {
             }
         }
 
-        if (length < PipelineLength) {
-            for (let i = 0; i < length; ++i) this.fetchData(log[i]);
-        } else {
-            for (let i = 0; i < PipelineLength; ++i) queue[i] = log[length - PipelineLength + i] & DataBits;
-        }
+        this.feedLast(log, length);
     }
 
     // Recovers the cell latched by the last line `skipLine` passed over, leaving everything else as it is.
@@ -459,6 +554,7 @@ export class Teletext {
             return;
         }
 
+        this.catchUpShown();
         this.scanlineCounter = 0;
         this.secondHalfOfDouble = false;
 
@@ -487,7 +583,11 @@ export class Teletext {
             return;
         }
 
-        this.skipLine();
+        if (this.logShows) {
+            this.catchUp();
+        } else {
+            this.skipLine();
+        }
         this.line.reset(this.normalGlyphs);
 
         this.scanlineCounter++;
@@ -509,17 +609,13 @@ export class Teletext {
         // The SAA5050 input pin "CRS" is connected to the 6845 output pin
         // "RA0", via a signal inverter, and it is used to select between a
         // normal scanline and a calculated smoothing scanline.
+        this.catchUpShown();
         this.levelRA0 = level;
     }
 
-    /**
-     * Clock one character through the chip: take the oldest byte in the pipeline, apply it
-     * to the character state, and latch how the resulting cell should look.
-     */
-    advance() {
+    /** Applies `data`, as the byte leaving the pipeline, to the character state and latches the cell it shows. */
+    clockCharacter(data) {
         const line = this.line;
-        let data = this.dataQueue[0];
-
         this.oldDbl = line.dbl;
 
         this.prevCol = line.col;
@@ -552,44 +648,18 @@ export class Teletext {
     }
 
     glyphScanline() {
-        let scanline = this.scanlineCounter << 1;
-        if (this.levelRA0) {
-            scanline++;
-        }
-
-        if (this.oldDbl) {
-            scanline = scanline >>> 1;
-            if (this.secondHalfOfDouble) {
-                scanline += 10;
-            }
-        }
-        return scanline;
+        return this.oldDbl ? this.doubleHeightGlyphRow() : this.glyphRow();
     }
 
-    /**
-     * Paint the cell most recently latched by `advance`. Everything else read here changes
-     * per scanline or per field, not per character.
-     */
-    emit(buf, offset) {
-        const scanline = this.glyphScanline();
-
-        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
-            const backgroundColour = this.colour[this.cellPalette & 0xe0];
-            for (let i = 0; i < 16; ++i) {
-                buf[offset++] = backgroundColour;
-            }
-        } else {
-            let chardef = this.curGlyphs[this.cellGlyphIndex + scanline];
-            const paletteIndex = this.cellPalette;
-
-            for (let pixel = 0; pixel < 16; ++pixel) {
-                buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
-                chardef >>>= 2;
-            }
-        }
+    glyphRow() {
+        return (this.scanlineCounter << 1) | (this.levelRA0 ? 1 : 0);
     }
 
-    // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
+    doubleHeightGlyphRow() {
+        return (this.glyphRow() >>> 1) + (this.secondHalfOfDouble ? 10 : 0);
+    }
+
+    // The second half of the latched cell, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
@@ -605,10 +675,5 @@ export class Teletext {
                 chardef >>>= 2;
             }
         }
-    }
-
-    render(buf, offset) {
-        this.advance();
-        this.emit(buf, offset);
     }
 }

@@ -183,7 +183,6 @@ describe("Video", () => {
             [0x14, 4],
             [0x18, 2],
             [0x1c, 1],
-            [0x02, 1],
         ])("gives display filters the texels per pixel %#x selects", (value, texelsWide) => {
             video.ula.write(0, value);
             expect(decodeLineGrid(video.lineGridUla).texelsWide).toBe(texelsWide);
@@ -274,14 +273,12 @@ describe("Video", () => {
         });
 
         // See https://github.com/mattgodbolt/jsbeeb/issues/546 and https://github.com/mattgodbolt/jsbeeb/issues/832
-        it("feeds the chip in a bitmap mode too, but shows none of its output", () => {
-            const emitted = vi.spyOn(video.teletext, "emit");
+        it("feeds the chip in a bitmap mode too", () => {
             video.ula.write(0, 0x00);
 
             video.polltime(1);
 
             expect(newestFed()).toBe(0x42);
-            expect(emitted).not.toHaveBeenCalled();
         });
 
         // IC37/IC36 force bit 6 high during H blanking, so the chip sees a graphics character, not a control code.
@@ -302,14 +299,22 @@ describe("Video", () => {
 
         // The "TTX trick": with the teletext bit set in a 2MHz mode the SAA5050 outputs black.
         it("draws black instead of characters with the teletext bit set at 2MHz", () => {
-            const emitted = vi.spyOn(video.teletext, "emit");
+            const WhiteGraphics = 0x17;
+            const SolidBlock = 0x7f;
+            const PipelineCells = 3;
+            const TwoMhzCellPixels = 8;
             video.ula.write(0, 0x12);
+            video.regs[7] = 30; // keep vsync, and the flyback that clears the framebuffer, away from the cell
             fb.fill(0xffffffff);
 
+            cpu.data = WhiteGraphics;
             video.polltime(1);
+            cpu.data = SolidBlock;
+            video.polltime(PipelineCells + 1);
+            video.renderPending();
 
-            expect(emitted).not.toHaveBeenCalled();
-            expect(fb[100 * FbWidth + 100]).toBe(OPAQUE_BLACK);
+            const cell = fb.subarray(100 * FbWidth + video.bitmapX, 100 * FbWidth + video.bitmapX + TwoMhzCellPixels);
+            expect([...cell]).toEqual(Array(TwoMhzCellPixels).fill(OPAQUE_BLACK));
         });
 
         describe("a cell above an odd field", () => {
@@ -322,15 +327,19 @@ describe("Video", () => {
 
             // Paints a solid white graphics block with the beam at (x, y), over a white frame.
             const paintCell = (ulaControl, r8, x, y) => {
+                const FeedTicks = 8;
                 rig.writeCrtc(8, r8);
                 rig.writeCrtc(7, 30);
                 video.ula.write(0, ulaControl);
-                for (const byte of [WhiteGraphics, SolidBlock, SolidBlock, SolidBlock]) video.teletext.fetchData(byte);
-                video.teletext.advance();
+                cpu.data = WhiteGraphics;
+                video.polltime(1);
                 cpu.data = SolidBlock;
+                video.polltime(FeedTicks);
+                video.renderPending();
                 fb.fill(White);
                 Object.assign(video, { bitmapX: x, bitmapY: y, oddClock: false });
                 video.polltime(1);
+                video.renderPending();
             };
             const pixelsAt = (offset, count) => Array.from(fb.subarray(offset, offset + count));
 
@@ -388,13 +397,15 @@ describe("Video", () => {
         }
 
         /**
-         * A Video running teletext rows, fetching `byteAt(row, column)` with the ULA in `ulaAt(row, column)`. Its
-         * paints collect the painted framebuffer and the framebuffer rows each character row reached.
+         * A Video running teletext rows, fetching `byteAt(row, column)` with the ULA in `ulaAt(row, column)`, and
+         * calling `afterStep` (if given) after each character clock. Its paints collect the painted framebuffer and the
+         * framebuffer rows each character row reached.
          */
-        function teletextRig({ byteAt, ulaAt }) {
+        function teletextRig({ byteAt, ulaAt, afterStep }, videoOptions) {
             const paints = [];
             let rows = new Map();
             const r = makeVideo({
+                ...videoOptions,
                 onPaint: (v) => {
                     paints.push({ fb: v.fb32.slice(), rows });
                     rows = new Map();
@@ -411,6 +422,7 @@ describe("Video", () => {
                 if (!rows.has(v.vertCounter)) rows.set(v.vertCounter, new Set());
                 rows.get(v.vertCounter).add(v.bitmapY & ~1);
                 r.run(1);
+                afterStep?.(v);
             };
             return { ...r, paints, step };
         }
@@ -460,12 +472,14 @@ describe("Video", () => {
             runUntilPaints(rig, PaintsToRun);
             const white = teletextColour(rig, WhiteForeground);
             const paint = rig.paints.at(-1);
+            expect(coloursOnRow(paint, BitmapRow).has(white)).toBe(false);
             expect(coloursOnRow(paint, BitmapRow + 1).has(white)).toBe(nextRowShown);
             expect(coloursOnRow(paint, BitmapRow + 2).has(white)).toBe(true);
         });
 
         it.each([
             ["part way along a line", TeletextFromColumn - 1],
+            ["part way along the line's teletext", (TeletextFromColumn + TeletextToColumn) / 2],
             ["in the blanking after a line", BlankingColumn],
         ])("continues identically from a snapshot taken %s", (_, column) => {
             const driver = switchedMidLine(RedAlpha);
@@ -486,6 +500,200 @@ describe("Video", () => {
                 expect(coloursOnRow(continued, row)).toEqual(coloursOnRow(straight.paints.at(-1), row));
             }
             expect(coloursOnRow(continued, SnapshotRow + 1).has(teletextColour(restored, RedForeground))).toBe(true);
+        });
+
+        describe("painted from the chip's log", () => {
+            const BitmapRow = 6;
+            const TwoMhzRow = 8;
+            const CursorRow = 10;
+            const CursorColumn = 12;
+            const NulaRow = 14;
+            const NulaColumn = 20;
+            const DoubleHeightRow = 3;
+            const DisplayedColumns = 40;
+            const Mode7TwoMhz = Mode4Teletext | TwoMhzClock;
+            const ScanlinesPerRow = 10;
+
+            // Random bytes, control codes included, with a double height pair and teletext throughout bar a bitmap
+            // stretch, a 2MHz stretch and the line ends.
+            function mixedScreen(seed) {
+                const random = seededRandom(seed);
+                const bytes = Array.from({ length: DisplayedRows * DisplayedColumns }, () => (random() * 128) | 0);
+                for (const row of [DoubleHeightRow, DoubleHeightRow + 1]) bytes[row * DisplayedColumns] = DoubleHeight;
+                for (const row of [NulaRow - 1, NulaRow]) {
+                    for (let column = 0; column < DisplayedColumns; ++column)
+                        bytes[row * DisplayedColumns + column] = LetterA + (column % 26);
+                }
+                return {
+                    byteAt: (row, column) => bytes[(row * DisplayedColumns + column) % bytes.length],
+                    ulaAt: (row, column) => {
+                        if (row === BitmapRow && column >= TeletextFromColumn && column < TeletextToColumn)
+                            return Mode4;
+                        if (row === TwoMhzRow && column >= TeletextFromColumn && column < TeletextToColumn)
+                            return Mode7TwoMhz;
+                        return Mode4Teletext;
+                    },
+                };
+            }
+
+            function programCursor(r, row, column) {
+                r.writeCrtc(10, 0); // a steady cursor from the top scanline
+                r.writeCrtc(11, ScanlinesPerRow - 1);
+                const address = row * DisplayedColumns + column;
+                r.writeCrtc(14, address >> 8);
+                r.writeCrtc(15, address & 0xff);
+            }
+
+            const writeNulaRed = (v) => {
+                if (v.vertCounter === NulaRow && v.horizCounter === NulaColumn) {
+                    v.ula.write(3, (1 << 4) | 0x0f);
+                    v.ula.write(3, 0x80);
+                }
+            };
+
+            const InterlaceSyncAndVideo = (r) => {
+                r.writeCrtc(8, 3);
+                r.writeCrtc(9, 2 * ScanlinesPerRow - 2);
+            };
+            // An interlaced field's vsync starts and ends half way along a line.
+            const InterlacedVSyncPartWayDown = (r) => {
+                InterlaceSyncAndVideo(r);
+                r.writeCrtc(7, NulaRow);
+            };
+            // Without the end of a displayed line no DISPTMG edge ends a scanline, so RA0 changes with cells unpainted.
+            const NoBlankingFrom = { row: 8, scanline: 4 };
+            const NoBlankingTo = { row: 12, scanline: 0 };
+            const lineOf = ({ row, scanline }) => row * ScanlinesPerRow + scanline;
+            const noBlankingPartWayDown = (v) => {
+                if (v.horizCounter !== 0) return;
+                const line = v.vertCounter * ScanlinesPerRow + v.scanlineCounter;
+                const noBlanking = line >= lineOf(NoBlankingFrom) && line < lineOf(NoBlankingTo);
+                v.crtc.write(0, 1);
+                v.crtc.write(1, noBlanking ? 70 : DisplayedColumns);
+            };
+            const FramesCompared = 5;
+
+            const differingPixels = (a, b) => a.reduce((count, pixel, i) => count + (pixel !== b[i] ? 1 : 0), 0);
+
+            it.each([
+                ["with doubled lines", () => {}, () => {}],
+                ["with interlace sync and video", InterlaceSyncAndVideo, () => {}],
+                ["with an interlaced vsync part way down the picture", InterlacedVSyncPartWayDown, () => {}],
+                ["with no horizontal blanking on some lines", () => {}, noBlankingPartWayDown],
+            ])("paints what a catch-up after every character paints, %s", (_, programTiming, retime) => {
+                const screen = mixedScreen(1);
+                const driven = (afterStep) => {
+                    const r = teletextRig({ ...screen, afterStep }, { hasVideoNula: true });
+                    programTiming(r);
+                    programCursor(r, CursorRow, CursorColumn);
+                    return r;
+                };
+                const lazy = driven((v) => {
+                    retime(v);
+                    writeNulaRed(v);
+                });
+                const eager = driven((v) => {
+                    retime(v);
+                    writeNulaRed(v);
+                    v.teletext.catchUp();
+                });
+
+                runUntilPaints(lazy, FramesCompared);
+                runUntilPaints(eager, FramesCompared);
+                for (let paint = 0; paint < FramesCompared; ++paint) {
+                    expect(differingPixels(lazy.paints[paint].fb, eager.paints[paint].fb)).toBe(0);
+                }
+
+                while (lazy.video.vertCounter !== NulaRow || lazy.video.horizCounter !== NulaColumn + 4) lazy.step();
+                while (eager.video.vertCounter !== NulaRow || eager.video.horizCounter !== NulaColumn + 4) eager.step();
+                expect(lazy.video.snapshotState()).toEqual(eager.video.snapshotState());
+                expect(differingPixels(lazy.fb, eager.fb)).toBe(0);
+            });
+
+            it("inverts the cursor over the teletext cell it painted", () => {
+                const screen = { byteAt: () => LetterA, ulaAt: () => Mode4Teletext };
+                const withCursor = teletextRig(screen);
+                programCursor(withCursor, CursorRow, CursorColumn);
+                const without = teletextRig(screen);
+                programCursor(without, DisplayedRows + 1, 0);
+                runUntilPaints(withCursor, PaintsToRun);
+                runUntilPaints(without, PaintsToRun);
+
+                const shown = without.paints.at(-1).fb;
+                const inverts = withCursor.paints.at(-1).fb.reduce((at, pixel, i) => {
+                    if (pixel !== shown[i]) at.push([i, pixel >>> 0 === inverted(shown[i])]);
+                    return at;
+                }, []);
+                expect(inverts.length).toBeGreaterThan(0);
+                expect(inverts.every(([, invertedPixel]) => invertedPixel)).toBe(true);
+            });
+
+            it("shows a VideoNuLA colour change only from where it was made", () => {
+                const screen = {
+                    byteAt: (row, column) => (column === 0 ? RedAlpha : LetterA),
+                    ulaAt: () => Mode4Teletext,
+                };
+                let armed = false;
+                let beam;
+                const r = teletextRig(
+                    {
+                        ...screen,
+                        afterStep: (v) => {
+                            const inGlyph = v.scanlineCounter === ScanlinesPerRow / 2;
+                            if (
+                                v.vertCounter === NulaRow &&
+                                v.horizCounter === NulaColumn &&
+                                inGlyph &&
+                                armed &&
+                                !beam
+                            ) {
+                                beam = { x: v.bitmapX, y: v.bitmapY & ~1, paint: r.paints.length };
+                                writeNulaRed(v);
+                            }
+                        },
+                    },
+                    { hasVideoNula: true },
+                );
+                const oldRed = teletextColour(r, RedForeground);
+                runUntilPaints(r, PaintsToRun - 1);
+                armed = true;
+                while (!beam) r.step();
+                runUntilPaints(r, beam.paint + 1);
+                const newRed = teletextColour(r, RedForeground);
+                expect(newRed).not.toBe(oldRed);
+
+                const coloursAlong = (from, to) => new Set(r.paints[beam.paint].fb.subarray(from, to));
+                const rowStart = beam.y * FbWidth;
+                expect(coloursAlong(rowStart, rowStart + beam.x)).toContain(oldRed);
+                expect(coloursAlong(rowStart, rowStart + beam.x)).not.toContain(newRed);
+                expect(coloursAlong(rowStart + beam.x + 16, rowStart + FbWidth)).toContain(newRed);
+                expect(coloursAlong(rowStart + beam.x + 16, rowStart + FbWidth)).not.toContain(oldRed);
+            });
+
+            it("draws a double height row's halves from the top and bottom of its glyphs", () => {
+                const r = teletextRig({
+                    byteAt: (row, column) => {
+                        if (column === 0 && (row === DoubleHeightRow || row === DoubleHeightRow + 1))
+                            return DoubleHeight;
+                        return LetterA;
+                    },
+                    ulaAt: () => Mode4Teletext,
+                });
+                runUntilPaints(r, PaintsToRun);
+                const paint = r.paints.at(-1);
+                const rowPixels = (row) =>
+                    [...paint.rows.get(row)].map((fbRow) => [
+                        ...paint.fb.subarray(fbRow * FbWidth, (fbRow + 1) * FbWidth),
+                    ]);
+                const [top, bottom, normal] = [DoubleHeightRow, DoubleHeightRow + 1, DoubleHeightRow + 2].map(
+                    rowPixels,
+                );
+                expect(top).not.toEqual(bottom);
+                expect(top).not.toEqual(normal);
+                expect(bottom).not.toEqual(normal);
+                for (const half of [top, bottom])
+                    expect(new Set(half.flat())).toContain(teletextColour(r, WhiteForeground));
+            });
         });
     });
 

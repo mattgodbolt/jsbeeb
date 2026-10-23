@@ -18,8 +18,8 @@
 //   16384    64                          palette: 16 colours, each an RGBA word (R in the lowest byte), copied in
 //                                        by Video before each drain.
 //   16448    1024                        line grid: one byte per framebuffer row, the pixel size it was drawn at
-//                                        (see pixel-grid.js); the drain writes it for bitmap runs, Video for
-//                                        teletext rows.
+//                                        (see pixel-grid.js); the drain writes it for bitmap runs, the SAA5050's
+//                                        replay for teletext cells.
 //   17472    262144                      records: up to 65536 pending records, one i32 each.
 //   279616   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
 //            + 8192                      overrun: room for a doubled cell's second row below the last row, and a
@@ -65,11 +65,12 @@ export const PendingCursor = 1 << 28;
 // cells and a few cursor inverts.
 export const PendingCapacity = 1 << 16;
 export const CursorInvert = 0x00ffffff;
+export const OPAQUE_BLACK = 0xff000000;
 
 const Table4bppBytes = 4 * 256 * 16;
 const PaletteEntries = 16;
-const RowShift = 10;
-const RowPixels = 1 << RowShift;
+export const RowShift = 10;
+export const RowPixels = 1 << RowShift;
 const WordShift = 2;
 const WordBytes = 1 << WordShift;
 const RowBytes = RowPixels * WordBytes;
