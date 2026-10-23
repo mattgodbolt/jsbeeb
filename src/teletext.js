@@ -11,35 +11,48 @@ const DoubleHeight = 13;
 const PipelineLength = 4;
 const PipelineLag = PipelineLength - 1;
 
-// What `advance` reads or changes besides the pipeline and the cell it latches. A DISPTMG falling edge resets all of it.
-function copyLineState(from, to) {
-    to.col = from.col;
-    to.bg = from.bg;
-    to.sep = from.sep;
-    to.dbl = from.dbl;
-    to.gfx = from.gfx;
-    to.conceal = from.conceal;
-    to.flash = from.flash;
-    to.holdChar = from.holdChar;
-    to.heldChar = from.heldChar;
-    to.nextGlyphs = from.nextGlyphs;
-    to.heldGlyphs = from.heldGlyphs;
-    to.wasDbl = from.wasDbl;
+// What `advance` reads or changes besides the pipeline and the cell it latches.
+class LineState {
+    constructor(glyphs) {
+        this.wasDbl = false;
+        this.reset(glyphs);
+    }
+
+    // A DISPTMG falling edge resets all of it but `wasDbl`, whether a double height code reached the pipeline's head.
+    reset(glyphs) {
+        this.col = 7;
+        this.bg = 0;
+        this.holdChar = false;
+        this.heldChar = 0x20;
+        this.nextGlyphs = this.heldGlyphs = glyphs;
+        this.flash = false;
+        this.sep = false;
+        this.gfx = false;
+        this.conceal = false;
+        this.dbl = false;
+    }
+
+    copyFrom(other) {
+        this.col = other.col;
+        this.bg = other.bg;
+        this.sep = other.sep;
+        this.dbl = other.dbl;
+        this.gfx = other.gfx;
+        this.conceal = other.conceal;
+        this.flash = other.flash;
+        this.holdChar = other.holdChar;
+        this.heldChar = other.heldChar;
+        this.nextGlyphs = other.nextGlyphs;
+        this.heldGlyphs = other.heldGlyphs;
+        this.wasDbl = other.wasDbl;
+    }
 }
 
 export class Teletext {
     constructor() {
         this.prevCol = 0;
-        this.col = 7;
-        this.bg = 0;
-        this.sep = false;
-        this.dbl = this.oldDbl = this.secondHalfOfDouble = this.wasDbl = false;
-        this.gfx = false;
-        this.conceal = false;
-        this.flash = false;
+        this.oldDbl = this.secondHalfOfDouble = false;
         this.flashTime = 0;
-        this.heldChar = 0;
-        this.holdChar = false;
         this.cellGlyphIndex = 0;
         this.cellFlash = false;
         this.cellConceal = false;
@@ -59,16 +72,15 @@ export class Teletext {
         this.skippedLog = new Uint8Array(LogCapacity);
         this.skippedLogLength = 0;
         this.skippedQueue = new Uint8Array(PipelineLength);
-        this.skippedLineState = {};
 
         this.normalGlyphs = makeFast32(new Uint32Array(96 * 20));
         this.graphicsGlyphs = makeFast32(new Uint32Array(96 * 20));
         this.separatedGlyphs = makeFast32(new Uint32Array(96 * 20));
         this.colour = makeFast32(new Uint32Array(256));
 
-        this.nextGlyphs = this.normalGlyphs;
         this.curGlyphs = this.normalGlyphs;
-        this.heldGlyphs = this.normalGlyphs;
+        this.line = new LineState(this.normalGlyphs);
+        this.skippedLine = new LineState(this.normalGlyphs);
 
         this.init();
     }
@@ -199,25 +211,25 @@ export class Teletext {
             ["graphics", this.graphicsGlyphs],
             ["separated", this.separatedGlyphs],
         ]) {
-            if (this.nextGlyphs === table) nextGlyphsName = name;
+            if (this.line.nextGlyphs === table) nextGlyphsName = name;
             if (this.curGlyphs === table) curGlyphsName = name;
-            if (this.heldGlyphs === table) heldGlyphsName = name;
+            if (this.line.heldGlyphs === table) heldGlyphsName = name;
         }
         return {
             prevCol: this.prevCol,
-            col: this.col,
-            bg: this.bg,
-            sep: this.sep,
-            dbl: this.dbl,
+            col: this.line.col,
+            bg: this.line.bg,
+            sep: this.line.sep,
+            dbl: this.line.dbl,
             oldDbl: this.oldDbl,
             secondHalfOfDouble: this.secondHalfOfDouble,
-            wasDbl: this.wasDbl,
-            gfx: this.gfx,
-            conceal: this.conceal,
-            flash: this.flash,
+            wasDbl: this.line.wasDbl,
+            gfx: this.line.gfx,
+            conceal: this.line.conceal,
+            flash: this.line.flash,
             flashTime: this.flashTime,
-            heldChar: this.heldChar,
-            holdChar: this.holdChar,
+            heldChar: this.line.heldChar,
+            holdChar: this.line.holdChar,
             dataQueue: [...this.dataQueue],
             scanlineCounter: this.scanlineCounter,
             levelDEW: this.levelDEW,
@@ -231,19 +243,19 @@ export class Teletext {
 
     restoreState(state) {
         this.prevCol = state.prevCol;
-        this.col = state.col;
-        this.bg = state.bg;
-        this.sep = state.sep;
-        this.dbl = state.dbl;
+        this.line.col = state.col;
+        this.line.bg = state.bg;
+        this.line.sep = state.sep;
+        this.line.dbl = state.dbl;
         this.oldDbl = state.oldDbl;
         this.secondHalfOfDouble = state.secondHalfOfDouble;
-        this.wasDbl = state.wasDbl;
-        this.gfx = state.gfx;
-        this.conceal = state.conceal ?? false;
-        this.flash = state.flash;
+        this.line.wasDbl = state.wasDbl;
+        this.line.gfx = state.gfx;
+        this.line.conceal = state.conceal ?? false;
+        this.line.flash = state.flash;
         this.flashTime = state.flashTime;
-        this.heldChar = state.heldChar;
-        this.holdChar = state.holdChar;
+        this.line.heldChar = state.heldChar;
+        this.line.holdChar = state.holdChar;
         this.dataQueue.set(state.dataQueue);
         this.scanlineCounter = state.scanlineCounter;
         this.levelDEW = state.levelDEW;
@@ -257,26 +269,28 @@ export class Teletext {
             graphics: this.graphicsGlyphs,
             separated: this.separatedGlyphs,
         };
-        this.nextGlyphs = glyphMap[state.nextGlyphs] || this.normalGlyphs;
+        this.line.nextGlyphs = glyphMap[state.nextGlyphs] || this.normalGlyphs;
         this.curGlyphs = glyphMap[state.curGlyphs] || this.normalGlyphs;
-        this.heldGlyphs = glyphMap[state.heldGlyphs] || this.normalGlyphs;
+        this.line.heldGlyphs = glyphMap[state.heldGlyphs] || this.normalGlyphs;
     }
 
     setNextChars() {
-        if (this.gfx) {
-            if (this.sep) {
-                this.nextGlyphs = this.separatedGlyphs;
+        const line = this.line;
+        if (line.gfx) {
+            if (line.sep) {
+                line.nextGlyphs = this.separatedGlyphs;
             } else {
-                this.nextGlyphs = this.graphicsGlyphs;
+                line.nextGlyphs = this.graphicsGlyphs;
             }
         } else {
-            this.nextGlyphs = this.normalGlyphs;
+            line.nextGlyphs = this.normalGlyphs;
         }
     }
 
     handleControlCode(data) {
-        const wasGfx = this.gfx;
-        const wasHoldChar = this.holdChar;
+        const line = this.line;
+        const wasGfx = line.gfx;
+        const wasHoldChar = line.holdChar;
 
         switch (data) {
             case 1:
@@ -286,21 +300,21 @@ export class Teletext {
             case 5:
             case 6:
             case 7:
-                this.gfx = false;
-                this.col = data;
-                this.conceal = false;
+                line.gfx = false;
+                line.col = data;
+                line.conceal = false;
                 this.setNextChars();
                 break;
             case 8:
-                this.flash = true;
+                line.flash = true;
                 break;
             case 9:
-                this.flash = false;
+                line.flash = false;
                 break;
             case 12:
             case 13:
-                this.dbl = !!(data & 1);
-                if (this.dbl) this.wasDbl = true;
+                line.dbl = !!(data & 1);
+                if (line.dbl) line.wasDbl = true;
                 break;
             case 17:
             case 18:
@@ -309,40 +323,40 @@ export class Teletext {
             case 21:
             case 22:
             case 23:
-                this.gfx = true;
-                this.col = data & 7;
-                this.conceal = false;
+                line.gfx = true;
+                line.col = data & 7;
+                line.conceal = false;
                 this.setNextChars();
                 break;
             case 24:
-                this.conceal = true;
+                line.conceal = true;
                 break;
             case 25:
-                this.sep = false;
+                line.sep = false;
                 this.setNextChars();
                 break;
             case 26:
-                this.sep = true;
+                line.sep = true;
                 this.setNextChars();
                 break;
             case 28:
-                this.bg = 0;
+                line.bg = 0;
                 break;
             case 29:
-                this.bg = this.col;
+                line.bg = line.col;
                 break;
             case 30:
-                this.holdChar = true;
+                line.holdChar = true;
                 break;
             case 31:
-                this.holdChar = false;
+                line.holdChar = false;
                 break;
         }
-        if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
-            data = this.heldChar;
-            this.curGlyphs = this.heldGlyphs;
+        if (wasGfx && (wasHoldChar || line.holdChar) && line.dbl === this.oldDbl) {
+            data = line.heldChar;
+            this.curGlyphs = line.heldGlyphs;
         } else {
-            this.heldChar = 0x20;
+            line.heldChar = 0x20;
             data = 0x20;
         }
 
@@ -409,7 +423,7 @@ export class Teletext {
         for (let i = length - 1; i >= 0 && !anyClocked; --i) anyClocked = !!(log[i] & ClockedEntry);
         if (anyClocked) {
             this.skippedQueue.set(queue);
-            copyLineState(this, this.skippedLineState);
+            this.skippedLine.copyFrom(this.line);
             this.log = this.skippedLog;
             this.skippedLog = log;
             this.skippedLogLength = length;
@@ -417,11 +431,11 @@ export class Teletext {
 
         // Each clocked entry runs the byte fed PipelineLag entries before it.
         for (let i = 0; i < Math.min(PipelineLag, length); ++i) {
-            if (log[i] & ClockedEntry && queue[i + 1] === DoubleHeight) this.wasDbl = true;
+            if (log[i] & ClockedEntry && queue[i + 1] === DoubleHeight) this.line.wasDbl = true;
         }
         for (let i = 0; i + PipelineLag < length; ++i) {
             if ((log[i] & DataBits) === DoubleHeight && log[i + PipelineLag] & ClockedEntry) {
-                this.wasDbl = true;
+                this.line.wasDbl = true;
                 break;
             }
         }
@@ -436,13 +450,13 @@ export class Teletext {
     // Recovers the cell latched by the last line `skipLine` passed over, leaving everything else as it is.
     replaySkippedLine() {
         if (this.skippedLogLength === 0) return;
-        const lineState = {};
-        copyLineState(this, lineState);
+        const line = this.line;
+        this.line = this.skippedLine;
         const queue = this.dataQueue.slice();
-        copyLineState(this.skippedLineState, this);
         this.dataQueue.set(this.skippedQueue);
         this.replayLog(this.skippedLog, this.skippedLogLength);
-        copyLineState(lineState, this);
+        this.skippedLine = this.line;
+        this.line = line;
         this.dataQueue.set(queue);
         this.skippedLogLength = 0;
     }
@@ -489,16 +503,7 @@ export class Teletext {
         }
 
         this.skipLine();
-        this.col = 7;
-        this.bg = 0;
-        this.holdChar = false;
-        this.heldChar = 0x20;
-        this.nextGlyphs = this.heldGlyphs = this.normalGlyphs;
-        this.flash = false;
-        this.sep = false;
-        this.gfx = false;
-        this.conceal = false;
-        this.dbl = false;
+        this.line.reset(this.normalGlyphs);
 
         this.scanlineCounter++;
         // Check for end of character row.
@@ -508,11 +513,11 @@ export class Teletext {
             if (this.secondHalfOfDouble) {
                 this.secondHalfOfDouble = false;
             } else {
-                this.secondHalfOfDouble = this.wasDbl;
+                this.secondHalfOfDouble = this.line.wasDbl;
             }
         }
 
-        this.wasDbl = false;
+        this.line.wasDbl = false;
     }
 
     setRA0(level) {
@@ -527,37 +532,38 @@ export class Teletext {
      * to the character state, and latch how the resulting cell should look.
      */
     advance() {
+        const line = this.line;
         let data = this.dataQueue[0];
 
-        this.oldDbl = this.dbl;
+        this.oldDbl = line.dbl;
 
-        this.prevCol = this.col;
-        this.curGlyphs = this.nextGlyphs;
+        this.prevCol = line.col;
+        this.curGlyphs = line.nextGlyphs;
 
-        let flashThisCell = this.flash;
-        let concealThisCell = this.conceal;
+        let flashThisCell = line.flash;
+        let concealThisCell = line.conceal;
         if (data < 0x20) {
             data = this.handleControlCode(data);
-        } else if (this.gfx) {
+        } else if (line.gfx) {
             if (data & 0x20) {
-                this.heldChar = data;
-                this.heldGlyphs = this.curGlyphs;
+                line.heldChar = data;
+                line.heldGlyphs = this.curGlyphs;
             }
         } else {
-            this.heldChar = 32;
+            line.heldChar = 32;
         }
 
         // Flash (code 8) is "Set After" — flashThisCell retains the pre-control-code state.
         // Steady (code 9) is "Set At" — update so this cell stops flashing immediately.
-        if (flashThisCell && !this.flash) flashThisCell = false;
+        if (flashThisCell && !line.flash) flashThisCell = false;
 
         // Conceal (code 24) is "Set At", and a colour code only reveals from the cell after itself.
-        if (this.conceal) concealThisCell = true;
+        if (line.conceal) concealThisCell = true;
 
         this.cellGlyphIndex = (data - 32) * 20;
         this.cellFlash = flashThisCell;
         this.cellConceal = concealThisCell;
-        this.cellPalette = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
+        this.cellPalette = ((line.bg & 7) << 5) | ((this.prevCol & 7) << 2);
     }
 
     glyphScanline() {
@@ -582,7 +588,7 @@ export class Teletext {
     emit(buf, offset) {
         const scanline = this.glyphScanline();
 
-        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
+        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];
             for (let i = 0; i < 16; ++i) {
                 buf[offset++] = backgroundColour;
@@ -601,7 +607,7 @@ export class Teletext {
     // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
         const scanline = this.glyphScanline();
-        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
+        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];
             for (let pixel = 8; pixel < 16; ++pixel) {
                 buf[offset + pixel] = backgroundColour;
