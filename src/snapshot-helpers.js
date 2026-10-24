@@ -157,7 +157,7 @@ export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, c
  * @param {string} importedFrom - source identifier (e.g. "b-em", "beebem-uef")
  * @param {string} modelName - jsbeeb model name/synonym
  * @param {object} cpuState - parsed CPU state {a, x, y, flags, s, pc, nmi, fe30, fe34}
- * @param {Uint8Array} ram - 128KB RAM array
+ * @param {Uint8Array} ram - 64KB RAM array
  * @param {Uint8Array|null} roms - 256KB sideways ROM/RAM array, or null
  * @param {object} sysvia - jsbeeb sys VIA state
  * @param {object} uservia - jsbeeb user VIA state

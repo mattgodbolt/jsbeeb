@@ -161,8 +161,22 @@ describe("Cpu6502 snapshotState / restoreState", () => {
 
     it("should not include ROM data in the snapshot", () => {
         const snapshot = cpu.snapshotState();
-        // RAM snapshot should only go up to romOffset (128KB), not include ROMs
         expect(snapshot.ram.length).toBe(cpu.romOffset);
+    });
+
+    it("restores the first 64KB of an older snapshot's 128KB ram and leaves the ROMs alone", async () => {
+        const oldRam = new Uint8Array(128 * 1024).fill(0xa5);
+        oldRam.fill(0x5a, 64 * 1024);
+        const cpu2 = makeCpu();
+        await cpu2.initialise();
+        cpu2.ramRomOs.fill(0x33, cpu2.romOffset);
+        const romsBefore = cpu2.ramRomOs.slice(cpu2.romOffset);
+
+        const { swRamBanks: _swRamBanks, ...olderState } = cpu.snapshotState();
+        cpu2.restoreState({ ...olderState, ram: oldRam });
+
+        expect(cpu2.ramRomOs.subarray(0, cpu2.romOffset)).toEqual(oldRam.subarray(0, 64 * 1024));
+        expect(cpu2.ramRomOs.subarray(cpu2.romOffset)).toEqual(romsBefore);
     });
 });
 
@@ -457,6 +471,27 @@ describe("the chips a machine names", () => {
         const cpu = fake6502(findModel("Atom"));
         expect(cpu.keyboardInterface).toBe(cpu.atomppia);
         expect(cpu.tapeInterface).toBe(cpu.atomppia);
+    });
+});
+
+describe("Atom Branquart banks", () => {
+    const BankWindow = 0xa000;
+    const BankLatch = 0xbfff;
+
+    it("keep what is written to a bank across a snapshot", async () => {
+        const cpu = fake6502(findModel("Atom"));
+        await cpu.initialise();
+        cpu.writemem(BankLatch, 3);
+        cpu.writemem(BankWindow, 0x42);
+        const snapshot = cpu.snapshotState();
+
+        const restored = fake6502(findModel("Atom"));
+        await restored.initialise();
+        restored.restoreState(snapshot);
+
+        expect(restored.readmem(BankWindow)).toBe(0x42);
+        restored.writemem(BankLatch, 0);
+        expect(restored.readmem(BankWindow)).not.toBe(0x42);
     });
 });
 

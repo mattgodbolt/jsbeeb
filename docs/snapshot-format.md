@@ -134,13 +134,15 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                  |
 | `videoCycles`         | number     | Video cycle accumulator                                                                                       |
 | `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
-| `ram`                 | Uint8Array | RAM contents (128KB, excludes ROMs)                                                                           |
+| `ram`                 | Uint8Array | RAM contents (64KB; on a Master, ANDY at 0x8000, HAZEL at 0x9000 and LYNNE at 0xB000)                         |
 | `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.         |
 | `swRamBanks`          | object     | _(Optional)_ Sideways RAM, keyed by bank number, each value a 16KB `Uint8Array` (see below)                   |
 
 `swRamBanks` holds every bank the model has as sideways RAM (banks 0-7 on a B, 4-7 on a Master, none on a stock B or an Atom). It is left out when `roms` already carries every bank. On restore each bank present overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots written before it was saved lack it, and absent means sideways RAM keeps its current contents, so it needed no format version bump.
 
 **Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
+
+Snapshots written before `ram` was 64KB, and earlier b-em and BeebEm imports, hold 128KB of `ram`. They still load: only the first 64KB is used, as the rest was never mapped, so it needed no format version bump.
 
 The NMI level is rebuilt the same way: the CPU clears every device's line and each device re-drives its own, the FDC from its restored registers and econet from its live state (econet state itself is not saved). `nmiLevel` is read back only when the snapshot carries no FDC state (v1 and imported snapshots), where it stands in for the disc controller's line. `nmiEdge` is applied after the devices have re-driven their lines, so a line coming back up on restore is not mistaken for a fresh edge.
 

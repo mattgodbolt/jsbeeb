@@ -4,6 +4,7 @@
 
 import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
 import { inflate } from "./archive.js";
+import { BaseRamBytes } from "./6502.js";
 
 const BemV1Size = 327885;
 
@@ -190,7 +191,7 @@ function parseBemV1(buffer) {
         fe34: bytes[V1Off.fe34],
     };
 
-    const ram = new Uint8Array(128 * 1024);
+    const ram = new Uint8Array(BaseRamBytes);
     ram.set(bytes.slice(V1Off.ram, V1Off.ram + 65536));
     const roms = bytes.slice(V1Off.rom, V1Off.rom + 262144);
 
@@ -443,7 +444,7 @@ async function parseBemV3(buffer) {
     }
 
     // Parse memory (zlib-compressed in v3)
-    const ram = new Uint8Array(128 * 1024);
+    const ram = new Uint8Array(BaseRamBytes);
     let roms = null;
     const memSection = sections["M"];
     if (memSection) {

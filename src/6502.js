@@ -20,7 +20,12 @@ function _set(byte, mask, set) {
 }
 
 const UnpeekableDevice = 0xff;
-const RomBankBytes = 16384;
+export const BaseRamBytes = 64 * 1024;
+const RomBankBytes = 16 * 1024;
+const NumRomBanks = 16;
+const RomOffset = BaseRamBytes;
+const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
+const BbcMemoryBytes = OsOffset + RomBankBytes;
 
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
@@ -686,9 +691,9 @@ export class Cpu6502 extends Base6502 {
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
         this.memLook = new Int32Array(512); // Cannot be unsigned as we use negative offsets
-        this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
-        this.romOffset = 128 * 1024;
-        this.osOffset = this.romOffset + 16 * 16 * 1024;
+        this.ramRomOs = new Uint8Array(this.memoryBytes);
+        this.romOffset = RomOffset;
+        this.osOffset = OsOffset;
         this.romsel = 0;
         this.acccon = 0;
         this.oldPcArray = new Uint16Array(256);
@@ -741,6 +746,10 @@ export class Cpu6502 extends Base6502 {
         this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         this.soundChip.setScheduler(this.scheduler);
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
+    }
+
+    get memoryBytes() {
+        return BbcMemoryBytes;
     }
 
     getPrevPc(index) {
@@ -1323,14 +1332,14 @@ export class Cpu6502 extends Base6502 {
         const ramRomOs = this.ramRomOs;
         const data = await loadData(os);
         const len = data.length;
-        if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
-        ramRomOs.set(data, this.osOffset);
-        const numExtraBanks = (len - 16384) / 16384;
-        let romIndex = 16 - numExtraBanks;
+        if (len < RomBankBytes || len % RomBankBytes) throw new Error(`Broken OS ROM file (length=${len})`);
+        ramRomOs.set(data.subarray(0, RomBankBytes), this.osOffset);
+        const numExtraBanks = (len - RomBankBytes) / RomBankBytes;
+        let romIndex = NumRomBanks - numExtraBanks;
         for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
-            const srcBase = 16384 + 16384 * i_1;
-            const destBase = this.romOffset + (romIndex + i_1) * 16384;
-            ramRomOs.set(data.subarray(srcBase, srcBase + 16384), destBase);
+            const srcBase = RomBankBytes * (i_1 + 1);
+            const destBase = this.romOffset + (romIndex + i_1) * RomBankBytes;
+            ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
         }
         const awaiting = [];
         for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
@@ -1341,7 +1350,7 @@ export class Cpu6502 extends Base6502 {
             }
             if (romIndex < 0) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
 
-            awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 16384));
+            awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * RomBankBytes));
         }
         return await Promise.all(awaiting);
     }
@@ -1376,7 +1385,7 @@ export class Cpu6502 extends Base6502 {
             videoCycles: this.videoCycles,
             music5000PageSel: this.music5000PageSel,
             ram: this.ramRomOs.slice(0, this.romOffset),
-            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * RomBankBytes) : undefined,
+            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.osOffset) : undefined,
             swRamBanks: includeRoms ? undefined : this.sidewaysRamBanks(),
             // Sub-component state
             scheduler: this.scheduler.snapshotState(),
@@ -1422,9 +1431,10 @@ export class Cpu6502 extends Base6502 {
         else this.debugInstruction.forgetStop();
 
         // 3. Memory
-        this.ramRomOs.set(state.ram);
+        // Older snapshots saved 128KB of ram; only the first 64KB was ever mapped.
+        this.ramRomOs.set(state.ram.subarray(0, this.romOffset));
         if (state.roms) {
-            this.ramRomOs.set(state.roms.slice(0, 16 * RomBankBytes), this.romOffset);
+            this.ramRomOs.set(state.roms.slice(0, NumRomBanks * RomBankBytes), this.romOffset);
         }
         if (state.swRamBanks) {
             for (const [bank, data] of Object.entries(state.swRamBanks)) {
@@ -1778,13 +1788,17 @@ export class Cpu6502 extends Base6502 {
 // bank is visible at 0xA000-0xAFFF. Banks can contain ROM or RAM.
 // The latch is write-only; bit 6 is a lock bit.
 
-// Storage for Branquart banks starts after the BBC ROM area.
-const BranquartOffset = 128 * 1024 + 17 * 16 * 16384;
+const BranquartOffset = BbcMemoryBytes;
 const BranquartBankSize = 0x1000; // 4KB per bank
 const NumBranquartBanks = 16;
+const AtomMemoryBytes = BranquartOffset + NumBranquartBanks * BranquartBankSize;
 const AtomRomBlockSize = 0x1000; // 4KB
 
 export class AtomCpu6502 extends Cpu6502 {
+    get memoryBytes() {
+        return AtomMemoryBytes;
+    }
+
     setKeyLayout(layout) {
         this.keyLayout = layout;
         this.atomppia.setKeyLayout(layout);
@@ -1803,14 +1817,6 @@ export class AtomCpu6502 extends Cpu6502 {
         this.branquartLatch = 0;
         // Track which banks are ROM (false) vs RAM (true) for write protection.
         this.branquartRam = new Array(NumBranquartBanks).fill(true);
-
-        // Expand ramRomOs to include Branquart bank storage.
-        const expandedSize = BranquartOffset + NumBranquartBanks * BranquartBankSize;
-        if (this.ramRomOs.length < expandedSize) {
-            const expanded = new Uint8Array(expandedSize);
-            expanded.set(this.ramRomOs);
-            this.ramRomOs = expanded;
-        }
 
         // reset() and debugger.setCpu() are called by initialise() after loadOs().
     }
