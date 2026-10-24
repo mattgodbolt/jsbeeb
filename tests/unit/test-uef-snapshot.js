@@ -168,7 +168,7 @@ describe("parseUefSnapshot", () => {
         ],
         ["reads main RAM", { ramAddr: 0x200, ramByte: 0xbb }, (s) => s.state.ram[0x200], 0xbb],
         [
-            "puts main RAM at the bottom of a 128K array, leaving the rest clear",
+            "puts main RAM at the bottom of a 64K array, leaving the rest clear",
             { ramAddr: 0x7fff, ramByte: 0xcc },
             ({ state }) => [
                 state.ram.length,
@@ -177,7 +177,7 @@ describe("parseUefSnapshot", () => {
                 state.ram[0x9000],
                 state.ram[0xb000],
             ],
-            [128 * 1024, 0xcc, 0, 0, 0],
+            [64 * 1024, 0xcc, 0, 0, 0],
         ],
         ["imports a B as a B", { machineType: 0 }, (s) => s.model, "B"],
         ["imports an IntegraB as a B", { machineType: 1 }, (s) => s.model, "B"],
