@@ -58,6 +58,7 @@ describe("parseBemSnapshot", () => {
         ["reads the NMI level", { nmi: 1 }, (s) => s.state.nmiLevel, true],
         ["reads ROMSEL", { fe30: 0x05 }, (s) => s.state.romsel, 0x05],
         ["reads RAM", { ramAddr: 0x100, ramByte: 0xaa }, (s) => s.state.ram[0x100], 0xaa],
+        ["builds a 64K RAM array", {}, (s) => s.state.ram.length, 64 * 1024],
         ["imports a B as a B", { model: 3 }, (s) => s.model, "B"],
         ["imports a B with sideways RAM as a B", { model: 4 }, (s) => s.model, "B"],
     ])("%s", async (_, overrides, pick, expected) => {
