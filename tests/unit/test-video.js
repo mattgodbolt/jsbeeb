@@ -5,6 +5,7 @@ import {
     Video,
     VDISPENABLE,
     EVERYTHINGENABLED,
+    HDISPENABLE,
     OPAQUE_BLACK,
     LineCountPeriod,
     PalPhasePerLine,
@@ -135,6 +136,9 @@ function drawCellAtOrigin(v, byte) {
     v.run(1);
     video.renderPending();
 }
+
+// A framebuffer's worth of toEqual diff takes minutes to print.
+const firstDifferentPixel = (actual, expected) => actual.findIndex((pixel, i) => pixel !== expected[i]);
 
 function clearBothFields(video) {
     for (const frameCount of [0, 1]) {
@@ -977,6 +981,7 @@ describe("Video", () => {
     describe.each(["wasm", "js"])("the clear between frames on the %s drain", (drainKind) => {
         const AllPixelsSet = 0xff;
         const CursorOnFirstCell = 0x80;
+        const InBorder = EVERYTHINGENABLED & ~HDISPENABLE;
         const Mode0 = 0x9c;
         const WideR1 = 80;
         const NarrowR1 = 20;
@@ -993,14 +998,15 @@ describe("Video", () => {
 
             // A cursor shows by inverting a black cell.
             it.each([
-                ["a cell running past the end of its row", 100, 0x00, AllPixelsSet],
-                ["a cursor running past the end of its row", 100, CursorOnFirstCell, 0],
-                ["a cell above an odd field", -1, 0x00, AllPixelsSet],
-            ])("blacks out %s", (_, bitmapY, ulaControl, byte) => {
+                ["a cell running past the end of its row", 100, 0x00, AllPixelsSet, EVERYTHINGENABLED],
+                ["a cursor running past the end of its row", 100, CursorOnFirstCell, 0, EVERYTHINGENABLED],
+                ["a cell above an odd field", -1, 0x00, AllPixelsSet, EVERYTHINGENABLED],
+                ["a teletext cursor in the border", 100, Mode4Teletext | CursorOnFirstCell, 0, InBorder],
+            ])("blacks out %s", (_, bitmapY, ulaControl, byte, dispEnabled) => {
                 video.ula.write(0, ulaControl);
                 video.ula.write(1, LogicalZeroAsPhysicalZero);
                 Object.assign(video, {
-                    dispEnabled: EVERYTHINGENABLED,
+                    dispEnabled,
                     horizCounter: 10,
                     bitmapX: 1008,
                     bitmapY,
@@ -1047,7 +1053,7 @@ describe("Video", () => {
                     [before, WideR1, 2],
                     [after, NarrowR1, 4],
                 ]);
-                expect(actual).toEqual(expected);
+                expect(firstDifferentPixel(actual, expected)).toBe(-1);
             });
         });
     });
@@ -1884,7 +1890,7 @@ describe("Video", () => {
 
                 restored.video.restoreState(saved.video.snapshotState());
 
-                expect(frameAfterNarrowing(restored)).toEqual(frameAfterNarrowing(saved));
+                expect(firstDifferentPixel(frameAfterNarrowing(restored), frameAfterNarrowing(saved))).toBe(-1);
             },
         );
 

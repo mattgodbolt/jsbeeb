@@ -55,7 +55,7 @@
 //    to the last's (plus the row below when doubled). Records arrive in beam order, so the first is the top row and
 //    the last the bottom one: Video appends them only while bitmapX is within a row, and bitmapY only grows, except
 //    at flyback and restore, which drain first. A cell running past the end of its row widens the box to the whole
-//    width and the next row; a clipped cell's row, -1 or -2, counts as row 0, where it spills.
+//    width and the next row; a clipped cell's row is -1 or -2, and it spills onto row 0.
 // 3. A negative `start` is a cell on the line above an odd field; only its right end, spilling onto row 0, is drawn,
 //    pixel by pixel (drawClipped).
 // 4. A cursor record inverts the RGB of the cell's pixels, on both rows when lines are doubled (invertCursor).
@@ -479,13 +479,7 @@ const WidenBoxes = `
     i32.and                                 ;; [the first record's start]
     i32.const ${RowShift}
     i32.shr_s
-    local.tee firstRow                      ;; firstRow = its row, -1 or -2 for a clipped cell; [firstRow]
-    i32.const 0
-    local.get firstRow
-    i32.const 0
-    i32.gt_s
-    select
-    local.set firstRow                      ;; firstRow = max(firstRow, 0), where a clipped cell spills
+    local.set firstRow                      ;; firstRow = its row, -1 or -2 for a clipped cell
     ${range(0, FieldParities)
         .map((parity) => {
             const box = parity * BoxBytes;
@@ -911,7 +905,7 @@ function widenByCells({ drawnBoxes }, minColumn, maxColumn, firstStart, lastStar
         drawnBoxes,
         spill ? 0 : minColumn,
         spill ? RowPixels : maxColumn + pixelsPerChar,
-        Math.max(firstStart >> RowShift, 0),
+        firstStart >> RowShift,
         (lastStart >> RowShift) + Number(doubledLines) + spill + 1,
     );
 }
@@ -1111,8 +1105,9 @@ export class VideoDrain {
     clearDrawn(parity) {
         const box = this.drawnBoxes.subarray(parity * BoxWords, (parity + 1) * BoxWords);
         const [minColumn, endColumn, firstRow, endRow] = box;
-        const lastRow = Math.min(endRow, this.fb32.length >>> RowShift);
-        for (let row = firstRow + ((firstRow ^ parity) & 1); row < lastRow; row += FieldParities) {
+        const fromRow = Math.max(firstRow, 0);
+        const toRow = Math.min(endRow, this.fb32.length >>> RowShift);
+        for (let row = fromRow + ((fromRow ^ parity) & 1); row < toRow; row += FieldParities) {
             this.fb32.fill(OPAQUE_BLACK, (row << RowShift) + minColumn, (row << RowShift) + endColumn);
         }
         box.set(EmptyBox);
