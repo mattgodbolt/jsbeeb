@@ -676,3 +676,146 @@ describe("Cpu6502 debug read hook", () => {
         expect(reads).toContainEqual([stackTop, ReturnAddressLessOne >>> 8]);
     });
 });
+
+describe("Cpu6502 debug hooks on the fast path", () => {
+    const ProgramAddress = 0x2000;
+    const ZeroPageAddress = 0x70;
+    const AbsoluteAddress = 0x3000;
+    const HookAddedAtCycle = 50;
+    // prettier-ignore
+    const Program = [
+        0xa9, 0x5a, // LDA #&5A
+        0x85, ZeroPageAddress, // STA &70
+        0x48, // PHA
+        0xad, 0x00, 0x30, // LDA &3000
+        0x4c, 0x00, 0x20, // JMP &2000
+    ];
+
+    async function cpuRunningProgram() {
+        const cpu = makeCpu();
+        await cpu.initialise();
+        Program.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
+        cpu.writemem(AbsoluteAddress, 0x99);
+        cpu.pc = ProgramAddress;
+        return cpu;
+    }
+
+    it("sees the next access after a read hook is added part way through a run", async () => {
+        const cpu = await cpuRunningProgram();
+        const reads = [];
+        cpu.scheduler
+            .newTask(() =>
+                cpu.debugRead.add((addr, value) => {
+                    reads.push([addr, value]);
+                }),
+            )
+            .schedule(HookAddedAtCycle);
+        expect(cpu.onFastPath).toBe(true);
+
+        cpu.execute(200);
+
+        expect(reads).toContainEqual([AbsoluteAddress, 0x99]);
+        expect(reads).toContainEqual([ProgramAddress, Program[0]]);
+    });
+
+    it("sees zero page and stack writes", async () => {
+        const cpu = await cpuRunningProgram();
+        const stackTop = 0x100 + cpu.s;
+        const writes = [];
+        cpu.debugWrite.add((addr, value) => {
+            writes.push([addr, value]);
+        });
+
+        cpu.execute(20);
+
+        expect(writes).toContainEqual([ZeroPageAddress, 0x5a]);
+        expect(writes).toContainEqual([stackTop, 0x5a]);
+    });
+
+    it("are not called once removed, and leave the fast tables as they found them", async () => {
+        const cpu = await cpuRunningProgram();
+        const readLook = cpu.readLook.slice();
+        const writeLook = cpu.writeLook.slice();
+        const calls = [];
+        const read = cpu.debugRead.add(() => {
+            calls.push("read");
+        });
+        const write = cpu.debugWrite.add(() => {
+            calls.push("write");
+        });
+        read.remove();
+        write.remove();
+
+        cpu.execute(20);
+
+        expect(calls).toEqual([]);
+        expect(cpu.readLook).toEqual(readLook);
+        expect(cpu.writeLook).toEqual(writeLook);
+    });
+});
+
+describe("Cpu6502 paged memory", () => {
+    const RomSelectRegister = 0xfe30;
+    const AccconRegister = 0xfe34;
+    const PagedWindow = 0x8000;
+    const OsAddress = 0xc000;
+    const ShadowAddress = 0x3000;
+    const AndySelect = 0x80;
+    const AccconShadow = 0x04;
+    const AccconHazel = 0x08;
+    const BasicBank = 15;
+    const MasterSidewaysRamBanks = [4, 5];
+
+    async function initialised(modelName) {
+        const cpu = fake6502(findModel(modelName));
+        await cpu.initialise();
+        return cpu;
+    }
+
+    it("ignores writes to a ROM bank and the OS", async () => {
+        const cpu = await initialised("B-DFS1.2");
+        cpu.writemem(RomSelectRegister, BasicBank);
+        const basicByte = cpu.readmem(PagedWindow);
+        const osByte = cpu.readmem(OsAddress);
+
+        cpu.writemem(PagedWindow, basicByte ^ 0xff);
+        cpu.writemem(OsAddress, osByte ^ 0xff);
+
+        expect(cpu.readmem(PagedWindow)).toBe(basicByte);
+        expect(cpu.readmem(OsAddress)).toBe(osByte);
+    });
+
+    it("reads and writes each sideways RAM bank and ANDY as ROMSEL pages them", async () => {
+        const cpu = await initialised("Master");
+        const [first, second] = MasterSidewaysRamBanks;
+        cpu.writemem(RomSelectRegister, first);
+        cpu.writemem(PagedWindow, 0x11);
+        cpu.writemem(RomSelectRegister, second);
+        cpu.writemem(PagedWindow, 0x22);
+        cpu.writemem(RomSelectRegister, AndySelect | second);
+        cpu.writemem(PagedWindow, 0x33);
+
+        expect(cpu.readmem(PagedWindow)).toBe(0x33);
+        cpu.writemem(RomSelectRegister, first);
+        expect(cpu.readmem(PagedWindow)).toBe(0x11);
+        cpu.writemem(RomSelectRegister, second);
+        expect(cpu.readmem(PagedWindow)).toBe(0x22);
+        expect(cpu.romBank(first)[0]).toBe(0x11);
+        expect(cpu.romBank(second)[0]).toBe(0x22);
+    });
+
+    it("reads and writes shadow RAM and HAZEL as ACCCON pages them", async () => {
+        const cpu = await initialised("Master");
+        const osByte = cpu.readmem(OsAddress);
+        cpu.writemem(ShadowAddress, 0x44);
+        cpu.writemem(AccconRegister, AccconShadow | AccconHazel);
+        cpu.writemem(ShadowAddress, 0x55);
+        cpu.writemem(OsAddress, osByte ^ 0xff);
+
+        expect(cpu.readmem(ShadowAddress)).toBe(0x55);
+        expect(cpu.readmem(OsAddress)).toBe(osByte ^ 0xff);
+        cpu.writemem(AccconRegister, 0);
+        expect(cpu.readmem(ShadowAddress)).toBe(0x44);
+        expect(cpu.readmem(OsAddress)).toBe(osByte);
+    });
+});
