@@ -632,7 +632,7 @@ describe("peeking at the hardware", () => {
     });
 });
 
-describe("Cpu6502 debug read hook", () => {
+describe("Cpu6502 debug hooks", () => {
     const ProgramAddress = 0x2000;
     const ZeroPageAddress = 0x70;
     const AbsoluteAddress = 0x3000;
@@ -649,6 +649,15 @@ describe("Cpu6502 debug read hook", () => {
         0x4c, 0x0e, 0x20, // JMP &200E
     ];
     const ReturnAddressLessOne = 0x200d;
+    const HookAddedAtCycle = 50;
+    // prettier-ignore
+    const StoringLoop = [
+        0xa9, 0x5a, // LDA #&5A
+        0x85, ZeroPageAddress, // STA &70
+        0x48, // PHA
+        0xad, 0x00, 0x30, // LDA &3000
+        0x4c, 0x00, 0x20, // JMP &2000
+    ];
 
     it.each([
         ["6502", TEST_6502],
@@ -675,33 +684,18 @@ describe("Cpu6502 debug read hook", () => {
         expect(reads).toContainEqual([stackTop - 1, ReturnAddressLessOne & 0xff]);
         expect(reads).toContainEqual([stackTop, ReturnAddressLessOne >>> 8]);
     });
-});
 
-describe("Cpu6502 debug hooks on the fast path", () => {
-    const ProgramAddress = 0x2000;
-    const ZeroPageAddress = 0x70;
-    const AbsoluteAddress = 0x3000;
-    const HookAddedAtCycle = 50;
-    // prettier-ignore
-    const Program = [
-        0xa9, 0x5a, // LDA #&5A
-        0x85, ZeroPageAddress, // STA &70
-        0x48, // PHA
-        0xad, 0x00, 0x30, // LDA &3000
-        0x4c, 0x00, 0x20, // JMP &2000
-    ];
-
-    async function cpuRunningProgram() {
+    async function cpuRunningStoringLoop() {
         const cpu = makeCpu();
         await cpu.initialise();
-        Program.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
+        StoringLoop.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
         cpu.writemem(AbsoluteAddress, 0x99);
         cpu.pc = ProgramAddress;
         return cpu;
     }
 
     it("sees the next access after a read hook is added part way through a run", async () => {
-        const cpu = await cpuRunningProgram();
+        const cpu = await cpuRunningStoringLoop();
         const reads = [];
         cpu.scheduler
             .newTask(() =>
@@ -715,11 +709,11 @@ describe("Cpu6502 debug hooks on the fast path", () => {
         cpu.execute(200);
 
         expect(reads).toContainEqual([AbsoluteAddress, 0x99]);
-        expect(reads).toContainEqual([ProgramAddress, Program[0]]);
+        expect(reads).toContainEqual([ProgramAddress, StoringLoop[0]]);
     });
 
     it("sees zero page and stack writes", async () => {
-        const cpu = await cpuRunningProgram();
+        const cpu = await cpuRunningStoringLoop();
         const stackTop = 0x100 + cpu.s;
         const writes = [];
         cpu.debugWrite.add((addr, value) => {
@@ -733,7 +727,7 @@ describe("Cpu6502 debug hooks on the fast path", () => {
     });
 
     it("are not called once removed, and leave the fast tables as they found them", async () => {
-        const cpu = await cpuRunningProgram();
+        const cpu = await cpuRunningStoringLoop();
         const readLook = cpu.readLook.slice();
         const writeLook = cpu.writeLook.slice();
         const calls = [];

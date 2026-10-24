@@ -27,7 +27,7 @@ const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const RomWriteSinkOffset = OsOffset + RomBankBytes;
 const BbcMemoryBytes = RomWriteSinkOffset + 256;
-const SlowPathPage = -0x40000000;
+const SlowPathOffset = -0x40000000;
 
 /**
  * Packs sideways RAM banks into a snapshot's `swram` and `swramBankMask`: the banks back to back in ascending
@@ -708,8 +708,8 @@ export class Cpu6502 extends Base6502 {
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
         this.memLook = new Int32Array(512); // Cannot be unsigned as we use negative offsets
-        this.readLook = new Int32Array(512).fill(SlowPathPage);
-        this.writeLook = new Int32Array(512).fill(SlowPathPage);
+        this.readLook = new Int32Array(512).fill(SlowPathOffset);
+        this.writeLook = new Int32Array(512).fill(SlowPathOffset);
         this.ramRomOs = new Uint8Array(this.memoryBytes);
         this.romOffset = RomOffset;
         this.osOffset = OsOffset;
@@ -806,8 +806,8 @@ export class Cpu6502 extends Base6502 {
             for (let i = page; i < 512; i += 256) {
                 const stat = this.memStat[i];
                 const offset = this.memLook[i];
-                this.readLook[i] = stat && !readHooked ? offset : SlowPathPage;
-                if (writeHooked || stat === 0) this.writeLook[i] = SlowPathPage;
+                this.readLook[i] = stat && !readHooked ? offset : SlowPathOffset;
+                if (writeHooked || stat === 0) this.writeLook[i] = SlowPathOffset;
                 else this.writeLook[i] = stat === 1 ? offset : RomWriteSinkOffset - (page << 8);
             }
         }
@@ -864,7 +864,7 @@ export class Cpu6502 extends Base6502 {
     readmemZpStack(addr) {
         addr &= 0xffff;
         const offset = this.readLook[addr >>> 8];
-        if (offset !== SlowPathPage) return this.ramRomOs[offset + addr] | 0;
+        if (offset !== SlowPathOffset) return this.ramRomOs[offset + addr] | 0;
         return this.readmemSlow(addr);
     }
 
@@ -872,7 +872,7 @@ export class Cpu6502 extends Base6502 {
         addr &= 0xffff;
         b |= 0;
         const offset = this.writeLook[addr >>> 8];
-        if (offset !== SlowPathPage) this.ramRomOs[offset + addr] = b;
+        if (offset !== SlowPathOffset) this.ramRomOs[offset + addr] = b;
         else this.writememSlow(addr, b);
     }
 
@@ -1069,7 +1069,7 @@ export class Cpu6502 extends Base6502 {
     readmem(addr) {
         addr &= 0xffff;
         const offset = this.readLook[this.memStatOffset + (addr >>> 8)];
-        if (offset !== SlowPathPage) return this.ramRomOs[offset + addr] | 0;
+        if (offset !== SlowPathOffset) return this.ramRomOs[offset + addr] | 0;
         return this.readmemSlow(addr);
     }
 
@@ -1211,7 +1211,7 @@ export class Cpu6502 extends Base6502 {
         addr &= 0xffff;
         b |= 0;
         const offset = this.writeLook[this.memStatOffset + (addr >>> 8)];
-        if (offset !== SlowPathPage) this.ramRomOs[offset + addr] = b;
+        if (offset !== SlowPathOffset) this.ramRomOs[offset + addr] = b;
         else this.writememSlow(addr, b);
     }
 
