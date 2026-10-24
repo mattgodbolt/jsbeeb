@@ -6,18 +6,18 @@ const Spinning = 2;
 const Volume = 0.25;
 /**
  * Each seekNNin/seekNNout.wav is a real 40-track drive taking 35 steps at NN ms a step, inward
- * (to higher tracks) or outward, recorded with a Greaseweazle stepping it. Each starts
- * RunLeadSeconds before its first step's onset and ends with the head settling after its last.
- * A drive sounds different stepping fast than slow: the stepper never comes to rest, so each
- * step is softer and the run comes out about as loud at 6 ms as at 30 ms. Stacking up clicks
- * recorded at a slow rate gets that wrong, so each rate a controller offers has its own run.
- * A lone step is stepin/stepout.wav, the same drive taking one step from rest, a little louder
- * than its share of a run so that it carries on its own.
+ * (to higher tracks) or outward, recorded with a Greaseweazle stepping it. Step k's click
+ * follows its cut point, RunLeadSeconds + k * NN ms, in the quiet before it (at 6 ms the steps
+ * run together and there is none), and the head's settle follows the last. A lone step is
+ * stepin/stepout.wav, the same drive taking one step from rest, a little louder than its share
+ * of a run so that it carries on its own.
  */
 const RunRatesMs = [6, 12, 20, 24, 30];
 const RunSteps = 35;
 const RunLeadSeconds = 0.005;
-/** Joins between pieces of a run cross-fade over this long, ending at a step's onset. */
+/** A run's first steps start it from rest, so a seek longer than a run repeats the ones after. */
+const RunFillFirstStep = 5;
+/** Pieces of a run cross-fade over this long, ending at a step's cut point. */
 const JoinFadeSeconds = 0.002;
 
 const runName = (rateMs, inward) => `seek${String(rateMs).padStart(2, "0")}${inward ? "in" : "out"}`;
@@ -83,7 +83,7 @@ export class DdNoise extends SamplePlayer {
     /**
      * The head is about to take `steps` steps (positive inward), one every `stepMs`: the last
      * that many steps of the recorded run nearest that rate, through to its settle. A seek
-     * longer than the recording plays the run's opening steps first, as many times as it takes.
+     * longer than the recording plays steps from its middle first, as many times as it takes.
      * A single step is a lone step, held off while the last one still sounds.
      */
     seekStart(steps, stepMs) {
@@ -103,8 +103,8 @@ export class DdNoise extends SamplePlayer {
         const parts = [];
         let done = 0;
         while (count - done > RunSteps) {
-            const take = Math.min(RunSteps, count - done - RunSteps);
-            parts.push(this.playSteps(sound, start + done * stepSeconds, 0, take, stepSeconds));
+            const take = Math.min(RunSteps - RunFillFirstStep, count - done - RunSteps);
+            parts.push(this.playSteps(sound, start + done * stepSeconds, RunFillFirstStep, take, stepSeconds));
             done += take;
         }
         parts.push(this.playSteps(sound, start + done * stepSeconds, RunSteps - (count - done), null, stepSeconds));
@@ -112,20 +112,20 @@ export class DdNoise extends SamplePlayer {
     }
 
     /**
-     * Plays `take` of the recording's steps from step `first`, the first onset landing at
-     * `onset`; a null `take` plays everything from `first` on, settle and all.
+     * Plays `take` of the recording's steps from step `first`, its cut point landing at
+     * `cutAt`; a null `take` plays everything from `first` on, settle and all.
      */
-    playSteps(sound, onset, first, take, stepSeconds) {
+    playSteps(sound, cutAt, first, take, stepSeconds) {
         const offset = RunLeadSeconds + first * stepSeconds - JoinFadeSeconds;
-        const duration = take === null ? sound.duration - offset : take * stepSeconds + 2 * JoinFadeSeconds;
+        const duration = take === null ? sound.duration - offset : take * stepSeconds + JoinFadeSeconds;
         const stepping = take === null ? RunSteps - first : take;
-        const at = onset - JoinFadeSeconds;
+        const at = cutAt - JoinFadeSeconds;
         const source = this.startSound(sound, { when: at, offset, duration, fadeSeconds: JoinFadeSeconds });
-        return { source, at, offset, stepsEnd: onset + stepping * stepSeconds };
+        return { source, at, cutAt, stepsEnd: cutAt + stepping * stepSeconds };
     }
 
     /**
-     * The head has stopped after `steps` steps. Fewer than announced cuts the run off where
+     * The head has stopped after `steps` steps. Fewer than announced fades the run out where
      * the next step would have sounded and lets the recording's settle ring from there. The
      * run stays until a new movement, so that a settle still to come can give way to it.
      */
@@ -133,21 +133,29 @@ export class DdNoise extends SamplePlayer {
         const run = this.run;
         if (!run || steps >= run.steps) return;
         const stopAt = run.start + steps * run.stepSeconds;
-        for (const part of run.parts) {
-            if (part.at >= stopAt) part.source?.stop();
-            else if (part.stepsEnd > stopAt) part.source?.stop(stopAt);
+        for (const { source, cutAt, stepsEnd } of run.parts) {
+            if (!source) continue;
+            if (cutAt >= stopAt) source.stop();
+            else if (stepsEnd > stopAt) this.stopSound(source, stopAt, JoinFadeSeconds);
         }
         run.parts.push(this.playSteps(run.sound, stopAt, RunSteps, null, run.stepSeconds));
         run.steps = steps;
     }
 
-    /** Stops the parts of a run with steps still to sound; a settle already ringing rings on. */
+    /**
+     * Stops the parts of a run with steps still to sound, fading out any already sounding; a
+     * settle already ringing rings on.
+     */
     cancelRun() {
         if (!this.run) return;
         const { parts } = this.run;
         this.run = null;
         const now = this.context.currentTime;
-        for (const part of parts) if (now < part.stepsEnd) part.source?.stop();
+        for (const { source, at, stepsEnd } of parts) {
+            if (!source || now >= stepsEnd) continue;
+            if (at > now) source.stop();
+            else this.stopSound(source, now + JoinFadeSeconds, JoinFadeSeconds);
+        }
     }
 }
 

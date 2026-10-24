@@ -7,6 +7,7 @@ const RunRates = [6, 12, 20, 24, 30];
 const RunSteps = 35;
 const RunLead = 0.005;
 const JoinFade = 0.002;
+const RunFillFirstStep = 5;
 const Settle = 0.06;
 
 const runName = (rate, inward) => `seek${String(rate).padStart(2, "0")}${inward ? "in" : "out"}`;
@@ -31,18 +32,15 @@ function loadedDdNoise(context) {
     return ddNoise;
 }
 
-/** A 16-bit mono WAV's samples, as magnitudes from 0 to 1, and its rate. */
-function wavMagnitudes(path) {
+/** A 16-bit mono WAV's samples, from -1 to 1, and its rate. */
+function wavSamples(path) {
     const bytes = readFileSync(new URL(path, import.meta.url));
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const rate = view.getUint32(24, true);
     let chunk = 12;
     while (bytes.toString("latin1", chunk, chunk + 4) !== "data") chunk += 8 + view.getUint32(chunk + 4, true);
     const count = view.getUint32(chunk + 4, true) / 2;
-    const samples = Float32Array.from(
-        { length: count },
-        (_, i) => Math.abs(view.getInt16(chunk + 8 + 2 * i, true)) / 32768,
-    );
+    const samples = Float32Array.from({ length: count }, (_, i) => view.getInt16(chunk + 8 + 2 * i, true) / 32768);
     return { samples, rate };
 }
 
@@ -52,6 +50,9 @@ const starts = (ddNoise) =>
         const [when = 0, offset = 0, duration] = source.start.mock.calls[0];
         return { sound: source.buffer, when, offset, duration };
     });
+
+/** The gain a source was started through to fade it. */
+const fadeOf = (source) => source.connect.mock.calls[0][0];
 
 /** Where in a run recorded at `rate` ms its step `step` begins, less the join's fade. */
 const stepOffset = (rate, step) => RunLead + (step * rate) / 1000 - JoinFade;
@@ -115,32 +116,40 @@ describe("DdNoise seeks", () => {
         expect(run.offset + run.duration).toBeCloseTo(Sounds.seek20out.duration, 9);
     });
 
-    it("plays a run's opening steps first for a seek longer than the run", () => {
+    it("plays steps from a run's middle first for a seek longer than the run", () => {
         context.currentTime = 5;
         ddNoise.seekStart(79, 6);
         const made = starts(ddNoise);
         expect(made).toHaveLength(3);
         made.forEach(({ sound }) => expect(sound).toBe(Sounds.seek06in));
         const [first, second, last] = made;
-        // 79 steps: 35 and then 9 of the run's opening steps, then its last 35 and the settle.
+        // 79 steps: 30 and then 14 steps from the run's middle, then its last 35 and the settle.
         expect(first.when).toBeCloseTo(5, 9);
-        expect(first.offset).toBeCloseTo(stepOffset(6, 0), 9);
-        expect(first.duration).toBeCloseTo(35 * 0.006 + 2 * JoinFade, 9);
-        expect(second.when).toBeCloseTo(5 + 35 * 0.006, 9);
-        expect(second.offset).toBeCloseTo(stepOffset(6, 0), 9);
-        expect(second.duration).toBeCloseTo(9 * 0.006 + 2 * JoinFade, 9);
+        expect(first.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
+        expect(first.duration).toBeCloseTo(30 * 0.006 + JoinFade, 9);
+        expect(second.when).toBeCloseTo(5 + 30 * 0.006, 9);
+        expect(second.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
+        expect(second.duration).toBeCloseTo(14 * 0.006 + JoinFade, 9);
         expect(last.when).toBeCloseTo(5 + 44 * 0.006, 9);
         expect(last.offset).toBeCloseTo(stepOffset(6, 0), 9);
         expect(last.offset + last.duration).toBeCloseTo(Sounds.seek06in.duration, 9);
     });
 
-    it("cuts the run where the head stopped short, and lets the settle ring from there", () => {
+    it("cross-fades the pieces of a long run, each fading out as the next fades in", () => {
+        ddNoise.seekStart(79, 12);
+        const [first, second] = starts(ddNoise);
+        const firstEnd = first.when + first.duration;
+        expect(second.when).toBeCloseTo(firstEnd - JoinFade, 9);
+    });
+
+    it("fades the run out where the head stopped short, and lets the settle ring from there", () => {
         context.currentTime = 5;
         ddNoise.seekStart(30, 24);
         const [run] = ddNoise.playing;
         ddNoise.seekEnd(11);
         const stopAt = 5 + JoinFade + 11 * 0.024;
         expect(run.stop).toHaveBeenCalledWith(expect.closeTo(stopAt, 9));
+        expect(fadeOf(run).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.closeTo(stopAt, 9));
         const settle = starts(ddNoise).at(-1);
         expect(settle.sound).toBe(Sounds.seek24in);
         expect(settle.when).toBeCloseTo(stopAt - JoinFade, 9);
@@ -156,6 +165,24 @@ describe("DdNoise seeks", () => {
         expect(last.stop).toHaveBeenCalledWith();
     });
 
+    it("fades out the piece of a long run the head stopped in, past the first", () => {
+        ddNoise.seekStart(79, 12);
+        const [first, second, last] = ddNoise.playing;
+        ddNoise.seekEnd(40);
+        expect(first.stop).not.toHaveBeenCalled();
+        expect(second.stop).toHaveBeenCalledWith(expect.closeTo(JoinFade + 40 * 0.012, 9));
+        expect(last.stop).toHaveBeenCalledWith();
+    });
+
+    it("fades out from now when the head is reported stopped after the audio clock has passed it", () => {
+        ddNoise.seekStart(30, 24);
+        const [run] = ddNoise.playing;
+        context.currentTime = 0.5;
+        ddNoise.seekEnd(11);
+        expect(run.stop).toHaveBeenCalledWith(expect.closeTo(0.5 + JoinFade, 9));
+        expect(fadeOf(run).gain.setValueAtTime).toHaveBeenLastCalledWith(1, 0.5);
+    });
+
     it("leaves a run alone when the head stops where it was told to", () => {
         ddNoise.seekStart(5, 24);
         const made = ddNoise.playing.slice();
@@ -164,12 +191,16 @@ describe("DdNoise seeks", () => {
         expect(ddNoise.playing).toHaveLength(made.length);
     });
 
-    it("gives way to a new movement while steps are still to sound", () => {
+    it("fades out for a new movement while steps are still to sound", () => {
         ddNoise.seekStart(30, 24);
         const [old] = ddNoise.playing;
         context.currentTime = 0.05;
         ddNoise.seekStart(-1, 24);
-        expect(old.stop).toHaveBeenCalled();
+        expect(old.stop).toHaveBeenCalledWith(expect.closeTo(0.05 + JoinFade, 9));
+        expect(fadeOf(old).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+            0,
+            expect.closeTo(0.05 + JoinFade, 9),
+        );
         expect(starts(ddNoise).at(-1).sound).toBe(Sounds.stepOut);
     });
 
@@ -201,12 +232,49 @@ describe("DdNoise seeks", () => {
 });
 
 describe("DdNoise recorded runs", () => {
+    /** The run's energy above about 1.5 kHz, where a step's click is, folded over a step period. */
+    function clickEnergyByPhase(name, rate, bins) {
+        const { samples, rate: sampleRate } = wavSamples(`../../public/sounds/disc525/${name}.wav`);
+        // RBJ high-pass, Q 0.707
+        const w = (2 * Math.PI * 1500) / sampleRate;
+        const alpha = Math.sin(w) / (2 * Math.SQRT1_2);
+        const cos = Math.cos(w);
+        const a0 = 1 + alpha;
+        const [b0, b1, b2] = [(1 + cos) / 2 / a0, -(1 + cos) / a0, (1 + cos) / 2 / a0];
+        const [a1, a2] = [(-2 * cos) / a0, (1 - alpha) / a0];
+        const period = (rate / 1000) * sampleRate;
+        const first = Math.round(RunLead * sampleRate);
+        const sums = new Float64Array(bins);
+        const counts = new Float64Array(bins);
+        let [x1, x2, y1, y2] = [0, 0, 0, 0];
+        for (let i = 0; i < first + RunSteps * period; ++i) {
+            const y = b0 * samples[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            [x2, x1, y2, y1] = [x1, samples[i], y1, y];
+            if (i < first) continue;
+            const bin = Math.floor((((i - first) % period) / period) * bins);
+            sums[bin] += y * y;
+            counts[bin]++;
+        }
+        return Array.from(sums, (sum, bin) => sum / counts[bin]);
+    }
+
     it.each(RunRates.flatMap((rate) => [true, false].map((inward) => [runName(rate, inward), rate])))(
-        "%s fades in from silence and holds the lead, every step and a settle",
+        "%s fades in from silence and is long enough for the lead, every step and a settle",
         (name, rate) => {
-            const { samples, rate: sampleRate } = wavMagnitudes(`../../public/sounds/disc525/${name}.wav`);
+            const { samples, rate: sampleRate } = wavSamples(`../../public/sounds/disc525/${name}.wav`);
             expect(samples.length / sampleRate).toBeGreaterThan(RunLead + RunSteps * (rate / 1000) + 0.02);
-            expect(samples[0]).toBeLessThan(0.01);
+            expect(Math.abs(samples[0])).toBeLessThan(0.01);
         },
     );
+
+    // At 6 ms the steps run into one another, and no part of a period is quiet.
+    it.each(
+        RunRates.filter((rate) => rate > 6).flatMap((rate) =>
+            [true, false].map((inward) => [runName(rate, inward), rate]),
+        ),
+    )("%s puts each step's cut point in the quiet before its click", (name, rate) => {
+        const energy = clickEnergyByPhase(name, rate, 12);
+        expect(energy[0]).toBeLessThan(1.25 * Math.min(...energy));
+        expect(energy[0]).toBeLessThan(0.5 * Math.max(...energy));
+    });
 });
