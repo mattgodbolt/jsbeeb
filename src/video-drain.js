@@ -948,8 +948,8 @@ function flushRun({ rowExtents }, runStart, runEnd, doubledLines) {
 
 /**
  * Draws the first `count` records of `views`, in order, in its palette: the JS drain, the same as the Wasm one.
- * @param {{records: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, table4bpp: Uint8Array,
- *     palette: Int32Array}} views
+ * @param {{records: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, rowExtents: Int32Array,
+ *     table4bpp: Uint8Array, palette: Int32Array}} views
  * @param {number} count
  * @param {number} modeBase the table4bpp offset of byte 0 in the ULA mode
  * @param {number} pixelsPerChar

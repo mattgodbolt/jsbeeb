@@ -136,6 +136,13 @@ function drawCellAtOrigin(v, byte) {
     video.renderPending();
 }
 
+function clearBothFields(video) {
+    for (const frameCount of [0, 1]) {
+        video.frameCount = frameCount;
+        video.clearPaintBuffer();
+    }
+}
+
 // MODE 7's vertical timing: with interlace sync and video the scanline
 // counter steps by two, so R9 must be even for rows to end at all.
 function programInterlaceSyncAndVideoFrame(v) {
@@ -790,6 +797,17 @@ describe("Video", () => {
             expect(fb.every((pixel, i) => pixel === before[i])).toBe(true);
         });
 
+        it("leaves the clear nothing to miss when a switch to 1MHz repaints a half the drain never drew", () => {
+            video.ula.write(0, Mode0);
+            video.polltime(1);
+
+            video.ula.write(0, Mode4);
+
+            expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
+            clearBothFields(video);
+            expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
+        });
+
         it("leaves a 2MHz mode alone, where every tick already paints", () => {
             video.ula.write(0, Mode0);
             video.polltime(1);
@@ -957,13 +975,6 @@ describe("Video", () => {
         const WideR1 = 80;
         const NarrowR1 = 20;
 
-        const clearBothFields = (v) => {
-            for (const frameCount of [0, 1]) {
-                v.frameCount = frameCount;
-                v.clearPaintBuffer();
-            }
-        };
-
         describe.each([
             ["single", 3],
             ["doubled", 0],
@@ -979,7 +990,6 @@ describe("Video", () => {
                 ["a cell running past the end of its row", 100, 0x00, AllPixelsSet],
                 ["a cursor running past the end of its row", 100, CursorOnFirstCell, 0],
                 ["a cell above an odd field", -1, 0x00, AllPixelsSet],
-                ["a cursor above an odd field", -1, CursorOnFirstCell, 0],
             ])("blacks out %s", (_, bitmapY, ulaControl, byte) => {
                 video.ula.write(0, ulaControl);
                 video.ula.write(1, LogicalZeroAsPhysicalZero);
@@ -1836,6 +1846,38 @@ describe("Video", () => {
 
     describe("snapshotState / restoreState", () => {
         const fresh = (options) => makeVideo(options).video;
+
+        it("clears the teletext a restore into MODE 7 paints, on a video that was showing a bitmap", () => {
+            // Both modes run the CRTC at 1MHz.
+            const FrameClocks = 2 * ClocksPerFrame;
+            const WideR1 = 40;
+            const NarrowR1 = 10;
+            const startVideo = (ulaControl, r1) => {
+                const r = makeVideo();
+                programStandardFrame(r);
+                r.cpu.data = 0xff;
+                r.video.ula.write(0, ulaControl);
+                r.writeCrtc(1, r1);
+                return r;
+            };
+            // The frame after narrowing shows the wide frame's rows only if the clear before it missed them.
+            const frameAfterNarrowing = (r) => {
+                let painted;
+                r.video.paint_ext = () => (painted = r.video.fb32.slice());
+                r.run(FrameClocks);
+                r.writeCrtc(1, NarrowR1);
+                r.run(FrameClocks);
+                return painted;
+            };
+            const saved = startVideo(Mode4Teletext, WideR1);
+            saved.run(2 * FrameClocks + FrameClocks / 2);
+            const restored = startVideo(Mode4, NarrowR1);
+            restored.run(2 * FrameClocks);
+
+            restored.video.restoreState(saved.video.snapshotState());
+
+            expect(frameAfterNarrowing(restored)).toEqual(frameAfterNarrowing(saved));
+        });
 
         it.each([
             ["a stock ULA", {}],

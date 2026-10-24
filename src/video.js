@@ -630,7 +630,7 @@ export class Video {
         this.halfClock = state.halfClock;
         this.ulaMode = state.ulaMode;
         this.teletextMode = state.teletextMode;
-        this.drain.markAllDrawn();
+        if (this.teletextMode) this.teletextDrawnSinceClear = true;
         // Derived from the above, so it is recomputed rather than snapshotted.
         this.updateLineGridUla();
         this.displayEnableSkew = state.displayEnableSkew;
