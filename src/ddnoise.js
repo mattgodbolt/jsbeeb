@@ -149,7 +149,7 @@ export class DdNoise extends SamplePlayer {
         const stopAt = run.start + steps * run.stepSeconds;
         for (const { source, at, cutAt, stepsEnd } of run.parts) {
             if (!source || (cutAt < stopAt && stepsEnd <= stopAt)) continue;
-            if (cutAt >= stopAt && at > now) source.stop();
+            if (cutAt >= stopAt && now < at + JoinFadeSeconds) source.stop();
             else this.stopSound(source, stopAt, JoinFadeSeconds);
         }
         const settleAt = Math.max(stopAt, now + JoinFadeSeconds);
@@ -158,7 +158,8 @@ export class DdNoise extends SamplePlayer {
 
     /**
      * Stops the parts of a run with steps still to sound, fading out any already sounding; a
-     * settle already ringing rings on.
+     * part still fading in has not been heard, and stops outright, since fading it out from there
+     * would first jump it to full level. A settle already ringing rings on.
      */
     cancelRun() {
         if (!this.run) return;
@@ -167,7 +168,7 @@ export class DdNoise extends SamplePlayer {
         const now = this.context.currentTime;
         for (const { source, at, stepsEnd } of parts) {
             if (!source || now >= stepsEnd) continue;
-            if (at > now) source.stop();
+            if (now < at + JoinFadeSeconds) source.stop();
             else this.stopSound(source, now + JoinFadeSeconds, JoinFadeSeconds);
         }
     }

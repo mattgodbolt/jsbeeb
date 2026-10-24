@@ -253,6 +253,23 @@ describe("DdNoise seeks", () => {
         expect(starts(ddNoise).at(-1).sound).toBe(Sounds.stepOut);
     });
 
+    it("stops outright a run a new movement interrupts while it is still fading in", () => {
+        ddNoise.seekStart(30, 24);
+        const [old] = ddNoise.playing;
+        context.currentTime = JoinFade / 2;
+        ddNoise.seekStart(-1, 24);
+        expect(old.stop).toHaveBeenCalledWith();
+        expect(fadeOf(old).gain.cancelScheduledValues).not.toHaveBeenCalled();
+    });
+
+    it("stops outright a run that took no steps, told while it is still fading in", () => {
+        ddNoise.seekStart(5, 24);
+        const [run] = ddNoise.playing;
+        context.currentTime = JoinFade / 2;
+        ddNoise.seekEnd(0);
+        expect(run.stop).toHaveBeenCalledWith();
+    });
+
     it("lets a run that has reached its settle ring on under a new movement", () => {
         ddNoise.seekStart(5, 24);
         const [old] = ddNoise.playing;
