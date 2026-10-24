@@ -15,6 +15,7 @@ import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { checkDrainsAgainstJs } from "../helpers/compare-drains.js";
+import { seededRandom } from "../helpers/seeded-random.js";
 
 const NulaPaletteModeOn = 0x11;
 const NulaPaletteModeOff = 0x10;
@@ -113,6 +114,7 @@ function programExternallySyncedTiming(v) {
 }
 
 const Mode4 = 0x88;
+const Mode4Teletext = 0x8a;
 const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
 
 function programNulaColour(v, index, red, green, blue) {
@@ -261,7 +263,7 @@ describe("Video", () => {
     });
 
     describe("feeding the SAA5050", () => {
-        let fetched;
+        const newestFed = () => video.teletext.snapshotState().dataQueue.at(-1);
 
         beforeEach(() => {
             video.dispEnabled = EVERYTHINGENABLED;
@@ -269,19 +271,16 @@ describe("Video", () => {
             video.bitmapY = 100;
             video.horizCounter = 10;
             cpu.data = 0x42;
-            fetched = vi.spyOn(video.teletext, "fetchData");
         });
 
         // See https://github.com/mattgodbolt/jsbeeb/issues/546 and https://github.com/mattgodbolt/jsbeeb/issues/832
-        it("clocks the chip in a bitmap mode too, but shows none of its output", () => {
-            const advanced = vi.spyOn(video.teletext, "advance");
+        it("feeds the chip in a bitmap mode too, but shows none of its output", () => {
             const emitted = vi.spyOn(video.teletext, "emit");
             video.ula.write(0, 0x00);
 
             video.polltime(1);
 
-            expect(fetched).toHaveBeenCalledWith(0x42);
-            expect(advanced).toHaveBeenCalled();
+            expect(newestFed()).toBe(0x42);
             expect(emitted).not.toHaveBeenCalled();
         });
 
@@ -292,13 +291,13 @@ describe("Video", () => {
 
             video.polltime(1);
 
-            expect(fetched).toHaveBeenCalledWith(0x45);
+            expect(newestFed()).toBe(0x45);
         });
 
         it("feeds it nothing outside the vertical display", () => {
             video.dispEnabled = 0;
             video.polltime(1);
-            expect(fetched).not.toHaveBeenCalled();
+            expect(newestFed()).toBe(0);
         });
 
         // The "TTX trick": with the teletext bit set in a 2MHz mode the SAA5050 outputs black.
@@ -360,9 +359,138 @@ describe("Video", () => {
         });
     });
 
+    // The chip runs whatever the ULA shows, so what a line shows in teletext depends on the bytes it
+    // saw while the ULA showed a bitmap. See https://github.com/mattgodbolt/jsbeeb/issues/832
+    describe("the SAA5050 across a frame", () => {
+        const RedAlpha = 0x01;
+        const DoubleHeight = 0x0d;
+        const LetterA = 0x41;
+        const CodeColumn = 2;
+        const TeletextFromColumn = 16;
+        const TeletextToColumn = 32;
+        const SnapshotRow = 5;
+        const BlankingColumn = 50;
+        const DisplayedRows = 25;
+        const PaintsToRun = 3;
+
+        // A MODE 7 shaped frame without interlace: ten scanline rows line the CRTC's rows up with the chip's.
+        function programTeletextRows(r) {
+            r.writeCrtc(0, 63); // Horizontal total
+            r.writeCrtc(1, 40); // Horizontal displayed
+            r.writeCrtc(2, 51); // Hsync position
+            r.writeCrtc(3, 0x24); // Sync widths
+            r.writeCrtc(4, 30); // Vertical total
+            r.writeCrtc(5, 2); // Vertical adjust
+            r.writeCrtc(6, DisplayedRows); // Vertical displayed
+            r.writeCrtc(7, 27); // Vsync position
+            r.writeCrtc(8, 0); // No interlace
+            r.writeCrtc(9, 9); // Scanlines per character row
+        }
+
+        /**
+         * A Video running teletext rows, fetching `byteAt(row, column)` with the ULA in `ulaAt(row, column)`. Its
+         * paints collect the painted framebuffer and the framebuffer rows each character row reached.
+         */
+        function teletextRig({ byteAt, ulaAt }) {
+            const paints = [];
+            let rows = new Map();
+            const r = makeVideo({
+                onPaint: (v) => {
+                    paints.push({ fb: v.fb32.slice(), rows });
+                    rows = new Map();
+                },
+            });
+            programTeletextRows(r);
+            r.cpu.videoRead = () => byteAt(r.video.vertCounter, r.video.horizCounter);
+            let ulaWritten;
+            const step = () => {
+                const { video: v } = r;
+                const ula = ulaAt(v.vertCounter, v.horizCounter);
+                if (ula !== ulaWritten) v.ula.write(0, ula);
+                ulaWritten = ula;
+                if (!rows.has(v.vertCounter)) rows.set(v.vertCounter, new Set());
+                rows.get(v.vertCounter).add(v.bitmapY & ~1);
+                r.run(1);
+            };
+            return { ...r, paints, step };
+        }
+
+        function runUntilPaints(rig, count) {
+            while (rig.paints.length < count) rig.step();
+        }
+
+        function coloursOnRow({ fb, rows }, row) {
+            const colours = new Set();
+            for (const fbRow of rows.get(row) ?? []) {
+                if (fbRow >= 0)
+                    for (const pixel of fb.subarray(fbRow * FbWidth, (fbRow + 1) * FbWidth)) colours.add(pixel);
+            }
+            return colours;
+        }
+
+        const teletextColour = (v, foreground) => v.video.teletext.colour[(foreground << 2) | 3];
+        const RedForeground = 1;
+        const WhiteForeground = 7;
+
+        const switchedMidLine = (code) => ({
+            byteAt: (row, column) => (column === CodeColumn ? code : LetterA),
+            ulaAt: (row, column) => (column >= TeletextFromColumn && column < TeletextToColumn ? Mode4Teletext : Mode4),
+        });
+
+        it.each([
+            ["red text after a red code early in the line", RedAlpha, RedForeground, WhiteForeground],
+            ["white text without one", LetterA, WhiteForeground, RedForeground],
+        ])("shows %s when the line turns to teletext part way along", (_, code, shown, absent) => {
+            const rig = teletextRig(switchedMidLine(code));
+            runUntilPaints(rig, PaintsToRun);
+            const colours = coloursOnRow(rig.paints.at(-1), SnapshotRow);
+            expect(colours.has(teletextColour(rig, shown))).toBe(true);
+            expect(colours.has(teletextColour(rig, absent))).toBe(false);
+        });
+
+        it.each([
+            ["blanks the next row's normal height text", DoubleHeight, false],
+            ["leaves the next row alone", LetterA, true],
+        ])("given a double height code on a bitmap row, %s", (_, code, nextRowShown) => {
+            const BitmapRow = 0;
+            const rig = teletextRig({
+                byteAt: (row, column) => (row === BitmapRow && column === CodeColumn ? code : LetterA),
+                ulaAt: (row) => (row === BitmapRow ? Mode4 : Mode4Teletext),
+            });
+            runUntilPaints(rig, PaintsToRun);
+            const white = teletextColour(rig, WhiteForeground);
+            const paint = rig.paints.at(-1);
+            expect(coloursOnRow(paint, BitmapRow + 1).has(white)).toBe(nextRowShown);
+            expect(coloursOnRow(paint, BitmapRow + 2).has(white)).toBe(true);
+        });
+
+        it.each([
+            ["part way along a line", TeletextFromColumn - 1],
+            ["in the blanking after a line", BlankingColumn],
+        ])("continues identically from a snapshot taken %s", (_, column) => {
+            const driver = switchedMidLine(RedAlpha);
+            const straight = teletextRig(driver);
+            runUntilPaints(straight, PaintsToRun);
+
+            const snapshotted = teletextRig(driver);
+            runUntilPaints(snapshotted, PaintsToRun - 1);
+            const { video: v } = snapshotted;
+            while (v.vertCounter !== SnapshotRow || v.horizCounter !== column) snapshotted.step();
+            const restored = teletextRig(driver);
+            restored.video.restoreState(v.snapshotState());
+            const paintsAtRestore = restored.paints.length;
+            runUntilPaints(restored, paintsAtRestore + 1);
+            const continued = restored.paints.at(-1);
+
+            for (let row = SnapshotRow + 1; row < DisplayedRows; ++row) {
+                expect(coloursOnRow(continued, row)).toEqual(coloursOnRow(straight.paints.at(-1), row));
+            }
+            expect(coloursOnRow(continued, SnapshotRow + 1).has(teletextColour(restored, RedForeground))).toBe(true);
+        });
+    });
+
     // See Video.repaintSecondHalfOfCell.
     describe("ULA writes half way through a 1MHz cell", () => {
-        const Mode4Teletext = 0x8a;
         const Mode0 = 0x9c;
         const Red = 0xff0000ff;
         const PhysicalRed = 1;
@@ -617,16 +745,6 @@ describe("Video", () => {
         const NulaControls = [NulaPaletteModeOn, NulaPaletteModeOff, 0x80, 0x90];
         const FnvOffsetBasis = 0x811c9dc5;
         const FnvPrime = 0x01000193;
-
-        function seededRandom(seed) {
-            let state = seed;
-            return () => {
-                state = (state + 0x6d2b79f5) | 0;
-                let t = Math.imul(state ^ (state >>> 15), state | 1);
-                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-                return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
-            };
-        }
 
         function frameHash(v) {
             let hash = FnvOffsetBasis;
