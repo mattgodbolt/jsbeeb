@@ -136,6 +136,13 @@ function drawCellAtOrigin(v, byte) {
     video.renderPending();
 }
 
+function clearBothFields(video) {
+    for (const frameCount of [0, 1]) {
+        video.frameCount = frameCount;
+        video.clearPaintBuffer();
+    }
+}
+
 // MODE 7's vertical timing: with interlace sync and video the scanline
 // counter steps by two, so R9 must be even for rows to end at all.
 function programInterlaceSyncAndVideoFrame(v) {
@@ -716,7 +723,7 @@ describe("Video", () => {
         const offset = 100 * FbWidth + 100;
 
         // Leaves the beam at the start of a cell with the body about to run on the next tick.
-        beforeEach(() => {
+        const aimAtCell = () => {
             video.dispEnabled = EVERYTHINGENABLED;
             video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell under test
             video.horizCounter = 10;
@@ -725,7 +732,8 @@ describe("Video", () => {
             video.oddClock = false;
             cpu.data = AllPixelsSet;
             for (let logical = 0; logical < 16; ++logical) video.ula.write(1, (logical << 4) | (PhysicalRed ^ 7));
-        });
+        };
+        beforeEach(aimAtCell);
 
         const cell = (at = offset) => {
             video.renderPending();
@@ -789,6 +797,22 @@ describe("Video", () => {
 
             expect(fb.every((pixel, i) => pixel === before[i])).toBe(true);
         });
+
+        it.each(["wasm", "js"])(
+            "leaves the clear nothing to miss when a switch to 1MHz repaints a half the %s drain never drew",
+            (drainKind) => {
+                ({ video, fb, cpu } = makeVideo({ drainKind }));
+                aimAtCell();
+                video.ula.write(0, Mode0);
+                video.polltime(1);
+
+                video.ula.write(0, Mode4);
+
+                expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
+                clearBothFields(video);
+                expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
+            },
+        );
 
         it("leaves a 2MHz mode alone, where every tick already paints", () => {
             video.ula.write(0, Mode0);
@@ -947,6 +971,84 @@ describe("Video", () => {
             video.renderPending();
             expect(Array.from(fb.subarray(0, 8))).toEqual(Array(8).fill(OPAQUE_BLACK));
             expect(fb[8]).toBe(OPAQUE_BLACK);
+        });
+    });
+
+    describe.each(["wasm", "js"])("the clear between frames on the %s drain", (drainKind) => {
+        const AllPixelsSet = 0xff;
+        const CursorOnFirstCell = 0x80;
+        const Mode0 = 0x9c;
+        const WideR1 = 80;
+        const NarrowR1 = 20;
+
+        describe.each([
+            ["single", 3],
+            ["doubled", 0],
+        ])("on %s rows", (_, r8) => {
+            beforeEach(() => {
+                rig = makeVideo({ drainKind });
+                ({ video, fb, cpu } = rig);
+                rig.writeCrtc(8, r8);
+            });
+
+            // A cursor shows by inverting a black cell.
+            it.each([
+                ["a cell running past the end of its row", 100, 0x00, AllPixelsSet],
+                ["a cursor running past the end of its row", 100, CursorOnFirstCell, 0],
+                ["a cell above an odd field", -1, 0x00, AllPixelsSet],
+            ])("blacks out %s", (_, bitmapY, ulaControl, byte) => {
+                video.ula.write(0, ulaControl);
+                video.ula.write(1, LogicalZeroAsPhysicalZero);
+                Object.assign(video, {
+                    dispEnabled: EVERYTHINGENABLED,
+                    horizCounter: 10,
+                    bitmapX: 1008,
+                    bitmapY,
+                    oddClock: false,
+                    cursorOnThisFrame: true,
+                    cursorDrawIndex: 3,
+                });
+                video.regs[7] = 30;
+                cpu.data = byte;
+                rig.run(1);
+                video.renderPending();
+                expect(fb.some((pixel) => pixel !== OPAQUE_BLACK)).toBe(true);
+                clearBothFields(video);
+                expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
+            });
+        });
+
+        // A video that only ever drew the second picture paints the same frame, so the first left nothing behind.
+        describe.each([
+            ["doubled rows", programStandardFrame],
+            ["interlace sync and video", programInterlaceSyncAndVideoFrame],
+        ])("on %s", (_, program) => {
+            const lastPaintedFrame = (steps) => {
+                let painted;
+                const r = makeVideo({ drainKind, onPaint: (v) => (painted = v.fb32.slice()) });
+                program(r);
+                r.cpu.data = AllPixelsSet;
+                for (const [ulaControl, r1, frames] of steps) {
+                    r.video.ula.write(0, ulaControl);
+                    r.writeCrtc(1, r1);
+                    r.run(frames * ClocksPerFrame);
+                }
+                return painted;
+            };
+
+            it.each([
+                ["a bitmap frame after a wider bitmap one", Mode0, Mode0],
+                ["a bitmap frame after a wider teletext one", Mode4Teletext, Mode0],
+                ["a teletext frame after a wider bitmap one", Mode0, Mode4Teletext],
+                ["a teletext frame after a wider teletext one", Mode4Teletext, Mode4Teletext],
+            ])("leaves no pixels of the first frame in %s", (_, before, after) => {
+                const expected = lastPaintedFrame([[after, NarrowR1, 6]]);
+                const actual = lastPaintedFrame([
+                    [before, WideR1, 2],
+                    [after, NarrowR1, 4],
+                ]);
+                expect(actual).toEqual(expected);
+            });
         });
     });
 
@@ -1356,7 +1458,10 @@ describe("Video", () => {
                 chainFrames: 2,
                 r6Gap,
                 interlaceSyncAndVideo: true,
-                onSettled: (video) => video.fb32.fill(Sentinel),
+                onSettled: (video) => {
+                    video.fb32.fill(Sentinel);
+                    video.drain.markAllDrawn();
+                },
                 onVsync: (video, field) => {
                     if (field !== 1) return;
                     nextFieldParity = video.frameCount & 1;
@@ -1747,6 +1852,41 @@ describe("Video", () => {
 
     describe("snapshotState / restoreState", () => {
         const fresh = (options) => makeVideo(options).video;
+
+        it.each(["wasm", "js"])(
+            "clears the teletext a restore into MODE 7 paints, on a %s drain that was showing a bitmap",
+            (drainKind) => {
+                // Both modes run the CRTC at 1MHz.
+                const FrameClocks = 2 * ClocksPerFrame;
+                const WideR1 = 40;
+                const NarrowR1 = 10;
+                const startVideo = (ulaControl, r1) => {
+                    const r = makeVideo({ drainKind });
+                    programStandardFrame(r);
+                    r.cpu.data = 0xff;
+                    r.video.ula.write(0, ulaControl);
+                    r.writeCrtc(1, r1);
+                    return r;
+                };
+                // The frame after narrowing shows the wide frame's rows only if the clear before it missed them.
+                const frameAfterNarrowing = (r) => {
+                    let painted;
+                    r.video.paint_ext = () => (painted = r.video.fb32.slice());
+                    r.run(FrameClocks);
+                    r.writeCrtc(1, NarrowR1);
+                    r.run(FrameClocks);
+                    return painted;
+                };
+                const saved = startVideo(Mode4Teletext, WideR1);
+                saved.run(2 * FrameClocks + FrameClocks / 2);
+                const restored = startVideo(Mode4, NarrowR1);
+                restored.run(2 * FrameClocks);
+
+                restored.video.restoreState(saved.video.snapshotState());
+
+                expect(frameAfterNarrowing(restored)).toEqual(frameAfterNarrowing(saved));
+            },
+        );
 
         it.each([
             ["a stock ULA", {}],
