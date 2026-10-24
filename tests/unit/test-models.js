@@ -14,6 +14,15 @@ describe("Model", () => {
         }
     });
 
+    it("gives the Atom no sideways RAM", () => {
+        for (const model of allModels.filter(({ isAtom }) => isAtom)) {
+            expect(
+                model.swram.some((isRam) => isRam),
+                model.name,
+            ).toBe(false);
+        }
+    });
+
     it("reports its clock in cycles per second", () => {
         expect(findModel("Master").cyclesPerSecond).toBe(2 * 1000 * 1000);
         expect(findModel("Atom").cyclesPerSecond).toBe(1 * 1000 * 1000);

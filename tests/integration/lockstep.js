@@ -9,6 +9,7 @@ import {
     restoreSessionSnapshot,
     stateHash,
 } from "../../src/lockstep.js";
+import { RomBankBytes } from "../../src/6502.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { TestMachine } from "../../src/test-machine.js";
 import * as fdc from "../../src/fdc.js";
@@ -26,7 +27,6 @@ const ScribbleAt = 0x3000;
 const ScribbleBytes = 0x100;
 const Scribble = 0xff;
 const SidewaysRamBank = 4;
-const RomBankBytes = 16384;
 const LcgMultiplier = 1664525;
 const LcgIncrement = 1013904223;
 // Room for the instruction a run to a cycle finishes past it.

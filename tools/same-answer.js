@@ -19,7 +19,6 @@ const RelativeHashesPath = path.relative(RepoRoot, HashesPath);
 export const Frames = 100;
 const FramesPerSecond = 50;
 const MsPerSecond = 1000;
-const RomBankBytes = 16384;
 const HashHexDigits = 16;
 
 function feed(hash, value) {
@@ -47,13 +46,6 @@ const hashOf = (value) => {
     feed(hash, value);
     return hash.digest("hex").slice(0, HashHexDigits);
 };
-
-function sidewaysRam(cpu) {
-    return cpu.model.swram.flatMap((isRam, bank) => {
-        const start = cpu.romOffset + bank * RomBankBytes;
-        return isRam ? [cpu.ramRomOs.subarray(start, start + RomBankBytes)] : [];
-    });
-}
 
 const registersOf = (cpu) => [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte(), cpu.interrupt, cpu.takeInt, cpu.nmi];
 const cyclesOf = (cpu) => [
@@ -89,13 +81,15 @@ function stateParts(cpu, trace) {
         videoCycles: _videoCycles,
         ram,
         roms: _roms,
+        swram,
+        swramBankMask: _swramBankMask,
         soundChip,
         ...peripherals
     } = cpu.snapshotState();
     return {
         framebuffer: cpu.video.fb32,
         registers: [{ a, x, y, s, pc, p, nmiLevel, nmiEdge, halted, takeInt }, trace.registers],
-        memory: [ram, ...sidewaysRam(cpu)],
+        memory: [ram, swram],
         cycles: trace.cycles,
         sound: [soundChip, trace.soundEvents],
         peripherals,

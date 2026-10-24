@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { RomBankBytes } from "../../src/6502.js";
 import { cycleCount, isValidCommit, isValidInput, LockstepGuest, stateHash } from "../../src/lockstep.js";
 
 const RomOffset = 0x10000;
-const RomBankBytes = 16384;
 
 describe("lockstep", () => {
     it.each([
