@@ -473,6 +473,27 @@ describe("the chips a machine names", () => {
     });
 });
 
+describe("Atom Branquart banks", () => {
+    const BankWindow = 0xa000;
+    const BankLatch = 0xbfff;
+
+    it("keep what is written to a bank across a snapshot", async () => {
+        const cpu = fake6502(findModel("Atom"));
+        await cpu.initialise();
+        cpu.writemem(BankLatch, 3);
+        cpu.writemem(BankWindow, 0x42);
+        const snapshot = cpu.snapshotState();
+
+        const restored = fake6502(findModel("Atom"));
+        await restored.initialise();
+        restored.restoreState(snapshot);
+
+        expect(restored.readmem(BankWindow)).toBe(0x42);
+        restored.writemem(BankLatch, 0);
+        expect(restored.readmem(BankWindow)).not.toBe(0x42);
+    });
+});
+
 describe("peeking at the hardware", () => {
     const BootCycles = 1000 * 1000;
     const PeekedCycles = 100 * 1000;
