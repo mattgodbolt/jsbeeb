@@ -205,6 +205,24 @@ describe("DdNoise seeks", () => {
         expect(run.stop).toHaveBeenCalledWith(expect.closeTo(0.05 + JoinFade, 9));
     });
 
+    it("fades the settle in from now when the stop is reported late", () => {
+        ddNoise.seekStart(30, 24);
+        context.currentTime = 0.5;
+        ddNoise.seekEnd(11);
+        const settle = starts(ddNoise).at(-1);
+        expect(settle.when).toBeCloseTo(0.5, 9);
+        expect(settle.offset).toBeCloseTo(stepOffset(24, RunSteps), 9);
+    });
+
+    it("leaves the run's own settle ringing when told of a stop after every step has sounded", () => {
+        ddNoise.seekStart(5, 24);
+        const [run] = ddNoise.playing;
+        context.currentTime = JoinFade + 5 * 0.024 + 0.01;
+        ddNoise.seekEnd(3);
+        expect(run.stop).not.toHaveBeenCalled();
+        expect(ddNoise.playing).toHaveLength(1);
+    });
+
     it("fades out from now when the head is reported stopped after the audio clock has passed it", () => {
         ddNoise.seekStart(30, 24);
         const [run] = ddNoise.playing;

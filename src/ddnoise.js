@@ -136,21 +136,24 @@ export class DdNoise extends SamplePlayer {
 
     /**
      * The head has stopped after `steps` steps. Fewer than announced fades the run out where
-     * the next step would have sounded and lets the recording's settle ring from there. The
-     * run stays until a new movement, so that a settle still to come can give way to it.
+     * the next step would have sounded, or from now if that has passed, and lets the recording's
+     * settle ring from there. Told once every step has sounded, it leaves the run's own settle
+     * ringing. The run stays until a new movement, so that a settle still to come can give way.
      */
     seekEnd(steps) {
         const run = this.run;
         if (!run || steps >= run.steps) return;
-        const stopAt = run.start + steps * run.stepSeconds;
         const now = this.context.currentTime;
+        run.steps = steps;
+        if (now >= run.parts.at(-1).stepsEnd) return;
+        const stopAt = run.start + steps * run.stepSeconds;
         for (const { source, at, cutAt, stepsEnd } of run.parts) {
             if (!source || (cutAt < stopAt && stepsEnd <= stopAt)) continue;
             if (cutAt >= stopAt && at > now) source.stop();
             else this.stopSound(source, stopAt, JoinFadeSeconds);
         }
-        run.parts.push(this.playSteps(run.sound, stopAt, RunSteps, null, run.stepSeconds));
-        run.steps = steps;
+        const settleAt = Math.max(stopAt, now + JoinFadeSeconds);
+        run.parts.push(this.playSteps(run.sound, settleAt, RunSteps, null, run.stepSeconds));
     }
 
     /**
