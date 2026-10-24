@@ -6,6 +6,7 @@ import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { TEST_6502, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { typedArrayToBase64 } from "../../src/state-utils.js";
+import { RomBankBytes } from "../../src/6502.js";
 
 function makeCpu(config = {}) {
     const video = new Video(false, 1024 * 768, () => {});
@@ -225,22 +226,40 @@ describe("Snapshot coordinator", () => {
             expect(readBank(cpu, SidewaysRamBank)).toEqual([0x5a, 0x5a]);
         });
 
-        it("saves only the banks the model has as sideways RAM", () => {
-            const { swRamBanks } = createSnapshot(cpu, model).state;
+        it("packs only the banks the model has as sideways RAM", () => {
+            const { swram, swramBankMask } = createSnapshot(cpu, model).state;
 
-            expect(Object.keys(swRamBanks)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"]);
+            expect(swramBankMask).toBe(0x00ff);
+            expect(swram.length).toBe(8 * RomBankBytes);
+        });
+
+        it("puts each packed bank back where the mask says it came from", () => {
+            const swram = new Uint8Array(2 * RomBankBytes);
+            swram.fill(0x11, 0, RomBankBytes).fill(0x22, RomBankBytes);
+            const snapshot = createSnapshot(cpu, model);
+            Object.assign(snapshot.state, { swram, swramBankMask: (1 << 2) | (1 << 5) });
+            writeBank(cpu, 3, 0xa5);
+
+            restoreSnapshot(cpu, model, snapshot);
+
+            expect([readBank(cpu, 2), readBank(cpu, 3), readBank(cpu, 5)]).toEqual([
+                [0x11, 0x11],
+                [0xa5, 0xa5],
+                [0x22, 0x22],
+            ]);
         });
 
         it("leaves the banks out of a snapshot that carries every ROM bank", () => {
             const state = cpu.snapshotState({ includeRoms: true });
 
             expect(state.roms).toBeDefined();
-            expect(state.swRamBanks).toBeUndefined();
+            expect(state.swram).toBeUndefined();
         });
 
         it("leaves sideways RAM as it is when restoring a snapshot from before it was saved", () => {
             const snapshot = createSnapshot(cpu, model);
-            delete snapshot.state.swRamBanks;
+            delete snapshot.state.swram;
+            delete snapshot.state.swramBankMask;
             writeBank(cpu, SidewaysRamBank, 0xa5);
 
             restoreSnapshot(cpu, model, snapshot);

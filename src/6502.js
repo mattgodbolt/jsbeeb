@@ -21,11 +21,23 @@ function _set(byte, mask, set) {
 
 const UnpeekableDevice = 0xff;
 export const BaseRamBytes = 64 * 1024;
-const RomBankBytes = 16 * 1024;
+export const RomBankBytes = 16 * 1024;
 const NumRomBanks = 16;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
+
+/**
+ * Packs sideways RAM banks into a snapshot's `swram` and `swramBankMask`: the banks back to back in ascending
+ * order, and a mask with bit n set when bank n is among them.
+ * @param {Map<number, Uint8Array>} banks 16KB of contents for each bank number
+ */
+export function packSidewaysRam(banks) {
+    const bankNumbers = [...banks.keys()].sort((a, b) => a - b);
+    const swram = new Uint8Array(bankNumbers.length * RomBankBytes);
+    bankNumbers.forEach((bank, index) => swram.set(banks.get(bank), index * RomBankBytes));
+    return { swram, swramBankMask: bankNumbers.reduce((mask, bank) => mask | (1 << bank), 0) };
+}
 
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
@@ -1386,7 +1398,7 @@ export class Cpu6502 extends Base6502 {
             music5000PageSel: this.music5000PageSel,
             ram: this.ramRomOs.slice(0, this.romOffset),
             roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.osOffset) : undefined,
-            swRamBanks: includeRoms ? undefined : this.sidewaysRamBanks(),
+            ...(includeRoms ? {} : this.packedSidewaysRam()),
             // Sub-component state
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
@@ -1402,13 +1414,26 @@ export class Cpu6502 extends Base6502 {
         };
     }
 
-    sidewaysRamBanks() {
-        const banks = {};
+    romBank(bank) {
+        const start = this.romOffset + bank * RomBankBytes;
+        return this.ramRomOs.subarray(start, start + RomBankBytes);
+    }
+
+    packedSidewaysRam() {
+        const banks = new Map();
         this.model.swram.forEach((isRam, bank) => {
-            const start = this.romOffset + bank * RomBankBytes;
-            if (isRam) banks[bank] = this.ramRomOs.slice(start, start + RomBankBytes);
+            if (isRam) banks.set(bank, this.romBank(bank));
         });
-        return banks;
+        return packSidewaysRam(banks);
+    }
+
+    restoreSidewaysRam(swram, swramBankMask) {
+        let packedOffset = 0;
+        for (let bank = 0; bank < NumRomBanks; ++bank) {
+            if (!(swramBankMask & (1 << bank))) continue;
+            this.romBank(bank).set(swram.subarray(packedOffset, packedOffset + RomBankBytes));
+            packedOffset += RomBankBytes;
+        }
     }
 
     restoreState(state) {
@@ -1436,11 +1461,7 @@ export class Cpu6502 extends Base6502 {
         if (state.roms) {
             this.ramRomOs.set(state.roms.slice(0, NumRomBanks * RomBankBytes), this.romOffset);
         }
-        if (state.swRamBanks) {
-            for (const [bank, data] of Object.entries(state.swRamBanks)) {
-                this.ramRomOs.set(data.slice(0, RomBankBytes), this.romOffset + Number(bank) * RomBankBytes);
-            }
-        }
+        if (state.swram) this.restoreSidewaysRam(state.swram, state.swramBankMask);
         this.videoDisplayPage = state.videoDisplayPage;
         this.music5000PageSel = state.music5000PageSel;
 

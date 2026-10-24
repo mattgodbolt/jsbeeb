@@ -243,19 +243,14 @@ describe("parseUefSnapshot", () => {
         [
             "loads no ROMs or sideways RAM when the file has none",
             {},
-            ({ state }) => [state.roms, state.swRamBanks],
+            ({ state }) => [state.roms, state.swram],
             [undefined, undefined],
         ],
         [
             "loads only the sideways RAM banks the file holds, never the ROM set",
             { swRamBanks: [{ bank: 4, fill: 0xaa }] },
-            ({ state }) => [
-                state.roms,
-                Object.keys(state.swRamBanks),
-                state.swRamBanks[4][0],
-                state.swRamBanks[4][16383],
-            ],
-            [undefined, ["4"], 0xaa, 0xaa],
+            ({ state }) => [state.roms, state.swramBankMask, state.swram.length, state.swram[0], state.swram[16383]],
+            [undefined, 1 << 4, 16384, 0xaa, 0xaa],
         ],
         [
             "loads several sideways RAM banks",
@@ -265,14 +260,14 @@ describe("parseUefSnapshot", () => {
                     { bank: 7, fill: 0xbb },
                 ],
             },
-            ({ state }) => [Object.keys(state.swRamBanks), state.swRamBanks[4][0], state.swRamBanks[7][0]],
-            [["4", "7"], 0xaa, 0xbb],
+            ({ state }) => [state.swramBankMask, state.swram[0], state.swram[16384]],
+            [(1 << 4) | (1 << 7), 0xaa, 0xbb],
         ],
         [
             "keeps only a sideways RAM bank number's low nibble",
             { swRamBanks: [{ bank: 0xf4, fill: 0xcc }] },
-            (s) => s.state.swRamBanks[4][0],
-            0xcc,
+            (s) => [s.state.swramBankMask, s.state.swram[0]],
+            [1 << 4, 0xcc],
         ],
         [
             "puts shadow RAM's top 20K in LYNNE and drops the rest",

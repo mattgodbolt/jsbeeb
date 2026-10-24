@@ -172,7 +172,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         cpu2.ramRomOs.fill(0x33, cpu2.romOffset);
         const romsBefore = cpu2.ramRomOs.slice(cpu2.romOffset);
 
-        const { swRamBanks: _swRamBanks, ...olderState } = cpu.snapshotState();
+        const { swram: _swram, swramBankMask: _swramBankMask, ...olderState } = cpu.snapshotState();
         cpu2.restoreState({ ...olderState, ram: oldRam });
 
         expect(cpu2.ramRomOs.subarray(0, cpu2.romOffset)).toEqual(oldRam.subarray(0, 64 * 1024));

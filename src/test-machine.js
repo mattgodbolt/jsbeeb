@@ -1,3 +1,4 @@
+import { RomBankBytes } from "./6502.js";
 import { installBasic } from "./basic-loader.js";
 import * as fdc from "./fdc.js";
 import { fake6502 } from "./fake6502.js";
@@ -324,11 +325,11 @@ export class TestMachine {
     /**
      * Load a ROM image directly into a sideways RAM slot.
      * @param {number} slot - slot number (0-15, typically 4-7 for SWRAM)
-     * @param {Uint8Array|Buffer} data - ROM data (up to 16384 bytes)
+     * @param {Uint8Array|Buffer} data - ROM data (up to one 16KB bank)
      */
     loadSidewaysRam(slot, data) {
-        const offset = this.processor.romOffset + slot * 16384;
-        for (let i = 0; i < data.length && i < 16384; i++) {
+        const offset = this.processor.romOffset + slot * RomBankBytes;
+        for (let i = 0; i < data.length && i < RomBankBytes; i++) {
             this.processor.ramRomOs[offset + i] = data[i];
         }
     }

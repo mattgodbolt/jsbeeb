@@ -81,14 +81,15 @@ function stateParts(cpu, trace) {
         videoCycles: _videoCycles,
         ram,
         roms: _roms,
-        swRamBanks,
+        swram,
+        swramBankMask: _swramBankMask,
         soundChip,
         ...peripherals
     } = cpu.snapshotState();
     return {
         framebuffer: cpu.video.fb32,
         registers: [{ a, x, y, s, pc, p, nmiLevel, nmiEdge, halted, takeInt }, trace.registers],
-        memory: [ram, ...Object.values(swRamBanks)],
+        memory: [ram, swram],
         cycles: trace.cycles,
         sound: [soundChip, trace.soundEvents],
         peripherals,
