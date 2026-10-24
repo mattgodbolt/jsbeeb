@@ -44,6 +44,7 @@ describe("benchmark workloads", () => {
             for (let frame = 0; frame < CheckedFrames; ++frame)
                 cpu.execute(cpu.model.cyclesPerSecond / FramesPerSecond);
             expect(checked.differences).toEqual([]);
+            if (name === "mode7-text") expect(checked.teletextPaints).toBeGreaterThan(0);
         });
 
         it("ends in the state test:same-answer recorded when drawn by the JS drain", async () => {

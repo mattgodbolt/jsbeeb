@@ -46,6 +46,7 @@ const Instructions = {
     "i32.store": [[0x36], "memory", 2],
     "i32.store8": [[0x3a], "memory", 0],
     "i32.const": [[0x41], "i32"],
+    "i32.eqz": [[0x45]],
     "i32.eq": [[0x46]],
     "i32.ne": [[0x47]],
     "i32.lt_s": [[0x48]],
@@ -54,14 +55,17 @@ const Instructions = {
     "i32.ge_u": [[0x4f]],
     "i32.add": [[0x6a]],
     "i32.sub": [[0x6b]],
+    "i32.mul": [[0x6c]],
     "i32.and": [[0x71]],
     "i32.xor": [[0x73]],
     "i32.shl": [[0x74]],
+    "i32.shr_s": [[0x75]],
     "i32.shr_u": [[0x76]],
     "v128.load": [[SimdPrefix, 0x00], "memory", 4],
     "v128.store": [[SimdPrefix, 0x0b], "memory", 4],
     "i8x16.shuffle": [[SimdPrefix, 0x0d], "lanes"],
     "i8x16.swizzle": [[SimdPrefix, 0x0e]],
+    "i32x4.splat": [[SimdPrefix, 0x11]],
 };
 
 function unsignedLeb(value) {

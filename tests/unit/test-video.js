@@ -370,7 +370,7 @@ describe("Video", () => {
 
     // The chip runs whatever the ULA shows, so what a line shows in teletext depends on the bytes it
     // saw while the ULA showed a bitmap. See https://github.com/mattgodbolt/jsbeeb/issues/832
-    describe("the SAA5050 across a frame", () => {
+    describe.each(["wasm", "js"])("the SAA5050 across a frame on the %s drain", (drainKind) => {
         const RedAlpha = 0x01;
         const DoubleHeight = 0x0d;
         const LetterA = 0x41;
@@ -399,19 +399,22 @@ describe("Video", () => {
         /**
          * A Video running teletext rows, fetching `byteAt(row, column)` with the ULA in `ulaAt(row, column)`, and
          * calling `afterStep` (if given) after each character clock. Its paints collect the painted framebuffer and the
-         * framebuffer rows each character row reached.
+         * framebuffer rows each character row reached, and `checked` compares each drain and teletext paint with
+         * the JS ones.
          */
         function teletextRig({ byteAt, ulaAt, afterStep }, videoOptions) {
             const paints = [];
             let rows = new Map();
             const r = makeVideo({
                 ...videoOptions,
+                drainKind,
                 onPaint: (v) => {
                     paints.push({ fb: v.fb32.slice(), rows });
                     rows = new Map();
                 },
             });
             programTeletextRows(r);
+            const checked = checkDrainsAgainstJs(r.video.drain);
             r.cpu.videoRead = () => byteAt(r.video.vertCounter, r.video.horizCounter);
             let ulaWritten;
             const step = () => {
@@ -424,7 +427,7 @@ describe("Video", () => {
                 r.run(1);
                 afterStep?.(v);
             };
-            return { ...r, paints, step };
+            return { ...r, paints, step, checked };
         }
 
         function runUntilPaints(rig, count) {
@@ -603,6 +606,8 @@ describe("Video", () => {
                 for (let paint = 0; paint < FramesCompared; ++paint) {
                     expect(differingPixels(lazy.paints[paint].fb, eager.paints[paint].fb)).toBe(0);
                 }
+                expect(lazy.checked.teletextPaints).toBeGreaterThan(0);
+                expect(lazy.checked.differences).toEqual([]);
 
                 while (lazy.video.vertCounter !== NulaRow || lazy.video.horizCounter !== NulaColumn + 4) lazy.step();
                 while (eager.video.vertCounter !== NulaRow || eager.video.horizCounter !== NulaColumn + 4) eager.step();
