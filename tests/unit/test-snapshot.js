@@ -3,15 +3,19 @@ import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSa
 import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
-import { TEST_6502, TubeModel } from "../../src/models.js";
+import { TEST_6502, TEST_65C12, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { typedArrayToBase64 } from "../../src/state-utils.js";
 import { RomBankBytes } from "../../src/6502.js";
 
-function makeCpu(config = {}) {
+function makeCpuOf(model, config) {
     const video = new Video(false, 1024 * 768, () => {});
     const soundChip = new SoundChip(() => {});
-    return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec(config) });
+    return new model.Cpu(model, { ...nullIo({ video, soundChip }), config: machineSpec(config) });
+}
+
+function makeCpu(config = {}) {
+    return makeCpuOf(TEST_6502, config);
 }
 
 const TrackBytes = 256 * 10;
@@ -216,9 +220,12 @@ describe("Snapshot coordinator", () => {
             return [machine.readmem(0x8000), machine.readmem(0xbfff)];
         }
 
-        it("puts back what a sideways RAM bank held when the snapshot was taken", () => {
+        it.each([
+            ["kept in memory, as rewind keeps it", (snapshot) => snapshot],
+            ["saved to a file", (snapshot) => snapshotFromJSON(snapshotToJSON(snapshot))],
+        ])("puts back what a sideways RAM bank held when a snapshot %s was taken", (_, transport) => {
             writeBank(cpu, SidewaysRamBank, 0x5a);
-            const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(cpu, model)));
+            const snapshot = transport(createSnapshot(cpu, model));
             writeBank(cpu, SidewaysRamBank, 0xa5);
 
             restoreSnapshot(cpu, model, snapshot);
@@ -226,11 +233,14 @@ describe("Snapshot coordinator", () => {
             expect(readBank(cpu, SidewaysRamBank)).toEqual([0x5a, 0x5a]);
         });
 
-        it("packs only the banks the model has as sideways RAM", () => {
-            const { swram, swramBankMask } = createSnapshot(cpu, model).state;
+        it.each([
+            ["a B", TEST_6502, 0x00ff, 8],
+            ["a Master", TEST_65C12, 0x00f0, 4],
+        ])("packs only the banks %s has as sideways RAM", (_, cpuModel, bankMask, banks) => {
+            const { swram, swramBankMask } = makeCpuOf(cpuModel, {}).snapshotState();
 
-            expect(swramBankMask).toBe(0x00ff);
-            expect(swram.length).toBe(8 * RomBankBytes);
+            expect(swramBankMask).toBe(bankMask);
+            expect(swram.length).toBe(banks * RomBankBytes);
         });
 
         it("puts each packed bank back where the mask says it came from", () => {
@@ -254,17 +264,6 @@ describe("Snapshot coordinator", () => {
 
             expect(state.roms).toBeDefined();
             expect(state.swram).toBeUndefined();
-        });
-
-        it("leaves sideways RAM as it is when restoring a snapshot from before it was saved", () => {
-            const snapshot = createSnapshot(cpu, model);
-            delete snapshot.state.swram;
-            delete snapshot.state.swramBankMask;
-            writeBank(cpu, SidewaysRamBank, 0xa5);
-
-            restoreSnapshot(cpu, model, snapshot);
-
-            expect(readBank(cpu, SidewaysRamBank)).toEqual([0xa5, 0xa5]);
         });
     });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isUefSnapshot, parseUefSnapshot } from "../../src/uef-snapshot.js";
+import { RomBankBytes } from "../../src/6502.js";
 
 const UefStateVersion = 15;
 
@@ -249,8 +250,14 @@ describe("parseUefSnapshot", () => {
         [
             "loads only the sideways RAM banks the file holds, never the ROM set",
             { swRamBanks: [{ bank: 4, fill: 0xaa }] },
-            ({ state }) => [state.roms, state.swramBankMask, state.swram.length, state.swram[0], state.swram[16383]],
-            [undefined, 1 << 4, 16384, 0xaa, 0xaa],
+            ({ state }) => [
+                state.roms,
+                state.swramBankMask,
+                state.swram.length,
+                state.swram[0],
+                state.swram[RomBankBytes - 1],
+            ],
+            [undefined, 1 << 4, RomBankBytes, 0xaa, 0xaa],
         ],
         [
             "loads several sideways RAM banks",
@@ -260,7 +267,7 @@ describe("parseUefSnapshot", () => {
                     { bank: 7, fill: 0xbb },
                 ],
             },
-            ({ state }) => [state.swramBankMask, state.swram[0], state.swram[16384]],
+            ({ state }) => [state.swramBankMask, state.swram[0], state.swram[RomBankBytes]],
             [(1 << 4) | (1 << 7), 0xaa, 0xbb],
         ],
         [
