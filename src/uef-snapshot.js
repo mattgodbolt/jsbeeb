@@ -7,6 +7,7 @@
 // Reference: stardot/beebem-windows Src/UefState.cpp
 
 import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
+import { BaseRamBytes } from "./6502.js";
 
 // Chunk IDs used in BeebEm UEF save states
 const ChunkId = {
@@ -314,9 +315,8 @@ export function parseUefSnapshot(buffer) {
     }
 
     // ── RAM ─────────────────────────────────────────────────────────────
-    // jsbeeb snapshot.state.ram is 128 KB (ramRomOs up to romOffset).
     // Main RAM (chunk 0x0462): 32 KB at offset 0.
-    const ram = new Uint8Array(128 * 1024);
+    const ram = new Uint8Array(BaseRamBytes);
     if (chunks.has(ChunkId.MainRam)) {
         const mainRam = chunks.get(ChunkId.MainRam)[0];
         // Defensive: chunk is defined as exactly 32 KB; clamp in case of a malformed file

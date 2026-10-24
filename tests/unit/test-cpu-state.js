@@ -161,8 +161,21 @@ describe("Cpu6502 snapshotState / restoreState", () => {
 
     it("should not include ROM data in the snapshot", () => {
         const snapshot = cpu.snapshotState();
-        // RAM snapshot should only go up to romOffset (128KB), not include ROMs
         expect(snapshot.ram.length).toBe(cpu.romOffset);
+    });
+
+    it("restores the first 64KB of an older snapshot's 128KB ram and leaves the ROMs alone", async () => {
+        const oldRam = new Uint8Array(128 * 1024).fill(0xa5);
+        oldRam.fill(0x5a, 64 * 1024);
+        const cpu2 = makeCpu();
+        await cpu2.initialise();
+        cpu2.ramRomOs.fill(0x33, cpu2.romOffset);
+        const romsBefore = cpu2.ramRomOs.slice(cpu2.romOffset);
+
+        cpu2.restoreState({ ...cpu.snapshotState(), ram: oldRam });
+
+        expect(cpu2.ramRomOs.subarray(0, cpu2.romOffset)).toEqual(oldRam.subarray(0, 64 * 1024));
+        expect(cpu2.ramRomOs.subarray(cpu2.romOffset)).toEqual(romsBefore);
     });
 });
 
