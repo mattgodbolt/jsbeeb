@@ -15,7 +15,10 @@ const Volume = 0.25;
 const RunRatesMs = [6, 12, 20, 24, 30];
 const RunSteps = 35;
 const RunLeadSeconds = 0.005;
-/** A run's first steps start it from rest, so a seek longer than a run repeats the ones after. */
+/**
+ * A run's first few steps start it from rest, so only the opening of a seek longer than a run
+ * plays them; the steps it repeats to fill out the rest come from this one on.
+ */
 const RunFillFirstStep = 5;
 /** Pieces of a run cross-fade over this long, ending at a step's cut point. */
 const JoinFadeSeconds = 0.002;
@@ -83,7 +86,8 @@ export class DdNoise extends SamplePlayer {
     /**
      * The head is about to take `steps` steps (positive inward), one every `stepMs`: the last
      * that many steps of the recorded run nearest that rate, through to its settle. A seek
-     * longer than the recording plays steps from its middle first, as many times as it takes.
+     * longer than the recording starts with its opening steps, repeats steps from past them as
+     * many times as it takes, and ends with its last steps and settle.
      * A single step is a lone step, held off while the last one still sounds.
      */
     seekStart(steps, stepMs) {
@@ -101,13 +105,19 @@ export class DdNoise extends SamplePlayer {
         const sound = this.sounds[runName(rateMs, steps > 0)];
         const start = now + JoinFadeSeconds;
         const parts = [];
-        let done = 0;
-        while (count - done > RunSteps) {
-            const take = Math.min(RunSteps - RunFillFirstStep, count - done - RunSteps);
-            parts.push(this.playSteps(sound, start + done * stepSeconds, RunFillFirstStep, take, stepSeconds));
-            done += take;
+        if (count <= RunSteps) {
+            parts.push(this.playSteps(sound, start, RunSteps - count, null, stepSeconds));
+        } else {
+            const fill = RunSteps - RunFillFirstStep;
+            let done = Math.min(RunSteps, count - fill);
+            parts.push(this.playSteps(sound, start, 0, done, stepSeconds));
+            while (count - done > fill) {
+                const take = Math.min(fill, count - done - fill);
+                parts.push(this.playSteps(sound, start + done * stepSeconds, RunFillFirstStep, take, stepSeconds));
+                done += take;
+            }
+            parts.push(this.playSteps(sound, start + done * stepSeconds, RunFillFirstStep, null, stepSeconds));
         }
-        parts.push(this.playSteps(sound, start + done * stepSeconds, RunSteps - (count - done), null, stepSeconds));
         this.run = { sound, parts, start, stepSeconds, steps: count };
     }
 
@@ -133,10 +143,11 @@ export class DdNoise extends SamplePlayer {
         const run = this.run;
         if (!run || steps >= run.steps) return;
         const stopAt = run.start + steps * run.stepSeconds;
-        for (const { source, cutAt, stepsEnd } of run.parts) {
-            if (!source) continue;
-            if (cutAt >= stopAt) source.stop();
-            else if (stepsEnd > stopAt) this.stopSound(source, stopAt, JoinFadeSeconds);
+        const now = this.context.currentTime;
+        for (const { source, at, cutAt, stepsEnd } of run.parts) {
+            if (!source || (cutAt < stopAt && stepsEnd <= stopAt)) continue;
+            if (cutAt >= stopAt && at > now) source.stop();
+            else this.stopSound(source, stopAt, JoinFadeSeconds);
         }
         run.parts.push(this.playSteps(run.sound, stopAt, RunSteps, null, run.stepSeconds));
         run.steps = steps;

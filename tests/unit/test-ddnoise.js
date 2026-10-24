@@ -116,23 +116,32 @@ describe("DdNoise seeks", () => {
         expect(run.offset + run.duration).toBeCloseTo(Sounds.seek20out.duration, 9);
     });
 
-    it("plays steps from a run's middle first for a seek longer than the run", () => {
+    it("opens a seek longer than the run with its opening steps, fills from past them, and ends the run", () => {
         context.currentTime = 5;
         ddNoise.seekStart(79, 6);
         const made = starts(ddNoise);
         expect(made).toHaveLength(3);
         made.forEach(({ sound }) => expect(sound).toBe(Sounds.seek06in));
         const [first, second, last] = made;
-        // 79 steps: 30 and then 14 steps from the run's middle, then its last 35 and the settle.
+        // 79 steps: the run's opening 35, then 14 from step 5 on, then its last 30 and the settle.
         expect(first.when).toBeCloseTo(5, 9);
-        expect(first.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
-        expect(first.duration).toBeCloseTo(30 * 0.006 + JoinFade, 9);
-        expect(second.when).toBeCloseTo(5 + 30 * 0.006, 9);
+        expect(first.offset).toBeCloseTo(stepOffset(6, 0), 9);
+        expect(first.duration).toBeCloseTo(35 * 0.006 + JoinFade, 9);
+        expect(second.when).toBeCloseTo(5 + 35 * 0.006, 9);
         expect(second.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
         expect(second.duration).toBeCloseTo(14 * 0.006 + JoinFade, 9);
-        expect(last.when).toBeCloseTo(5 + 44 * 0.006, 9);
-        expect(last.offset).toBeCloseTo(stepOffset(6, 0), 9);
+        expect(last.when).toBeCloseTo(5 + 49 * 0.006, 9);
+        expect(last.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
         expect(last.offset + last.duration).toBeCloseTo(Sounds.seek06in.duration, 9);
+    });
+
+    it("plays a run's opening steps only at the start of a seek just longer than the run", () => {
+        ddNoise.seekStart(36, 12);
+        const [first, last] = starts(ddNoise);
+        expect(starts(ddNoise)).toHaveLength(2);
+        expect(first.offset).toBeCloseTo(stepOffset(12, 0), 9);
+        expect(first.duration).toBeCloseTo(6 * 0.012 + JoinFade, 9);
+        expect(last.offset).toBeCloseTo(stepOffset(12, RunFillFirstStep), 9);
     });
 
     it("cross-fades the pieces of a long run, each fading out as the next fades in", () => {
@@ -172,6 +181,28 @@ describe("DdNoise seeks", () => {
         expect(first.stop).not.toHaveBeenCalled();
         expect(second.stop).toHaveBeenCalledWith(expect.closeTo(JoinFade + 40 * 0.012, 9));
         expect(last.stop).toHaveBeenCalledWith();
+    });
+
+    it("fades out every sounding piece of a long run when the stop is reported late", () => {
+        ddNoise.seekStart(79, 12);
+        const [first, second, last] = ddNoise.playing;
+        context.currentTime = 0.5;
+        ddNoise.seekEnd(20);
+        expect(first.stop).toHaveBeenCalledWith(expect.closeTo(0.5 + JoinFade, 9));
+        expect(second.stop).toHaveBeenCalledWith(expect.closeTo(0.5 + JoinFade, 9));
+        expect(fadeOf(second).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+            0,
+            expect.closeTo(0.5 + JoinFade, 9),
+        );
+        expect(last.stop).toHaveBeenCalledWith();
+    });
+
+    it("fades the run out when the head is reported not to have moved at all", () => {
+        ddNoise.seekStart(5, 24);
+        const [run] = ddNoise.playing;
+        context.currentTime = 0.05;
+        ddNoise.seekEnd(0);
+        expect(run.stop).toHaveBeenCalledWith(expect.closeTo(0.05 + JoinFade, 9));
     });
 
     it("fades out from now when the head is reported stopped after the audio clock has passed it", () => {
