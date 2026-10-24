@@ -950,6 +950,92 @@ describe("Video", () => {
         });
     });
 
+    describe.each(["wasm", "js"])("the clear between frames on the %s drain", (drainKind) => {
+        const AllPixelsSet = 0xff;
+        const CursorOnFirstCell = 0x80;
+        const Mode0 = 0x9c;
+        const WideR1 = 80;
+        const NarrowR1 = 20;
+
+        const clearBothFields = (v) => {
+            for (const frameCount of [0, 1]) {
+                v.frameCount = frameCount;
+                v.clearPaintBuffer();
+            }
+        };
+
+        describe.each([
+            ["single", 3],
+            ["doubled", 0],
+        ])("on %s rows", (_, r8) => {
+            beforeEach(() => {
+                rig = makeVideo({ drainKind });
+                ({ video, fb, cpu } = rig);
+                rig.writeCrtc(8, r8);
+            });
+
+            // A cursor shows by inverting a black cell.
+            it.each([
+                ["a cell running past the end of its row", 100, 0x00, AllPixelsSet],
+                ["a cursor running past the end of its row", 100, CursorOnFirstCell, 0],
+                ["a cell above an odd field", -1, 0x00, AllPixelsSet],
+                ["a cursor above an odd field", -1, CursorOnFirstCell, 0],
+            ])("blacks out %s", (_, bitmapY, ulaControl, byte) => {
+                video.ula.write(0, ulaControl);
+                video.ula.write(1, LogicalZeroAsPhysicalZero);
+                Object.assign(video, {
+                    dispEnabled: EVERYTHINGENABLED,
+                    horizCounter: 10,
+                    bitmapX: 1008,
+                    bitmapY,
+                    oddClock: false,
+                    cursorOnThisFrame: true,
+                    cursorDrawIndex: 3,
+                });
+                video.regs[7] = 30;
+                cpu.data = byte;
+                rig.run(1);
+                video.renderPending();
+                expect(fb.some((pixel) => pixel !== OPAQUE_BLACK)).toBe(true);
+                clearBothFields(video);
+                expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
+            });
+        });
+
+        // A video that only ever drew the second picture paints the same frame, so the first left nothing behind.
+        describe.each([
+            ["doubled rows", programStandardFrame],
+            ["interlace sync and video", programInterlaceSyncAndVideoFrame],
+        ])("on %s", (_, program) => {
+            const lastPaintedFrame = (steps) => {
+                let painted;
+                const r = makeVideo({ drainKind, onPaint: (v) => (painted = v.fb32.slice()) });
+                program(r);
+                r.cpu.data = AllPixelsSet;
+                for (const [ulaControl, r1, frames] of steps) {
+                    r.video.ula.write(0, ulaControl);
+                    r.writeCrtc(1, r1);
+                    r.run(frames * ClocksPerFrame);
+                }
+                return painted;
+            };
+
+            it.each([
+                ["a bitmap frame after a wider bitmap one", Mode0, Mode0],
+                ["a bitmap frame after a wider teletext one", Mode4Teletext, Mode0],
+                ["a teletext frame after a wider bitmap one", Mode0, Mode4Teletext],
+                ["a teletext frame after a wider teletext one", Mode4Teletext, Mode4Teletext],
+            ])("leaves no pixels of the first frame in %s", (_, before, after) => {
+                const expected = lastPaintedFrame([[after, NarrowR1, 6]]);
+                const actual = lastPaintedFrame([
+                    [before, WideR1, 2],
+                    [after, NarrowR1, 4],
+                ]);
+                expect(actual).toEqual(expected);
+            });
+        });
+    });
+
     // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.
     describe("raster effects", () => {
         const RasterFrames = 6;
@@ -1356,7 +1442,10 @@ describe("Video", () => {
                 chainFrames: 2,
                 r6Gap,
                 interlaceSyncAndVideo: true,
-                onSettled: (video) => video.fb32.fill(Sentinel),
+                onSettled: (video) => {
+                    video.fb32.fill(Sentinel);
+                    video.drain.markAllDrawn();
+                },
                 onVsync: (video, field) => {
                     if (field !== 1) return;
                     nextFieldParity = video.frameCount & 1;

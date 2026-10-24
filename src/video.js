@@ -173,6 +173,7 @@ class Ula {
             this.video.ulaMode = newMode;
         }
         this.video.teletextMode = !!(val & 2);
+        if (this.video.teletextMode) this.video.teletextDrawnSinceClear = true;
         this.video.updateLineGridUla();
     }
 
@@ -438,6 +439,7 @@ export class Video {
         this.halfClock = false;
         this.ulaMode = 0;
         this.teletextMode = false;
+        this.teletextDrawnSinceClear = false;
         this.displayEnableSkew = 0;
         this.ulaPal = makeFast32(new Uint32Array(16));
         this.actualPal = new Uint8Array(16);
@@ -628,6 +630,7 @@ export class Video {
         this.halfClock = state.halfClock;
         this.ulaMode = state.ulaMode;
         this.teletextMode = state.teletextMode;
+        this.drain.markAllDrawn();
         // Derived from the above, so it is recomputed rather than snapshotted.
         this.updateLineGridUla();
         this.displayEnableSkew = state.displayEnableSkew;
@@ -667,19 +670,26 @@ export class Video {
     }
 
     clearPaintBuffer() {
-        const fb32 = this.fb32;
+        // The drain keeps each row's drawn extent; teletext and the 6847 draw without one.
+        const drawnUntracked = this.teletextDrawnSinceClear || this.video6847;
+        this.teletextDrawnSinceClear = this.teletextMode;
         // The line grid is cleared exactly where the next field's pixels go: when it
         // does not double lines, the other field's rows survive, and so must their grid.
         if (!this.doublesLines()) {
+            if (drawnUntracked) this.drain.markAllDrawn();
             let line = this.frameCount & 1;
             while (line < 625) {
-                const start = line * 1024;
-                fb32.fill(OPAQUE_BLACK, start, start + 1024);
+                this.drain.clearRow(line);
                 this.lineGrid[line] = 0;
                 line += 2;
             }
         } else {
-            fb32.fill(OPAQUE_BLACK);
+            if (drawnUntracked) {
+                this.drain.clearAll();
+            } else {
+                const rows = this.fb32.length >>> 10;
+                for (let line = 0; line < rows; ++line) this.drain.clearRow(line);
+            }
             this.lineGrid.fill(0);
         }
     }
@@ -860,6 +870,7 @@ export class Video {
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {
             this.blitFbSecondHalf(this.cellData, offset);
+            this.drain.markDrawn(offset, this.pixelsPerChar, this.doublesLines());
         }
         if (this.doublesLines()) {
             this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);

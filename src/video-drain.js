@@ -31,7 +31,10 @@
 //   283712   1024                        teletext colour: the SAA5050's 256 colours (see Teletext.rebuildColours),
 //                                        RGBA words; a cell's palette index picks four in a row.
 //   284736   8192                        teletext cells: up to 1024 cells to paint, two i32s each.
-//   292928   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
+//   292928   8192                        row extents: for each framebuffer row, two i32s, the first and one past the
+//                                        last column the drain drew in it since it was last cleared (an empty row
+//                                        is 1024, 0), so that Video's clear blacks out only those.
+//   301120   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
 //            + 8192                      overrun: room for a doubled cell's second row below the last row, and a
 //                                        cell running past the end of its row.
 //
@@ -51,7 +54,12 @@
 // 3. A cursor record inverts the RGB of the cell's pixels, on both rows when lines are doubled (invertCursor).
 // 4. Otherwise it is a cell. Cells that follow on from the previous one (its `raw` plus pixelsPerChar) form a run;
 //    the first cell of a run writes the line grid for its row, and for the row below when lines are doubled.
-// 5. The cell is drawn (drawCell). The JS looks each pixel's colour up through table4bpp and the palette. The Wasm
+// 5. A run, drawn by the Wasm's inner loop, is also an extent: it ends where the run does, or at a cell starting a
+//    row (its raw following on from the end of the row before). A cursor record is an extent of its own cell, and a
+//    clipped cell one of row 0's first pixelsPerChar columns. Each extent widens its row's entry in the row extents
+//    when it ends, and the row below's when lines are doubled, and the next rows' first columns for any part that ran
+//    past the end of its row (flushRun).
+// 6. The cell is drawn (drawCell). The JS looks each pixel's colour up through table4bpp and the palette. The Wasm
 //    does the whole cell with vectors:
 //    - Once per drain, SplitPalette splits the 16 palette colours into four 16-byte "planes": plane0 holds byte 0
 //      (red) of every colour, plane1 byte 1 (green), plane2 blue, plane3 alpha.
@@ -137,7 +145,11 @@ const RecordsOffset = LineGridOffset + LineGridRows;
 const TeletextLanesOffset = RecordsOffset + PendingCapacity * WordBytes;
 const TeletextColourOffset = TeletextLanesOffset + TeletextLaneBytes;
 const TeletextCellsOffset = TeletextColourOffset + TeletextColours * WordBytes;
-const FramebufferOffset = TeletextCellsOffset + TeletextCellCapacity * TeletextCellWords * WordBytes;
+const RowExtentsOffset = TeletextCellsOffset + TeletextCellCapacity * TeletextCellWords * WordBytes;
+const RowExtentWords = 2;
+const RowExtentBytes = RowExtentWords * WordBytes;
+const RowExtentShift = Math.log2(RowExtentBytes);
+const FramebufferOffset = RowExtentsOffset + LineGridRows * RowExtentBytes;
 const FramebufferOverrunBytes = 2 * RowBytes;
 
 const range = (start, count) => Array.from({ length: count }, (_, i) => start + i);
@@ -165,6 +177,13 @@ const DrainLocals = {
     at: "i32",
     span: "i32",
     rowsEnd: "i32",
+    runStart: "i32",
+    runEnd: "i32",
+    extent: "i32",
+    low32: "i32",
+    high32: "i32",
+    spill: "i32",
+    current: "i32",
     plane0: "v128",
     plane1: "v128",
     plane2: "v128",
@@ -403,31 +422,91 @@ const DrawCell = `
         ${eightPixels(InterleaveHigh, 32)}
     end`;
 
+// Widens the row extent at extent plus byteOffset (a multiple of 8: 0 for its row, 8 the row below) to take in
+// columns low32 to high32. Pairs with widen in JS.
+function widenRow(byteOffset) {
+    return `
+    local.get extent                        ;; [extent], for the store
+    local.get low32
+    local.get extent
+    i32.load offset=${RowExtentsOffset + byteOffset}
+    local.tee current                       ;; [extent, low32, the row's first column]
+    local.get low32
+    local.get current
+    i32.lt_s
+    select                                  ;; [extent, the lower of the two]
+    i32.store offset=${RowExtentsOffset + byteOffset}
+    local.get extent                        ;; [extent], for the store
+    local.get high32
+    local.get extent
+    i32.load offset=${RowExtentsOffset + byteOffset + WordBytes}
+    local.tee current                       ;; [extent, high32, one past the row's last column]
+    local.get high32
+    local.get current
+    i32.gt_s
+    select                                  ;; [extent, the higher of the two]
+    i32.store offset=${RowExtentsOffset + byteOffset + WordBytes}`;
+}
+
+// Widens the row extents by the pixels runStart to runEnd, when there are any, and starts no extent. Pairs with
+// flushRun in JS.
+const FlushRun = `
+    local.get runStart
+    i32.const 0
+    i32.ge_s
+    if                                      ;; an extent is open
+        local.get runStart
+        i32.const ${RowShift}
+        i32.shr_u
+        i32.const ${RowExtentShift}
+        i32.shl
+        local.set extent                    ;; extent = (runStart >> 10) * 8, its row's extent
+        local.get runStart
+        i32.const ${RowPixels - 1}
+        i32.and
+        local.set low32                     ;; low32 = runStart's column
+        local.get runEnd
+        local.get runStart
+        i32.const ${-RowPixels}
+        i32.and
+        i32.sub
+        local.tee high32                    ;; high32 = runEnd less its row's start, past 1024 if it ran over; [high32]
+        i32.const ${RowPixels}
+        i32.sub
+        local.tee spill                     ;; spill = high32 - 1024, the pixels on the next row; [spill]
+        i32.const 0
+        i32.gt_s
+        if                                  ;; it ran past the end of its row
+            i32.const ${RowPixels}
+            local.set high32                ;; high32 = 1024
+        end
+        ${widenRow(0)}
+        local.get doubledLines
+        if                                  ;; and the row below
+            ${widenRow(RowExtentBytes)}
+        end
+        local.get spill
+        i32.const 0
+        i32.gt_s
+        if                                  ;; the part that ran over, from column 0 of the next row(s)
+            i32.const 0
+            local.set low32
+            local.get spill
+            local.set high32
+            ${widenRow(RowExtentBytes)}
+            local.get doubledLines
+            if
+                ${widenRow(2 * RowExtentBytes)}
+            end
+        end
+        i32.const -1
+        local.set runStart                  ;; no extent open
+    end`;
+
 // drain(count, modeBase, pixelsPerChar, doubledLines, lineGridValue): the whole function. Pairs with jsDrain.
-const DrainCode = `
-    ${SplitPalette}
-    i32.const -1
-    local.get doubledLines
-    i32.const ${RowShift}
-    i32.shl                                 ;; [-1, 1024 when doubled, else 0]
-    i32.xor
-    local.set rowMask                       ;; rowMask = ~1024 when doubled, clearing a row's odd bit, else ~0
-    i32.const -1
-    local.set expected                      ;; no run yet; no raw is -1
-    block                                   ;; br 1 from the loop body leaves this, ending the drain
-        loop                                ;; for each record; br 0 from its body is "continue"
-            local.get i
-            local.get count
-            i32.ge_u
-            br_if 1                         ;; done when i >= count
-            local.get i
-            i32.const ${WordShift}
-            i32.shl
-            i32.load offset=${RecordsOffset}
-            local.tee record                ;; record = records[i]; [record]
-            i32.const ${PendingOffsetShift}
-            i32.shr_u
-            local.tee raw                   ;; raw = record >>> 8; [raw]
+// Sets start and source from raw and record, and moves i on. Pairs with the same steps in jsDrain.
+const DecodeRecord = `
+            local.get raw
             i32.const ${PendingOffsetMask}
             i32.and                         ;; [the biased offset]
             i32.const ${PendingRowBias * RowPixels}
@@ -446,16 +525,63 @@ const DrainCode = `
             local.get i
             i32.const 1
             i32.add
-            local.set i                     ;; ++i
+            local.set i                     ;; ++i`;
+
+// Loads records[i] into record, and record >>> 8 into raw.
+const LoadRecord = `
+            local.get i
+            i32.const ${WordShift}
+            i32.shl
+            i32.load offset=${RecordsOffset}
+            local.tee record                ;; record = records[i]; [record]
+            i32.const ${PendingOffsetShift}
+            i32.shr_u
+            local.set raw                   ;; raw = record >>> 8`;
+
+// drain(count, modeBase, pixelsPerChar, doubledLines, lineGridValue): the whole function. Pairs with jsDrain. The
+// outer loop takes each record that does not continue a run, closing the open extent first; the inner loop then
+// draws the cells that continue the run, and leaves at the first that does not, or that starts a new row's columns
+// (whose raw follows on from a cell at the end of the row before).
+const DrainCode = `
+    ${SplitPalette}
+    i32.const -1
+    local.get doubledLines
+    i32.const ${RowShift}
+    i32.shl                                 ;; [-1, 1024 when doubled, else 0]
+    i32.xor
+    local.set rowMask                       ;; rowMask = ~1024 when doubled, clearing a row's odd bit, else ~0
+    i32.const -1
+    local.set expected                      ;; no run yet; no raw is -1
+    i32.const -1
+    local.set runStart                      ;; no extent open
+    block                                   ;; br 1 from the loop body leaves this, ending the drain
+        loop                                ;; for each record that does not continue a run; br 0 is "continue"
+            local.get i
+            local.get count
+            i32.ge_u
+            br_if 1                         ;; done when i >= count
+            ${LoadRecord}
+            ${DecodeRecord}
+            ${FlushRun}
             local.get start
             i32.const 0
             i32.lt_s
             if                              ;; start < 0: the line above an odd field
                 ${DrawClipped}
+                i32.const 0
+                local.set runStart
+                local.get pixelsPerChar
+                local.set runEnd            ;; an extent of row 0's columns 0 to pixelsPerChar, where it spills
                 i32.const -1
                 local.set expected          ;; the next cell starts a run
                 br 1                        ;; continue (depth 0 is this if, 1 the loop)
             end
+            local.get start
+            local.set runStart
+            local.get start
+            local.get pixelsPerChar
+            i32.add
+            local.set runEnd                ;; an extent from start, of one cell so far
             local.get record
             i32.const ${PendingCursor}
             i32.and
@@ -483,18 +609,44 @@ const DrainCode = `
                     i32.store8 offset=${LineGridOffset + 1}   ;; lineGrid[row + 1] = lineGridValue
                 end
             end
-            local.get raw
-            local.get pixelsPerChar
-            i32.add
-            local.set expected              ;; expected = raw + pixelsPerChar, where a following cell would be
-            local.get start
-            i32.const ${WordShift}
-            i32.shl
-            local.set address               ;; address = start * 4
-            ${DrawCell}
+            block                           ;; br 0 from the inner loop's body leaves the run
+                loop                        ;; for each cell of the run
+                    local.get raw
+                    local.get pixelsPerChar
+                    i32.add
+                    local.set expected      ;; expected = raw + pixelsPerChar, where a following cell would be
+                    local.get start
+                    i32.const ${WordShift}
+                    i32.shl
+                    local.set address       ;; address = start * 4
+                    ${DrawCell}
+                    local.get i
+                    local.get count
+                    i32.ge_u
+                    br_if 1                 ;; the run ends with the records
+                    ${LoadRecord}
+                    local.get raw
+                    local.get expected
+                    i32.ne
+                    br_if 1                 ;; or at a record that does not follow on (a cursor record never does)
+                    local.get raw
+                    i32.const ${RowPixels - 1}
+                    i32.and
+                    local.get pixelsPerChar
+                    i32.lt_u
+                    br_if 1                 ;; or at the first cell of a row
+                    ${DecodeRecord}
+                    local.get start
+                    local.get pixelsPerChar
+                    i32.add
+                    local.set runEnd        ;; the extent now ends after this cell
+                    br 0                    ;; the next cell
+                end
+            end
             br 0                            ;; continue
         end
-    end`;
+    end
+    ${FlushRun}`;
 
 const PaintTeletextParams = ["count"];
 const PaintTeletextLocals = {
@@ -773,6 +925,27 @@ function drawCell({ fb32, table4bpp, palette }, source, start, pixelsPerChar, do
     }
 }
 
+function widen(rowExtents, row, low, high) {
+    const at = row * RowExtentWords;
+    if (low < rowExtents[at]) rowExtents[at] = low;
+    if (high > rowExtents[at + 1]) rowExtents[at + 1] = high;
+}
+
+function flushRun({ rowExtents }, runStart, runEnd, doubledLines) {
+    if (runStart < 0) return;
+    const row = runStart >>> RowShift;
+    const low = runStart & (RowPixels - 1);
+    let high = runEnd - (runStart & -RowPixels);
+    const spill = high - RowPixels;
+    if (spill > 0) high = RowPixels;
+    widen(rowExtents, row, low, high);
+    if (doubledLines) widen(rowExtents, row + 1, low, high);
+    if (spill > 0) {
+        widen(rowExtents, row + 1, 0, spill);
+        if (doubledLines) widen(rowExtents, row + 2, 0, spill);
+    }
+}
+
 /**
  * Draws the first `count` records of `views`, in order, in its palette: the JS drain, the same as the Wasm one.
  * @param {{records: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, table4bpp: Uint8Array,
@@ -787,17 +960,30 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
     const { records, lineGrid } = views;
     const rowMask = ~(Number(doubledLines) << RowShift);
     let expected = -1;
+    let runStart = -1;
+    let runEnd = 0;
     for (let i = 0; i < count;) {
         const record = records[i];
         const raw = record >>> PendingOffsetShift;
         const start = ((raw & PendingOffsetMask) - PendingRowBias * RowPixels) & rowMask;
         const source = modeBase + ((record & PendingByteMask) << TableRowShift);
         ++i;
+        if (raw === expected && (raw & (RowPixels - 1)) >= pixelsPerChar) {
+            expected = raw + pixelsPerChar;
+            runEnd = start + pixelsPerChar;
+            drawCell(views, source, start, pixelsPerChar, doubledLines);
+            continue;
+        }
+        flushRun(views, runStart, runEnd, doubledLines);
         if (start < 0) {
             drawClipped(views, record, source, start, pixelsPerChar, doubledLines);
+            runStart = 0;
+            runEnd = pixelsPerChar;
             expected = -1;
             continue;
         }
+        runStart = start;
+        runEnd = start + pixelsPerChar;
         if (record & PendingCursor) {
             invertCursor(views, start, pixelsPerChar, doubledLines);
             expected = -1;
@@ -810,6 +996,7 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
         expected = raw + pixelsPerChar;
         drawCell(views, source, start, pixelsPerChar, doubledLines);
     }
+    flushRun(views, runStart, runEnd, doubledLines);
 }
 
 function paintClippedTeletextCell({ fb32, teletextColour }, pixels, info, offset, doubled) {
@@ -912,6 +1099,8 @@ export class VideoDrain {
         this.lineGrid = new Uint8Array(buffer, LineGridOffset, LineGridRows);
         this.records = new Int32Array(buffer, RecordsOffset, PendingCapacity);
         this.fb32 = new Int32Array(buffer, FramebufferOffset, framebufferPixels);
+        this.rowExtents = new Int32Array(buffer, RowExtentsOffset, LineGridRows * RowExtentWords);
+        this.markAllDrawn();
         this.teletextColour = new Int32Array(buffer, TeletextColourOffset, TeletextColours);
         this.teletextCells = new Int32Array(buffer, TeletextCellsOffset, TeletextCellCapacity * TeletextCellWords);
         fillTeletextLanes(new Uint8Array(buffer, TeletextLanesOffset, TeletextLaneBytes));
@@ -927,5 +1116,45 @@ export class VideoDrain {
          * @type {(count: number) => void}
          */
         this.paintTeletext = exports ? exports.paintTeletext : (count) => jsPaintTeletext(this, count);
+    }
+
+    /** Widens every row's extent to the whole row, for a write the extents do not follow. */
+    markAllDrawn() {
+        for (let at = 0; at < this.rowExtents.length; at += RowExtentWords) {
+            this.rowExtents[at] = 0;
+            this.rowExtents[at + 1] = RowPixels;
+        }
+    }
+
+    /**
+     * Widens the extents of the rows the pixels offset to offset + pixels fall on, and the row below when doubled.
+     * @param {number} offset
+     * @param {number} pixels
+     * @param {boolean} doubledLines
+     */
+    markDrawn(offset, pixels, doubledLines) {
+        flushRun(this, offset, offset + pixels, doubledLines);
+    }
+
+    /** Blacks out the whole framebuffer and empties every row's extent. */
+    clearAll() {
+        this.fb32.fill(OPAQUE_BLACK);
+        for (let at = 0; at < this.rowExtents.length; at += RowExtentWords) {
+            this.rowExtents[at] = RowPixels;
+            this.rowExtents[at + 1] = 0;
+        }
+    }
+
+    /**
+     * Blacks out the drawn extent of `row` and empties it.
+     * @param {number} row
+     */
+    clearRow(row) {
+        const at = row * RowExtentWords;
+        const low = this.rowExtents[at];
+        const high = this.rowExtents[at + 1];
+        if (high > low) this.fb32.fill(OPAQUE_BLACK, row * RowPixels + low, row * RowPixels + high);
+        this.rowExtents[at] = RowPixels;
+        this.rowExtents[at + 1] = 0;
     }
 }

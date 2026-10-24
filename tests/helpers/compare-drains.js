@@ -46,20 +46,21 @@ function teletextSpan(cells, count, length) {
 
 /**
  * Has every drain of `videoDrain` compare its framebuffer and line grid with jsDrain's, over the part of the
- * framebuffer the records reach, and every teletext paint likewise with jsPaintTeletext's.
+ * framebuffer the records reach (and its row extents), and every teletext paint likewise with jsPaintTeletext's.
  * @param {import("../../src/video-drain.js").VideoDrain} videoDrain
  * @returns {{drains: number, teletextPaints: number, differences: string[]}} how many drains and teletext paints
  *     ran, and a description of each that differed
  */
 export function checkDrainsAgainstJs(videoDrain) {
     const checked = { drains: 0, teletextPaints: 0, differences: [] };
-    const { fb32, lineGrid, records, table4bpp, palette, teletextCells, teletextColour } = videoDrain;
+    const { fb32, lineGrid, rowExtents, records, table4bpp, palette, teletextCells, teletextColour } = videoDrain;
     const drainUnderTest = videoDrain.drain;
     const paintUnderTest = videoDrain.paintTeletext;
     const expected = {
         records,
         fb32: new Int32Array(fb32.length),
         lineGrid: lineGrid.slice(),
+        rowExtents: rowExtents.slice(),
         table4bpp,
         palette,
         teletextCells,
@@ -68,8 +69,11 @@ export function checkDrainsAgainstJs(videoDrain) {
     const compare = (what, count, start, end) => {
         const pixel = firstDifference(expected.fb32, fb32, start, end);
         const row = firstDifference(expected.lineGrid, lineGrid, 0, lineGrid.length);
-        if (pixel >= 0 || row >= 0) {
-            checked.differences.push(`${what} ${checked[what]} of ${count}: pixel ${pixel}, line grid row ${row}`);
+        const extent = firstDifference(expected.rowExtents, rowExtents, 0, rowExtents.length);
+        if (pixel >= 0 || row >= 0 || extent >= 0) {
+            checked.differences.push(
+                `${what} ${checked[what]} of ${count}: pixel ${pixel}, line grid row ${row}, row extent ${extent}`,
+            );
         }
         ++checked[what];
     };
@@ -77,6 +81,7 @@ export function checkDrainsAgainstJs(videoDrain) {
         const [start, end] = touchedSpan(records, count, fb32.length);
         expected.fb32.set(fb32.subarray(start, end), start);
         expected.lineGrid.set(lineGrid);
+        expected.rowExtents.set(rowExtents);
         jsDrain(expected, count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
         drainUnderTest(count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
         compare("drains", count, start, end);
@@ -85,6 +90,7 @@ export function checkDrainsAgainstJs(videoDrain) {
         const [start, end] = teletextSpan(teletextCells, count, fb32.length);
         expected.fb32.set(fb32.subarray(start, end), start);
         expected.lineGrid.set(lineGrid);
+        expected.rowExtents.set(rowExtents);
         jsPaintTeletext(expected, count);
         paintUnderTest(count);
         compare("teletextPaints", count, start, end);
