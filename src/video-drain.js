@@ -1106,8 +1106,7 @@ export class VideoDrain {
         const box = this.drawnBoxes.subarray(parity * BoxWords, (parity + 1) * BoxWords);
         const [minColumn, endColumn, firstRow, endRow] = box;
         const fromRow = Math.max(firstRow, 0);
-        const toRow = Math.min(endRow, this.fb32.length >>> RowShift);
-        for (let row = fromRow + ((fromRow ^ parity) & 1); row < toRow; row += FieldParities) {
+        for (let row = fromRow + ((fromRow ^ parity) & 1); row < endRow; row += FieldParities) {
             this.fb32.fill(OPAQUE_BLACK, (row << RowShift) + minColumn, (row << RowShift) + endColumn);
         }
         box.set(EmptyBox);

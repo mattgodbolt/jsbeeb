@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Video6847 } from "../../src/6847.js";
-import { Video } from "../../src/video.js";
+import { OPAQUE_BLACK, Video } from "../../src/video.js";
 import { decodeLineGrid } from "../helpers/line-grid.js";
 import { shortestRun } from "../helpers/pixel-runs.js";
 
@@ -161,18 +161,31 @@ const LinesPerRowMode = 0x50;
 const LinesPerRow = 3;
 const SnowAddr = 0x8123;
 
-describe("Video6847 snapshot", () => {
-    function makeAtomVideo(mode = LinesPerRowMode) {
-        const video = new Video(false, FbWidth * FbHeight, () => {}, { isAtom: true });
-        const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
-        const vblanks = [];
-        const cpu = { model: { clockMhz: 1 }, videoRead: (addr) => ram[addr & 0x1fff] };
-        const ppia = { portapins: mode, portcpins: 0x08, setVBlankInt: (level) => vblanks.push(level) };
-        video.reset(cpu, null);
-        video.video6847.reset(cpu, ppia);
-        return { video, vblanks };
-    }
+function makeAtomVideo(mode = LinesPerRowMode) {
+    const video = new Video(false, FbWidth * FbHeight, () => {}, { isAtom: true });
+    const ram = new Uint8Array(0x2000).map((_, i) => (i * 37) ^ (i >>> 5));
+    const vblanks = [];
+    const cpu = { model: { clockMhz: 1 }, videoRead: (addr) => ram[addr & 0x1fff] };
+    const ppia = { portapins: mode, portcpins: 0x08, setVBlankInt: (level) => vblanks.push(level) };
+    video.reset(cpu, null);
+    video.video6847.reset(cpu, ppia);
+    return { video, vblanks };
+}
 
+describe("Video6847 and the clear between frames", () => {
+    it("blacks out everything a part-drawn field drew", () => {
+        const { video } = makeAtomVideo();
+        const fb = new Uint32Array(video.fb32.buffer, video.fb32.byteOffset, video.fb32.length);
+        video.polltime(Math.floor(CpuCyclesPerField * 0.6));
+        expect(fb.some((pixel) => pixel !== OPAQUE_BLACK)).toBe(true);
+
+        video.clearPaintBuffer();
+
+        expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
+    });
+});
+
+describe("Video6847 snapshot", () => {
     // One CPU cycle at a time, as the CPU drives it, so snow reads can happen.
     function runCpuCycles(video, cycles) {
         for (let i = 0; i < cycles; i++) video.polltime(1);
