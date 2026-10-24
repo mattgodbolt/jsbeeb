@@ -424,8 +424,8 @@ const DrawCell = `
         ${eightPixels(InterleaveHigh, 32)}
     end`;
 
-// Widens the drawn box at byteOffset, field `field` (0 or 1) of the box at boxOffset, to take in `local`: the lower
-// of the two when `compare` is i32.lt_s, the higher when it is i32.gt_s.
+// Widens word `field` (0 to 3) of the drawn box at boxOffset to take in `local`: the lower of the two when
+// `compare` is i32.lt_s, the higher when it is i32.gt_s.
 function widenBoxField(boxOffset, field, local, compare) {
     const offset = DrawnBoxesOffset + boxOffset + field * WordBytes;
     return `
