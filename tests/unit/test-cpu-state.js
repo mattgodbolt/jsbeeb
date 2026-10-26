@@ -812,4 +812,23 @@ describe("Cpu6502 paged memory", () => {
         expect(cpu.readmem(ShadowAddress)).toBe(0x44);
         expect(cpu.readmem(OsAddress)).toBe(osByte);
     });
+
+    it("reads and writes as a restored snapshot pages", async () => {
+        const cpu = await initialised("Master");
+        const [first, second] = MasterSidewaysRamBanks;
+        cpu.writemem(ShadowAddress, 0x44);
+        cpu.writemem(RomSelectRegister, first);
+        cpu.writemem(AccconRegister, AccconShadow);
+        cpu.writemem(ShadowAddress, 0x55);
+        const snapshot = cpu.snapshotState();
+        cpu.writemem(RomSelectRegister, second);
+        cpu.writemem(AccconRegister, 0);
+
+        cpu.restoreState(snapshot);
+        cpu.writemem(PagedWindow, 0x66);
+
+        expect(cpu.readmem(ShadowAddress)).toBe(0x55);
+        expect(cpu.romBank(first)[0]).toBe(0x66);
+        expect(cpu.romBank(second)[0]).not.toBe(0x66);
+    });
 });
