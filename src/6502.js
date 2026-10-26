@@ -25,8 +25,9 @@ export const RomBankBytes = 16 * 1024;
 const NumRomBanks = 16;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
+const AddressSpaceBytes = 64 * 1024;
 const RomWriteSinkOffset = OsOffset + RomBankBytes;
-const BbcMemoryBytes = RomWriteSinkOffset + 256;
+const BbcMemoryBytes = RomWriteSinkOffset + AddressSpaceBytes;
 const SlowPathOffset = -0x40000000;
 
 /**
@@ -784,31 +785,32 @@ export class Cpu6502 extends Base6502 {
         this.romsel = b;
         const bankOffset = ((b & 15) << 14) + this.romOffset;
         const offset = bankOffset - 0x8000;
-        for (let c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
         const swram = this.model.swram[b & 15] ? 1 : 2;
-        for (let c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
+        this.mapBothHalves(0x80, 0xc0, swram, offset);
         if (this.model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
             // Zero offset as 0x8000 mapped to 0x8000
-            for (let c = 128; c < 144; ++c) {
-                this.memLook[c] = this.memLook[256 + c] = 0;
-                this.memStat[c] = this.memStat[256 + c] = 1;
-            }
+            this.mapBothHalves(0x80, 0x90, 1, 0);
         }
-        this.refreshLook();
     }
 
-    // While a debug hook is set, every access of its kind takes the slow path, which calls it.
+    mapPages(start, end, stat, offset) {
+        this.memStat.fill(stat, start, end);
+        this.memLook.fill(offset, start, end);
+        // While a debug hook is set, every access of its kind takes the slow path, which calls it.
+        this.readLook.fill(stat && !this._debugRead ? offset : SlowPathOffset, start, end);
+        let writeOffset = SlowPathOffset;
+        if (stat && !this._debugWrite) writeOffset = stat === 1 ? offset : RomWriteSinkOffset;
+        this.writeLook.fill(writeOffset, start, end);
+    }
+
+    mapBothHalves(fromPage, toPage, stat, offset) {
+        this.mapPages(fromPage, toPage, stat, offset);
+        this.mapPages(256 + fromPage, 256 + toPage, stat, offset);
+    }
+
     refreshLook() {
-        const readHooked = !!this._debugRead;
-        const writeHooked = !!this._debugWrite;
-        for (let i = 0; i < 512; ++i) {
-            const stat = this.memStat[i];
-            const offset = this.memLook[i];
-            this.readLook[i] = stat && !readHooked ? offset : SlowPathOffset;
-            if (writeHooked || stat === 0) this.writeLook[i] = SlowPathOffset;
-            else this.writeLook[i] = stat === 1 ? offset : RomWriteSinkOffset - ((i & 0xff) << 8);
-        }
+        for (let i = 0; i < this.memStat.length; ++i) this.mapPages(i, i + 1, this.memStat[i], this.memLook[i]);
     }
 
     writeAcccon(b) {
@@ -827,31 +829,21 @@ export class Cpu6502 extends Base6502 {
         const bitY = !!(b & 8);
         // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
         // This loop rewires which paged RAM 0x3000 - 0x7fff hits.
-        for (let i = 48; i < 128; ++i) {
-            // For "normal" access, it's simple: shadow or not.
-            this.memLook[i] = bitX ? 0x8000 : 0;
-            // For special Master opcode access at 0xc000 - 0xdfff,
-            // it's more involved.
-            if (bitY) {
-                // If 0xc000 is mapped as RAM, the Master opcode access
-                // is disabled; follow what normal access does.
-                this.memLook[i + 256] = this.memLook[i];
-            } else {
-                // Master opcode access enabled; bit E determines whether
-                // it hits shadow RAM or normal RAM. This is independent
-                // of bit X.
-                this.memLook[i + 256] = bitE ? 0x8000 : 0;
-            }
-        }
+        // For "normal" access, it's simple: shadow or not.
+        const normal = bitX ? 0x8000 : 0;
+        this.mapPages(0x30, 0x80, 1, normal);
+        // For special Master opcode access at 0xc000 - 0xdfff,
+        // it's more involved.
+        // If 0xc000 is mapped as RAM, the Master opcode access
+        // is disabled; follow what normal access does.
+        // Otherwise bit E determines whether it hits shadow RAM
+        // or normal RAM. This is independent of bit X.
+        this.mapPages(256 + 0x30, 256 + 0x80, 1, bitY ? normal : bitE ? 0x8000 : 0);
         // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
         // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
         const hazelRAM = bitY ? 1 : 2;
         const hazelOff = bitY ? -0x3000 : this.osOffset - 0xc000;
-        for (let i = 192; i < 224; ++i) {
-            this.memLook[i] = this.memLook[i + 256] = hazelOff;
-            this.memStat[i] = this.memStat[i + 256] = hazelRAM;
-        }
-        this.refreshLook();
+        this.mapBothHalves(0xc0, 0xe0, hazelRAM, hazelOff);
     }
 
     // Works for unpaged RAM only (ie stack and zp)
@@ -1555,19 +1547,13 @@ export class Cpu6502 extends Base6502 {
         // redirected to shadow RAM.
         this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
         if (!this.model.isTest) {
-            for (let i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
-            for (let i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
-            for (let i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-            for (let i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
-            for (let i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
-
-            for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+            this.mapBothHalves(0, 0x80, 1, 0);
+            this.mapBothHalves(0x80, 0xc0, 2, this.romOffset - 0x8000);
+            this.mapBothHalves(0xc0, 0x100, 2, this.osOffset - 0xc000);
+            this.mapBothHalves(0xfc, 0xff, 0, 0);
         } else {
             // Test sets everything as RAM.
-            for (let i = 0; i < 256; ++i) {
-                this.memStat[i] = this.memStat[256 + i] = 1;
-                this.memLook[i] = this.memLook[256 + i] = 0;
-            }
+            this.mapBothHalves(0, 0x100, 1, 0);
         }
         // DRAM content is not guaranteed to contain any particular
         // value on start up, so we choose values that help avoid
@@ -1581,7 +1567,6 @@ export class Cpu6502 extends Base6502 {
                 this.ramRomOs[i] = 0xff;
             }
         }
-        this.refreshLook();
         this.videoDisplayPage = 0;
     }
 
@@ -1879,57 +1864,37 @@ export class AtomCpu6502 extends Cpu6502 {
     selectBranquartBank(bank) {
         bank &= 0x0f;
         const offset = BranquartOffset + bank * BranquartBankSize - 0xa000;
-        for (let i = 0xa0; i < 0xb0; ++i) {
-            this.memLook[i] = this.memLook[256 + i] = offset;
-        }
         // ROM banks are read-only, RAM banks are writable
         const stat = this.branquartRam[bank] ? 1 : 2;
-        for (let i = 0xa0; i < 0xb0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = stat;
-        }
-        this.refreshLook();
+        this.mapBothHalves(0xa0, 0xb0, stat, offset);
     }
 
     setupMemoryMap() {
         this.memStatOffsetByIFetchBank = 0; // no shadow RAM on Atom
 
         // 0x0000-0x9FFF: RAM (including video RAM at 0x8000)
-        for (let i = 0; i < 0xa0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 1;
-            this.memLook[i] = this.memLook[256 + i] = 0;
-        }
+        this.mapBothHalves(0, 0xa0, 1, 0);
 
         // 0xA000-0xAFFF: Branquart banked region (set up via selectBranquartBank)
         this.branquartLatch = 0;
         this.selectBranquartBank(0);
 
         // 0xB000-0xBFFF: Device I/O (PPIA, MMC, VIA, bank latch)
-        for (let i = 0xb0; i < 0xc0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 0;
-        }
+        this.mapBothHalves(0xb0, 0xc0, 0, 0);
 
         // 0xC000-0xEFFF: ROM (4KB blocks loaded into romOffset area)
-        for (let i = 0xc0; i < 0xf0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 2;
-            this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0xa000;
-        }
+        this.mapBothHalves(0xc0, 0xf0, 2, this.romOffset - 0xa000);
 
         // 0xF000-0xFFFF: OS kernel ROM
-        for (let i = 0xf0; i < 0x100; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 2;
-            this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
-        }
+        this.mapBothHalves(0xf0, 0x100, 2, this.osOffset - 0xf000);
 
         // FDC at 0x0A00 (device hole in RAM, if model uses FDC)
-        if (this.model.Fdc) {
-            this.memStat[0x0a] = this.memStat[256 + 0x0a] = 0;
-        }
+        if (this.model.Fdc) this.mapBothHalves(0x0a, 0x0b, 0, 0);
 
         // Randomise video RAM and seed bytes
         for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
         for (let i = 0x8000; i < 0x9000; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
 
-        this.refreshLook();
         this.videoDisplayPage = 0;
     }
 
