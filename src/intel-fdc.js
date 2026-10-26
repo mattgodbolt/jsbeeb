@@ -492,7 +492,9 @@ export class IntelFdc {
         if (!this._stateIsIndexPulse || wasIndexPulse) return;
 
         this._noteIndexPulse();
-        // The ROM's sampler also copies the raw status to register 21, which jsbeeb shares with a read's gap
+        // A seek busy-waits through its head load, taking no index request (see _doSeek).
+        if (this._timerState !== TimerState.none) return;
+        // The ROM's sampler also writes a raw copy, which jsbeeb keeps in register 21 alongside a read's gap
         // count and a write's run byte; an index pulse can come in the middle of either.
         this._latchDriveStatus(this._driveIn);
         switch (this._indexPulseCallback) {

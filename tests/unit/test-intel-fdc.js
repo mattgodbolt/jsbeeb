@@ -373,39 +373,43 @@ describe("Intel 8271 tests", function () {
             return { fdc, scheduler, drive, indexPulse, ready, seek };
         }
 
-        function readyThenStalled() {
+        function stallAndResume({ scheduler, indexPulse }) {
+            scheduler.polltime(ms(300));
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+        }
+
+        function readyFdcAfterStatus() {
             const fixture = readyFdc();
             const { scheduler, indexPulse, ready } = fixture;
             indexPulse();
             scheduler.polltime(ms(200));
             indexPulse();
             expect(ready()).toBe(true);
-            scheduler.polltime(ms(300));
-            indexPulse();
-            scheduler.polltime(ms(200));
-            indexPulse();
             return fixture;
         }
 
         it("is latched off by an index pulse that finds it gone, until a read drive status", () => {
-            const { fdc, seek } = readyThenStalled();
+            const fixture = readyFdcAfterStatus();
+            const { fdc, seek } = fixture;
+            stallAndResume(fixture);
             expect(seek()).toBe(DriveNotReady);
             expect(seek()).toBe(DriveNotReady);
             sendCommand(fdc, ReadDriveStatusCmd | DriveSelect1);
             expect(seek()).toBe(0);
         });
 
-        it("stays on through index pulses that keep coming in time", () => {
-            const { scheduler, indexPulse, ready, seek } = readyFdc();
-            indexPulse();
-            scheduler.polltime(ms(200));
-            indexPulse();
-            expect(ready()).toBe(true);
-            for (let pulse = 0; pulse < 5; ++pulse) {
-                scheduler.polltime(ms(200));
+        it("is not latched by index pulses during a seek, which the chip busy-waits through", () => {
+            const fixture = readyFdcAfterStatus();
+            const { fdc, scheduler, indexPulse } = fixture;
+            sendCommand(fdc, SeekCmd, 79);
+            stallAndResume(fixture);
+            while (fdc.peek(StatusAddr) & Busy) {
+                scheduler.polltime(ms(100));
                 indexPulse();
             }
-            expect(seek()).toBe(0);
+            expect(fdc.read(ResultAddr)).toBe(0);
         });
 
         it("comes on the second index pulse after selection, when they are coming in time", () => {
