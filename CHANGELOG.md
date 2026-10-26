@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.11.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.2...v2.11.0) (2026-10-24)
+
+
+### Features
+
+* list Eben Upton's Solid Elite, 2048, Lander and DOOM in the GitHub discs ([#1482](https://github.com/mattgodbolt/jsbeeb/issues/1482)) ([4be96b6](https://github.com/mattgodbolt/jsbeeb/commit/4be96b6cd0b2aab530cf2ae60e5bc525df7a9982))
+
+
+### Bug Fixes
+
+* clip teletext cells above an odd field to their spill onto row 0 ([#1508](https://github.com/mattgodbolt/jsbeeb/issues/1508)) ([6a9c696](https://github.com/mattgodbolt/jsbeeb/commit/6a9c6968516cb7c6fcd4707b1e14cc7489ae806a))
+* double the cursor with its cell in a stuck interlaced field ([#1496](https://github.com/mattgodbolt/jsbeeb/issues/1496)) ([470a378](https://github.com/mattgodbolt/jsbeeb/commit/470a378a3b5adb95ec3b2506c2140cd6985e652a))
+* save sideways RAM in save states and rewind snapshots ([#1511](https://github.com/mattgodbolt/jsbeeb/issues/1511)) ([0f23ece](https://github.com/mattgodbolt/jsbeeb/commit/0f23ece941aa0403f44324ee022ad0dd79253889))
+
+
+### Performance Improvements
+
+* draw pending bitmap cells with a generated Wasm SIMD drain ([#1497](https://github.com/mattgodbolt/jsbeeb/issues/1497)) ([ba0605d](https://github.com/mattgodbolt/jsbeeb/commit/ba0605d759fae129b517f8a0e34102d79ffce9dc))
+
 ## [2.10.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.1...v2.10.2) (2026-10-21)
 
 

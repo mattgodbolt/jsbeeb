@@ -24,7 +24,9 @@ const CommandFull = 0x40;
 const ParamFull = 0x20;
 const ResultReady = 0x10;
 const NeedData = 0x04;
+const DriveNotReady = 0x10;
 const TrackZeroNotFound = 0x14;
+const SectorNotFound = 0x18;
 
 const LoadHead = 0x08;
 const DriveSelect1 = 0x40;
@@ -363,8 +365,52 @@ describe("Intel 8271 tests", function () {
                 sendCommand(fdc, ReadDriveStatusCmd | DriveSelect1);
                 return (fdc.read(ResultAddr) & ready0) === ready0;
             };
-            return { fdc, scheduler, drive, indexPulse, ready };
+            const seek = () => {
+                sendCommand(fdc, SeekCmd, 0);
+                while (fdc.peek(StatusAddr) & Busy) scheduler.polltime(PollTicks);
+                return fdc.read(ResultAddr);
+            };
+            return { fdc, scheduler, drive, indexPulse, ready, seek };
         }
+
+        function stallAndResume({ scheduler, indexPulse }) {
+            scheduler.polltime(ms(300));
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+        }
+
+        function readyFdcAfterStatus() {
+            const fixture = readyFdc();
+            const { scheduler, indexPulse, ready } = fixture;
+            indexPulse();
+            scheduler.polltime(ms(200));
+            indexPulse();
+            expect(ready()).toBe(true);
+            return fixture;
+        }
+
+        it("is latched off by an index pulse that finds it gone, until a read drive status", () => {
+            const fixture = readyFdcAfterStatus();
+            const { fdc, seek } = fixture;
+            stallAndResume(fixture);
+            expect(seek()).toBe(DriveNotReady);
+            expect(seek()).toBe(DriveNotReady);
+            sendCommand(fdc, ReadDriveStatusCmd | DriveSelect1);
+            expect(seek()).toBe(0);
+        });
+
+        it("is not latched by index pulses during a seek, which the chip busy-waits through", () => {
+            const fixture = readyFdcAfterStatus();
+            const { fdc, scheduler, indexPulse } = fixture;
+            sendCommand(fdc, SeekCmd, 79);
+            stallAndResume(fixture);
+            while (fdc.peek(StatusAddr) & Busy) {
+                scheduler.polltime(ms(100));
+                indexPulse();
+            }
+            expect(fdc.read(ResultAddr)).toBe(0);
+        });
 
         it("comes on the second index pulse after selection, when they are coming in time", () => {
             const { scheduler, indexPulse, ready } = readyFdc();
@@ -535,6 +581,17 @@ describe("Intel 8271 tests", function () {
                 },
             });
             expect(readFirstByte(5)).toEqual({ result: 0, firstByte: 6 });
+        });
+
+        it("times out a read of a sector the track does not have after three revolutions", () => {
+            const { fdc, scheduler } = dfsFdc();
+            const missingSector = SectorsPerTrack;
+            sendCommand(fdc, ReadDataCmd, 0, missingSector, OneSectorOf256Bytes);
+            scheduler.polltime(ms(2 * 200));
+            expect(fdc.peek(StatusAddr) & Busy).toBe(Busy);
+            scheduler.polltime(ms(200));
+            expect(fdc.peek(StatusAddr) & Busy).toBe(0);
+            expect(fdc.read(ResultAddr)).toBe(SectorNotFound);
         });
 
         it("still unloads the head the counted revolutions after a command", () => {
