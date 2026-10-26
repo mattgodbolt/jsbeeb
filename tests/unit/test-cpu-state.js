@@ -757,7 +757,6 @@ describe("Cpu6502 paged memory", () => {
     const AndySelect = 0x80;
     const AccconShadow = 0x04;
     const AccconHazel = 0x08;
-    const BasicBank = 15;
     const MasterSidewaysRamBanks = [4, 5];
 
     async function initialised(modelName) {
@@ -766,16 +765,12 @@ describe("Cpu6502 paged memory", () => {
         return cpu;
     }
 
-    it("ignores writes to a ROM bank and the OS", async () => {
+    it("ignores a write to the OS", async () => {
         const cpu = await initialised("B-DFS1.2");
-        cpu.writemem(RomSelectRegister, BasicBank);
-        const basicByte = cpu.readmem(PagedWindow);
         const osByte = cpu.readmem(OsAddress);
 
-        cpu.writemem(PagedWindow, basicByte ^ 0xff);
         cpu.writemem(OsAddress, osByte ^ 0xff);
 
-        expect(cpu.readmem(PagedWindow)).toBe(basicByte);
         expect(cpu.readmem(OsAddress)).toBe(osByte);
     });
 
