@@ -25,9 +25,7 @@ export const RomBankBytes = 16 * 1024;
 const NumRomBanks = 16;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
-const AddressSpaceBytes = 64 * 1024;
-const RomWriteSinkOffset = OsOffset + RomBankBytes;
-const BbcMemoryBytes = RomWriteSinkOffset + AddressSpaceBytes;
+const BbcMemoryBytes = OsOffset + RomBankBytes;
 const SlowPathOffset = -0x40000000;
 
 /**
@@ -799,9 +797,7 @@ export class Cpu6502 extends Base6502 {
         this.memLook.fill(offset, start, end);
         // While a debug hook is set, every access of its kind takes the slow path, which calls it.
         this.readLook.fill(stat && !this._debugRead ? offset : SlowPathOffset, start, end);
-        let writeOffset = SlowPathOffset;
-        if (stat && !this._debugWrite) writeOffset = stat === 1 ? offset : RomWriteSinkOffset;
-        this.writeLook.fill(writeOffset, start, end);
+        this.writeLook.fill(stat === 1 && !this._debugWrite ? offset : SlowPathOffset, start, end);
     }
 
     mapBothHalves(fromPage, toPage, stat, offset) {
@@ -827,17 +823,11 @@ export class Cpu6502 extends Base6502 {
         const bitE = !!(b & 2);
         const bitX = !!(b & 4);
         const bitY = !!(b & 8);
-        // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
-        // This loop rewires which paged RAM 0x3000 - 0x7fff hits.
-        // For "normal" access, it's simple: shadow or not.
+        // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE at 0x3000 - 0x7fff.
         const normal = bitX ? 0x8000 : 0;
         this.mapPages(0x30, 0x80, 1, normal);
-        // For special Master opcode access at 0xc000 - 0xdfff,
-        // it's more involved.
-        // If 0xc000 is mapped as RAM, the Master opcode access
-        // is disabled; follow what normal access does.
-        // Otherwise bit E determines whether it hits shadow RAM
-        // or normal RAM. This is independent of bit X.
+        // Opcodes at 0xc000 - 0xdfff see shadow RAM by bit E, independent of bit X, unless HAZEL
+        // is paged in there, when they see what normal access does.
         this.mapPages(256 + 0x30, 256 + 0x80, 1, bitY ? normal : bitE ? 0x8000 : 0);
         // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
         // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
