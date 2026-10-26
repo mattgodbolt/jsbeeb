@@ -621,7 +621,7 @@ class DebugHook {
                 }
                 return stop;
             };
-            this.cpu.debugHooksChanged();
+            this.cpu.refreshLook();
         }
         handler.remove = () => this.remove(handler);
         return handler;
@@ -633,14 +633,14 @@ class DebugHook {
         this.handlers = this.handlers.slice(0, i).concat(this.handlers.slice(i + 1));
         if (this.handlers.length === 0) {
             this.cpu[this.functionName] = null;
-            this.cpu.debugHooksChanged();
+            this.cpu.refreshLook();
         }
     }
 
     clear() {
         this.handlers = [];
         this.cpu[this.functionName] = null;
-        this.cpu.debugHooksChanged();
+        this.cpu.refreshLook();
     }
 
     get stopped() {
@@ -795,26 +795,20 @@ export class Cpu6502 extends Base6502 {
                 this.memStat[c] = this.memStat[256 + c] = 1;
             }
         }
-        this.refreshLook(0x80, 0xc0);
+        this.refreshLook();
     }
 
     // While a debug hook is set, every access of its kind takes the slow path, which calls it.
-    refreshLook(fromPage, toPage) {
+    refreshLook() {
         const readHooked = !!this._debugRead;
         const writeHooked = !!this._debugWrite;
-        for (let page = fromPage; page < toPage; ++page) {
-            for (let i = page; i < 512; i += 256) {
-                const stat = this.memStat[i];
-                const offset = this.memLook[i];
-                this.readLook[i] = stat && !readHooked ? offset : SlowPathOffset;
-                if (writeHooked || stat === 0) this.writeLook[i] = SlowPathOffset;
-                else this.writeLook[i] = stat === 1 ? offset : RomWriteSinkOffset - (page << 8);
-            }
+        for (let i = 0; i < 512; ++i) {
+            const stat = this.memStat[i];
+            const offset = this.memLook[i];
+            this.readLook[i] = stat && !readHooked ? offset : SlowPathOffset;
+            if (writeHooked || stat === 0) this.writeLook[i] = SlowPathOffset;
+            else this.writeLook[i] = stat === 1 ? offset : RomWriteSinkOffset - ((i & 0xff) << 8);
         }
-    }
-
-    debugHooksChanged() {
-        this.refreshLook(0, 0x100);
     }
 
     writeAcccon(b) {
@@ -857,7 +851,7 @@ export class Cpu6502 extends Base6502 {
             this.memLook[i] = this.memLook[i + 256] = hazelOff;
             this.memStat[i] = this.memStat[i + 256] = hazelRAM;
         }
-        this.refreshLook(0x30, 0xe0);
+        this.refreshLook();
     }
 
     // Works for unpaged RAM only (ie stack and zp)
@@ -1587,7 +1581,7 @@ export class Cpu6502 extends Base6502 {
                 this.ramRomOs[i] = 0xff;
             }
         }
-        this.refreshLook(0, 0x100);
+        this.refreshLook();
         this.videoDisplayPage = 0;
     }
 
@@ -1893,7 +1887,7 @@ export class AtomCpu6502 extends Cpu6502 {
         for (let i = 0xa0; i < 0xb0; ++i) {
             this.memStat[i] = this.memStat[256 + i] = stat;
         }
-        this.refreshLook(0xa0, 0xb0);
+        this.refreshLook();
     }
 
     setupMemoryMap() {
@@ -1935,7 +1929,7 @@ export class AtomCpu6502 extends Cpu6502 {
         for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
         for (let i = 0x8000; i < 0x9000; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
 
-        this.refreshLook(0, 0x100);
+        this.refreshLook();
         this.videoDisplayPage = 0;
     }
 
