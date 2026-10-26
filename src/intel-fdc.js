@@ -492,6 +492,9 @@ export class IntelFdc {
         if (!this._stateIsIndexPulse || wasIndexPulse) return;
 
         this._noteIndexPulse();
+        // The ROM's sampler also copies the raw status to register 21, which jsbeeb shares with a read's gap
+        // count and a write's run byte; an index pulse can come in the middle of either.
+        this._latchDriveStatus(this._driveIn);
         switch (this._indexPulseCallback) {
             case IndexPulse.none:
                 break;
@@ -1544,12 +1547,15 @@ export class IntelFdc {
     }
 
     _doReadDriveStatus() {
-        let driveIn = this._driveIn;
+        const driveIn = this._driveIn;
         this._regs[Registers.internalDriveInCopy] = driveIn;
-        this._regs[Registers.internalDriveInLatched] |= 0xbb;
-        driveIn &= this._regs[Registers.internalDriveInLatched];
-        this._regs[Registers.internalDriveInLatched] = driveIn;
-        return driveIn;
+        return this._latchDriveStatus(driveIn);
+    }
+
+    _latchDriveStatus(driveIn) {
+        const latched = (this._regs[Registers.internalDriveInLatched] | 0xbb) & driveIn;
+        this._regs[Registers.internalDriveInLatched] = latched;
+        return latched;
     }
 
     _doCommandDispatch() {
