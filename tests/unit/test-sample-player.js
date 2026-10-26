@@ -98,6 +98,30 @@ describe("SamplePlayer", () => {
         });
     });
 
+    describe("stopSound", () => {
+        const startCut = (player) =>
+            player.startSound({ duration: 2 }, { when: 1, offset: 0, duration: 1, fadeSeconds: 0.002 });
+
+        it("fades a sound out over the fade before the stop, in place of its own fade-out", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = startCut(player);
+            const fade = source.connect.mock.calls[0][0];
+            player.stopSound(source, 1.5, 0.002);
+            expect(fade.gain.cancelScheduledValues).toHaveBeenCalledWith(1.498);
+            expect(fade.gain.setValueAtTime).toHaveBeenLastCalledWith(1, 1.498);
+            expect(fade.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, 1.5);
+            expect(source.stop).toHaveBeenCalledWith(1.5);
+        });
+
+        it("fades from now when the stop is already past", () => {
+            const player = new SamplePlayer(context, destination, 0.4);
+            const source = startCut(player);
+            context.currentTime = 1.7;
+            player.stopSound(source, 1.5, 0.002);
+            expect(source.stop).toHaveBeenCalledWith(expect.closeTo(1.702, 9));
+        });
+    });
+
     describe("play", () => {
         it("should reject when context is not running", async () => {
             context.state = "suspended";

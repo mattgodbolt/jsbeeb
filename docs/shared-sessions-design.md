@@ -152,9 +152,8 @@ Ranked by how much they would bite.
    it. The existing emulation lead logic (`setEmulationLead`) is the place for that. In v0 a guest simply runs
    no faster than the host's commits and catches up when more than 40 ms behind (see
    Pacing), so its audio stalls, or skips ahead after it catches up, rather than drifting.
-8. **Smaller ones.** The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is
-   audio only and harmless. Later, the Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a
-   session-wide seed.
+8. **Smaller ones.** The Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a session-wide
+   seed.
 
 ## Prior art
 

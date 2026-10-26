@@ -17,6 +17,7 @@ export class SamplePlayer {
         this.gain.connect(destination);
         // Prevent older Safari from GC-ing in-flight AudioBufferSourceNodes.
         this.playing = [];
+        this.fades = new WeakMap();
     }
 
     /**
@@ -69,6 +70,7 @@ export class SamplePlayer {
             fade.gain.setValueAtTime(1, start + duration - fadeSeconds);
             fade.gain.linearRampToValueAtTime(0, start + duration);
             fade.connect(this.gain);
+            this.fades.set(source, fade);
             into = fade;
         }
         source.connect(into);
@@ -80,6 +82,19 @@ export class SamplePlayer {
         else source.start(when, offset, duration);
         this.playing.push(source);
         return source;
+    }
+
+    /**
+     * Stop a sound started with a fade at `at`, fading it out over the `fadeSeconds` before, so
+     * that cutting it short does not click either. A time already gone fades from now.
+     */
+    stopSound(source, at, fadeSeconds) {
+        const from = Math.max(at - fadeSeconds, this.context.currentTime);
+        const fade = this.fades.get(source);
+        fade.gain.cancelScheduledValues(from);
+        fade.gain.setValueAtTime(1, from);
+        fade.gain.linearRampToValueAtTime(0, from + fadeSeconds);
+        source.stop(from + fadeSeconds);
     }
 
     /**
