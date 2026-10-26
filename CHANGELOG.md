@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.11.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.11.0...v2.11.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* latch the 8271's drive status on every index pulse ([#1524](https://github.com/mattgodbolt/jsbeeb/issues/1524)) ([76d5c3c](https://github.com/mattgodbolt/jsbeeb/commit/76d5c3c949493f08bc6cff0b1979c15a8ea26cb3))
+
+
+### Performance Improvements
+
+* clear only the box each field drew in ([#1521](https://github.com/mattgodbolt/jsbeeb/issues/1521)) ([55d9aca](https://github.com/mattgodbolt/jsbeeb/commit/55d9acab625227dd9fc260e6cc31d0c7c13c4d31))
+* expand the SAA5050's glyph rows with Wasm SIMD ([#1506](https://github.com/mattgodbolt/jsbeeb/issues/1506)) ([801dc90](https://github.com/mattgodbolt/jsbeeb/commit/801dc90317514cb6a35500abda5abaf2f9fbc8aa))
+* paint MODE 7 from the SAA5050's log, outside the render loop ([#1504](https://github.com/mattgodbolt/jsbeeb/issues/1504)) ([d64497f](https://github.com/mattgodbolt/jsbeeb/commit/d64497fdb2541349f06b99260f575c644473066d))
+* run the SAA5050 only when something reads it ([#1501](https://github.com/mattgodbolt/jsbeeb/issues/1501)) ([25e98f9](https://github.com/mattgodbolt/jsbeeb/commit/25e98f9f6a97644bd7bd4f60c5329456dbab4b55))
+
 ## [2.11.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.2...v2.11.0) (2026-10-24)
 
 
