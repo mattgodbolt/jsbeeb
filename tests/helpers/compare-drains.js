@@ -45,21 +45,22 @@ function teletextSpan(cells, count, length) {
 }
 
 /**
- * Has every drain of `videoDrain` compare its framebuffer and line grid with jsDrain's, over the part of the
- * framebuffer the records reach, and every teletext paint likewise with jsPaintTeletext's.
+ * Has every drain of `videoDrain` compare its framebuffer, line grid and drawn boxes with jsDrain's, over the
+ * part of the framebuffer the records reach, and every teletext paint likewise with jsPaintTeletext's.
  * @param {import("../../src/video-drain.js").VideoDrain} videoDrain
  * @returns {{drains: number, teletextPaints: number, differences: string[]}} how many drains and teletext paints
  *     ran, and a description of each that differed
  */
 export function checkDrainsAgainstJs(videoDrain) {
     const checked = { drains: 0, teletextPaints: 0, differences: [] };
-    const { fb32, lineGrid, records, table4bpp, palette, teletextCells, teletextColour } = videoDrain;
+    const { fb32, lineGrid, drawnBoxes, records, table4bpp, palette, teletextCells, teletextColour } = videoDrain;
     const drainUnderTest = videoDrain.drain;
     const paintUnderTest = videoDrain.paintTeletext;
     const expected = {
         records,
         fb32: new Int32Array(fb32.length),
         lineGrid: lineGrid.slice(),
+        drawnBoxes: drawnBoxes.slice(),
         table4bpp,
         palette,
         teletextCells,
@@ -77,8 +78,11 @@ export function checkDrainsAgainstJs(videoDrain) {
         const [start, end] = touchedSpan(records, count, fb32.length);
         expected.fb32.set(fb32.subarray(start, end), start);
         expected.lineGrid.set(lineGrid);
+        expected.drawnBoxes.set(drawnBoxes);
         jsDrain(expected, count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
         drainUnderTest(count, modeBase, pixelsPerChar, doubledLines, lineGridValue);
+        const box = firstDifference(expected.drawnBoxes, drawnBoxes, 0, drawnBoxes.length);
+        if (box >= 0) checked.differences.push(`drains ${checked.drains} of ${count}: drawn box word ${box}`);
         compare("drains", count, start, end);
     };
     videoDrain.paintTeletext = (count) => {

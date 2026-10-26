@@ -667,19 +667,16 @@ export class Video {
     }
 
     clearPaintBuffer() {
-        const fb32 = this.fb32;
+        if (this.video6847) this.drain.markAllDrawn();
         // The line grid is cleared exactly where the next field's pixels go: when it
         // does not double lines, the other field's rows survive, and so must their grid.
         if (!this.doublesLines()) {
-            let line = this.frameCount & 1;
-            while (line < 625) {
-                const start = line * 1024;
-                fb32.fill(OPAQUE_BLACK, start, start + 1024);
-                this.lineGrid[line] = 0;
-                line += 2;
-            }
+            const parity = this.frameCount & 1;
+            this.drain.clearDrawn(parity);
+            for (let line = parity; line < 625; line += 2) this.lineGrid[line] = 0;
         } else {
-            fb32.fill(OPAQUE_BLACK);
+            this.drain.clearDrawn(0);
+            this.drain.clearDrawn(1);
             this.lineGrid.fill(0);
         }
     }
@@ -816,6 +813,7 @@ export class Video {
             this.cursorInvertedOffset = this.beamOffset();
             if (this.teletextMode) {
                 this.teletext.catchUpShown();
+                this.drain.markAllDrawn();
                 this.invertForCursor(this.cursorInvertedOffset, 0);
             } else {
                 this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
@@ -861,6 +859,7 @@ export class Video {
         } else {
             this.blitFbSecondHalf(this.cellData, offset);
         }
+        this.drain.markDrawn(offset, this.pixelsPerChar, this.doublesLines());
         if (this.doublesLines()) {
             this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);
         }

@@ -31,7 +31,11 @@
 //   283712   1024                        teletext colour: the SAA5050's 256 colours (see Teletext.rebuildColours),
 //                                        RGBA words; a cell's palette index picks four in a row.
 //   284736   8192                        teletext cells: up to 1024 cells to paint, two i32s each.
-//   292928   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
+//   292928   32                          drawn boxes: for the even rows, then the odd rows, four i32s bounding
+//                                        what was drawn since those rows were last cleared: the first column, one
+//                                        past the last, the first row and one past the last (empty is 1024, 0,
+//                                        1024, 0). Video's clear blacks out only the box of the rows it clears.
+//   292960   4 * framebufferPixels       framebuffer: 1024 RGBA words per row.
 //            + 8192                      overrun: room for a doubled cell's second row below the last row, and a
 //                                        cell running past the end of its row.
 //
@@ -46,12 +50,18 @@
 // 1. Decode: `raw` is the record shifted down 8 (the biased offset, and the cursor bit). `start` is the offset with
 //    the bias removed, rounded down to an even row when lines are doubled. `source` is where the cell's 16 palette
 //    indices are in table4bpp.
-// 2. A negative `start` is a cell on the line above an odd field; only its right end, spilling onto row 0, is drawn,
+// 2. Every record widens the drain's columns, minColumn to maxColumn, by its `start`'s column. At the end, the
+//    drain widens both drawn boxes by those columns (plus pixelsPerChar), and by the rows from the first record's
+//    to the last's (plus the row below when doubled). Records arrive in beam order, so the first is the top row and
+//    the last the bottom one: Video appends them only while bitmapX is within a row, and bitmapY only grows, except
+//    at flyback and restore, which drain first. A cell running past the end of its row widens the box to the whole
+//    width and the next row; a clipped cell's row is -1 or -2, and it spills onto row 0.
+// 3. A negative `start` is a cell on the line above an odd field; only its right end, spilling onto row 0, is drawn,
 //    pixel by pixel (drawClipped).
-// 3. A cursor record inverts the RGB of the cell's pixels, on both rows when lines are doubled (invertCursor).
-// 4. Otherwise it is a cell. Cells that follow on from the previous one (its `raw` plus pixelsPerChar) form a run;
+// 4. A cursor record inverts the RGB of the cell's pixels, on both rows when lines are doubled (invertCursor).
+// 5. Otherwise it is a cell. Cells that follow on from the previous one (its `raw` plus pixelsPerChar) form a run;
 //    the first cell of a run writes the line grid for its row, and for the row below when lines are doubled.
-// 5. The cell is drawn (drawCell). The JS looks each pixel's colour up through table4bpp and the palette. The Wasm
+// 6. The cell is drawn (drawCell). The JS looks each pixel's colour up through table4bpp and the palette. The Wasm
 //    does the whole cell with vectors:
 //    - Once per drain, SplitPalette splits the 16 palette colours into four 16-byte "planes": plane0 holds byte 0
 //      (red) of every colour, plane1 byte 1 (green), plane2 blue, plane3 alpha.
@@ -137,7 +147,12 @@ const RecordsOffset = LineGridOffset + LineGridRows;
 const TeletextLanesOffset = RecordsOffset + PendingCapacity * WordBytes;
 const TeletextColourOffset = TeletextLanesOffset + TeletextLaneBytes;
 const TeletextCellsOffset = TeletextColourOffset + TeletextColours * WordBytes;
-const FramebufferOffset = TeletextCellsOffset + TeletextCellCapacity * TeletextCellWords * WordBytes;
+const DrawnBoxesOffset = TeletextCellsOffset + TeletextCellCapacity * TeletextCellWords * WordBytes;
+const BoxWords = 4;
+const BoxBytes = BoxWords * WordBytes;
+const FieldParities = 2;
+const EmptyBox = [RowPixels, 0, LineGridRows, 0];
+const FramebufferOffset = DrawnBoxesOffset + FieldParities * BoxBytes;
 const FramebufferOverrunBytes = 2 * RowBytes;
 
 const range = (start, count) => Array.from({ length: count }, (_, i) => start + i);
@@ -165,6 +180,12 @@ const DrainLocals = {
     at: "i32",
     span: "i32",
     rowsEnd: "i32",
+    column: "i32",
+    minColumn: "i32",
+    maxColumn: "i32",
+    spill: "i32",
+    firstRow: "i32",
+    endRow: "i32",
     plane0: "v128",
     plane1: "v128",
     plane2: "v128",
@@ -403,9 +424,79 @@ const DrawCell = `
         ${eightPixels(InterleaveHigh, 32)}
     end`;
 
+// Widens word `field` (0 to 3) of the drawn box at boxOffset to take in `local`: the lower of the two when
+// `compare` is i32.lt_s, the higher when it is i32.gt_s.
+function widenBoxField(boxOffset, field, local, compare) {
+    const offset = DrawnBoxesOffset + boxOffset + field * WordBytes;
+    return `
+        i32.const 0                         ;; [0], the address for the store
+        local.get ${local}
+        i32.const 0
+        i32.load offset=${offset}           ;; [0, ${local}, the box's]
+        local.get ${local}
+        i32.const 0
+        i32.load offset=${offset}
+        ${compare}
+        select                              ;; [0, whichever wins]
+        i32.store offset=${offset}`;
+}
+
+// Widens both drawn boxes by the columns minColumn to maxColumn and the rows from the first record's to the last's.
+// Pairs with widenByCells in JS.
+const WidenBoxes = `
+    local.get maxColumn
+    local.get pixelsPerChar
+    i32.add
+    local.tee maxColumn                     ;; maxColumn = one past the last column drawn; [maxColumn]
+    i32.const ${RowPixels}
+    i32.gt_s
+    local.tee spill                         ;; spill = 1 when a cell ran past the end of its row; [spill]
+    if                                      ;; it drew from column 0 of the next row, so take in the whole width
+        i32.const 0
+        local.set minColumn
+        i32.const ${RowPixels}
+        local.set maxColumn
+    end
+    local.get start                         ;; [the last record's start]
+    i32.const ${RowShift}
+    i32.shr_s
+    local.get doubledLines
+    i32.add
+    local.get spill
+    i32.add
+    i32.const 1
+    i32.add
+    local.set endRow                        ;; endRow = one past its row, the row below and the spill's row
+    i32.const 0
+    i32.load offset=${RecordsOffset}
+    i32.const ${PendingOffsetShift}
+    i32.shr_u
+    i32.const ${PendingOffsetMask}
+    i32.and
+    i32.const ${PendingRowBias * RowPixels}
+    i32.sub
+    local.get rowMask
+    i32.and                                 ;; [the first record's start]
+    i32.const ${RowShift}
+    i32.shr_s
+    local.set firstRow                      ;; firstRow = its row, -1 or -2 for a clipped cell
+    ${range(0, FieldParities)
+        .map((parity) => {
+            const box = parity * BoxBytes;
+            return [
+                widenBoxField(box, 0, "minColumn", "i32.lt_s"),
+                widenBoxField(box, 1, "maxColumn", "i32.gt_s"),
+                widenBoxField(box, 2, "firstRow", "i32.lt_s"),
+                widenBoxField(box, 3, "endRow", "i32.gt_s"),
+            ].join("");
+        })
+        .join("")}`;
+
 // drain(count, modeBase, pixelsPerChar, doubledLines, lineGridValue): the whole function. Pairs with jsDrain.
 const DrainCode = `
     ${SplitPalette}
+    i32.const ${RowPixels}
+    local.set minColumn                     ;; minColumn = 1024, past every column; maxColumn starts at 0
     i32.const -1
     local.get doubledLines
     i32.const ${RowShift}
@@ -435,6 +526,23 @@ const DrainCode = `
             local.get rowMask
             i32.and
             local.set start                 ;; start = offset & rowMask
+            local.get start
+            i32.const ${RowPixels - 1}
+            i32.and
+            local.tee column                ;; column = start's column; [column]
+            local.get minColumn
+            local.get column
+            local.get minColumn
+            i32.lt_u
+            select
+            local.set minColumn             ;; minColumn = min(column, minColumn)
+            local.get column
+            local.get maxColumn
+            local.get column
+            local.get maxColumn
+            i32.gt_u
+            select
+            local.set maxColumn             ;; maxColumn = max(column, maxColumn)
             local.get modeBase
             local.get record
             i32.const ${PendingByteMask}
@@ -494,6 +602,10 @@ const DrainCode = `
             ${DrawCell}
             br 0                            ;; continue
         end
+    end
+    local.get count
+    if                                      ;; there were records
+        ${WidenBoxes}
     end`;
 
 const PaintTeletextParams = ["count"];
@@ -773,10 +885,35 @@ function drawCell({ fb32, table4bpp, palette }, source, start, pixelsPerChar, do
     }
 }
 
+const recordStart = (record, rowMask) =>
+    (((record >>> PendingOffsetShift) & PendingOffsetMask) - PendingRowBias * RowPixels) & rowMask;
+
+function widenBoxes(drawnBoxes, minColumn, endColumn, firstRow, endRow) {
+    for (let at = 0; at < drawnBoxes.length; at += BoxWords) {
+        drawnBoxes[at] = Math.min(drawnBoxes[at], minColumn);
+        drawnBoxes[at + 1] = Math.max(drawnBoxes[at + 1], endColumn);
+        drawnBoxes[at + 2] = Math.min(drawnBoxes[at + 2], firstRow);
+        drawnBoxes[at + 3] = Math.max(drawnBoxes[at + 3], endRow);
+    }
+}
+
+// Cells of pixelsPerChar pixels starting at columns minColumn to maxColumn, on the rows of firstStart to lastStart.
+// Pairs with WidenBoxes.
+function widenByCells({ drawnBoxes }, minColumn, maxColumn, firstStart, lastStart, pixelsPerChar, doubledLines) {
+    const spill = Number(maxColumn + pixelsPerChar > RowPixels);
+    widenBoxes(
+        drawnBoxes,
+        spill ? 0 : minColumn,
+        spill ? RowPixels : maxColumn + pixelsPerChar,
+        firstStart >> RowShift,
+        (lastStart >> RowShift) + Number(doubledLines) + spill + 1,
+    );
+}
+
 /**
  * Draws the first `count` records of `views`, in order, in its palette: the JS drain, the same as the Wasm one.
- * @param {{records: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, table4bpp: Uint8Array,
- *     palette: Int32Array}} views
+ * @param {{records: Int32Array, fb32: Int32Array, lineGrid: Uint8Array, drawnBoxes: Int32Array,
+ *     table4bpp: Uint8Array, palette: Int32Array}} views
  * @param {number} count
  * @param {number} modeBase the table4bpp offset of byte 0 in the ULA mode
  * @param {number} pixelsPerChar
@@ -787,12 +924,17 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
     const { records, lineGrid } = views;
     const rowMask = ~(Number(doubledLines) << RowShift);
     let expected = -1;
+    let minColumn = RowPixels;
+    let maxColumn = 0;
     for (let i = 0; i < count;) {
         const record = records[i];
         const raw = record >>> PendingOffsetShift;
-        const start = ((raw & PendingOffsetMask) - PendingRowBias * RowPixels) & rowMask;
+        const start = recordStart(record, rowMask);
         const source = modeBase + ((record & PendingByteMask) << TableRowShift);
         ++i;
+        const column = start & (RowPixels - 1);
+        minColumn = Math.min(column, minColumn);
+        maxColumn = Math.max(column, maxColumn);
         if (start < 0) {
             drawClipped(views, record, source, start, pixelsPerChar, doubledLines);
             expected = -1;
@@ -810,6 +952,10 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
         expected = raw + pixelsPerChar;
         drawCell(views, source, start, pixelsPerChar, doubledLines);
     }
+    if (count === 0) return;
+    const firstStart = recordStart(records[0], rowMask);
+    const lastStart = recordStart(records[count - 1], rowMask);
+    widenByCells(views, minColumn, maxColumn, firstStart, lastStart, pixelsPerChar, doubledLines);
 }
 
 function paintClippedTeletextCell({ fb32, teletextColour }, pixels, info, offset, doubled) {
@@ -912,6 +1058,8 @@ export class VideoDrain {
         this.lineGrid = new Uint8Array(buffer, LineGridOffset, LineGridRows);
         this.records = new Int32Array(buffer, RecordsOffset, PendingCapacity);
         this.fb32 = new Int32Array(buffer, FramebufferOffset, framebufferPixels);
+        this.drawnBoxes = new Int32Array(buffer, DrawnBoxesOffset, FieldParities * BoxWords);
+        this.markAllDrawn();
         this.teletextColour = new Int32Array(buffer, TeletextColourOffset, TeletextColours);
         this.teletextCells = new Int32Array(buffer, TeletextCellsOffset, TeletextCellCapacity * TeletextCellWords);
         fillTeletextLanes(new Uint8Array(buffer, TeletextLanesOffset, TeletextLaneBytes));
@@ -926,6 +1074,41 @@ export class VideoDrain {
          * Paints the first `count` cells of teletextCells, in order, in teletextColour.
          * @type {(count: number) => void}
          */
-        this.paintTeletext = exports ? exports.paintTeletext : (count) => jsPaintTeletext(this, count);
+        const paintTeletext = exports ? exports.paintTeletext : (count) => jsPaintTeletext(this, count);
+        this.paintTeletext = (count) => {
+            this.markAllDrawn();
+            paintTeletext(count);
+        };
+    }
+
+    /** Widens the drawn boxes to the whole framebuffer, for writers that do not track what they draw. */
+    markAllDrawn() {
+        widenBoxes(this.drawnBoxes, 0, RowPixels, 0, this.fb32.length >>> RowShift);
+    }
+
+    /**
+     * Widens the drawn boxes by `pixels` pixels from `offset`, and the row below when doubled.
+     * @param {number} offset
+     * @param {number} pixels
+     * @param {boolean} doubledLines
+     */
+    markDrawn(offset, pixels, doubledLines) {
+        const column = offset & (RowPixels - 1);
+        widenByCells(this, column, column, offset, offset, pixels, doubledLines);
+    }
+
+    /**
+     * Blacks out what was drawn on the rows of one field parity (even or odd) since they were last cleared, and
+     * empties that parity's box.
+     * @param {number} parity
+     */
+    clearDrawn(parity) {
+        const box = this.drawnBoxes.subarray(parity * BoxWords, (parity + 1) * BoxWords);
+        const [minColumn, endColumn, firstRow, endRow] = box;
+        const fromRow = Math.max(firstRow, 0);
+        for (let row = fromRow + ((fromRow ^ parity) & 1); row < endRow; row += FieldParities) {
+            this.fb32.fill(OPAQUE_BLACK, (row << RowShift) + minColumn, (row << RowShift) + endColumn);
+        }
+        box.set(EmptyBox);
     }
 }
