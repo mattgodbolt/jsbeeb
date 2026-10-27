@@ -1570,6 +1570,7 @@ export class Cpu6502 extends Base6502 {
             }
         }
         this.videoDisplayPage = 0;
+        if (this.model.isMaster) this.writeAcccon(0);
     }
 
     // Override in subclasses for different peripheral sets.

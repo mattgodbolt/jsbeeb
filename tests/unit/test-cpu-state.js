@@ -808,6 +808,22 @@ describe("Cpu6502 paged memory", () => {
         expect(cpu.readmem(OsAddress)).toBe(osByte);
     });
 
+    it("clears ACCCON and pages out shadow RAM and HAZEL on a hard reset", async () => {
+        const cpu = await initialised("Master");
+        const osByte = cpu.readmem(OsAddress);
+        cpu.writemem(AccconRegister, AccconShadow | AccconHazel);
+
+        cpu.reset(true);
+        cpu.writemem(ShadowAddress, 0x77);
+
+        expect(cpu.readmem(AccconRegister)).toBe(0);
+        expect(cpu.readmem(OsAddress)).toBe(osByte);
+        cpu.writemem(AccconRegister, AccconShadow);
+        expect(cpu.readmem(ShadowAddress)).not.toBe(0x77);
+        cpu.writemem(AccconRegister, 0);
+        expect(cpu.readmem(ShadowAddress)).toBe(0x77);
+    });
+
     it("reads and writes as a restored snapshot pages", async () => {
         const cpu = await initialised("Master");
         const [first, second] = MasterSidewaysRamBanks;
