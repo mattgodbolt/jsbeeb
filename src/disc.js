@@ -903,6 +903,13 @@ function sectorsOnSurface(disc) {
     return found;
 }
 
+/**
+ * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
+ * have held is lost. Copy protection usually shows up as one of these.
+ *
+ * @param {{sector: Sector}[]} sectors
+ * @returns {string[]} what `sectors` hold that an SSD or DSD cannot, worst first
+ */
 function describeShortfalls(sectors) {
     const counts = new Map();
     for (const { sector } of sectors) {
@@ -912,17 +919,6 @@ function describeShortfalls(sectors) {
     return [...counts]
         .sort(([, a], [, b]) => b - a)
         .map(([shortfall, count]) => `${count} sector${count === 1 ? "" : "s"} ${shortfall}`);
-}
-
-/**
- * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
- * have held is lost. Copy protection usually shows up as one of these.
- *
- * @returns {string[]} what `disc` holds that an SSD or DSD cannot, worst first
- * @param {Disc} disc
- */
-export function ssdOrDsdShortfalls(disc) {
-    return describeShortfalls(sectorsOnSurface(disc));
 }
 
 /**

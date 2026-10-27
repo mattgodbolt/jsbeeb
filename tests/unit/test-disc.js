@@ -594,12 +594,13 @@ describe("sector decoding warnings", () => {
     });
 
     it.each([
-        ["warns of an FM mark after only two sync bytes", 2, true],
-        ["takes three sync bytes before an FM mark as enough", 3, false],
-    ])("%s", (_, syncBytes, isShort) => {
+        ["warns of an FM mark after only two sync bytes", IbmDiscFormat.stdGap1FFs, 2, true],
+        ["takes three sync bytes before an FM mark as enough", IbmDiscFormat.stdGap1FFs, 3, false],
+        ["counts nothing before the track's start as sync", 0, 2, true],
+    ])("%s", (_, gapBytes, syncBytes, isShort) => {
         const disc = Disc.createBlank();
         disc.buildTrack(false, 0)
-            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+            .appendRepeatFmByte(0xff, gapBytes)
             .appendRepeatFmByte(0x00, syncBytes)
             .resetCrc()
             .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)

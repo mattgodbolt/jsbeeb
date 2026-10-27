@@ -1,14 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import {
-    Disc,
-    DiscConfig,
-    loadAdf,
-    loadSsd,
-    sniffSurfaceLayout,
-    ssdOrDsdShortfalls,
-    toSsdOrDsd,
-} from "../../src/disc.js";
+import { Disc, DiscConfig, loadAdf, loadSsd, sniffSurfaceLayout, toSsdOrDsd } from "../../src/disc.js";
 import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import { SectorBytes, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
 import * as fs from "node:fs";
@@ -79,11 +71,9 @@ describe("HFE loader tests", function () {
     it("should refuse to save a protected disc as SSD or DSD", { timeout: 30000 }, () => {
         // Elite's protection puts sectors numbered 246 to 255 on track 2 and an unreadable one on
         // track 80, none of which a sector image can hold.
-        expect(ssdOrDsdShortfalls(elite())).toEqual([
-            "50 sectors numbered past the 10 a track holds",
-            "1 sector with a CRC error",
-        ]);
-        expect(() => toSsdOrDsd(elite())).toThrow(/cannot be saved as SSD or DSD/);
+        expect(() => toSsdOrDsd(elite())).toThrow(
+            "cannot be saved as SSD or DSD: it has 50 sectors numbered past the 10 a track holds, 1 sector with a CRC error.",
+        );
     });
 
     it("should save what fits when forced", { timeout: 30000 }, () => {
