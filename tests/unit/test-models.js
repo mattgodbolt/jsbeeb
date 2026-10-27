@@ -38,6 +38,7 @@ describe("Model", () => {
             "BBC B (stock)": "BBC B",
             "BBC B (US)": "BBC B",
             "BBC B (German)": "BBC B",
+            "BBC B (MOS 0.10)": "BBC B",
             "BBC Master 128 (DFS)": "Master 128",
             "BBC Master 128 (ADFS)": "Master 128",
             "BBC Master 128 (ANFS)": "Master 128",
@@ -57,10 +58,13 @@ describe("Model", () => {
         expect([beeb.Cpu, atom.Cpu]).toEqual([Cpu6502, AtomCpu6502]);
         expect([beeb.wrchvAddress, atom.wrchvAddress]).toEqual([0x020e, 0x0208]);
         expect([beeb.idleAddress, master.idleAddress, atom.idleAddress]).toEqual([0xe581, 0xe7e6, 0xfea7]);
-        expect([findModel("B-US").idleAddress, findModel("B-German").idleAddress]).toEqual([0xe556, 0xe581]);
-        expect([beeb.vsyncAddress, findModel("B-US").vsyncAddress, master.vsyncAddress]).toEqual([
+        expect(["B-US", "B-German", "B-MOS0.10"].map((name) => findModel(name).idleAddress)).toEqual([
+            0xe556, 0xe581, 0xe598,
+        ]);
+        expect(["B-DFS1.2", "B-US", "B-MOS0.10", "Master"].map((name) => findModel(name).vsyncAddress)).toEqual([
             0xdd15,
             0xdcec,
+            0xdf12,
             null,
         ]);
         expect(beeb.keys).toBe(BBC);

@@ -255,6 +255,21 @@ export const allModels = [
         fdc: NoiseAwareIntelFdc,
     }),
     new Model({
+        name: "BBC B (MOS 0.10)",
+        shortName: "BBC B",
+        synonyms: ["B-MOS0.10"],
+        // MOS 0.10 looks for a language only at ROMSEL 0 to 3, which the four sockets alias, and has no DFS.
+        os: ["os01.rom", "", "", "", "a01/BASIC1.rom"],
+        idleAddress: 0xe598,
+        vsyncAddress: 0xdf12,
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        clockMhz: 2,
+        swram: noSwram,
+        romSockets: 4,
+        fdc: NoiseAwareIntelFdc,
+    }),
+    new Model({
         name: "BBC Master 128 (DFS)",
         shortName: "Master 128",
         synonyms: ["Master"],
