@@ -415,6 +415,13 @@ describe("Debugger", () => {
             expect(watchMenu().hidden).toBe(true);
         });
 
+        it("leaves a watch's list of formats open when the machine steps or goes", () => {
+            addWatch("$70");
+            watchControl(0, "watch-format").click();
+            dbgr.hide();
+            expect(watchChoices(0).hidden).toBe(false);
+        });
+
         it("closes a watch's list of formats on Escape too", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
@@ -746,6 +753,20 @@ describe("Debugger", () => {
                 ["$2002", "hex"],
                 ["oswrch", "dec16"],
             ]);
+            document.getElementById("watch-close").click();
+        });
+
+        it("labels an operand by its hex when the disassembly shows no name beside it", async () => {
+            withMos((mos) => (mos.workspace = { scratch: "0x70" }));
+            [0xa5, 0x70].forEach((byte, i) => cpu.writemem(0x2010 + i, byte));
+            cpu.pc = OswrchAt;
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            dbgr.updateDisassembly(0x2010);
+            expect(code(0x2010).textContent).toBe("LDA $70");
+            rightClick(code(0x2010).querySelector(".instr_mem_ref"));
+            pickFromMenu("Watch dec");
+            expect(watchRows().map(([name]) => name)).toEqual(["$0070"]);
             document.getElementById("watch-close").click();
         });
 

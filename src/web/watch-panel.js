@@ -122,9 +122,8 @@ export class WatchPanel {
         this._menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - this._menu.offsetHeight))}px`;
     }
 
-    /** Closes the menu and any open list of formats. */
-    dismiss() {
-        this._showPopup(null);
+    dismissMenu() {
+        if (this._openPopup?.popup === this._menu) this._showPopup(null);
     }
 
     _add({ address, label }, initialFormat) {

@@ -486,7 +486,7 @@ export class Debugger {
             this.updatePrevMem();
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
-        if (!e) this.watches.dismiss();
+        if (this._enabled && !e) this.watches.dismissMenu();
         this._enabled = e;
         const focused = document.activeElement;
         if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();
