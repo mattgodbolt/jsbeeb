@@ -282,18 +282,25 @@ describe("Debugger", () => {
         const panelOpen = () => !document.getElementById("watch-panel").hidden;
         const openFromMenu = () => document.getElementById("watch-open").click();
 
-        it("takes names and addresses only while the debugger is open", () => {
-            expect(watchBox().disabled).toBe(true);
-            expect(watchBox().placeholder).toBe("Enter the debugger to add one");
-            dbgr.debug(cpu.pc);
-            expect(watchBox().disabled).toBe(false);
+        it("takes an address while the machine runs, giving the keyboard back once it is added", () => {
+            openFromMenu();
             watchBox().focus();
             addWatch("$70");
             expect(document.activeElement).not.toBe(watchBox());
             expect(watchBox().value).toBe("");
-            dbgr.hide();
-            expect(watchBox().disabled).toBe(true);
             expect(watchRows()).toEqual([["$0070", "5", "dec", "\u00d7"]]);
+        });
+
+        it("gives the keyboard back on Escape, keeping the panel open and the Escape from the machine", () => {
+            const pageSaw = vi.fn();
+            document.addEventListener("keydown", pageSaw);
+            openFromMenu();
+            watchBox().focus();
+            watchBox().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            document.removeEventListener("keydown", pageSaw);
+            expect(document.activeElement).not.toBe(watchBox());
+            expect(panelOpen()).toBe(true);
+            expect(pageSaw).not.toHaveBeenCalled();
         });
 
         it("reads its watches once a frame, without side effects, while open, and not at all while closed", () => {
@@ -571,6 +578,16 @@ describe("Debugger", () => {
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             goTo("goto-mem-addr-form", "$1000");
             expect(credited()).toBe(false);
+        });
+
+        it("watches a name typed while the machine runs, once opening the panel has fetched its set", async () => {
+            document.getElementById("watch-open").click();
+            await vi.waitFor(() => {
+                addWatch("oswrch");
+                expect(watchRows()).toEqual([["oswrch", "108", "dec", "\u00d7"]]);
+            });
+            expect(dbgr.enabled()).toBe(false);
+            document.getElementById("watch-close").click();
         });
 
         it("watches a name, or an address by its name, and refuses a word that is neither", async () => {

@@ -2,13 +2,10 @@ import { hexword } from "../hex.js";
 import { formatWatch, nextWatchFormat, WatchFormats } from "../watches.js";
 import { FloatingPanel } from "./floating-panel.js";
 
-const AddingPlaceholder = "Name or address, then Enter";
-const NotAddingPlaceholder = "Enter the debugger to add one";
-
 /**
  * A floating list of addresses and their values, read once a frame while it is open and not at all
- * while it is closed. Watches are added by name or address while the debugger is open, as the names
- * are the debugger's.
+ * while it is closed. Watches are added by name or address, and the add box gives the keyboard back
+ * to the machine on Escape or once a watch is added.
  */
 export class WatchPanel {
     /**
@@ -46,6 +43,12 @@ export class WatchPanel {
             if (e.target.closest("button")) e.preventDefault();
         });
         this._input.addEventListener("input", () => this._input.classList.remove("is-invalid"));
+        this._input.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") return;
+            // Neither the panel nor the page sees it: one would close, the other pass Escape on to the machine.
+            e.stopPropagation();
+            this._input.blur();
+        });
         document.getElementById("watch-add-form").addEventListener("submit", (e) => {
             e.preventDefault();
             const text = this._input.value.trim();
@@ -57,15 +60,6 @@ export class WatchPanel {
             this._input.value = "";
             this._input.blur();
         });
-        this.setAdding(false);
-    }
-
-    /** Whether names and addresses can be typed in, which they can only while the debugger is open. */
-    setAdding(adding) {
-        if (!adding && document.activeElement === this._input) this._input.blur();
-        this._input.disabled = !adding;
-        this._input.placeholder = adding ? AddingPlaceholder : NotAddingPlaceholder;
-        this._input.classList.remove("is-invalid");
     }
 
     update() {

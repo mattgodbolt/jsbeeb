@@ -162,6 +162,13 @@ describe("KeyboardSetup", () => {
             expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
         });
 
+        it("reach the page, not the machine, from the watch panel's add box", () => {
+            domFromIndexHtml("watch-panel");
+            document.getElementById("watch-add").focus();
+            document.dispatchEvent(keyEvent("keydown", keyCodes.A));
+            expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
+        });
+
         it("aims the media window from inside it, where the search box has focus", () => {
             domFromIndexHtml("media-panel");
             document.getElementById("media-search").focus();

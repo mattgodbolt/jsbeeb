@@ -178,6 +178,8 @@ export class Debugger {
             },
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
+        // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
+        this.watches.floating.addEventListener("open", () => this._namesNow());
         this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
         this.disassStack = [];
@@ -430,7 +432,7 @@ export class Debugger {
     }
 
     _matchSymbols() {
-        this._names = this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
+        this._names = this._namesNow();
     }
 
     _credit() {
@@ -456,17 +458,21 @@ export class Debugger {
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
         this._enabled = e;
-        this.watches.setAdding(e);
         const focused = document.activeElement;
         if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();
         for (const node of this.debugNodes) toggle(node, this._enabled);
     }
 
+    _namesNow() {
+        return this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
+    }
+
     _resolveWatch(text) {
-        const named = this._names.addressOf(text, this.cpu.pc);
+        const names = this._namesNow();
+        const named = names.addressOf(text, this.cpu.pc);
         const address = named ?? parseAddr(text);
         if (address === undefined) return undefined;
-        const label = named === undefined ? this._names.address(address, this.cpu.pc)?.name : text;
+        const label = named === undefined ? names.address(address, this.cpu.pc)?.name : text;
         return { address, label: label ?? `$${hexword(address)}` };
     }
 
