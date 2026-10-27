@@ -326,7 +326,7 @@ export function parseUefSnapshot(buffer) {
     // ── Shadow RAM (chunk 0x0463, Master/B+) ─────────────────────────────
     // BeebEm saves 32 KB (full shadow bank). jsbeeb's LYNNE region is 20 KB
     // at ram[0xB000-0xFFFF], covering addresses 0x3000-0x7FFF when ACCCON X bit is set.
-    // See 6502.js writeAcccon: memLook[i] = bitX ? 0x8000 : 0 for pages 0x30-0x7F.
+    // See 6502.js writeAcccon: bit X maps pages 0x30-0x7F at offset 0x8000.
     if (chunks.has(ChunkId.ShadowRam)) {
         const shadowData = chunks.get(ChunkId.ShadowRam)[0];
         if (shadowData.length >= 0x8000) {
