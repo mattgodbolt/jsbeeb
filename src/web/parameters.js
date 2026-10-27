@@ -12,7 +12,7 @@ export function tubeCpuSpeedLabel(multiplier, model) {
     return `${round(multiplier)}x (${round(multiplier * tubeModelFor(model).clockMhz)}MHz)`;
 }
 
-/** @returns {number|undefined} the bank a `ROM.` parameter names: 0 to 15, with 10 to 15 also written A to F. */
+/** @returns {number|undefined} the bank a `rom.` parameter names: 0 to 15, with 10 to 15 also written A to F. */
 function romBankNumber(member) {
     if (!/^(?:\d{1,2}|[A-F])$/.test(member)) return undefined;
     const bank = parseInt(member, /^[A-F]$/.test(member) ? 16 : 10);

@@ -130,7 +130,7 @@ Ranked by how much they would bite.
    (`src/filestore.js:84`) is the same problem, later, with Econet.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
-   ROMs (`?rom=`, `?ROM.N=`) all change behaviour. A joiner adopts the host's model, and every setting the Parameters table
+   ROMs (`?rom=`, `?rom.N=`) all change behaviour. A joiner adopts the host's model, and every setting the Parameters table
    marks `takenFromHost`, by reloading as the host's machine, the way a cross-model snapshot load reloads the page
    as the right machine (`src/web/snapshot-ui.js:132`); the ROMs come with the snapshot, which carries every
    sideways bank. The emulator itself must match too: every merge to main is

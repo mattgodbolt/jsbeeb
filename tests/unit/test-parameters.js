@@ -269,7 +269,7 @@ describe("processInputParams", () => {
     });
 });
 
-describe("the ROM. family", () => {
+describe("the rom. family", () => {
     const apply = (params) => {
         const bankRoms = [];
         const warnings = processInputParams(params, { bankRoms });
@@ -294,6 +294,13 @@ describe("the ROM. family", () => {
             "rom.7": ["a.rom", "b.rom"],
             rom: ["c.rom"],
         });
+    });
+
+    it("leaves rom for the free banks when rom.7 names one", () => {
+        const params = parseQueryString("rom=x.rom&rom.7=y.rom", urlParamType);
+
+        expect(params.rom).toEqual(["x.rom"]);
+        expect(apply(params)).toEqual({ bankRoms: [{ bank: 7, rom: "y.rom" }], warnings: [] });
     });
 
     it("leaves alone a bank with no value", () => {

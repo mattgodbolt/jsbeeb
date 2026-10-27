@@ -398,8 +398,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   must allow cross-site requests, and `github:OWNER/REPO/PATH` loads a ROM from a public GitHub repo as
   `disc1=github:` does a disc. Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file
   will attempt to use the `.rom` file assumed to be within. May be given more than once.
-- `ROM.N=X` - loads ROM `X`, named as for `rom`, into sideways bank `N`, 0 to 15 (10 to 15 may also be written A to
-  F), e.g. `model=Master&ROM.7=github:mattgodbolt/xmos/original.rom`. If the model has sideways RAM in that bank, the
+- `rom.N=X` - loads ROM `X`, named as for `rom`, into sideways bank `N`, 0 to 15 (10 to 15 may also be written A to
+  F), e.g. `model=Master&rom.7=github:mattgodbolt/xmos/original.rom`. If the model has sideways RAM in that bank, the
   ROM goes into the RAM and can still be written. A bank that already holds a ROM, the model's own (BASIC, a filing
   system) or one a fitted peripheral needs (Music 5000, teletext, Econet), cannot be named; the boot stops with an
   error saying what is there. The ROMs `rom` loads go in the banks left over. The stock BBC B (`model=B-stock`) has

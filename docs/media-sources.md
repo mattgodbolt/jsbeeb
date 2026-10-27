@@ -4,7 +4,7 @@ A media source is somewhere the media window can list discs from and load them. 
 pair of functions keyed by a URL schema: a lister that describes what the source holds, and a
 fetcher that returns the bytes of one entry. The window, the URL parameters, the headless
 session and the MCP server all go through the same two. GitHub has no fetcher of its own, since
-its references are URLs by another name (see [GitHub](#github)). The `rom` and `ROM.N` URL
+its references are URLs by another name (see [GitHub](#github)). The `rom` and `rom.N` URL
 parameters load sideways ROMs through the same resolver, as its `rom` kind: a bare name from
 `roms/`, a URL, a `github:` reference or inline data, but none of the archives.
 
