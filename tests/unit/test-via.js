@@ -24,6 +24,7 @@ const AcrT2CountsPb6 = 0x20;
 const Pb6 = 0x40;
 const Timer1Int = 0x40;
 const Timer2Int = 0x20;
+const Ca2Int = 0x01;
 const Ca1Int = 0x02;
 const Cb1Int = 0x10;
 const UserViaIrq = 0x02;
@@ -144,6 +145,18 @@ describe("Via snapshotState / restoreState", () => {
             via2.restoreKeyboard(via.keyboardState());
             via2.setMapped(BBC.B, 1);
             expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
+        });
+
+        it.each([
+            ["rising", 0x04],
+            ["falling", 0x00],
+        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+            const via = makeSystemVia();
+            via.write(DDRB, 0x0f);
+            via.write(ORB, LatchSetBit3);
+            via.write(PCR, pcr);
+            via.keyDownRaw(BBC.A);
+            expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
         });
 
         it("leaves the held keys alone when restoring a snapshot", () => {

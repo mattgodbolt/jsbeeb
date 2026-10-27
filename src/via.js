@@ -812,6 +812,10 @@ export class SysVia extends Via {
             for (let i = 0; i < numCols; ++i) {
                 for (let j = 1; j < 8; ++j) {
                     if (this.keys[i][j]) {
+                        // The scan pulses CA2 each time it passes the held key's column, so both edges arrive:
+                        // MOS 0.10 interrupts on the falling one.
+                        this.setca2(true);
+                        this.setca2(false);
                         this.setca2(true);
                         return;
                     }
