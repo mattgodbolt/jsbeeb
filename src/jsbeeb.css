@@ -772,6 +772,10 @@ small {
   font-size: 9pt;
 }
 
+#watch-close {
+  margin-left: auto;
+}
+
 #watch-panel table {
   width: 100%;
   margin-top: 6px;
