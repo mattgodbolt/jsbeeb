@@ -793,7 +793,7 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    /** The sideways bank ROMSEL pages in: the model's sockets fill the top banks, and its low bits pick one. */
+    /** The sideways bank ROMSEL pages in. */
     get pagedBank() {
         const { romSockets } = this.model;
         return NumRomBanks - romSockets + (this.romsel & (romSockets - 1));

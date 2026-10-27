@@ -201,6 +201,7 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         const session = await bootedSession("B-stock");
         const ProgramAddress = 0x2000;
         const LoopAddress = ProgramAddress + 6;
+        const BasicFirstByte = 0xc9;
         // prettier-ignore
         session.writeMemory(ProgramAddress, [
             0x78, // SEI
@@ -214,9 +215,8 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         await session.type(`CALL &${ProgramAddress.toString(16)}`);
         await session.runFor(RunSecs * CyclesPerSecond);
 
-        expect(session.hitBreakpoint()).toMatchObject({ id, address: 0x8000, bank: 12 });
-        expect(session.registers().pc).toBeGreaterThan(LoopAddress);
-        expect(session.registers().pc).toBeLessThanOrEqual(LoopAddress + 9);
+        expect(session.hitBreakpoint()).toEqual({ id, type: "read", address: 0x8000, bank: 12, value: BasicFirstByte });
+        expect(session.registers().pc).toBe(LoopAddress + 3);
         expect(session.pagingState()).toEqual({ romsel: 0, bank: 12 });
         session.destroy();
     });
@@ -228,6 +228,14 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         await expect(session.runUntilAddress(ServiceEntry, RunSecs, { bank: -1 })).rejects.toThrow(
             "Bank -1 is not 0 to 15",
         );
+        session.destroy();
+    });
+
+    it("refuses, on a stock BBC B, a bank no ROMSEL value reaches", async () => {
+        const session = new MachineSession("B-stock");
+
+        expect(() => session.addBreakpoint("execute", ServiceEntry, { bank: 0 })).toThrow("Bank 0 is not 12 to 15");
+        expect(() => session.readMemory(0x8000, 1, { bank: 11 })).toThrow("Bank 11 is not 12 to 15");
         session.destroy();
     });
 });

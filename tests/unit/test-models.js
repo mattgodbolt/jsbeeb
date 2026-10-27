@@ -112,6 +112,15 @@ describe("Model", () => {
             expect(bankPagedAtEachRomsel("B-DFS1.2")).toEqual([...Array(16).keys()]);
         });
 
+        it("powers on with ROMSEL 0's bank paged, whatever was paged before", () => {
+            const cpu = fake6502(findModel("B-DFS1.2"));
+            cpu.romSelect(5);
+            cpu.reset(true);
+            expect(cpu.pagedBank).toBe(0);
+            cpu.writemem(0x8000, 0x5a);
+            expect(cpu.readmem(0x8000)).toBe(0x5a);
+        });
+
         it("ignores a write to a bank the other BBC Bs fill with RAM", () => {
             const ram = sidewaysBytesAroundWrite("B-DFS1.2", 4);
             expect(ram.after).toBe(ram.before ^ 0xff);
