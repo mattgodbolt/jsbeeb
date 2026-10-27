@@ -102,7 +102,7 @@ export class WatchPanel {
             format.blur();
             this.update();
         });
-        // Focus left on a menu closed without a pick would keep the player's keys, and its type-ahead change the format.
+        // A menu closed without a pick would keep the player's keys, its type-ahead changing the format.
         format.addEventListener("keydown", (e) => {
             if (e.key === "Escape") return;
             e.preventDefault();
