@@ -757,6 +757,8 @@ describe("Cpu6502 paged memory", () => {
     const AndySelect = 0x80;
     const AccconShadow = 0x04;
     const AccconHazel = 0x08;
+    const AccconDisplay = 0x01;
+    const AccconTest = 0x40;
     const MasterSidewaysRamBanks = [4, 5];
 
     async function initialised(modelName) {
@@ -806,6 +808,15 @@ describe("Cpu6502 paged memory", () => {
         cpu.writemem(AccconRegister, 0);
         expect(cpu.readmem(ShadowAddress)).toBe(0x44);
         expect(cpu.readmem(OsAddress)).toBe(osByte);
+    });
+
+    it("clears ACCCON on a hard reset, display and test bits included", async () => {
+        const cpu = await initialised("Master");
+        cpu.writemem(AccconRegister, AccconTest | AccconHazel | AccconShadow | AccconDisplay);
+
+        cpu.reset(true);
+
+        expect(cpu.readmem(AccconRegister)).toBe(0);
     });
 
     it("reads and writes as a restored snapshot pages", async () => {
