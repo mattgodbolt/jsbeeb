@@ -39,6 +39,7 @@ export class WatchPanel {
         this.floating.addEventListener("close", () => {
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
+            this._showChoices(null);
         });
         // A focused button would keep keys from the machine and the debugger.
         this.panel.addEventListener("mousedown", (e) => {
@@ -160,7 +161,7 @@ function textButton(className, text, title) {
     button.className = `txt-btn ${className}`;
     button.textContent = text;
     button.title = title;
-    // Tab would otherwise be a way into the panel, and a focused button keeps keys from the debugger.
+    // Out of the tab order, so Tab from the add box can't reach it either.
     button.tabIndex = -1;
     return button;
 }

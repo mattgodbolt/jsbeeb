@@ -347,7 +347,7 @@ describe("Debugger", () => {
             expect(shown).toEqual(["5 dec", "$05 hex", "261 dec16", "$0105 hex16", "261 dec32", "$00000105 hex32"]);
         });
 
-        it("closes the list of formats on a click anywhere else, or on another watch's", () => {
+        it("closes the list of formats on a click anywhere else, on another watch's, or on closing the panel", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
             addWatch("$71");
@@ -360,6 +360,9 @@ describe("Debugger", () => {
             watchControl(1, "watch-format").click();
             expect(watchChoices(0).hidden).toBe(true);
             expect(watchChoices(1).hidden).toBe(false);
+            openFromMenu();
+            openFromMenu();
+            expect(watchChoices(1).hidden).toBe(true);
             expect(watchRows()[0][2]).toBe("dec");
         });
 
