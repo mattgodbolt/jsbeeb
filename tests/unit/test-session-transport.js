@@ -267,18 +267,18 @@ describe("webRtcTransport, as a host listens", () => {
 
     it.each([
         [
-            "with the candidates it found, however long the first took",
-            false,
+            "answers with the candidates it found, however long the first took",
+            () => {},
             [["room", "secret", "g1", expect.stringContaining(Candidate)]],
         ],
-        ["nothing to a guest it gave up on meanwhile", true, []],
-    ])("answers, once gathering ends, %s", async (_, givesUp, answers) => {
+        ["sends no answer to a guest it gave up on while still gathering", (link) => link.close(), []],
+    ])("%s", async (_, meanwhile, answers) => {
         vi.stubGlobal("RTCPeerConnection", GatheringPeer);
         const rendezvous = offering("g1");
         const { links } = listen(rendezvous);
         await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
         expect(rendezvous.postAnswer).not.toHaveBeenCalled();
-        if (givesUp) links[0].close();
+        meanwhile(links[0]);
         peers[0].find();
         await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
         expect(rendezvous.postAnswer.mock.calls).toEqual(answers);
