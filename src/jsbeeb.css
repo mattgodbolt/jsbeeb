@@ -815,6 +815,30 @@ small {
   font-family: inherit;
 }
 
+#watch-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+  background: #222222;
+  border: 1px solid #555555;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#watch-menu[hidden] {
+  display: none;
+}
+
+#watch-menu .txt-btn {
+  color: #cccccc;
+  text-align: left;
+  font-family: inherit;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
 .watch-formats td {
   padding-bottom: 4px;
   text-align: right;

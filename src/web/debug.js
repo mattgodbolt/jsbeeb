@@ -122,6 +122,7 @@ class MemoryView {
                 bytes[i].textContent = dump.hex[i];
                 ascii[i].textContent = dump.asc[i];
                 for (const span of [bytes[i], ascii[i]]) {
+                    span.dataset.addr = address;
                     span.classList.toggle("changed", dump.changed[i]);
                     span.classList.toggle("region", !!inRegion);
                     span.classList.toggle("region-start", inRegion?.region.start === address);
@@ -233,6 +234,27 @@ export class Debugger {
 
         this.disass.addEventListener("click", (e) => {
             if (e.target.closest(".bp_gutter")) this.bpClick(e);
+        });
+
+        const offerWatch = (e, address, named) => {
+            e.preventDefault();
+            this.watches.offer({ address, label: named?.name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
+        };
+        document.getElementById("memory").addEventListener("contextmenu", (e) => {
+            const byte = e.target.closest("[data-addr]");
+            if (!byte) return;
+            const address = Number(byte.dataset.addr);
+            offerWatch(e, address, this._names.address(address, this.cpu.pc));
+        });
+        this.disass.addEventListener("contextmenu", (e) => {
+            const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
+            const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
+            if (operand) {
+                const target = Number(operand.dataset.ref);
+                offerWatch(e, target, this._names.operand(at, target) ?? this._names.address(target, this.cpu.pc));
+            } else if (e.target.closest(".dis_addr")) {
+                offerWatch(e, at, this._names.address(at, this.cpu.pc));
+            }
         });
 
         this.disass.addEventListener("wheel", (evt) => {

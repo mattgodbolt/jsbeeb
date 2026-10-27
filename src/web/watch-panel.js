@@ -5,7 +5,7 @@ import { FloatingPanel } from "./floating-panel.js";
 /**
  * A floating list of addresses and their values, read once a frame while it is open and not at all
  * while it is closed. Watches are added by name or address, and the add box gives the keyboard back
- * to the machine on Escape or once a watch is added.
+ * to the machine on Escape or once a watch is added, or from a menu offered at an address (`offer`).
  */
 export class WatchPanel {
     /**
@@ -19,12 +19,24 @@ export class WatchPanel {
         /** @type {{address: number, format: import("../watches.js").WatchFormat, value: HTMLElement}[]} */
         this._watches = [];
         this._frameHandle = null;
-        /** @type {{picker: HTMLElement, choices: HTMLElement} | null} */
-        this._openChoices = null;
+        /** @type {{opener: HTMLElement | null, popup: HTMLElement} | null} */
+        this._openPopup = null;
         this.panel = document.getElementById("watch-panel");
         this._list = this.panel.querySelector(".watch-list");
         this._empty = this.panel.querySelector(".watch-empty");
         this._input = document.getElementById("watch-add");
+        this._menu = document.getElementById("watch-menu");
+        /** @type {{address: number, label: string} | null} */
+        this._offered = null;
+        for (const format of WatchFormats) {
+            const choice = textButton("watch-menu-choice", `Watch ${format.name}`, format.description);
+            choice.addEventListener("click", () => {
+                this._showPopup(null);
+                this._add(this._offered, format);
+                this.floating.open();
+            });
+            this._menu.append(choice);
+        }
 
         document.getElementById("watch-open").addEventListener("click", (e) => {
             e.preventDefault();
@@ -39,19 +51,29 @@ export class WatchPanel {
         this.floating.addEventListener("close", () => {
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
-            this._showChoices(null);
+            this._showPopup(null);
         });
         // A focused button would keep keys from the machine and the debugger.
-        this.panel.addEventListener("mousedown", (e) => {
-            if (e.target.closest("button")) e.preventDefault();
-        });
+        for (const holder of [this.panel, this._menu]) {
+            holder.addEventListener("mousedown", (e) => {
+                if (e.target.closest("button")) e.preventDefault();
+            });
+        }
+        this._menu.addEventListener("contextmenu", (e) => e.preventDefault());
         // pointerdown, as the panel's drag handle cancels the mousedown that would follow.
         document.addEventListener(
             "pointerdown",
             (e) => {
-                const open = this._openChoices;
-                if (open && !open.picker.contains(e.target) && !open.choices.contains(e.target))
-                    this._showChoices(null);
+                const open = this._openPopup;
+                if (open && !open.opener?.contains(e.target) && !open.popup.contains(e.target)) this._showPopup(null);
+            },
+            true,
+        );
+        // Escape goes on to the page as well, as if nothing had been open.
+        document.addEventListener(
+            "keydown",
+            (e) => {
+                if (e.key === "Escape") this._showPopup(null);
             },
             true,
         );
@@ -69,7 +91,7 @@ export class WatchPanel {
             const found = this._resolve(text);
             this._input.classList.toggle("is-invalid", found === undefined);
             if (!found) return;
-            this._add(found);
+            this._add(found, WatchFormats[0]);
             this._input.value = "";
             this._input.blur();
         });
@@ -87,7 +109,21 @@ export class WatchPanel {
         this._frameHandle = requestAnimationFrame(() => this._tick());
     }
 
-    _add({ address, label }) {
+    /**
+     * Offers a menu of formats to watch `address` in, at the window position `x`, `y`.
+     * @param {{address: number, label: string}} what
+     * @param {number} x
+     * @param {number} y
+     */
+    offer(what, x, y) {
+        this._offered = what;
+        this._menu.title = what.label;
+        this._showPopup({ opener: null, popup: this._menu });
+        this._menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - this._menu.offsetWidth))}px`;
+        this._menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - this._menu.offsetHeight))}px`;
+    }
+
+    _add({ address, label }, initialFormat) {
         const row = document.createElement("tr");
         const cell = (className, text) => {
             const td = document.createElement("td");
@@ -99,7 +135,7 @@ export class WatchPanel {
         const name = cell("watch-name", label);
         name.title = `${label}: $${hexword(address)}`;
         const value = cell("watch-value", "");
-        const watch = { address, format: WatchFormats[0], value };
+        const watch = { address, format: initialFormat, value };
 
         const picker = textButton("watch-format dropdown-toggle", "", "");
         picker.setAttribute("aria-expanded", "false");
@@ -115,12 +151,14 @@ export class WatchPanel {
             picker.title = `Shown as ${format.description}`;
         };
         show(watch.format);
-        picker.addEventListener("click", () => this._showChoices(choices.hidden ? { picker, choices } : null));
+        picker.addEventListener("click", () =>
+            this._showPopup(choices.hidden ? { opener: picker, popup: choices } : null),
+        );
         for (const format of WatchFormats) {
             const choice = textButton("watch-format-choice", format.name, format.description);
             choice.addEventListener("click", () => {
                 show(format);
-                this._showChoices(null);
+                this._showPopup(null);
                 this.update();
             });
             choiceCell.append(choice);
@@ -142,16 +180,17 @@ export class WatchPanel {
         this.update();
     }
 
-    /** Opens a watch's list of formats, closing any other, or closes them all for null. */
-    _showChoices(open) {
-        if (this._openChoices && this._openChoices.choices !== open?.choices) {
-            this._openChoices.choices.hidden = true;
-            this._openChoices.picker.setAttribute("aria-expanded", "false");
+    /** Opens `open`'s popup, closing any other, or closes them all for null. */
+    _showPopup(open) {
+        const was = this._openPopup;
+        if (was && was.popup !== open?.popup) {
+            was.popup.hidden = true;
+            was.opener?.setAttribute("aria-expanded", "false");
         }
-        this._openChoices = open;
+        this._openPopup = open;
         if (!open) return;
-        open.choices.hidden = false;
-        open.picker.setAttribute("aria-expanded", "true");
+        open.popup.hidden = false;
+        open.opener?.setAttribute("aria-expanded", "true");
     }
 }
 

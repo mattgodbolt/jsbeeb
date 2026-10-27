@@ -16,7 +16,7 @@ describe("Debugger", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-open");
+        domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });
@@ -61,6 +61,13 @@ describe("Debugger", () => {
     const watchRow = (index) => document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats)")[index];
     const watchControl = (index, className) => watchRow(index).querySelector(`.${className}`);
     const watchChoices = (index) => watchRow(index).nextElementSibling;
+    const watchMenu = () => document.getElementById("watch-menu");
+    const rightClick = (target) =>
+        target.dispatchEvent(
+            new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }),
+        );
+    const pickFromMenu = (text) =>
+        [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
         it("start hidden, show when the debugger is entered, and hide again on leaving", () => {
@@ -366,6 +373,51 @@ describe("Debugger", () => {
             expect(watchRows()[0][2]).toBe("dec");
         });
 
+        it("offers a menu of every format on a right-click on a memory byte, adding the watch picked", () => {
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$70");
+            const click = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+            memByte(0x70).dispatchEvent(click);
+            expect(click.defaultPrevented).toBe(true);
+            expect(watchMenu().hidden).toBe(false);
+            expect([...watchMenu().querySelectorAll("button")].map((choice) => choice.textContent)).toEqual(
+                ["dec", "hex", "dec16", "hex16", "dec32", "hex32"].map((name) => `Watch ${name}`),
+            );
+            expect(panelOpen()).toBe(false);
+            pickFromMenu("Watch hex16");
+            expect(watchMenu().hidden).toBe(true);
+            expect(panelOpen()).toBe(true);
+            expect(watchRows()).toEqual([["$0070", "$0105", "hex16", "\u00d7"]]);
+        });
+
+        it("closes the menu on a click elsewhere, or on Escape, which goes on to the page", () => {
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$70");
+            rightClick(memByte(0x70));
+            document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+            expect(watchMenu().hidden).toBe(true);
+            rightClick(memByte(0x71));
+            const pageSaw = vi.fn();
+            document.addEventListener("keydown", pageSaw);
+            document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            document.removeEventListener("keydown", pageSaw);
+            expect(watchMenu().hidden).toBe(true);
+            expect(pageSaw).toHaveBeenCalledOnce();
+            expect(watchRows()).toEqual([]);
+        });
+
+        it("keeps the menu's buttons from focus, by mouse or by Tab", () => {
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$70");
+            rightClick(memByte(0x70));
+            for (const choice of watchMenu().querySelectorAll("button")) {
+                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+                choice.dispatchEvent(press);
+                expect(press.defaultPrevented).toBe(true);
+                expect(choice.tabIndex).toBe(-1);
+            }
+        });
+
         it("stops watching on the remove button, saying so once the list is empty", () => {
             const empty = () => document.querySelector("#watch-panel .watch-empty").hidden === false;
             expect(empty()).toBe(true);
@@ -462,7 +514,7 @@ describe("Debugger", () => {
             [0x6c, 0x0e, 0x02, 0x60, 0xd0, 0xfa].forEach((byte, i) => cpu.writemem(OswrchAt + i, byte));
             load = vi.fn(async (url) => structuredClone(files.get(url)));
             document.body.innerHTML = "";
-            domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-open");
+            domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
             dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: BaseUrl, load }) });
             dbgr.setCpu(cpu);
         });
@@ -647,6 +699,20 @@ describe("Debugger", () => {
             addWatch("scratch");
             addWatch("$70");
             expect(watchRows().map(([name]) => name)).toEqual(["scratch", "$0070"]);
+        });
+
+        it("watches a disassembly operand, or an instruction's address, by its name from a right-click", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            rightClick(code(0x2002).querySelector(".instr_instr_ref"));
+            pickFromMenu("Watch dec");
+            rightClick(rowAt(0x2002).querySelector(".dis_addr"));
+            pickFromMenu("Watch hex");
+            expect(watchRows().map((row) => [row[0], row[2]])).toEqual([
+                ["oswrch", "dec"],
+                ["$2002", "hex"],
+            ]);
+            document.getElementById("watch-close").click();
         });
 
         it("leaves the credit as it is while the view moves among the same sets' names", async () => {
