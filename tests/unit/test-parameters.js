@@ -195,6 +195,20 @@ describe("Parameters", () => {
     });
 });
 
+describe("rewriting the page's URL", () => {
+    it.each(["glEnabled", "lowLatency"])("keeps %s=false", (name) => {
+        expect(fakeUrlState(`?${name}=false`).urlWith({ model: "Master" })).toBe(
+            `https://bbc.example/?${name}=false&model=Master`,
+        );
+    });
+
+    it("leaves out a boolean that is off by default when it is off", () => {
+        expect(fakeUrlState("?coProcessor=false").urlWith({ model: "Master" })).toBe(
+            "https://bbc.example/?model=Master",
+        );
+    });
+});
+
 describe("parameterFor", () => {
     it.each([
         ["disc1", Parameters.disc1, undefined],
