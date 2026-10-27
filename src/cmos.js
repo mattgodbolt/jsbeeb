@@ -25,6 +25,16 @@ function fromBcd(value) {
     return parseInt(value.toString(16), 10);
 }
 
+const TimeRegisters = Object.freeze({
+    0: { limit: 60, get: (time) => time.getSeconds(), set: (time, value) => time.setSeconds(value) },
+    2: { limit: 60, get: (time) => time.getMinutes(), set: (time, value) => time.setMinutes(value) },
+    4: { limit: 24, get: (time) => time.getHours(), set: (time, value) => time.setHours(value) },
+});
+
+function isBcdBelow(value, limit) {
+    return (value & 0x0f) < 10 && fromBcd(value) < limit;
+}
+
 export { defaultCmos };
 
 // A shared session (src/lockstep.js) runs the same machine on several computers in step, one of them hosting.
@@ -100,6 +110,8 @@ export class Cmos {
         // The 146818 keeps the day, month and year in separate registers and checks none of them, so bytes that
         // do not name a real day are held as written until they do.
         this.heldDate = null;
+        // Likewise a seconds, minutes or hours byte that is not a time, keyed by register, while the clock runs on.
+        this.heldTime = {};
         this.beforeSession = null;
 
         if (!this.store) {
@@ -126,14 +138,15 @@ export class Cmos {
 
     /**
      * The chip as a machine joining a shared session needs it: the settings, the offset a program set
-     * the clock to, any date registers held part way through setting it, and how far through an access the bus is.
+     * the clock to, any clock registers held as written, and how far through an access the bus is.
      */
     sessionState() {
-        const { store, timeOffset, heldDate, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
+        const { store, timeOffset, heldDate, heldTime, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
         return {
             store: [...store],
             timeOffset,
             heldDate: heldDate && { ...heldDate },
+            heldTime: { ...heldTime },
             enabled,
             isRead,
             addressSelect,
@@ -149,13 +162,14 @@ export class Cmos {
      */
     joinSession(state, now) {
         if (!this.beforeSession) {
-            const { persistence, store, utc, timeOffset, heldDate } = this;
-            this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate };
+            const { persistence, store, utc, timeOffset, heldDate, heldTime } = this;
+            this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
-        const { store, timeOffset, heldDate, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
+        const { store, timeOffset, heldDate, heldTime, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
         Object.assign(this, { timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr });
         this.store = [...store];
         this.heldDate = heldDate && { ...heldDate };
+        this.heldTime = { ...heldTime };
         this.persistence = null;
         this.now = now;
         this.utc = true;
@@ -189,6 +203,18 @@ export class Cmos {
         this.timeOffset = bbcTime.getTime() - secondsNow;
     }
 
+    writeTime(register, value) {
+        const { limit, set } = TimeRegisters[register];
+        if (!isBcdBelow(value, limit)) {
+            this.heldTime[register] = value;
+            return;
+        }
+        delete this.heldTime[register];
+        const bbcTime = this.bbcDateTime();
+        set(bbcTime, fromBcd(value));
+        this.setTimeFrom(bbcTime);
+    }
+
     writeCalendar(field, value) {
         const bbcTime = this.bbcDateTime();
         const registers = { ...this.calendarRegisters(bbcTime), [field]: value };
@@ -220,11 +246,9 @@ export class Cmos {
                 const current = this.bbcDateTime();
                 switch (this.cmosAddr) {
                     case 0:
-                        return toBcd(current.getSeconds());
                     case 2:
-                        return toBcd(current.getMinutes());
                     case 4:
-                        return toBcd(current.getHours());
+                        return this.heldTime[this.cmosAddr] ?? toBcd(TimeRegisters[this.cmosAddr].get(current));
                     case 6:
                         return toBcd(current.getDay() + 1);
                     case 7:
@@ -255,19 +279,11 @@ export class Cmos {
                 this.store[this.cmosAddr] = portApins;
                 this.save();
             } else {
-                const bbcTime = this.bbcDateTime();
                 switch (this.cmosAddr) {
                     case 0:
-                        bbcTime.setSeconds(fromBcd(portApins));
-                        this.setTimeFrom(bbcTime);
-                        break;
                     case 2:
-                        bbcTime.setMinutes(fromBcd(portApins));
-                        this.setTimeFrom(bbcTime);
-                        break;
                     case 4:
-                        bbcTime.setHours(fromBcd(portApins));
-                        this.setTimeFrom(bbcTime);
+                        this.writeTime(this.cmosAddr, portApins);
                         break;
                     case 7:
                         this.writeCalendar("day", portApins);
