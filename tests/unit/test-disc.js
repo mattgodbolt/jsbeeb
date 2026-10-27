@@ -35,12 +35,6 @@ describe("BitWindow64", function () {
         expect([window.hi, window.lo]).toEqual([hi, lo]);
     });
 
-    it("returns the bit leaving bit 63", () => {
-        const window = shiftIn(new BitWindow64(), 0x8000000000000000n);
-        expect(window.shiftIn(0)).toBe(1);
-        expect(window.shiftIn(0)).toBe(0);
-    });
-
     it("matches a 64 bit value only in full", () => {
         const window = shiftIn(new BitWindow64(), 0xaaaa448944894489n);
         expect(window.equals(0xaaaa4489, 0x44894489)).toBe(true);

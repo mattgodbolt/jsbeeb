@@ -387,13 +387,10 @@ export class BitWindow64 {
 
     /**
      * @param {Number} bit 0 or 1, shifted into bit 0
-     * @returns {Number} the bit shifted out of bit 63
      */
     shiftIn(bit) {
-        const shiftedOut = this.hi >>> 31;
         this.hi = ((this.hi << 1) | (this.lo >>> 31)) >>> 0;
         this.lo = ((this.lo << 1) | bit) >>> 0;
-        return shiftedOut;
     }
 
     /**
@@ -423,8 +420,8 @@ const BitWindowBits = 64;
 const FmSyncHi = 0x88888888;
 const MfmMarkerHi = 0xaaaa4489;
 const MfmMarkerLo = 0x44894489;
-// FM puts each data bit's clock pulse in the top bit of its nibble. The mark clock pattern 0xc7
-// spread that way lets the detector pass over zero data, which also looks like FmSyncHi, cheaply.
+// FM puts each data bit's clock pulse in the top bit of its nibble; the second is the mark clock
+// pattern 0xc7 spread that way.
 const FmClockPulses = 0x88888888;
 const FmMarkClockPulses = 0x88000888;
 // One data bit of zero, FM encoded with its clock, is the pulse nibble 0x8.
