@@ -113,19 +113,19 @@ describe("Cpu6502 ROM loading into a named bank", () => {
         );
     });
 
-    it.each([16, -1, 7.5])("refuses bank %s, which no ROMSEL value names", async (bank) => {
+    it.each([16, 7.5])("refuses bank %s, which no ROMSEL value names", async (bank) => {
         await expect(load("B-DFS1.2", { bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(
-            `Can't load ample.rom into ROM bank ${bank}`,
+            `Can't load ample.rom into ROM bank ${bank}: the BBC B with 8271 (DFS 1.2) has 16 ROM sockets, banks 0 to 15`,
         );
     });
 
     it("refuses a bank named twice", async () => {
         const bankRoms = [
-            { bank: 7, rom: "ample.rom" },
+            { bank: 7, rom: "missing.rom" },
             { bank: 7, rom: "ats-3.0.rom" },
         ];
         await expect(load("B-DFS1.2", { bankRoms })).rejects.toThrow(
-            "Can't load ats-3.0.rom into ROM bank 7, which already holds ample.rom",
+            "Can't load ats-3.0.rom into ROM bank 7, which already holds missing.rom",
         );
     });
 

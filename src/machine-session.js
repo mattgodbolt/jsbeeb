@@ -66,7 +66,8 @@ export class MachineSession {
      * @param {string[]} [opts.extraRoms] - sideways ROMs for the free banks, highest first, as the page's `rom=`
      *   takes them: a name or path under roms/, a `file:` or `http(s):` URL, or a `github:` reference
      * @param {{bank: number, rom: string}[]} [opts.bankRoms] - sideways ROMs for the banks they name, as the page's
-     *   `rom.N=`; initialise() throws for a bank the model or its fittings fill, or one named twice
+     *   `rom.N=`; initialise() throws for a bank the model has no socket for, one the model or its fittings fill,
+     *   or one named twice
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;

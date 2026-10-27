@@ -1353,7 +1353,7 @@ export class Cpu6502 extends Base6502 {
     /**
      * Loads the OS and then the model's sideways ROMs into the highest free banks, in order, an empty name leaving its
      * socket empty. The fittings' ROMs follow, into the empty sockets before any lower bank; then each of the config's
-     * `bankRoms` goes into the bank it names, which must be one those leave free, and the config's extra ROMs into the
+     * `bankRoms` goes into the bank it names, which must be one those leave free and named once, and the config's extra ROMs into the
      * empty sockets and highest banks left.
      */
     async loadOs(os, ...modelRoms) {
@@ -1408,8 +1408,8 @@ export class Cpu6502 extends Base6502 {
             if (filledBy.has(bank))
                 throw new Error(`Can't load ${rom} into ROM bank ${bank}, which already holds ${filledBy.get(bank)}`);
             filledBy.set(bank, rom);
-            loadInto(bank, rom);
         }
+        for (const { bank, rom } of bankRoms) loadInto(bank, rom);
         const isNamed = (bank) => bankRoms.some((named) => named.bank === bank);
         emptySockets = emptySockets.filter((bank) => !isNamed(bank));
         const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
