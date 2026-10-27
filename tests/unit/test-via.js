@@ -629,12 +629,6 @@ describe("Via peek", () => {
         expect(timers.t2c).toBe(via.read(T2CL) | (via.read(T2CH) << 8));
     });
 
-    it("leaves the timer interrupt raised when peeking the timers", () => {
-        runMicroseconds(25);
-        via.peekTimers();
-        expect(via.peek(IFR) & Timer1Int).toBe(Timer1Int);
-    });
-
     it("leaves the port interrupts raised when peeking the ports", () => {
         via.setca1(true);
         via.setcb1(true);

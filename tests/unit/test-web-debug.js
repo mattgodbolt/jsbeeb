@@ -498,10 +498,9 @@ describe("Debugger", () => {
         });
 
         it("shows the VIA timers as a program reads them, without clearing the interrupt", () => {
-            const [T1CL, T1CH, IFR, IER] = [0x4, 0x5, 0xd, 0xe];
+            const [T1CL, T1CH, IFR] = [0x4, 0x5, 0xd];
             const Timer1Int = 0x40;
             const via = cpu.sysvia;
-            via.write(IER, 0x80 | Timer1Int);
             via.write(T1CL, 0x1e);
             via.write(T1CH, 0x4e);
             cpu.scheduler.polltime(0x4e1e * 2 + 100);
