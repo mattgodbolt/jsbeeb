@@ -32,7 +32,7 @@ const TimeRegisters = Object.freeze({
 });
 
 function isBcdBelow(value, limit) {
-    return (value & 0x0f) < 10 && fromBcd(value) < limit;
+    return value >> 4 < 10 && (value & 0x0f) < 10 && fromBcd(value) < limit;
 }
 
 export { defaultCmos };
