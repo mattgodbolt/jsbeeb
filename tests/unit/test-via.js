@@ -25,6 +25,8 @@ const Pb6 = 0x40;
 const Timer1Int = 0x40;
 const Timer2Int = 0x20;
 const Ca2Int = 0x01;
+const PcrCa2FallingEdge = 0x00;
+const PcrCa2RisingEdge = 0x04;
 const Ca1Int = 0x02;
 const Cb1Int = 0x10;
 const UserViaIrq = 0x02;
@@ -148,8 +150,8 @@ describe("Via snapshotState / restoreState", () => {
         });
 
         it.each([
-            ["rising", 0x04],
-            ["falling", 0x00],
+            ["rising", PcrCa2RisingEdge],
+            ["falling", PcrCa2FallingEdge],
         ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
             const via = makeSystemVia();
             via.write(DDRB, 0x0f);
@@ -159,11 +161,11 @@ describe("Via snapshotState / restoreState", () => {
             expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
         });
 
-        it("raises the keyboard interrupt again when a port A write clears it while a key is held", () => {
+        it("raises the keyboard interrupt again on a port A write after it is cleared while a key is held", () => {
             const via = makeSystemVia();
             via.write(DDRB, 0x0f);
             via.write(ORB, LatchSetBit3);
-            via.write(PCR, 0x04);
+            via.write(PCR, PcrCa2RisingEdge);
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
             expect(via.read(IFR) & Ca2Int).toBe(0);
