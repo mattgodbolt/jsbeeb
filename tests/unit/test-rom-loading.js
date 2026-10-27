@@ -46,8 +46,8 @@ describe("Cpu6502 extra ROM loading", () => {
             );
         });
 
-        it("throws rather than load a ROM no ROMSEL value reaches", async () => {
-            await expect(loadStock(["ample.rom", "ats-3.0.rom", "ample.rom"])).rejects.toThrow("Too many extra ROMs");
+        it("throws, starting no load, rather than load a ROM no ROMSEL value reaches", async () => {
+            await expect(loadStock(["missing.rom", "ats-3.0.rom", "ample.rom"])).rejects.toThrow("Too many extra ROMs");
         });
 
         it("puts a named ROM in an AUX socket, a fitting's in the other and an extra ROM nowhere", async () => {
@@ -115,7 +115,7 @@ describe("Cpu6502 ROM loading into a named bank", () => {
 
     it.each([16, 7.5])("refuses bank %s, which no ROMSEL value names", async (bank) => {
         await expect(load("B-DFS1.2", { bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(
-            `Can't load ample.rom into ROM bank ${bank}: the BBC B with 8271 (DFS 1.2) has 16 ROM sockets, banks 0 to 15`,
+            `ROM bank ${bank}: the BBC B with 8271 (DFS 1.2) has 16 ROM sockets, banks 0 to 15`,
         );
     });
 
