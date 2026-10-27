@@ -38,6 +38,7 @@ export function fake6502(model, opts = {}) {
             hasMusic5000: opts.hasMusic5000,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
             extraRoms: econet && model.isMaster ? [MasterAnfsRom] : [],
+            bankRoms: opts.bankRoms,
         }),
         cycleAccurate: opts.cycleAccurate,
     });

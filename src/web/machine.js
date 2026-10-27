@@ -18,6 +18,7 @@ export function buildEmulationConfig({
     keyLayout,
     cpuMultiplier,
     extraRoms,
+    bankRoms,
     userPort,
     printer,
 }) {
@@ -32,6 +33,7 @@ export function buildEmulationConfig({
         // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
         // before any the user asked for with ?rom=.
         extraRoms: [...settings.extraRoms, ...extraRoms],
+        bankRoms,
         userPort,
         printerPort: printer,
         getGamepads: function () {
@@ -54,6 +56,7 @@ export class Machine {
         keyLayout,
         cpuMultiplier,
         extraRoms,
+        bankRoms,
         stationId,
         userPort,
         printer,
@@ -93,6 +96,7 @@ export class Machine {
             keyLayout,
             cpuMultiplier,
             extraRoms,
+            bankRoms,
             userPort,
             printer,
         });

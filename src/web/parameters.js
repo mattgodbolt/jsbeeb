@@ -3,12 +3,20 @@ import { allModels, findModel, tubeModelFor } from "../models.js";
 import { AudioOutputs, DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { getFilterForMode, MaxPersistenceMs, persistenceSettings } from "./canvas.js";
 import { mediaLabel, redacted } from "./analytics-filters.js";
+import { NumRomBanks } from "../6502.js";
 
 const round = (value) => Number(value.toFixed(2));
 
 /** @returns {string} the speed a multiplier gives this machine's co-processor, e.g. "1.6x (4.8MHz)". */
 export function tubeCpuSpeedLabel(multiplier, model) {
     return `${round(multiplier)}x (${round(multiplier * tubeModelFor(model).clockMhz)}MHz)`;
+}
+
+/** @returns {number|undefined} the bank a `ROM.` parameter names: 0 to 15, with 10 to 15 also written A to F. */
+function romBankNumber(member) {
+    if (!/^(?:\d{1,2}|[A-F])$/.test(member)) return undefined;
+    const bank = parseInt(member, /^[A-F]$/.test(member) ? 16 : 10);
+    return bank < NumRomBanks ? bank : undefined;
 }
 
 const capitalise = (word) => word[0].toUpperCase() + word.substring(1);
@@ -339,6 +347,21 @@ export const Parameters = {
         type: ParamTypes.STRING,
         localToPage: true,
         apply: (control, bbcKey, { gamepad }) => gamepad.remap(control, bbcKey),
+    },
+    romBank: {
+        prefix: "ROM.",
+        type: ParamTypes.ARRAY,
+        analyticsFilter: mediaLabel,
+        apply: (member, refs, { bankRoms }) => {
+            const bank = romBankNumber(member);
+            if (bank === undefined) return `"${member}" is not a ROM bank, which is 0 to 15, or A to F in hex.`;
+            const [rom, ...others] = refs.filter((ref) => ref);
+            if (!rom) return;
+            const earlier = bankRoms.find((named) => named.bank === bank);
+            if (earlier) return `bank ${bank} already has ${earlier.rom}, so ${rom} is not loaded.`;
+            bankRoms.push({ bank, rom });
+            if (others.length) return `bank ${bank} takes one ROM, so ${others.join(", ")} is not loaded.`;
+        },
     },
 };
 

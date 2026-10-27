@@ -249,6 +249,42 @@ describe("MediaResolver", () => {
         expect(session).toHaveBeenCalledTimes(2);
     });
 
+    describe("a sideways ROM", () => {
+        it("takes a bare name from the built-in ROMs and a github: reference from the repo", async () => {
+            const { resolver, load } = make({
+                "roms/ample.rom": bytes("ample"),
+                "https://raw.githubusercontent.com/mattgodbolt/xmos/HEAD/original.rom": bytes("xmos"),
+            });
+            expect((await resolver.resolve("rom", "ample.rom")).data).toEqual(bytes("ample"));
+            expect(await resolver.resolve("rom", "github:mattgodbolt/xmos/original.rom")).toEqual({
+                name: "original.rom",
+                data: bytes("xmos"),
+                ignored: [],
+            });
+            expect(load).toHaveBeenCalledTimes(2);
+        });
+
+        it("opens a zip for the ROM in it, passing over a disc", async () => {
+            const zip = await zipOf([
+                ["readme.ssd", "disc"],
+                ["thing.rom", "rom"],
+            ]);
+            const { resolver } = make({ "https://raw.githubusercontent.com/o/r/HEAD/thing.zip": zip });
+            expect(await resolver.resolve("rom", "github:o/r/thing.zip")).toEqual({
+                name: "thing.rom",
+                data: bytes("rom"),
+                ignored: [],
+            });
+        });
+
+        it("says Stairway to Hell has none", async () => {
+            const { resolver } = make();
+            await expect(resolver.resolve("rom", "sth:ELITE.zip")).rejects.toThrow(
+                'Stairway to Hell has no rom images, so "sth:ELITE.zip" cannot be loaded',
+            );
+        });
+    });
+
     it("says when an archive has not been registered", async () => {
         const { resolver } = make();
         await expect(resolver.resolve("disc", "sth:ELITE.zip")).rejects.toThrow("No sth archive is available here");
