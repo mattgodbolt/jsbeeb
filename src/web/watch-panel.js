@@ -100,7 +100,7 @@ export class WatchPanel {
         const value = cell("watch-value", "");
         const watch = { address, format: WatchFormats[0], value };
 
-        const picker = textButton("watch-format dropdown-toggle", "", `How to show ${label}`);
+        const picker = textButton("watch-format dropdown-toggle", "", "");
         picker.setAttribute("aria-expanded", "false");
         const choices = document.createElement("tr");
         choices.className = "watch-formats";
