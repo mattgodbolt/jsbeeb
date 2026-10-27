@@ -896,12 +896,14 @@ export class MediaWindow {
     /**
      * A disc kept in this browser or on Google Drive, put in the aimed drive:
      * blank and formatted, or a copy of what a drive holds. A name with no
-     * extension is an SSD.
+     * extension is an SSD; an HFE can only be a blank on Google Drive.
      */
     async createDisc(name, where) {
         if (!name) return;
-        if (!guessDiscTypeFromName(name).supportsCatalogue) name = replaceOrAddExtension(name, ".ssd");
         const copyFrom = this.list.copyFrom;
+        const discType = guessDiscTypeFromName(name);
+        const blankFluxOnDrive = discType.isFluxImage && copyFrom === null && where === "gdrive";
+        if (!discType.supportsCatalogue && !blankFluxOnDrive) name = replaceOrAddExtension(name, ".ssd");
         const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;
         if (copyFrom === null && where === "browser")

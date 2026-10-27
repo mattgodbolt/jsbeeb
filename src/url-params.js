@@ -12,7 +12,7 @@ function isDefined(value) {
 }
 
 /**
- * @typedef {"string"|"array"|"int"|"float"|"bool"} ParamType
+ * @typedef {"string"|"array"|"int"|"float"|"bool"|"boolDefaultTrue"} ParamType
  */
 
 /**
@@ -30,6 +30,8 @@ export const ParamTypes = {
     FLOAT: "float",
     /** Boolean parameter (true if present, regardless of value) */
     BOOL: "bool",
+    /** Boolean parameter the page takes as true when absent, so the URL carries it as `key=false` when it is off */
+    BOOL_DEFAULT_TRUE: "boolDefaultTrue",
 };
 
 /**
@@ -73,6 +75,7 @@ export function parseQueryString(queryString, typeOf = () => undefined) {
                 }
                 break;
             case ParamTypes.BOOL:
+            case ParamTypes.BOOL_DEFAULT_TRUE:
                 // Only the exact 'false' string is treated as false.
                 parsedQuery[key] = val !== "false";
                 break;
@@ -166,6 +169,13 @@ export function buildUrlFromParams(baseUrl, parsedQuery, typeOf = () => undefine
                 // For boolean params, only add the key without value if true
                 if (value === true) {
                     const result = appendParam(url, sep, key);
+                    url = result.url;
+                    sep = result.sep;
+                }
+                break;
+            case ParamTypes.BOOL_DEFAULT_TRUE:
+                if (typeof value === "boolean") {
+                    const result = appendParam(url, sep, key, value ? undefined : "false");
                     url = result.url;
                     sep = result.sep;
                 }

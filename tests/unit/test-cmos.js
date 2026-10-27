@@ -198,6 +198,29 @@ describe("CMOS", () => {
             },
         );
 
+        it.each(
+            [
+                { register: "SECONDS", value: 0xa5 },
+                { register: "SECONDS", value: 0x5a },
+                { register: "SECONDS", value: 0x60 },
+                { register: "MINUTES", value: 0xff },
+                { register: "HOURS", value: 0x24 },
+            ].map((row) => ({ ...row, hex: row.value.toString(16).padStart(2, "0") })),
+        )(
+            "holds $register written as &$hex, which is not a time, as written while the clock runs",
+            ({ register, value }) => {
+                writeRegister(CMOS_ADDR[register], value);
+                vi.advanceTimersByTime(1000);
+                expect(readClock()).toEqual({ ...testDateRegisters, SECONDS: 0x57, [register]: value });
+                writeRegister(CMOS_ADDR[register], testDateRegisters[register]);
+                expect(readClock()).toEqual({
+                    ...testDateRegisters,
+                    SECONDS: 0x57,
+                    [register]: testDateRegisters[register],
+                });
+            },
+        );
+
         it("runs on from what was written, into the next year", () => {
             writeRegister(CMOS_ADDR.MONTH, 0x12);
             writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
@@ -268,9 +291,17 @@ describe("CMOS", () => {
             expect([readRegister(CMOS_ADDR.DAY_OF_MONTH), readRegister(CMOS_ADDR.MONTH)]).toEqual([0x31, 0x05]);
         });
 
+        it("reads a time register the host holds as written", () => {
+            const host = new Cmos(null);
+            writeRegister(CMOS_ADDR.MINUTES, 0xa5, host);
+            cmos.joinSession(host.sessionState(), () => 0);
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0xa5);
+        });
+
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
             vi.stubEnv("TZ", "America/New_York");
             writeRegister(CMOS_ADDR.HOURS, 0x10);
+            writeRegister(CMOS_ADDR.MINUTES, 0xa5);
             writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
             const ownClock = readClock();
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);

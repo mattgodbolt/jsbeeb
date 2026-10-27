@@ -1004,7 +1004,7 @@ const { opcodes: opcodes65c02, undocumented: undocumented65c02 } = splitUndocume
 const PrevInstructionWindow = 64;
 const PcInRunScore = 10;
 const CommonInstructions =
-    /RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC/;
+    /^(?:RTS|B(?:CC|CS|EQ|NE|MI|PL|VC|VS|RA|IT)|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|ADC|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC)\b/;
 const UncommonInstructions = /,\s*([XY]|X\))$/;
 
 class Disassemble6502 {
