@@ -22,7 +22,7 @@ function _set(byte, mask, set) {
 const UnpeekableDevice = 0xff;
 export const BaseRamBytes = 64 * 1024;
 export const RomBankBytes = 16 * 1024;
-const NumRomBanks = 16;
+export const NumRomBanks = 16;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
@@ -782,9 +782,10 @@ export class Cpu6502 extends Base6502 {
     // 0b000 - 10000 -> LYNNE - 20KB
     romSelect(b) {
         this.romsel = b;
-        const bankOffset = ((b & 15) << 14) + this.romOffset;
-        const offset = bankOffset - 0x8000;
-        const swram = this.model.swram[b & 15] ? 1 : 2;
+        const { romSockets } = this.model;
+        const bank = NumRomBanks - romSockets + (b & (romSockets - 1));
+        const offset = bank * RomBankBytes + this.romOffset - 0x8000;
+        const swram = this.model.swram[bank] ? 1 : 2;
         this.mapBothHalves(0x80, 0xc0, swram, offset);
         if (this.model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
@@ -1374,7 +1375,8 @@ export class Cpu6502 extends Base6502 {
             while (this.model.swram[romIndex]) {
                 romIndex--;
             }
-            if (romIndex < 0) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
+            if (romIndex < NumRomBanks - this.model.romSockets)
+                throw new Error("Too many extra ROMs (no free sideways ROM banks)");
 
             awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * RomBankBytes));
         }

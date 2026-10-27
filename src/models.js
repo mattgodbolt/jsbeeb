@@ -1,7 +1,7 @@
 import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 import * as opcodes from "./6502.opcodes.js";
-import { AtomCpu6502, Cpu6502 } from "./6502.js";
+import { AtomCpu6502, Cpu6502, NumRomBanks } from "./6502.js";
 import { BBC, stringToBBCKeys } from "./keymap.js";
 import { ATOM, stringToATOMKeys } from "./keymap-atom.js";
 
@@ -29,6 +29,7 @@ class Model {
         isMaster,
         isAtom,
         swram,
+        romSockets,
         fdc,
         cmosOverride,
         banks,
@@ -65,6 +66,9 @@ class Model {
         this.pasteReleaseGapMs = this.isAtom ? 40 : 0;
         this.Fdc = fdc;
         this.swram = swram;
+        // How many sockets ROMSEL decodes: they fill the top banks, and every bank number pages the socket its low
+        // bits pick. A Model B without a sideways board decodes two bits, for four.
+        this.romSockets = romSockets ?? NumRomBanks;
         this.isTest = false;
         this.cmosOverride = cmosOverride;
     }
@@ -219,6 +223,7 @@ export const allModels = [
         isMaster: false,
         clockMhz: 2,
         swram: noSwram,
+        romSockets: 4,
         fdc: NoiseAwareIntelFdc,
     }),
     new Model({
