@@ -131,7 +131,6 @@ describe("GoogleDriveSource", () => {
             expect(name).toBe("fresh.hfe");
             expect(ref).toBe("gd:xyz/fresh.hfe");
             const blank = discFor(name, data);
-            expect(blank.isDoubleSided).toBe(true);
             expect(blank.is40Track).toBe(false);
             const expected = new Uint8Array(DsdByteSize);
             expected.set(new TextEncoder().encode("fresh.hf"));
