@@ -582,10 +582,11 @@ describe("Debugger", () => {
 
         it("watches a name typed while the machine runs, once opening the panel has fetched its set", async () => {
             document.getElementById("watch-open").click();
-            await vi.waitFor(() => {
-                addWatch("oswrch");
-                expect(watchRows()).toEqual([["oswrch", "108", "dec", "\u00d7"]]);
-            });
+            await vi.waitFor(() => expect(load).toHaveBeenCalledWith(`${BaseUrl}mos.json`));
+            await vi.waitFor(() => expect(load.mock.settledResults.at(-1)?.type).toBe("fulfilled"));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            addWatch("oswrch");
+            expect(watchRows()).toEqual([["oswrch", "108", "dec", "\u00d7"]]);
             expect(dbgr.enabled()).toBe(false);
             document.getElementById("watch-close").click();
         });

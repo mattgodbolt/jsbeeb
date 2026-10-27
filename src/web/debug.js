@@ -193,6 +193,8 @@ export class Debugger {
         this._memorySets = new Set();
         toggle(this._symbolsLine, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
+            // The index arriving is what lets the sets matching memory be fetched.
+            if (this.watches.floating.isOpen) this._namesNow();
             if (!this._enabled) return;
             this._matchSymbols();
             this.updateDisassembly(this.disassPc);
