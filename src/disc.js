@@ -420,9 +420,9 @@ const BitWindowBits = 64;
 const FmSyncHi = 0x88888888;
 const MfmMarkerHi = 0xaaaa4489;
 const MfmMarkerLo = 0x44894489;
-// FM puts each data bit's clock pulse in the top bit of its nibble; the second is the mark clock
-// pattern 0xc7 spread that way.
+// FM puts each data bit's clock pulse in the top bit of its nibble.
 const FmClockPulses = 0x88888888;
+// IbmDiscFormat.markClockPattern (0xc7) spread that way; the class is not yet defined here.
 const FmMarkClockPulses = 0x88000888;
 // One data bit of zero, FM encoded with its clock, is the pulse nibble 0x8.
 const FmZeroBitPulses = 0x8;
@@ -462,8 +462,8 @@ class Track {
 
     /**
      * @param {Number} lastBit
-     * @returns {BitWindow64} the pulses up to and including `lastBit`, as zero before the track's
-     *     start as a window shifted in from there would hold
+     * @returns {BitWindow64} the pulses up to and including `lastBit`; bits before the track's start
+     *     read as zero
      */
     _pulseWindowEndingAt(lastBit) {
         const window = new BitWindow64();
@@ -891,7 +891,10 @@ function ssdOffsetOf(sector, isSideUpper, numSides) {
     return track * SsdFormat.trackSize + sector.sectorNumber * SsdFormat.sectorSize;
 }
 
-/** @returns {{sector: Sector, isSideUpper: boolean}[]} every sector on `disc`, track by track */
+/**
+ * @param {Disc} disc
+ * @returns {{sector: Sector, isSideUpper: boolean}[]} every sector on `disc`, track by track
+ */
 function sectorsOnSurface(disc) {
     const found = [];
     for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
