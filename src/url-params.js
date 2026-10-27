@@ -30,7 +30,7 @@ export const ParamTypes = {
     FLOAT: "float",
     /** Boolean parameter (true if present, regardless of value) */
     BOOL: "bool",
-    /** Boolean parameter that is on when absent, so the URL carries it as `key=false` when it is off */
+    /** Boolean parameter the page takes as true when absent, so the URL carries it as `key=false` when it is off */
     BOOL_DEFAULT_TRUE: "boolDefaultTrue",
 };
 
