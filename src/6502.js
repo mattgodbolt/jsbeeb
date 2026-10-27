@@ -26,7 +26,7 @@ const NumRomBanks = 16;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
-// Further from every real offset than any address, and V8's smallest small integer.
+// Further from every real offset than any address, and a small integer in every V8 build.
 const SlowPathOffset = -0x40000000;
 
 /**
