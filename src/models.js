@@ -130,6 +130,8 @@ function atomModel({ name, synonyms, os, banks }) {
     });
 }
 
+// A convenience layout for the expanded B models, not any real board's: all sixteen banks decoded, and RAM in 0-7
+// written through ROMSEL. Real boards are #1539.
 const beebSwram = [
     true,
     true,
@@ -218,7 +220,8 @@ export const allModels = [
         name: "BBC B (stock)",
         shortName: "BBC B",
         synonyms: ["B-stock"],
-        // The board's legends: IC101 and IC100 "AUX ROM" (15, 14), IC88 "DISC&NET ROM" (13), IC52 "BASIC ROM" (12).
+        // The unexpanded machine, fitted per the board's legends: IC101 and IC100 "AUX ROM" (15, 14),
+        // IC88 "DISC&NET ROM" (13), IC52 "BASIC ROM" (12).
         os: ["os.rom", "", "", "b/DFS-1.2.rom", "BASIC.ROM"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
