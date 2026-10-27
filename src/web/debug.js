@@ -479,7 +479,8 @@ export class Debugger {
         const pc = this.cpu?.pc;
         const address = addressFor(names, text, pc);
         if (address === undefined) return undefined;
-        return { address, label: names.address(address, pc)?.name ?? `$${hexword(address)}` };
+        const label = parseAddr(text) === address ? names.address(address, pc)?.name : text;
+        return { address, label: label ?? `$${hexword(address)}` };
     }
 
     enabled() {

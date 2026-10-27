@@ -378,7 +378,7 @@ describe("Debugger", () => {
             expect(empty()).toBe(true);
         });
 
-        it("keeps focus where it was when one of its buttons is pressed", () => {
+        it("keeps its buttons from focus, by mouse or by Tab", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
             for (const button of [
@@ -389,6 +389,7 @@ describe("Debugger", () => {
                 const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
                 button.dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);
+                expect(button.tabIndex).toBe(-1);
             }
         });
     });
@@ -634,6 +635,15 @@ describe("Debugger", () => {
                 ["$3001", "14", "dec", "\u00d7"],
                 ["os_text_ptr", "0", "dec", "\u00d7"],
             ]);
+        });
+
+        it("labels a watch with the name typed, even one the address isn't shown by here", async () => {
+            withMos((mos) => (mos.workspace = { scratch: "0x70" }));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            addWatch("scratch");
+            addWatch("$70");
+            expect(watchRows().map(([name]) => name)).toEqual(["scratch", "$0070"]);
         });
 
         it("leaves the credit as it is while the view moves among the same sets' names", async () => {

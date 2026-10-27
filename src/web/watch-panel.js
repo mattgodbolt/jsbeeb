@@ -39,13 +39,12 @@ export class WatchPanel {
         this.floating.addEventListener("close", () => {
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
-            this._showChoices(null);
         });
         // A focused button would keep keys from the machine and the debugger.
         this.panel.addEventListener("mousedown", (e) => {
             if (e.target.closest("button")) e.preventDefault();
         });
-        // Captured, and pointerdown not mousedown, as the panel's drag handle cancels the mousedown that would follow.
+        // pointerdown, as the panel's drag handle cancels the mousedown that would follow.
         document.addEventListener(
             "pointerdown",
             (e) => {
@@ -128,9 +127,9 @@ export class WatchPanel {
         cell("", "").append(picker);
 
         const remove = textButton("watch-remove", "×", `Stop watching ${label}`);
+        remove.setAttribute("aria-label", remove.title);
         remove.addEventListener("click", () => {
             this._watches.splice(this._watches.indexOf(watch), 1);
-            if (this._openChoices?.choices === choices) this._showChoices(null);
             row.remove();
             choices.remove();
             this._empty.hidden = this._watches.length > 0;
@@ -161,6 +160,7 @@ function textButton(className, text, title) {
     button.className = `txt-btn ${className}`;
     button.textContent = text;
     button.title = title;
-    button.setAttribute("aria-label", title);
+    // Tab would otherwise be a way into the panel, and a focused button keeps keys from the debugger.
+    button.tabIndex = -1;
     return button;
 }
