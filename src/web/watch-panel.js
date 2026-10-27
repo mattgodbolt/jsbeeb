@@ -102,6 +102,12 @@ export class WatchPanel {
             format.blur();
             this.update();
         });
+        // Focus left on a menu closed without a pick would keep the player's keys, and its type-ahead change the format.
+        format.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") return;
+            e.preventDefault();
+            format.blur();
+        });
         const formatCell = document.createElement("td");
         formatCell.append(format);
         const remove = this._button("watch-remove", "×", () => {
