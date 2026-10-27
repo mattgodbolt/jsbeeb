@@ -757,6 +757,9 @@ describe("Cpu6502 paged memory", () => {
     const AndySelect = 0x80;
     const AccconShadow = 0x04;
     const AccconHazel = 0x08;
+    const AccconDisplay = 0x01;
+    const AccconTest = 0x40;
+    const MosResetKeptAccconBits = AccconDisplay;
     const MasterSidewaysRamBanks = [4, 5];
 
     async function initialised(modelName) {
@@ -808,20 +811,17 @@ describe("Cpu6502 paged memory", () => {
         expect(cpu.readmem(OsAddress)).toBe(osByte);
     });
 
-    it("clears ACCCON and pages out shadow RAM and HAZEL on a hard reset", async () => {
+    it("clears ACCCON on a hard reset, display and test bits included", async () => {
         const cpu = await initialised("Master");
-        const osByte = cpu.readmem(OsAddress);
-        cpu.writemem(AccconRegister, AccconShadow | AccconHazel);
+        cpu.writemem(AccconRegister, AccconTest | AccconHazel | AccconShadow | AccconDisplay);
 
         cpu.reset(true);
-        cpu.writemem(ShadowAddress, 0x77);
 
-        expect(cpu.readmem(AccconRegister)).toBe(0);
-        expect(cpu.readmem(OsAddress)).toBe(osByte);
-        cpu.writemem(AccconRegister, AccconShadow);
-        expect(cpu.readmem(ShadowAddress)).not.toBe(0x77);
-        cpu.writemem(AccconRegister, 0);
-        expect(cpu.readmem(ShadowAddress)).toBe(0x77);
+        const acccon = cpu.readmem(AccconRegister);
+        expect(acccon).toBe(0);
+        cpu.writemem(ShadowAddress, 0x77);
+        cpu.writemem(AccconRegister, acccon & MosResetKeptAccconBits);
+        expect(cpu.videoRead(ShadowAddress)).toBe(0x77);
     });
 
     it("reads and writes as a restored snapshot pages", async () => {
