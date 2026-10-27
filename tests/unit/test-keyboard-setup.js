@@ -162,9 +162,12 @@ describe("KeyboardSetup", () => {
             expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
         });
 
-        it("reach the page, not the machine, from the watch panel's add box", () => {
+        it.each([
+            ["add box", () => document.getElementById("watch-add")],
+            ["format menu", () => document.getElementById("watch-panel").appendChild(document.createElement("select"))],
+        ])("reach the page, not the machine, from the watch panel's %s", (_, field) => {
             domFromIndexHtml("watch-panel");
-            document.getElementById("watch-add").focus();
+            field().focus();
             document.dispatchEvent(keyEvent("keydown", keyCodes.A));
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
         });

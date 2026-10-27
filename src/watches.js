@@ -16,11 +16,6 @@ export const WatchFormats = [
     { name: "hex32", bytes: 4, radix: 16, description: "four bytes, little-endian, in hex" },
 ];
 
-/** The format after `format`, back to the first after the last. */
-export function nextWatchFormat(format) {
-    return WatchFormats[(WatchFormats.indexOf(format) + 1) % WatchFormats.length];
-}
-
 /**
  * `format`'s bytes from `address` up, wrapping past 0xffff, as `peek` reads them.
  * @param {(address: number) => number} peek

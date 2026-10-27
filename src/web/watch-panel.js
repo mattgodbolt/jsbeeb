@@ -1,5 +1,5 @@
 import { hexword } from "../hex.js";
-import { formatWatch, nextWatchFormat, WatchFormats } from "../watches.js";
+import { formatWatch, WatchFormats } from "../watches.js";
 import { FloatingPanel } from "./floating-panel.js";
 
 /**
@@ -87,12 +87,23 @@ export class WatchPanel {
         name.title = `${label}: $${hexword(address)}`;
         const value = cell("watch-value", "");
         const watch = { address, format: WatchFormats[0], value };
-        const format = this._button("watch-format", watch.format.name, () => {
-            watch.format = nextWatchFormat(watch.format);
-            this._showFormat(format, watch.format);
+        const format = document.createElement("select");
+        format.className = "form-select form-select-sm watch-format";
+        format.setAttribute("aria-label", `How to show ${label}`);
+        for (const { name, description } of WatchFormats) {
+            const option = new Option(name, name);
+            option.title = description;
+            format.add(option);
+        }
+        format.title = watch.format.description;
+        format.addEventListener("change", () => {
+            watch.format = WatchFormats.find(({ name }) => name === format.value);
+            format.title = watch.format.description;
+            format.blur();
             this.update();
         });
-        this._showFormat(format, watch.format);
+        const formatCell = document.createElement("td");
+        formatCell.append(format);
         const remove = this._button("watch-remove", "×", () => {
             this._watches.splice(this._watches.indexOf(watch), 1);
             row.remove();
@@ -100,7 +111,7 @@ export class WatchPanel {
         });
         remove.title = `Stop watching ${label}`;
         remove.setAttribute("aria-label", remove.title);
-        row.append(format.parentElement, remove.parentElement);
+        row.append(formatCell, remove.parentElement);
         this._list.append(row);
         this._watches.push(watch);
         this._empty.hidden = true;
@@ -116,10 +127,5 @@ export class WatchPanel {
         button.addEventListener("click", onClick);
         td.append(button);
         return button;
-    }
-
-    _showFormat(button, format) {
-        button.textContent = format.name;
-        button.title = `Shown as ${format.description}; click for the next way`;
     }
 }

@@ -798,6 +798,14 @@ small {
   text-align: right;
 }
 
+#watch-panel .watch-format {
+  width: 9ch;
+  padding: 0 1.5em 0 0.4em;
+  background-position: right 0.3em center;
+  font-family: monospace;
+  font-size: inherit;
+}
+
 #watch-panel .txt-btn {
   color: #cccccc;
   text-decoration-color: rgba(255, 255, 255, 0.45);

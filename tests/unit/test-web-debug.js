@@ -54,7 +54,7 @@ describe("Debugger", () => {
     };
     const watchRows = () =>
         [...document.querySelectorAll("#watch-panel .watch-list tr")].map((row) =>
-            [...row.querySelectorAll("td")].map((td) => td.textContent),
+            [...row.querySelectorAll("td")].map((td) => td.querySelector("select")?.value ?? td.textContent),
         );
     const watchButton = (index, className) =>
         document.querySelectorAll("#watch-panel .watch-list tr")[index].querySelector(`.${className}`);
@@ -329,16 +329,19 @@ describe("Debugger", () => {
             expect(watchRows()[0][1]).toBe("6");
         });
 
-        it("steps a watch through its formats, reading as many bytes as each needs", () => {
+        it("shows a watch in the format picked from its menu, reading as many bytes as each needs, then lets go of the keyboard", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
+            const menu = watchButton(0, "watch-format");
             const shown = [];
-            for (let i = 0; i < 6; ++i) {
+            for (const option of menu.options) {
+                menu.focus();
+                menu.value = option.value;
+                menu.dispatchEvent(new Event("change", { bubbles: true }));
+                expect(document.activeElement).not.toBe(menu);
                 shown.push(watchRows()[0].slice(1, 3).join(" "));
-                watchButton(0, "watch-format").click();
             }
             expect(shown).toEqual(["5 dec", "$05 hex", "261 dec16", "$0105 hex16", "261 dec32", "$00000105 hex32"]);
-            expect(watchRows()[0][2]).toBe("dec");
         });
 
         it("stops watching on the remove button, saying so once the list is empty", () => {
@@ -355,11 +358,11 @@ describe("Debugger", () => {
             expect(empty()).toBe(true);
         });
 
-        it("keeps focus where it was when one of its buttons is pressed", () => {
+        it("keeps focus where it was when its remove button is pressed", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
             const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-            watchButton(0, "watch-format").dispatchEvent(press);
+            watchButton(0, "watch-remove").dispatchEvent(press);
             expect(press.defaultPrevented).toBe(true);
         });
     });
