@@ -131,7 +131,7 @@ function atomModel({ name, synonyms, os, banks }) {
 }
 
 // A convenience layout for the expanded B models, not any real board's: all sixteen banks decoded, and RAM in 0-7
-// written through ROMSEL. Real boards are #1539.
+// written through ROMSEL. Real boards: #1539.
 const beebSwram = [
     true,
     true,
