@@ -1292,6 +1292,7 @@ describe("MediaWindow", () => {
             ${"browser"} | ${"0"} | ${"blank"}     | ${"local:blank"}    | ${"disc1"} | ${undefined}
             ${"browser"} | ${"1"} | ${"mine.hfe"}  | ${"local:mine.ssd"} | ${"disc2"} | ${true}
             ${"gdrive"}  | ${"0"} | ${"fresh.ssd"} | ${"fresh.ssd"}      | ${"disc1"} | ${undefined}
+            ${"gdrive"}  | ${"0"} | ${"fresh.hfe"} | ${"fresh.hfe"}      | ${"disc1"} | ${undefined}
         `(
             "makes a blank disc in $where called $typed in drive $aimed, booting nothing",
             async ({ where, aimed, typed, asked, param, autoboot }) => {

@@ -5,8 +5,25 @@ import { errorText } from "./reporting.js";
 import { replaceOrAddExtension } from "../archive.js";
 import { describeDriveFile } from "./media-catalogue.js";
 import { failedFor, LoadFailures } from "../loader.js";
+import { DiscLayout } from "../disc.js";
+
+const FluxBlankSectorExtension = ".dsd";
 
 const isUnauthorised = (error) => error?.status === 401 || error?.result?.error?.code === 401;
+
+/** @returns {Uint8Array} an empty sector image, its catalogue titled from `name` where the format has one */
+function blankSectorImage(discType, name) {
+    const data = new Uint8Array(discType.byteSize);
+    if (discType.supportsCatalogue) discType.setDiscName(data, name);
+    return data;
+}
+
+/** @returns {import("../disc.js").Disc} a blank sector image with every track written out, ready to save as flux */
+function formattedDisc(name) {
+    const sectorName = replaceOrAddExtension(name, FluxBlankSectorExtension);
+    const data = blankSectorImage(disc.guessDiscTypeFromName(sectorName), name);
+    return disc.discFor(sectorName, data, undefined, DiscLayout.contiguous);
+}
 
 /**
  * Google Drive as a media source: signing in, listing the user's discs,
@@ -79,16 +96,14 @@ export class GoogleDriveSource {
     }
 
     /**
-     * Makes a blank, formatted disc on the Drive.
+     * Makes a blank, formatted disc on the Drive. An HFE is a double-sided DFS
+     * disc, formatted and empty, recorded as flux.
      *
      * @returns {Promise<{ref: string, disc: import("../disc.js").Disc}>} the disc, and how the URL names it
      */
     async createBlank(name, layout) {
-        // TODO(#1070) blank HFE images have no fixed byteSize, so only SSD and DSD blanks can be made here.
         const discType = disc.guessDiscTypeFromName(name);
-        if (!discType.byteSize) throw new Error(`blank ${discType.extension} discs have no known size`);
-        const data = new Uint8Array(discType.byteSize);
-        if (discType.supportsCatalogue) discType.setDiscName(data, name);
+        const data = discType.isFluxImage ? discType.saver(formattedDisc(name)) : blankSectorImage(discType, name);
         return this.createFrom(name, data, layout);
     }
 
