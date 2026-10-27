@@ -621,7 +621,11 @@ describe("MachineSession paged memory", () => {
     it("reports what is paged in, agreeing with the OS's copy of ROMSEL", () => {
         const [romselCopy] = session.readMemory(0xf4, 1);
 
-        expect(session.pagingState()).toEqual({ romsel: romselCopy, acccon: expect.any(Number) });
+        expect(session.pagingState()).toEqual({
+            romsel: romselCopy,
+            bank: romselCopy & 15,
+            acccon: expect.any(Number),
+        });
     });
 
     it("reads and writes a sideways bank other than the one paged in", () => {
@@ -632,7 +636,7 @@ describe("MachineSession paged memory", () => {
 
         expect(session.readMemory(0x8000, 3, { bank: SidewaysRamBank })).toEqual([1, 2, 3]);
         expect(session.readMemory(0x8000, 3, { bank: OtherSidewaysRamBank })).toEqual([9, 9, 9]);
-        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.romsel & 15 }));
+        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.bank }));
         expect(session.pagingState()).toEqual(before);
     });
 
@@ -661,8 +665,8 @@ describe("MachineSession paged memory on a machine without shadow RAM", () => {
 
     afterAll(() => session.destroy());
 
-    it("reports ROMSEL alone", () => {
-        expect(session.pagingState()).toEqual({ romsel: expect.any(Number) });
+    it("reports ROMSEL and its bank, without ACCCON", () => {
+        expect(session.pagingState()).toEqual({ romsel: expect.any(Number), bank: expect.any(Number) });
     });
 
     it("refuses to page shadow RAM", () => {

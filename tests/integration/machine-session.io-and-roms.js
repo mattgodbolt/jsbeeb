@@ -149,7 +149,6 @@ describe("MachineSession breakpoints in sideways ROM", () => {
     const UnduplicatedTitle = 0x55;
     const ServiceWrite = 0x70;
     const RunSecs = 5;
-    const RomselBankMask = 0x0f;
     // A service ROM titled "T" whose service handler stores A at ServiceWrite and returns.
     // prettier-ignore
     const ServiceRom = [
@@ -173,7 +172,7 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         return session;
     }
 
-    const pagedBank = (session) => session.pagingState().romsel & RomselBankMask;
+    const pagedBank = (session) => session.pagingState().bank;
 
     it("breaks only while the bank it is given is paged in", async () => {
         const session = await sessionWithSpareRom();
@@ -195,6 +194,30 @@ describe("MachineSession breakpoints in sideways ROM", () => {
 
         expect(session.registers().pc).toBe(ServiceEntry);
         expect(pagedBank(session)).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("on a stock BBC B, breaks in socket 12 and reports it when code pages it as ROMSEL 0", async () => {
+        const session = await bootedSession("B-stock");
+        const ProgramAddress = 0x2000;
+        const LoopAddress = ProgramAddress + 6;
+        // prettier-ignore
+        session.writeMemory(ProgramAddress, [
+            0x78, // SEI
+            0xa9, 0x00, // LDA #0
+            0x8d, 0x30, 0xfe, // STA &FE30
+            0xad, 0x00, 0x80, // LDA &8000
+            0x4c, LoopAddress & 0xff, LoopAddress >> 8, // JMP LoopAddress
+        ]);
+        const id = session.addBreakpoint("read", 0x8000, { bank: 12 });
+
+        await session.type(`CALL &${ProgramAddress.toString(16)}`);
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(session.hitBreakpoint()).toMatchObject({ id, address: 0x8000, bank: 12 });
+        expect(session.registers().pc).toBeGreaterThan(LoopAddress);
+        expect(session.registers().pc).toBeLessThanOrEqual(LoopAddress + 9);
+        expect(session.pagingState()).toEqual({ romsel: 0, bank: 12 });
         session.destroy();
     });
 

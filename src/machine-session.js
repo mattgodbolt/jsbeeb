@@ -603,14 +603,14 @@ export class MachineSession {
     }
 
     /**
-     * What the memory map has paged in: `romsel`, the sideways bank at
-     * &8000 to &BFFF, and on a Master `acccon`, whose bit 2 puts shadow
-     * RAM at &3000 to &7FFF.
-     * @returns {{romsel: number, acccon?: number}}
+     * What the memory map has paged in: `romsel` as last written, `bank`,
+     * the sideways bank it pages at &8000 to &BFFF, and on a Master
+     * `acccon`, whose bit 2 puts shadow RAM at &3000 to &7FFF.
+     * @returns {{romsel: number, bank: number, acccon?: number}}
      */
     pagingState() {
         const cpu = this._machine.processor;
-        const state = { romsel: cpu.romsel };
+        const state = { romsel: cpu.romsel, bank: cpu.pagedBank };
         if (cpu.model.isMaster) state.acccon = cpu.acccon;
         return state;
     }

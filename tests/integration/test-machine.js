@@ -37,6 +37,9 @@ describe("TestMachine", () => {
         ["Master", 0x84, 0x8fff, 4, false],
         ["Master", 0x84, 0x9000, 4, true],
         ["B-DFS1.2", 0x84, 0x8000, 4, true],
+        ["B-stock", 0x00, 0x8000, 12, true],
+        ["B-stock", 0x08, 0x8000, 12, true],
+        ["B-stock", 0x00, 0x8000, 0, false],
     ]) {
         it(`on a ${model} with ROMSEL &${hex(romsel)}, bank ${bank} is ${paged ? "" : "not "}paged at &${hex(address)}`, () => {
             const machine = new TestMachine(model);
