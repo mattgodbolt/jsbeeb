@@ -26,6 +26,7 @@ const NumRomBanks = 16;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
+// Further from every real offset than any address, and V8's smallest small integer.
 const SlowPathOffset = -0x40000000;
 
 /**
@@ -836,7 +837,7 @@ export class Cpu6502 extends Base6502 {
         this.mapBothHalves(0xc0, 0xe0, hazelRAM, hazelOff);
     }
 
-    // Works for unpaged RAM only (ie stack and zp)
+    // Pages 0 and 1 are the same in both halves of the tables, so these skip memStatOffset.
     readmemZpStack(addr) {
         addr &= 0xffff;
         const offset = this.readLook[addr >>> 8];
