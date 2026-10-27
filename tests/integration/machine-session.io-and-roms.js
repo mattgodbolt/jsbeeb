@@ -172,8 +172,6 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         return session;
     }
 
-    const pagedBank = (session) => session.pagingState().bank;
-
     it("breaks only while the bank it is given is paged in", async () => {
         const session = await sessionWithSpareRom();
         const id = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
@@ -183,7 +181,7 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         expect(completed).toBe(false);
         expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: ServiceEntry, bank: SpareBank });
         expect(session.registers().pc).toBe(ServiceEntry);
-        expect(pagedBank(session)).toBe(SpareBank);
+        expect(session.pagingState().bank).toBe(SpareBank);
         session.destroy();
     });
 
@@ -193,7 +191,7 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         await session.runUntilAddress(ServiceEntry, RunSecs, { bank: SpareBank });
 
         expect(session.registers().pc).toBe(ServiceEntry);
-        expect(pagedBank(session)).toBe(SpareBank);
+        expect(session.pagingState().bank).toBe(SpareBank);
         session.destroy();
     });
 
