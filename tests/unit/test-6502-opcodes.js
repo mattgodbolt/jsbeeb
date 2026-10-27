@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Cpu6502 as cpu6502Opcodes, Cpu65c02 as cpu65c02Opcodes } from "../../src/6502.opcodes.js";
+import {
+    Cpu6502 as cpu6502Opcodes,
+    Cpu65c02 as cpu65c02Opcodes,
+    Cpu65c12 as cpu65c12Opcodes,
+} from "../../src/6502.opcodes.js";
 
 describe("Disassemble6502", () => {
     const mem = new Uint8Array(0x10000);
@@ -119,6 +123,16 @@ describe("Disassemble6502", () => {
                 expect(disassembler65c02.isDocumented(0)).toBe(text !== "???");
             }
         });
+    });
+
+    it.each([
+        ["a BRK", cpu6502Opcodes, [0xad, 0x00, 0x60], "LDA $6000"],
+        ["a TSB", cpu65c12Opcodes, [0x0e, 0x04, 0x04], "ASL $0404"],
+    ])("does not count %s parsed out of an operand as a common instruction", (_, opcodes, bytes, listing) => {
+        const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+        mem.set(bytes, 0x1ffd);
+        expect(dis.disassemble(0x1ffd, true)[0]).toBe(listing);
+        expect(dis.prevInstruction(0x2000, 0x0000)).toBe(0x1ffd);
     });
 
     it("returns the previous instruction in an unambiguous run", () => {
