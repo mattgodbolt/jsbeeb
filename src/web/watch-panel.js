@@ -60,10 +60,6 @@ export class WatchPanel {
         this.setAdding(false);
     }
 
-    get isOpen() {
-        return this.floating.isOpen;
-    }
-
     /** Whether names and addresses can be typed in, which they can only while the debugger is open. */
     setAdding(adding) {
         if (!adding && document.activeElement === this._input) this._input.blur();

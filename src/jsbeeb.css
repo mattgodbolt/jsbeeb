@@ -772,10 +772,6 @@ small {
   font-size: 9pt;
 }
 
-.watch-header {
-  justify-content: space-between;
-}
-
 #watch-panel table {
   width: 100%;
   margin-top: 6px;

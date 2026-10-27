@@ -284,6 +284,7 @@ describe("Debugger", () => {
 
         it("takes names and addresses only while the debugger is open", () => {
             expect(watchBox().disabled).toBe(true);
+            expect(watchBox().placeholder).toBe("Enter the debugger to add one");
             dbgr.debug(cpu.pc);
             expect(watchBox().disabled).toBe(false);
             watchBox().focus();
@@ -295,22 +296,28 @@ describe("Debugger", () => {
             expect(watchRows()).toEqual([["$0070", "5", "dec", "\u00d7"]]);
         });
 
-        it("reads its watches once a frame while open, and not at all while closed", () => {
+        it("reads its watches once a frame, without side effects, while open, and not at all while closed", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
             dbgr.hide();
+            const peek = vi.spyOn(cpu, "peekmem");
+            const read = vi.spyOn(cpu, "readmem");
             openFromMenu();
             expect(panelOpen()).toBe(true);
+            peek.mockClear();
             cpu.writemem(0x70, 0x06);
             runFrame();
             expect(watchRows()[0][1]).toBe("6");
+            expect(peek).toHaveBeenCalledTimes(1);
+            expect(frames.size).toBe(1);
             openFromMenu();
             expect(panelOpen()).toBe(false);
             expect(frames.size).toBe(0);
-            const peek = vi.spyOn(cpu, "peekmem");
+            peek.mockClear();
             cpu.writemem(0x70, 0x07);
             runFrame();
             expect(peek).not.toHaveBeenCalled();
+            expect(read).not.toHaveBeenCalled();
             expect(watchRows()[0][1]).toBe("6");
         });
 
