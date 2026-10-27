@@ -7,6 +7,8 @@ function makeCpu() {
     return new TEST_6502.Cpu(TEST_6502, { ...nullIo(), config: machineSpec() });
 }
 
+const romTitle = (cpu, bank) => String.fromCharCode(...cpu.romBank(bank).subarray(9, 12));
+
 // TEST_6502 has eight sideways RAM banks, leaving eight for extra ROMs.
 const NumFreeRomBanks = 8;
 
@@ -30,7 +32,6 @@ describe("Cpu6502 extra ROM loading", () => {
             await cpu.loadOs(...stock.os);
             return cpu;
         };
-        const romTitle = (cpu, bank) => String.fromCharCode(...cpu.romBank(bank).subarray(9, 12));
 
         it("puts BASIC in IC52 and the DFS in IC88, and extra ROMs in the two AUX sockets", async () => {
             const cpu = await loadStock(["ample.rom", "ats-3.0.rom"]);
@@ -74,7 +75,6 @@ describe("Cpu6502 ROM loading into a named bank", () => {
         await cpu.loadOs(...model.os);
         return cpu;
     };
-    const romTitle = (cpu, bank) => String.fromCharCode(...cpu.romBank(bank).subarray(9, 12));
     const pagedByteAfterWrite = (cpu, bank) => {
         cpu.romSelect(bank);
         cpu.writemem(0x8000, cpu.readmem(0x8000) ^ 0xff);
