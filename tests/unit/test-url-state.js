@@ -104,6 +104,7 @@ describe("UrlState", () => {
             [ParamTypes.INT]: (name) => `${name}=3`,
             [ParamTypes.FLOAT]: (name) => `${name}=0.25`,
             [ParamTypes.BOOL]: (name) => name,
+            [ParamTypes.BOOL_DEFAULT_TRUE]: (name) => `${name}=false`,
         };
         const query = Object.entries(Parameters)
             .filter(([, { prefix }]) => !prefix)

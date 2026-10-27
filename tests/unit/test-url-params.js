@@ -16,7 +16,7 @@ import {
 const typesOf = (types) => (name) => types[name];
 
 const BaseUrl = "http://localhost:8080/index.html";
-const { ARRAY, BOOL, FLOAT, INT, STRING } = ParamTypes;
+const { ARRAY, BOOL, BOOL_DEFAULT_TRUE, FLOAT, INT, STRING } = ParamTypes;
 
 describe("URL Parameters", () => {
     describe("parseQueryString", () => {
@@ -55,6 +55,11 @@ describe("URL Parameters", () => {
                 { debug: true, verbose: false, noseek: true },
             ],
             [
+                "gl&latency=false&fast=true",
+                { gl: BOOL_DEFAULT_TRUE, latency: BOOL_DEFAULT_TRUE, fast: BOOL_DEFAULT_TRUE },
+                { gl: true, latency: false, fast: true },
+            ],
+            [
                 "model=B&rom=os.rom&rom=basic.rom&speed=4&volume=0.8&debug",
                 { model: STRING, rom: ARRAY, speed: INT, volume: FLOAT, debug: BOOL },
                 { model: "B", rom: ["os.rom", "basic.rom"], speed: 4, volume: 0.8, debug: true },
@@ -85,6 +90,11 @@ describe("URL Parameters", () => {
             [{ model: "B", disc: "", debug: null, rom: [] }, { rom: ARRAY }, "?model=B"],
             [{ debug: true, noseek: false }, { debug: BOOL, noseek: BOOL }, "?debug"],
             [{ debug: true }, {}, "?debug=true"],
+            [
+                { gl: true, latency: false, unset: undefined },
+                { gl: BOOL_DEFAULT_TRUE, latency: BOOL_DEFAULT_TRUE, unset: BOOL_DEFAULT_TRUE },
+                "?gl&latency=false",
+            ],
             [{ speed: 0, volume: 0.0 }, { speed: INT, volume: FLOAT }, "?speed=0&volume=0"],
             [{ speed: 4, volume: 0.8 }, { speed: INT, volume: FLOAT }, "?speed=4&volume=0.8"],
             [
