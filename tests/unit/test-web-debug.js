@@ -53,11 +53,14 @@ describe("Debugger", () => {
         document.getElementById("watch-add-form").dispatchEvent(new Event("submit", { cancelable: true }));
     };
     const watchRows = () =>
-        [...document.querySelectorAll("#watch-panel .watch-list tr")].map((row) =>
-            [...row.querySelectorAll("td")].map((td) => td.querySelector("select")?.value ?? td.textContent),
+        [...document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats)")].map((row) =>
+            [...row.querySelectorAll("td")].map(
+                (td) => td.querySelector(".watch-format")?.textContent ?? td.textContent,
+            ),
         );
-    const watchControl = (index, className) =>
-        document.querySelectorAll("#watch-panel .watch-list tr")[index].querySelector(`.${className}`);
+    const watchRow = (index) => document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats)")[index];
+    const watchControl = (index, className) => watchRow(index).querySelector(`.${className}`);
+    const watchChoices = (index) => watchRow(index).nextElementSibling;
 
     describe("the panels", () => {
         it("start hidden, show when the debugger is entered, and hide again on leaving", () => {
@@ -329,30 +332,34 @@ describe("Debugger", () => {
             expect(watchRows()[0][1]).toBe("6");
         });
 
-        it("shows a watch in the format picked from its menu, reading as many bytes as each needs, then lets go of the keyboard", () => {
+        it("shows a watch in the format picked from its list, reading as many bytes as each needs", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
-            const menu = watchControl(0, "watch-format");
             const shown = [];
-            for (const option of menu.options) {
-                menu.focus();
-                menu.value = option.value;
-                menu.dispatchEvent(new Event("change", { bubbles: true }));
-                expect(document.activeElement).not.toBe(menu);
+            for (const name of ["dec", "hex", "dec16", "hex16", "dec32", "hex32"]) {
+                watchControl(0, "watch-format").click();
+                const choices = watchChoices(0);
+                expect(choices.hidden).toBe(false);
+                [...choices.querySelectorAll("button")].find((choice) => choice.textContent === name).click();
+                expect(choices.hidden).toBe(true);
                 shown.push(watchRows()[0].slice(1, 3).join(" "));
             }
             expect(shown).toEqual(["5 dec", "$05 hex", "261 dec16", "$0105 hex16", "261 dec32", "$00000105 hex32"]);
         });
 
-        it("lets go of the keyboard when a key reaches a menu closed without a pick, leaving the format alone", () => {
+        it("closes the list of formats on a click anywhere else, or on another watch's", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
-            const menu = watchControl(0, "watch-format");
-            menu.focus();
-            const press = new KeyboardEvent("keydown", { key: "h", bubbles: true, cancelable: true });
-            menu.dispatchEvent(press);
-            expect(press.defaultPrevented).toBe(true);
-            expect(document.activeElement).not.toBe(menu);
+            addWatch("$71");
+            const press = (target) => target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+            watchControl(0, "watch-format").click();
+            press(document.body);
+            expect(watchChoices(0).hidden).toBe(true);
+            watchControl(0, "watch-format").click();
+            press(watchControl(1, "watch-format"));
+            watchControl(1, "watch-format").click();
+            expect(watchChoices(0).hidden).toBe(true);
+            expect(watchChoices(1).hidden).toBe(false);
             expect(watchRows()[0][2]).toBe("dec");
         });
 
@@ -367,15 +374,22 @@ describe("Debugger", () => {
             expect(watchRows().map(([name]) => name)).toEqual(["$0071"]);
             watchControl(0, "watch-remove").click();
             expect(watchRows()).toEqual([]);
+            expect(document.querySelectorAll("#watch-panel .watch-list tr")).toHaveLength(0);
             expect(empty()).toBe(true);
         });
 
-        it("keeps focus where it was when its remove button is pressed", () => {
+        it("keeps focus where it was when one of its buttons is pressed", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
-            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-            watchControl(0, "watch-remove").dispatchEvent(press);
-            expect(press.defaultPrevented).toBe(true);
+            for (const button of [
+                watchControl(0, "watch-format"),
+                watchChoices(0).querySelector("button"),
+                watchControl(0, "watch-remove"),
+            ]) {
+                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+                button.dispatchEvent(press);
+                expect(press.defaultPrevented).toBe(true);
+            }
         });
     });
 

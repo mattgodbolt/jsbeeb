@@ -19,6 +19,8 @@ export class WatchPanel {
         /** @type {{address: number, format: import("../watches.js").WatchFormat, value: HTMLElement}[]} */
         this._watches = [];
         this._frameHandle = null;
+        /** @type {{picker: HTMLElement, choices: HTMLElement} | null} */
+        this._openChoices = null;
         this.panel = document.getElementById("watch-panel");
         this._list = this.panel.querySelector(".watch-list");
         this._empty = this.panel.querySelector(".watch-empty");
@@ -37,11 +39,22 @@ export class WatchPanel {
         this.floating.addEventListener("close", () => {
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
+            this._showChoices(null);
         });
         // A focused button would keep keys from the machine and the debugger.
         this.panel.addEventListener("mousedown", (e) => {
             if (e.target.closest("button")) e.preventDefault();
         });
+        // Captured, and pointerdown not mousedown, as the panel's drag handle cancels the mousedown that would follow.
+        document.addEventListener(
+            "pointerdown",
+            (e) => {
+                const open = this._openChoices;
+                if (open && !open.picker.contains(e.target) && !open.choices.contains(e.target))
+                    this._showChoices(null);
+            },
+            true,
+        );
         this._input.addEventListener("input", () => this._input.classList.remove("is-invalid"));
         this._input.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
@@ -87,51 +100,67 @@ export class WatchPanel {
         name.title = `${label}: $${hexword(address)}`;
         const value = cell("watch-value", "");
         const watch = { address, format: WatchFormats[0], value };
-        const format = document.createElement("select");
-        format.className = "form-select form-select-sm watch-format";
-        format.setAttribute("aria-label", `How to show ${label}`);
-        for (const { name, description } of WatchFormats) {
-            const option = new Option(name, name);
-            option.title = description;
-            format.add(option);
+
+        const picker = textButton("watch-format dropdown-toggle", "", `How to show ${label}`);
+        picker.setAttribute("aria-expanded", "false");
+        const choices = document.createElement("tr");
+        choices.className = "watch-formats";
+        choices.hidden = true;
+        const choiceCell = document.createElement("td");
+        choiceCell.colSpan = 4;
+        choices.append(choiceCell);
+        const show = (format) => {
+            watch.format = format;
+            picker.textContent = format.name;
+            picker.title = `Shown as ${format.description}`;
+        };
+        show(watch.format);
+        picker.addEventListener("click", () => this._showChoices(choices.hidden ? { picker, choices } : null));
+        for (const format of WatchFormats) {
+            const choice = textButton("watch-format-choice", format.name, format.description);
+            choice.addEventListener("click", () => {
+                show(format);
+                this._showChoices(null);
+                this.update();
+            });
+            choiceCell.append(choice);
         }
-        format.title = watch.format.description;
-        format.addEventListener("change", () => {
-            watch.format = WatchFormats.find(({ name }) => name === format.value);
-            format.title = watch.format.description;
-            format.blur();
-            this.update();
-        });
-        // A menu closed without a pick would keep the player's keys, its type-ahead changing the format.
-        format.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") return;
-            e.preventDefault();
-            format.blur();
-        });
-        const formatCell = document.createElement("td");
-        formatCell.append(format);
-        const remove = this._button("watch-remove", "×", () => {
+        cell("", "").append(picker);
+
+        const remove = textButton("watch-remove", "×", `Stop watching ${label}`);
+        remove.addEventListener("click", () => {
             this._watches.splice(this._watches.indexOf(watch), 1);
+            if (this._openChoices?.choices === choices) this._showChoices(null);
             row.remove();
+            choices.remove();
             this._empty.hidden = this._watches.length > 0;
         });
-        remove.title = `Stop watching ${label}`;
-        remove.setAttribute("aria-label", remove.title);
-        row.append(formatCell, remove.parentElement);
-        this._list.append(row);
+        cell("", "").append(remove);
+        this._list.append(row, choices);
         this._watches.push(watch);
         this._empty.hidden = true;
         this.update();
     }
 
-    _button(className, text, onClick) {
-        const td = document.createElement("td");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `txt-btn ${className}`;
-        button.textContent = text;
-        button.addEventListener("click", onClick);
-        td.append(button);
-        return button;
+    /** Opens a watch's list of formats, closing any other, or closes them all for null. */
+    _showChoices(open) {
+        if (this._openChoices && this._openChoices.choices !== open?.choices) {
+            this._openChoices.choices.hidden = true;
+            this._openChoices.picker.setAttribute("aria-expanded", "false");
+        }
+        this._openChoices = open;
+        if (!open) return;
+        open.choices.hidden = false;
+        open.picker.setAttribute("aria-expanded", "true");
     }
+}
+
+function textButton(className, text, title) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `txt-btn ${className}`;
+    button.textContent = text;
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    return button;
 }

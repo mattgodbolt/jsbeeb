@@ -58,6 +58,10 @@ function cloneTemplate(container) {
     return clone;
 }
 
+function addressFor(names, text, pc) {
+    return names.addressOf(text, pc) ?? parseAddr(text);
+}
+
 function memoryTitle(address, named, inRegion) {
     const lines = [named ? `${named.name}: $${hexword(address)}` : `$${hexword(address)}`];
     if (inRegion) {
@@ -209,7 +213,7 @@ export class Debugger {
                 e.preventDefault();
                 const text = addr.value.trim();
                 if (!text) return;
-                const address = this._names.addressOf(text, this.cpu.pc) ?? parseAddr(text);
+                const address = addressFor(this._names, text, this.cpu.pc);
                 addr.classList.toggle("is-invalid", address === undefined);
                 if (address === undefined) return;
                 func(address);
@@ -473,11 +477,9 @@ export class Debugger {
     _resolveWatch(text) {
         const names = this._namesNow();
         const pc = this.cpu?.pc;
-        const named = names.addressOf(text, pc);
-        const address = named ?? parseAddr(text);
+        const address = addressFor(names, text, pc);
         if (address === undefined) return undefined;
-        const label = named === undefined ? names.address(address, pc)?.name : text;
-        return { address, label: label ?? `$${hexword(address)}` };
+        return { address, label: names.address(address, pc)?.name ?? `$${hexword(address)}` };
     }
 
     enabled() {

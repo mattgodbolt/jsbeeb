@@ -810,11 +810,18 @@ small {
 }
 
 #watch-panel .watch-format {
-  width: 9ch;
-  padding: 0 1.5em 0 0.4em;
-  background-position: right 0.3em center;
-  font-family: monospace;
-  font-size: inherit;
+  width: 8ch;
+  text-align: left;
+  font-family: inherit;
+}
+
+.watch-formats td {
+  padding-bottom: 4px;
+  text-align: right;
+}
+
+.watch-formats .txt-btn {
+  font-family: inherit;
 }
 
 #watch-panel .txt-btn {
