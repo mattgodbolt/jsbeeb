@@ -91,6 +91,31 @@ describe("Keyboard", () => {
                 expect(mockSysvia.disableKeyboard).not.toHaveBeenCalled();
             });
 
+            test("holds its typing while the machine is stopped, then gives the key down a full delay", () => {
+                const pasteKeyMs = mockProcessor.model.pasteKeyDelayMs;
+                keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
+                vi.advanceTimersByTime(0);
+                running = false;
+                vi.advanceTimersByTime(10 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.A, true]]);
+                running = true;
+                vi.advanceTimersByTime(pasteKeyMs);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.A, true]]);
+                vi.advanceTimersByTime(2 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls.slice(1, 3)).toEqual([
+                    [BBC.A, false],
+                    [BBC.B, true],
+                ]);
+            });
+
+            test("pastes into the machine again once the session is over", () => {
+                keyboard.setInput(null);
+                keyboard.sendRawKeyboard([BBC.A], false);
+                mockProcessor.scheduler.polltime(1);
+                expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
+                expect(input.keyRaw).not.toHaveBeenCalled();
+            });
+
             test("lets go through the session of what it held when the session ends", () => {
                 keyboard.sendRawKeyboard([BBC.SHIFT, BBC.A, BBC.B], false);
                 vi.advanceTimersByTime(mockProcessor.model.pasteKeyDelayMs);

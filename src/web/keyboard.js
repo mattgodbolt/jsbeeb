@@ -88,7 +88,9 @@ export class Keyboard extends EventTarget {
         this.cancelPaste();
         this.clearKeys();
         this.input = input ?? this.directInput();
-        this.typist = input ? new Typist(this.processor, input) : this.machineTypist;
+        this.typist = input
+            ? new Typist(this.processor, { input, isRunning: this.runningFunction })
+            : this.machineTypist;
         this.input.clearKeys();
     }
 

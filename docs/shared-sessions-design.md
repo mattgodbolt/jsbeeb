@@ -99,8 +99,8 @@ Ranked by how much they would bite.
    fires (`Keyboard._press`), as does BREAK, and the Mac caps lock "tap" is released by a `setTimeout`
    (`Keyboard.handleMacCapsLock`). Gamepad keys are polled at the start of each tick (`EmulationLoop.advance`
    into `src/web/gamepads.js:168`). All of it lands at whatever cycle the current tick happens to have reached.
-   In v0, keys, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which stamps
-   each with a cycle, and gamepad keys are not polled while a session runs.
+   In v0, keys, pastes, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which
+   stamps each with a cycle, and gamepad keys are not polled while a session runs.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
    OS converts continuously into RAM whether a program reads them or not. The system VIA reads gamepad fire
@@ -111,7 +111,8 @@ Ranked by how much they would bite.
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
    - the Master's CMOS RAM, which comes from each person's `localStorage` (persisted by `localStoragePersistence`);
-   - a paste in progress (the typist's queue) and the mouse buttons;
+   - a paste in progress (the typist's queue), which in a session is typed through it instead, and the mouse
+     buttons;
    - later, with the peripherals that need them: tape position (a known limitation in
      `docs/snapshot-format.md`), Music 5000 and Econet state.
 

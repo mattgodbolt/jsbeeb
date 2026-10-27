@@ -1,6 +1,7 @@
 import { BBC } from "./keymap.js";
 
 const RepeatedKeyGapMs = 30;
+const StoppedPollMs = 100;
 
 // The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
 // multiplier is, and the CPU stays on its fast path while the text arrives.
@@ -13,14 +14,20 @@ function schedulerTimer(processor, callback) {
     };
 }
 
-function wallClockTimer(callback) {
+// Keys typed while the machine is stopped would all go in at the cycle it starts again, so a stop holds the
+// typing, and after it the key down waits a full delay of the machine running before the next goes.
+function wallClockTimer(callback, isRunning) {
     let timeout = null;
-    return {
+    const fire = () => {
+        timeout = null;
+        callback();
+    };
+    const waitForMachine = (ms) => {
+        timeout = setTimeout(() => (isRunning() ? timer.start(ms) : waitForMachine(ms)), StoppedPollMs);
+    };
+    const timer = {
         start(ms) {
-            timeout = setTimeout(() => {
-                timeout = null;
-                callback();
-            }, ms);
+            timeout = setTimeout(() => (isRunning() ? fire() : waitForMachine(ms)), ms);
         },
         cancel() {
             clearTimeout(timeout);
@@ -28,6 +35,7 @@ function wallClockTimer(callback) {
         },
         running: () => timeout !== null,
     };
+    return timer;
 }
 
 /**
@@ -66,18 +74,20 @@ function keysThrough(input, keyInterface) {
 export class Typist {
     /**
      * @param {object} processor
-     * @param {object} [through] an input, as `Keyboard.setInput` takes, to press the keys through one by one as
-     *   someone typing would, timed by the wall clock; without one they go straight into the matrix, timed by the
-     *   processor's scheduler
+     * @param {{input: object, isRunning: function(): boolean}} [through] an input, as `Keyboard.setInput` takes, to
+     *   press the keys through one by one as someone typing would, timed by the wall clock while `isRunning` says
+     *   the machine runs; without one they go straight into the matrix, timed by the processor's scheduler
      */
     constructor(processor, through) {
         this.processor = processor;
-        this.keyInterface = through ? keysThrough(through, processor.keyboardInterface) : processor.keyboardInterface;
+        this.keyInterface = through
+            ? keysThrough(through.input, processor.keyboardInterface)
+            : processor.keyboardInterface;
         this._shiftKey = processor.model.keys.SHIFT;
         this._keys = [];
         this._lastKey = undefined;
         const deliver = () => this._deliver();
-        this._timer = through ? wallClockTimer(deliver) : schedulerTimer(processor, deliver);
+        this._timer = through ? wallClockTimer(deliver, through.isRunning) : schedulerTimer(processor, deliver);
     }
 
     /**
