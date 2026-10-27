@@ -40,9 +40,13 @@ describe("Cpu6502 ROM loading into a named bank", () => {
         return cpu.readmem(0x8000);
     };
 
-    it("loads it there, and the extra ROMs into the highest banks left", async () => {
-        const cpu = await load("B-DFS1.2", { bankRoms: [{ bank: 13, rom: "ample.rom" }], extraRoms: ["ats-3.0.rom"] });
-        expect([13, 12].map((bank) => romTitle(cpu, bank))).toEqual(["AMP", "ATS"]);
+    it("loads it after the fittings' ROMs, and the extra ROMs into the highest banks left", async () => {
+        const cpu = await load("B-DFS1.2", {
+            fittedRoms: ["ats-3.0.rom"],
+            bankRoms: [{ bank: 12, rom: "ample.rom" }],
+            extraRoms: ["ats-3.0.rom"],
+        });
+        expect([13, 12, 11].map((bank) => romTitle(cpu, bank))).toEqual(["ATS", "AMP", "ATS"]);
     });
 
     it("keeps a ROM in a sideways RAM bank writable, and one in a ROM bank not", async () => {
@@ -59,11 +63,12 @@ describe("Cpu6502 ROM loading into a named bank", () => {
     });
 
     it.each([
-        ["B-DFS1.2", 15, "fills with BASIC.ROM"],
-        ["Master", 12, "fills with the ROMs in roms/master/mos3.20"],
-    ])("refuses a bank the %s fills itself", async (modelName, bank, reason) => {
-        await expect(load(modelName, { bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(
-            `Can't load ample.rom into ROM bank ${bank}, which the ${findModel(modelName).name} ${reason}`,
+        ["B-DFS1.2", 15, {}, "BASIC.ROM"],
+        ["Master", 12, {}, "a ROM from roms/master/mos3.20"],
+        ["Master", 8, { fittedRoms: ["master/anfs-4.25.rom"] }, "master/anfs-4.25.rom"],
+    ])("refuses a bank the %s fills already, a fitting's ROM included", async (modelName, bank, spec, holder) => {
+        await expect(load(modelName, { ...spec, bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(
+            `Can't load ample.rom into ROM bank ${bank}, which already holds ${holder}`,
         );
     });
 

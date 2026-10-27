@@ -1350,8 +1350,9 @@ export class Cpu6502 extends Base6502 {
     }
 
     /**
-     * Loads the OS and the model's sideways ROMs into the highest banks, then each of the config's `bankRoms` into the
-     * bank it names, which must be one the model leaves free, and the config's extra ROMs into the highest banks left.
+     * Loads the OS, the model's sideways ROMs and then the fittings' into the highest free banks, then each of the
+     * config's `bankRoms` into the bank it names, which must be one those leave free, and the config's extra ROMs into
+     * the highest banks left.
      */
     async loadOs(os, ...modelRoms) {
         os = "roms/" + os;
@@ -1368,7 +1369,7 @@ export class Cpu6502 extends Base6502 {
             const srcBase = RomBankBytes * (i_1 + 1);
             const destBase = this.romOffset + (romIndex + i_1) * RomBankBytes;
             ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
-            filledBy.set(romIndex + i_1, `the ROMs in ${os}`);
+            filledBy.set(romIndex + i_1, `a ROM from ${os}`);
         }
         const awaiting = [];
         const loadInto = (bank, rom) => awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
@@ -1379,7 +1380,7 @@ export class Cpu6502 extends Base6502 {
             return romIndex;
         };
         const isRam = (bank) => this.model.swram[bank];
-        for (const rom of modelRoms) {
+        for (const rom of [...modelRoms, ...this.config.fittedRoms]) {
             const bank = nextFreeBank(isRam);
             filledBy.set(bank, rom);
             loadInto(bank, rom);
@@ -1387,9 +1388,7 @@ export class Cpu6502 extends Base6502 {
         const { bankRoms } = this.config;
         for (const { bank, rom } of bankRoms) {
             if (filledBy.has(bank))
-                throw new Error(
-                    `Can't load ${rom} into ROM bank ${bank}, which the ${this.model.name} fills with ${filledBy.get(bank)}`,
-                );
+                throw new Error(`Can't load ${rom} into ROM bank ${bank}, which already holds ${filledBy.get(bank)}`);
             loadInto(bank, rom);
         }
         const isRamOrNamed = (bank) => isRam(bank) || bankRoms.some((named) => named.bank === bank);
@@ -2019,7 +2018,9 @@ export class AtomCpu6502 extends Cpu6502 {
     // mapped at 0xC000, 0xD000, 0xE000 etc.
     async loadOs(os) {
         if (this.config.bankRoms.length) throw new Error("The Atom has no sideways ROM banks to load a ROM into");
-        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+        const extraRoms = Array.prototype.slice
+            .call(arguments, 1)
+            .concat(this.config.fittedRoms, this.config.extraRoms);
         const bankRoms = this.model.banks || [];
         os = "roms/" + os;
         console.log(`Loading Atom OS from ${os}`);

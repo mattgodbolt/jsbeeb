@@ -443,8 +443,9 @@ export const matchesHost = (host, own) => Object.keys(host).every((name) => same
 /**
  * Puts each parameter in `params` that a family applies into effect.
  * @param {object} params - The page's parsed parameters
- * @param {{machineKeys: object, hostKeyCodes: (name: string) => string[], userKeymap: object[], gamepad: object}}
- *     context - What the families need from the page: the emulated machine's keys (`BBC`, or `ATOM` for the Atom)
+ * @param {{machineKeys: object, hostKeyCodes: (name: string) => string[], userKeymap: object[], gamepad: object,
+ *     bankRoms: {bank: number, rom: string}[]}} context - What the families need from the page: the emulated machine's
+ *     keys (`BBC`, or `ATOM` for the Atom), and the list the ROMs named for a bank go in
  * @returns {string[]} what is wrong with each that could not be, for showing to the user
  */
 export function processInputParams(params, context) {

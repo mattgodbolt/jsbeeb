@@ -131,7 +131,7 @@ const familyWarnings = processInputParams(parsedQuery, {
 });
 if (familyWarnings.length) {
     toast(`${familyWarnings.join(" ")} The key names and ROM banks are listed in the README.`, {
-        title: "Mappings in the URL",
+        title: "Parameters in the URL",
     });
 }
 if (driveTrackWarnings.length) {

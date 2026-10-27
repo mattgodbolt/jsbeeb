@@ -30,10 +30,9 @@ export function buildEmulationConfig({
         tube: settings.coProcessor ? tubeModelFor(settings.model) : null,
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
-        // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
-        // before any the user asked for with ?rom=.
-        extraRoms: [...settings.extraRoms, ...extraRoms],
+        fittedRoms: settings.extraRoms,
         bankRoms,
+        extraRoms,
         userPort,
         printerPort: printer,
         getGamepads: function () {
