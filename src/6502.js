@@ -10,10 +10,14 @@ import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
-import { unzipRomImage } from "./archive.js";
 import { signExtend } from "./binary.js";
 import { hexbyte, hexword } from "./hex.js";
 import { loadData } from "./loader.js";
+import { MediaResolver } from "./media-resolver.js";
+
+async function romImage(name) {
+    return (await new MediaResolver().resolve("rom", name)).data;
+}
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
@@ -1342,19 +1346,15 @@ export class Cpu6502 extends Base6502 {
     }
 
     async loadRom(name, offset) {
-        if (name.indexOf("http") !== 0) name = "roms/" + name;
-        console.log("Loading ROM from " + name);
-        const ramRomOs = this.ramRomOs;
-        let data = await loadData(name);
-        if (/\.zip/i.test(name)) {
-            data = (await unzipRomImage(data)).data;
-        }
-        ramRomOs.set(data, offset);
+        console.log(`Loading ROM from ${name}`);
+        this.ramRomOs.set(await romImage(name), offset);
     }
 
     /**
-     * Loads the OS and then the model's sideways ROMs into the highest free banks, in order. An empty name leaves
-     * its socket empty, and the config's extra ROMs fill those sockets before any lower bank.
+     * Loads the OS and then the model's sideways ROMs into the highest free banks, in order, an empty name leaving its
+     * socket empty. The fittings' ROMs follow, into the empty sockets before any lower bank; then each of the config's
+     * `bankRoms` goes into the bank it names, which must be one those leave free, and the config's extra ROMs into the
+     * empty sockets and highest banks left.
      */
     async loadOs(os, ...modelRoms) {
         os = "roms/" + os;
@@ -1366,29 +1366,54 @@ export class Cpu6502 extends Base6502 {
         ramRomOs.set(data.subarray(0, RomBankBytes), this.osOffset);
         const numExtraBanks = (len - RomBankBytes) / RomBankBytes;
         let romIndex = NumRomBanks - numExtraBanks;
+        const filledBy = new Map();
         for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
             const srcBase = RomBankBytes * (i_1 + 1);
             const destBase = this.romOffset + (romIndex + i_1) * RomBankBytes;
             ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
+            filledBy.set(romIndex + i_1, `a ROM from ${os}`);
         }
-        const nextFreeBank = () => {
+        const awaiting = [];
+        const loadInto = (bank, rom) => awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
+        const { romSockets } = this.model;
+        const lowestBank = NumRomBanks - romSockets;
+        const nextFreeBank = (isTaken) => {
             romIndex--;
-            while (this.model.swram[romIndex]) romIndex--;
-            if (romIndex < NumRomBanks - this.model.romSockets)
-                throw new Error("Too many extra ROMs (no free sideways ROM banks)");
+            while (isTaken(romIndex)) romIndex--;
+            if (romIndex < lowestBank) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
             return romIndex;
         };
-        const awaiting = [];
-        const emptySockets = [];
+        const isRam = (bank) => this.model.swram[bank];
+        let emptySockets = [];
         for (const rom of modelRoms) {
-            const bank = nextFreeBank();
-            if (rom) awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
-            else emptySockets.push(bank);
+            const bank = nextFreeBank(isRam);
+            if (!rom) {
+                emptySockets.push(bank);
+                continue;
+            }
+            filledBy.set(bank, rom);
+            loadInto(bank, rom);
         }
-        for (const rom of this.config.extraRoms) {
-            const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank();
-            awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
+        for (const rom of this.config.fittedRoms) {
+            const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
+            filledBy.set(bank, rom);
+            loadInto(bank, rom);
         }
+        const { bankRoms } = this.config;
+        for (const { bank, rom } of bankRoms) {
+            if (bank < lowestBank)
+                throw new Error(
+                    `Can't load ${rom} into ROM bank ${bank}: the ${this.model.name} has ${romSockets} ROM sockets, banks ${lowestBank} to ${NumRomBanks - 1}`,
+                );
+            if (filledBy.has(bank))
+                throw new Error(`Can't load ${rom} into ROM bank ${bank}, which already holds ${filledBy.get(bank)}`);
+            loadInto(bank, rom);
+        }
+        const isNamed = (bank) => bankRoms.some((named) => named.bank === bank);
+        emptySockets = emptySockets.filter((bank) => !isNamed(bank));
+        const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
+        for (const rom of this.config.extraRoms)
+            loadInto(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
         return await Promise.all(awaiting);
     }
 
@@ -2014,7 +2039,10 @@ export class AtomCpu6502 extends Cpu6502 {
     // Extra ROMs (BASIC, FP, DOS) are 4KB blocks at romOffset+0..romOffset+0x5000
     // mapped at 0xC000, 0xD000, 0xE000 etc.
     async loadOs(os) {
-        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+        if (this.config.bankRoms.length) throw new Error("The Atom has no sideways ROM banks to load a ROM into");
+        const extraRoms = Array.prototype.slice
+            .call(arguments, 1)
+            .concat(this.config.fittedRoms, this.config.extraRoms);
         const bankRoms = this.model.banks || [];
         os = "roms/" + os;
         console.log(`Loading Atom OS from ${os}`);
@@ -2057,11 +2085,7 @@ export class AtomCpu6502 extends Cpu6502 {
 
     // Override loadRom to accept 4KB ROMs
     async loadRom(name, offset) {
-        if (name.indexOf("http") !== 0) name = "roms/" + name;
-        let data = await loadData(name);
-        if (/\.zip/i.test(name)) {
-            data = (await unzipRomImage(data)).data;
-        }
+        const data = await romImage(name);
         const len = data.length;
         if (len !== 16384 && len !== 8192 && len !== 4096) {
             throw new Error(`Broken ROM file ${name} (length=${len})`);
