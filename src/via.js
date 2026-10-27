@@ -413,6 +413,17 @@ class Via {
         return this._registerValue(addr);
     }
 
+    /** The timers as 16-bit values, read as {@link peek} would; T2L, which no register reads back, as last written. */
+    peekTimers() {
+        const word = (low, high) => (this.peek(high) << 8) | this.peek(low);
+        return {
+            t1c: word(T1CL, T1CH),
+            t1l: word(T1LL, T1LH),
+            t2c: word(T2CL, T2CH),
+            t2l: (this.t2l >>> 1) & 0xffff,
+        };
+    }
+
     _registerValue(addr) {
         switch (addr & 0xf) {
             case ORA:

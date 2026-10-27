@@ -368,13 +368,7 @@ export class Debugger {
             row.querySelector(".register").textContent = elem.toUpperCase();
             const value = row.querySelector(".value");
             if (elem.match(/t[12][cl]/)) {
-                updates.push(() => {
-                    const reg = via[elem];
-                    this.updateElem(
-                        value,
-                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff),
-                    );
-                });
+                updates.push(() => this.updateElem(value, hexword(via.peekTimers()[elem])));
             } else {
                 updates.push(() => {
                     this.updateElem(value, hexbyte(via[elem]));
