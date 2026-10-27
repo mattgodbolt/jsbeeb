@@ -113,6 +113,22 @@ describe("Cpu6502 ROM loading into a named bank", () => {
         );
     });
 
+    it.each([16, -1, 7.5])("refuses bank %s, which no ROMSEL value names", async (bank) => {
+        await expect(load("B-DFS1.2", { bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(
+            `Can't load ample.rom into ROM bank ${bank}`,
+        );
+    });
+
+    it("refuses a bank named twice", async () => {
+        const bankRoms = [
+            { bank: 7, rom: "ample.rom" },
+            { bank: 7, rom: "ats-3.0.rom" },
+        ];
+        await expect(load("B-DFS1.2", { bankRoms })).rejects.toThrow(
+            "Can't load ats-3.0.rom into ROM bank 7, which already holds ample.rom",
+        );
+    });
+
     it("refuses on the Atom, which has no sideways banks", async () => {
         await expect(load("Atom", { bankRoms: [{ bank: 7, rom: "ample.rom" }] })).rejects.toThrow(
             "The Atom has no sideways ROM banks",
