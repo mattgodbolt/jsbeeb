@@ -1292,6 +1292,7 @@ describe("MediaWindow", () => {
             ${"browser"} | ${"0"} | ${"blank"}     | ${"local:blank"}    | ${"disc1"} | ${undefined}
             ${"browser"} | ${"1"} | ${"mine.hfe"}  | ${"local:mine.ssd"} | ${"disc2"} | ${true}
             ${"gdrive"}  | ${"0"} | ${"fresh.ssd"} | ${"fresh.ssd"}      | ${"disc1"} | ${undefined}
+            ${"gdrive"}  | ${"0"} | ${"fresh.hfe"} | ${"fresh.hfe"}      | ${"disc1"} | ${undefined}
         `(
             "makes a blank disc in $where called $typed in drive $aimed, booting nothing",
             async ({ where, aimed, typed, asked, param, autoboot }) => {
@@ -1333,7 +1334,7 @@ describe("MediaWindow", () => {
             expect(panel().hidden).toBe(false);
         });
 
-        it("copies the disc in a drive to Google Drive from its Save menu", async () => {
+        it("copies the disc in a drive to Google Drive from its Save menu, as a sector image", async () => {
             deps.driveSource.connected = true;
             const copy = ssd("mine.ssd");
             deps.driveSource.createFrom.mockResolvedValue({ ref: "gd:xyz/mine.ssd", disc: copy });
@@ -1344,7 +1345,7 @@ describe("MediaWindow", () => {
             expect(byId("media-new-disc-where").hidden).toBe(true);
             expect(byId("media-new-disc-name").value).toBe("Exile.ssd");
             expect(text(byId("media-new-disc-label"))).toContain("drive 1");
-            submitDiscForm("mine.ssd");
+            submitDiscForm("mine.hfe");
             await vi.waitFor(() => expect(fdc.drives[1].disc === copy).toBe(true));
             const [name, data, layout] = deps.driveSource.createFrom.mock.calls[0];
             expect(name).toBe("mine.ssd");
