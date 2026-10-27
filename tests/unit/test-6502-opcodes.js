@@ -126,13 +126,25 @@ describe("Disassemble6502", () => {
     });
 
     it.each([
-        ["a BRK", cpu6502Opcodes, [0xad, 0x00, 0x60], "LDA $6000"],
-        ["a TSB", cpu65c12Opcodes, [0x0e, 0x04, 0x04], "ASL $0404"],
-    ])("does not count %s parsed out of an operand as a common instruction", (_, opcodes, bytes, listing) => {
-        const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
-        mem.set(bytes, 0x1ffd);
-        expect(dis.disassemble(0x1ffd, true)[0]).toBe(listing);
-        expect(dis.prevInstruction(0x2000, 0x0000)).toBe(0x1ffd);
+        ["a BRK", cpu6502Opcodes, 0x1ffd, [0xad, 0x00, 0x60], "LDA $6000", 0x1ffd],
+        ["a TSB", cpu65c12Opcodes, 0x1ffd, [0x0e, 0x04, 0x04], "ASL $0404", 0x1ffd],
+        ["a BBR0", cpu65c02Opcodes, 0x1ffc, [0xc0, 0x0f, 0xe0, 0x41], "CPY #$0f", 0x1ffe],
+    ])(
+        "does not count %s parsed out of an operand as a common instruction",
+        (_, opcodes, at, bytes, listing, expected) => {
+            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            mem.set(bytes, at);
+            expect(dis.disassemble(at, true)[0]).toBe(listing);
+            expect(dis.prevInstruction(0x2000, 0x0000)).toBe(expected);
+        },
+    );
+
+    it("counts BIT as a common instruction", () => {
+        // The CPY run starts first, so it would win the 1-1 tie were BIT not to score.
+        mem.fill(0x02, 0x1fc0, 0x1ff9);
+        mem.set([0xc0, 0x2c, 0x08, 0xa9, 0xad, 0x08, 0x28], 0x1ff9);
+        expect(disassembler.disassemble(0x1ffa, true)[0]).toBe("BIT $a908");
+        expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffd);
     });
 
     it("returns the previous instruction in an unambiguous run", () => {
