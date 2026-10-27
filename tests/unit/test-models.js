@@ -79,11 +79,37 @@ describe("Model", () => {
             return { before, after: cpu.readmem(0x8000) };
         };
 
-        it("is the default BBC B with no sideways RAM", () => {
+        it("is the default BBC B with no sideways RAM and only the motherboard's ROM sockets", () => {
             const stock = findModel("B-stock");
-            const allButNameAndRam = ({ name: _name, synonyms: _synonyms, swram: _swram, ...rest }) => rest;
-            expect(allButNameAndRam(stock)).toEqual(allButNameAndRam(DefaultModel));
+            const allButNameAndSideways = ({
+                name: _name,
+                synonyms: _synonyms,
+                os: _os,
+                swram: _swram,
+                romSockets: _romSockets,
+                ...rest
+            }) => rest;
+            expect(allButNameAndSideways(stock)).toEqual(allButNameAndSideways(DefaultModel));
             expect(stock.swram.some((isRam) => isRam)).toBe(false);
+        });
+
+        const bankPagedAtEachRomsel = (modelName) => {
+            const cpu = fake6502(findModel(modelName));
+            for (let bank = 0; bank < 16; ++bank) cpu.romBank(bank)[0] = bank;
+            return [...Array(16).keys()].map((romsel) => {
+                cpu.romSelect(romsel);
+                return cpu.readmem(0x8000);
+            });
+        };
+
+        it("pages its four sockets, banks 12 to 15, at every ROMSEL value", () => {
+            expect(bankPagedAtEachRomsel("B-stock")).toEqual([
+                12, 13, 14, 15, 12, 13, 14, 15, 12, 13, 14, 15, 12, 13, 14, 15,
+            ]);
+        });
+
+        it("leaves the BBC Bs with a sideways board sixteen separate banks", () => {
+            expect(bankPagedAtEachRomsel("B-DFS1.2")).toEqual([...Array(16).keys()]);
         });
 
         it("ignores a write to a bank the other BBC Bs fill with RAM", () => {

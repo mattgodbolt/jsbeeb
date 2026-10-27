@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TEST_6502 } from "../../src/models.js";
+import { findModel, TEST_6502 } from "../../src/models.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
 
 function makeCpu() {
@@ -20,5 +20,32 @@ describe("Cpu6502 extra ROM loading", () => {
         await expect(cpu.loadOs("os.rom", ...Array(NumFreeRomBanks + 1).fill("BASIC.ROM"))).rejects.toThrow(
             "Too many extra ROMs",
         );
+    });
+
+    describe("on the stock BBC B", () => {
+        const stock = findModel("B-stock");
+        const loadStock = async (extraRoms) => {
+            const cpu = new stock.Cpu(stock, { ...nullIo(), config: machineSpec({ extraRoms }) });
+            await cpu.loadOs(...stock.os);
+            return cpu;
+        };
+        const romTitle = (cpu, bank) => String.fromCharCode(...cpu.romBank(bank).subarray(9, 12));
+
+        it("puts BASIC in IC52 and the DFS in IC88, and extra ROMs in the two AUX sockets", async () => {
+            const cpu = await loadStock(["ample.rom", "ats-3.0.rom"]);
+            expect([12, 13, 14, 15].map((bank) => romTitle(cpu, bank))).toEqual(["BAS", "DFS", "ATS", "AMP"]);
+        });
+
+        it("keeps BASIC paged when a program writes the Master's ACCCON value to &FE34", async () => {
+            const cpu = await loadStock([]);
+            cpu.writemem(0xfe34, 0x18);
+            expect(String.fromCharCode(...[9, 10, 11, 12, 13].map((offset) => cpu.readmem(0x8000 + offset)))).toBe(
+                "BASIC",
+            );
+        });
+
+        it("throws rather than load a ROM no ROMSEL value reaches", async () => {
+            await expect(loadStock(["ample.rom", "ats-3.0.rom", "ample.rom"])).rejects.toThrow("Too many extra ROMs");
+        });
     });
 });
