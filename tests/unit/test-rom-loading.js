@@ -40,7 +40,7 @@ describe("Cpu6502 ROM loading into a named bank", () => {
         return cpu.readmem(0x8000);
     };
 
-    it("loads it after the fittings' ROMs, and the extra ROMs into the highest banks left", async () => {
+    it("loads it there, and the extra ROMs into the highest banks left after it and the fittings' ROMs", async () => {
         const cpu = await load("B-DFS1.2", {
             fittedRoms: ["ats-3.0.rom"],
             bankRoms: [{ bank: 12, rom: "ample.rom" }],

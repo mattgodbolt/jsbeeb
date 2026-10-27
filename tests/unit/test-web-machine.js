@@ -11,7 +11,7 @@ const settings = (overrides = {}) => ({
     hasMusic5000: false,
     hasTeletextAdaptor: false,
     hasEconet: false,
-    extraRoms: [],
+    fittedRoms: [],
     ...overrides,
 });
 
@@ -32,7 +32,7 @@ describe("buildEmulationConfig", () => {
     it("hands over the fittings' ROMs apart from the URL's, those for a named bank among them", () => {
         const bankRoms = [{ bank: 7, rom: "banked.rom" }];
         const built = build({
-            settings: settings({ extraRoms: ["fitted.rom"] }),
+            settings: settings({ fittedRoms: ["fitted.rom"] }),
             extraRoms: ["user.rom"],
             bankRoms,
         });

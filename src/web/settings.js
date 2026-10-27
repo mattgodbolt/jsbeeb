@@ -79,7 +79,7 @@ export class Settings extends EventTarget {
         return name === "model" ? (this.model.synonyms[0] ?? this.model.name) : this[name];
     }
 
-    get extraRoms() {
+    get fittedRoms() {
         return fittedRoms(this);
     }
 
