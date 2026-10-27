@@ -5,7 +5,7 @@ import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
-import { hexbyte } from "../../src/hex.js";
+import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
@@ -16,7 +16,7 @@ describe("Debugger", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        domFromIndexHtml("crtc_debug", "debug", "hardware_debug");
+        domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-open");
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });
@@ -41,6 +41,23 @@ describe("Debugger", () => {
         form.querySelector(".goto-addr").value = text;
         form.dispatchEvent(new Event("submit", { cancelable: true }));
     };
+
+    /** The byte's span, in a view whose rows start on a multiple of 8. */
+    const memByte = (address) =>
+        [...document.querySelectorAll("#memory > div")]
+            .find((row) => addrOf(row) === hexword(address & ~7))
+            .querySelectorAll(".mem_bytes span")[address & 7];
+    const watchBox = () => document.getElementById("watch-add");
+    const addWatch = (text) => {
+        watchBox().value = text;
+        document.getElementById("watch-add-form").dispatchEvent(new Event("submit", { cancelable: true }));
+    };
+    const watchRows = () =>
+        [...document.querySelectorAll("#watch-panel .watch-list tr")].map((row) =>
+            [...row.querySelectorAll("td")].map((td) => td.textContent),
+        );
+    const watchButton = (index, className) =>
+        document.querySelectorAll("#watch-panel .watch-list tr")[index].querySelector(`.${className}`);
 
     describe("the panels", () => {
         it("start hidden, show when the debugger is entered, and hide again on leaving", () => {
@@ -240,6 +257,98 @@ describe("Debugger", () => {
         });
     });
 
+    describe("the watch panel", () => {
+        let frames;
+        const runFrame = () => {
+            const pending = [...frames.values()];
+            frames.clear();
+            for (const callback of pending) callback();
+        };
+
+        beforeEach(() => {
+            frames = new Map();
+            let handle = 0;
+            vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+                frames.set(++handle, callback);
+                return handle;
+            });
+            vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+            cpu.writemem(0x70, 0x05);
+            cpu.writemem(0x71, 0x01);
+        });
+
+        afterEach(() => vi.restoreAllMocks());
+
+        const panelOpen = () => !document.getElementById("watch-panel").hidden;
+        const openFromMenu = () => document.getElementById("watch-open").click();
+
+        it("takes names and addresses only while the debugger is open", () => {
+            expect(watchBox().disabled).toBe(true);
+            dbgr.debug(cpu.pc);
+            expect(watchBox().disabled).toBe(false);
+            watchBox().focus();
+            addWatch("$70");
+            expect(document.activeElement).not.toBe(watchBox());
+            expect(watchBox().value).toBe("");
+            dbgr.hide();
+            expect(watchBox().disabled).toBe(true);
+            expect(watchRows()).toEqual([["$0070", "5", "dec", "\u00d7"]]);
+        });
+
+        it("reads its watches once a frame while open, and not at all while closed", () => {
+            dbgr.debug(cpu.pc);
+            addWatch("$70");
+            dbgr.hide();
+            openFromMenu();
+            expect(panelOpen()).toBe(true);
+            cpu.writemem(0x70, 0x06);
+            runFrame();
+            expect(watchRows()[0][1]).toBe("6");
+            openFromMenu();
+            expect(panelOpen()).toBe(false);
+            expect(frames.size).toBe(0);
+            const peek = vi.spyOn(cpu, "peekmem");
+            cpu.writemem(0x70, 0x07);
+            runFrame();
+            expect(peek).not.toHaveBeenCalled();
+            expect(watchRows()[0][1]).toBe("6");
+        });
+
+        it("steps a watch through its formats, reading as many bytes as each needs", () => {
+            dbgr.debug(cpu.pc);
+            addWatch("$70");
+            const shown = [];
+            for (let i = 0; i < 6; ++i) {
+                shown.push(watchRows()[0].slice(1, 3).join(" "));
+                watchButton(0, "watch-format").click();
+            }
+            expect(shown).toEqual(["5 dec", "$05 hex", "261 dec16", "$0105 hex16", "261 dec32", "$00000105 hex32"]);
+            expect(watchRows()[0][2]).toBe("dec");
+        });
+
+        it("stops watching on the remove button, saying so once the list is empty", () => {
+            const empty = () => document.querySelector("#watch-panel .watch-empty").hidden === false;
+            expect(empty()).toBe(true);
+            dbgr.debug(cpu.pc);
+            addWatch("$70");
+            addWatch("$71");
+            expect(empty()).toBe(false);
+            watchButton(0, "watch-remove").click();
+            expect(watchRows().map(([name]) => name)).toEqual(["$0071"]);
+            watchButton(0, "watch-remove").click();
+            expect(watchRows()).toEqual([]);
+            expect(empty()).toBe(true);
+        });
+
+        it("keeps focus where it was when one of its buttons is pressed", () => {
+            dbgr.debug(cpu.pc);
+            addWatch("$70");
+            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+            watchButton(0, "watch-format").dispatchEvent(press);
+            expect(press.defaultPrevented).toBe(true);
+        });
+    });
+
     describe("the hardware panels", () => {
         it("lists the VIA registers with their values", () => {
             const rows = [...document.querySelectorAll("#sysvia tr:not(.template)")];
@@ -305,7 +414,7 @@ describe("Debugger", () => {
             [0x6c, 0x0e, 0x02, 0x60, 0xd0, 0xfa].forEach((byte, i) => cpu.writemem(OswrchAt + i, byte));
             load = vi.fn(async (url) => structuredClone(files.get(url)));
             document.body.innerHTML = "";
-            domFromIndexHtml("crtc_debug", "debug", "hardware_debug");
+            domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-open");
             dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: BaseUrl, load }) });
             dbgr.setCpu(cpu);
         });
@@ -427,6 +536,49 @@ describe("Debugger", () => {
             keyPress("n");
             expect(code(0x2002).textContent).toBe("JMP start");
             expect(symbolsLine().textContent).toBe("names from Test MOS (source) · Other (source)");
+        });
+
+        it("marks a matching region's bytes in the memory view, with its name and any byte's own on hover", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            goTo("goto-mem-addr-form", "$3000");
+            const marks = (address) =>
+                ["region", "region-start"].filter((mark) => memByte(address).classList.contains(mark));
+            expect(marks(0x2fff)).toEqual([]);
+            expect(memByte(0x2fff).title).toBe("");
+            expect(marks(0x3000)).toEqual(["region", "region-start"]);
+            expect(memByte(0x3000).title).toBe("oswrch: $3000\nin rom, $3000-$30ff, from Test MOS");
+            expect(marks(0x3001)).toEqual(["region"]);
+            expect(memByte(0x3001).title).toBe("$3001\nin rom, $3000-$30ff, from Test MOS");
+            goTo("goto-mem-addr-form", "$f0");
+            expect(marks(0xf2)).toEqual([]);
+            expect(memByte(0xf2).title).toBe("os_text_ptr: $00f2");
+        });
+
+        it("credits a set whose names only the memory view shows", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            dbgr.updateDisassembly(0x8000);
+            expect(credited()).toBe(false);
+            goTo("goto-mem-addr-form", "$3000");
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            goTo("goto-mem-addr-form", "$1000");
+            expect(credited()).toBe(false);
+        });
+
+        it("watches a name, or an address by its name, and refuses a word that is neither", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            addWatch("oswrch");
+            addWatch("$3001");
+            addWatch("$f2");
+            addWatch("nobody");
+            expect(watchBox().classList.contains("is-invalid")).toBe(true);
+            expect(watchRows()).toEqual([
+                ["oswrch", "108", "dec", "\u00d7"],
+                ["$3001", "14", "dec", "\u00d7"],
+                ["os_text_ptr", "0", "dec", "\u00d7"],
+            ]);
         });
 
         it("leaves the credit as it is while the view moves among the same sets' names", async () => {

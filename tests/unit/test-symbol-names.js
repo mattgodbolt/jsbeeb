@@ -334,6 +334,27 @@ describe("symbol names", () => {
         });
     });
 
+    describe("the region an address is in", () => {
+        const regionOf = (names, address) => {
+            const found = names.regionAt(address);
+            return found && `${found.region.name} from ${found.set.title}`;
+        };
+
+        it("is the matching region holding it, from its first address to its last", () => {
+            const names = namesFrom(mos, loader, game);
+            expect(regionOf(names, 0x1100)).toBe("main from Game");
+            expect(regionOf(names, 0x19ff)).toBe("main from Game");
+            expect(regionOf(names, 0x1a00)).toBe("startup from Game");
+            expect(regionOf(names, 0xffff)).toBe("rom from MOS");
+            expect(regionOf(names, 0x70)).toBeUndefined();
+        });
+
+        it("is none where the region doesn't match", () => {
+            breakAnchor(0x1a00);
+            expect(regionOf(namesFrom(mos, game), 0x1a00)).toBeUndefined();
+        });
+    });
+
     describe("a name's address", () => {
         it("finds a global or a region's name in the sets that match", () => {
             const names = namesFrom(mos, loader, game);

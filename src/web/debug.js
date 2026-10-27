@@ -3,6 +3,7 @@ import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
+import { WatchPanel } from "./watch-panel.js";
 
 const noop = () => {};
 
@@ -57,10 +58,27 @@ function cloneTemplate(container) {
     return clone;
 }
 
+function memoryTitle(address, named, inRegion) {
+    const lines = [named ? `${named.name}: $${hexword(address)}` : `$${hexword(address)}`];
+    if (inRegion) {
+        const { region, set } = inRegion;
+        lines.push(`in ${region.name}, $${hexword(region.start)}-$${hexword(region.end - 1)}, from ${set.title}`);
+    }
+    return lines.join("\n");
+}
+
 class MemoryView {
-    constructor(widget, peekMem) {
+    /**
+     * @param {HTMLElement} widget
+     * @param {(address: number) => number} peekMem
+     * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
+     * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
+     */
+    constructor(widget, peekMem, naming, showing) {
         this._widget = widget;
         this._peekMem = peekMem;
+        this._naming = naming;
+        this._showing = showing;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
         this._rows = [];
@@ -83,6 +101,8 @@ class MemoryView {
         if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
         let addr = this._addr - 8 * Math.floor(this._rows.length / 2);
         if (addr < 0) addr = 0;
+        const { names, pc } = this._naming();
+        const shown = new Set();
         for (const row of this._rows) {
             row.querySelector(".dis_addr").innerHTML = labelHtml(addr);
             row.classList.toggle("highlight", addr === this._addr);
@@ -90,13 +110,23 @@ class MemoryView {
             const bytes = row.querySelectorAll(".mem_bytes span");
             const ascii = row.querySelectorAll(".mem_asc span");
             for (let i = 0; i < 8; ++i) {
+                const address = (addr + i) & 0xffff;
+                const inRegion = names.regionAt(address);
+                const named = names.address(address, pc);
+                if (inRegion) shown.add(inRegion.set);
+                if (named) shown.add(named.set);
                 bytes[i].textContent = dump.hex[i];
-                bytes[i].classList.toggle("changed", dump.changed[i]);
                 ascii[i].textContent = dump.asc[i];
-                ascii[i].classList.toggle("changed", dump.changed[i]);
+                for (const span of [bytes[i], ascii[i]]) {
+                    span.classList.toggle("changed", dump.changed[i]);
+                    span.classList.toggle("region", !!inRegion);
+                    span.classList.toggle("region-start", inRegion?.region.start === address);
+                    span.title = inRegion || named ? memoryTitle(address, named, inRegion) : "";
+                }
             }
             addr = (addr + 8) & 0xffff;
         }
+        this._showing(shown);
     }
 
     // TODO(#1062) extract memory part from view part and reuse in disassembler etc. also peekmem can go then
@@ -137,9 +167,17 @@ export class Debugger {
         this.patchInstructions = new Map();
         this._enabled = false;
         this.disass = document.getElementById("disassembly");
-        this._memoryView = new MemoryView(document.getElementById("memory"), (address) =>
-            this.cpu ? this.cpu.peekmem(address) : 0,
+        const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
+        this._memoryView = new MemoryView(
+            document.getElementById("memory"),
+            peek,
+            () => ({ names: this._names, pc: this.cpu.pc }),
+            (sets) => {
+                this._memorySets = sets;
+                this._credit();
+            },
         );
+        this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
         this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
         this.disassStack = [];
@@ -149,11 +187,14 @@ export class Debugger {
         this._names = NoNames;
         this._symbolsLine = document.getElementById("debug-symbols");
         this._credited = null;
+        this._disassemblySets = new Set();
+        this._memorySets = new Set();
         toggle(this._symbolsLine, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
             if (!this._enabled) return;
             this._matchSymbols();
             this.updateDisassembly(this.disassPc);
+            this._memoryView.update();
         });
 
         const setupGoto = (form, func) => {
@@ -392,8 +433,8 @@ export class Debugger {
         this._names = this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
     }
 
-    _credit(shown) {
-        const sets = this._names.sets.filter((set) => shown.has(set));
+    _credit() {
+        const sets = this._names.sets.filter((set) => this._disassemblySets.has(set) || this._memorySets.has(set));
         if (this._credited?.length === sets.length && sets.every((set, i) => set === this._credited[i])) return;
         this._credited = sets;
         this._symbolsLine.style.visibility = sets.length > 0 ? "" : "hidden";
@@ -415,9 +456,18 @@ export class Debugger {
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
         this._enabled = e;
+        this.watches.setAdding(e);
         const focused = document.activeElement;
         if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();
         for (const node of this.debugNodes) toggle(node, this._enabled);
+    }
+
+    _resolveWatch(text) {
+        const named = this._names.addressOf(text, this.cpu.pc);
+        const address = named ?? parseAddr(text);
+        if (address === undefined) return undefined;
+        const label = named === undefined ? this._names.address(address, this.cpu.pc)?.name : text;
+        return { address, label: label ?? `$${hexword(address)}` };
     }
 
     enabled() {
@@ -479,7 +529,8 @@ export class Debugger {
             address = this.prevInstruction(address);
             updateDisElem(elems[i], address);
         }
-        this._credit(shown);
+        this._disassemblySets = shown;
+        this._credit();
     }
 
     prevInstruction(address) {
