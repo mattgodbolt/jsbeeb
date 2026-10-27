@@ -251,7 +251,7 @@ export class Debugger {
             const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
             if (operand) {
                 const target = Number(operand.dataset.ref);
-                offerWatch(e, target, this._names.operand(at, target) ?? this._names.address(target, this.cpu.pc));
+                offerWatch(e, target, this._names.operand(at, target));
             } else if (e.target.closest(".dis_addr")) {
                 offerWatch(e, at, this._names.address(at, this.cpu.pc));
             }
@@ -486,6 +486,7 @@ export class Debugger {
             this.updatePrevMem();
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
+        if (!e) this.watches.dismiss();
         this._enabled = e;
         const focused = document.activeElement;
         if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();

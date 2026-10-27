@@ -394,6 +394,7 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$70");
             rightClick(memByte(0x70));
+            expect(watchMenu().hidden).toBe(false);
             document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
             expect(watchMenu().hidden).toBe(true);
             rightClick(memByte(0x71));
@@ -404,6 +405,35 @@ describe("Debugger", () => {
             expect(watchMenu().hidden).toBe(true);
             expect(pageSaw).toHaveBeenCalledOnce();
             expect(watchRows()).toEqual([]);
+        });
+
+        it("closes the menu on leaving the debugger", () => {
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$70");
+            rightClick(memByte(0x70));
+            dbgr.hide();
+            expect(watchMenu().hidden).toBe(true);
+        });
+
+        it("closes a watch's list of formats on Escape too", () => {
+            dbgr.debug(cpu.pc);
+            addWatch("$70");
+            watchControl(0, "watch-format").click();
+            document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            expect(watchChoices(0).hidden).toBe(true);
+        });
+
+        it("leaves the browser's own menu to a right-click on an instruction's mnemonic or bytes", () => {
+            dbgr.debug(cpu.pc);
+            for (const target of [
+                currentRow().querySelector(".disassembly"),
+                currentRow().querySelector(".instr_bytes"),
+            ]) {
+                const click = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+                target.dispatchEvent(click);
+                expect(click.defaultPrevented).toBe(false);
+            }
+            expect(watchMenu().hidden).toBe(true);
         });
 
         it("keeps the menu's buttons from focus, by mouse or by Tab", () => {
@@ -708,9 +738,29 @@ describe("Debugger", () => {
             pickFromMenu("Watch dec");
             rightClick(rowAt(0x2002).querySelector(".dis_addr"));
             pickFromMenu("Watch hex");
+            dbgr.updateDisassembly(OswrchAt);
+            rightClick(rowAt(OswrchAt).querySelector(".dis_addr"));
+            pickFromMenu("Watch dec16");
             expect(watchRows().map((row) => [row[0], row[2]])).toEqual([
                 ["oswrch", "dec"],
                 ["$2002", "hex"],
+                ["oswrch", "dec16"],
+            ]);
+            document.getElementById("watch-close").click();
+        });
+
+        it("watches a memory byte by its name, from the hex or the text column", async () => {
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            goTo("goto-mem-addr-form", "$3000");
+            rightClick(memByte(OswrchAt));
+            pickFromMenu("Watch hex");
+            const text = memByte(OswrchAt).closest("#memory > div").querySelectorAll(".mem_asc span")[0];
+            rightClick(text);
+            pickFromMenu("Watch dec");
+            expect(watchRows().map((row) => [row[0], row[2]])).toEqual([
+                ["oswrch", "hex"],
+                ["oswrch", "dec"],
             ]);
             document.getElementById("watch-close").click();
         });

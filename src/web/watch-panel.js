@@ -4,8 +4,8 @@ import { FloatingPanel } from "./floating-panel.js";
 
 /**
  * A floating list of addresses and their values, read once a frame while it is open and not at all
- * while it is closed. Watches are added by name or address, and the add box gives the keyboard back
- * to the machine on Escape or once a watch is added, or from a menu offered at an address (`offer`).
+ * while it is closed. Watches are added by name or address, or from a menu offered at an address
+ * (`offer`), and the add box gives the keyboard back to the machine on Escape or once a watch is added.
  */
 export class WatchPanel {
     /**
@@ -110,17 +110,21 @@ export class WatchPanel {
     }
 
     /**
-     * Offers a menu of formats to watch `address` in, at the window position `x`, `y`.
+     * Offers a menu of formats to watch `what` in, at the window position `x`, `y`.
      * @param {{address: number, label: string}} what
      * @param {number} x
      * @param {number} y
      */
     offer(what, x, y) {
         this._offered = what;
-        this._menu.title = what.label;
         this._showPopup({ opener: null, popup: this._menu });
         this._menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - this._menu.offsetWidth))}px`;
         this._menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - this._menu.offsetHeight))}px`;
+    }
+
+    /** Closes the menu and any open list of formats. */
+    dismiss() {
+        this._showPopup(null);
     }
 
     _add({ address, label }, initialFormat) {
