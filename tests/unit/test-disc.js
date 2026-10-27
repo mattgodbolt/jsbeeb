@@ -598,6 +598,26 @@ describe("sector decoding warnings", () => {
 
         expect(console).toHaveBeenCalled();
     });
+
+    it.each([
+        ["warns of an FM mark after only two sync bytes", 2, true],
+        ["takes three sync bytes before an FM mark as enough", 3, false],
+    ])("%s", (_, syncBytes, isShort) => {
+        const disc = Disc.createBlank();
+        disc.buildTrack(false, 0)
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+            .appendRepeatFmByte(0x00, syncBytes)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendRepeatFmByte(0, 4)
+            .appendCrc()
+            .fillFmByte(0xff);
+        const warnings = [];
+        const sectors = disc.getTrack(false, 0).findSectors((message) => warnings.push(message));
+
+        expect(sectors).toHaveLength(1);
+        expect(warnings.some((message) => message.startsWith("Short zeros sync"))).toBe(isShort);
+    });
 });
 
 describe("restoring a state's written tracks", () => {
