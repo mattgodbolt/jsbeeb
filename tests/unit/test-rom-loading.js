@@ -22,6 +22,47 @@ describe("Cpu6502 extra ROM loading", () => {
             "Too many extra ROMs",
         );
     });
+
+    describe("on the stock BBC B", () => {
+        const stock = findModel("B-stock");
+        const loadStock = async (extraRoms, spec) => {
+            const cpu = new stock.Cpu(stock, { ...nullIo(), config: machineSpec({ ...spec, extraRoms }) });
+            await cpu.loadOs(...stock.os);
+            return cpu;
+        };
+        const romTitle = (cpu, bank) => String.fromCharCode(...cpu.romBank(bank).subarray(9, 12));
+
+        it("puts BASIC in IC52 and the DFS in IC88, and extra ROMs in the two AUX sockets", async () => {
+            const cpu = await loadStock(["ample.rom", "ats-3.0.rom"]);
+            expect([12, 13, 14, 15].map((bank) => romTitle(cpu, bank))).toEqual(["BAS", "DFS", "ATS", "AMP"]);
+        });
+
+        it("keeps BASIC paged when a program writes the Master's ACCCON value to &FE34", async () => {
+            const cpu = await loadStock([]);
+            cpu.writemem(0xfe34, 0x18);
+            expect(String.fromCharCode(...[9, 10, 11, 12, 13].map((offset) => cpu.readmem(0x8000 + offset)))).toBe(
+                "BASIC",
+            );
+        });
+
+        it("throws rather than load a ROM no ROMSEL value reaches", async () => {
+            await expect(loadStock(["ample.rom", "ats-3.0.rom", "ample.rom"])).rejects.toThrow("Too many extra ROMs");
+        });
+
+        it("puts a named ROM in an AUX socket, a fitting's in the other and an extra ROM nowhere", async () => {
+            const spec = { fittedRoms: ["ats-3.0.rom"], bankRoms: [{ bank: 14, rom: "ample.rom" }] };
+            const cpu = await loadStock([], spec);
+            expect([14, 15].map((bank) => romTitle(cpu, bank))).toEqual(["AMP", "ATS"]);
+            await expect(loadStock(["ample.rom"], spec)).rejects.toThrow("Too many extra ROMs");
+        });
+
+        it.each([
+            [8, "has 4 ROM sockets, banks 12 to 15"],
+            [12, "which already holds BASIC.ROM"],
+        ])("refuses to name bank %i", async (bank, reason) => {
+            await expect(loadStock([], { bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(reason);
+        });
+    });
 });
 
 describe("Cpu6502 ROM loading into a named bank", () => {

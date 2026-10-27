@@ -786,9 +786,10 @@ export class Cpu6502 extends Base6502 {
     // 0b000 - 10000 -> LYNNE - 20KB
     romSelect(b) {
         this.romsel = b;
-        const bankOffset = ((b & 15) << 14) + this.romOffset;
-        const offset = bankOffset - 0x8000;
-        const swram = this.model.swram[b & 15] ? 1 : 2;
+        const { romSockets } = this.model;
+        const bank = NumRomBanks - romSockets + (b & (romSockets - 1));
+        const offset = bank * RomBankBytes + this.romOffset - 0x8000;
+        const swram = this.model.swram[bank] ? 1 : 2;
         this.mapBothHalves(0x80, 0xc0, swram, offset);
         if (this.model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
@@ -1350,9 +1351,10 @@ export class Cpu6502 extends Base6502 {
     }
 
     /**
-     * Loads the OS, the model's sideways ROMs and then the fittings' into the highest free banks, then each of the
-     * config's `bankRoms` into the bank it names, which must be one those leave free, and the config's extra ROMs into
-     * the highest banks left.
+     * Loads the OS and then the model's sideways ROMs into the highest free banks, in order, an empty name leaving its
+     * socket empty. The fittings' ROMs follow, into the empty sockets before any lower bank; then each of the config's
+     * `bankRoms` goes into the bank it names, which must be one those leave free, and the config's extra ROMs into the
+     * empty sockets and highest banks left.
      */
     async loadOs(os, ...modelRoms) {
         os = "roms/" + os;
@@ -1373,26 +1375,45 @@ export class Cpu6502 extends Base6502 {
         }
         const awaiting = [];
         const loadInto = (bank, rom) => awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
+        const { romSockets } = this.model;
+        const lowestBank = NumRomBanks - romSockets;
         const nextFreeBank = (isTaken) => {
             romIndex--;
             while (isTaken(romIndex)) romIndex--;
-            if (romIndex < 0) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
+            if (romIndex < lowestBank) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
             return romIndex;
         };
         const isRam = (bank) => this.model.swram[bank];
-        for (const rom of [...modelRoms, ...this.config.fittedRoms]) {
+        let emptySockets = [];
+        for (const rom of modelRoms) {
             const bank = nextFreeBank(isRam);
+            if (!rom) {
+                emptySockets.push(bank);
+                continue;
+            }
+            filledBy.set(bank, rom);
+            loadInto(bank, rom);
+        }
+        for (const rom of this.config.fittedRoms) {
+            const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
             filledBy.set(bank, rom);
             loadInto(bank, rom);
         }
         const { bankRoms } = this.config;
         for (const { bank, rom } of bankRoms) {
+            if (bank < lowestBank)
+                throw new Error(
+                    `Can't load ${rom} into ROM bank ${bank}: the ${this.model.name} has ${romSockets} ROM sockets, banks ${lowestBank} to ${NumRomBanks - 1}`,
+                );
             if (filledBy.has(bank))
                 throw new Error(`Can't load ${rom} into ROM bank ${bank}, which already holds ${filledBy.get(bank)}`);
             loadInto(bank, rom);
         }
-        const isRamOrNamed = (bank) => isRam(bank) || bankRoms.some((named) => named.bank === bank);
-        for (const rom of this.config.extraRoms) loadInto(nextFreeBank(isRamOrNamed), rom);
+        const isNamed = (bank) => bankRoms.some((named) => named.bank === bank);
+        emptySockets = emptySockets.filter((bank) => !isNamed(bank));
+        const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
+        for (const rom of this.config.extraRoms)
+            loadInto(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
         return await Promise.all(awaiting);
     }
 

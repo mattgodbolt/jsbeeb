@@ -402,7 +402,9 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   F), e.g. `model=Master&ROM.7=github:mattgodbolt/xmos/original.rom`. If the model has sideways RAM in that bank, the
   ROM goes into the RAM and can still be written. A bank that already holds a ROM, the model's own (BASIC, a filing
   system) or one a fitted peripheral needs (Music 5000, teletext, Econet), cannot be named; the boot stops with an
-  error saying what is there. The ROMs `rom` loads go in the banks left over.
+  error saying what is there. The ROMs `rom` loads go in the banks left over. The stock BBC B (`model=B-stock`) has
+  only four ROM sockets, banks 12 to 15, so it takes only those, and of them only the two AUX sockets, 14 and 15, that
+  BASIC and the DFS leave empty.
 - `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in
   `public/benchmarks/workloads.json`, on the model it names there (e.g. `benchmark=elite`, or
   `benchmark=master-shadow&model=Master`) instead of starting as usual. It runs the workload unthrottled from its

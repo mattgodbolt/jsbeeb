@@ -1,7 +1,7 @@
 import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 import * as opcodes from "./6502.opcodes.js";
-import { AtomCpu6502, Cpu6502 } from "./6502.js";
+import { AtomCpu6502, Cpu6502, NumRomBanks } from "./6502.js";
 import { BBC, stringToBBCKeys } from "./keymap.js";
 import { ATOM, stringToATOMKeys } from "./keymap-atom.js";
 
@@ -29,6 +29,7 @@ class Model {
         isMaster,
         isAtom,
         swram,
+        romSockets,
         fdc,
         cmosOverride,
         banks,
@@ -65,6 +66,9 @@ class Model {
         this.pasteReleaseGapMs = this.isAtom ? 40 : 0;
         this.Fdc = fdc;
         this.swram = swram;
+        // How many sockets ROMSEL decodes: they fill the top banks, and every bank number pages the socket its low
+        // bits pick. A Model B without a sideways board decodes two bits, for four.
+        this.romSockets = romSockets ?? NumRomBanks;
         this.isTest = false;
         this.cmosOverride = cmosOverride;
     }
@@ -126,6 +130,8 @@ function atomModel({ name, synonyms, os, banks }) {
     });
 }
 
+// A convenience layout for the expanded B models, not any real board's: all sixteen banks decoded, and RAM in 0-7
+// written through ROMSEL. Real boards: #1539.
 const beebSwram = [
     true,
     true,
@@ -214,11 +220,14 @@ export const allModels = [
         name: "BBC B (stock)",
         shortName: "BBC B",
         synonyms: ["B-stock"],
-        os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
+        // The unexpanded machine, fitted per the board's legends: IC101 and IC100 "AUX ROM" (15, 14),
+        // IC88 "DISC&NET ROM" (13), IC52 "BASIC ROM" (12).
+        os: ["os.rom", "", "", "b/DFS-1.2.rom", "BASIC.ROM"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
         clockMhz: 2,
         swram: noSwram,
+        romSockets: 4,
         fdc: NoiseAwareIntelFdc,
     }),
     new Model({
