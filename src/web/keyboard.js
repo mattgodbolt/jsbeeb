@@ -57,7 +57,8 @@ export class Keyboard extends EventTarget {
         this.resetInputMethodFunction = resetInputMethodFunction;
 
         this.keyInterface = processor.keyboardInterface;
-        this.typist = new Typist(processor);
+        this.machineTypist = new Typist(processor);
+        this.typist = this.machineTypist;
         this.input = this.directInput();
 
         // State
@@ -79,12 +80,17 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Routes key presses and BREAK through `input`, or straight to the machine again with
-     * null, which starts it with nothing held: a session's keys go with the session.
+     * Routes key presses, pastes and BREAK through `input`, or straight to the machine again with
+     * null, which starts it with nothing held: a session's keys go with the session. A paste is typed
+     * through `input.keyRaw(colRow, down)`.
      */
     setInput(input) {
+        this.cancelPaste();
         this.clearKeys();
         this.input = input ?? this.directInput();
+        this.typist = input
+            ? new Typist(this.processor, { input, isRunning: this.runningFunction })
+            : this.machineTypist;
         this.input.clearKeys();
     }
 

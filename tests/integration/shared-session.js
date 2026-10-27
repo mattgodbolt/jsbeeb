@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TestMachine } from "../../src/test-machine.js";
+import { Keyboard } from "../../src/web/keyboard.js";
 import { SessionGuest, SessionHost } from "../../src/web/shared-session.js";
 import { inProcessTransport } from "../helpers/session-link.js";
 import { StockTakenFromHost, fakePage, keyCodeFor, plainCodec } from "../helpers/session-fakes.js";
@@ -21,22 +22,29 @@ async function station(transport, { boot }) {
     const machine = new TestMachine(Model);
     await machine.initialise();
     if (boot) await machine.runUntilInput();
+    const keyboard = new Keyboard({
+        processor: machine.processor,
+        inputEnabledFunction: () => false,
+        runningFunction: () => true,
+    });
     const page = {
         lockstep: null,
-        input: null,
+        get input() {
+            return keyboard.input;
+        },
     };
     const context = {
         processor: machine.processor,
         model: machine.model,
         takenFromHost: StockTakenFromHost,
         loop: { setLockstep: (lockstep) => (page.lockstep = lockstep) },
-        keyboard: { isPasting: false, setInput: (input) => (page.input = input), cancelPaste() {} },
+        keyboard,
         version: "test",
         transport,
         codec: plainCodec,
         page: fakePage(),
     };
-    return { machine, context, page };
+    return { machine, context, page, keyboard };
 }
 
 async function sessionOf(guestCount) {
@@ -73,6 +81,13 @@ async function sessionOf(guestCount) {
         await frames(SettleFrames);
     }
 
+    // As the page's paste box does.
+    async function paste(who, text) {
+        who.keyboard.sendRawKeyboard(who.machine.model.stringToKeys(text), true);
+        while (who.keyboard.isPasting) await frames(1);
+        await frames(SettleFrames);
+    }
+
     /** Asks each machine still in the session to catch up with the others, then checks they are the same. */
     async function expectInStep(machines = present()) {
         await frames(1);
@@ -105,7 +120,7 @@ async function sessionOf(guestCount) {
             .map(({ session }) => session.name);
 
     await frames(SettleFrames);
-    return { host, guests, frames, type, expectInStep, expectNothingMended, inControl };
+    return { host, guests, frames, type, paste, expectInStep, expectNothingMended, inControl };
 }
 
 const screen = ({ machine }) => mode7Text(machine);
@@ -129,6 +144,22 @@ describe("a shared session in-process", () => {
             expect(screen(each)).toContain("42");
             expect(screen(each)).toContain("90");
         }
+        await expectInStep();
+        expectNothingMended();
+    });
+
+    it("brings what the host pastes to every guest as keys, leaving them in step", async () => {
+        const { host, guests, paste, expectInStep, expectNothingMended } = await sessionOf(2);
+        await paste(host, "PRINT 6*7\n");
+        for (const each of [host, ...guests]) expect(screen(each)).toContain(" 42");
+        await expectInStep();
+        expectNothingMended();
+    });
+
+    it("brings what a guest pastes to every machine", async () => {
+        const { host, guests, paste, expectInStep, expectNothingMended } = await sessionOf(2);
+        await paste(guests[0], 'PRINT "PASTED";99-9\n');
+        for (const each of [host, ...guests]) expect(screen(each)).toContain("PASTED90");
         await expectInStep();
         expectNothingMended();
     });

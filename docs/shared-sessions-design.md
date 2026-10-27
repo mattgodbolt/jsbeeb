@@ -51,7 +51,10 @@ matrix position: in the symbolic layout a key can force BBC SHIFT up or down whi
 so an event carries the position and the SHIFT it forces. With two people on one matrix, whose SHIFT wins needs
 a rule; the simplest is that each person's held keys are tracked separately and a forced SHIFT applies only
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
-change, and reset, disc changes and pastes would be events too; in v0 only keys and the host's BREAK are.
+change, and reset and disc changes would be events too; in v0 only keys and the host's BREAK are. A paste is
+typed as keys through `Keyboard.setInput`'s input, so it goes to whoever orders the inputs, from host or guest, as
+typing does; it is paced by the wall clock rather than the machine's scheduler, so its keys arrive between
+executes as key events do.
 
 **Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of a
 second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
@@ -97,8 +100,8 @@ Ranked by how much they would bite.
    fires (`Keyboard._press`), as does BREAK, and the Mac caps lock "tap" is released by a `setTimeout`
    (`Keyboard.handleMacCapsLock`). Gamepad keys are polled at the start of each tick (`EmulationLoop.advance`
    into `src/web/gamepads.js:168`). All of it lands at whatever cycle the current tick happens to have reached.
-   In v0, keys, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which stamps
-   each with a cycle, and gamepad keys are not polled while a session runs.
+   In v0, keys, pastes, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which
+   stamps each with a cycle, and gamepad keys are not polled while a session runs.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
    OS converts continuously into RAM whether a program reads them or not. The system VIA reads gamepad fire
@@ -109,7 +112,8 @@ Ranked by how much they would bite.
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
    - the Master's CMOS RAM, which comes from each person's `localStorage` (persisted by `localStoragePersistence`);
-   - a paste in progress (the typist's queue) and the mouse buttons;
+   - a paste in progress (the typist's queue), which in a session is typed through it instead, and the mouse
+     buttons;
    - later, with the peripherals that need them: tape position (a known limitation in
      `docs/snapshot-format.md`), Music 5000 and Econet state.
 
@@ -270,7 +274,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   can, and the keys after it keep their gaps from it, a gap over 40 ms shrinking to 40 ms until the lag is made
   up, so no key is lost and the lag does not last; a release held up that long still lengthens its hold, enough to
   start the OS's auto-repeat. The margin is a guess until session reports show the jitter.
-- Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
+- Anything that changes a machine without going through the session (the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
   guests are resynced from the host. A disc change or a poke at a device may not show until the program reads

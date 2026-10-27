@@ -144,8 +144,8 @@ const keysDown = (sysvia) =>
 
 /**
  * Keyboard input for a session: keys are mapped to the matrix here, with this
- * person's layout, and handed to `send` as session inputs. BREAK goes too only
- * if `allowBreak`.
+ * person's layout, or come as matrix positions from a paste, and are handed to
+ * `send` as session inputs. BREAK goes too only if `allowBreak`.
  */
 export function sessionInput(sysvia, send, { allowBreak }) {
     const keyInput = (mapping, down) => ({
@@ -164,6 +164,9 @@ export function sessionInput(sysvia, send, { allowBreak }) {
                 const mapping = sysvia.keyMapping(key, shiftDown);
                 if (mapping) send(keyInput(mapping, false));
             }
+        },
+        keyRaw(colRow, down) {
+            send(keyInput(colRow, down));
         },
         setReset(down) {
             if (allowBreak) send({ kind: "break", down });
@@ -1220,8 +1223,6 @@ export class SessionGuest {
         const { processor, loop } = this.context;
         const restored = snapshotFromJSON(await this.context.codec.decompress(snapshot.bytes));
         if (this.left) return;
-        // Before the restore, which would cancel the typist's task and leave the keyboard it disabled.
-        this.context.keyboard.cancelPaste();
         restoreSessionSnapshot(processor, restored);
         this.rtcBaseMs = restored.rtcBaseMs;
         ++this.snapshotsRestored;

@@ -1,4 +1,4 @@
-import { expect, describe, test, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
 import { BBC, keyCodes, userKeymap } from "../../src/keymap.js";
@@ -41,10 +41,19 @@ describe("Keyboard", () => {
         });
     });
 
+    test("cancels a paste into the machine when its input changes, giving the keyboard back", () => {
+        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
+        mockProcessor.scheduler.polltime(1);
+        keyboard.setInput({ keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() });
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.keyToggleRaw.mock.calls).toEqual([[BBC.A], [BBC.A]]);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+    });
+
     describe("in a shared session", () => {
         let input;
         beforeEach(() => {
-            input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
+            input = { keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
             running = true;
             keyboard.setInput(input);
             mockSysvia.clearKeys.mockClear();
@@ -67,6 +76,65 @@ describe("Keyboard", () => {
             keyboard.clearKeys();
             expect(input.keyUp).toHaveBeenCalledWith(keyCodes.A);
             expect(mockSysvia.clearKeys).not.toHaveBeenCalled();
+        });
+
+        describe("pasting", () => {
+            beforeEach(() => vi.useFakeTimers());
+            afterEach(() => vi.useRealTimers());
+
+            test("types through the session as the wall clock goes, leaving the machine's keys alone", () => {
+                const pasteKeyMs = mockProcessor.model.pasteKeyDelayMs;
+                keyboard.sendRawKeyboard([BBC.SHIFT, BBC.A, BBC.SHIFT], false);
+                vi.advanceTimersByTime(0);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.SHIFT, true]]);
+                vi.advanceTimersByTime(pasteKeyMs);
+                expect(input.keyRaw.mock.calls.at(-1)).toEqual([BBC.A, true]);
+                vi.advanceTimersByTime(3 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls.slice(2)).toEqual([
+                    [BBC.A, false],
+                    [BBC.SHIFT, false],
+                ]);
+                expect(keyboard.isPasting).toBe(false);
+                mockProcessor.scheduler.polltime(mockProcessor.peripheralCyclesPerSecond);
+                expect(mockSysvia.keyToggleRaw).not.toHaveBeenCalled();
+                expect(mockSysvia.disableKeyboard).not.toHaveBeenCalled();
+            });
+
+            test("holds its typing while the machine is stopped, then gives the key down a full delay", () => {
+                const pasteKeyMs = mockProcessor.model.pasteKeyDelayMs;
+                keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
+                vi.advanceTimersByTime(0);
+                running = false;
+                vi.advanceTimersByTime(10 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.A, true]]);
+                running = true;
+                vi.advanceTimersByTime(pasteKeyMs);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.A, true]]);
+                vi.advanceTimersByTime(2 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls.slice(1, 3)).toEqual([
+                    [BBC.A, false],
+                    [BBC.B, true],
+                ]);
+            });
+
+            test("pastes into the machine again once the session is over", () => {
+                keyboard.setInput(null);
+                keyboard.sendRawKeyboard([BBC.A], false);
+                mockProcessor.scheduler.polltime(1);
+                expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
+                expect(input.keyRaw).not.toHaveBeenCalled();
+            });
+
+            test("lets go through the session of what it held when the session ends", () => {
+                keyboard.sendRawKeyboard([BBC.SHIFT, BBC.A, BBC.B], false);
+                vi.advanceTimersByTime(mockProcessor.model.pasteKeyDelayMs);
+                keyboard.setInput(null);
+                expect(input.keyRaw.mock.calls.slice(2)).toEqual([
+                    [BBC.A, false],
+                    [BBC.SHIFT, false],
+                ]);
+                expect(keyboard.isPasting).toBe(false);
+            });
         });
 
         test("goes straight to the machine again once the session is over, with nothing held", () => {
