@@ -41,6 +41,15 @@ describe("Keyboard", () => {
         });
     });
 
+    test("cancels a paste into the machine when its input changes, giving the keyboard back", () => {
+        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
+        mockProcessor.scheduler.polltime(1);
+        keyboard.setInput({ keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() });
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.keyToggleRaw.mock.calls).toEqual([[BBC.A], [BBC.A]]);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+    });
+
     describe("in a shared session", () => {
         let input;
         beforeEach(() => {

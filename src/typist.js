@@ -14,8 +14,8 @@ function schedulerTimer(processor, callback) {
     };
 }
 
-// Keys typed while the machine is stopped would all go in at the cycle it starts again, so a stop holds the
-// typing, and after it the key down waits a full delay of the machine running before the next goes.
+// Keys typed while the machine is stopped would all go in at the cycle it starts again, so a delay that comes due
+// with the machine stopped starts again once it runs.
 function wallClockTimer(callback, isRunning) {
     let timeout = null;
     const fire = () => {
