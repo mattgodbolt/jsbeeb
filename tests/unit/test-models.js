@@ -84,6 +84,7 @@ describe("Model", () => {
             const allButNameAndSideways = ({
                 name: _name,
                 synonyms: _synonyms,
+                os: _os,
                 swram: _swram,
                 romSockets: _romSockets,
                 ...rest

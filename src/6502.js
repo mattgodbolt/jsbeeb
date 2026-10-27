@@ -1352,8 +1352,11 @@ export class Cpu6502 extends Base6502 {
         ramRomOs.set(data, offset);
     }
 
-    async loadOs(os) {
-        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+    /**
+     * Loads the OS and then the model's sideways ROMs into the highest free banks, in order. An empty name leaves
+     * its socket empty, and the config's extra ROMs fill those sockets before any lower bank.
+     */
+    async loadOs(os, ...modelRoms) {
         os = "roms/" + os;
         console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
@@ -1368,17 +1371,23 @@ export class Cpu6502 extends Base6502 {
             const destBase = this.romOffset + (romIndex + i_1) * RomBankBytes;
             ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
         }
-        const awaiting = [];
-        for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
-            // Skip over banks 4-7 (sideways RAM on a Master)
+        const nextFreeBank = () => {
             romIndex--;
-            while (this.model.swram[romIndex]) {
-                romIndex--;
-            }
+            while (this.model.swram[romIndex]) romIndex--;
             if (romIndex < NumRomBanks - this.model.romSockets)
                 throw new Error("Too many extra ROMs (no free sideways ROM banks)");
-
-            awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * RomBankBytes));
+            return romIndex;
+        };
+        const awaiting = [];
+        const emptySockets = [];
+        for (const rom of modelRoms) {
+            const bank = nextFreeBank();
+            if (rom) awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
+            else emptySockets.push(bank);
+        }
+        for (const rom of this.config.extraRoms) {
+            const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank();
+            awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
         }
         return await Promise.all(awaiting);
     }

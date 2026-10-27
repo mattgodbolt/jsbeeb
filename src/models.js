@@ -218,7 +218,8 @@ export const allModels = [
         name: "BBC B (stock)",
         shortName: "BBC B",
         synonyms: ["B-stock"],
-        os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
+        // The board's legends: IC101 and IC100 "AUX ROM" (15, 14), IC88 "DISC&NET ROM" (13), IC52 "BASIC ROM" (12).
+        os: ["os.rom", "", "", "b/DFS-1.2.rom", "BASIC.ROM"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
         clockMhz: 2,
