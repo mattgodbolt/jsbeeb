@@ -51,7 +51,9 @@ matrix position: in the symbolic layout a key can force BBC SHIFT up or down whi
 so an event carries the position and the SHIFT it forces. With two people on one matrix, whose SHIFT wins needs
 a rule; the simplest is that each person's held keys are tracked separately and a forced SHIFT applies only
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
-change, and reset, disc changes and pastes would be events too; in v0 only keys and the host's BREAK are.
+change, and reset and disc changes would be events too; in v0 only keys and the host's BREAK are. A paste is
+typed as keys (`Typist` through `Keyboard.setInput`'s input), paced by the wall clock rather than the machine's
+scheduler, so it goes to whoever orders the inputs, from host or guest, as typing does.
 
 **Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of a
 second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
@@ -270,7 +272,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   can, and the keys after it keep their gaps from it, a gap over 40 ms shrinking to 40 ms until the lag is made
   up, so no key is lost and the lag does not last; a release held up that long still lengthens its hold, enough to
   start the OS's auto-repeat. The margin is a guess until session reports show the jitter.
-- Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
+- Anything that changes a machine without going through the session (the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
   guests are resynced from the host. A disc change or a poke at a device may not show until the program reads

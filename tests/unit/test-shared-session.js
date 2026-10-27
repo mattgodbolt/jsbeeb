@@ -88,6 +88,12 @@ describe("sessionInput", () => {
             (input) => input.keyUp("a"),
             [up(A), up(A)],
         ],
+        [
+            "a pasted key as the place on the matrix it was given",
+            false,
+            (input) => input.keyRaw([0, 0], true),
+            [{ kind: "key", mapping: [0, 0], down: true }],
+        ],
         ["nothing for a key the layout does not have", false, (input) => input.keyDown("?", false), []],
         ["BREAK where it is allowed", true, (input) => input.setReset(true), [{ kind: "break", down: true }]],
         ["no BREAK where it is not", false, (input) => input.setReset(true), []],
@@ -1518,15 +1524,9 @@ describe("SessionGuest", () => {
         expect([counted, starved]).toEqual([catchingUp, undefined]);
     });
 
-    it("cancels its own paste or autoboot when it joins, and before every restore", async () => {
-        const { context, deliver } = await joining();
-        const { cancelPaste } = context.keyboard;
-        expect(cancelPaste).toHaveBeenCalledTimes(1);
-        await deliver(snapshotMessages(100));
-        expect(cancelPaste).toHaveBeenCalledTimes(2);
-        expect(cancelPaste.mock.invocationCallOrder[1]).toBeLessThan(
-            context.processor.restoreState.mock.invocationCallOrder[0],
-        );
+    it("cancels its own paste or autoboot when it joins", async () => {
+        const { context } = await joining();
+        expect(context.keyboard.cancelPaste).toHaveBeenCalledTimes(1);
     });
 
     it("goes back to running on its own if it cannot join", async () => {
