@@ -285,6 +285,7 @@ describe("Debugger", () => {
         it("takes an address while the machine runs, giving the keyboard back once it is added", () => {
             openFromMenu();
             watchBox().focus();
+            expect(document.activeElement).toBe(watchBox());
             addWatch("$70");
             expect(document.activeElement).not.toBe(watchBox());
             expect(watchBox().value).toBe("");

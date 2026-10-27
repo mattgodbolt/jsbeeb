@@ -168,6 +168,7 @@ export class Debugger {
         this._enabled = false;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
+        this._peek = peek;
         this._memoryView = new MemoryView(
             document.getElementById("memory"),
             peek,
@@ -466,15 +467,16 @@ export class Debugger {
     }
 
     _namesNow() {
-        return this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
+        return this._symbolSets?.names(this._peek) ?? NoNames;
     }
 
     _resolveWatch(text) {
         const names = this._namesNow();
-        const named = names.addressOf(text, this.cpu.pc);
+        const pc = this.cpu?.pc;
+        const named = names.addressOf(text, pc);
         const address = named ?? parseAddr(text);
         if (address === undefined) return undefined;
-        const label = named === undefined ? names.address(address, this.cpu.pc)?.name : text;
+        const label = named === undefined ? names.address(address, pc)?.name : text;
         return { address, label: label ?? `$${hexword(address)}` };
     }
 

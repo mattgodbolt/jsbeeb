@@ -38,7 +38,7 @@ export class WatchPanel {
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
         });
-        // A focused button would keep the debugger's keys from reaching it.
+        // A focused button would keep keys from the machine and the debugger.
         this.panel.addEventListener("mousedown", (e) => {
             if (e.target.closest("button")) e.preventDefault();
         });
