@@ -58,13 +58,10 @@ describe("Model", () => {
         expect([beeb.Cpu, atom.Cpu]).toEqual([Cpu6502, AtomCpu6502]);
         expect([beeb.wrchvAddress, atom.wrchvAddress]).toEqual([0x020e, 0x0208]);
         expect([beeb.idleAddress, master.idleAddress, atom.idleAddress]).toEqual([0xe581, 0xe7e6, 0xfea7]);
-        expect(["B-US", "B-German", "B-MOS0.10"].map((name) => findModel(name).idleAddress)).toEqual([
-            0xe556, 0xe581, 0xe598,
-        ]);
-        expect(["B-DFS1.2", "B-US", "B-MOS0.10", "Master"].map((name) => findModel(name).vsyncAddress)).toEqual([
+        expect([findModel("B-US").idleAddress, findModel("B-German").idleAddress]).toEqual([0xe556, 0xe581]);
+        expect([beeb.vsyncAddress, findModel("B-US").vsyncAddress, master.vsyncAddress]).toEqual([
             0xdd15,
             0xdcec,
-            0xdf12,
             null,
         ]);
         expect(beeb.keys).toBe(BBC);

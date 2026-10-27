@@ -159,6 +159,18 @@ describe("Via snapshotState / restoreState", () => {
             expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
         });
 
+        it("raises the keyboard interrupt again when a port A write clears it while a key is held", () => {
+            const via = makeSystemVia();
+            via.write(DDRB, 0x0f);
+            via.write(ORB, LatchSetBit3);
+            via.write(PCR, 0x04);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            expect(via.read(IFR) & Ca2Int).toBe(0);
+            via.write(ORA, 0);
+            expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
+        });
+
         it("leaves the held keys alone when restoring a snapshot", () => {
             const via = makeSystemVia();
             const snapshot = via.snapshotState();
