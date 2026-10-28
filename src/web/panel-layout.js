@@ -214,6 +214,8 @@ function wantedRect(place, size, area, placed) {
 
 const placeFor = (layout, panel) => placeOf(layout, panel.id) ?? { ...panel.place, w: null, h: null };
 const sizeFor = (place, panel, area) => ({ w: sizeOn(place, "x", area, panel), h: sizeOn(place, "y", area, panel) });
+/** What `panel` must keep clear of: `placed`, and `avoid` too while it is in its default place. */
+const obstaclesFor = (layout, panel, placed, avoid) => (placeOf(layout, panel.id) ? placed : { ...avoid, ...placed });
 
 /**
  * Where every open panel goes in `area`. Panels go in the layout's order, each after any it is
@@ -223,10 +225,12 @@ const sizeFor = (place, panel, area) => ({ w: sizeOn(place, "x", area, panel), h
  * @param {{id: string, natural: {w: number, h: number}, min: {w: number, h: number}, header: number, place: object}[]} panels
  * the open panels: their content's size, their smallest usable size, their header's height, and
  * the place they take until the user arranges them
+ * @param {Object<string, object>} avoid rects, with their header's height set to their whole height, that
+ * panels keep clear of while in their default places
  * @returns {Object<string, {x: number, y: number, w: number, h: number, overlapping: boolean}>} in the
  * order they were placed, which is the order to stack the overlapping ones in
  */
-export function resolve(layout, area, panels) {
+export function resolve(layout, area, panels, avoid) {
     const places = Object.fromEntries(panels.map((panel) => [panel.id, placeFor(layout, panel)]));
     const sizes = Object.fromEntries(panels.map((panel) => [panel.id, sizeFor(places[panel.id], panel, area)]));
     fitChains(panels, places, sizes, area);
@@ -246,7 +250,7 @@ export function resolve(layout, area, panels) {
         // A cycle of attachments is broken at its highest ranked panel.
         const [panel] = pending.splice(Math.max(0, pending.findIndex(isReady)), 1);
         const want = wantedRect(places[panel.id], sizes[panel.id], area, placed);
-        const rect = findRoom(want, panel, placed, area);
+        const rect = findRoom(want, panel, obstaclesFor(layout, panel, placed, avoid), area);
         placed[panel.id] = { ...rectOf(rect), header: panel.header };
         result[panel.id] = rect;
     }
@@ -255,11 +259,12 @@ export function resolve(layout, area, panels) {
 
 /**
  * Where a panel being opened goes, leaving the open panels `others` ({id: rect with its header's
- * height}) where they are.
+ * height}) where they are, and keeping clear of `avoid` as `resolve` does.
  */
-export function placeOpened(layout, area, panel, others) {
+export function placeOpened(layout, area, panel, others, avoid) {
     const place = placeFor(layout, panel);
-    return findRoom(wantedRect(place, sizeFor(place, panel, area), area, others), panel, others, area);
+    const want = wantedRect(place, sizeFor(place, panel, area), area, others);
+    return findRoom(want, panel, obstaclesFor(layout, panel, others, avoid), area);
 }
 
 /**

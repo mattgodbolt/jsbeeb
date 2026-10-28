@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingPanel, navbarHeightOf, PanelArrangement } from "../../src/web/floating-panel.js";
-import { EndEdge, overlaps, StartEdge } from "../../src/web/panel-layout.js";
+import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
 import { sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
@@ -154,6 +154,26 @@ describe("FloatingPanel", () => {
                 x: window.innerWidth - Natural.w,
                 y: window.innerHeight - Natural.h,
             });
+        });
+
+        it("opens above the lights by default, but goes over them where the user puts it", () => {
+            const LightsHeight = 60;
+            document.body.insertAdjacentHTML("beforeend", `<div id="leds"></div>`);
+            const lights = document.getElementById("leds");
+            lights.getClientRects = () => [{}];
+            lights.getBoundingClientRect = () => ({
+                left: 0,
+                top: window.innerHeight - LightsHeight,
+                width: 400,
+                height: LightsHeight,
+            });
+            const floating = make("session", { x: StartEdge, y: EndEdge }, false);
+            floating.open();
+            expect(rectOf(floating)).toMatchObject({ x: 0, y: window.innerHeight - LightsHeight - Gap - Natural.h });
+            const start = rectOf(floating);
+            drag(header(floating), { x: start.x, y: start.y }, { x: start.x, y: window.innerHeight });
+            window.dispatchEvent(new Event("resize"));
+            expect(rectOf(floating)).toMatchObject({ x: 0, y: window.innerHeight - Natural.h });
         });
 
         it("never moves a panel already open", () => {

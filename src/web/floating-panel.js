@@ -155,7 +155,13 @@ export class PanelArrangement {
         }
         const area = this.workArea();
         const spec = floating.measure();
-        this._apply(floating, placeOpened(layout, area, spec, this._others(floating)), spec, layout, area);
+        this._apply(
+            floating,
+            placeOpened(layout, area, spec, this._others(floating), this._defaultsAvoid()),
+            spec,
+            layout,
+            area,
+        );
     }
 
     onClose(floating) {
@@ -170,13 +176,20 @@ export class PanelArrangement {
         const specs = movable.map((floating) => floating.measure());
         const layout = this._read();
         const area = this.workArea();
-        const rects = resolve(layout, area, specs);
+        const rects = resolve(layout, area, specs, this._defaultsAvoid());
         for (const [id, rect] of Object.entries(rects)) {
             const index = movable.findIndex((floating) => floating.id === id);
             this._apply(movable[index], rect, specs[index], layout, area);
             movable[index].restoreScroll();
             if (rect.overlapping) this.raise(movable[index]);
         }
+    }
+
+    /** Panels may be put over the lights, but do not open over them by default. */
+    _defaultsAvoid() {
+        const lights = document.getElementById("leds");
+        if (!lights || lights.getClientRects().length === 0) return {};
+        return { lights: { ...boundsOf(lights), header: lights.getBoundingClientRect().height } };
     }
 
     _others(except) {

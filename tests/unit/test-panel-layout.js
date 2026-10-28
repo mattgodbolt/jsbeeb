@@ -40,7 +40,7 @@ const Panels = {
 };
 
 const specs = (ids) => ids.map((id) => ({ id, header: HeaderHeight, ...Panels[id] }));
-const layOut = (layout, area, ids) => resolve(layout, area, specs(ids));
+const layOut = (layout, area, ids) => resolve(layout, area, specs(ids), {});
 const rectsOnly = (rects) =>
     Object.fromEntries(Object.entries(rects).map(([id, { x, y, w, h }]) => [id, { x, y, w, h }]));
 
@@ -78,6 +78,17 @@ describe("panel layout", () => {
             expect(rects.session.y + rects.session.h).toBe(small.bottom);
             expectApart(rects);
             expectInside(rects, small);
+        });
+
+        it("keep clear of what they are asked to avoid, which a panel the user places may cover", () => {
+            const lights = { x: 0, y: small.bottom - 60, w: 420, h: 60 };
+            const avoid = { lights: { ...lights, header: lights.h } };
+            const opened = resolve(emptyLayout(), small, specs(["session"]), avoid).session;
+            expect(opened.y + opened.h + Gap).toBe(lights.y);
+            expect(placeOpened(emptyLayout(), small, specs(["session"])[0], {}, avoid)).toEqual(opened);
+            const over = { x: 0, y: small.bottom - 220, w: 460, h: 220 };
+            const layout = drop(emptyLayout(), small, ["session"], "session", over, unsized);
+            expect(rectsOnly(resolve(layout, small, specs(["session"]), avoid)).session).toEqual(over);
         });
 
         it("save nothing, so a panel opened after the window grows takes its default for the new size", () => {
@@ -315,9 +326,9 @@ describe("panel layout", () => {
             // Memory's default is the same corner as the watches', and it comes first among the panels.
             layout = opened(layout, "memory");
             const others = { watches: { ...watches, header: HeaderHeight } };
-            const memory = placeOpened(layout, area, specs(["memory"])[0], others);
+            const memory = placeOpened(layout, area, specs(["memory"])[0], others, {});
             expect(overlaps(memory, watches)).toBe(false);
-            const rects = resolve(layout, area, specs(["memory", "watches"]));
+            const rects = resolve(layout, area, specs(["memory", "watches"]), {});
             expect(rectsOnly(rects).watches).toEqual(rectsOnly({ watches }).watches);
             expect(rectsOnly(rects).memory).toEqual(rectsOnly({ memory }).memory);
         });
