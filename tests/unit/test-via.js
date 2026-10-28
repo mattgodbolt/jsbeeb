@@ -32,7 +32,7 @@ const Ca1Int = 0x02;
 const Cb1Int = 0x10;
 const UserViaIrq = 0x02;
 const TicksPerMicrosecond = 2;
-const KeyScanPassTicks = 16 * TicksPerMicrosecond;
+const ScanPassTicks = 16 * TicksPerMicrosecond;
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -189,18 +189,56 @@ describe("Via snapshotState / restoreState", () => {
             expect(ca2Flag(via)).toBe(Ca2Int);
         });
 
+        function expectFlagAfter(via, ticks) {
+            scheduler.polltime(ticks - 1);
+            expect(ca2Flag(via)).toBe(0);
+            scheduler.polltime(1);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        }
+
+        // The counter is on column epoch / 2 (mod 16); A is in column 1 and P in column 7.
         it.each([
             ["an IFR write", (via) => via.write(IFR, Ca2Int)],
             ["a port A write", (via) => via.write(ORA, 0)],
             ["a port A read", (via) => via.read(ORA)],
-        ])("raises the keyboard interrupt again one scan pass after %s clears it", (_, clear) => {
-            const via = makeScanningVia(PcrCa2FallingEdge);
+        ])("raises the keyboard interrupt again at the scan's next edge after %s clears it", (_, clear) => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
             via.keyDownRaw(BBC.A);
             clear(via);
-            scheduler.polltime(KeyScanPassTicks - 1);
-            expect(ca2Flag(via)).toBe(0);
-            scheduler.polltime(1);
-            expect(ca2Flag(via)).toBe(Ca2Int);
+            expectFlagAfter(via, 2);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, "reaches column 1", 0, 2],
+            ["rising", PcrCa2RisingEdge, "comes back round to column 1", 10, 24],
+            ["rising", PcrCa2RisingEdge, "comes back round to column 1 from mid-column", 11, 23],
+            ["falling", PcrCa2FallingEdge, "leaves column 1", 2, 2],
+            ["falling", PcrCa2FallingEdge, "comes back round and leaves column 1", 10, 26],
+        ])("with CA2 on the %s edge, sets the flag when the counter %s", (_, pcr, __, startTicks, ticks) => {
+            scheduler.polltime(startTicks);
+            const via = makeScanningVia(pcr);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            expectFlagAfter(via, ticks);
+        });
+
+        it("brings the scan's return forward when a key ahead of the counter goes down", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            via.keyDownRaw(BBC.P);
+            expectFlagAfter(via, 4);
+        });
+
+        it("puts the scan's return back when the key ahead of the counter goes up", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.keyDownRaw(BBC.P);
+            via.write(IFR, Ca2Int);
+            via.keyUpRaw(BBC.P);
+            expectFlagAfter(via, 24);
         });
 
         it.each([
@@ -213,7 +251,7 @@ describe("Via snapshotState / restoreState", () => {
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
             stop(via);
-            scheduler.polltime(KeyScanPassTicks);
+            scheduler.polltime(ScanPassTicks);
             expect(ca2Flag(via)).toBe(0);
             expect(levels).toEqual([]);
         });
@@ -224,7 +262,7 @@ describe("Via snapshotState / restoreState", () => {
             via.ca2changecallback = (level) => levels.push(level);
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
-            scheduler.polltime(KeyScanPassTicks);
+            scheduler.polltime(ScanPassTicks);
             expect(ca2Flag(via)).toBe(Ca2Int);
             expect(levels).toEqual([]);
         });
@@ -242,9 +280,9 @@ describe("Via snapshotState / restoreState", () => {
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
             const { keyScanTaskOffset, ...olderSnapshot } = via.snapshotState();
-            expect(keyScanTaskOffset).toBe(KeyScanPassTicks);
+            expect(keyScanTaskOffset).toBe(2);
             via.restoreState(olderSnapshot);
-            scheduler.polltime(KeyScanPassTicks);
+            scheduler.polltime(ScanPassTicks);
             expect(ca2Flag(via)).toBe(0);
         });
 
@@ -257,7 +295,7 @@ describe("Via snapshotState / restoreState", () => {
             via2.restoreKeyboard(via.keyboardState());
             via2.restoreState(snapshot);
             expect(ca2Flag(via2)).toBe(0);
-            scheduler.polltime(KeyScanPassTicks);
+            scheduler.polltime(ScanPassTicks);
             expect(ca2Flag(via2)).toBe(Ca2Int);
         });
 
