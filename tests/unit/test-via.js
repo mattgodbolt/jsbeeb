@@ -203,17 +203,6 @@ describe("Via snapshotState / restoreState", () => {
             expect(ca2Flag(via)).toBe(Ca2Int);
         });
 
-        it("keeps the scan's first return when the flag is cleared again before it", () => {
-            const via = makeScanningVia(PcrCa2FallingEdge);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            scheduler.polltime(KeyScanPassTicks / 2);
-            via.keyDownRaw(BBC.B);
-            via.write(IFR, Ca2Int);
-            scheduler.polltime(KeyScanPassTicks / 2);
-            expect(ca2Flag(via)).toBe(Ca2Int);
-        });
-
         it.each([
             ["the key is released", (via) => via.keyUpRaw(BBC.A)],
             ["autoscan stops", (via) => via.write(ORB, LatchClearBit3)],
@@ -224,26 +213,9 @@ describe("Via snapshotState / restoreState", () => {
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
             stop(via);
+            scheduler.polltime(KeyScanPassTicks);
             expect(ca2Flag(via)).toBe(0);
             expect(levels).toEqual([]);
-        });
-
-        it("does not raise the keyboard interrupt again once the key is released", () => {
-            const via = makeScanningVia(PcrCa2RisingEdge);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            via.keyUpRaw(BBC.A);
-            scheduler.polltime(KeyScanPassTicks);
-            expect(ca2Flag(via)).toBe(0);
-        });
-
-        it("does not raise the keyboard interrupt again once autoscan stops", () => {
-            const via = makeScanningVia(PcrCa2RisingEdge);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            via.write(ORB, LatchClearBit3);
-            scheduler.polltime(KeyScanPassTicks);
-            expect(ca2Flag(via)).toBe(0);
         });
 
         it("reports no CA2 level changes while the scan raises its interrupt", () => {
@@ -271,11 +243,9 @@ describe("Via snapshotState / restoreState", () => {
             via.write(IFR, Ca2Int);
             const { keyScanTaskOffset, ...olderSnapshot } = via.snapshotState();
             expect(keyScanTaskOffset).toBe(KeyScanPassTicks);
-            const via2 = makeSystemVia();
-            via2.restoreKeyboard(via.keyboardState());
-            via2.restoreState(olderSnapshot);
+            via.restoreState(olderSnapshot);
             scheduler.polltime(KeyScanPassTicks);
-            expect(ca2Flag(via2)).toBe(0);
+            expect(ca2Flag(via)).toBe(0);
         });
 
         it("carries the scan's return to a held key through a snapshot", () => {

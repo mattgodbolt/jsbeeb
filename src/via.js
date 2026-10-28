@@ -888,7 +888,7 @@ export class SysVia extends Via {
 
     _scanAfterCa2Cleared(ca2WasFlagged) {
         if (ca2WasFlagged && !(this.ifr & INT_CA2) && this.IC32 & 8 && this.ca2) {
-            if (!this.keyScanTask.scheduled()) this.keyScanTask.schedule(KeyScanPassTicks);
+            this.keyScanTask.ensureScheduled(true, KeyScanPassTicks);
         }
     }
 
