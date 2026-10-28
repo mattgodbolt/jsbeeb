@@ -7,6 +7,7 @@
 // Reference: stardot/beebem-windows Src/UefState.cpp
 
 import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
+import { BaseRamBytes, packSidewaysRam, RomBankBytes } from "./6502.js";
 
 // Chunk IDs used in BeebEm UEF save states
 const ChunkId = {
@@ -314,9 +315,8 @@ export function parseUefSnapshot(buffer) {
     }
 
     // ── RAM ─────────────────────────────────────────────────────────────
-    // jsbeeb snapshot.state.ram is 128 KB (ramRomOs up to romOffset).
     // Main RAM (chunk 0x0462): 32 KB at offset 0.
-    const ram = new Uint8Array(128 * 1024);
+    const ram = new Uint8Array(BaseRamBytes);
     if (chunks.has(ChunkId.MainRam)) {
         const mainRam = chunks.get(ChunkId.MainRam)[0];
         // Defensive: chunk is defined as exactly 32 KB; clamp in case of a malformed file
@@ -326,7 +326,7 @@ export function parseUefSnapshot(buffer) {
     // ── Shadow RAM (chunk 0x0463, Master/B+) ─────────────────────────────
     // BeebEm saves 32 KB (full shadow bank). jsbeeb's LYNNE region is 20 KB
     // at ram[0xB000-0xFFFF], covering addresses 0x3000-0x7FFF when ACCCON X bit is set.
-    // See 6502.js writeAcccon: memLook[i] = bitX ? 0x8000 : 0 for pages 0x30-0x7F.
+    // See 6502.js writeAcccon: bit X maps pages 0x30-0x7F at offset 0x8000.
     if (chunks.has(ChunkId.ShadowRam)) {
         const shadowData = chunks.get(ChunkId.ShadowRam)[0];
         if (shadowData.length >= 0x8000) {
@@ -347,20 +347,10 @@ export function parseUefSnapshot(buffer) {
 
     // ── Sideways RAM (chunk 0x0466) ─────────────────────────────────────
     // Each chunk: uint8 bank_number + 16384 bytes of data.
-    // BeebEm only saves sideways RAM banks, not the actual ROMs (BASIC, DFS, OS).
-    // We must NOT pass a roms array to restoreState because that would overwrite
-    // all 16 ROM banks (including the ROMs jsbeeb has already loaded) with zeros.
-    // Instead, we record which banks have sideways RAM data so restoreState can
-    // selectively overwrite only those banks.
-    let swRamBanks = null;
-    if (chunks.has(ChunkId.SwRam)) {
-        swRamBanks = {};
-        for (const d of chunks.get(ChunkId.SwRam)) {
-            if (d.length >= 1 + 16384) {
-                const bank = d[0] & 0x0f;
-                swRamBanks[bank] = d.slice(1, 1 + 16384);
-            }
-        }
+    // BeebEm saves only sideways RAM, not the ROMs, so the banks go in `swram` and the ROMs jsbeeb loaded stay.
+    const swRamBanks = new Map();
+    for (const d of chunks.get(ChunkId.SwRam) ?? []) {
+        if (d.length >= 1 + RomBankBytes) swRamBanks.set(d[0] & 0x0f, d.subarray(1, 1 + RomBankBytes));
     }
 
     // ── VIA (chunk 0x0467, one per VIA) ─────────────────────────────────
@@ -395,6 +385,6 @@ export function parseUefSnapshot(buffer) {
     const soundChip = convertSoundChunk(soundData);
 
     const snapshot = buildSnapshot("beebem-uef", modelName, cpuState, ram, null, sysvia, uservia, video, soundChip);
-    if (swRamBanks) snapshot.state.swRamBanks = swRamBanks;
+    if (swRamBanks.size) Object.assign(snapshot.state, packSidewaysRam(swRamBanks));
     return snapshot;
 }

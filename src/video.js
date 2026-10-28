@@ -1,8 +1,17 @@
 import { Teletext } from "./teletext.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
-import { encodeLineGrid, texelsPerPixel, LineGridRows } from "./video-filters/pixel-grid.js";
+import { encodeLineGrid, texelsPerPixel } from "./video-filters/pixel-grid.js";
 import { makeFast32 } from "./binary.js";
+import {
+    CursorInvert,
+    OPAQUE_BLACK,
+    PendingCursor,
+    PendingOffsetShift,
+    PendingRowBias,
+    PreferredDrain,
+    VideoDrain,
+} from "./video-drain.js";
 
 const noop = () => {};
 
@@ -15,7 +24,7 @@ export const FRAMESKIPENABLE = 1 << 5;
 export const EVERYTHINGENABLED =
     VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
-export const OPAQUE_BLACK = 0xff000000;
+export { OPAQUE_BLACK };
 export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
@@ -60,6 +69,11 @@ class Ula {
         this.reset();
     }
 
+    powerOn() {
+        this.disabled = !this.hasVideoNula;
+        this.reset();
+    }
+
     reset() {
         this.collook.set(NulaDefaultPalette);
         this.flash.fill(1);
@@ -80,6 +94,7 @@ class Ula {
     write(addr, val) {
         addr |= 0;
         val |= 0;
+        this.video.renderPending();
         let reg = addr & 3;
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
@@ -171,9 +186,7 @@ class Ula {
         if (val & 8 && this.video.ulactrl & 1 && this.flash[(val & 7) ^ 7]) {
             colour = this.collook[val & 0xf];
         }
-        if (this.video.ulaPal[index] !== colour) {
-            this.video.ulaPal[index] = colour;
-        }
+        this.video.ulaPal[index] = colour;
     }
 
     // NULA control register (&FE22).
@@ -252,9 +265,7 @@ class Ula {
             if (palVal & 8 && flashEnabled && this.flash[(palVal & 7) ^ 7]) {
                 colour = this.collook[palVal & 0xf];
             }
-            if (video.ulaPal[i] !== colour) {
-                video.ulaPal[i] = colour;
-            }
+            video.ulaPal[i] = colour;
         }
     }
 }
@@ -302,6 +313,7 @@ class Crtc {
                     this.video.vpulseWidth = (val & 0xf0) >>> 4;
                     break;
                 case 8: {
+                    this.video.renderPending();
                     this.video.interlacedSyncAndVideo = (val & 3) === 3;
                     this.video.updateVSync();
                     const skew = (val & 0x30) >>> 4;
@@ -362,12 +374,13 @@ function table4bppOffset(ulamode, byte) {
 export class Video {
     constructor(
         isMaster,
-        fb32_param,
+        framebufferPixels,
         paint_ext_param,
-        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null } = {},
+        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, drainKind } = {},
     ) {
         this.isMaster = isMaster;
-        this.fb32 = makeFast32(fb32_param);
+        this.drain = new VideoDrain(framebufferPixels, drainKind ?? PreferredDrain);
+        this.fb32 = this.drain.fb32;
         this.collook = makeFast32(
             new Uint32Array([
                 0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
@@ -447,10 +460,13 @@ export class Video {
         // character cell renders, so a mode change between rows is recorded
         // faithfully. A row whose mode changes part way along keeps only the
         // last mode on it — enough for a raster split, not for a mid-line one.
-        this.lineGrid = new Uint8Array(LineGridRows);
+        this.lineGrid = this.drain.lineGrid;
+        this.teletext.setOutput(this.drain);
         this.lineGridUla = 0;
         this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
+        this.pendingCells = this.drain.records;
+        this.pendingCount = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -462,7 +478,7 @@ export class Video {
         this.debugPrevScreen = null;
 
         this.table4bpp = (() => {
-            const t = new Uint8Array(4 * 256 * 16);
+            const t = this.drain.table4bpp;
             let i, b, temp, left;
             for (b = 0; b < 256; ++b) {
                 temp = b;
@@ -501,6 +517,7 @@ export class Video {
     }
 
     snapshotState() {
+        this.renderPending();
         return {
             regs: this.regs.slice(),
             bitmapX: this.bitmapX,
@@ -564,6 +581,7 @@ export class Video {
     }
 
     restoreState(state) {
+        this.renderPending();
         this.regs.set(state.regs);
         this.bitmapX = state.bitmapX;
         this.bitmapY = state.bitmapY;
@@ -632,38 +650,39 @@ export class Video {
         if (this.ula.hasVideoNula) this.ulaPal.set(state.ulaPal);
     }
 
-    reset(cpu, via) {
+    reset(cpu, via, hard) {
+        this.renderPending();
         this.cpu = cpu;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
+        if (hard) this.ula.powerOn();
         if (this.video6847 && cpu) {
             this.video6847.reset(cpu, cpu.atomppia);
         }
     }
 
     paint() {
+        this.renderPending();
         this.paint_ext(this.leftBorder, this.topBorder, 1024 - this.rightBorder, 625 - this.bottomBorder);
     }
 
     clearPaintBuffer() {
-        const fb32 = this.fb32;
+        if (this.video6847) this.drain.markAllDrawn();
         // The line grid is cleared exactly where the next field's pixels go: when it
         // does not double lines, the other field's rows survive, and so must their grid.
         if (!this.doublesLines()) {
-            let line = this.frameCount & 1;
-            while (line < 625) {
-                const start = line * 1024;
-                fb32.fill(OPAQUE_BLACK, start, start + 1024);
-                this.lineGrid[line] = 0;
-                line += 2;
-            }
+            const parity = this.frameCount & 1;
+            this.drain.clearDrawn(parity);
+            for (let line = parity; line < 625; line += 2) this.lineGrid[line] = 0;
         } else {
-            fb32.fill(OPAQUE_BLACK);
+            this.drain.clearDrawn(0);
+            this.drain.clearDrawn(1);
             this.lineGrid.fill(0);
         }
     }
 
     flyback() {
+        this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();
         // Decided per field, before the clear: the CRTC frames of one field can
@@ -699,6 +718,8 @@ export class Video {
         }
     }
 
+    // In an interlace mode with R6>R4 we get stuck painting just an odd or even
+    // frame, so scanlines are doubled up to avoid a ghost half frame.
     doublesLines() {
         return (this.doubledScanlines && !this.interlacedSyncAndVideo) || this.isEvenRender === this.lastRenderWasEven;
     }
@@ -713,6 +734,7 @@ export class Video {
     // frame below it: this frame above the beam, the last one under it, as a
     // camera would see.
     debugPaint() {
+        this.renderPending();
         if (!this.debugPrevScreen) {
             this.debugPrevScreen = new Uint32Array(1024 * 768);
         }
@@ -740,33 +762,33 @@ export class Video {
      * Recompute the ULA-dependent half of the line grid descriptor: everything
      * except whether this particular scanline was doubled. Called whenever the
      * ULA control register changes, so the render loop only has to store it.
-     *
-     * MODE 7 counts as one texel per pixel: the SAA5050 emulation writes each
-     * of its 16 texels per character individually, so its output is already at
-     * the framebuffer's own resolution.
+     * Teletext cells carry their own, from the SAA5050.
      */
     updateLineGridUla() {
-        const texelsWide = this.teletextMode ? 1 : texelsPerPixel(this.ulaMode);
+        const texelsWide = texelsPerPixel(this.ulaMode);
         this.lineGridUla = encodeLineGrid(texelsWide, false);
         this.lineGridUlaDoubled = encodeLineGrid(texelsWide, true);
     }
 
-    blitFb(dat, destOffset, numPixels) {
-        destOffset |= 0;
-        const offset = table4bppOffset(this.ulaMode, dat);
-        const fb32 = this.fb32;
-        const colourLookup = this.pixelColours();
-        const table4bpp = this.table4bpp;
-        // Take advantage of numPixels being either 8 or 16
-        if (numPixels === 8) {
-            for (let i = 0; i < 8; ++i) {
-                fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
-            }
-        } else {
-            for (let i = 0; i < 16; ++i) {
-                fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
-            }
-        }
+    /**
+     * Draws the cells the beam has passed into fb32. It reads the ULA's state as it is now, so it
+     * runs before anything changes that state or reads the framebuffer. With every ULA write
+     * draining, bitmap and teletext cells are never pending together.
+     */
+    renderPending() {
+        this.teletext.catchUpShown();
+        const count = this.pendingCount;
+        if (count === 0) return;
+        this.pendingCount = 0;
+        const doubledLines = this.doublesLines();
+        this.drain.palette.set(this.pixelColours());
+        this.drain.drain(
+            count,
+            table4bppOffset(this.ulaMode, 0),
+            this.pixelsPerChar,
+            doubledLines,
+            doubledLines ? this.lineGridUlaDoubled : this.lineGridUla,
+        );
     }
 
     // The second half of a 16 pixel cell, for the 1MHz repaint.
@@ -786,10 +808,16 @@ export class Video {
         return this.ula.paletteMode ? this.ula.collook : this.ulaPal;
     }
 
-    handleCursor(offset) {
+    handleCursor() {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
-            this.invertForCursor(offset, 0);
-            this.cursorInvertedOffset = offset;
+            this.cursorInvertedOffset = this.beamOffset();
+            if (this.teletextMode) {
+                this.teletext.catchUpShown();
+                this.drain.markAllDrawn();
+                this.invertForCursor(this.cursorInvertedOffset, 0);
+            } else {
+                this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | PendingCursor;
+            }
         } else {
             this.cursorInvertedOffset = -1;
         }
@@ -798,13 +826,22 @@ export class Video {
 
     invertForCursor(offset, fromPixel) {
         for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
-            this.fb32[offset + i] ^= 0x00ffffff;
+            this.fb32[offset + i] ^= CursorInvert;
         }
-        if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
+        if (this.doublesLines()) {
             for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
-                this.fb32[offset + 1024 + i] ^= 0x00ffffff;
+                this.fb32[offset + 1024 + i] ^= CursorInvert;
             }
         }
+    }
+
+    pendingBeamOffset() {
+        return ((this.bitmapY + PendingRowBias) * 1024 + this.bitmapX) << PendingOffsetShift;
+    }
+
+    beamOffset() {
+        const bitmapRow = this.doublesLines() ? this.bitmapY & ~1 : this.bitmapY;
+        return bitmapRow * 1024 + this.bitmapX;
     }
 
     // The render loop paints a whole 1MHz cell on one 2MHz tick and skips the next, but the ULA
@@ -814,16 +851,16 @@ export class Video {
         if (!this.halfClock || !this.oddClock) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
-        const doubledLines = this.doublesLines();
-        const bitmapRow = doubledLines ? this.bitmapY & ~1 : this.bitmapY;
-        const offset = bitmapRow * 1024 + this.bitmapX;
+        const offset = this.beamOffset();
         const halfCell = this.pixelsPerChar >>> 1;
         if (this.teletextMode) {
+            this.teletext.catchUp();
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {
             this.blitFbSecondHalf(this.cellData, offset);
         }
-        if (doubledLines) {
+        this.drain.markDrawn(offset, this.pixelsPerChar, this.doublesLines());
+        if (this.doublesLines()) {
             this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);
         }
         if (this.cursorInvertedOffset === offset) {
@@ -1095,6 +1132,7 @@ export class Video {
     ////////////////////
     // Main drawing routine
     polltime(clocks) {
+        const regs = this.regs;
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
@@ -1116,26 +1154,23 @@ export class Video {
             }
 
             // Latch next line screen address in case we are in the last line of a character row
-            if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
+            if (this.horizCounter === regs[1]) this.nextLineStartAddr = this.addr;
 
             // Handle end of horizontal displayed.
             // Make sure to account for display enable skew.
             // Also, the last scanline character never displays.
-            if (
-                this.horizCounter === this.regs[1] + displayEnablePos ||
-                this.horizCounter === this.regs[0] + displayEnablePos
-            ) {
+            if (this.horizCounter === regs[1] + displayEnablePos || this.horizCounter === regs[0] + displayEnablePos) {
                 this.dispEnableClear(HDISPENABLE | SKEWDISPENABLE);
             }
 
             // Initiate HSync.
-            if (this.horizCounter === this.regs[2] && !this.inHSync) {
+            if (this.horizCounter === regs[2] && !this.inHSync) {
                 this.inHSync = true;
                 this.hpulseCounter = 0;
             }
 
             // Handle VSync.
-            const r7Hit = this.vertCounter === this.regs[7];
+            const r7Hit = this.vertCounter === regs[7];
             if (r7Hit || this.inLineVSync || this.inHalfLineVSync) this.clockVSync(r7Hit);
 
             // TODO(#876) this will be cleaner if we rework skew to have fetch
@@ -1149,75 +1184,48 @@ export class Video {
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
                     // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
                     // clocked here and painted later, so a control code seen while the ULA shows
-                    // bitmap still takes effect.
+                    // bitmap still takes effect. The chip logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.fetchData(dat);
-                    this.teletext.advance();
+                    this.teletext.logClocked(dat);
 
                     // Check cursor start.
                     if (
                         this.addr === this.cursorPos &&
                         this.cursorOn &&
                         !this.cursorOff &&
-                        this.horizCounter < this.regs[1]
+                        this.horizCounter < regs[1]
                     ) {
-                        this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
+                        this.cursorDrawIndex = 3 - ((regs[8] >>> 6) & 3);
                     }
                 }
 
                 // Render data depending on display enable state.
                 if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
-                    let doubledLines = false;
-                    let bitmapRow = this.bitmapY;
-                    // There's a painting subtlety here: if we're in an
-                    // interlace mode but R6>R4 then we'll get stuck
-                    // painting just an odd or even frame, so we double up
-                    // scanlines to avoid a ghost half frame. This is
-                    // doublesLines(), inlined for speed.
-                    if (
-                        (this.doubledScanlines && !this.interlacedSyncAndVideo) ||
-                        this.isEvenRender === this.lastRenderWasEven
-                    ) {
-                        doubledLines = true;
-                        bitmapRow &= ~1;
-                    }
-
-                    const offset = bitmapRow * 1024 + this.bitmapX;
                     this.cellData = dat;
-
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
-                        // Note this row's logical pixel size for display
-                        // filters; see video-filters/pixel-grid.js. The ULA half
-                        // of the descriptor is precomputed on register writes so
-                        // this stays a store or two in the hottest loop we have.
-                        if (doubledLines) {
-                            this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
-                            this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
-                        } else {
-                            this.lineGrid[bitmapRow] = this.lineGridUla;
-                        }
                         if (this.teletextMode) {
-                            if (this.halfClock) {
-                                // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
-                                this.teletext.emit(this.fb32, offset);
-                            } else {
-                                // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
-                                // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
-                                // at ABUG 2026-03-13; the mechanism is not established, as the
-                                // Model B ULA has no connection to the SAA5050 at all.
-                                // See https://github.com/mattgodbolt/jsbeeb/issues/546
-                                this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
+                            let doubledLines = false;
+                            let bitmapRow = this.bitmapY;
+                            // This is doublesLines(), inlined for speed.
+                            if (
+                                (this.doubledScanlines && !this.interlacedSyncAndVideo) ||
+                                this.isEvenRender === this.lastRenderWasEven
+                            ) {
+                                doubledLines = true;
+                                bitmapRow &= ~1;
                             }
+                            // With a 2MHz clock (the "TTX trick") the SAA5050 shows black. Behaviour
+                            // confirmed by Rich Talbot-Watkins (RTW) at ABUG 2026-03-13; the mechanism
+                            // is not established, as the Model B ULA has no connection to the SAA5050 at all.
+                            // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                            this.teletext.showLatest(bitmapRow * 1024 + this.bitmapX, doubledLines, !this.halfClock);
                         } else {
-                            this.blitFb(dat, offset, this.pixelsPerChar);
-                        }
-                        if (doubledLines) {
-                            this.fb32.copyWithin(offset + 1024, offset, offset + this.pixelsPerChar);
+                            this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
                         }
                     }
                     if (this.cursorDrawIndex) {
-                        this.handleCursor(offset);
+                        this.handleCursor();
                     }
                 }
             }
@@ -1227,11 +1235,11 @@ export class Video {
             // On real hardware IC37/IC36 operates regardless of ULA mode —
             // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
             // Hardware also clocks the chip here, which we do not: our row reset fires
-            // too early relative to the pipeline for that to come out right, and adding
-            // `advance()` alone moves three of the hardware reference pages. See
+            // too early relative to the pipeline for that to come out right, and clocking
+            // it here alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
             if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
-                this.teletext.fetchData(this.readVideoMem() | 0x40);
+                this.teletext.logFed(this.readVideoMem() | 0x40);
             }
 
             // CRTC MA always increments, inside display border or not.
@@ -1244,7 +1252,7 @@ export class Video {
             if (this.checkVertAdjust) {
                 this.checkVertAdjust = false;
                 if (this.endOfMainLatched) {
-                    if (this.vertAdjustCounter === this.regs[5]) {
+                    if (this.vertAdjustCounter === regs[5]) {
                         this.endOfVertAdjustLatched = true;
                     }
                     this.vertAdjustCounter++;
@@ -1259,7 +1267,7 @@ export class Video {
             // Testing indicates that the latch is set here at exactly C0=1.
             // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
             if (this.horizCounter === 1) {
-                if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) {
+                if (this.vertCounter === regs[4] && this.scanlineCounter === regs[9]) {
                     this.endOfMainLatched = true;
                     this.vertAdjustCounter = 0;
                 }
@@ -1269,7 +1277,7 @@ export class Video {
             }
 
             // Handle horizontal total.
-            if (this.horizCounter === this.regs[0]) {
+            if (this.horizCounter === regs[0]) {
                 this.endOfScanline();
                 this.horizCounter = 0;
                 this.dispEnableSet(HDISPENABLE);
@@ -1285,7 +1293,7 @@ export class Video {
             // We do this after the render and various counter increments
             // because there seems to be a 1 character delay between setting
             // R6=C4 and display actually stopping.
-            const r6Hit = this.vertCounter === this.regs[6];
+            const r6Hit = this.vertCounter === regs[6];
             if (r6Hit && !this.firstScanline && this.dispEnabled & VDISPENABLE) {
                 this.dispEnableClear(VDISPENABLE);
                 // Before the MOS programs the CRTC, its all-zero registers pulse DEW every 128

@@ -1,6 +1,7 @@
 // Pure geometry and colour mapping, free of the DOM; disc-visualiser.js owns the canvases.
 
-import { IbmDiscFormat, PulsesPerWord } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
+import { PulsesPerWord } from "./disc.js";
 
 /** One FM byte, or two MFM bytes; 2us a slot. */
 

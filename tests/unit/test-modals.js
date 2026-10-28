@@ -35,18 +35,10 @@ describe("Modals", () => {
     };
 
     describe("holding the emulator", () => {
-        it("holds the emulator while a modal is up and lets go when it goes", () => {
-            raise("info");
-            expect(loop.hold).toHaveBeenCalledWith("the info dialog");
-            expect(resumes()[0]).not.toHaveBeenCalled();
-            lower("info");
-            expect(resumes()[0]).toHaveBeenCalledTimes(1);
-        });
-
-        it("takes one hold per modal and lets each go with its own", () => {
+        it("holds the emulator once per modal while it is up, and lets each go with its own", () => {
             raise("info");
             raise("help");
-            expect(loop.hold).toHaveBeenCalledTimes(2);
+            expect(loop.hold.mock.calls).toEqual([["the info dialog"], ["the help dialog"]]);
             lower("info");
             expect(resumes()[0]).toHaveBeenCalledTimes(1);
             expect(resumes()[1]).not.toHaveBeenCalled();

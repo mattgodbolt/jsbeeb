@@ -17,7 +17,7 @@ import { configForm } from "../../src/web/config-form.js";
 import { Settings } from "../../src/web/settings.js";
 import { Config } from "../../src/web/config.js";
 import { UrlState } from "../../src/web/url-state.js";
-import { ParamTypes } from "../../src/url-params.js";
+import { ParamTypes, parseQueryString } from "../../src/url-params.js";
 import { MaxPersistenceMs, persistenceSettings } from "../../src/web/canvas.js";
 import { findModel } from "../../src/models.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
@@ -203,6 +203,9 @@ describe("parameterFor", () => {
         ["GP.FIRE2", Parameters.gamepadMapping, "FIRE2"],
         ["gp.fire2", Parameters.gamepadMapping, "FIRE2"],
         ["FIRE", Parameters.gamepadMapping, "FIRE"],
+        ["rom", Parameters.rom, undefined],
+        ["rom.7", Parameters.romBank, "7"],
+        ["ROM.f", Parameters.romBank, "F"],
     ])("finds %s", (name, parameter, member) => {
         expect(parameterFor(name)).toEqual(member === undefined ? { parameter } : { parameter, member });
     });
@@ -266,21 +269,78 @@ describe("processInputParams", () => {
     });
 });
 
+describe("the rom. family", () => {
+    const apply = (params) => {
+        const bankRoms = [];
+        const warnings = processInputParams(params, { bankRoms });
+        return { bankRoms, warnings };
+    };
+
+    it("reads its name as the bank, 0 to 15 or A to F, and keeps the reference as it was given", () => {
+        expect(
+            apply({ "rom.7": ["github:mattgodbolt/xmos/original.rom"], "ROM.12": ["a.rom"], "rom.f": ["Mixed.ROM"] }),
+        ).toEqual({
+            bankRoms: [
+                { bank: 7, rom: "github:mattgodbolt/xmos/original.rom" },
+                { bank: 12, rom: "a.rom" },
+                { bank: 15, rom: "Mixed.ROM" },
+            ],
+            warnings: [],
+        });
+    });
+
+    it("is parsed as a list, so a second value for the same name is seen", () => {
+        expect(parseQueryString("rom.7=a.rom&rom.7=b.rom&rom=c.rom", urlParamType)).toEqual({
+            "rom.7": ["a.rom", "b.rom"],
+            rom: ["c.rom"],
+        });
+    });
+
+    it("leaves rom for the free banks when rom.7 names one", () => {
+        const params = parseQueryString("rom=x.rom&rom.7=y.rom", urlParamType);
+
+        expect(params.rom).toEqual(["x.rom"]);
+        expect(apply(params)).toEqual({ bankRoms: [{ bank: 7, rom: "y.rom" }], warnings: [] });
+    });
+
+    it("leaves alone a bank with no value", () => {
+        expect(apply({ "rom.7": [""] })).toEqual({ bankRoms: [], warnings: [] });
+    });
+
+    it.each(["16", "G", "-1", "0x7", "&7", "007", "WIBBLE"])("says %s is not a bank", (bank) => {
+        expect(apply({ [`rom.${bank}`]: ["a.rom"] })).toEqual({
+            bankRoms: [],
+            warnings: [
+                `rom.${bank}=a.rom: "${bank.toUpperCase()}" is not a ROM bank, which is 0 to 15, or A to F in hex.`,
+            ],
+        });
+    });
+
+    it("loads the first ROM a bank is given and says the others are not loaded", () => {
+        expect(
+            apply({ "rom.7": ["a.rom", "b.rom"], "ROM.07": ["c.rom"], "rom.a": ["d.rom"], "rom.10": ["e.rom"] }),
+        ).toEqual({
+            bankRoms: [
+                { bank: 7, rom: "a.rom" },
+                { bank: 10, rom: "d.rom" },
+            ],
+            warnings: [
+                "rom.7=a.rom,b.rom: bank 7 takes one ROM, so b.rom is not loaded.",
+                "ROM.07=c.rom: bank 7 already has a.rom, so c.rom is not loaded.",
+                "rom.10=e.rom: bank 10 already has d.rom, so e.rom is not loaded.",
+            ],
+        });
+    });
+});
+
 describe("tubeCpuSpeedLabel", () => {
-    const bbcB = findModel("B-DFS1.2");
-    const master = findModel("Master");
-
-    it("shows each machine's own second processor at 1x", () => {
-        expect(tubeCpuSpeedLabel(1, bbcB)).toBe("1x (3MHz)");
-        expect(tubeCpuSpeedLabel(1, master)).toBe("1x (4MHz)");
-    });
-
-    it("shows a fractional overclock", () => {
-        expect(tubeCpuSpeedLabel(1.6, bbcB)).toBe("1.6x (4.8MHz)");
-    });
-
-    it("keeps a repeating multiplier from a URL readable", () => {
-        expect(tubeCpuSpeedLabel(4 / 3, bbcB)).toBe("1.33x (4MHz)");
+    it.each([
+        ["a B's second processor at 1x", 1, "B-DFS1.2", "1x (3MHz)"],
+        ["a Master's second processor at 1x", 1, "Master", "1x (4MHz)"],
+        ["a fractional overclock", 1.6, "B-DFS1.2", "1.6x (4.8MHz)"],
+        ["a repeating multiplier from a URL, readably", 4 / 3, "B-DFS1.2", "1.33x (4MHz)"],
+    ])("shows %s", (_, multiplier, model, label) => {
+        expect(tubeCpuSpeedLabel(multiplier, findModel(model))).toBe(label);
     });
 });
 
@@ -332,10 +392,11 @@ describe("the settings a session guest takes from its host", () => {
         expect(readTakenFromHost({}).cpuMultiplier).toBeUndefined();
     });
 
-    it("refuses a host's value this page would not take from its own URL", () => {
+    it("refuses a host's value this page would not take from its own URL, and takes one of the wrong type as none", () => {
         expect(readTakenFromHost({ tubeCpuMultiplier: 0 })).toBeNull();
         expect(readTakenFromHost({ stationId: 1e21 })).toBeNull();
         expect(readTakenFromHost({ tubeCpuMultiplier: 2 })).toMatchObject({ tubeCpuMultiplier: 2 });
+        expect(readTakenFromHost({ cpuMultiplier: "2" }).cpuMultiplier).toBeUndefined();
     });
 
     it("carries one marked in any table, with nothing else to change", () => {

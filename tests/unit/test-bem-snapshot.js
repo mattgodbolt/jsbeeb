@@ -2,20 +2,15 @@ import { describe, it, expect } from "vitest";
 import { isBemSnapshot, parseBemSnapshot } from "../../src/bem-snapshot.js";
 
 const BemSnapshotSize = 327885;
+const BemModelB = 3;
 
 function makeMinimalBemSnapshot(overrides = {}) {
     const buffer = new ArrayBuffer(BemSnapshotSize);
     const view = new DataView(buffer);
     const bytes = new Uint8Array(buffer);
 
-    // Signature
-    const sig = new TextEncoder().encode("BEMSNAP1");
-    bytes.set(sig, 0);
-
-    // Model (3 = BBC Model B)
-    view.setUint8(8, overrides.model ?? 3);
-
-    // CPU registers
+    bytes.set(new TextEncoder().encode("BEMSNAP1"), 0);
+    view.setUint8(8, overrides.model ?? BemModelB);
     view.setUint8(9, overrides.a ?? 0x42);
     view.setUint8(10, overrides.x ?? 0x10);
     view.setUint8(11, overrides.y ?? 0x20);
@@ -25,11 +20,7 @@ function makeMinimalBemSnapshot(overrides = {}) {
     view.setUint8(16, overrides.nmi ?? 0);
     view.setUint8(17, overrides.interrupt ?? 0);
     view.setUint32(18, overrides.cycles ?? 12345, true);
-
-    // fe30 (ROM select)
     view.setUint8(22, overrides.fe30 ?? 0x0f);
-
-    // RAM: write a marker byte
     if (overrides.ramByte !== undefined) {
         bytes[24 + (overrides.ramAddr ?? 0)] = overrides.ramByte;
     }
@@ -37,107 +28,65 @@ function makeMinimalBemSnapshot(overrides = {}) {
     return buffer;
 }
 
+function withSignature(signature) {
+    const buffer = new ArrayBuffer(BemSnapshotSize);
+    new Uint8Array(buffer).set(new TextEncoder().encode(signature));
+    return buffer;
+}
+
 describe("isBemSnapshot", () => {
-    it("should return true for a valid BEM snapshot", () => {
-        const buffer = makeMinimalBemSnapshot();
-        expect(isBemSnapshot(buffer)).toBe(true);
+    it("accepts a BEMSNAP1", () => {
+        expect(isBemSnapshot(makeMinimalBemSnapshot())).toBe(true);
     });
 
-    it("should return false for wrong size", () => {
-        const buffer = new ArrayBuffer(100);
-        expect(isBemSnapshot(buffer)).toBe(false);
-    });
-
-    it("should return false for wrong signature", () => {
-        const buffer = new ArrayBuffer(BemSnapshotSize);
-        new Uint8Array(buffer).set(new TextEncoder().encode("NOTASNAP"), 0);
+    it.each([
+        ["the wrong size", new ArrayBuffer(100)],
+        ["the wrong signature", withSignature("NOTASNAP")],
+    ])("rejects a buffer of %s", (_, buffer) => {
         expect(isBemSnapshot(buffer)).toBe(false);
     });
 });
 
 describe("parseBemSnapshot", () => {
-    it("should parse CPU registers correctly", async () => {
-        const buffer = makeMinimalBemSnapshot({
-            a: 0x42,
-            x: 0x10,
-            y: 0x20,
-            flags: 0xe5,
-            s: 0xfd,
-            pc: 0xd940,
+    it.each([
+        [
+            "reads the CPU registers, with P's bits 4 and 5 always set",
+            { a: 0x42, x: 0x10, y: 0x20, flags: 0xc5, s: 0xfd, pc: 0xd940 },
+            (s) => [s.format, s.version, s.state.a, s.state.x, s.state.y, s.state.p, s.state.s, s.state.pc],
+            ["jsbeeb-snapshot", 3, 0x42, 0x10, 0x20, 0xf5, 0xfd, 0xd940],
+        ],
+        ["reads the NMI level", { nmi: 1 }, (s) => s.state.nmiLevel, true],
+        ["reads ROMSEL", { fe30: 0x05 }, (s) => s.state.romsel, 0x05],
+        ["reads RAM", { ramAddr: 0x100, ramByte: 0xaa }, (s) => s.state.ram[0x100], 0xaa],
+        ["builds a 64K RAM array", {}, (s) => s.state.ram.length, 64 * 1024],
+        ["imports a B as a B", { model: 3 }, (s) => s.model, "B"],
+        ["imports a B with sideways RAM as a B", { model: 4 }, (s) => s.model, "B"],
+        ["imports an A with OS 0.1 as a B with MOS 0.10", { model: 0 }, (s) => s.model, "B-MOS0.10"],
+        ["imports a B with OS 0.1 as a B with MOS 0.10", { model: 1 }, (s) => s.model, "B-MOS0.10"],
+    ])("%s", async (_, overrides, pick, expected) => {
+        expect(pick(await parseBemSnapshot(makeMinimalBemSnapshot(overrides)))).toEqual(expected);
+    });
+
+    it("gives every device a state", async () => {
+        const { state } = await parseBemSnapshot(makeMinimalBemSnapshot());
+        const present = expect.anything();
+        expect(state).toMatchObject({
+            scheduler: present,
+            sysvia: { ora: present, IC32: present },
+            uservia: { ora: present },
+            video: { ula: present, crtc: present, teletext: present },
+            soundChip: present,
+            acia: present,
+            adc: present,
         });
-
-        const snapshot = await parseBemSnapshot(buffer);
-
-        expect(snapshot.format).toBe("jsbeeb-snapshot");
-        expect(snapshot.version).toBe(3);
-        expect(snapshot.model).toBe("B");
-        expect(snapshot.state.a).toBe(0x42);
-        expect(snapshot.state.x).toBe(0x10);
-        expect(snapshot.state.y).toBe(0x20);
-        expect(snapshot.state.p).toBe(0xe5 | 0x30);
-        expect(snapshot.state.s).toBe(0xfd);
-        expect(snapshot.state.pc).toBe(0xd940);
     });
 
-    it("should parse NMI state", async () => {
-        const buffer = makeMinimalBemSnapshot({ nmi: 1 });
-        const snapshot = await parseBemSnapshot(buffer);
-        expect(snapshot.state.nmiLevel).toBe(true);
-    });
-
-    it("should parse ROM select register", async () => {
-        const buffer = makeMinimalBemSnapshot({ fe30: 0x05 });
-        const snapshot = await parseBemSnapshot(buffer);
-        expect(snapshot.state.romsel).toBe(0x05);
-    });
-
-    it("should parse RAM contents", async () => {
-        const buffer = makeMinimalBemSnapshot({ ramAddr: 0x100, ramByte: 0xaa });
-        const snapshot = await parseBemSnapshot(buffer);
-        expect(snapshot.state.ram[0x100]).toBe(0xaa);
-    });
-
-    it("should reject non-Model B snapshots", async () => {
-        const buffer = makeMinimalBemSnapshot({ model: 5 });
+    it.each([
+        ["a model other than a B", makeMinimalBemSnapshot({ model: 5 })],
+        ["the wrong size", new ArrayBuffer(100)],
+        ["the wrong signature", withSignature("NOTSNAP!")],
+    ])("rejects a file of %s as unsupported", async (_, buffer) => {
         await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Unsupported/);
-    });
-
-    it("should reject wrong size", async () => {
-        const buffer = new ArrayBuffer(100);
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Unsupported/);
-    });
-
-    it("should reject wrong signature", async () => {
-        const buffer = new ArrayBuffer(BemSnapshotSize);
-        new Uint8Array(buffer).set(new TextEncoder().encode("NOTSNAP!"), 0);
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Unsupported/);
-    });
-
-    it("should include sub-component state structures", async () => {
-        const buffer = makeMinimalBemSnapshot();
-        const snapshot = await parseBemSnapshot(buffer);
-
-        expect(snapshot.state.scheduler).toBeDefined();
-        expect(snapshot.state.sysvia).toBeDefined();
-        expect(snapshot.state.uservia).toBeDefined();
-        expect(snapshot.state.video).toBeDefined();
-        expect(snapshot.state.soundChip).toBeDefined();
-        expect(snapshot.state.acia).toBeDefined();
-        expect(snapshot.state.adc).toBeDefined();
-
-        expect(snapshot.state.sysvia.ora).toBeDefined();
-        expect(snapshot.state.sysvia.IC32).toBeDefined();
-        expect(snapshot.state.uservia.ora).toBeDefined();
-
-        expect(snapshot.state.video.ula).toBeDefined();
-        expect(snapshot.state.video.crtc).toBeDefined();
-        expect(snapshot.state.video.teletext).toBeDefined();
-    });
-
-    it("should accept model 4 (BBC B with sideways RAM)", async () => {
-        const buffer = makeMinimalBemSnapshot({ model: 4 });
-        const snapshot = await parseBemSnapshot(buffer);
-        expect(snapshot.model).toBe("B");
     });
 });
 
@@ -174,6 +123,7 @@ function section(key, data, compressed = false) {
  * needs. `ula` and `parasite` are sparse overrides applied to otherwise-zeroed state.
  */
 async function makeBemV3WithTube({
+    modelName = "BBC B",
     tubeName = "6502 External",
     tubeState = true,
     ula = {},
@@ -184,7 +134,7 @@ async function makeBemV3WithTube({
 } = {}) {
     const model = [
         ...encodeVar(3),
-        ...["BBC B", "os12", "", "std", "none"].flatMap(encodeString),
+        ...[modelName, "os12", "", "std", "none"].flatMap(encodeString),
         ...new Array(6).fill(0), // model flag bytes
         ...(tubeName ? [1, ...encodeString(tubeName)] : [0]),
     ];
@@ -207,6 +157,20 @@ async function makeBemV3WithTube({
     ]).buffer;
 }
 
+describe("b-em v3 model import", () => {
+    it.each([
+        ["BBC B w/8271 FDC", "B"],
+        ["BBC B w/1770 FDC", "B1770"],
+        ["Master 128", "Master"],
+        ["BBC A w/OS 0.1", "B-MOS0.10"],
+        ["BBC B w/OS 0.1", "B-MOS0.10"],
+    ])("imports a %s as %s", async (modelName, expected) => {
+        const buffer = await makeBemV3WithTube({ modelName, tubeName: null, tubeState: false });
+
+        expect((await parseBemSnapshot(buffer)).model).toBe(expected);
+    });
+});
+
 describe("b-em tube import", () => {
     it("imports the parasite processor state", async () => {
         const buffer = await makeBemV3WithTube({
@@ -216,13 +180,15 @@ describe("b-em tube import", () => {
         const snapshot = await parseBemSnapshot(buffer);
 
         expect(snapshot.coProcessor).toBe(true);
-        expect(snapshot.state.tube.a).toBe(0x11);
-        expect(snapshot.state.tube.x).toBe(0x22);
-        expect(snapshot.state.tube.y).toBe(0x33);
-        expect(snapshot.state.tube.s).toBe(0x44);
-        expect(snapshot.state.tube.pc).toBe(0xf800);
-        expect(snapshot.state.tube.nmiLevel).toBe(true);
-        expect(snapshot.state.tube.romPaged).toBe(true);
+        expect(snapshot.state.tube).toMatchObject({
+            a: 0x11,
+            x: 0x22,
+            y: 0x33,
+            s: 0x44,
+            pc: 0xf800,
+            nmiLevel: true,
+            romPaged: true,
+        });
         expect(snapshot.state.tube.memory[0x1234]).toBe(0x99);
     });
 
@@ -244,44 +210,30 @@ describe("b-em tube import", () => {
         expect(snapshot.state.tube).toBeUndefined();
     });
 
-    it("rejects co-processors that are a different CPU entirely", async () => {
-        const buffer = await makeBemV3WithTube({ tubeName: "Z80 ROM 1.21" });
-
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/only emulates the 64K 65C02/);
-    });
-
-    it("rejects the 6502 Turbo, whose 16MB of RAM jsbeeb cannot hold", async () => {
-        const buffer = await makeBemV3WithTube({ tubeName: "6502 Turbo", ramSize: 0x1000000 });
-
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/only emulates the 64K 65C02/);
-    });
-
-    it("rejects a parasite whose RAM is not the 64K jsbeeb emulates", async () => {
-        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 16384 }))).rejects.toThrow(/parasite RAM/);
-        // A renamed Turbo in b-em's config would get past the name check on size alone.
-        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 0x1000000 }))).rejects.toThrow(/parasite RAM/);
-    });
-
-    it("rejects a truncated ULA section", async () => {
-        const buffer = await makeBemV3WithTube({ ulaBytes: 20 });
-
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Truncated b-em tube ULA/);
-    });
-
-    it("rejects FIFO counts a real machine could not have produced", async () => {
-        const tooManyBytesQueued = await makeBemV3WithTube({ ula: { fields: { 46: 30 } } }); // ph1count
-        const headPastTheEnd = await makeBemV3WithTube({ ula: { fields: { 45: 24 } } }); // ph1head
-        const overfullR3 = await makeBemV3WithTube({ ula: { fields: { 48: 3 } } }); // hp3pos
-
-        for (const buffer of [tooManyBytesQueued, headPastTheEnd, overfullR3]) {
-            await expect(parseBemSnapshot(buffer)).rejects.toThrow(/FIFO counts out of range/);
-        }
-    });
-
-    it("rejects co-processor state that names no co-processor", async () => {
-        const buffer = await makeBemV3WithTube({ tubeName: null });
-
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/names no co-processor/);
+    it.each([
+        [
+            "a co-processor that is a different CPU entirely",
+            { tubeName: "Z80 ROM 1.21" },
+            /only emulates the 64K 65C02/,
+        ],
+        [
+            "the 6502 Turbo, whose 16MB of RAM jsbeeb cannot hold",
+            { tubeName: "6502 Turbo", ramSize: 0x1000000 },
+            /only emulates the 64K 65C02/,
+        ],
+        ["a parasite with less than 64K of RAM", { ramSize: 16384 }, /parasite RAM/],
+        [
+            "a renamed Turbo, which gets past the name check on its RAM size alone",
+            { ramSize: 0x1000000 },
+            /parasite RAM/,
+        ],
+        ["a truncated ULA section", { ulaBytes: 20 }, /Truncated b-em tube ULA/],
+        ["more bytes queued in R1 than its FIFO holds", { ula: { fields: { 46: 30 } } }, /FIFO counts out of range/],
+        ["R1's head past the end of its FIFO", { ula: { fields: { 45: 24 } } }, /FIFO counts out of range/],
+        ["an overfull R3", { ula: { fields: { 48: 3 } } }, /FIFO counts out of range/],
+        ["co-processor state that names no co-processor", { tubeName: null }, /names no co-processor/],
+    ])("rejects %s", async (_, options, message) => {
+        await expect(parseBemSnapshot(await makeBemV3WithTube(options))).rejects.toThrow(message);
     });
 
     it("accepts a parasite whose ROM size b-em's config left unset", async () => {

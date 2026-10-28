@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { exposeConsoleSurface } from "../../src/web/console-surface.js";
 import { hd } from "../../src/hex.js";
 
-// Mirrors the ConsoleSurface list in tests/playwright/smoke.spec.js.
 const ExpectedNames = [
     "processor",
     "video",
@@ -43,7 +42,7 @@ describe("exposeConsoleSurface", () => {
         if (vi.isFakeTimers()) vi.useRealTimers();
     });
 
-    it("defines every name the smoke test checks for", () => {
+    it("defines every name the console offers", () => {
         const { target } = make();
         for (const name of ExpectedNames) expect(target[name], name).toBeDefined();
     });

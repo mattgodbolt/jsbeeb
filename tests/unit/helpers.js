@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { expect, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
 
@@ -81,6 +81,33 @@ export const manifestResponse = (files) => ({
     json: async () => ({ schemaVersion: 1, files }),
 });
 
+/** The catalogue behaviour every manifest-backed archive shares; `make()` builds one that reads `manifestUrl`. */
+export function describeManifestCatalogue(make, manifestUrl) {
+    describe("catalogue", () => {
+        afterEach(() => vi.restoreAllMocks());
+
+        it("fetches the manifest once", async () => {
+            const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([{ path: "a.ssd" }]));
+            const archive = make();
+            await archive.catalogue();
+            await archive.catalogue();
+            expect(fetchSpy.mock.calls).toEqual([[manifestUrl]]);
+        });
+
+        it.each([
+            ["a manifest the server will not send", { ok: false, status: 503 }, "503"],
+            [
+                "a manifest with no files array",
+                { ok: true, status: 200, json: async () => ({}) },
+                "missing files array",
+            ],
+        ])("rejects %s", async (_, response, message) => {
+            vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+            await expect(make().catalogue()).rejects.toThrow(message);
+        });
+    });
+}
+
 /** A fetch response carrying `body` as its bytes. */
 export const bytesResponse = (body = new Uint8Array()) => ({
     ok: true,
@@ -136,6 +163,7 @@ export async function teardownDom() {
     vi.unstubAllEnvs();
     await disposeToasts();
     document.body.innerHTML = "";
+    window.history.replaceState(null, "", window.location.pathname);
     window.localStorage.clear();
     window.sessionStorage.clear();
 }

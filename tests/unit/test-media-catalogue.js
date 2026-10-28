@@ -20,10 +20,12 @@ import {
     requirementOf,
     satisfiesRequirement,
     scoreQuery,
+    sourceOf,
 } from "../../src/web/media-catalogue.js";
 import { Provenance } from "../../src/bbcdiscs.js";
 import { findModel } from "../../src/models.js";
 import { Parameters } from "../../src/web/parameters.js";
+import { Schemas } from "../../src/media-resolver.js";
 
 describe("the media catalogue", () => {
     afterEach(() => window.localStorage.clear());
@@ -453,6 +455,30 @@ describe("the media catalogue", () => {
             }
             expect(scoreQuery(exile, "exile")).toBeGreaterThan(scoreQuery(exile, "exil"));
             expect(scoreQuery(exile, "")).toBe(1);
+        });
+    });
+
+    describe("naming where a reference came from", () => {
+        it("knows every schema the URL takes", () => {
+            expect(sourceOf("sth:Games/ELITE.zip")).toBe("STH archive");
+            expect(sourceOf("|Games/ELITE.zip")).toBe("STH archive");
+            expect(sourceOf("hfe:3A1DAB83.hfe")).toBe("HFE archive");
+            expect(sourceOf("bitshifters:bs-paradroid.ssd")).toBe("Bitshifters");
+            expect(sourceOf("github:mattgodbolt/nm/ninja_music.ssd")).toBe("GitHub");
+            expect(sourceOf("gd:abc/mine.ssd")).toBe("Google Drive");
+            expect(sourceOf("local:mine")).toBe("this browser");
+            expect(sourceOf("!mine")).toBe("this browser");
+            expect(sourceOf("https://example.com/a.ssd")).toBe("the web");
+            expect(sourceOf("elite.ssd")).toBe("built in");
+            expect(sourceOf("session:mine.ssd")).toBe("a file opened this session");
+            expect(sourceOf(undefined)).toBeNull();
+        });
+
+        it("has words for every schema a reference can take", () => {
+            for (const schema of Object.keys(Schemas)) {
+                const ref = schema === "" ? "x.ssd" : schema.length === 1 ? `${schema}x.ssd` : `${schema}:x.ssd`;
+                expect(sourceOf(ref), schema).toBeTruthy();
+            }
         });
     });
 });

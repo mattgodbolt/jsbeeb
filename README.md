@@ -6,8 +6,8 @@
 [![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
 A BBC Micro and other 8-bit Acorn emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B
-(with sideways RAM, and with the US or German MOS), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card
-interface), along with a number of different peripherals.
+(with sideways RAM, and with the US or German MOS or the early MOS 0.10), a 128K BBC Master, and an Acorn Atom (with
+AtoMMC2 SD card interface), along with a number of different peripherals.
 
 jsbeeb supports the browser versions listed under `browserslist` in [package.json](package.json).
 
@@ -39,7 +39,7 @@ The BBC had a somewhat different-looking keyboard to a modern PC, and so it's us
 
 - BBC `F0` is `F10`
 - BBC `Break` key is `F12`
-- BBC `*` is on `"` (if it doesn't work for you try shift-2)
+- BBC `:` and `*` are on the key two to the right of `L` (in the default [Physical](#keyboard-layouts) layout)
 
 To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in this
 case), press shift-F12 (which is shift-Break on the BBC).
@@ -118,12 +118,13 @@ The definitive lists are `keyCodes` with `keyCodeAliases` (host) and `BBC` (BBC 
 
 ### Keyboard Layouts
 
-A BBC keyboard is not a PC keyboard, so **Keyboard** on the top bar offers three ways to bridge the
-two. The choice is remembered, and `?keyLayout=physical`, `?keyLayout=natural` or `?keyLayout=gaming`
-sets it from a link.
+A BBC keyboard is not a PC keyboard, so **Keyboard layout** in the settings offers three ways to
+bridge the two. Open the settings by clicking the gear and model name on the top bar, or from
+**Machine > Settings...** in the desktop app. The choice is remembered, and `?keyLayout=physical`,
+`?keyLayout=natural` or `?keyLayout=gaming` sets it from a link.
 
 **Physical** is the default, and the one to use for games. Each key presses the BBC key in the same
-place on the keyboard, so `Z` is `Z` and the key to the right of the `L` is the BBC's `:` and `*`,
+place on the keyboard, so `Z` is `Z` and the key two to the right of the `L` is the BBC's `:` and `*`,
 whatever your keyboard is printed with. A Dvorak or Hungarian keyboard works the same as a UK one,
 because only position matters.
 
@@ -172,8 +173,8 @@ same for that row.
 - **A disc that needs a Master 128** switches the emulator to one: without asking when it is to boot, after asking
   otherwise.
 - **Files from this computer:** drop one on the page, or open one from the window's footer. A disc goes into the
-  aimed drive, a tape into the deck, and a save state is restored. The footer also makes a blank disc in this browser
-  or on Google Drive, and connects Google Drive.
+  aimed drive and a tape into the deck. The footer also makes a blank disc in this browser or on Google Drive, and
+  connects Google Drive. Save states load from the **State** menu; see [Save State and Rewind](#save-state-and-rewind).
 - **Each drive** has an eject latch, a 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the
   URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser.
 - **The URL** names what is loaded and says whether the last load into drive 0 booted, so a link copied afterwards
@@ -207,7 +208,8 @@ Press `Alt-B` to open a window showing what has been printed so far; it then kee
 
 ### Save State and Rewind
 
-Save and load full emulator state snapshots from the **State** menu (or `Ctrl+S` / `Ctrl+O` in the Electron app).
+Save and load full emulator state snapshots from the **State** menu.
+A save state dropped on the page is restored too.
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
 
@@ -284,7 +286,8 @@ site to make it smaller and faster to load when it's deployed to [https://bbc.xa
 Google Analytics is only on the deployed site: the deploy job builds with `GA_MEASUREMENT_ID` set from the repository
 variable of that name, and every other build (`npm start`, a clone's own build, the tests and the desktop app) has no
 analytics on the page and sends nothing. `npm run test:e2e` builds with a dummy id and answers Google's requests
-itself, so it can check what the page would send.
+itself, so it can check what the page would send; it answers every other outside request from the stand-ins in
+`tests/playwright/offline`, and blocks anything else and reports it as one of the page's problems.
 
 ## Running as a Desktop Application
 
@@ -391,9 +394,17 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   problems on smaller screens; bottom taller than 100 or so similarly.
 - `videoCyclesBatch` - the number of video cycles to batch up before running the video emulation. Defaults to zero:
   anything higher leads to emulation inaccuracies. Useful for showing why accuracy is important, even if less efficient.
-- `rom` - load the given URL or path as an extra ROM. If a URL is provided, that URL must allow cross-site requests.
-  Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom`
-  file assumed to be within.
+- `rom` - load the given URL or path as an extra ROM, in the highest sideways ROM bank the machine leaves free. A URL
+  must allow cross-site requests, and `github:OWNER/REPO/PATH` loads a ROM from a public GitHub repo as
+  `disc1=github:` does a disc. Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file
+  will attempt to use the `.rom` file assumed to be within. May be given more than once.
+- `rom.N=X` - loads ROM `X`, named as for `rom`, into sideways bank `N`, 0 to 15 (10 to 15 may also be written A to
+  F), e.g. `model=Master&rom.7=github:mattgodbolt/xmos/original.rom`. If the model has sideways RAM in that bank, the
+  ROM goes into the RAM and can still be written. A bank that already holds a ROM, the model's own (BASIC, a filing
+  system) or one a fitted peripheral needs (Music 5000, teletext, Econet), cannot be named; the boot stops with an
+  error saying what is there. The ROMs `rom` loads go in the banks left over. The stock BBC B (`model=B-stock`) has
+  only four ROM sockets, banks 12 to 15, so it takes only those, and of them only the two AUX sockets, 14 and 15, that
+  BASIC and the DFS leave empty.
 - `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in
   `public/benchmarks/workloads.json`, on the model it names there (e.g. `benchmark=elite`, or
   `benchmark=master-shadow&model=Master`) instead of starting as usual. It runs the workload unthrottled from its
@@ -402,25 +413,25 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   `window.jsbeebBenchmark` holds the same for scripts, and its `done` resolves when the run ends. Nothing is sent to
   Google Analytics. After a successful run the machine carries on with the workload once the dialog is closed; after a
   failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
-  refused alongside it, as they change what is measured, and so is a machine with a Music 5000, teletext adaptor or
-  Econet fitted.
+  refused alongside it, as they change what is measured, and so is a machine fitted otherwise than the workload's
+  `fittings` there say (a co-processor, Music 5000, teletext adaptor, Econet or VideoNuLA).
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
 - `audioOutput` - what the sound chip is heard through: `speaker` (the default: the board's output stage and the
   internal speaker and case, fitted to recordings of a Master 128), `board` (the board's output stage alone, as at
-  its line-level socket) or `off` (the chip resampled and nothing else). The top bar and the configuration dialog
+  its line-level socket) or `off` (the chip resampled and nothing else). The top bar and the settings dialog
   have the same choice, and remember it. See [docs/audio-path.md](docs/audio-path.md) for the path, the Master's circuit and what a real
   machine measures.
 - `speakerAmount` - how much of the speaker's character to apply, from 0 (the same as `board`) to 1 (as measured,
-  the default). The slider next to the sound output, on the top bar and in the configuration dialog, sets it live
+  the default). The slider next to the sound output, on the top bar and in the settings dialog, sets it live
   and remembers it.
 - `audiofilterfreq` / `audiofilterq` - the corner frequency in Hz and the Q of the lowpass modelling the board's output
   filter, applied to the sound chip before it is resampled. The defaults, 7234 and 0.696, are the Beeb's own.
   `audiofilterfreq=0` turns the whole output path off.
 - `palPersistenceMs` / `rgbPersistenceMs` - the phosphor afterglow of the PAL TV and RGB monitor displays, the time
-  in milliseconds the last picture takes to fade under the next, from 0 (none) to 500; the slider in the configuration
+  in milliseconds the last picture takes to fade under the next, from 0 (none) to 500; the slider in the settings
   dialog sets the showing display's amount live and remembers it.
 - `displayMode=X` - picks the display: `rgb` (the default, a plain monitor), `pal` (a television fed by the Beeb's UHF modulator)
   or `xbr` (an upscaler, see [docs/xbr-display-mode.md](docs/xbr-display-mode.md)). The top bar has the same choice, and remembers it.
@@ -484,8 +495,8 @@ For timing correctness, we have:
 - Some 65C12-specific read-modify-write tests written by Ed Spittles.
 
 Tests are run via npm scripts: `npm test` runs the whole suite. The vitest suites are `npm run test:unit`,
-`npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the smoke test is
-`npm run test:smoke` (the shader and smoke tests need Chrome installed). Please note it can take a while to run the
+`npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the browser tests are
+`npm run test:e2e` (the shader and browser tests need Chrome installed). Please note it can take a while to run the
 whole test suite.
 
 ## Thanks

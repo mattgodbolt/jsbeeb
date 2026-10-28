@@ -20,8 +20,9 @@ const isGzip = (bytes) => GzipMagic.every((byte, index) => bytes[index] === byte
 const hex = (value) => `&${value.toString(HexRadix).toUpperCase()}`;
 
 /**
- * Every workload's manifest entry: `name`, `model`, `description`, `source` (where its disc or program comes
- * from), `snapshot` (the file under WorkloadsDir) and `checks` (see checkWorkload).
+ * Every workload's manifest entry: `name`, `model`, `fittings` (each of the Settings dialog's peripherals, true or
+ * false), `description`, `source` (where its disc or program comes from), `snapshot` (the file under WorkloadsDir)
+ * and `checks` (see checkWorkload).
  * @returns {Promise<object[]>}
  */
 export async function listWorkloads() {

@@ -15,134 +15,57 @@ import {
 
 const typesOf = (types) => (name) => types[name];
 
+const BaseUrl = "http://localhost:8080/index.html";
+const { ARRAY, BOOL, BOOL_DEFAULT_TRUE, FLOAT, INT, STRING } = ParamTypes;
+
 describe("URL Parameters", () => {
     describe("parseQueryString", () => {
-        it("should parse empty query string", () => {
-            expect(parseQueryString("")).toEqual({});
-        });
-
-        it("should parse basic query string parameters", () => {
-            const qs = "model=B&disc=elite.ssd";
-            expect(parseQueryString(qs)).toEqual({
-                model: "B",
-                disc: "elite.ssd",
-            });
-        });
-
-        it("should handle URL encoded components", () => {
-            const qs = "text=Hello%20World&path=file%2Fname.txt";
-            expect(parseQueryString(qs)).toEqual({
-                text: "Hello World",
-                path: "file/name.txt",
-            });
-        });
-
-        it("should handle parameters without values", () => {
-            const qs = "debug&verbose&disc=test.ssd&noseek";
-            expect(parseQueryString(qs)).toEqual({
-                debug: null,
-                verbose: null,
-                disc: "test.ssd",
-                noseek: null,
-            });
-        });
-
-        it("should keep a trailing slash, which is part of the value", () => {
-            const qs = "model=B&disc=archive/sth/";
-            expect(parseQueryString(qs)).toEqual({
-                model: "B",
-                disc: "archive/sth/",
-            });
-        });
-
-        it("should handle array parameters", () => {
-            const qs = "rom=os.rom&rom=basic.rom&rom=dfs.rom&model=B";
-            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY }))).toEqual({
-                rom: ["os.rom", "basic.rom", "dfs.rom"],
-                model: "B",
-            });
-        });
-
-        it("should handle array parameters with single value", () => {
-            const qs = "rom=os.rom&model=B";
-            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY }))).toEqual({
-                rom: ["os.rom"],
-                model: "B",
-            });
-        });
-
-        it("should handle empty array parameters", () => {
-            const qs = "rom=&model=B";
-            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY }))).toEqual({
-                rom: [""],
-                model: "B",
-            });
-        });
-
-        it("should handle multiple array parameter types", () => {
-            const qs = "rom=os.rom&rom=basic.rom&disc=elite.ssd&disc=other.ssd";
-            expect(parseQueryString(qs, typesOf({ rom: ParamTypes.ARRAY, disc: ParamTypes.ARRAY }))).toEqual({
-                rom: ["os.rom", "basic.rom"],
-                disc: ["elite.ssd", "other.ssd"],
-            });
-        });
-
-        // Tests for new parameter types
-        it("should parse parameter types - string", () => {
-            const qs = "name=jsbeeb&title=BBC%20Emulator";
-            expect(parseQueryString(qs, typesOf({ name: ParamTypes.STRING, title: ParamTypes.STRING }))).toEqual({
-                name: "jsbeeb",
-                title: "BBC Emulator",
-            });
-        });
-
-        it("should parse parameter types - int", () => {
-            const qs = "speed=100&cycles=50";
-            expect(parseQueryString(qs, typesOf({ speed: ParamTypes.INT, cycles: ParamTypes.INT }))).toEqual({
-                speed: 100,
-                cycles: 50,
-            });
-        });
-
-        it("should parse parameter types - float", () => {
-            const qs = "volume=0.5&zoom=1.25";
-            expect(parseQueryString(qs, typesOf({ volume: ParamTypes.FLOAT, zoom: ParamTypes.FLOAT }))).toEqual({
-                volume: 0.5,
-                zoom: 1.25,
-            });
-        });
-
-        it("should parse parameter types - bool", () => {
-            const qs = "debug&verbose=false&noseek=true";
-            expect(
-                parseQueryString(
-                    qs,
-                    typesOf({ debug: ParamTypes.BOOL, verbose: ParamTypes.BOOL, noseek: ParamTypes.BOOL }),
-                ),
-            ).toEqual({
-                debug: true,
-                verbose: false,
-                noseek: true,
-            });
-        });
-
-        it("should handle mixed parameter types", () => {
-            const qs = "model=B&rom=os.rom&rom=basic.rom&speed=4&volume=0.8&debug";
-            const paramTypes = {
-                model: ParamTypes.STRING,
-                rom: ParamTypes.ARRAY,
-                speed: ParamTypes.INT,
-                volume: ParamTypes.FLOAT,
-                debug: ParamTypes.BOOL,
-            };
-
-            expect(parseQueryString(qs, typesOf(paramTypes))).toEqual({
-                model: "B",
-                rom: ["os.rom", "basic.rom"],
-                speed: 4,
-                volume: 0.8,
-                debug: true,
-            });
+        it.each([
+            ["", {}, {}],
+            ["model=B&disc=elite.ssd", {}, { model: "B", disc: "elite.ssd" }],
+            ["text=Hello%20World&path=file%2Fname.txt", {}, { text: "Hello World", path: "file/name.txt" }],
+            [
+                "text=Hello%20%26%20World%21&file=file%2Bname%40domain.com",
+                {},
+                { text: "Hello & World!", file: "file+name@domain.com" },
+            ],
+            ["debug&verbose&disc=test.ssd", {}, { debug: null, verbose: null, disc: "test.ssd" }],
+            ["model=B&disc=archive/sth/", {}, { model: "B", disc: "archive/sth/" }],
+            ["a=b=c&data=AAAA==", {}, { a: "b=c", data: "AAAA==" }],
+            ["=value", {}, { "": "value" }],
+            ["key=", {}, { key: "" }],
+            ["&&&", {}, {}],
+            ["key&key=value", {}, { key: "value" }],
+            [
+                "disc1=sth%3AMicropower%2FGhouls.zip&autoboot",
+                {},
+                { disc1: "sth:Micropower/Ghouls.zip", autoboot: null },
+            ],
+            ["disc1=sth:Micropower/Ghouls.zip&autoboot", {}, { disc1: "sth:Micropower/Ghouls.zip", autoboot: null }],
+            [
+                "rom=os.rom&rom=basic.rom&disc=a.ssd&disc=b.ssd",
+                { rom: ARRAY, disc: ARRAY },
+                { rom: ["os.rom", "basic.rom"], disc: ["a.ssd", "b.ssd"] },
+            ],
+            ["rom=os.rom&model=B", { rom: ARRAY }, { rom: ["os.rom"], model: "B" }],
+            ["rom=&model=B", { rom: ARRAY }, { rom: [""], model: "B" }],
+            [
+                "debug&verbose=false&noseek=true",
+                { debug: BOOL, verbose: BOOL, noseek: BOOL },
+                { debug: true, verbose: false, noseek: true },
+            ],
+            [
+                "gl&latency=false&fast=true",
+                { gl: BOOL_DEFAULT_TRUE, latency: BOOL_DEFAULT_TRUE, fast: BOOL_DEFAULT_TRUE },
+                { gl: true, latency: false, fast: true },
+            ],
+            [
+                "model=B&rom=os.rom&rom=basic.rom&speed=4&volume=0.8&debug",
+                { model: STRING, rom: ARRAY, speed: INT, volume: FLOAT, debug: BOOL },
+                { model: "B", rom: ["os.rom", "basic.rom"], speed: 4, volume: 0.8, debug: true },
+            ],
+        ])("reads %j with types %o", (query, types, expected) => {
+            expect(parseQueryString(query, typesOf(types))).toEqual(expected);
         });
     });
 
@@ -160,136 +83,50 @@ describe("URL Parameters", () => {
     });
 
     describe("buildUrlFromParams", () => {
-        const baseUrl = "http://localhost:8080/index.html";
-
-        it("should build URL with basic parameters", () => {
-            const params = { model: "B", disc: "elite.ssd" };
-            expect(buildUrlFromParams(baseUrl, params)).toBe("http://localhost:8080/index.html?model=B&disc=elite.ssd");
-        });
-
-        it("should handle array parameters in URL", () => {
-            const params = {
-                model: "B",
-                rom: ["os.rom", "basic.rom", "dfs.rom"],
-            };
-            expect(buildUrlFromParams(baseUrl, params, typesOf({ rom: ParamTypes.ARRAY }))).toBe(
-                "http://localhost:8080/index.html?model=B&rom=os.rom&rom=basic.rom&rom=dfs.rom",
-            );
-        });
-
-        it("should skip empty or falsy values", () => {
-            const params = {
-                model: "B",
-                disc: "",
-                debug: null,
-                rom: [],
-            };
-            expect(buildUrlFromParams(baseUrl, params, typesOf({ rom: ParamTypes.ARRAY }))).toBe(
-                "http://localhost:8080/index.html?model=B",
-            );
-        });
-
-        it("should handle mixed parameter types", () => {
-            const params = {
-                model: "B",
-                disc: "test.ssd",
-                rom: ["os.rom", "basic.rom"],
-            };
-            expect(buildUrlFromParams(baseUrl, params, typesOf({ rom: ParamTypes.ARRAY }))).toBe(
-                "http://localhost:8080/index.html?model=B&disc=test.ssd&rom=os.rom&rom=basic.rom",
-            );
-        });
-
-        // Tests for new parameter types with buildUrlFromParams
-        it("should build URL with typed parameters", () => {
-            const params = {
-                model: "B",
-                rom: ["os.rom", "basic.rom"],
-                speed: 4,
-                volume: 0.8,
-                debug: true,
-                noseek: false, // Should be omitted as it's false
-            };
-
-            const paramTypes = {
-                model: ParamTypes.STRING,
-                rom: ParamTypes.ARRAY,
-                speed: ParamTypes.INT,
-                volume: ParamTypes.FLOAT,
-                debug: ParamTypes.BOOL,
-                noseek: ParamTypes.BOOL,
-            };
-
-            expect(buildUrlFromParams(baseUrl, params, typesOf(paramTypes))).toBe(
-                "http://localhost:8080/index.html?model=B&rom=os.rom&rom=basic.rom&speed=4&volume=0.8&debug",
-            );
-        });
-
-        it("should handle zero values correctly", () => {
-            const params = {
-                speed: 0,
-                volume: 0.0,
-            };
-
-            const paramTypes = {
-                speed: ParamTypes.INT,
-                volume: ParamTypes.FLOAT,
-            };
-
-            expect(buildUrlFromParams(baseUrl, params, typesOf(paramTypes))).toBe(
-                "http://localhost:8080/index.html?speed=0&volume=0",
-            );
+        it.each([
+            [{}, {}, ""],
+            [{ model: "B", disc: "elite.ssd" }, {}, "?model=B&disc=elite.ssd"],
+            [{ model: "B", rom: ["os.rom", "basic.rom"] }, { rom: ARRAY }, "?model=B&rom=os.rom&rom=basic.rom"],
+            [{ model: "B", disc: "", debug: null, rom: [] }, { rom: ARRAY }, "?model=B"],
+            [{ debug: true, noseek: false }, { debug: BOOL, noseek: BOOL }, "?debug"],
+            [{ debug: true }, {}, "?debug=true"],
+            [
+                { gl: true, latency: false, unset: undefined },
+                { gl: BOOL_DEFAULT_TRUE, latency: BOOL_DEFAULT_TRUE, unset: BOOL_DEFAULT_TRUE },
+                "?gl&latency=false",
+            ],
+            [{ speed: 0, volume: 0.0 }, { speed: INT, volume: FLOAT }, "?speed=0&volume=0"],
+            [{ speed: 4, volume: 0.8 }, { speed: INT, volume: FLOAT }, "?speed=4&volume=0.8"],
+            [
+                { text: "Hello & World!", file: "file+name@domain.com" },
+                {},
+                "?text=Hello%20%26%20World!&file=file%2Bname@domain.com",
+            ],
+            [{ disc1: "sth:Micropower/Ghouls.zip" }, {}, "?disc1=sth:Micropower/Ghouls.zip"],
+            [{ punctuation: "!$'()*,;:@/-_.~" }, {}, "?punctuation=!$'()*,;:@/-_.~"],
+            [{ dir: "archive/sth/" }, {}, "?dir=archive/sth/"],
+            [
+                { "a&b": "c=d", "e#f": "g%h", "i+j": "k l", "m?n": "o?p" },
+                {},
+                "?a%26b=c%3Dd&e%23f=g%25h&i%2Bj=k%20l&m%3Fn=o%3Fp",
+            ],
+        ])("writes %o with types %o as %j", (params, types, query) => {
+            expect(buildUrlFromParams(BaseUrl, params, typesOf(types))).toBe(BaseUrl + query);
         });
     });
 
     describe("processAutobootParams", () => {
-        it("should process autoboot parameters with boolean values", () => {
-            const params = {
-                autoboot: true,
-                other: "value",
-            };
-            expect(processAutobootParams(params)).toEqual({
-                needsAutoboot: "boot",
-                autoType: "",
-            });
-
-            expect(processAutobootParams({ autochain: true })).toEqual({
-                needsAutoboot: "chain",
-                autoType: "",
-            });
-
-            expect(processAutobootParams({ autorun: true })).toEqual({
-                needsAutoboot: "run",
-                autoType: "",
-            });
-
-            expect(processAutobootParams({ autotype: "HELLO" })).toEqual({
-                needsAutoboot: "type",
-                autoType: "HELLO",
-            });
-
-            expect(processAutobootParams({ other: "value" })).toEqual({
-                needsAutoboot: "none",
-                autoType: "",
-            });
-        });
-
-        it("should handle legacy autoboot parameters (backward compatibility)", () => {
-            // For backward compatibility, handle string values from parseQueryString legacy mode
-            expect(processAutobootParams({ autoboot: "" })).toEqual({
-                needsAutoboot: "boot",
-                autoType: "",
-            });
-
-            expect(processAutobootParams({ autochain: "" })).toEqual({
-                needsAutoboot: "chain",
-                autoType: "",
-            });
-
-            expect(processAutobootParams({ autorun: "" })).toEqual({
-                needsAutoboot: "run",
-                autoType: "",
-            });
+        it.each([
+            [{ autoboot: true, other: "value" }, "boot", ""],
+            [{ autochain: true }, "chain", ""],
+            [{ autorun: true }, "run", ""],
+            [{ autotype: "HELLO" }, "type", "HELLO"],
+            [{ other: "value" }, "none", ""],
+            [{ autoboot: "" }, "boot", ""],
+            [{ autochain: "" }, "chain", ""],
+            [{ autorun: "" }, "run", ""],
+        ])("reads %o as %s", (params, needsAutoboot, autoType) => {
+            expect(processAutobootParams(params)).toEqual({ needsAutoboot, autoType });
         });
     });
 
@@ -309,34 +146,13 @@ describe("URL Parameters", () => {
     });
 
     describe("parseMediaParams", () => {
-        it("should extract disc images from query params", () => {
-            const params = {
-                disc: "elite.ssd",
-                disc2: "games.ssd",
-                other: "value",
-            };
-
-            expect(parseMediaParams(params)).toEqual({
-                discImage: "elite.ssd",
-                secondDiscImage: "games.ssd",
-                mmcImage: undefined,
-            });
-
-            expect(parseMediaParams({ disc1: "disc1.ssd" })).toEqual({
-                discImage: "disc1.ssd",
-                secondDiscImage: undefined,
-                mmcImage: undefined,
-            });
-            // disc1 is what the drives are named by; a bare disc gives way to it, as it does everywhere else.
-            expect(parseMediaParams({ disc: "old.ssd", disc1: "disc1.ssd" }).discImage).toBe("disc1.ssd");
-        });
-
-        it("should extract mmc image for Atom", () => {
-            expect(parseMediaParams({ mmc: "sdcard.zip" })).toEqual({
-                discImage: undefined,
-                secondDiscImage: undefined,
-                mmcImage: "sdcard.zip",
-            });
+        it.each([
+            [{ disc: "elite.ssd", disc2: "games.ssd", other: "value" }, ["elite.ssd", "games.ssd", undefined]],
+            [{ disc1: "disc1.ssd" }, ["disc1.ssd", undefined, undefined]],
+            [{ disc: "old.ssd", disc1: "disc1.ssd" }, ["disc1.ssd", undefined, undefined]],
+            [{ mmc: "sdcard.zip" }, [undefined, undefined, "sdcard.zip"]],
+        ])("reads %o", (params, [discImage, secondDiscImage, mmcImage]) => {
+            expect(parseMediaParams(params)).toEqual({ discImage, secondDiscImage, mmcImage });
         });
     });
 
@@ -403,126 +219,21 @@ describe("URL Parameters", () => {
             const url = buildUrlFromParams("", { disc1: value });
             expect(parseQueryString(url.substring(1))).toEqual({ disc1: value });
         });
-
-        it("should parse URLs generated before the encoding was relaxed", () => {
-            expect(parseQueryString("disc1=sth%3AMicropower%2FGhouls.zip&model=Master&autoboot")).toEqual({
-                disc1: "sth:Micropower/Ghouls.zip",
-                model: "Master",
-                autoboot: null,
-            });
-            expect(parseQueryString("disc1=sth:Micropower/Ghouls.zip&model=Master&autoboot")).toEqual({
-                disc1: "sth:Micropower/Ghouls.zip",
-                model: "Master",
-                autoboot: null,
-            });
-        });
     });
 
     describe("guessModelFromHostname", () => {
-        it("should return B-DFS1.2 for hostnames starting with 'bbc'", () => {
-            expect(guessModelFromHostname("bbc.example.com")).toBe("B-DFS1.2");
-            expect(guessModelFromHostname("bbcmicro.local")).toBe("B-DFS1.2");
-        });
-
-        it("should return Master for hostnames starting with 'master'", () => {
-            expect(guessModelFromHostname("master.example.com")).toBe("Master");
-            expect(guessModelFromHostname("mastercompact.local")).toBe("Master");
-        });
-
-        it("should return Atom for hostnames starting with 'atom'", () => {
-            expect(guessModelFromHostname("atom.example.com")).toBe("Atom");
-            expect(guessModelFromHostname("atomulator.local")).toBe("Atom");
-        });
-
-        it("should return default model for other hostnames", () => {
-            expect(guessModelFromHostname("example.com")).toBe("B-DFS1.2");
-            expect(guessModelFromHostname("localhost")).toBe("B-DFS1.2");
-            expect(guessModelFromHostname("")).toBe("B-DFS1.2");
-        });
-    });
-
-    describe("parseQueryString additional tests", () => {
-        it("should handle invalid/malformed query strings", () => {
-            expect(parseQueryString("=value")).toEqual({ "": "value" });
-            expect(parseQueryString("key=")).toEqual({ key: "" });
-            expect(parseQueryString("&&&")).toEqual({});
-            expect(parseQueryString("key&key=value")).toEqual({ key: "value" });
-        });
-
-        it("should keep everything after the first equals in the value", () => {
-            expect(parseQueryString("a=b=c")).toEqual({ a: "b=c" });
-            expect(parseQueryString("data=AAAA==&model=B")).toEqual({ data: "AAAA==", model: "B" });
-        });
-
-        it("should handle special characters in query parameters", () => {
-            const qs = "text=Hello%20%26%20World%21&file=file%2Bname%40domain.com";
-            expect(parseQueryString(qs)).toEqual({
-                text: "Hello & World!",
-                file: "file+name@domain.com",
-            });
-        });
-    });
-
-    describe("buildUrlFromParams additional tests", () => {
-        const baseUrl = "http://localhost:8080/index.html";
-
-        it("should handle empty parameter object", () => {
-            expect(buildUrlFromParams(baseUrl, {})).toBe(baseUrl);
-        });
-
-        it("should encode special characters in URL parameters", () => {
-            const params = {
-                text: "Hello & World!",
-                file: "file+name@domain.com",
-            };
-            const expected = "http://localhost:8080/index.html?text=Hello%20%26%20World!&file=file%2Bname@domain.com";
-            expect(buildUrlFromParams(baseUrl, params)).toBe(expected);
-        });
-
-        it("should leave characters the query grammar allows alone", () => {
-            expect(buildUrlFromParams(baseUrl, { disc1: "sth:Micropower/Ghouls.zip" })).toBe(
-                "http://localhost:8080/index.html?disc1=sth:Micropower/Ghouls.zip",
-            );
-            expect(buildUrlFromParams(baseUrl, { punctuation: "!$'()*,;:@/-_.~" })).toBe(
-                "http://localhost:8080/index.html?punctuation=!$'()*,;:@/-_.~",
-            );
-        });
-
-        it("should escape everything that delimits, and question marks", () => {
-            expect(buildUrlFromParams(baseUrl, { "a&b": "c=d", "e#f": "g%h", "i+j": "k l", "m?n": "o?p" })).toBe(
-                "http://localhost:8080/index.html?a%26b=c%3Dd&e%23f=g%25h&i%2Bj=k%20l&m%3Fn=o%3Fp",
-            );
-        });
-
-        it("should leave a trailing slash alone", () => {
-            const url = buildUrlFromParams(baseUrl, { dir: "archive/sth/" });
-            expect(url).toBe("http://localhost:8080/index.html?dir=archive/sth/");
-            expect(parseQueryString(url.substring(url.indexOf("?") + 1))).toEqual({ dir: "archive/sth/" });
-        });
-
-        it("should handle explicit parameter types", () => {
-            const params = {
-                name: "jsbeeb",
-                roms: ["os.rom", "basic.rom"],
-                debug: true,
-            };
-
-            // With ARRAY type for roms - we should get separate parameters
-            expect(buildUrlFromParams(baseUrl, params, typesOf({ roms: ParamTypes.ARRAY }))).toBe(
-                "http://localhost:8080/index.html?name=jsbeeb&roms=os.rom&roms=basic.rom&debug=true",
-            );
-
-            // With BOOL type for debug and ARRAY type for roms
-            expect(
-                buildUrlFromParams(
-                    baseUrl,
-                    params,
-                    typesOf({
-                        debug: ParamTypes.BOOL,
-                        roms: ParamTypes.ARRAY,
-                    }),
-                ),
-            ).toBe("http://localhost:8080/index.html?name=jsbeeb&roms=os.rom&roms=basic.rom&debug");
+        it.each([
+            ["bbc.example.com", "B-DFS1.2"],
+            ["bbcmicro.local", "B-DFS1.2"],
+            ["master.example.com", "Master"],
+            ["mastercompact.local", "Master"],
+            ["atom.example.com", "Atom"],
+            ["atomulator.local", "Atom"],
+            ["example.com", "B-DFS1.2"],
+            ["localhost", "B-DFS1.2"],
+            ["", "B-DFS1.2"],
+        ])("guesses %j is a %s", (hostname, model) => {
+            expect(guessModelFromHostname(hostname)).toBe(model);
         });
     });
 });

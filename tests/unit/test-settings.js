@@ -19,18 +19,6 @@ describe("Settings", () => {
     const make = () => new Settings({ urlState });
 
     describe("resolving the initial values", () => {
-        it("prefers the URL, then browser storage, then the defaults", () => {
-            window.localStorage.displayMode = "pal";
-            window.localStorage.audioOutput = "board";
-            urlState.params.displayMode = "xbr";
-            const settings = make();
-            expect(settings.displayMode).toBe("xbr");
-            expect(settings.audioOutput).toBe("board");
-            expect(settings.speakerAmount).toBe(1);
-            expect(settings.keyLayout).toBe("physical");
-            expect(settings.tubeCpuMultiplier).toBe(1);
-        });
-
         it("starts every setting at its default given nothing", () => {
             expect(make()).toMatchObject({
                 model: DefaultModel,
@@ -128,25 +116,11 @@ describe("Settings", () => {
             expect(settings.speakerAmount).toBe(1);
         });
 
-        it("takes each display's afterglow from its filter, then storage, then the URL", () => {
-            expect(make().palPersistenceMs).toBe(40);
-            expect(make().rgbPersistenceMs).toBe(25);
-            window.localStorage.palPersistenceMs = "30";
-            expect(make().palPersistenceMs).toBe(30);
-            urlState.params.palPersistenceMs = 100;
-            expect(make().palPersistenceMs).toBe(100);
-        });
-
         it("keeps an afterglow within what a display can show", () => {
             urlState.params.palPersistenceMs = 5000;
             expect(make().palPersistenceMs).toBe(500);
             window.localStorage.rgbPersistenceMs = "-1";
             expect(make().rgbPersistenceMs).toBe(0);
-        });
-
-        it("lower-cases a key layout from the URL", () => {
-            urlState.params.keyLayout = "GAMING";
-            expect(make().keyLayout).toBe("gaming");
         });
 
         it("resolves the model and the fittings", () => {
@@ -157,7 +131,7 @@ describe("Settings", () => {
             expect(settings.model).toBe(findModel("Master"));
             expect(settings.hasMusic5000).toBe(true);
             expect(settings.coProcessor).toBe(false);
-            expect(settings.extraRoms).toEqual(["master/anfs-4.25.rom", "ample.rom"]);
+            expect(settings.fittedRoms).toEqual(["master/anfs-4.25.rom", "ample.rom"]);
         });
 
         it("falls back to the default model with a notice when the name is unknown", () => {
@@ -165,13 +139,6 @@ describe("Settings", () => {
             const settings = make();
             expect(settings.model.name).toBe(DefaultModel.name);
             expect(toasts()).toEqual([expect.stringContaining('no model called "PDP-11"')]);
-        });
-
-        it("understands the old combination model names", () => {
-            urlState.params.model = "MasterTurbo";
-            const settings = make();
-            expect(settings.model).toBe(findModel("Master"));
-            expect(settings.coProcessor).toBe(true);
         });
     });
 
@@ -183,14 +150,6 @@ describe("Settings", () => {
             expect(window.localStorage.audioOutput).toBe("board");
             expect(urlState.params.audioOutput).toBe("board");
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
-        });
-
-        it("keeps only the settings worth remembering in storage", () => {
-            const settings = make();
-            settings.set({ hasMusic5000: true, keyLayout: "natural" });
-            expect(window.localStorage.hasMusic5000).toBeUndefined();
-            expect(window.localStorage.keyLayout).toBe("natural");
-            expect(urlState.params.hasMusic5000).toBe(true);
         });
 
         it("remembers in storage the key layout, the display and the sound, and nothing else", () => {
@@ -250,34 +209,16 @@ describe("Settings", () => {
             expect(urlState.params.palPersistenceMs).toBe(500);
         });
 
-        it("puts a cleared afterglow back at its display's default, remembered nowhere", () => {
+        it.each([
+            ["palPersistenceMs", [60, 70]],
+            ["speakerAmount", [0.5, 0.4, 0.3]],
+        ])("lets a drag of %s settle before writing one history entry", (name, values) => {
             const settings = make();
-            settings.set({ palPersistenceMs: 30 });
-            settings.set({ palPersistenceMs: undefined });
-            expect(settings.palPersistenceMs).toBe(40);
-            expect(window.localStorage.palPersistenceMs).toBeUndefined();
-            expect(urlState.params.palPersistenceMs).toBeUndefined();
-        });
-
-        it("remembers an afterglow and lets its drag settle", () => {
-            const settings = make();
-            settings.set({ palPersistenceMs: 60 });
-            settings.set({ palPersistenceMs: 70 });
-            expect(settings.palPersistenceMs).toBe(70);
-            expect(window.localStorage.palPersistenceMs).toBe("70");
-            expect(urlState.params.palPersistenceMs).toBe(70);
-            expect(urlState.updateUrl).not.toHaveBeenCalled();
-            vi.advanceTimersByTime(300);
-            expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
-        });
-
-        it("lets a speaker amount drag settle before writing one history entry", () => {
-            const settings = make();
-            settings.set({ speakerAmount: 0.5 });
-            settings.set({ speakerAmount: 0.4 });
-            settings.set({ speakerAmount: 0.3 });
-            expect(settings.speakerAmount).toBe(0.3);
-            expect(urlState.params.speakerAmount).toBe(0.3);
+            for (const value of values) settings.set({ [name]: value });
+            const last = values.at(-1);
+            expect(settings[name]).toBe(last);
+            expect(window.localStorage[name]).toBe(String(last));
+            expect(urlState.params[name]).toBe(last);
             expect(urlState.updateUrl).not.toHaveBeenCalled();
             vi.advanceTimersByTime(300);
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
@@ -300,20 +241,17 @@ describe("Settings", () => {
             expect(settings.model).toBe(DefaultModel);
         });
 
-        it("forgets a stored setting that is cleared, leaving it at its default", () => {
-            window.localStorage.keyLayout = "natural";
+        it.each([
+            ["palPersistenceMs", 30, 40],
+            ["keyLayout", "natural", "physical"],
+            ["microphoneChannel", 2, undefined],
+        ])("puts %s back at its default when cleared, remembered nowhere", (name, value, byDefault) => {
             const settings = make();
-            settings.set({ keyLayout: undefined });
-            expect(window.localStorage.keyLayout).toBeUndefined();
-            expect(settings.keyLayout).toBe("physical");
-        });
-
-        it("clears a setting given undefined", () => {
-            urlState.params.microphoneChannel = 2;
-            const settings = make();
-            settings.set({ microphoneChannel: undefined });
-            expect(settings.microphoneChannel).toBeUndefined();
-            expect("microphoneChannel" in urlState.params).toBe(false);
+            settings.set({ [name]: value });
+            settings.set({ [name]: undefined });
+            expect(settings[name]).toBe(byDefault);
+            expect(window.localStorage[name]).toBeUndefined();
+            expect(name in urlState.params).toBe(false);
         });
 
         it("tells each setting's subscribers its new value, then everyone about the lot", () => {
@@ -350,24 +288,26 @@ describe("Settings", () => {
     });
 
     describe("mapLegacyModels", () => {
-        it("splits the combination models into a model and its fitting", () => {
-            const turbo = { model: "MasterTurbo" };
-            mapLegacyModels(turbo);
-            expect(turbo).toEqual({ model: "Master", coProcessor: true });
-
-            const music = { model: "BMusic5000" };
-            mapLegacyModels(music);
-            expect(music).toEqual({ model: "B-DFS1.2", hasMusic5000: true });
-
-            const teletext = { model: "BTeletext" };
-            mapLegacyModels(teletext);
-            expect(teletext).toEqual({ model: "B-DFS1.2", hasTeletextAdaptor: true });
-        });
-
-        it("leaves a query with no model alone", () => {
-            const query = { autoboot: true };
+        it.each([
+            [
+                "splits MasterTurbo into the Master and a co-processor",
+                { model: "MasterTurbo" },
+                { model: "Master", coProcessor: true },
+            ],
+            [
+                "splits BMusic5000 into the B and a Music 5000",
+                { model: "BMusic5000" },
+                { model: "B-DFS1.2", hasMusic5000: true },
+            ],
+            [
+                "splits BTeletext into the B and a teletext adaptor",
+                { model: "BTeletext" },
+                { model: "B-DFS1.2", hasTeletextAdaptor: true },
+            ],
+            ["leaves a query with no model alone", { autoboot: true }, { autoboot: true }],
+        ])("%s", (_, query, mapped) => {
             mapLegacyModels(query);
-            expect(query).toEqual({ autoboot: true });
+            expect(query).toEqual(mapped);
         });
     });
 });

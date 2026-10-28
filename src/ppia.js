@@ -1,4 +1,5 @@
 import { ATOM, getKeyMapAtom } from "./keymap-atom.js";
+import { ShiftOverride } from "./keymap.js";
 
 // 8255 Programmable Peripheral Interface Adapter for the Acorn Atom.
 // Reference: http://mdfs.net/Docs/Comp/Acorn/Atom/atap25.htm
@@ -47,7 +48,6 @@ class PPIA {
         this.cpu = cpu;
 
         this.latcha = 0;
-        this.latchb = 0;
         this.latchc = 0;
         this.portapins = 0;
         this.portbpins = 0;
@@ -58,7 +58,7 @@ class PPIA {
 
     reset() {
         //http://members.casema.nl/hhaydn/8255_pin.html
-        this.latcha = this.latchb = this.latchc = 0x00;
+        this.latcha = this.latchc = 0x00;
     }
 
     setVBlankInt(level) {
@@ -119,9 +119,10 @@ class PPIA {
                 break;
             case CREG: {
                 this.creg = val & 0xff;
-                // 8255 CREG: D7=1 is mode-set (ignored; Atom uses fixed port directions),
+                // 8255 CREG: D7=1 is mode-set, ignored, as port directions are fixed at what the Atom ROM's
+                // reset selects (#1436).
                 // D7=0 is Bit Set/Reset (BSR) for individual port C output bits.
-                if (val & 0x80) break; // mode-set: no action needed
+                if (val & 0x80) break;
 
                 // BSR: set or clear a single port C output bit.
                 // NOTE: Simplified: only handles bits 2 (speaker) and 3 (CSS),
@@ -151,7 +152,6 @@ class PPIA {
                 this.recalculatePortAPins();
                 return this.portapins;
             case PORTB: {
-                this.recalculatePortBPins();
                 const keyrow = this.portapins & 0x0f;
                 const n = this.keys[keyrow];
                 let r = 0xff; // all keys unpressed
@@ -194,12 +194,6 @@ class PPIA {
         this.portAUpdated();
     }
 
-    recalculatePortBPins() {
-        this.portbpins = this.latchb;
-        this.drivePortB();
-        this.portBUpdated();
-    }
-
     recalculatePortCPins() {
         this.portcpins = this.latchc;
         this.drivePortC();
@@ -208,10 +202,8 @@ class PPIA {
 
     // No-op hooks for subclass override
     drivePortA() {}
-    drivePortB() {}
     drivePortC() {}
     portAUpdated() {}
-    portBUpdated() {}
     portCUpdated() {}
 }
 
@@ -228,11 +220,9 @@ export class AtomPPIA extends PPIA {
         }
 
         this.setKeyLayout(initialLayout);
-        this.physicalShiftDown = false;
-        this.shiftOverride = null;
+        this.shift = new ShiftOverride(ATOM.SHIFT);
 
         this.keyboardEnabled = true;
-        this.lastSpeakerBit = 0;
         // The Atom has no lock lights. Report caps lock as "on" and shift
         // lock as "off" so the paste routine's lock-toggle logic is never
         // triggered (it toggles CAPSLOCK when !capsLockLight, and SHIFTLOCK
@@ -250,6 +240,11 @@ export class AtomPPIA extends PPIA {
         this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 
+    reset() {
+        super.reset();
+        this.lastSpeakerBit = (this.latchc & 0x04) >>> 2;
+    }
+
     setKeyLayout(map) {
         this.keycodeToRowCol = getKeyMapAtom(map);
     }
@@ -261,8 +256,7 @@ export class AtomPPIA extends PPIA {
                 this.keys[i][j] = 0;
             }
         }
-        this.physicalShiftDown = false;
-        this.shiftOverride = null;
+        this.shift.clear();
         this.updateKeys();
     }
 
@@ -283,19 +277,7 @@ export class AtomPPIA extends PPIA {
         if (!this.keyboardEnabled) return;
         const colrow = this.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) return;
-        const [col, row, shiftOverride] = colrow;
-        const [shiftCol, shiftRow] = ATOM.SHIFT;
-
-        this.keys[col][row] = val;
-        const isShiftKey = shiftOverride === undefined && col === shiftCol && row === shiftRow;
-        if (isShiftKey) this.physicalShiftDown = !!val;
-        if (shiftOverride !== undefined) this.shiftOverride = val ? shiftOverride : null;
-        // A key with a shift override holds the Atom's shift its own way while it is down; otherwise
-        // only the shift key moves it, which leaves alone a shift held through the raw entry points.
-        if (isShiftKey || shiftOverride !== undefined || this.shiftOverride !== null) {
-            const shiftPressed = this.shiftOverride === null ? this.physicalShiftDown : this.shiftOverride;
-            this.keys[shiftCol][shiftRow] = shiftPressed ? 1 : 0;
-        }
+        this.shift.setMapped(this.keys, colrow, val);
         this.updateKeys();
     }
 
@@ -355,9 +337,6 @@ export class AtomPPIA extends PPIA {
         this.updateKeys();
     }
 
-    // nothing on ATOM
-    portBUpdated() {}
-
     portCUpdated() {
         const speakerBit = (this.portcpins & 0x04) >>> 2;
         if (speakerBit !== this.lastSpeakerBit) {
@@ -368,10 +347,6 @@ export class AtomPPIA extends PPIA {
 
     drivePortA() {
         this.updateKeys();
-    }
-
-    drivePortB() {
-        // Nothing driving here.
     }
 
     drivePortC() {
@@ -484,7 +459,6 @@ export class AtomPPIA extends PPIA {
     snapshotState() {
         return {
             latcha: this.latcha,
-            latchb: this.latchb,
             latchc: this.latchc,
             portapins: this.portapins,
             portbpins: this.portbpins,
@@ -498,7 +472,6 @@ export class AtomPPIA extends PPIA {
 
     restoreState(state) {
         this.latcha = state.latcha;
-        this.latchb = state.latchb;
         this.latchc = state.latchc;
         this.portapins = state.portapins;
         this.portbpins = state.portbpins;
@@ -513,7 +486,6 @@ export class AtomPPIA extends PPIA {
         this.lastSpeakerBit = state.lastSpeakerBit;
         // Which held key was forcing shift is not saved, so the matrix's shift is taken as the shift key's.
         const [shiftCol, shiftRow] = ATOM.SHIFT;
-        this.shiftOverride = null;
-        this.physicalShiftDown = !!this.keys[shiftCol][shiftRow];
+        this.shift.restore({ physicalShiftDown: !!this.keys[shiftCol][shiftRow], shiftOverrideActive: false });
     }
 }

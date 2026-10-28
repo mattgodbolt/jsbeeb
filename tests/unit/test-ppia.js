@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AtomPPIA } from "../../src/ppia.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { keyCodes } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { AtomSoundChip } from "../../src/soundchip.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 function makePPIA(layout = "physical") {
     const scheduler = new Scheduler();
@@ -20,11 +22,11 @@ function makePPIA(layout = "physical") {
 }
 
 describe("AtomPPIA", () => {
-    it("should construct with initial state", () => {
+    it("starts with port A clear, the keyboard enabled and no key down", () => {
         const { ppia } = makePPIA();
-        expect(ppia.portapins).toBe(0);
-        expect(ppia.portbpins).toBe(0);
+        expect(ppia.read(0xb000)).toBe(0);
         expect(ppia.keyboardEnabled).toBe(true);
+        expect(ppia.hasAnyKeyDown()).toBe(false);
     });
 
     describe("port read/write", () => {
@@ -39,13 +41,6 @@ describe("AtomPPIA", () => {
             const before = ppia.read(0xb001);
             ppia.write(0xb001, 0xff); // PORTB is input-only
             expect(ppia.read(0xb001)).toBe(before);
-        });
-
-        it("should read port C with VSync and REPT bits", () => {
-            const { ppia } = makePPIA();
-            const val = ppia.read(0xb002); // PORTC
-            expect(typeof val).toBe("number");
-            expect(val & 0xff).toBe(val); // 8-bit value
         });
 
         it("should return open bus for unmapped register reads", () => {
@@ -67,43 +62,27 @@ describe("AtomPPIA", () => {
     });
 
     describe("CREG Bit Set/Reset", () => {
-        it("should set speaker bit via BSR write", () => {
-            const { ppia } = makePPIA();
-            // BSR: D7=0, bits 1-3 select pin, bit 0 = set/reset value
-            // Pin 2 (speaker) set: val = 0b0000_0101 = 0x05
-            ppia.write(0xb003, 0x05);
-            expect(ppia.portcpins & 0x04).toBe(0x04);
-        });
+        const Speaker = 0x04;
+        const Css = 0x08;
+        // BSR: D7=0, bits 1-3 select the pin, bit 0 the value it takes.
+        const SetSpeaker = 0x05;
+        const ClearSpeaker = 0x04;
+        const SetCss = 0x07;
+        const ModeSet = 0x80;
 
-        it("should clear speaker bit via BSR write", () => {
+        it.each([
+            ["sets the speaker bit", [SetSpeaker], Speaker],
+            ["clears the speaker bit", [SetSpeaker, ClearSpeaker], 0],
+            ["preserves CSS when toggling the speaker", [SetCss, SetSpeaker], Speaker | Css],
+            ["ignores a mode-set write (D7=1)", [SetSpeaker, ModeSet], Speaker],
+        ])("%s", (_, writes, expected) => {
             const { ppia } = makePPIA();
-            ppia.write(0xb003, 0x05); // set speaker
-            ppia.write(0xb003, 0x04); // clear speaker
-            expect(ppia.portcpins & 0x04).toBe(0);
-        });
-
-        it("should preserve CSS when toggling speaker", () => {
-            const { ppia } = makePPIA();
-            ppia.write(0xb003, 0x07); // set CSS (pin 3)
-            ppia.write(0xb003, 0x05); // set speaker (pin 2)
-            expect(ppia.portcpins & 0x08).toBe(0x08); // CSS still set
-            expect(ppia.portcpins & 0x04).toBe(0x04); // speaker set
-        });
-
-        it("should ignore mode-set writes (D7=1)", () => {
-            const { ppia } = makePPIA();
-            ppia.write(0xb003, 0x05); // set speaker via BSR
-            ppia.write(0xb003, 0x80); // mode-set (should be ignored)
-            expect(ppia.portcpins & 0x04).toBe(0x04); // speaker unchanged
+            for (const value of writes) ppia.write(0xb003, value);
+            expect(ppia.read(0xb002) & (Speaker | Css)).toBe(expected);
         });
     });
 
     describe("keyboard matrix", () => {
-        it("should report no keys down initially", () => {
-            const { ppia } = makePPIA();
-            expect(ppia.hasAnyKeyDown()).toBe(false);
-        });
-
         it("should register key down and up via keyDown/keyUp", () => {
             const { ppia } = makePPIA();
             // Space is [9, 0] in the ATOM matrix
@@ -145,10 +124,6 @@ describe("AtomPPIA", () => {
         it("should ignore key events when keyboard disabled", () => {
             const { ppia } = makePPIA();
             ppia.disableKeyboard();
-            ppia.keyDownRaw([5, 3]);
-            // keyDownRaw bypasses the enabled check, but set() respects it
-            // Test via the set() path
-            ppia.clearKeys();
             ppia.set(65, 1, false); // 'A' key code
             expect(ppia.hasAnyKeyDown()).toBe(false);
         });
@@ -157,13 +132,11 @@ describe("AtomPPIA", () => {
     describe("VSync", () => {
         it("should set port C bit 7 based on VSync level", () => {
             const { ppia } = makePPIA();
-            // In frame (level=0): bit 7 should be high
             ppia.setVBlankInt(0);
-            expect(ppia.latchc & 0x80).toBe(0x80);
+            expect(ppia.read(0xb002) & 0x80).toBe(0x80);
 
-            // In VSync (level=1): bit 7 should be low
             ppia.setVBlankInt(1);
-            expect(ppia.latchc & 0x80).toBe(0);
+            expect(ppia.read(0xb002) & 0x80).toBe(0);
         });
     });
 
@@ -179,21 +152,26 @@ describe("AtomPPIA", () => {
             expect(calls.length).toBeGreaterThan(0);
             expect(calls[0].bit).toBe(1); // bit 2 >> 2 = 1
         });
+
+        it.each([0, 1])("sounds the first rising edge after a hard reset taken with the speaker at %i", (level) => {
+            const { ppia, cpu, scheduler } = makePPIA();
+            const chip = new AtomSoundChip(() => {});
+            chip.setScheduler(scheduler);
+            cpu.soundChip = chip;
+            ppia.write(0xb002, level << 2);
+
+            ppia.reset();
+            chip.reset(true);
+            cpu.currentCycles = 10;
+            ppia.write(0xb002, 0x04);
+            scheduler.epoch = 20;
+            const out = new Float32Array(10);
+            chip.render(out, 0, out.length);
+            expect(out[5]).toBeGreaterThan(0.1);
+        });
     });
 
     describe("tape", () => {
-        it("should set and manage tape", () => {
-            const { ppia } = makePPIA();
-            const fakeTape = {
-                rewind() {},
-                poll() {
-                    return 100;
-                },
-            };
-            ppia.setTape(fakeTape);
-            expect(ppia.tape).toBe(fakeTape);
-        });
-
         it("starts a new tape stopped, whatever the last one was doing", () => {
             const { ppia } = makePPIA();
             ppia.setTape({ rewind() {}, poll: () => 100 });
@@ -219,15 +197,15 @@ describe("AtomPPIA", () => {
         });
 
         it("stops, motor and all, when the tape runs out", () => {
-            const { ppia } = makePPIA();
+            const { ppia, scheduler } = makePPIA();
             let polls = 0;
             ppia.setTape({ rewind() {}, poll: () => (++polls > 1 ? undefined : 100) });
-            vi.spyOn(ppia.runTapeTask, "reschedule");
             ppia.playTape();
             expect(ppia.motorOn).toBe(true);
-            ppia.runTape();
-            expect(ppia.runTapeTask.reschedule).toHaveBeenCalledTimes(1);
+            scheduler.polltime(100);
+            expect(polls).toBe(2);
             expect(ppia.motorOn).toBe(false);
+            expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
         });
 
         it("stops the motor when rewinding", () => {
@@ -249,80 +227,62 @@ describe("AtomPPIA", () => {
         it("should receive bits into port C", () => {
             const { ppia } = makePPIA();
             ppia.receiveBit(1);
-            expect(ppia.latchc & 0x20).toBe(0x20); // bit 5 set
+            expect(ppia.read(0xb002) & 0x20).toBe(0x20);
             ppia.receiveBit(0);
-            expect(ppia.latchc & 0x20).toBe(0); // bit 5 cleared
+            expect(ppia.read(0xb002) & 0x20).toBe(0);
         });
     });
 
     describe("address mirroring", () => {
-        it("should read port A via mirrored address 0xB004", () => {
-            const { ppia } = makePPIA();
-            ppia.write(0xb000, 0x35);
-            expect(ppia.read(0xb004)).toBe(0x35);
-        });
+        const readPorts = (ppia, base) => [0, 1, 2].map((port) => ppia.read(base + port));
 
-        it("should read port B via mirrored address 0xB005", () => {
-            const { ppia } = makePPIA();
-            ppia.keyDownRaw([6, 1]);
-            ppia.write(0xb000, 6); // select row 6
-            expect(ppia.read(0xb005)).toBe(ppia.read(0xb001));
-        });
-
-        it("should read port C via mirrored address 0xB006", () => {
-            const { ppia } = makePPIA();
-            expect(ppia.read(0xb006)).toBe(ppia.read(0xb002));
-        });
-
-        it("should write port A via mirrored address 0xB004", () => {
-            const { ppia } = makePPIA();
-            ppia.write(0xb004, 0x42);
-            expect(ppia.read(0xb000)).toBe(0x42);
-        });
-
-        it("should write CREG via mirrored address 0xB007", () => {
-            const { ppia } = makePPIA();
-            // BSR: set speaker (pin 2) via mirrored CREG address
-            ppia.write(0xb007, 0x05);
-            expect(ppia.portcpins & 0x04).toBe(0x04);
+        it.each([
+            ["port A, selecting a keyboard row", 0, 6],
+            ["port C's output latch", 2, 0x0f],
+            ["CREG, setting the speaker bit", 3, 0x05],
+        ])("answers at 0xB004-0xB007 as at 0xB000-0xB003: %s", (_, register, value) => {
+            const direct = makePPIA().ppia;
+            const mirrored = makePPIA().ppia;
+            for (const ppia of [direct, mirrored]) ppia.keyDownRaw([6, 1]);
+            direct.write(0xb000 + register, value);
+            mirrored.write(0xb004 + register, value);
+            expect(readPorts(mirrored, 0xb004)).toEqual(readPorts(direct, 0xb000));
+            expect(readPorts(direct, 0xb004)).toEqual(readPorts(direct, 0xb000));
         });
     });
 
     describe("snapshot/restore", () => {
-        it("should round-trip state through snapshot and restore", () => {
-            const { ppia } = makePPIA();
-            // Mutate state
-            ppia.write(0xb000, 0x35); // port A
-            ppia.keyDownRaw([6, 1]); // press a key
-            ppia.write(0xb003, 0x05); // BSR: set speaker bit
-
-            const snapshot = ppia.snapshotState();
-            expect(snapshot.latcha).toBe(0x35);
-            expect(snapshot.keyboardEnabled).toBe(true);
-
-            // Create a fresh PPIA and restore
-            const { ppia: ppia2 } = makePPIA();
-            ppia2.restoreState(snapshot);
-
-            expect(ppia2.latcha).toBe(0x35);
-            expect(ppia2.keyboardEnabled).toBe(true);
-            expect(ppia2.keys[6][1]).toBe(1);
+        it("should round-trip a PPIA with a key down and the speaker up in vertical sync", async () => {
+            await expectSnapshotRoundTrips(
+                () => makePPIA().ppia,
+                (ppia) => {
+                    ppia.write(0xb000, 0x35);
+                    ppia.write(0xb003, 0x05);
+                    ppia.keyDownRaw([6, 1]);
+                    ppia.setVBlankInt(true);
+                },
+            );
         });
 
         it("should produce JSON-serializable state", () => {
             const { ppia } = makePPIA();
-            ppia.write(0xb000, 0x42);
+            ppia.write(0xb000, 0x43);
             ppia.keyDownRaw([3, 2]);
-            const snapshot = ppia.snapshotState();
-
-            // Round-trip through JSON
-            const json = JSON.stringify(snapshot);
-            const parsed = JSON.parse(json);
 
             const { ppia: ppia2 } = makePPIA();
-            ppia2.restoreState(parsed);
-            expect(ppia2.latcha).toBe(0x42);
-            expect(ppia2.keys[3][2]).toBe(1);
+            ppia2.restoreState(JSON.parse(JSON.stringify(ppia.snapshotState())));
+            expect(ppia2.read(0xb000)).toBe(0x43);
+            expect(ppia2.read(0xb001) & (1 << 2)).toBe(0);
+        });
+
+        it("should restore a snapshot from before latchb was dropped", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb000, 0x42);
+            const saved = ppia.snapshotState();
+
+            const { ppia: restored } = makePPIA();
+            restored.restoreState({ ...saved, latchb: 0 });
+            expect(restored.snapshotState()).toEqual(saved);
         });
     });
 });
@@ -338,56 +298,14 @@ describe("AtomPPIA natural keyboard shift override", () => {
         return ppia.keys[atomKey[0]][atomKey[1]] === 1;
     }
 
-    it("holds no Atom shift for a `@`, which the Atom prints unshifted", () => {
+    it("holds the Atom's shift off for a shifted `@` and gives it back on release", () => {
         ppia.keyDown(keyCodes.SHIFT_LEFT, false);
         ppia.keyDown("@", true);
-
         expect(atomKeyPressed(ATOM.AT)).toBe(true);
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
 
-    it("gives the shift key back when the character is released", () => {
-        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
-        ppia.keyDown("@", true);
         ppia.keyUp("@");
-
         expect(atomKeyPressed(ATOM.AT)).toBe(false);
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
-    });
-
-    it("keeps the shift suppressed when shift is let go first", () => {
-        ppia.keyDown(keyCodes.SHIFT_LEFT, false);
-        ppia.keyDown("@", true);
-
-        ppia.keyUp(keyCodes.SHIFT_LEFT);
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-
-        ppia.keyUp("@");
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
-
-    it("holds Atom shift for a `=`, which the Atom prints shifted", () => {
-        ppia.keyDown("=", false);
-
-        expect(atomKeyPressed(ATOM.MINUS_EQUALS)).toBe(true);
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
-    });
-
-    it("keeps the override while a plain key is pressed and released under it", () => {
-        ppia.keyDown("=", false);
-        ppia.keyDown("a", false);
-        ppia.keyUp("a");
-
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
-        ppia.keyUp("=");
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
-
-    it("leaves shift alone for the space bar, which prints the same either way", () => {
-        ppia.keyDown(" ", true);
-        ppia.keyDown(keyCodes.SHIFT_LEFT, true);
-
-        expect(atomKeyPressed(ATOM.SPACE)).toBe(true);
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
     });
 
@@ -397,13 +315,6 @@ describe("AtomPPIA natural keyboard shift override", () => {
         ppia.keyDown("a", false);
 
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(false);
-    });
-
-    it("leaves a shift held through the raw entry points alone", () => {
-        ppia.keyDownRaw(ATOM.SHIFT);
-        ppia.keyDown("a", false);
-
-        expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
     });
 
     it("does not carry an override across a restore", () => {

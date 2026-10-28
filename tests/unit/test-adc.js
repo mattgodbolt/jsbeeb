@@ -1,329 +1,171 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Adc } from "../../src/adc.js";
-import { AnalogueSource } from "../../src/analogue-source.js";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { Adc, AdcCentreValue } from "../../src/adc.js";
+import { Scheduler } from "../../src/scheduler.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
-// Create a mock gamepad source for testing
-class MockGamepadSource extends AnalogueSource {
-    constructor() {
-        super();
-        this.mockValues = {
-            0: 0x3fff, // Channel 0: halfway (0.5) -> 0x3fff
-            1: 0xffff, // Channel 1: max (-1.0) -> 0xffff
-            2: 0x5fff, // Channel 2: quarter (0.25) -> 0x5fff
-            3: 0xdfff, // Channel 3: three quarters (-0.75) -> 0xdfff
-        };
-    }
+const Status = 0;
+const High = 1;
+const Low = 2;
+const Busy = 0x80;
+const EndOfConversion = 0x40;
+const TenBit = 0x08;
+const EightBitConversionCycles = 8000;
+const TenBitConversionCycles = 20000;
 
-    getValue(channel) {
-        return this.mockValues[channel] || 0x8000;
-    }
-}
+const source = (value) => ({ getValue: () => value, dispose: vi.fn() });
 
-describe("ADC", () => {
-    // Mock dependencies
-    const mockSysvia = {
-        setcb1: vi.fn(),
-    };
-
-    const mockScheduler = {
-        newTask: vi.fn().mockImplementation((callback) => ({
-            schedule: vi.fn(),
-            cancel: vi.fn(),
-            callback,
-        })),
-    };
-
+describe("Adc", () => {
+    let scheduler;
+    let cb1;
+    let sysvia;
     let adc;
-    let mockTask;
-    let mockGamepadSource;
+
+    const registers = () => [adc.read(Status), adc.read(High), adc.read(Low)];
+    const convert = (control) => {
+        adc.write(Status, control);
+        scheduler.polltime(control & TenBit ? TenBitConversionCycles : EightBitConversionCycles);
+    };
 
     beforeEach(() => {
-        // Reset mocks
-        vi.resetAllMocks();
-
-        // Create a mock task that stores the callback
-        mockTask = {
-            schedule: vi.fn(),
-            cancel: vi.fn(),
-        };
-        mockScheduler.newTask.mockReturnValue(mockTask);
-
-        // Create a fresh ADC instance
-        adc = new Adc(mockSysvia, mockScheduler);
-
-        mockGamepadSource = new MockGamepadSource();
-        adc.setChannelSource(0, mockGamepadSource);
-        adc.setChannelSource(1, mockGamepadSource);
-        adc.setChannelSource(2, mockGamepadSource);
-        adc.setChannelSource(3, mockGamepadSource);
+        scheduler = new Scheduler();
+        cb1 = null;
+        sysvia = { setcb1: (level) => (cb1 = level) };
+        adc = new Adc(sysvia, scheduler);
     });
 
-    afterEach(() => {
-        vi.resetAllMocks();
+    it("powers on, and resets, with a conversion complete and a zero result", () => {
+        expect([...registers(), adc.read(3)]).toEqual([EndOfConversion, 0, 0, 0x40]);
+        adc.setChannelSource(1, source(0x1234));
+        convert(1);
+        adc.reset();
+        expect(registers()).toEqual([EndOfConversion, 0, 0]);
     });
 
-    describe("Initialization", () => {
-        it("should initialize with default state", () => {
-            expect(adc.status).toBe(0x40);
-            expect(adc.low).toBe(0x00);
-            expect(adc.high).toBe(0x00);
-            expect(mockScheduler.newTask).toHaveBeenCalled();
-        });
-
-        it("should reset to default state", () => {
-            // Change state
-            adc.status = 0xff;
-            adc.low = 0xff;
-            adc.high = 0xff;
-
-            // Reset
-            adc.reset();
-
-            // Check state is back to default
-            expect(adc.status).toBe(0x40);
-            expect(adc.low).toBe(0x00);
-            expect(adc.high).toBe(0x00);
-        });
+    it.each([
+        [0, 0x3fff, 0x00],
+        [1, 0xffff, 0x30],
+        [2, 0x5fff, 0x10],
+        [3, 0xbfff, 0x20],
+    ])("reports channel %i and its result's top two bits in the status", (channel, value, topBits) => {
+        adc.setChannelSource(channel, source(value));
+        convert(channel);
+        expect(adc.read(Status)).toBe(channel | EndOfConversion | topBits);
     });
 
-    describe("Peeking registers", () => {
-        it("gives what a read gives for every register after a conversion", () => {
-            const RegisterCount = 4;
-            adc.write(0, 0x01);
-            adc.onComplete();
-            for (let reg = 0; reg < RegisterCount; ++reg) expect(adc.peek(reg)).toBe(adc.read(reg));
-            expect(adc.peek(1)).not.toBe(0);
-        });
+    it.each([4, 5, 6, 7])("answers at %i as at the register four below", (addr) => {
+        adc.setChannelSource(1, source(0x1234));
+        convert(1);
+        expect(adc.read(addr)).toBe(adc.read(addr & 3));
     });
 
-    describe("Reading registers", () => {
-        it("should read status register (addr 0)", () => {
-            adc.status = 0x42;
-            expect(adc.read(0)).toBe(0x42);
-        });
+    it.each([1, 2, 3, 5])("starts nothing on a write to %i", (addr) => {
+        adc.write(addr, 1);
+        expect([adc.read(Status), cb1]).toEqual([EndOfConversion, null]);
+    });
 
-        it("should read high byte register (addr 1)", () => {
-            adc.high = 0x42;
-            expect(adc.read(1)).toBe(0x42);
-        });
+    it.each([
+        ["an 8-bit", 0x02, EightBitConversionCycles],
+        ["a 10-bit", TenBit | 0x03, TenBitConversionCycles],
+        ["a mirrored", 0x01, EightBitConversionCycles, 4],
+    ])("holds CB1 high for %s conversion's whole length", (_, control, cycles, addr = Status) => {
+        adc.write(addr, control);
+        expect([adc.read(Status), cb1]).toEqual([Busy | control, true]);
+        scheduler.polltime(cycles - 1);
+        expect(adc.read(Status) & Busy).toBe(Busy);
+        scheduler.polltime(1);
+        expect([adc.read(Status) & (Busy | EndOfConversion), cb1]).toEqual([EndOfConversion, false]);
+    });
 
-        it("should read low byte register (addr 2)", () => {
-            adc.low = 0x42;
-            expect(adc.read(2)).toBe(0x42);
-        });
+    it("starts again from the beginning, on the new channel, when written mid-conversion", () => {
+        adc.setChannelSource(1, source(0x1234));
+        adc.write(Status, 0);
+        scheduler.polltime(EightBitConversionCycles - 1);
+        adc.write(Status, 1);
+        scheduler.polltime(EightBitConversionCycles - 1);
+        expect(adc.read(Status) & Busy).toBe(Busy);
+        scheduler.polltime(1);
+        expect(registers().slice(1)).toEqual([0x12, 0x30]);
+    });
 
-        it("should return 0x40 for undefined register (addr 3)", () => {
-            expect(adc.read(3)).toBe(0x40);
-        });
-
-        it("should correctly mask address when reading", () => {
-            adc.status = 0x42;
-            adc.high = 0x43;
-            adc.low = 0x44;
-
-            expect(adc.read(4)).toBe(0x42); // 4 & 3 = 0
-            expect(adc.read(5)).toBe(0x43); // 5 & 3 = 1
-            expect(adc.read(6)).toBe(0x44); // 6 & 3 = 2
-            expect(adc.read(7)).toBe(0x40); // 7 & 3 = 3
+    describe.each([
+        ["8-bit", 0],
+        ["10-bit", TenBit],
+    ])("in %s mode", (_, precision) => {
+        it.each([
+            [0, 0x3fff, [0x3f, 0xf0]],
+            [1, 0xffff, [0xff, 0xf0]],
+            [2, 0x5a5f, [0x5a, 0x50]],
+            [3, 0xdc0f, [0xdc, 0x00]],
+        ])("reads channel %i from its own source, the low byte's bits 3-0 as zero", (channel, value, highLow) => {
+            for (let other = 0; other < 4; other++) adc.setChannelSource(other, source(other === channel ? value : 0));
+            convert(precision | channel);
+            expect(registers().slice(1)).toEqual(highLow);
         });
     });
 
-    describe("Writing to control register", () => {
-        it("should ignore writes to non-control registers", () => {
-            // Write to addresses 1, 2, 3
-            adc.write(1, 0x42);
-            adc.write(2, 0x42);
-            adc.write(3, 0x42);
-
-            // Verify no conversion was started
-            expect(mockTask.cancel).not.toHaveBeenCalled();
-            expect(mockTask.schedule).not.toHaveBeenCalled();
-            expect(mockSysvia.setcb1).not.toHaveBeenCalled();
-        });
-
-        it("should start 8-bit conversion on write to control register", () => {
-            adc.write(0, 0x00); // 8-bit conversion (bit 3 not set)
-
-            expect(mockTask.cancel).toHaveBeenCalled();
-            expect(mockTask.schedule).toHaveBeenCalledWith(8000); // 8ms for 8-bit
-            expect(adc.status).toBe(0x80); // Busy bit set
-            expect(mockSysvia.setcb1).toHaveBeenCalledWith(true);
-        });
-
-        it("should start 10-bit conversion on write to control register", () => {
-            adc.write(0, 0x08); // 10-bit conversion (bit 3 set)
-
-            expect(mockTask.cancel).toHaveBeenCalled();
-            expect(mockTask.schedule).toHaveBeenCalledWith(20000); // 20ms for 10-bit
-            expect(adc.status).toBe(0x88); // Busy bit set, bit 3 set
-            expect(mockSysvia.setcb1).toHaveBeenCalledWith(true);
-        });
-
-        it("should store channel number in status register", () => {
-            adc.write(0, 0x02); // Channel 2
-            expect(adc.status & 0x0f).toBe(0x02);
-
-            adc.write(0, 0x03); // Channel 3
-            expect(adc.status & 0x0f).toBe(0x03);
-        });
-
-        it("should correctly mask address when writing", () => {
-            adc.write(4, 0x01); // 4 & 3 = 0
-            expect(adc.status & 0x0f).toBe(0x01);
-
-            // These should be ignored
-            adc.write(5, 0x02); // 5 & 3 = 1
-            adc.write(6, 0x03); // 6 & 3 = 2
-            adc.write(7, 0x04); // 7 & 3 = 3
-
-            // Status should still reflect the last valid write
-            expect(adc.status & 0x0f).toBe(0x01);
-        });
+    it("reads the centre on a channel with no source", () => {
+        convert(1);
+        expect(registers().slice(1)).toEqual([AdcCentreValue >>> 8, AdcCentreValue & 0xff]);
     });
 
-    describe("Analogue sources", () => {
-        it("should set and get a channel source", () => {
-            const newSource = new MockGamepadSource();
-            const result = adc.setChannelSource(1, newSource);
-            expect(result).toBe(true);
-            expect(adc.getChannelSource(1)).toBe(newSource);
+    it("reads a fixed value instead of the source while one is set, and the source again after", () => {
+        adc.setChannelSource(1, source(0x1234));
+        adc.setFixedValue(0x8000);
+        convert(1);
+        expect(registers().slice(1)).toEqual([0x80, 0x00]);
+        adc.setFixedValue(null);
+        convert(1);
+        expect(registers().slice(1)).toEqual([0x12, 0x30]);
+    });
+
+    describe("sources", () => {
+        it("disposes of a source when it is replaced or cleared, and not when set again", () => {
+            const first = source(1);
+            const second = source(2);
+            adc.setChannelSource(0, first);
+            adc.setChannelSource(0, first);
+            expect(first.dispose).not.toHaveBeenCalled();
+            adc.setChannelSource(0, second);
+            expect([first.dispose.mock.calls.length, adc.getChannelSource(0)]).toEqual([1, second]);
+            expect(adc.clearChannelSource(0)).toBe(true);
+            expect([second.dispose.mock.calls.length, adc.getChannelSource(0)]).toEqual([1, null]);
         });
 
-        it("should clear a channel source", () => {
-            const result = adc.clearChannelSource(2);
-            expect(result).toBe(true);
-            expect(adc.getChannelSource(2)).toBe(null);
-        });
-
-        it("should clear all sources", () => {
+        it("disposes of every source on clearing them all", () => {
+            const sources = [0, 1, 2, 3].map(source);
+            sources.forEach((s, channel) => adc.setChannelSource(channel, s));
             adc.clearSources();
-            for (let i = 0; i < 4; i++) {
-                expect(adc.getChannelSource(i)).toBe(null);
-            }
+            expect(sources.map((s) => s.dispose.mock.calls.length)).toEqual([1, 1, 1, 1]);
+            expect([0, 1, 2, 3].map((channel) => adc.getChannelSource(channel))).toEqual([null, null, null, null]);
         });
     });
 
-    describe("Conversion completion", () => {
-        it("reads a fixed value instead of the source while one is set, and the source again after", () => {
-            adc.setChannelSource(1, { getValue: () => 0x1234, dispose: () => {} });
-            adc.setFixedValue(0x8000);
-            adc.write(0, 0x01);
-            adc.onComplete();
-            expect([adc.high, adc.low]).toEqual([0x80, 0x00]);
-            adc.setFixedValue(null);
-            adc.write(0, 0x01);
-            adc.onComplete();
-            expect([adc.high, adc.low]).toEqual([0x12, 0x34]);
+    describe("snapshots", () => {
+        it("round-trips a converter part way through its second conversion", async () => {
+            await expectSnapshotRoundTrips(
+                () => new Adc(sysvia, scheduler),
+                (driven) => {
+                    driven.setFixedValue(0x1234);
+                    driven.write(Status, 1);
+                    scheduler.polltime(EightBitConversionCycles);
+                    driven.write(Status, TenBit | 2);
+                    scheduler.polltime(100);
+                },
+            );
         });
 
-        it("should handle completion with no source for the channel", () => {
-            adc.clearChannelSource(1);
-
-            // Set up a conversion for channel 1
-            adc.write(0, 0x01);
-
-            // Reset mock to clearly see what happens during completion
-            mockSysvia.setcb1.mockReset();
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // Check results
-            expect(adc.status & 0x80).toBe(0); // Busy bit cleared
-            expect(adc.status & 0x40).toBe(0x40); // End of conversion bit set
-            expect(adc.low).toBe(0); // Default value low byte
-            expect(adc.high).toBe(0x80); // Default value high byte (0x8000 >> 8)
-            expect(mockSysvia.setcb1).toHaveBeenCalledWith(false); // Interrupt cleared
-        });
-
-        it("should read from source on channel 0", () => {
-            // Set channel 0
-            adc.write(0, 0x00);
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // Check that the mock value was used
-            const expectedValue = mockGamepadSource.getValue(0);
-            expect(adc.low).toBe(expectedValue & 0xff);
-            expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
-        });
-
-        it("should read from source on channel 1", () => {
-            // Set channel 1
-            adc.write(0, 0x01);
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // Check that the mock value was used
-            const expectedValue = mockGamepadSource.getValue(1);
-            expect(adc.low).toBe(expectedValue & 0xff);
-            expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
-        });
-
-        it("should use specific source for each channel", () => {
-            // Create a special source for channel 2 with a different value
-            const specialSource = new MockGamepadSource();
-            specialSource.mockValues[2] = 0x1234; // Different value
-
-            // Set it as the source for channel 2
-            adc.setChannelSource(2, specialSource);
-
-            // Set channel 2
-            adc.write(0, 0x02);
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // Should use the special source for channel 2
-            const expectedValue = specialSource.getValue(2);
-            expect(adc.low).toBe(expectedValue & 0xff);
-            expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
-        });
-
-        it("should switch between different sources by channel", () => {
-            // Create two different sources with different values
-            const source1 = new MockGamepadSource();
-            source1.mockValues[2] = 0x1111;
-
-            const source2 = new MockGamepadSource();
-            source2.mockValues[3] = 0x2222;
-
-            // Set them for different channels
-            adc.setChannelSource(2, source1);
-            adc.setChannelSource(3, source2);
-
-            // Test channel 2 (should use source1)
-            adc.write(0, 0x02);
-            adc.onComplete();
-            expect(adc.low).toBe(0x11); // 0x1111 & 0xff
-            expect(adc.high).toBe(0x11); // (0x1111 >>> 8) & 0xff
-
-            // Test channel 3 (should use source2)
-            adc.write(0, 0x03);
-            adc.onComplete();
-            expect(adc.low).toBe(0x22); // 0x2222 & 0xff
-            expect(adc.high).toBe(0x22); // (0x2222 >>> 8) & 0xff
-        });
-
-        it("should update status bits correctly after conversion", () => {
-            // Set channel 2
-            adc.write(0, 0x02);
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // Get the expected value from our mock source
-            const expectedValue = mockGamepadSource.getValue(2);
-
-            // The status should have:
-            // - bits 0-3: channel number (0)
-            // - bit 6: end of conversion bit (1)
-            // - bits 4-5: ((0x5fff >>> 10) & 0x03) = 0x01 (shifted to bit position)
-            const expectedStatus = (0x00 & 0x0f) | 0x40 | ((expectedValue >>> 10) & 0x03);
-
-            expect(adc.status).toBe(expectedStatus);
+        it("restores a conversion in progress with CB1 high, finishing when it would have", () => {
+            adc.write(Status, 1);
+            scheduler.polltime(100);
+            const restoredScheduler = new Scheduler();
+            let restoredCb1 = null;
+            const restored = new Adc({ setcb1: (level) => (restoredCb1 = level) }, restoredScheduler);
+            restored.restoreState(adc.snapshotState());
+            expect(restoredCb1).toBe(true);
+            restoredScheduler.polltime(EightBitConversionCycles - 101);
+            expect(restored.read(Status) & Busy).toBe(Busy);
+            restoredScheduler.polltime(1);
+            expect([restored.read(Status) & Busy, restoredCb1]).toEqual([0, false]);
         });
     });
 });

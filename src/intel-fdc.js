@@ -3,7 +3,8 @@
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502, NmiSource } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
-import { Disc, IbmDiscFormat } from "./disc.js";
+import { Disc } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
 
 // eslint-disable-next-line no-unused-vars
 import { attachDriveNoise, BaseDiscDrive, DiscDrive } from "./disc-drive.js";
@@ -140,6 +141,7 @@ const Result = Object.freeze({
     dataCrcError: 0x0e,
     driveNotReady: 0x10,
     writeProtected: 0x12,
+    trackZeroNotFound: 0x14,
     sectorNotFound: 0x18,
     flagDeletedData: 0x20,
 });
@@ -342,8 +344,11 @@ export class IntelFdc {
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
 
-        const callback = (pulses, count) => this._pulsesCallback(pulses, count);
-        for (const drive of this._drives) drive.setPulsesCallback(callback);
+        for (const drive of this._drives) {
+            drive.setPulsesCallback((pulses, count) => {
+                if (drive === this._currentDrive) this._pulsesCallback(pulses, count);
+            });
+        }
 
         this.powerOnReset();
     }
@@ -354,7 +359,7 @@ export class IntelFdc {
         // important to emulate at all, but it does help create new copy protection
         // schemes under emulation.
         if (this._driveOut & DriveOut.writeEnable) {
-            this._currentDrive.writePulses(IbmDiscFormat.fmTo2usPulses(0xff, 0xff));
+            this._currentDrive?.writePulses(IbmDiscFormat.fmTo2usPulses(0xff, 0xff));
         }
 
         // Lower any NMI assertion. This is particularly important for error $0A,
@@ -488,6 +493,11 @@ export class IntelFdc {
         if (!this._stateIsIndexPulse || wasIndexPulse) return;
 
         this._noteIndexPulse();
+        // A seek busy-waits through its head load, taking no index request (see _doSeek).
+        if (this._timerState !== TimerState.none) return;
+        // The ROM's sampler also writes a raw copy, which jsbeeb keeps in register 21 alongside a read's gap
+        // count and a write's run byte; an index pulse can come in the middle of either.
+        this._latchDriveStatus(this._driveIn);
         switch (this._indexPulseCallback) {
             case IndexPulse.none:
                 break;
@@ -1247,9 +1257,8 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) drive = this._drives[0];
         else if (selectBits === DriveOut.select_1) drive = this._drives[1];
 
-        if (this._currentDrive && (this._currentDrive !== drive || !(driveOut & DriveOut.loadHead)))
-            this._currentDrive.stopSpinning();
-        this._currentDrive = drive;
+        // LOAD HEAD gates each drive select (a 7438, IC79 on the Model B), so with it low no drive is selected
+        this._currentDrive = driveOut & DriveOut.loadHead ? drive : null;
 
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             this._ready = false;
@@ -1258,10 +1267,12 @@ export class IntelFdc {
             // Edges are counted from the new drive's level, not the old one's
             this._stateIsIndexPulse = this._index;
         }
-        if (this._currentDrive) {
-            if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
-            this._currentDrive.selectSide(!!(driveOut & DriveOut.side));
+        // LOAD HEAD is the drives' common motor line
+        for (const eachDrive of this._drives) {
+            if (driveOut & DriveOut.loadHead) eachDrive.startSpinning();
+            else eachDrive.stopSpinning();
         }
+        this._currentDrive?.selectSide(!!(driveOut & DriveOut.side));
         this._driveOut = driveOut;
     }
 
@@ -1341,7 +1352,9 @@ export class IntelFdc {
             (this._trk0 && this._regs[Registers.internalSeekTarget_2] === 0) || // Seek to 0 done, TRK0 detected
             this._regs[Registers.internalSeekCount] === 0
         ) {
-            this._doLoadHead();
+            if (this._regs[Registers.internalSeekTarget_2] === 0 && !this._trk0)
+                this._finishCommand(Result.trackZeroNotFound);
+            else this._doLoadHead();
             return;
         }
         //  We're going to actually step, so we'll need settle if the head is already loaded.
@@ -1468,7 +1481,7 @@ export class IntelFdc {
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             // A change of drive select bits clears all drive out bits other than side select.
             // For example, the newly selected drive won't have the load head signal
-            // active. This spins down any previously selected drive.
+            // active, and dropping it stops both drives.
             const newSelectBits = selectBits | (this._driveOut & DriveOut.side);
             this._setDriveOut(newSelectBits);
         }
@@ -1537,12 +1550,15 @@ export class IntelFdc {
     }
 
     _doReadDriveStatus() {
-        let driveIn = this._driveIn;
+        const driveIn = this._driveIn;
         this._regs[Registers.internalDriveInCopy] = driveIn;
-        this._regs[Registers.internalDriveInLatched] |= 0xbb;
-        driveIn &= this._regs[Registers.internalDriveInLatched];
-        this._regs[Registers.internalDriveInLatched] = driveIn;
-        return driveIn;
+        return this._latchDriveStatus(driveIn);
+    }
+
+    _latchDriveStatus(driveIn) {
+        const latched = (this._regs[Registers.internalDriveInLatched] | 0xbb) & driveIn;
+        this._regs[Registers.internalDriveInLatched] = latched;
+        return latched;
     }
 
     _doCommandDispatch() {
@@ -1786,6 +1802,7 @@ export class IntelFdc {
         const selectBits = this._driveOut & DriveOut.selectFlags;
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
         else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
+        if (!(this._driveOut & DriveOut.loadHead)) this._currentDrive = null;
 
         // Restore timer
         this._timerTask.cancel();
@@ -1811,8 +1828,9 @@ export class IntelFdc {
         this._drives[drive].tracksPerStep = tracksPerStep;
     }
 
+    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
     get motorOn() {
-        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
     }
 
     get drives() {

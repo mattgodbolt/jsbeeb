@@ -2,16 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Cmos, defaultCmos, localStoragePersistence } from "../../src/cmos.js";
 
 describe("CMOS", () => {
-    // Mock persistence
     const mockPersistence = {
         load: vi.fn().mockReturnValue(null),
         save: vi.fn(),
     };
 
-    // Test date (2023-04-15T12:34:56)
     const TEST_DATE = new Date(2023, 3, 15, 12, 34, 56);
 
-    // CMOS register addresses (from BBC Micro documentation)
     const CMOS_ADDR = {
         SECONDS: 0,
         MINUTES: 2,
@@ -20,17 +17,15 @@ describe("CMOS", () => {
         DAY_OF_MONTH: 7,
         MONTH: 8,
         YEAR: 9,
-        // Non-RTC addresses for testing
         CONFIG_1: 12,
         CONFIG_2: 13,
         FILING_SYSTEM: 19,
     };
 
-    // Constants from the hardware implementation
-    const PORT_B_ENABLE = 0x40; // Bit 6 of port B
-    const PORT_B_ADDR_SEL = 0x80; // Bit 7 of port B
-    const IC32_READ = 2; // Bit 1 of IC32
-    const IC32_DATA_SEL = 4; // Bit 2 of IC32
+    const PORT_B_ENABLE = 0x40;
+    const PORT_B_ADDR_SEL = 0x80;
+    const IC32_READ = 2;
+    const IC32_DATA_SEL = 4;
 
     let cmos;
 
@@ -48,14 +43,9 @@ describe("CMOS", () => {
         target.writeControl(PORT_B_ENABLE, value, 0);
     }
 
-    const toBcd = (value) => parseInt(value.toString(10), 16);
-
     beforeEach(() => {
-        // Use fake timers for consistent date/time testing
         vi.useFakeTimers();
         vi.setSystemTime(TEST_DATE);
-
-        // Create a fresh CMOS instance for each test
         cmos = new Cmos(mockPersistence);
     });
 
@@ -70,18 +60,8 @@ describe("CMOS", () => {
         });
 
         it("should use custom persistence data if available", () => {
-            const customData = Array(48).fill(0x42);
-            mockPersistence.load.mockReturnValueOnce(customData);
-
-            const customCmos = new Cmos(mockPersistence);
-
-            // Reading from a non-RTC location should return our custom data
-            // First enable CMOS and set it up for reading
-            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_1, 0);
-            customCmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_1, 0);
-            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-
-            expect(customCmos.read()).toBe(0x42);
+            mockPersistence.load.mockReturnValueOnce(Array(48).fill(0x42));
+            expect(readRegister(CMOS_ADDR.CONFIG_1, new Cmos(mockPersistence))).toBe(0x42);
         });
 
         it("should apply CMOS override when provided", () => {
@@ -90,16 +70,7 @@ describe("CMOS", () => {
                 newStore[CMOS_ADDR.CONFIG_1] = 0x42;
                 return newStore;
             };
-
-            const customCmos = new Cmos(mockPersistence, cmosOverride);
-
-            // Reading from the overridden location should return our custom value
-            // First enable CMOS and set it up for reading
-            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_1, 0);
-            customCmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_1, 0);
-            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-
-            expect(customCmos.read()).toBe(0x42);
+            expect(readRegister(CMOS_ADDR.CONFIG_1, new Cmos(mockPersistence, cmosOverride))).toBe(0x42);
         });
 
         it("should not let a mutating override change the defaults for later machines", () => {
@@ -111,97 +82,162 @@ describe("CMOS", () => {
             };
             new Cmos(mockPersistence, mutatingOverride);
             expect(defaultCmos[CMOS_ADDR.FILING_SYSTEM]).toBe(untouchedDefault);
-
-            const plainCmos = new Cmos(mockPersistence);
-            plainCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
-            plainCmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
-            plainCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-
-            expect(plainCmos.read()).toBe(untouchedDefault);
+            expect(readRegister(CMOS_ADDR.FILING_SYSTEM, new Cmos(mockPersistence))).toBe(untouchedDefault);
         });
 
         it("should apply econet settings when provided", () => {
-            const econet = { stationId: 0x42 };
-            const customCmos = new Cmos(mockPersistence, null, econet);
-
-            // First read econet station ID (at address 0x0E)
-            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 0x0e, 0);
-            customCmos.writeControl(PORT_B_ENABLE, 0x0e, 0);
-            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-
-            expect(customCmos.read()).toBe(0x42);
-
-            // Then read FS ID (at address 0x0F)
-            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 0x0f, 0);
-            customCmos.writeControl(PORT_B_ENABLE, 0x0f, 0);
-            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-
-            expect(customCmos.read()).toBe(254);
+            const customCmos = new Cmos(mockPersistence, null, { stationId: 0x42 });
+            expect(readRegister(0x0e, customCmos)).toBe(0x42);
+            expect(readRegister(0x0f, customCmos)).toBe(254);
         });
     });
 
     describe("Reading and Writing non-RTC data", () => {
         it("should return 0xFF when CMOS is disabled", () => {
-            // Don't enable CMOS (no PORT_B_ENABLE bit)
             expect(cmos.read()).toBe(0xff);
-        });
-
-        it("should write and read from CMOS memory locations", () => {
-            // Set address to CONFIG_1 (addr 12)
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_1, 0);
-            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_1, 0);
-
-            // Write value 0x42 to CONFIG_1
-            cmos.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
-            cmos.writeControl(PORT_B_ENABLE, 0x42, 0);
-
-            // Read it back
-            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-            expect(cmos.read()).toBe(0x42);
-
-            // Check persistence was called
-            expect(mockPersistence.save).toHaveBeenCalled();
         });
 
         it("should only read when properly configured", () => {
-            // Set address to CONFIG_2 (different than other tests)
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_2, 0);
-            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_2, 0);
-
-            // Write a known test value
-            cmos.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
-            cmos.writeControl(PORT_B_ENABLE, 0x42, 0);
-
-            // Without setting the read mode, should return 0xFF
+            writeRegister(CMOS_ADDR.CONFIG_2, 0x42);
             expect(cmos.read()).toBe(0xff);
 
-            // With address select high, should return 0xFF
             cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 0, IC32_READ);
             expect(cmos.read()).toBe(0xff);
 
-            // With data select low, should return 0xFF
             cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ);
             expect(cmos.read()).toBe(0xff);
 
-            // Make sure we're still pointing at the right address
-            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_2, 0);
-            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_2, 0);
-
-            // With everything set correctly, should return the value
-            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
-            expect(cmos.read()).toBe(0x42);
+            expect(readRegister(CMOS_ADDR.CONFIG_2)).toBe(0x42);
         });
     });
 
-    describe("Reading RTC values", () => {
-        it("should read current time from RTC registers", () => {
-            // Test all RTC components
-            expect(readRegister(CMOS_ADDR.SECONDS)).toBe(toBcd(TEST_DATE.getSeconds()));
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(TEST_DATE.getMinutes()));
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(TEST_DATE.getHours()));
-            expect(readRegister(CMOS_ADDR.DAY_OF_WEEK)).toBe(toBcd(TEST_DATE.getDay() + 1));
-            expect(readRegister(CMOS_ADDR.DAY_OF_MONTH)).toBe(toBcd(TEST_DATE.getDate()));
-            expect(readRegister(CMOS_ADDR.MONTH)).toBe(toBcd(TEST_DATE.getMonth() + 1));
+    const readClock = (target = cmos) =>
+        Object.fromEntries(
+            ["SECONDS", "MINUTES", "HOURS", "DAY_OF_WEEK", "DAY_OF_MONTH", "MONTH", "YEAR"].map((name) => [
+                name,
+                readRegister(CMOS_ADDR[name], target),
+            ]),
+        );
+    const toBcd = (value) => parseInt(value.toString(10), 16);
+
+    describe("The real-time clock", () => {
+        const testDateRegisters = {
+            SECONDS: 0x56,
+            MINUTES: 0x34,
+            HOURS: 0x12,
+            DAY_OF_WEEK: 0x07,
+            DAY_OF_MONTH: 0x15,
+            MONTH: 0x04,
+            YEAR: 0x23,
+        };
+        it("reads the time it is now", () => {
+            expect(readClock()).toEqual(testDateRegisters);
+        });
+
+        it.each(
+            [
+                { register: "SECONDS", value: 0x59, dayOfWeek: 0x07 },
+                { register: "MINUTES", value: 0x45, dayOfWeek: 0x07 },
+                { register: "HOURS", value: 0x23, dayOfWeek: 0x07 },
+                { register: "HOURS", value: 0x00, dayOfWeek: 0x07 },
+                { register: "DAY_OF_MONTH", value: 0x30, dayOfWeek: 0x01 },
+                { register: "DAY_OF_MONTH", value: 0x01, dayOfWeek: 0x07 },
+                { register: "MONTH", value: 0x01, dayOfWeek: 0x01 },
+                { register: "MONTH", value: 0x10, dayOfWeek: 0x01 },
+                { register: "MONTH", value: 0x12, dayOfWeek: 0x06 },
+                { register: "YEAR", value: 0x00, dayOfWeek: 0x07 },
+                { register: "YEAR", value: 0x79, dayOfWeek: 0x07 },
+                { register: "YEAR", value: 0x80, dayOfWeek: 0x02 },
+                { register: "YEAR", value: 0x99, dayOfWeek: 0x04 },
+            ].map((row) => ({ ...row, hex: row.value.toString(16).padStart(2, "0") })),
+        )(
+            "reads back $register written as &$hex, and the day of the week that date falls on",
+            ({ register, value, dayOfWeek }) => {
+                writeRegister(CMOS_ADDR[register], value);
+                expect(readClock()).toEqual({ ...testDateRegisters, [register]: value, DAY_OF_WEEK: dayOfWeek });
+            },
+        );
+
+        const lastDaysOfMonths = (year) =>
+            Array.from({ length: 12 }, (_, month) => ({
+                year,
+                month: month + 1,
+                day: new Date(year, month + 1, 0).getDate(),
+            }));
+
+        it.each([...lastDaysOfMonths(2023), ...lastDaysOfMonths(2024), { year: 2024, month: 1, day: 1 }])(
+            "reads back $day/$month/$year written in the MOS's order, from a clock in any month",
+            ({ year, month, day }) => {
+                for (let startMonth = 0; startMonth < 12; startMonth++) {
+                    vi.setSystemTime(new Date(2023, startMonth, 15, 12, 34, 56));
+                    const clock = new Cmos(null);
+                    for (const [register, value] of [
+                        ["DAY_OF_MONTH", day],
+                        ["MONTH", month],
+                        ["YEAR", year % 100],
+                    ])
+                        writeRegister(CMOS_ADDR[register], toBcd(value), clock);
+                    expect(readClock(clock), `from month ${startMonth + 1}`).toEqual({
+                        ...testDateRegisters,
+                        DAY_OF_WEEK: new Date(year, month - 1, day).getDay() + 1,
+                        DAY_OF_MONTH: toBcd(day),
+                        MONTH: toBcd(month),
+                        YEAR: toBcd(year % 100),
+                    });
+                }
+            },
+        );
+
+        it.each([0x31, 0x00, 0x1a, 0xa5].map((day) => ({ day, hex: day.toString(16).padStart(2, "0") })))(
+            "holds a day of the month of &$hex, which April lacks, as written while the time is set and runs",
+            ({ day }) => {
+                writeRegister(CMOS_ADDR.DAY_OF_MONTH, day);
+                writeRegister(CMOS_ADDR.HOURS, 0x13);
+                vi.advanceTimersByTime(1000);
+                expect(readClock()).toEqual({ ...testDateRegisters, HOURS: 0x13, SECONDS: 0x57, DAY_OF_MONTH: day });
+            },
+        );
+
+        it.each(
+            [
+                { register: "SECONDS", value: 0xa5 },
+                { register: "SECONDS", value: 0x5a },
+                { register: "SECONDS", value: 0x60 },
+                { register: "MINUTES", value: 0xff },
+                { register: "HOURS", value: 0x24 },
+            ].map((row) => ({ ...row, hex: row.value.toString(16).padStart(2, "0") })),
+        )(
+            "holds $register written as &$hex, which is not a time, as written while the clock runs",
+            ({ register, value }) => {
+                writeRegister(CMOS_ADDR[register], value);
+                vi.advanceTimersByTime(1000);
+                expect(readClock()).toEqual({ ...testDateRegisters, SECONDS: 0x57, [register]: value });
+                writeRegister(CMOS_ADDR[register], testDateRegisters[register]);
+                expect(readClock()).toEqual({
+                    ...testDateRegisters,
+                    SECONDS: 0x57,
+                    [register]: testDateRegisters[register],
+                });
+            },
+        );
+
+        it("runs on from what was written, into the next year", () => {
+            writeRegister(CMOS_ADDR.MONTH, 0x12);
+            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
+            writeRegister(CMOS_ADDR.YEAR, 0x26);
+            writeRegister(CMOS_ADDR.HOURS, 0x23);
+            writeRegister(CMOS_ADDR.MINUTES, 0x59);
+            writeRegister(CMOS_ADDR.SECONDS, 0x59);
+            vi.advanceTimersByTime(1000);
+            expect(readClock()).toEqual({
+                SECONDS: 0x00,
+                MINUTES: 0x00,
+                HOURS: 0x00,
+                DAY_OF_WEEK: 0x06,
+                DAY_OF_MONTH: 0x01,
+                MONTH: 0x01,
+                YEAR: 0x27,
+            });
         });
     });
 
@@ -228,13 +264,13 @@ describe("CMOS", () => {
         it("reads the session's clock in UTC, so every time zone shows the host's time", () => {
             vi.stubEnv("TZ", "America/New_York");
             cmos.joinSession(sessionState(), () => Date.UTC(1999, 11, 31, 23, 59, 58));
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(23));
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(59));
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x23);
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x59);
         });
 
         it("keeps the offset the host's software set its clock to", () => {
             cmos.joinSession(sessionState({ timeOffset: HourMs }), () => Date.UTC(1999, 11, 31, 10, 0, 0));
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(11));
+            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x11);
         });
 
         it("picks up an access the host was part way through", () => {
@@ -247,9 +283,27 @@ describe("CMOS", () => {
             expect(cmos.read()).toBe(0x42);
         });
 
+        it("finishes setting a date the host is part way through", () => {
+            const host = new Cmos(null);
+            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31, host);
+            cmos.joinSession(host.sessionState(), () => Date.UTC(2023, 3, 15, 12, 0, 0));
+            writeRegister(CMOS_ADDR.MONTH, 0x05);
+            expect([readRegister(CMOS_ADDR.DAY_OF_MONTH), readRegister(CMOS_ADDR.MONTH)]).toEqual([0x31, 0x05]);
+        });
+
+        it("reads a time register the host holds as written", () => {
+            const host = new Cmos(null);
+            writeRegister(CMOS_ADDR.MINUTES, 0xa5, host);
+            cmos.joinSession(host.sessionState(), () => 0);
+            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0xa5);
+        });
+
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
             vi.stubEnv("TZ", "America/New_York");
-            writeRegister(CMOS_ADDR.HOURS, toBcd(10));
+            writeRegister(CMOS_ADDR.HOURS, 0x10);
+            writeRegister(CMOS_ADDR.MINUTES, 0xa5);
+            writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31);
+            const ownClock = readClock();
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
             const store = [...defaultCmos];
             store[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
@@ -257,46 +311,16 @@ describe("CMOS", () => {
             cmos.joinSession(sessionState({ store }), () => 0);
             cmos.leaveSession();
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(ownSetting);
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(toBcd(10));
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(TEST_DATE.getMinutes()));
+            expect(readClock()).toEqual(ownClock);
             mockPersistence.save.mockClear();
             cmos.save();
             expect(mockPersistence.save).toHaveBeenCalled();
         });
     });
 
-    describe("Setting RTC values", () => {
-        it("should update RTC values when written", () => {
-            // Set hours to 10
-            writeRegister(CMOS_ADDR.HOURS, 0x10);
-
-            // Advance time slightly to ensure changes take effect
-            vi.advanceTimersByTime(100);
-
-            // Read back hours
-            expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x10);
-
-            // Set minutes to 45
-            writeRegister(CMOS_ADDR.MINUTES, 0x45);
-
-            // Advance time slightly
-            vi.advanceTimersByTime(100);
-
-            // Read back minutes
-            expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x45);
-        });
-    });
-
     describe("Default CMOS values", () => {
         it("should default FDRIVE to 0 (6ms step rate) at CMOS address 0x19 (storage byte 11)", () => {
-            // CMOS layout: bytes 0-13 are RTC internals; bytes 14+ are user storage.
-            // Storage byte 11 = CMOS address 25 (0x19) holds the DFS configuration
-            // byte whose bits [1:0] are the WD1770 *CONFIGURE FDRIVE step rate:
-            //   0b00 = 6ms, 0b01 = 12ms, 0b10 = 20ms, 0b11 = 30ms
-            // FDRIVE 0 (6ms) is required for disc-streaming demos to complete
-            // seeks within the vsync window on the Master 128.
-            const fdriveBits = defaultCmos[25] & 0x03;
-            expect(fdriveBits).toBe(0); // FDRIVE 0 = 6ms
+            expect(defaultCmos[0x19] & 0x03).toBe(0);
         });
     });
 
@@ -319,20 +343,13 @@ describe("CMOS", () => {
             expect(onSaveFailure).not.toHaveBeenCalled();
         });
 
-        it("starts from the defaults when the stored settings are unreadable", () => {
-            const storage = { cmosRam: "[0, 1, tru" };
-
-            const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
-
-            expect(readRegister(25, cmos)).toBe(defaultCmos[25]);
-        });
-
-        it("starts from the defaults when the stored settings are the wrong shape", () => {
-            for (const cmosRam of ['"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"]) {
+        it.each(["[0, 1, tru", '"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"])(
+            "starts from the defaults when the stored settings are %s",
+            (cmosRam) => {
                 const cmos = new Cmos(localStoragePersistence(() => ({ cmosRam }), onSaveFailure));
-                expect(readRegister(25, cmos), cmosRam).toBe(defaultCmos[25]);
-            }
-        });
+                expect(readRegister(0x19, cmos)).toBe(defaultCmos[0x19]);
+            },
+        );
 
         it("starts from the defaults when the page is refused storage altogether", () => {
             const refused = () => {
@@ -342,7 +359,7 @@ describe("CMOS", () => {
             const cmos = new Cmos(localStoragePersistence(refused, onSaveFailure));
             writeRegister(CMOS_ADDR.CONFIG_1, 0x42, cmos);
 
-            expect(readRegister(25, cmos)).toBe(defaultCmos[25]);
+            expect(readRegister(0x19, cmos)).toBe(defaultCmos[0x19]);
             expect(onSaveFailure).toHaveBeenCalledTimes(1);
         });
 
@@ -363,45 +380,6 @@ describe("CMOS", () => {
             expect(onSaveFailure).toHaveBeenCalledTimes(1);
             expect(onSaveFailure.mock.calls[0][0].message).toBe("Storage is full");
             expect(readRegister(CMOS_ADDR.CONFIG_1, cmos)).toBe(0x42);
-        });
-    });
-
-    describe("BCD Conversion Logic", () => {
-        it("should correctly convert between decimal and BCD", () => {
-            // Helper functions for BCD conversion (same as in cmos.js)
-            const toBcd = (value) => parseInt(value.toString(10), 16);
-            const fromBcd = (value) => parseInt(value.toString(16), 10);
-
-            // Test toBcd conversion
-            expect(toBcd(0)).toBe(0x00);
-            expect(toBcd(9)).toBe(0x09);
-            expect(toBcd(10)).toBe(0x10);
-            expect(toBcd(42)).toBe(0x42);
-            expect(toBcd(99)).toBe(0x99);
-
-            // Test fromBcd conversion
-            expect(fromBcd(0x00)).toBe(0);
-            expect(fromBcd(0x09)).toBe(9);
-            expect(fromBcd(0x10)).toBe(10);
-            expect(fromBcd(0x42)).toBe(42);
-            expect(fromBcd(0x99)).toBe(99);
-
-            // Test round-trips
-            for (let i = 0; i < 100; i++) {
-                expect(fromBcd(toBcd(i))).toBe(i);
-            }
-        });
-
-        it("should handle year century threshold correctly", () => {
-            const fromBcd = (value) => parseInt(value.toString(16), 10);
-
-            // Years 80-99 should use 1900 as base
-            expect(fromBcd(0x80) >= 80 ? 1900 : 2000).toBe(1900);
-            expect(fromBcd(0x99) >= 80 ? 1900 : 2000).toBe(1900);
-
-            // Years 00-79 should use 2000 as base
-            expect(fromBcd(0x00) >= 80 ? 1900 : 2000).toBe(2000);
-            expect(fromBcd(0x79) >= 80 ? 1900 : 2000).toBe(2000);
         });
     });
 });

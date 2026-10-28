@@ -1,7 +1,7 @@
 // HFE format implementation for disc image loading and saving
 // Translated from beebjit by Chris Evans and expanded by Matt Godbolt.
 
-import { IbmDiscFormat } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
 
 // HFE format constants
 const HfeHeaderV1 = "HXCPICFE";

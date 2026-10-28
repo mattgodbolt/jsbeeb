@@ -77,13 +77,30 @@ describe("FrontPanel", () => {
             const printer = new Printer();
             make(false, printer);
             printer.dispatchEvent(new Event("first-output"));
-            expect(toasts()).toEqual([expect.stringContaining("Alt-B")]);
+            expect(toasts()).toEqual([expect.stringContaining("Press Alt-B to open")]);
+        });
+
+        it("names the shortcut as a Mac's keyboard prints it, on a Mac", async () => {
+            vi.spyOn(Navigator.prototype, "platform", "get").mockReturnValue("MacIntel");
+            vi.spyOn(window, "open").mockReturnValue(null);
+            vi.resetModules();
+            const { FrontPanel: MacFrontPanel } = await import("../../src/web/front-panel.js");
+            const printer = new Printer();
+            const panel = new MacFrontPanel({ processor, model: { isAtom: false }, printer, loop });
+            printer.dispatchEvent(new Event("first-output"));
+            panel.checkPrinterWindow();
+            expect(toasts()).toEqual([
+                expect.stringContaining("Press ⌥B to open"),
+                expect.stringContaining("then press ⌥B again."),
+            ]);
         });
 
         it("says when the pop-up was blocked", () => {
             vi.spyOn(window, "open").mockReturnValue(null);
             make().checkPrinterWindow();
-            expect(toasts()).toEqual([expect.stringContaining("blocked")]);
+            expect(toasts()).toEqual([
+                expect.stringContaining("blocked. Allow pop-up windows for this site, then press Alt-B again."),
+            ]);
         });
 
         it("quietly keeps output until a window is open", () => {

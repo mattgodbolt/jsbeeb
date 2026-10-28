@@ -20,22 +20,59 @@ const LumaSection = `    // BEGIN_LUMA_COEFFICIENTS
 const assignedIndices = (code, name) =>
     [...code.matchAll(new RegExp(`${name}\\[(\\d+)\\] = `, "g"))].map((m) => Number(m[1]));
 
-describe("FIR shader substitution", () => {
+describe.each([
+    {
+        filter: "chroma",
+        apply: applyFirCoefficients,
+        section: Section,
+        marker: "FIR_COEFFICIENTS",
+        array: "FIR",
+        taps: 5,
+    },
+    {
+        filter: "luma",
+        apply: applyLumaCoefficients,
+        section: LumaSection,
+        marker: "LUMA_COEFFICIENTS",
+        array: "LUMA_FIR",
+        taps: LumaTaps,
+    },
+])("$filter FIR shader substitution", ({ apply, section, marker, array, taps }) => {
     it("leaves a shader without markers alone", () => {
-        expect(applyFirCoefficients("void main() {}")).toBeNull();
+        expect(apply("void main() {}")).toBeNull();
     });
 
     it("fills the marked section in with every coefficient, at the section's indent", () => {
-        const { code, taps, cutoff } = applyFirCoefficients(`void main() {\n${Section}\n}\n`);
-        expect([taps, cutoff]).toEqual([5, 2]);
-        expect(assignedIndices(code, "FIR")).toEqual([0, 1, 2, 3, 4]);
-        for (const line of code.split("\n").filter((l) => l.includes("FIR[")))
+        const { code, taps: filled } = apply(`void main() {\n${section}\n}\n`);
+        expect(filled).toBe(taps);
+        expect(assignedIndices(code, array)).toEqual([...Array(taps).keys()]);
+        for (const line of code.split("\n").filter((l) => l.includes(`${array}[`)))
             expect(line.startsWith("    ")).toBe(true);
     });
 
     it("regenerates a section it has already filled to the same text", () => {
-        const once = applyFirCoefficients(Section).code;
-        expect(applyFirCoefficients(once).code).toBe(once);
+        const once = apply(section).code;
+        expect(apply(once).code).toBe(once);
+    });
+
+    it("rejects markers in the wrong order", () => {
+        expect(() => apply(`// END_${marker}\n// BEGIN_${marker}`)).toThrow("marker order");
+    });
+
+    it("rejects a lone marker", () => {
+        expect(() => apply(`// BEGIN_${marker}\n`)).toThrow("Unpaired");
+        expect(() => apply(`// END_${marker}\n`)).toThrow("Unpaired");
+    });
+
+    it("leaves the shipped shader with every tap initialised", () => {
+        const { code, taps: filled } = apply(readFileSync(ShaderPath, "utf8"));
+        expect(assignedIndices(code, array)).toEqual([...Array(filled).keys()]);
+    });
+});
+
+describe("chroma FIR section", () => {
+    it("reads the cutoff from the section", () => {
+        expect(applyFirCoefficients(Section).cutoff).toBe(2);
     });
 
     it("indents the marker lines once", () => {
@@ -44,67 +81,21 @@ describe("FIR shader substitution", () => {
         expect(code).toContain("\n    // END_FIR_COEFFICIENTS\n");
     });
 
-    it("rejects markers in the wrong order", () => {
-        expect(() => applyFirCoefficients("// END_FIR_COEFFICIENTS\n// BEGIN_FIR_COEFFICIENTS")).toThrow();
-    });
-
-    it("rejects a lone marker", () => {
-        expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n")).toThrow();
-        expect(() => applyFirCoefficients("// END_FIR_COEFFICIENTS\n")).toThrow();
-    });
-
     it("rejects a section that names no cutoff or tap count", () => {
-        expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n// END_FIR_COEFFICIENTS")).toThrow();
-    });
-
-    it("leaves the shipped shader with no uninitialised taps", () => {
-        const { code, taps } = applyFirCoefficients(readFileSync(ShaderPath, "utf8"));
-        expect(code.match(/FIR\[\d+\] = /g)).toHaveLength(taps);
+        expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n// END_FIR_COEFFICIENTS")).toThrow(
+            "Could not parse FIR parameters",
+        );
     });
 });
 
-describe("luma FIR shader substitution", () => {
-    it("leaves a shader without markers alone", () => {
-        expect(applyLumaCoefficients("void main() {}")).toBeNull();
-    });
-
-    it("fills the marked section in with every coefficient, at the section's indent", () => {
-        const { code, taps } = applyLumaCoefficients(`void main() {\n${LumaSection}\n}\n`);
-        expect(taps).toBe(LumaTaps);
-        expect(assignedIndices(code, "LUMA_FIR")).toEqual([...Array(LumaTaps).keys()]);
-        for (const line of code.split("\n").filter((l) => l.includes("LUMA_FIR[")))
-            expect(line.startsWith("    ")).toBe(true);
-    });
-
+describe("luma FIR section", () => {
     it("declares as many taps as it assigns", () => {
-        const { code } = applyLumaCoefficients(LumaSection);
-        expect(code).toContain(`const int LUMA_TAPS = ${LumaTaps};`);
+        expect(applyLumaCoefficients(LumaSection).code).toContain(`const int LUMA_TAPS = ${LumaTaps};`);
     });
 
-    it("regenerates a section it has already filled to the same text", () => {
-        const once = applyLumaCoefficients(LumaSection).code;
-        expect(applyLumaCoefficients(once).code).toBe(once);
-    });
-
-    it("leaves the chroma section alone", () => {
+    it("leaves the chroma section alone, and the chroma substitution leaves it alone", () => {
         const both = `void main() {\n${Section}\n\n${LumaSection}\n}\n`;
         expect(applyLumaCoefficients(both).code).toContain(Section);
         expect(applyFirCoefficients(both).code).toContain(LumaSection);
-    });
-
-    it("rejects markers in the wrong order", () => {
-        expect(() => applyLumaCoefficients("// END_LUMA_COEFFICIENTS\n// BEGIN_LUMA_COEFFICIENTS")).toThrow();
-    });
-
-    it("rejects a lone marker", () => {
-        expect(() => applyLumaCoefficients("// BEGIN_LUMA_COEFFICIENTS\n")).toThrow();
-        expect(() => applyLumaCoefficients("// END_LUMA_COEFFICIENTS\n")).toThrow();
-    });
-
-    it("leaves the shipped shader with exactly LUMA_TAPS taps, all initialised", () => {
-        const { code } = applyLumaCoefficients(applyFirCoefficients(readFileSync(ShaderPath, "utf8")).code);
-        const declared = Number(/const int LUMA_TAPS = (\d+);/.exec(code)[1]);
-        expect(declared).toBe(LumaTaps);
-        expect(assignedIndices(code, "LUMA_FIR")).toEqual([...Array(declared).keys()]);
     });
 });

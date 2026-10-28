@@ -8,7 +8,7 @@ import { expectPngToMatch } from "./png.js";
 
 class CapturingVideo extends Video {
     constructor() {
-        super(false, new Uint32Array(1024 * 1024), () => {});
+        super(false, 1024 * 1024, () => {});
         this.paint_ext = (left, top, right, bottom) => this._onPaint(left, top, right, bottom);
         this._capturing = false;
         this._captureSharp = null;
@@ -18,7 +18,7 @@ class CapturingVideo extends Video {
         if (this._capturing) {
             const width = right - left;
             const height = bottom - top;
-            const bufferCopy = new Uint8Array(this.fb32.buffer.slice(0));
+            const bufferCopy = new Uint8Array(this.fb32.buffer, this.fb32.byteOffset, this.fb32.byteLength).slice();
             this._captureSharp = sharp(bufferCopy, {
                 raw: { width: 1024, height: 1024, channels: 4 },
             }).extract({ left: left, top: top, width, height });
@@ -28,20 +28,17 @@ class CapturingVideo extends Video {
 
     async capture(testMachine) {
         this._capturing = true;
-        await testMachine.runUntilVblank();
+        // A run that stopped between a frame's paint and the OS reaching its vsync handler meets the handler first.
+        for (let tries = 0; this._capturing && tries < 2; tries++) await testMachine.runUntilVblank();
         if (this._capturing) throw new Error("Should have captured by now");
         return this._captureSharp.removeAlpha().png().toBuffer();
     }
 }
 
-async function setupCeefaxTestMachine(video) {
-    const testMachine = new TestMachine(null, { video: video });
+async function bootedMachine(video) {
+    const testMachine = new TestMachine(null, { video });
     await testMachine.initialise();
     await testMachine.runUntilInput();
-    await testMachine.loadDisc("discs/eng_test.ssd");
-    await testMachine.type("*EXEC !BOOT");
-    // The drive has to spin up before the page can load, and the load takes a second or so.
-    await testMachine.runFor(4 * 1000 * 1000);
     return testMachine;
 }
 
@@ -73,36 +70,25 @@ async function compare(video, testMachine, expectedName, field) {
 }
 
 describe("Test Ceefax test page", () => {
-    it("should match the Ceefax test page (no flash)", async () => {
+    it("should match the Ceefax test page with flash hidden and shown, before and after reveal", async () => {
         const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
-        await compare(video, testMachine, `expected_flash_0.png`, FlashHiddenField);
-    });
-    it("should match the Ceefax test page (flash)", async () => {
-        const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
+        const testMachine = await bootedMachine(video);
+        await testMachine.loadDisc("discs/eng_test.ssd");
+        await testMachine.type("*EXEC !BOOT");
+        // The drive has to spin up before the page can load, and the load takes a second or so.
+        await testMachine.runFor(4 * 1000 * 1000);
         await compare(video, testMachine, `expected_flash_1.png`, FlashShownField);
-    });
-    it("should match the Ceefax test page after reveal (no flash)", async () => {
-        const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
-        await testMachine.type(" ");
-        await compare(video, testMachine, `expected_reveal_flash_0.png`, FlashHiddenField);
-    });
-    it("should match the Ceefax test page after reveal (flash)", async () => {
-        const video = new CapturingVideo();
-        const testMachine = await setupCeefaxTestMachine(video);
+        await compare(video, testMachine, `expected_flash_0.png`, FlashHiddenField);
         await testMachine.type(" ");
         await compare(video, testMachine, `expected_reveal_flash_1.png`, FlashShownField);
+        await compare(video, testMachine, `expected_reveal_flash_0.png`, FlashHiddenField);
     });
 });
 
 describe("Test other teletext test pages", () => {
     it("should work with hoglet's test case", async () => {
         const video = new CapturingVideo();
-        const testMachine = new TestMachine(null, { video: video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
+        const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/316
         await testMachine.type("VDU &91,&61,&9E,&92,&93,&94,&81,&91,&91,10,13");
         await testMachine.runUntilInput();
@@ -110,27 +96,17 @@ describe("Test other teletext test pages", () => {
     });
     it("should apply Steady as Set At, not Set After (bug 611)", async () => {
         const video = new CapturingVideo();
-        const testMachine = new TestMachine(null, { video: video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
+        const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/611
-        // Red graphics, Flash, full-block graphic, Hold Graphics, Steady.
-        // The Steady code (at position 5) should take effect "Set At" — the
-        // held graphic displayed there should NOT flash. Without the fix, it
-        // flashes because Steady is incorrectly applied "Set After".
-        // Red gfx, Flash, two full-block graphics, Hold, Steady, then more blocks.
-        // Positions: [gfx][flash][block][block][hold][steady][block][block]
-        // While flashing text is hidden: blocks at pos 3-4 should be blanked (flashing),
-        // but pos 5 (Steady+held) and pos 6-7 should show red (Steady applies "Set At").
+        // Red graphics, Flash, two blocks, Hold, Steady, two blocks: with the flash hidden, the held
+        // block in the Steady cell shows, as Steady is Set At.
         await testMachine.type("CLS:VDU &91,&88,&BF,&BF,&9E,&89,&BF,&BF");
         await testMachine.runUntilInput();
         await compare(video, testMachine, `expected_steady_set_at_flash_0.png`, FlashHiddenField);
     });
     it("should work with the alternative engineer test page bug 469", async () => {
         const video = new CapturingVideo();
-        const testMachine = new TestMachine(null, { video: video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
+        const testMachine = await bootedMachine(video);
         // https://github.com/mattgodbolt/jsbeeb/issues/469
         // Taken from the 7th line of the engineer test page from b2.
         await testMachine.type(

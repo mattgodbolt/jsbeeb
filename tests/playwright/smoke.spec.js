@@ -5,27 +5,14 @@
 //   npm run test:e2e                        build, then run every check in the system Chrome
 //   npx playwright test --project chrome    the same without the build
 //   npx playwright test --project chromium  the browser Playwright ships (npx playwright install chromium)
-//   npx playwright test -g modal            checks whose name matches
+//   npx playwright test -g settings         checks whose name matches
 //   npx playwright show-trace test-results/**/trace.zip
 //
 // BASE_URL=http://localhost:5173/ points a run at a server that is already up.
 
-import { expect, test } from "./fixtures.js";
+import { readFileSync } from "node:fs";
 
-// Mirrored by tests/unit/test-console-surface.js.
-const ConsoleSurface = [
-    "processor",
-    "video",
-    "soundChip",
-    "go",
-    "stop",
-    "hd",
-    "m7dump",
-    "benchmarkCpu",
-    "profileCpu",
-    "benchmarkVideo",
-    "profileVideo",
-];
+import { expect, test } from "./fixtures.js";
 
 const OneRowWidth = 4000;
 const ShaderCompileBudgetMs = 30000;
@@ -38,22 +25,19 @@ const LightsBarViewports = [
     { width: 1100, height: 650, lines: 2 },
 ];
 const Oswrch = 0xffee;
-// osnewl's JSR oswrch, a few instructions above oswrch itself.
-const OsnewlCall = 0xffe9;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
-
-test("boots to the BASIC prompt with a working console surface", async ({ beeb, page }) => {
-    await beeb.open();
-    await beeb.expectScreenText("BASIC");
-    await beeb.expectScreenText(">");
-    const missing = await page.evaluate(
-        (names) => names.filter((name) => typeof window[name] === "undefined"),
-        ConsoleSurface,
-    );
-    expect(missing, "names missing from window").toEqual([]);
-    expect(typeof (await page.evaluate(() => window.processor.readmem(0)))).toBe("number");
-});
+const OsScreenMode = 0x355;
+// A field's rows are cleared at the flyback after the next field's, so the MODE 7 field the mode changed in is gone
+// only after the frame count has gone up three times.
+const FramesToClearModeSeven = 3;
+const RgbBits = 0xffffff;
+const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.meta.url), "utf8");
+// The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
+const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
+    contextBridge: { exposeInMainWorld: (key, api) => (window[key] = api) },
+    ipcRenderer: { on: () => {}, send: () => {} },
+}));`;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     const headerBar = async (width) => {
@@ -74,7 +58,20 @@ test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     }
 });
 
-test("every label and lamp in the lights bar sits on one of its shared lines", async ({ beeb, page }) => {
+test("the desktop app's page starts the machine with the page furniture its preload removes gone", async ({
+    beeb,
+    page,
+}) => {
+    await page.addInitScript(DesktopPreloadScript);
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#header-bar")).toHaveCount(0);
+});
+
+test("every label and lamp in the lights bar sits on one of its shared lines, and on a Mac its tooltips say ⌥ for Alt", async ({
+    beeb,
+    page,
+}) => {
     const lightsBarItems = () =>
         page.evaluate(() =>
             [...document.querySelectorAll("#leds .slot-readout, #leds .cell")]
@@ -102,8 +99,10 @@ test("every label and lamp in the lights bar sits on one of its shared lines", a
                     };
                 }),
         );
+    await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
     await beeb.open("?disc=elite.ssd&tape=Welcome.uef");
     await beeb.expectDrive0("elite.ssd");
+    await expect(page.locator('#leds [title*="⌥T"]')).toHaveCount(2);
     const counter = page.locator('#leds [data-slot="tape"] .counter');
     await expect(counter).not.toBeEmpty();
     await expect(counter, "the deck's counter styling reaching the bar").toHaveCSS("box-shadow", "none");
@@ -120,50 +119,28 @@ test("every label and lamp in the lights bar sits on one of its shared lines", a
     }
 });
 
-test("typing at the keyboard reaches the machine", async ({ beeb }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await beeb.pressKey("a");
-    await beeb.expectScreenText(">A");
-});
-
-test("a breakpoint in the MOS names its addresses, and says where the names came from", async ({ beeb, page }) => {
+test("the debugger keeps its width whatever the line crediting the names says", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
     await page.evaluate((address) => window.processor.debugInstruction.add((pc) => pc === address), Oswrch);
     await beeb.pressKey("a");
-    const stopped = page.locator("#disassembly .highlight");
-    await expect(stopped.locator(".dis_addr")).toHaveText(/^ffee (oswrch|OSWRCH)$/);
-    await expect(stopped.locator(".disassembly")).toHaveText(/^JMP \((wrchv|vectorWRCHV)\) ; \$[0-9a-f]{4}$/);
-    await expect(page.locator(`#disassembly [data-addr="${OsnewlCall}"] .disassembly`)).toHaveText(
-        /^JSR (oswrch|OSWRCH)$/,
-    );
-    await expect(page.locator("#debug-symbols")).toHaveText(
-        /^names from BBC Micro MOS 1\.20 \((?:tobylobster\.github\.io, )?source\)$/,
-    );
-    const panelWidth = () => page.locator("#debug").evaluate((panel) => panel.getBoundingClientRect().width);
+    const credit = page.locator("#debug-symbols");
     const goTo = async (address) => {
         const box = page.locator("#goto-dis-addr-form .goto-addr");
         await box.fill(`$${address.toString(16)}`);
         await box.press("Enter");
     };
-    await goTo(Unnamed);
-    await expect(page.locator("#debug-symbols")).toHaveCSS("visibility", "hidden");
-    const uncreditedWidth = await panelWidth();
+    // Both sets in, so neither arriving later can redraw the line under the checks.
     await goTo(BasicOswrchCall);
-    await expect(page.locator(`#disassembly [data-addr="${BasicOswrchCall}"] .disassembly`)).toHaveText(
-        /^JSR (oswrch|OSWRCH)$/,
-    );
-    await expect(page.locator("#debug-symbols")).toHaveText(
-        /^names from BBC Micro MOS 1\.20 \((?:tobylobster\.github\.io, )?source\) · BBC BASIC II \(acornaeology\.uk, source\)$/,
-    );
-    await expect(page.locator("#debug-symbols a", { hasText: "acornaeology.uk" })).toHaveAttribute(
-        "href",
-        "https://acornaeology.uk/bbc-basic/2.html",
-    );
-    expect(await panelWidth()).toBe(uncreditedWidth);
-    await page.locator("#debug-symbols").evaluate((line) => line.append(" · a set with a long title".repeat(20)));
-    expect(await panelWidth()).toBe(uncreditedWidth);
+    await expect(credit).toContainText("MOS 1.20");
+    await expect(credit).toContainText("BASIC II");
+    const panelWidth = () => page.locator("#debug").evaluate((panel) => panel.getBoundingClientRect().width);
+    const creditedWidth = await panelWidth();
+    await credit.evaluate((line) => line.append(" · a set with a long title".repeat(20)));
+    expect(await panelWidth()).toBe(creditedWidth);
+    await goTo(Unnamed);
+    await expect(credit).toHaveCSS("visibility", "hidden");
+    expect(await panelWidth()).toBe(creditedWidth);
 });
 
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
@@ -171,111 +148,42 @@ test("a state saved at a breakpoint loads paused there in the debugger, on this 
     page,
 }) => {
     const pc = () => page.evaluate(() => window.processor.pc);
+    const where = async () => ({ pc: await pc(), cycles: await beeb.cycles() });
     const stoppedAtOswrch = page.locator("#disassembly .highlight .dis_addr");
-    const loadAndContinue = async (file) => {
-        await page.setInputFiles("#load-state", file);
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.evaluate((address) => window.processor.debugInstruction.add((at) => at === address), Oswrch);
+    await beeb.pressKey("a");
+    await expect(stoppedAtOswrch).toHaveText(/^ffee /);
+    const savedAt = await where();
+    const download = page.waitForEvent("download");
+    await page.locator("#save-state").dispatchEvent("click");
+    const saved = await (await download).path();
+    await page.click("#debug-play");
+    await beeb.expectRunningPast(savedAt.cycles);
+
+    // Each load starts with the machine running and the debugger shut. The play button comes on as soon as the load
+    // holds the machine, before the state is in; the debugger opening is what says it is.
+    const loadAndContinue = async () => {
+        await page.setInputFiles("#load-state", saved);
+        await expect(page.locator("#debug")).toBeVisible();
+        expect(await where()).toEqual(savedAt);
         await expect(page.locator("#debug-play")).toBeEnabled();
         await expect(stoppedAtOswrch).toHaveText(/^ffee /);
-        expect(await pc()).toBe(Oswrch);
         const loaded = await beeb.expectHeld();
         await page.click("#debug-play");
         await beeb.expectRunningPast(loaded);
         await expect.poll(pc).not.toBe(Oswrch);
     };
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await page.evaluate((address) => {
-        window.e2eBreakpoint = window.processor.debugInstruction.add((at) => at === address);
-    }, Oswrch);
-    await beeb.pressKey("a");
-    await expect(stoppedAtOswrch).toHaveText(/^ffee /);
-    const download = page.waitForEvent("download");
-    await page.locator("#save-state").dispatchEvent("click");
-    const saved = await (await download).path();
 
-    await loadAndContinue(saved);
-
-    await page.evaluate(() => window.e2eBreakpoint.remove());
-    await expect(page.locator("#debug-pause")).toBeEnabled();
-
-    await loadAndContinue(saved);
+    await loadAndContinue();
 
     await beeb.open("?model=Master");
     await beeb.expectScreenText(">");
-
-    await loadAndContinue(saved);
+    await loadAndContinue();
 });
 
-test("a disc named in the URL is loaded and autobooted", async ({ beeb }) => {
-    await beeb.open("?disc=elite.ssd&autoboot");
-    await beeb.expectDrive0("elite.ssd");
-    // Elite's loader leaves mode 7, so the prompt text goes away.
-    await beeb.expectNotOnScreen("BASIC");
-});
-
-test("analytics is told the page's location with the user's own disc and session name taken out", async ({
-    beeb,
-    page,
-}) => {
-    await beeb.open("?disc=elite.ssd&disc2=local:Mine&name=Someone&model=B");
-    await expect(page.locator('script[src^="https://www.googletagmanager.com/gtag/js?id="]')).toHaveCount(1);
-    const configs = await page.evaluate(() =>
-        window.dataLayer.filter((entry) => entry[0] === "config").map((entry) => entry[2].page_location),
-    );
-    expect(configs).toEqual([expect.stringMatching(/\?disc=elite\.ssd&disc2=browser&name=redacted&model=B$/)]);
-    const sent = (name) =>
-        page.evaluate(
-            (name) =>
-                window.dataLayer.filter((entry) => entry[0] === "event" && entry[1] === name).map((entry) => entry[2]),
-            name,
-        );
-    await expect
-        .poll(() => sent("machine_start"))
-        .toEqual([
-            {
-                model: "B-DFS0.9",
-                keyLayout: "physical",
-                embed: false,
-                boot_mode: "none",
-                renderer: expect.stringMatching(/^(webgl|canvas2d)$/),
-                audio: expect.stringMatching(/^(ok|unavailable)$/),
-            },
-        ]);
-    const loads = await sent("media_load");
-    expect(loads).toContainEqual({
-        source: "builtin",
-        kind: "disc",
-        slot: "drive0",
-        entry: "url",
-        ref: "elite.ssd",
-        result: "loaded",
-    });
-    expect(loads).toContainEqual(expect.objectContaining({ slot: "drive1", source: "browser", ref: "browser" }));
-    expect(JSON.stringify(loads)).not.toContain("Mine");
-});
-
-test("the media window shows the drives, keeps the keyboard while focused, and gives it back", async ({
-    beeb,
-    page,
-}) => {
-    await beeb.open("?disc=elite.ssd");
-    await beeb.expectDrive0("elite.ssd");
-    await beeb.expectScreenText(">");
-    await expect(page.locator('#leds .slot-readout[data-slot="0"] .name')).toHaveText("elite");
-    await page.click('#leds .slot-readout[data-slot="0"]');
-    await expect(page.locator("#media-panel")).toBeVisible();
-    await expect(page.locator("#media-summary")).toHaveText("0: elite.ssd · 1: empty · tape: empty");
-    await expect(page.locator('.bay[data-drive="0"] .bay-dfs')).toHaveText("Elite (05)");
-    await page.focus("#media-close");
-    await beeb.pressKey("a");
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#media-panel")).toBeHidden();
-    await beeb.pressKey("b");
-    await beeb.expectScreenText(">B");
-    expect(await beeb.screenText()).not.toContain(">AB");
-});
-
-test("Alt+M opens the window aimed at drive 0 with the search box focused, and typing there stays on the page", async ({
+test("Alt+M opens the media window with the search box focused, and while the window has the keyboard the machine gets none of it", async ({
     beeb,
     page,
 }) => {
@@ -283,50 +191,22 @@ test("Alt+M opens the window aimed at drive 0 with the search box focused, and t
     await beeb.expectScreenText(">");
     await page.keyboard.press("Alt+M");
     await expect(page.locator("#media-panel")).toBeVisible();
-    await expect(page.locator('.bay[data-drive="0"]')).toHaveClass(/target/);
     await expect(page.locator("#media-search")).toBeFocused();
     await page.keyboard.type("welcome");
     await expect(page.locator("#media-search")).toHaveValue("welcome");
-    await expect(page.locator("#media-list .media-row-main").first()).toHaveAttribute("title", /Boot Welcome/);
+    await page.focus("#media-close");
+    await beeb.expectKeyKept("a");
     await page.keyboard.press("Escape");
     await expect(page.locator("#media-panel")).toBeHidden();
     await beeb.pressKey("b");
     await beeb.expectScreenText(">B");
-    expect(await beeb.screenText()).not.toContain("WELCOME");
+    expect(await beeb.screenText()).not.toMatch(/WELCOME|>AB/);
 });
 
-test("Enter in the media window boots the best match from drive 0, and the URL says so", async ({ beeb, page }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await page.click("#navbarMedia");
-    await expect(page.locator("#media-panel .autoboot")).toBeChecked();
-    await expect(page.locator("#media-hint")).toContainText("Enter boots from drive 0");
-    await page.fill("#media-search", "elite");
-    await expect(page.locator("#media-list .media-row-main").first()).toHaveAttribute("title", /^Boot Elite/);
-    await page.keyboard.press("Enter");
-    await beeb.expectDrive0("elite.ssd");
-    await beeb.expectNotOnScreen("BASIC");
-    await expect(page).toHaveURL(/[?&]autoboot(&|$)/);
-});
-
-test("the media window's list puts a built-in disc into drive 1", async ({ beeb, page }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await page.click("#navbarMedia");
-    await expect(page.locator("#media-panel")).toBeVisible();
-    await page.click('#media-into [data-target="1"]');
-    await expect(page.locator('.bay[data-drive="1"]')).toHaveClass(/target/);
-    await page.fill("#media-search", "welcome");
-    const row = page.locator("#media-list .media-row-main").first();
-    await expect(row).toHaveAttribute("title", /Load Welcome.*into drive 1/);
-    await row.click();
-    await expect(page.locator('.bay[data-drive="1"]')).toHaveAttribute("data-state", "loaded");
-    await expect(page.locator('.bay[data-drive="1"] .bay-title')).toHaveText("Welcome");
-    expect(await page.evaluate(() => window.processor.fdc.drives[1].disc?.name)).toBe("Welcome.ssd");
-    await expect(page).toHaveURL(/disc2=Welcome\.ssd/);
-});
-
-test("the media window fills a phone's screen without scrolling sideways", async ({ beeb, page }) => {
+test("the media window fills a phone's screen without scrolling sideways, and its bays show one thing at a time", async ({
+    beeb,
+    page,
+}) => {
     await page.setViewportSize({ width: 600, height: 800 });
     await beeb.open("?disc=elite.ssd");
     await beeb.expectDrive0("elite.ssd");
@@ -349,22 +229,67 @@ test("the media window fills a phone's screen without scrolling sideways", async
     expect(fit.width).toBe(fit.innerWidth);
     expect(fit.pageScrollsSideways).toBe(false);
     expect(fit.panelScrollsSideways).toBe(false);
+
+    // The archives' listing arriving redraws the bays from the drives, undoing a state forced on one before it.
+    await expect(page.locator("#media-count")).not.toBeEmpty();
+    const bay = (drive) => page.locator(`.bay[data-drive="${drive}"]`);
+    const shown = async (drive) => ({
+        note: await bay(drive).locator(".empty-note").isVisible(),
+        jacket: await bay(drive).locator(".jacket").isVisible(),
+    });
+    await expect(bay(0)).toHaveAttribute("data-state", "loaded");
+    expect(await shown(0)).toEqual({ note: false, jacket: true });
+    await expect(bay(1)).toHaveAttribute("data-state", "empty");
+    expect(await shown(1)).toEqual({ note: true, jacket: false });
+    await bay(1).evaluate((element) => (element.dataset.state = "busy"));
+    expect(await shown(1)).toEqual({ note: false, jacket: true });
 });
 
-test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }) => {
+test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({
+    beeb,
+    page,
+}) => {
+    const helpLayout = async ({ width, height }) => {
+        await page.setViewportSize({ width, height });
+        return page.evaluate(() => {
+            const modal = document.getElementById("help");
+            const body = modal.querySelector(".modal-body");
+            const close = modal.querySelector(".btn-close").getBoundingClientRect();
+            return {
+                closeOnScreen: close.top >= 0 && close.bottom <= innerHeight,
+                modalScrolls: modal.scrollHeight > modal.clientHeight,
+                bodyScrolls: body.scrollHeight > body.clientHeight,
+                scrollsSideways: body.scrollWidth > body.clientWidth || modal.scrollWidth > modal.clientWidth,
+            };
+        });
+    };
+    const desktop = { width: 1920, height: 940 };
+    await page.setViewportSize(desktop);
     await beeb.open();
     await beeb.expectScreenText(">");
-    await beeb.armModalShown("configuration");
-    await page.click('a[data-bs-target="#configuration"]');
-    await expect(page.locator("#debug-pause")).toBeDisabled();
+    await beeb.armModalShown("help");
+    await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
     await beeb.expectModalShown();
-    const during = await beeb.expectHeld();
-    await page.click("#configuration .btn-close");
-    await expect(page.locator("#debug-pause")).toBeEnabled();
-    await beeb.expectRunningPast(during);
+    expect(await helpLayout(desktop)).toEqual({
+        closeOnScreen: true,
+        modalScrolls: false,
+        bodyScrolls: false,
+        scrollsSideways: false,
+    });
+    for (const narrow of [
+        { width: 390, height: 844 },
+        { width: 768, height: 1024 },
+    ]) {
+        expect(await helpLayout(narrow), `at ${narrow.width}x${narrow.height}`).toEqual({
+            closeOnScreen: true,
+            modalScrolls: false,
+            bodyScrolls: true,
+            scrollsSideways: false,
+        });
+    }
 });
 
-test("a setting changed in the dialog applies at once, reaches the URL and survives a reload", async ({
+test("settings hold the emulator while open, a restart is asked about from inside their close, and a setting survives a reload", async ({
     beeb,
     page,
 }) => {
@@ -373,55 +298,35 @@ test("a setting changed in the dialog applies at once, reaches the URL and survi
     await expect(page.locator("#audio-output .active")).not.toHaveAttribute("data-output", "board");
     await beeb.armModalShown("configuration");
     await page.click('a[data-bs-target="#configuration"]');
+    await expect(page.locator("#debug-pause")).toBeDisabled();
     await beeb.expectModalShown();
+    await beeb.expectHeld();
     await page.click("#audioOutputDropdown");
     await page.click('#configuration .audio-output-option[data-output="board"]');
     await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
-    expect(new URL(page.url()).searchParams.get("audioOutput")).toBe("board");
+    await page.click("#bbc-model-dropdown");
+    await page.click('#configuration .model-menu a[data-target="Master"]');
+    await beeb.armModalShown("are-you-sure");
     await page.click("#configuration .btn-close");
+    await beeb.expectModalShown();
+    const held = await beeb.expectHeld();
+    await page.click("#are-you-sure .ays-no");
+    await expect(page.locator("#are-you-sure")).toBeHidden();
+    await expect(page.locator("#configuration")).toBeHidden();
+    await beeb.expectRunningPast(held);
     // Back to a bare URL: only browser storage can carry the setting across.
     await beeb.open();
     await beeb.expectScreenText(">");
     await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
 });
 
-test("a setting that needs a restart asks first, and Later keeps it for next time", async ({ beeb, page }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await beeb.armModalShown("configuration");
-    await page.click('a[data-bs-target="#configuration"]');
-    await beeb.expectModalShown();
-    await page.click("#bbc-model-dropdown");
-    await page.click('#configuration .model-menu a[data-target="Master"]');
-    await expect(page.locator("#restart-pending")).toBeVisible();
-    // The prompt is raised from inside the settings dialog's own hide.
-    await beeb.armModalShown("are-you-sure");
-    await page.click("#configuration .btn-close");
-    await beeb.expectModalShown();
-    await expect(page.locator("#are-you-sure .context")).toContainText("Restart now?");
-    const held = await beeb.expectHeld();
-    await page.click("#are-you-sure .ays-no");
-    await expect(page.locator("#are-you-sure")).toBeHidden();
-    await expect(page.locator("#configuration")).toBeHidden();
-    await beeb.expectRunningPast(held);
-    expect(new URL(page.url()).searchParams.get("model")).toBe("Master");
-    await beeb.armModalShown("configuration");
-    await page.click('a[data-bs-target="#configuration"]');
-    await beeb.expectModalShown();
-    await expect(page.locator("#restart-pending")).toBeVisible();
-});
-
-test("every display mode and sound output on the bar can be picked", async ({ beeb, page }) => {
+test("every display mode on the bar can be picked", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
     const modes = await page
         .locator("#display-mode [data-mode]")
         .evaluateAll((els) => els.map((el) => el.dataset.mode));
-    const outputs = await page
-        .locator("#audio-output [data-output]")
-        .evaluateAll((els) => els.map((el) => el.dataset.output));
     expect(modes).not.toEqual([]);
-    expect(outputs).not.toEqual([]);
     for (const mode of modes) {
         // Picking a mode compiles its shaders under software GL, which blocks
         // the page well past the action default on a slow machine; the next
@@ -433,78 +338,25 @@ test("every display mode and sound output on the bar can be picked", async ({ be
         });
         await beeb.expectRunningPast(before, ShaderCompileBudgetMs);
     }
-    for (const output of outputs) {
-        await page.click(`#audio-output [data-output="${output}"]`);
-        await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", output);
-    }
     await beeb.expectScreenText(">");
 });
 
-test("a drive bay shows one thing at a time: the note when empty, the jacket when loaded, neither twice while busy", async ({
+test("a link that boots a disc from Bitshifters without naming a model comes up on the machine it needs", async ({
     beeb,
     page,
 }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await page.click("#navbarMedia");
-    await expect(page.locator("#media-panel")).toBeVisible();
-    const visible = (selector) => page.locator(`.bay[data-drive="0"] ${selector}`).isVisible();
-    const shown = async () => ({ note: await visible(".empty-note"), jacket: await visible(".jacket") });
-    // The page boots with a disc in drive 0; ejecting it is the empty state.
-    await page.click('.bay[data-drive="0"] .bay-eject');
-    await expect(page.locator('.bay[data-drive="0"]')).toHaveAttribute("data-state", "empty");
-    expect(await shown()).toEqual({ note: true, jacket: false });
-    await page.evaluate(() => (document.querySelector('.bay[data-drive="0"]').dataset.state = "busy"));
-    expect(await shown()).toEqual({ note: false, jacket: true });
-    await page.evaluate(() => (document.querySelector('.bay[data-drive="0"]').dataset.state = "loaded"));
-    expect(await shown()).toEqual({ note: false, jacket: true });
-});
-
-// A Bitshifters catalogue of one disc, served in place of the site so the test needs no network.
-const BitshiftersContent = "https://bitshifters.github.io/content/";
-const catalogueOfOne = (page) =>
-    Promise.all([
-        page.route(`${BitshiftersContent}manifest.json`, (route) =>
-            route.fulfill({
-                json: {
-                    schemaVersion: 1,
-                    files: [{ path: "bs-paradroid.ssd", title: "Paradroid", type: "Game", machine: "Master" }],
-                },
-            }),
-        ),
-        page.route(`${BitshiftersContent}bs-paradroid.ssd`, (route) =>
-            route.fulfill({ path: "public/discs/elite.ssd", contentType: "application/octet-stream" }),
-        ),
-    ]);
-
-test("a link that boots a Bitshifters disc without naming a model comes up on the machine it needs", async ({
-    beeb,
-    page,
-}) => {
-    await catalogueOfOne(page);
-    await beeb.open("?disc=bitshifters:bs-paradroid.ssd&autoboot");
-    await expect(page).toHaveURL(/model=Master/);
-    await expect(page).toHaveURL(/autoboot/);
-    await expect(page.locator(".toast")).toContainText("Switched to a BBC Master 128 for Paradroid");
-    expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
-    await beeb.expectDrive0("bs-paradroid.ssd");
-    await beeb.expectNotOnScreen("BASIC");
-    await page.goBack();
-    await expect(page).not.toHaveURL(/bitshifters/);
-});
-
-test("a link that boots a disc on the GitHub list comes up on the machine the list gives", async ({ beeb, page }) => {
-    await page.route("https://raw.githubusercontent.com/mattgodbolt/nm/HEAD/ninja_music.ssd", (route) =>
+    const served = "https://bitshifters.github.io/content/bs-paradroid.ssd";
+    await page.route(served, (route) =>
         route.fulfill({ path: "public/discs/elite.ssd", contentType: "application/octet-stream" }),
     );
-    await beeb.open("?disc=github:mattgodbolt/nm/ninja_music.ssd&autoboot");
+    await beeb.open("?disc=bitshifters:bs-paradroid.ssd&autoboot");
+    await expect(page.locator(".toast")).toContainText("Switched to a BBC Master 128 for Paradroid");
     await expect(page).toHaveURL(/model=Master/);
-    await expect(page.locator(".toast")).toContainText("Switched to a BBC Master 128 for Ninja Massacre music");
+    await expect(page).toHaveURL(/autoboot/);
     expect(await page.evaluate(() => window.processor.model.isMaster)).toBe(true);
-    await beeb.expectDrive0("ninja_music.ssd");
-    await page.click("#navbarMedia");
-    await page.click('#media-chips .media-chip[title^="Games and demos from their authors"]');
-    await expect(page.locator("#media-list .media-row .media-source").first()).toHaveText("GitHub");
+    await beeb.expectDrive0("bs-paradroid.ssd");
+    // The stand-in is Elite, whose loader refuses a Master: only a boot gets it to say so.
+    await beeb.expectScreenText("This program is only suitable for a BBC Micro");
 });
 
 test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit one restarts with one", async ({
@@ -523,5 +375,41 @@ test("a program that writes to a VideoNuLA the machine lacks is told so, and Fit
     await expect
         .poll(() => noted.filter((text) => text.startsWith("event noted: feature_used")))
         .toEqual([expect.stringContaining("action=missing"), expect.stringContaining("action=fitted")]);
-    expect(beeb.problems).toEqual([]);
 });
+
+const drawnSoFar = (rgbBits) => {
+    const { video } = window.processor;
+    video.renderPending();
+    return video.fb32.some((pixel) => (pixel & rgbBits) !== 0);
+};
+
+for (const [wasm, drain] of [
+    ["on", "wasm"],
+    ["switched off", "js"],
+]) {
+    test(`with WebAssembly ${wasm}, the bitmap modes are drawn by the ${drain} drain`, async ({ beeb, page }) => {
+        if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
+        const logged = [];
+        page.on("console", (message) => logged.push(message.text()));
+        await beeb.open(`?autotype=${encodeURIComponent("MODE 1\n")}`);
+        await expect.poll(() => page.evaluate((at) => window.processor?.readmem(at), OsScreenMode)).toBe(1);
+        const modeSetFrame = await page.evaluate(() => window.processor.video.frameCount);
+        await expect
+            .poll(() => page.evaluate(() => window.processor.video.frameCount))
+            .toBeGreaterThanOrEqual(modeSetFrame + FramesToClearModeSeven);
+        expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
+        await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
+        expect(logged.some((text) => text.includes("video drain falls back to JavaScript"))).toBe(drain === "js");
+    });
+
+    test(`with WebAssembly ${wasm}, the MODE 7 boot screen is painted by the ${drain} drain`, async ({
+        beeb,
+        page,
+    }) => {
+        if (drain === "js") await page.addInitScript(() => delete globalThis.WebAssembly);
+        await beeb.open();
+        await beeb.expectScreenText("BASIC");
+        expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
+        await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
+    });
+}

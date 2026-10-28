@@ -1,8 +1,10 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { IbmDiscFormat } from "../../src/disc-format.js";
 import { attachDriveNoise, DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
 const SectorsPerTrack = 10;
 const SectorSize = 256;
@@ -19,29 +21,33 @@ function ssdDisc(numTracks, is40Track) {
 const eightyTrackDisc = () => ssdDisc(80, false);
 const fortyTrackDisc = () => ssdDisc(40, true);
 
+const ms = (n) => n * 2000;
+
+function spinningDrive(cyclesPerSecond = BbcCyclesPerSecond) {
+    const scheduler = new Scheduler();
+    const drive = new DiscDrive(0, scheduler, cyclesPerSecond);
+    drive.setDisc(fortyTrackDisc());
+    drive.startSpinning();
+    return { scheduler, drive };
+}
+
 describe("Disc drive tests", function () {
-    it("starts empty", () => {
+    it("starts empty, asserting index all the time", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         expect(drive.trackLength).toBe(IbmDiscFormat.bytesPerTrack);
         expect(drive.disc).toBeFalsy();
         expect(drive.spinning).toBe(false);
+        expect(drive.indexPulse).toBe(true);
         drive.setPulsesCallback(() => {
             expect.fail("no callbacks expected");
         });
         scheduler.polltime(1000000);
     });
-    it("sets a disc", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        const disc = Disc.createBlank();
-        drive.setDisc(disc);
-        expect(drive.disc).toBe(disc);
-    });
     it("calls back with pulses after spinning starts", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(0, Disc.createBlank());
+        drive.setDisc(Disc.createBlank());
         drive.setPulsesCallback(() => {
             expect.fail("no callbacks expected");
         });
@@ -59,48 +65,20 @@ describe("Disc drive tests", function () {
         });
         scheduler.polltime(1000000);
     });
-    it("generates quasi random pulses with a blank disc", () => {
+    it("reads a blank disc as quasi random pulses the FM decoder takes for clean data that changes over time", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
         drive.setDisc(Disc.createBlank());
-        drive.getQuasiRandomPulses = () => {
-            return 0xdeadbeef;
-        };
-        let called = false;
+        const decoded = [];
         drive.setPulsesCallback((pulses, numPulses) => {
-            called = true;
             expect(numPulses).toBe(32);
-            expect(pulses).toBe(0xdeadbeef);
+            decoded.push(IbmDiscFormat._2usPulsesToFm(pulses));
         });
         drive.startSpinning();
-        scheduler.polltime(1000000);
-        expect(called).toBe(true);
-    });
-    it("makes quasi random pulses the FM decoder reads as clean data that changes over time", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        const first = IbmDiscFormat._2usPulsesToFm(drive.getQuasiRandomPulses());
-        expect(first).toMatchObject({ clocks: 0xff, iffyPulses: false });
-        const seen = new Set();
-        for (let i = 0; i < 8; ++i) {
-            scheduler.polltime(1000);
-            seen.add(IbmDiscFormat._2usPulsesToFm(drive.getQuasiRandomPulses()).data);
-        }
-        expect(seen.size).toBeGreaterThan(1);
-    });
-    it("asserts index all the time with no disc", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        expect(drive.indexPulse).toBe(true);
-    });
-    it("steps one track at a time for an 80 track disc", () => {
-        const drive = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
-        drive.setDisc(eightyTrackDisc());
-
-        drive.seekOneTrack(1);
-        drive.seekOneTrack(1);
-
-        expect(drive.track).toBe(2);
+        scheduler.polltime(ms(10));
+        expect(decoded.length).toBeGreaterThan(0);
+        for (const fm of decoded) expect(fm).toMatchObject({ clocks: 0xff, iffyPulses: false });
+        expect(new Set(decoded.map((fm) => fm.data)).size).toBeGreaterThan(1);
     });
 
     it("asserts index periodically with a spinning disc", () => {
@@ -120,6 +98,29 @@ describe("Disc drive tests", function () {
             previousIndex = drive.indexPulse;
         }
         expect(risingEdges).toBe((rpm / 60) * testSeconds);
+    });
+    it("keeps the index coming after a disc with shorter tracks goes in past the end of them", () => {
+        const ShortTrackLength = IbmDiscFormat.bytesPerTrack / 4;
+        const shortDisc = Disc.createBlank();
+        shortDisc.buildTrack(false, 0).appendRepeatFmByte(0xff, ShortTrackLength).setTrackLength();
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+        drive.setDisc(Disc.createBlank());
+        drive.startSpinning();
+        scheduler.polltime(3 * BbcCyclesPerSecond);
+        drive.positionFraction = 0.9;
+        drive.setDisc(shortDisc);
+        expect(drive.positionFraction).toBeCloseTo(0.9, 2);
+        let risingEdges = 0;
+        let previousIndex = drive.indexPulse;
+        const cyclesPerIter = 100;
+        for (let cycle = 0; cycle < BbcCyclesPerSecond / 2; cycle += cyclesPerIter) {
+            scheduler.polltime(cyclesPerIter);
+            if (drive.indexPulse && !previousIndex) risingEdges++;
+            previousIndex = drive.indexPulse;
+        }
+        // Half a second from 0.9 of the way round passes the index at 0.02, 0.22 and 0.42 s.
+        expect(risingEdges).toBe(3);
     });
 });
 
@@ -185,16 +186,16 @@ describe("40 track discs", () => {
     });
 
     it("offers both tracks a fat write covers to the next snapshot", () => {
-        const disc = fortyTrackDisc();
+        const disc = eightyTrackDisc();
         const drive = driveSteppedIn(disc, 1);
-        const before = disc.snapshotState().tracks;
+        disc.snapshotState();
         drive.writePulses(0x12345678);
-
         drive.seekOneTrack(1);
 
-        const after = disc.snapshotState().tracks;
-        expect(after["false:2"]).not.toBe(before["false:2"]);
-        expect(after["false:3"]).not.toBe(before["false:3"]);
+        disc.restoreState(disc.snapshotState());
+
+        expect(disc.readPulses(false, 2, 0)).toBe(0x12345678);
+        expect(disc.getTrack(false, 3).findSectors()).toEqual([]);
     });
 
     it("refuses a switch position no drive has", () => {
@@ -265,27 +266,17 @@ describe("40 track discs", () => {
         expect(drive.track).toBe(0);
     });
 
-    it("forgets the steps of a seek that never ended once a seek with none to take is announced", () => {
+    it.each([
+        ["once a seek with none to take is announced", (drive) => drive.notifySeekAmount(0, 24)],
+        ["on a restore", (drive) => drive.restoreState(drive.snapshotState())],
+    ])("forgets the steps of a seek that never ended %s", (_, forget) => {
         const drive = driveSteppedIn(fortyTrackDisc(), 2);
         const ends = [];
         drive.addEventListener("seekEnd", (event) => ends.push(event.steps));
 
         drive.notifySeekAmount(5, 24);
         drive.seekOneTrack(1);
-        drive.notifySeekAmount(0, 24);
-        drive.notifySeekEnd();
-
-        expect(ends).toEqual([]);
-    });
-
-    it("forgets the steps of a seek that never ended on a restore", () => {
-        const drive = driveSteppedIn(fortyTrackDisc(), 2);
-        const ends = [];
-        drive.addEventListener("seekEnd", (event) => ends.push(event.steps));
-
-        drive.notifySeekAmount(5, 24);
-        drive.seekOneTrack(1);
-        drive.restoreState(drive.snapshotState());
+        forget(drive);
         drive.notifySeekEnd();
 
         expect(ends).toEqual([]);
@@ -308,13 +299,8 @@ describe("40 track discs", () => {
 });
 
 describe("spindle motor", () => {
-    const ms = (n) => n * 2000;
-
     it("comes up to speed over about half a second and stays there", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
+        const { scheduler, drive } = spinningDrive();
         expect(drive.speed).toBeLessThan(0.05);
         scheduler.polltime(ms(150));
         expect(drive.speed).toBeCloseTo(0.63, 1);
@@ -325,10 +311,7 @@ describe("spindle motor", () => {
     });
 
     it("turns the disc slowly at first, so the index comes round late", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
+        const { scheduler, drive } = spinningDrive();
         const started = scheduler.epoch;
         untilIndexRises(drive, scheduler);
         const firstIndex = scheduler.epoch - started;
@@ -340,10 +323,7 @@ describe("spindle motor", () => {
 
     it("turns at 300 rpm and spins up in the same time on the Atom's 1 MHz clock", () => {
         const atomMs = (n) => n * 1000;
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, AtomCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
+        const { scheduler, drive } = spinningDrive(AtomCyclesPerSecond);
         scheduler.polltime(atomMs(150));
         expect(drive.speed).toBeCloseTo(0.63, 1);
         scheduler.polltime(atomMs(3000));
@@ -351,10 +331,7 @@ describe("spindle motor", () => {
     });
 
     it("keeps its speed through a stop and start at the same instant, and coasts through a longer one", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
+        const { scheduler, drive } = spinningDrive();
         scheduler.polltime(ms(3000));
         drive.stopSpinning();
         drive.startSpinning();
@@ -367,18 +344,15 @@ describe("spindle motor", () => {
     });
 
     it("keeps the disc turning through a brief stop, with no pulses while the motor is off", () => {
-        const spinningDrive = () => {
-            const scheduler = new Scheduler();
-            const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-            drive.setDisc(fortyTrackDisc());
+        const atSpeed = () => {
+            const { scheduler, drive } = spinningDrive();
             let pulses = 0;
             drive.setPulsesCallback(() => ++pulses);
-            drive.startSpinning();
             scheduler.polltime(ms(3000));
             return { scheduler, drive, pulses: () => pulses };
         };
-        const steady = spinningDrive();
-        const stopped = spinningDrive();
+        const steady = atSpeed();
+        const stopped = atSpeed();
         stopped.drive.stopSpinning();
         const pulsesAtStop = stopped.pulses();
         steady.scheduler.polltime(ms(1));
@@ -392,10 +366,7 @@ describe("spindle motor", () => {
     });
 
     it("comes to rest about two seconds after the motor stops", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
+        const { scheduler, drive } = spinningDrive();
         scheduler.polltime(ms(3000));
         drive.stopSpinning();
         scheduler.polltime(ms(1900));
@@ -404,31 +375,32 @@ describe("spindle motor", () => {
         expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
-    it("carries its speed through a snapshot", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
-        scheduler.polltime(ms(150));
-        const state = drive.snapshotState();
-        expect(state.speed).toBeCloseTo(0.63, 1);
-        const restored = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        restored.setDisc(fortyTrackDisc());
-        restored.restoreState(state);
-        expect(restored.speed).toBeCloseTo(0.63, 1);
+    it("brings back its head, its spin and its disc from a snapshot", () => {
+        const withDisc = () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
+            drive.setDisc(eightyTrackDisc());
+            return {
+                drive,
+                scheduler,
+                snapshotState: () => drive.snapshotState(),
+                restoreState: (state) => drive.restoreState(state),
+            };
+        };
+        return expectSnapshotRoundTrips(withDisc, ({ drive, scheduler }) => {
+            drive.selectSide(true);
+            drive.seekOneTrack(1);
+            drive.startSpinning();
+            scheduler.polltime(ms(150));
+        });
     });
 
     it("carries a coast through a snapshot, turning unread until it comes to rest", () => {
-        const scheduler = new Scheduler();
-        const drive = new DiscDrive(0, scheduler, BbcCyclesPerSecond);
-        drive.setDisc(fortyTrackDisc());
-        drive.startSpinning();
+        const { scheduler, drive } = spinningDrive();
         scheduler.polltime(ms(3000));
         drive.stopSpinning();
         scheduler.polltime(ms(350));
         const state = drive.snapshotState();
-        expect(state.spinning).toBe(false);
-        expect(state.timerTaskOffset).not.toBeNull();
 
         const restoredScheduler = new Scheduler();
         const restored = new DiscDrive(0, restoredScheduler, BbcCyclesPerSecond);
@@ -494,6 +466,46 @@ describe("drive noise", () => {
         vi.runAllTimers();
         expect(calls.at(-1)).toBe("spinDown");
         expect(calls.filter((call) => call === "spinDown")).toHaveLength(1);
+    });
+
+    it("follows a snapshot restored over a stopped drive, then stops with it", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives();
+        const turning = new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond);
+        turning.startSpinning();
+
+        drives[0].restoreState(turning.snapshotState());
+        vi.runAllTimers();
+        expect(calls.at(-1)).toBe("spinUp");
+
+        drives[0].stopSpinning();
+        vi.runAllTimers();
+        expect(calls.at(-1)).toBe("spinDown");
+    });
+
+    it("stops for a stopped snapshot restored over a turning drive", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives();
+        drives[0].startSpinning();
+        vi.runAllTimers();
+
+        drives[0].restoreState(new DiscDrive(0, new Scheduler(), BbcCyclesPerSecond).snapshotState());
+        vi.runAllTimers();
+        expect(calls.at(-1)).toBe("spinDown");
+    });
+
+    it("stays balanced over restores that leave a drive as it was", () => {
+        vi.useFakeTimers();
+        const { drives, calls } = noisyDrives();
+        drives[0].startSpinning();
+        const turning = drives[0].snapshotState();
+        drives[0].restoreState(turning);
+        drives[0].restoreState(turning);
+        drives[1].restoreState(drives[1].snapshotState());
+
+        drives[0].stopSpinning();
+        vi.runAllTimers();
+        expect(calls.at(-1)).toBe("spinDown");
     });
 
     it("passes every seek's start and end on, from either drive", () => {

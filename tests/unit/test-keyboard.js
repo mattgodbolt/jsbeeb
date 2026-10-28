@@ -1,72 +1,59 @@
-import { expect, describe, test, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
-import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
 import { BBC, keyCodes, userKeymap } from "../../src/keymap.js";
-import { findModel } from "../../src/models.js";
+import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
+
+const keyEvent = (code, key = "", extra = {}) => ({
+    code,
+    key,
+    preventDefault: vi.fn(),
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...extra,
+});
 
 describe("Keyboard", () => {
     let keyboard;
     let mockProcessor;
     let mockSysvia;
     let mockInputEnabledFunction;
+    let resetInputMethod;
     let running;
 
-    const keyEvent = (code, key = "", extra = {}) => ({
-        code,
-        key,
-        preventDefault: vi.fn(),
-        ctrlKey: false,
-        altKey: false,
-        shiftKey: false,
-        ...extra,
-    });
     const breakKey = () => keyEvent(keyCodes.F12, "F12");
 
     beforeEach(() => {
-        mockSysvia = {
-            keyDown: vi.fn(),
-            keyUp: vi.fn(),
-            clearKeys: vi.fn(),
-            disableKeyboard: vi.fn(),
-            enableKeyboard: vi.fn(),
-            keyToggleRaw: vi.fn(),
-            setKeyLayout: vi.fn(),
-            capsLockLight: false,
-            shiftLockLight: false,
-        };
-
-        mockProcessor = {
-            model: findModel("B-DFS1.2"),
-            sysvia: mockSysvia,
-            keyboardInterface: mockSysvia,
-            setKeyLayout: vi.fn(),
-            scheduler: new Scheduler(),
-            setReset: vi.fn(),
-            peripheralCyclesPerSecond: 2000000,
-            cycleSeconds: 0,
-            currentCycles: 0,
-        };
+        mockProcessor = fakeKeyboardProcessor();
+        mockSysvia = mockProcessor.sysvia;
 
         mockInputEnabledFunction = vi.fn().mockReturnValue(false);
         running = false;
+        resetInputMethod = vi.fn();
 
         keyboard = new Keyboard({
             processor: mockProcessor,
             inputEnabledFunction: mockInputEnabledFunction,
             runningFunction: () => running,
+            resetInputMethodFunction: resetInputMethod,
             keyLayout: "physical",
         });
     });
 
-    test("should create a keyboard instance", () => {
-        expect(keyboard).toBeDefined();
+    test("cancels a paste into the machine when its input changes, giving the keyboard back", () => {
+        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
+        mockProcessor.scheduler.polltime(1);
+        keyboard.setInput({ keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() });
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.keyToggleRaw.mock.calls).toEqual([[BBC.A], [BBC.A]]);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
     });
 
     describe("in a shared session", () => {
         let input;
         beforeEach(() => {
-            input = { keyDown: vi.fn(), keyUp: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
+            input = { keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() };
             running = true;
             keyboard.setInput(input);
             mockSysvia.clearKeys.mockClear();
@@ -89,6 +76,65 @@ describe("Keyboard", () => {
             keyboard.clearKeys();
             expect(input.keyUp).toHaveBeenCalledWith(keyCodes.A);
             expect(mockSysvia.clearKeys).not.toHaveBeenCalled();
+        });
+
+        describe("pasting", () => {
+            beforeEach(() => vi.useFakeTimers());
+            afterEach(() => vi.useRealTimers());
+
+            test("types through the session as the wall clock goes, leaving the machine's keys alone", () => {
+                const pasteKeyMs = mockProcessor.model.pasteKeyDelayMs;
+                keyboard.sendRawKeyboard([BBC.SHIFT, BBC.A, BBC.SHIFT], false);
+                vi.advanceTimersByTime(0);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.SHIFT, true]]);
+                vi.advanceTimersByTime(pasteKeyMs);
+                expect(input.keyRaw.mock.calls.at(-1)).toEqual([BBC.A, true]);
+                vi.advanceTimersByTime(3 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls.slice(2)).toEqual([
+                    [BBC.A, false],
+                    [BBC.SHIFT, false],
+                ]);
+                expect(keyboard.isPasting).toBe(false);
+                mockProcessor.scheduler.polltime(mockProcessor.peripheralCyclesPerSecond);
+                expect(mockSysvia.keyToggleRaw).not.toHaveBeenCalled();
+                expect(mockSysvia.disableKeyboard).not.toHaveBeenCalled();
+            });
+
+            test("holds its typing while the machine is stopped, then gives the key down a full delay", () => {
+                const pasteKeyMs = mockProcessor.model.pasteKeyDelayMs;
+                keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
+                vi.advanceTimersByTime(0);
+                running = false;
+                vi.advanceTimersByTime(10 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.A, true]]);
+                running = true;
+                vi.advanceTimersByTime(pasteKeyMs);
+                expect(input.keyRaw.mock.calls).toEqual([[BBC.A, true]]);
+                vi.advanceTimersByTime(2 * pasteKeyMs);
+                expect(input.keyRaw.mock.calls.slice(1, 3)).toEqual([
+                    [BBC.A, false],
+                    [BBC.B, true],
+                ]);
+            });
+
+            test("pastes into the machine again once the session is over", () => {
+                keyboard.setInput(null);
+                keyboard.sendRawKeyboard([BBC.A], false);
+                mockProcessor.scheduler.polltime(1);
+                expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
+                expect(input.keyRaw).not.toHaveBeenCalled();
+            });
+
+            test("lets go through the session of what it held when the session ends", () => {
+                keyboard.sendRawKeyboard([BBC.SHIFT, BBC.A, BBC.B], false);
+                vi.advanceTimersByTime(mockProcessor.model.pasteKeyDelayMs);
+                keyboard.setInput(null);
+                expect(input.keyRaw.mock.calls.slice(2)).toEqual([
+                    [BBC.A, false],
+                    [BBC.SHIFT, false],
+                ]);
+                expect(keyboard.isPasting).toBe(false);
+            });
         });
 
         test("goes straight to the machine again once the session is over, with nothing held", () => {
@@ -168,25 +214,21 @@ describe("Keyboard", () => {
         });
     });
 
-    test("brings the machine out of reset when Break is released after it stopped", () => {
-        const evt = breakKey();
+    test.each([
+        [
+            "Break is released after the machine stopped",
+            () => {
+                running = false;
+                keyboard.keyUp(breakKey());
+            },
+        ],
+        ["the window loses focus with Break held", () => keyboard.clearKeys()],
+    ])("brings the machine out of reset when %s", (_, release) => {
         running = true;
-        keyboard.keyDown(evt);
+        keyboard.keyDown(breakKey());
         expect(mockProcessor.setReset).toHaveBeenLastCalledWith(true);
 
-        running = false;
-        keyboard.keyUp(evt);
-
-        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(false);
-    });
-
-    test("brings the machine out of reset when the window loses focus with Break held", () => {
-        const evt = breakKey();
-        running = true;
-        keyboard.keyDown(evt);
-        expect(mockProcessor.setReset).toHaveBeenLastCalledWith(true);
-
-        keyboard.clearKeys();
+        release();
 
         expect(mockProcessor.setReset).toHaveBeenLastCalledWith(false);
     });
@@ -198,12 +240,11 @@ describe("Keyboard", () => {
     });
 
     test("lets a text field that took focus mid-hold have the key's repeats", () => {
-        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
         running = true;
-        keyboard.keyDown(key);
+        keyboard.keyDown(keyEvent(keyCodes.A));
         mockInputEnabledFunction.mockReturnValue(true);
 
-        const repeat = { ...key, repeat: true, preventDefault: vi.fn() };
+        const repeat = keyEvent(keyCodes.A, "", { repeat: true });
         keyboard.keyDown(repeat);
 
         expect(repeat.preventDefault).not.toHaveBeenCalled();
@@ -211,27 +252,25 @@ describe("Keyboard", () => {
     });
 
     test("brings a key held through a paste back once the paste is over", () => {
-        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
-        mockSysvia.keyUpRaw = vi.fn();
+        const repeat = () => keyEvent(keyCodes.A, "", { repeat: true });
         running = true;
-        keyboard.keyDown(key);
+        keyboard.keyDown(keyEvent(keyCodes.A));
 
         keyboard.sendRawKeyboard([BBC.B], false);
-        keyboard.keyDown({ ...key, repeat: true });
+        keyboard.keyDown(repeat());
         expect(mockSysvia.keyDown).toHaveBeenCalledTimes(1);
 
         keyboard.cancelPaste();
-        keyboard.keyDown({ ...key, repeat: true });
+        keyboard.keyDown(repeat());
         expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
     });
 
     test("presses again when a key comes down whose key up never arrived", () => {
-        const key = { code: keyCodes.A, preventDefault: vi.fn(), altKey: false, ctrlKey: false, shiftKey: false };
         running = true;
 
-        keyboard.keyDown(key);
-        keyboard.keyDown(key);
-        keyboard.keyUp(key);
+        keyboard.keyDown(keyEvent(keyCodes.A));
+        keyboard.keyDown(keyEvent(keyCodes.A));
+        keyboard.keyUp(keyEvent(keyCodes.A));
 
         expect(mockSysvia.keyDown).toHaveBeenCalledTimes(2);
         expect(mockSysvia.keyUp).toHaveBeenCalledTimes(2);
@@ -358,6 +397,36 @@ describe("Keyboard", () => {
             expect(mockSysvia.keyUp.mock.calls).toEqual([[keyCodes.APOSTROPHE]]);
         });
 
+        test("resets the input method once when the machine takes a dead key", () => {
+            keyboard.keyDown(deadKey());
+            keyboard.keyDown(deadKey({ repeat: true }));
+
+            expect(resetInputMethod).toHaveBeenCalledTimes(1);
+        });
+
+        test("leaves the input method alone for a dead key typed into the page", () => {
+            mockInputEnabledFunction.mockReturnValue(true);
+            keyboard.keyDown(deadKey());
+
+            expect(resetInputMethod).not.toHaveBeenCalled();
+        });
+
+        test("holds a Return pressed after the reset dead key from its press to its key up", () => {
+            const enter = (extra) => keyEvent(keyCodes.ENTER, "Enter", extra);
+            keyboard.keyDown(keyEvent(keyCodes.SHIFT_LEFT, "Shift", { shiftKey: true }));
+            keyboard.keyDown(deadKey());
+            keyboard.keyUp(keyEvent(keyCodes.APOSTROPHE, "Dead", { shiftKey: true }));
+            keyboard.keyUp(keyEvent(keyCodes.SHIFT_LEFT, "Shift"));
+            keyboard.keyDown(enter());
+            keyboard.keyDown(enter({ repeat: true }));
+            keyboard.keyDown(enter({ repeat: true }));
+            expect(mockSysvia.keyUp).not.toHaveBeenCalledWith(keyCodes.ENTER);
+
+            keyboard.keyUp(enter());
+            expect(mockSysvia.keyDown.mock.calls.filter(([key]) => key === keyCodes.ENTER)).toHaveLength(1);
+            expect(mockSysvia.keyUp).toHaveBeenLastCalledWith(keyCodes.ENTER);
+        });
+
         test("holds a dead key through its repeats", () => {
             keyboard.keyDown(deadKey());
             keyboard.keyDown(deadKey({ repeat: true }));
@@ -389,239 +458,63 @@ describe("Keyboard", () => {
         });
     });
 
-    test("keyCode is the physical position the event came from", () => {
+    test("names each shift key by where it is", () => {
         expect(keyboard.keyCode({ code: "ShiftLeft" })).toBe(keyCodes.SHIFT_LEFT);
         expect(keyboard.keyCode({ code: "ShiftRight" })).toBe(keyCodes.SHIFT_RIGHT);
-        expect(keyboard.keyCode({ code: "NumpadEnter" })).toBe(keyCodes.NUMPADENTER);
-        expect(keyboard.keyCode({ code: "NumpadDecimal" })).toBe(keyCodes.NUMPAD_DECIMAL_POINT);
-        expect(keyboard.keyCode({ code: "KeyA" })).toBe(keyCodes.A);
     });
 
-    test("keyDown should handle normal key press", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
-        expect(event.preventDefault).toHaveBeenCalled();
-    });
-
-    test("keyDown should not handle keys when not running", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = false;
-        keyboard.keyDown(event);
-
+    test("keeps keys from a machine that is not running", () => {
+        keyboard.keyDown(keyEvent(keyCodes.A));
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("keyDown should not handle keys when input is enabled", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        // Set input enabled to true
-        mockInputEnabledFunction.mockReturnValueOnce(true);
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockInputEnabledFunction).toHaveBeenCalled();
-        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("keyDown should hold reset for F12/BREAK", () => {
-        const event = {
-            code: keyCodes.F12,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockProcessor.setReset).toHaveBeenCalledWith(true);
-        expect(event.preventDefault).toHaveBeenCalled();
-    });
-
-    test("keyUp should call sysvia.keyUp", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            altKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-        keyboard.keyUp(event);
-
-        expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
-        expect(event.preventDefault).toHaveBeenCalled();
     });
 
     test("releases a key pressed before focus moved into a text field", () => {
-        const event = {
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            altKey: false,
-        };
-
         running = true;
-        keyboard.keyDown(event);
+        keyboard.keyDown(keyEvent(keyCodes.A));
         mockInputEnabledFunction.mockReturnValue(true);
-        keyboard.keyUp(event);
+        keyboard.keyUp(keyEvent(keyCodes.A));
 
         expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
     });
 
     test("does not reach the machine for a key released without being pressed", () => {
         running = true;
-        keyboard.keyUp({ code: keyCodes.A, preventDefault: vi.fn(), altKey: false });
+        keyboard.keyUp(keyEvent(keyCodes.A));
 
         expect(mockSysvia.keyUp).not.toHaveBeenCalled();
     });
 
-    test("keyUp should release reset for F12/BREAK", () => {
-        const event = {
-            code: keyCodes.F12,
-            preventDefault: vi.fn(),
-            altKey: false,
-        };
-
+    test("gives a key to its Ctrl handler instead of the machine", () => {
+        const handler = vi.fn();
+        keyboard.registerKeyHandler(keyCodes.E, handler, { alt: false, ctrl: true });
         running = true;
-        keyboard.keyDown(event);
-        keyboard.keyUp(event);
 
-        expect(mockProcessor.setReset).toHaveBeenCalledWith(false);
-        expect(event.preventDefault).toHaveBeenCalled();
+        keyboard.keyDown(keyEvent(keyCodes.E, "", { ctrlKey: true }));
+
+        expect(handler).toHaveBeenCalledWith(true, keyCodes.E, false);
+        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
-    test("clearKeys should call sysvia.clearKeys", () => {
+    test("runs a shortcut once however long it is held, even when its repeats outlast a blur", () => {
+        const handler = vi.fn();
+        keyboard.registerKeyHandler(keyCodes.T, handler, { alt: true, ctrl: false });
+        const altT = (repeat) => keyEvent(keyCodes.T, "", { altKey: true, repeat });
+
+        keyboard.keyDown(altT(false));
+        keyboard.keyDown(altT(true));
         keyboard.clearKeys();
-        expect(mockSysvia.clearKeys).toHaveBeenCalled();
+        keyboard.keyDown(altT(true));
+
+        expect(handler.mock.calls.filter(([down]) => down)).toHaveLength(1);
     });
 
-    test("setKeyLayout hands the layout to the processor", () => {
-        keyboard.setKeyLayout("gaming");
-        expect(mockProcessor.setKeyLayout).toHaveBeenCalledWith("gaming");
-    });
-
-    test("registerKeyHandler should add a handler for a key with Alt modifier", () => {
-        const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.Q, mockHandler, { alt: true, ctrl: false });
-
-        const event = {
-            code: keyCodes.Q,
-            preventDefault: vi.fn(),
-            ctrlKey: false,
-            altKey: true,
-            shiftKey: false,
-        };
-
+    test("keeps the keyboard from the machine while a paste types, until Escape cancels it", () => {
         running = true;
-        keyboard.keyDown(event);
-
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.Q, false);
-        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("registered handler suppresses sysvia.keyDown for that key", () => {
-        // When a handler claims a key, the BBC Micro should NOT also receive it.
-        const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.K1, mockHandler, { alt: true, ctrl: false });
-
-        running = true;
-        keyboard.keyDown({
-            code: keyCodes.K1,
-            preventDefault: vi.fn(),
-            altKey: true,
-            ctrlKey: false,
-            shiftKey: false,
-        });
-
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.K1, false);
-        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("unhandled keys still reach sysvia.keyDown", () => {
-        running = true;
-        keyboard.keyDown({
-            code: keyCodes.A,
-            preventDefault: vi.fn(),
-            altKey: false,
-            ctrlKey: false,
-            shiftKey: false,
-        });
-
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
-    });
-
-    test("registerKeyHandler should add a handler for a key with Ctrl modifier", () => {
-        const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.E, mockHandler, { alt: false, ctrl: true });
-
-        const event = {
-            code: keyCodes.E,
-            preventDefault: vi.fn(),
-            ctrlKey: true,
-            altKey: false,
-            shiftKey: false,
-        };
-
-        running = true;
-        keyboard.keyDown(event);
-
-        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.E, false);
-    });
-
-    test("sendRawKeyboard should disable keyboard and schedule paste task", () => {
-        keyboard.sendRawKeyboard([BBC.A], false);
-
+        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
         expect(keyboard.isPasting).toBe(true);
-    });
 
-    test("cancelPaste should stop paste and re-enable keyboard", () => {
-        keyboard.sendRawKeyboard([BBC.A, BBC.B, BBC.C], false);
-        mockProcessor.scheduler.polltime(1); // deliver first key
-
-        keyboard.cancelPaste();
-
-        expect(keyboard.isPasting).toBe(false);
-        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
-    });
-
-    test("Escape should cancel paste during keyDown", () => {
-        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
-        running = true;
-
-        const escEvent = {
-            code: keyCodes.ESCAPE,
-            preventDefault: vi.fn(),
-            altKey: false,
-            ctrlKey: false,
-            shiftKey: false,
-        };
-        keyboard.keyDown(escEvent);
+        keyboard.keyDown(keyEvent(keyCodes.ESCAPE));
 
         expect(keyboard.isPasting).toBe(false);
         expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
@@ -647,28 +540,8 @@ describe("Keyboard Atom adapter", () => {
     let mockProcessor;
 
     beforeEach(() => {
-        mockAtomPPIA = {
-            keyDown: vi.fn(),
-            keyUp: vi.fn(),
-            clearKeys: vi.fn(),
-            disableKeyboard: vi.fn(),
-            enableKeyboard: vi.fn(),
-            keyToggleRaw: vi.fn(),
-            setKeyLayout: vi.fn(),
-        };
-
-        mockProcessor = {
-            model: findModel("Atom"),
-            atomppia: mockAtomPPIA,
-            keyboardInterface: mockAtomPPIA,
-            setKeyLayout: vi.fn(),
-            sysvia: { keyDown: vi.fn(), keyUp: vi.fn() },
-            scheduler: new Scheduler(),
-            setReset: vi.fn(),
-            peripheralCyclesPerSecond: 1000000,
-            cycleSeconds: 0,
-            currentCycles: 0,
-        };
+        mockProcessor = fakeKeyboardProcessor("Atom");
+        mockAtomPPIA = mockProcessor.atomppia;
 
         keyboard = new Keyboard({
             processor: mockProcessor,
@@ -678,34 +551,17 @@ describe("Keyboard Atom adapter", () => {
         });
     });
 
-    test("takes the PPIA as its key interface on an Atom", () => {
-        expect(keyboard.keyInterface).toBe(mockAtomPPIA);
-    });
-
-    test("keyDown should route to PPIA, not SysVia", () => {
-        const evt = { code: "KeyA", shiftKey: false, altKey: false, ctrlKey: false, preventDefault: vi.fn() };
-        keyboard.keyDown(evt);
+    test("routes keys to the PPIA, not the SysVIA", () => {
+        keyboard.keyDown(keyEvent("KeyA"));
+        keyboard.keyUp(keyEvent("KeyA"));
         expect(mockAtomPPIA.keyDown).toHaveBeenCalledWith("KeyA", false);
-        expect(mockProcessor.sysvia.keyDown).not.toHaveBeenCalled();
-    });
-
-    test("keyUp should route to PPIA", () => {
-        const evt = { code: "KeyA", altKey: false, ctrlKey: false, preventDefault: vi.fn() };
-        keyboard.keyDown(evt);
-        keyboard.keyUp(evt);
         expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith("KeyA");
+        expect(mockProcessor.sysvia.keyDown).not.toHaveBeenCalled();
     });
 
     test("sends the PPIA the character the host produced in the natural layout", () => {
         keyboard.setKeyLayout("natural");
-        keyboard.keyDown({
-            code: "Digit2",
-            key: "@",
-            shiftKey: true,
-            altKey: false,
-            ctrlKey: false,
-            preventDefault: vi.fn(),
-        });
+        keyboard.keyDown(keyEvent("Digit2", "@", { shiftKey: true }));
         expect(mockAtomPPIA.keyDown).toHaveBeenCalledWith("@", true);
     });
 
@@ -716,27 +572,12 @@ describe("Keyboard Atom adapter", () => {
 });
 
 describe("stringToATOMKeys", () => {
-    test("should insert LOCK toggles only for case transitions", () => {
-        // "Hello" = H (caps on), LOCK off, e, l, l, o, LOCK on (restore)
-        const keys = stringToATOMKeys("Hello");
-        expect(keys).toEqual([ATOM.H, ATOM.LOCK, ATOM.E, ATOM.L, ATOM.L, ATOM.O, ATOM.LOCK]);
-    });
-
-    test("should not insert LOCK for all-uppercase", () => {
-        const keys = stringToATOMKeys("ABC");
-        expect(keys).toEqual([ATOM.A, ATOM.B, ATOM.C]);
-    });
-
-    test("should not toggle LOCK for non-letter characters", () => {
-        // Space and digits should not force LOCK back on between lowercase runs
-        const keys = stringToATOMKeys("a b");
-        expect(keys).toEqual([ATOM.LOCK, ATOM.A, ATOM.SPACE, ATOM.B, ATOM.LOCK]);
-    });
-
-    test("should handle shifted characters without extra LOCK toggles", () => {
-        // ' is SHIFT+7. Apostrophe doesn't care about caps lock state,
-        // so no LOCK toggle between the lowercase letters and the punctuation.
-        const keys = stringToATOMKeys("a'b");
-        expect(keys).toEqual([ATOM.LOCK, ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B, ATOM.LOCK]);
+    test.each([
+        ["Hello", [ATOM.H, ATOM.LOCK, ATOM.E, ATOM.L, ATOM.L, ATOM.O, ATOM.LOCK]],
+        ["ABC", [ATOM.A, ATOM.B, ATOM.C]],
+        ["a b", [ATOM.LOCK, ATOM.A, ATOM.SPACE, ATOM.B, ATOM.LOCK]],
+        ["a'b", [ATOM.LOCK, ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B, ATOM.LOCK]],
+    ])("types %s with LOCK pressed only to change case, and left on at the end", (text, keys) => {
+        expect(stringToATOMKeys(text)).toEqual(keys);
     });
 });

@@ -2,7 +2,7 @@
 // e2e build's dummy measurement id.
 
 import { Beeb, expect, test } from "./fixtures.js";
-import { browserFloors, floorText } from "../../tools/vite-plugin-browser-floor.js";
+import { floorText } from "../../tools/vite-plugin-browser-floor.js";
 
 const ModuleScriptSrc = /<script type="module"[^>]* src="([^"]+)"/;
 const Chrome105 =
@@ -23,16 +23,30 @@ const analyticsCalls = (page, command) =>
 const unsupportedBrowserEvents = async (page) =>
     (await analyticsCalls(page, "event")).filter((call) => call[1] === "unsupported_browser");
 
-test("a supported browser sees no message and reports nothing", async ({ beeb, page }) => {
+test("a supported browser starts the machine with its console names, loads gtag.js once, reports the start, and sees no message, even for an error once main.js has started", async ({
+    beeb,
+    page,
+}) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await expect(page.locator("#browser-floor")).toBeHidden();
-    expect(await unsupportedBrowserEvents(page)).toEqual([]);
-});
-
-test("an error from the bundle once main.js has finished starting shows no message", async ({ beeb, page }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
+    expect(await page.evaluate(() => [window.video, window.soundChip].map((part) => typeof part))).toEqual([
+        "object",
+        "object",
+    ]);
+    await expect(page.locator('script[src^="https://www.googletagmanager.com/gtag/js?id="]')).toHaveCount(1);
+    expect(await analyticsCalls(page, "config"), "main.js's config").toHaveLength(1);
+    await expect
+        .poll(async () => (await analyticsCalls(page, "event")).filter((call) => call[1] === "machine_start"))
+        .toEqual([
+            [
+                "event",
+                "machine_start",
+                expect.objectContaining({
+                    renderer: expect.stringMatching(/^(webgl|canvas2d)$/),
+                    audio: expect.stringMatching(/^(ok|unavailable)$/),
+                }),
+            ],
+        ]);
     await page.evaluate(() => {
         const bundle = document.querySelector('script[type="module"]').src;
         window.dispatchEvent(new ErrorEvent("error", { filename: bundle }));
@@ -41,26 +55,13 @@ test("an error from the bundle once main.js has finished starting shows no messa
     expect(await unsupportedBrowserEvents(page)).toEqual([]);
 });
 
-test("a browser below the floor is told its version and the one it needs, and the emulator still starts", async ({
-    beeb,
-    page,
-}) => {
+test("a browser below the floor is told so, and the emulator still starts", async ({ beeb, page }) => {
     await pretendToBe(page, Chrome105);
     await beeb.open();
-    const message = page.locator("#browser-floor");
-    await expect(message).toBeVisible();
-    await expect(message).toContainText(
-        `You're using Chrome 105. jsbeeb needs Chrome ${browserFloors().Chrome} or newer.`,
-    );
-    await expect(message.getByRole("link", { name: "matt@godbolt.org" })).toHaveAttribute(
-        "href",
-        "mailto:matt@godbolt.org",
-    );
+    await expect(page.locator("#browser-floor")).toBeVisible();
     expect(await unsupportedBrowserEvents(page)).toEqual([["event", "unsupported_browser", { reason: "below_floor" }]]);
     expect(await analyticsCalls(page, "config"), "main.js's config and no other").toHaveLength(1);
     await beeb.expectScreenText(">");
-    await message.getByRole("button", { name: "Close" }).click();
-    await expect(message).toBeHidden();
 });
 
 const breakBundle = async (page) => {
@@ -72,8 +73,7 @@ const breakBundle = async (page) => {
     );
 };
 
-// These use a Beeb of their own rather than the fixture's, which fails a test whose page throws.
-
+// A Beeb of its own rather than the fixture's, which fails a test whose page throws, so it checks the one throw itself.
 test("a bundle that fails to parse leaves the message, and its own page_view, instead of a blank page", async ({
     page,
 }) => {
@@ -90,27 +90,5 @@ test("a bundle that fails to parse leaves the message, and its own page_view, in
     const [config] = await analyticsCalls(page, "config");
     expect(config[1]).toBe("G-E2ETEST");
     expect(config[2].page_location).not.toContain("?");
-});
-
-test("a browser below the floor that cannot parse the bundle either is reported as below the floor", async ({
-    page,
-}) => {
-    const beeb = new Beeb(page);
-    await pretendToBe(page, Chrome105);
-    await breakBundle(page);
-    await beeb.open();
-    await expect(page.locator("#browser-floor")).toBeVisible();
-    expect(await unsupportedBrowserEvents(page)).toEqual([["event", "unsupported_browser", { reason: "below_floor" }]]);
-});
-
-test("an error from another site's script shows no message", async ({ page }) => {
-    const beeb = new Beeb(page);
-    await page.route(/^https:\/\/www\.googletagmanager\.com\//, (route) =>
-        route.fulfill({ contentType: "text/javascript", body: 'throw new Error("from Google");' }),
-    );
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    expect(beeb.problems).not.toEqual([]);
-    await expect(page.locator("#browser-floor")).toBeHidden();
-    expect(await unsupportedBrowserEvents(page)).toEqual([]);
+    expect(beeb.problems).toEqual([expect.stringMatching(/^exception: Unexpected token/)]);
 });

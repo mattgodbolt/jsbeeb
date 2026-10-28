@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { TickMs } from "../../../src/emulation-tick.js";
-import { SlicesPerSecond, timeSlices } from "../../../tools/node-ab-sample.js";
+import { SlicesPerSecond, timeSlices } from "../../../tools/ab-sample.js";
 
 describe("timeSlices", () => {
     it("runs the warm-up and then the timed seconds in tick-sized slices of the model's clock", () => {

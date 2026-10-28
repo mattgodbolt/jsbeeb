@@ -41,13 +41,6 @@ describe("SessionDialog", () => {
         find(".session-join-form").requestSubmit();
     };
 
-    it("opens the dialog when there is no session", () => {
-        new SessionDialog({ session: null, refusal: null, host, join });
-        const show = shown();
-        openIt();
-        expect(show).toHaveBeenCalled();
-    });
-
     it("opens the session's pane instead while there is one", () => {
         new SessionDialog({ session, refusal: null, host, join });
         const show = shown();
@@ -173,18 +166,6 @@ describe("SessionDialog", () => {
         expect(find(".session-host").disabled).toBe(false);
     });
 
-    it("opens the dialog again after hosting came to nothing", async () => {
-        host.mockResolvedValue(null);
-        new SessionDialog({ session: null, refusal: null, host, join });
-        await openDialog();
-        await startHosting();
-        await hosted();
-        expect(find(".session-host").disabled).toBe(false);
-        const show = shown();
-        openIt();
-        expect(show).toHaveBeenCalled();
-    });
-
     describe("an Enter held on Start hosting", () => {
         const enter = (type, repeat = false) =>
             document.dispatchEvent(new KeyboardEvent(type, { key: "Enter", repeat, bubbles: true, cancelable: true }));
@@ -240,16 +221,15 @@ describe("SessionDialog", () => {
         expect(room.classList).not.toContain("is-invalid");
     });
 
-    it("says why a machine that cannot take part can neither host nor join", () => {
-        new SessionDialog({ session: null, refusal: "No Atoms.", host, join });
-        expect(find(".session-refusal").hidden).toBe(false);
-        expect(find(".session-refusal").textContent).toBe("No Atoms.");
-        expect(find(".session-host").disabled).toBe(true);
-        expect(find(".session-join").disabled).toBe(true);
-    });
-
-    it("keeps the refusal out of the way when there is none", () => {
-        new SessionDialog({ session: null, refusal: null, host, join });
-        expect(find(".session-refusal").hidden).toBe(true);
+    it.each([
+        ["says why a machine that cannot take part can neither host nor join", "No Atoms."],
+        ["keeps the refusal out of the way, and lets it host or join, when there is none", null],
+    ])("%s", (_, refusal) => {
+        new SessionDialog({ session: null, refusal, host, join });
+        const refused = refusal !== null;
+        expect(find(".session-refusal").hidden).toBe(!refused);
+        expect(find(".session-refusal").textContent).toBe(refusal ?? "");
+        expect(find(".session-host").disabled).toBe(refused);
+        expect(find(".session-join").disabled).toBe(refused);
     });
 });

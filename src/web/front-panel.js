@@ -1,5 +1,6 @@
 import { toast } from "./toast.js";
 import { noteFeature } from "./analytics.js";
+import { shortcutLabel } from "./shortcuts.js";
 
 class Light {
     constructor(name) {
@@ -28,7 +29,7 @@ export class FrontPanel {
         loop.addEventListener("tick", () => this.syncLights());
         printer.addEventListener("output", (event) => this.printChar(event.detail));
         printer.addEventListener("first-output", () =>
-            toast("Printer output is being kept. Press Alt-B to open the printer window.", {
+            toast(`Printer output is being kept. Press ${shortcutLabel("Alt-B")} to open the printer window.`, {
                 title: "Printer",
                 quietKey: "quietPrinterOutput",
             }),
@@ -76,7 +77,7 @@ export class FrontPanel {
         this.printerWindow = window.open("", "_blank", "height=300,width=400");
         if (!this.printerWindow) {
             toast(
-                "The printer output window was blocked. Allow pop-up windows for this site, then press Alt-B again.",
+                `The printer output window was blocked. Allow pop-up windows for this site, then press ${shortcutLabel("Alt-B")} again.`,
                 {
                     title: "Printer",
                 },

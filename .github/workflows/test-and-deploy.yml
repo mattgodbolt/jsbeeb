@@ -7,17 +7,15 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
+  checks:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
@@ -27,6 +25,22 @@ jobs:
         run: npm ci
       - name: checks
         run: npm run ci-checks
+
+  unit:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: npm ci
+        run: npm ci
       - name: Unit tests
         env:
           VITEST_JOB_SUMMARY_TITLE: Unit tests
@@ -55,16 +69,46 @@ jobs:
             --no-progress --delete \
             --exclude "coverage-final.json" --exclude "lcov.info" --exclude "lcov-report/*" --exclude ".tmp/*" \
             --cache-control max-age=30 --metadata-directive REPLACE
+
+  integration:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: npm ci
+        run: npm ci
       - name: Integration tests
         env:
           VITEST_JOB_SUMMARY_TITLE: Integration tests
         run: npm run test:integration
+      - name: Benchmark workloads are what their script builds
+        run: npm run test:benchmark-workloads
       - name: Same-answer check
         run: npm run test:same-answer
       - name: Shader tests
         env:
           VITEST_JOB_SUMMARY_TITLE: Shader tests
         run: npm run test:shader
+
+  e2e:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: npm ci
+        run: npm ci
       - name: Built scripts parse at the browser floor
         run: |
           echo "# Built scripts parse at the browser floor" >> "$GITHUB_STEP_SUMMARY"
@@ -133,7 +177,7 @@ jobs:
           ls -lh out/dist/*.deb out/dist/*.rpm
 
   update-web:
-    needs: [build-and-test, cpu-test]
+    needs: [checks, unit, integration, e2e, cpu-test]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

@@ -129,6 +129,7 @@
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
                 <li><a href="#" id="fs" data-feature="fullscreen" class="dropdown-item">Fullscreen</a></li>
                 <li><a href="#" id="disc-visualiser-open" class="dropdown-item">Disc surface</a></li>
+                <li><a href="#" id="watch-open" class="dropdown-item">Watches</a></li>
                 <li><hr class="dropdown-divider" /></li>
                 <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
                 <li id="fsmenuitem">
@@ -349,6 +350,27 @@
         <div class="disc-status" id="disc-hover-where"></div>
         <div class="disc-status" id="disc-hover-what"></div>
       </div>
+      <div id="watch-panel" data-feature="watches" hidden>
+        <div class="watch-header">
+          <span class="disc-title">Watches</span>
+          <button id="watch-close" class="btn btn-sm btn-outline-light">Close</button>
+        </div>
+        <form id="watch-add-form" role="form">
+          <input
+            type="text"
+            id="watch-add"
+            class="form-control form-control-sm"
+            aria-label="Name or address to watch"
+            placeholder="Name or address, then Enter"
+            autocomplete="off"
+          />
+        </form>
+        <table>
+          <tbody class="watch-list"></tbody>
+        </table>
+        <div class="watch-empty">Nothing watched yet.</div>
+      </div>
+      <div id="watch-menu" hidden></div>
       <div id="leds">
         <div class="slot-readouts" role="group" aria-label="What is loaded">
           <button type="button" class="slot-readout media-window-open bbc-only" data-slot="0">
@@ -920,130 +942,177 @@
       aria-labelledby="helpModalLabel"
       aria-hidden="true"
     >
-      <div class="modal-dialog">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-lg-down">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="helpModalLabel">Help</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <div>
-              An emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular home
-              computer in 1980s Britain. It emulates the BBC B and the Master, and also the
-              <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them. Choose which by
-              clicking the model name at the top left.
-            </div>
-            <div>
-              The default disc is Elite, a pioneering 3D space trading game. Discs are booted by pressing
-              <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The BBC's keyboard differs from a
-              modern one, mostly in where the symbols are; the layout here currently assumes a US keyboard.
-            </div>
-            <div>
-              <h5>Handy key mappings</h5>
-              <table class="keymap">
-                <tr>
-                  <th>BBC</th>
-                  <th>PC</th>
-                  <th>macOS</th>
-                </tr>
-                <tr>
-                  <td><span class="function key">F0</span></td>
-                  <td><span class="key">F10</span></td>
-                  <td><span class="key">F10</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key">BREAK</span></td>
-                  <td><span class="key">F12</span></td>
-                  <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key">COPY</span></td>
-                  <td><span class="key">End</span></td>
-                  <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="dbl key">*<br />:</div>
-                  </td>
-                  <td>
-                    <div class="dbl key">"<br />'</div>
-                  </td>
-                  <td>
-                    <div class="dbl key">"<br />'</div>
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="dbl key">CAPS<br />LOCK</div>
-                  </td>
-                  <td class="key">CAPSLOCK</td>
-                  <td>See notes</td>
-                </tr>
-                <tr>
-                  <td>Debugger, in or out</td>
-                  <td><span class="key">Alt-S</span></td>
-                  <td><span class="key">Alt-S</span></td>
-                </tr>
-                <tr>
-                  <td>Pause or resume</td>
-                  <td><span class="key">Alt-P</span></td>
-                  <td><span class="key">Alt-P</span></td>
-                </tr>
-                <tr>
-                  <td>Full speed</td>
-                  <td><span class="key">Alt-T</span></td>
-                  <td><span class="key">Alt-T</span></td>
-                </tr>
-                <tr>
-                  <td>Printer output</td>
-                  <td><span class="key">Alt-B</span></td>
-                  <td><span class="key">Alt-B</span></td>
-                </tr>
-                <tr>
-                  <td>Rewind</td>
-                  <td><span class="key">Alt-W</span></td>
-                  <td><span class="key">Alt-W</span></td>
-                </tr>
-                <tr>
-                  <td>Discs and tapes, for drive 0</td>
-                  <td><span class="key">Alt-M</span></td>
-                  <td><span class="key">Alt-M</span></td>
-                </tr>
-                <tr>
-                  <td>Discs and tapes, for drive 1</td>
-                  <td><span class="key">Alt-Shift-M</span></td>
-                  <td><span class="key">Alt-Shift-M</span></td>
-                </tr>
-                <tr>
-                  <td>Discs and tapes, for the cassette</td>
-                  <td><span class="key">Alt-C</span></td>
-                  <td><span class="key">Alt-C</span></td>
-                </tr>
-                <tr>
-                  <td>Hold an accessibility switch</td>
-                  <td><span class="key">Alt-1 to Alt-8</span></td>
-                  <td><span class="key">Alt-1 to Alt-8</span></td>
-                </tr>
-              </table>
-              <div>
-                While paused, <span class="key">g</span> resumes and <span class="key">n</span> runs one frame. In the
-                debugger, <span class="key">g</span> resumes, <span class="key">n</span> steps one instruction,
-                <span class="key">m</span> steps over a call, <span class="key">o</span> steps out of one,
-                <span class="key">t</span> toggles a breakpoint on the highlighted instruction,
-                <span class="key">j</span> and <span class="key">k</span> move the disassembly,
-                <span class="key">b</span> goes back to where it was, and <span class="key">u</span> and
-                <span class="key">i</span> move the memory view by 8 bytes (<span class="key">U</span> and
-                <span class="key">I</span> by 64).
+          <div class="modal-body help">
+            <div class="row">
+              <div class="col-lg-6">
+                <p>
+                  jsbeeb emulates the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a> Model B and Master
+                  128, and the <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them.
+                  Choose the machine and the keyboard layout in the settings: click the model name on the top bar.
+                </p>
+                <p>
+                  Elite, the classic 3D space trading game, is already in drive 0. Press
+                  <span class="text-nowrap"><span class="key">SHIFT</span>+<span class="key">BREAK</span></span>
+                  (Shift+F12) to boot it. Other discs and tapes load from the media window: click
+                  <strong>Media</strong> on the top bar. Pasting text types it into the BBC.
+                </p>
+                <h5>Keyboard</h5>
+                <p>
+                  A BBC keyboard has its symbols in different places from yours. The default <em>Physical</em> layout
+                  goes by position: most keys press the BBC key in the same place, so the BBC's
+                  <span class="key">: *</span> is the key two to the right of your <span class="key">L</span>.
+                  <em>Natural</em> goes by character instead, so what you type is what the BBC gets; it suits typing,
+                  and games want Physical or Gaming. <em>Gaming</em> puts the BBC's
+                  <span class="key">CAPS LOCK</span> and <span class="key">CTRL</span> on your left
+                  <span class="key">Ctrl</span> and <span class="key">Alt</span>, for games that steer with them;
+                  jsbeeb's Alt shortcuts still come first. Any key can be
+                  <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
+                </p>
+                <table class="table table-sm caption-top">
+                  <caption>
+                    BBC and Master keys yours lacks (Physical and Natural layouts)
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>BBC key</th>
+                      <th>Press</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="key function">F0</span></td>
+                      <td><span class="key">F10</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">BREAK</span></td>
+                      <td><span class="key">F12</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="key cursor">COPY</span></td>
+                      <td>
+                        <span class="key">End</span> (on a Mac laptop,
+                        <span class="text-nowrap"><span class="key">fn</span>+<span class="key">&rarr;</span></span
+                        >)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">SHIFT LOCK</span></td>
+                      <td><span class="key">Home</span></td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">@</span></td>
+                      <td><span class="key">`</span> in Physical</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">_ &pound;</span></td>
+                      <td>
+                        <span class="key">Page Up</span> in Physical; in Natural, <span class="key">`</span> gives
+                        &pound;
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p>
+                  On a Mac, hold <span class="key">fn</span> for the function keys. Games there can't use
+                  <span class="key">Caps Lock</span> to move or fire, as browsers never report it being let go; the
+                  Gaming layout puts the BBC's <span class="key">CAPS LOCK</span> on <span class="key">Ctrl</span>.
+                </p>
               </div>
-              <div>
-                Caps lock is unreliable on macOS: browsers never report it being released, so games that use it to move
-                or fire don't work. Any key can be
-                <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
+              <div class="col-lg-6">
+                <h5>Shortcuts</h5>
+                <table class="table table-sm">
+                  <tbody>
+                    <tr>
+                      <td><span class="key">Alt-S</span></td>
+                      <td>Stop or start; when stopped, the debugger shows</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-P</span></td>
+                      <td>Pause or resume, no debugger</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-T</span></td>
+                      <td>Turbo, or back to real speed</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-W</span></td>
+                      <td>Rewind: pick an earlier moment to go back to</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-B</span></td>
+                      <td>Open the printer output</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-M</span></td>
+                      <td>Media window for drive 0</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-Shift-M</span></td>
+                      <td>Media window for drive 1</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-C</span></td>
+                      <td>Media window for the cassette</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">Alt-1 to Alt-8</span></td>
+                      <td>Hold switch 1 to 8 on the user port (PB0 to PB7)</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <h5>Paused or debugging</h5>
+                <p>
+                  After <span class="key">Alt-P</span>, <span class="key">g</span> resumes and
+                  <span class="key">n</span> runs one frame. In the debugger (<span class="key">Alt-S</span>):
+                </p>
+                <table class="table table-sm">
+                  <tbody>
+                    <tr>
+                      <td><span class="key">g</span></td>
+                      <td>Resume running</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">n</span></td>
+                      <td>Step one instruction</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">m</span></td>
+                      <td>Step over a subroutine call</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">o</span></td>
+                      <td>Run until the current subroutine returns</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">t</span></td>
+                      <td>Set or clear a breakpoint on the highlighted instruction</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">j</span> <span class="key">k</span></td>
+                      <td>Move the highlight down or up</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">b</span></td>
+                      <td>Back after clicking a jump target</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">u</span> <span class="key">i</span></td>
+                      <td>Memory forward (u), back (i), 8 bytes</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">U</span> <span class="key">I</span></td>
+                      <td>Memory forward (U), back (I), 64 bytes</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
@@ -1252,5 +1321,6 @@
         </div>
       </div>
     </div>
+    <textarea id="ime-reset" tabindex="-1" aria-hidden="true"></textarea>
   </body>
 </html>

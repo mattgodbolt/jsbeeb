@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resultLine, summarise } from "../../src/web/benchmark-page.js";
+import { BenchmarkPage, misfitting, resultLine, summarise } from "../../src/web/benchmark-page.js";
+import { FittingParams } from "../../src/web/parameters.js";
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
+
+const { workloads } = JSON.parse(readFileSync("public/benchmarks/workloads.json"));
 
 const summary = (median) => ({
     median,
@@ -60,4 +65,78 @@ describe("benchmark page", () => {
             );
         });
     });
+
+    describe("misfitting", () => {
+        const workload = { name: "elite", fittings: { hasMusic5000: false, hasVideoNula: false } };
+
+        it("passes a machine fitted as the workload is", () => {
+            expect(misfitting(workload, { hasMusic5000: false, hasVideoNula: false, cpuMultiplier: 2 })).toBeNull();
+        });
+
+        it("names each fitting the machine has otherwise, as the URL sets it", () => {
+            expect(misfitting(workload, { hasMusic5000: false, hasVideoNula: true })).toBe(
+                "The elite workload runs with hasVideoNula=false; set that in the URL",
+            );
+            expect(misfitting(workload, { hasMusic5000: true, hasVideoNula: true })).toBe(
+                "The elite workload runs with hasMusic5000=false, hasVideoNula=false; set those in the URL",
+            );
+        });
+    });
+
+    describe("run", () => {
+        const elite = workloads.find(({ name }) => name === "elite");
+
+        beforeEach(() => {
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+            domFromIndexHtml("benchmark");
+        });
+
+        afterEach(teardownDom);
+
+        const refusal = async (name, { query = {}, fitted = {} } = {}) => {
+            const target = {};
+            const page = new BenchmarkPage(name, {
+                target,
+                readWorkload: async (wanted) => workloads.find((workload) => workload.name === wanted),
+            });
+            await page.run({
+                processor: { model: { name: "B-DFS1.2" } },
+                audioHandler: { mute: () => {} },
+                modals: { show: () => {} },
+                parsedQuery: { benchmark: name, ...query },
+                takenFromHost: { ...elite.fittings, ...fitted },
+            });
+            const { status, error } = target.jsbeebBenchmark;
+            return { status, error, shown: document.querySelector("#benchmark .benchmark-status").textContent };
+        };
+
+        it.each([
+            [
+                "a workload for another model",
+                () => refusal("master-shadow"),
+                "The master-shadow workload runs on the Master: add &model=Master to the URL",
+            ],
+            [
+                "a parameter that changes what is measured",
+                () => refusal("elite", { query: { frameSkip: "2" } }),
+                "frameSkip would change what is measured; take it out of the URL",
+            ],
+            [
+                "a machine fitted otherwise than the workload",
+                () => refusal("elite", { fitted: { hasVideoNula: true } }),
+                "The elite workload runs with hasVideoNula=false; set that in the URL",
+            ],
+        ])("refuses %s, saying why", async (_, run, error) => {
+            const { status, error: reported, shown } = await run();
+            expect({ status, error: reported }).toEqual({ status: "failed", error });
+            expect(shown).toContain(error);
+        });
+    });
+
+    it.each(workloads.map((workload) => [workload.name, workload]))(
+        "%s says whether it has each fitting the settings offer",
+        (_, { fittings }) => {
+            expect(Object.keys(fittings).sort()).toEqual([...FittingParams].sort());
+        },
+    );
 });

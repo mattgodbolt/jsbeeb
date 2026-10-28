@@ -16,13 +16,8 @@ describe("decompressedIfBrotli", () => {
         expect(decompressedIfBrotli(new Uint8Array(brotliCompressSync(image)))).toEqual(image);
     });
 
-    it("leaves an image that is already an image alone", () => {
-        const image = hfe();
-        expect(decompressedIfBrotli(image)).toBe(image);
-    });
-
-    it("knows the older HFE magic too", () => {
-        const image = hfe("HXCPICFE");
+    it.each(["HXCHFEV3", "HXCPICFE"])("leaves an image that is already an %s image alone", (magic) => {
+        const image = hfe(magic);
         expect(decompressedIfBrotli(image)).toBe(image);
     });
 

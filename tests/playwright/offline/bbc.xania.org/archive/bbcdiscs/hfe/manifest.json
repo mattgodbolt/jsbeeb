@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "3A1DAB83.hfe",
+      "size": 43591,
+      "originalSize": 1050624,
+      "encoding": "br",
+      "provenance": "captured",
+      "title": "Calligraphy",
+      "publisher": "Acorn User",
+      "disc": "D1S1",
+      "tracks": ["40"],
+      "variant": "1",
+      "crc32": ["3A1DAB83"],
+      "dfsTitle": ["Calligraphy"],
+      "dfsCycle": ["02"],
+      "grabVersion": "3",
+      "submitter": "pumpkin"
+    },
+    {
+      "path": "EFBFC515-2DDBFD80.hfe",
+      "size": 96380,
+      "originalSize": 2074624,
+      "encoding": "br",
+      "provenance": "captured",
+      "title": "The Games Disc",
+      "publisher": "Acorn User",
+      "disc": "D1DS",
+      "tracks": ["80"],
+      "variant": "1",
+      "crc32": ["EFBFC515", "2DDBFD80"],
+      "crc32As40": ["A40D8BFB", "018CBF1E"],
+      "dfsTitle": ["AU Games 0", "AU Games 2"],
+      "dfsCycle": ["88", "95"],
+      "grabVersion": "3",
+      "submitter": "SarahWalker"
+    }
+  ]
+}

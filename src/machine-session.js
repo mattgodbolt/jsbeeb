@@ -24,6 +24,7 @@ import { BitshiftersArchive } from "./bitshifters.js";
 import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
+import { NumRomBanks } from "./6502.js";
 import { setNodeBasePath } from "./loader.js";
 
 // BBC framebuffer is 1024×625 pixels
@@ -63,16 +64,19 @@ export class MachineSession {
      * @param {boolean} [opts.econet] - fit Econet, with a file server on the network, and on a Master the ANFS
      *   ROM, as the web page does
      * @param {number} [opts.stationId=101] - the Econet station number, 1 to 253
+     * @param {string[]} [opts.extraRoms] - sideways ROMs for the free banks, highest first, as the page's `rom=`
+     *   takes them: a name or path under roms/, a `file:` or `http(s):` URL, or a `github:` reference; an empty
+     *   name is skipped, as the page skips it
+     * @param {{bank: number, rom: string}[]} [opts.bankRoms] - sideways ROMs for the banks they name, as the page's
+     *   `rom.N=`, skipping one with an empty name; initialise() throws for a bank the model has no socket for, one
+     *   the model or its fittings fill, or one named twice
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
         this._opts = opts;
 
-        // Raw RGBA framebuffer. The Video chip renders into _fb32 (cleared each frame).
         // _completeFb8 is a snapshot taken at paint time (the equivalent of the browser canvas)
         // and is what screenshot() reads from, always a complete frame, never mid-render.
-        this._fb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
-        this._fb32 = new Uint32Array(this._fb8.buffer);
         this._completeFb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._lastPaint = { minx: 0, miny: 0, maxx: FB_WIDTH, maxy: FB_HEIGHT };
         this._frameDirty = false;
@@ -83,17 +87,19 @@ export class MachineSession {
         const modelObj = findModel(modelName);
         this._isAtom = modelObj.isAtom;
         this._keyboardBufferOffsets = modelObj.isMaster ? MasterKeyboardBufferOffsets : KeyboardBufferOffsets;
+        const session = this;
         this._video = new Video(
             modelObj.isMaster,
-            this._fb32,
-            (minx, miny, maxx, maxy) => {
-                this._lastPaint = { minx, miny, maxx, maxy };
-                this._frameDirty = true;
-                // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
+            FB_WIDTH * FB_HEIGHT,
+            function (minx, miny, maxx, maxy) {
+                session._lastPaint = { minx, miny, maxx, maxy };
+                session._frameDirty = true;
+                // Snapshot the complete frame now, before clearPaintBuffer() wipes it.
                 // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
-                this._completeFb8.set(this._fb8);
-                this._frameCount++;
-                if (this._frameCount >= this._stopAtFrame) this._machine.processor.stop();
+                const { fb32 } = this;
+                session._completeFb8.set(new Uint8Array(fb32.buffer, fb32.byteOffset, fb32.byteLength));
+                session._frameCount++;
+                if (session._frameCount >= session._stopAtFrame) session._machine.processor.stop();
             },
             { isAtom: modelObj.isAtom, hasVideoNula: opts.hasVideoNula },
         );
@@ -112,6 +118,8 @@ export class MachineSession {
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
             econet: opts.econet,
             stationId: opts.stationId,
+            extraRoms: opts.extraRoms?.filter((rom) => rom),
+            bankRoms: opts.bankRoms?.filter(({ rom }) => rom),
         });
 
         // Accumulated VDU text output, drained by callers
@@ -447,7 +455,7 @@ export class MachineSession {
      *     while ANDY is paged over &8000 to &8FFF)
      */
     async runUntilAddress(addr, timeoutSecs = 30, { bank } = {}) {
-        requireBank(bank);
+        requireBank(bank, this._machine.model);
         await this._machine.runUntilAddress(addr, timeoutSecs, { bank });
     }
 
@@ -463,39 +471,13 @@ export class MachineSession {
      * @returns {number} breakpoint id
      */
     addBreakpoint(type, address, { bank } = {}) {
-        requireBank(bank);
-        const cpu = this._machine.processor;
-        const inBank = () => bank === undefined || this._machine.isBankPagedAt(bank, address);
+        requireBank(bank, this._machine.model);
         const id = this._nextBreakpointId++;
         const bp = { type, address, bank, hit: false, id, value: undefined };
-
-        if (type === "execute") {
-            bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address && inBank() && !cpu.resumingFromStop) {
-                    bp.hit = true;
-                    return true;
-                }
-            });
-        } else if (type === "read") {
-            bp.hook = cpu.debugRead.add((addr, val) => {
-                if (addr === address && inBank()) {
-                    bp.hit = true;
-                    bp.value = val;
-                    return true;
-                }
-            });
-        } else if (type === "write") {
-            bp.hook = cpu.debugWrite.add((addr, val) => {
-                if (addr === address && inBank()) {
-                    bp.hit = true;
-                    bp.value = val;
-                    return true;
-                }
-            });
-        } else {
-            throw new Error(`Unknown breakpoint type: ${type}`);
-        }
-
+        bp.hook = this._machine.addBreakpoint(type, address, { bank }, (value) => {
+            bp.hit = true;
+            bp.value = value;
+        });
         this._breakpoints.set(id, bp);
         return id;
     }
@@ -630,14 +612,14 @@ export class MachineSession {
     }
 
     /**
-     * What the memory map has paged in: `romsel`, the sideways bank at
-     * &8000 to &BFFF, and on a Master `acccon`, whose bit 2 puts shadow
-     * RAM at &3000 to &7FFF.
-     * @returns {{romsel: number, acccon?: number}}
+     * What the memory map has paged in: `romsel` as last written, `bank`,
+     * the sideways bank it pages at &8000 to &BFFF, and on a Master
+     * `acccon`, whose bit 2 puts shadow RAM at &3000 to &7FFF.
+     * @returns {{romsel: number, bank: number, acccon?: number}}
      */
     pagingState() {
         const cpu = this._machine.processor;
-        const state = { romsel: cpu.romsel };
+        const state = { romsel: cpu.romsel, bank: cpu.pagedBank };
         if (cpu.model.isMaster) state.acccon = cpu.acccon;
         return state;
     }
@@ -650,7 +632,7 @@ export class MachineSession {
     _withPaging({ bank, shadow }, fn) {
         const cpu = this._machine.processor;
         const { romsel, acccon } = cpu;
-        requireBank(bank);
+        requireBank(bank, cpu.model);
         if (shadow !== undefined && !cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
         try {
             if (bank !== undefined) cpu.romSelect(bank);
@@ -721,7 +703,7 @@ export class MachineSession {
      */
     async screenshot() {
         // Read from _completeFb8, the last fully-painted frame snapshotted in paint_ext.
-        // _fb8/_fb32 is the live render buffer (cleared and partially refilled each frame).
+        // The video's fb32 is the live render buffer (cleared and partially refilled each frame).
         const { default: sharp } = await import("sharp");
         return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
@@ -759,7 +741,7 @@ export class MachineSession {
 
     /** Free any resources (currently just clears the framebuffer) */
     destroy() {
-        this._fb8.fill(0);
+        this._video.fb32.fill(0);
         this._pendingOutput = [];
     }
 }
@@ -769,9 +751,11 @@ export class MachineSession {
 // ---------------------------------------------------------------------------
 
 /** Throws unless `bank`, if given, is a sideways bank. */
-function requireBank(bank) {
-    if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
-        throw new Error(`Bank ${bank} is not 0 to 15`);
+function requireBank(bank, { romSockets }) {
+    const lowest = NumRomBanks - romSockets;
+    const highest = NumRomBanks - 1;
+    if (bank !== undefined && (!Number.isInteger(bank) || bank < lowest || bank > highest))
+        throw new Error(`Bank ${bank} is not ${lowest} to ${highest}`);
 }
 
 /**

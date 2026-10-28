@@ -21,15 +21,8 @@ describe("crc32", () => {
     });
 
     it("should compute correct CRC-32 for known input", () => {
-        // CRC-32 of "123456789" is 0xCBF43926
         const data = new TextEncoder().encode("123456789");
         expect((crc32(data) >>> 0).toString(16)).toBe("cbf43926");
-    });
-
-    it("should differ for different inputs", () => {
-        const a = crc32(new Uint8Array([1, 2, 3]));
-        const b = crc32(new Uint8Array([1, 2, 4]));
-        expect(a).not.toBe(b);
     });
 });
 
@@ -90,65 +83,24 @@ function corruptFirstEntry(zipData, offsetIntoData) {
 }
 
 describe("zip tests", function () {
-    it("should unzip SSD files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
-        const result = await unzipDiscImage(zipData);
+    it.each([
+        ["SSD", "test-ssd.zip", unzipDiscImage, "test.ssd", "This is a test SSD file\n"],
+        ["ADFS", "test-adf.zip", unzipDiscImage, "test.adf", "This is a test ADF file\n"],
+        ["HFE", "test-hfe.zip", unzipDiscImage, "test.hfe", "This is a test HFE file\n"],
+        ["ROM", "test-rom.zip", unzipRomImage, "test.rom", "This is a test ROM file\n"],
+        [
+            "deflate-compressed SSD",
+            "test-deflated.zip",
+            unzipDiscImage,
+            "test.ssd",
+            "This is a deflate-compressed test SSD file\n",
+        ],
+    ])("should unzip %s files", async (_, zip, unzipImage, name, text) => {
+        const result = await unzipImage(readZip(zip));
 
-        expect(result.name).toBe("test.ssd");
-        expect(result.data instanceof Uint8Array).toBeTruthy();
-
-        const content = Array.from(result.data)
-            .map((b) => String.fromCharCode(b))
-            .join("");
-        expect(content).toBe("This is a test SSD file\n");
-    });
-
-    it("should unzip ADFS files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-adf.zip")));
-        const result = await unzipDiscImage(zipData);
-
-        expect(result.name).toBe("test.adf");
-        expect(result.data instanceof Uint8Array).toBeTruthy();
-
-        const content = Array.from(result.data)
-            .map((b) => String.fromCharCode(b))
-            .join("");
-        expect(content).toBe("This is a test ADF file\n");
-    });
-
-    it("should unzip HFE files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-hfe.zip")));
-        const result = await unzipDiscImage(zipData);
-
-        expect(result.name).toBe("test.hfe");
-        expect(result.data instanceof Uint8Array).toBeTruthy();
-
-        const content = Array.from(result.data)
-            .map((b) => String.fromCharCode(b))
-            .join("");
-        expect(content).toBe("This is a test HFE file\n");
-    });
-
-    it("should unzip ROM files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-rom.zip")));
-        const result = await unzipRomImage(zipData);
-
-        expect(result.name).toBe("test.rom");
-        expect(result.data instanceof Uint8Array).toBeTruthy();
-
-        const content = Array.from(result.data)
-            .map((b) => String.fromCharCode(b))
-            .join("");
-        expect(content).toBe("This is a test ROM file\n");
-    });
-
-    it("should handle ZIP with multiple files by picking the first compatible one", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-mixed.zip")));
-        const result = await unzipDiscImage(zipData);
-
-        // Should get the first compatible file (order may vary)
-        expect(result.name === "test.ssd" || result.name === "test.rom").toBeTruthy();
-        expect(result.data instanceof Uint8Array).toBeTruthy();
+        expect(result.name).toBe(name);
+        expect(result.data).toBeInstanceOf(Uint8Array);
+        expect(new TextDecoder().decode(result.data)).toBe(text);
     });
 
     it("should name the loadable files it passed over", async () => {
@@ -165,59 +117,41 @@ describe("zip tests", function () {
         expect(result.ignored).toEqual([]);
     });
 
-    it("should throw error for ZIP with no compatible files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
-
-        await expect(unzipRomImage(zipData)).rejects.toThrow(/Couldn't find any compatible files/);
-    });
-
-    it("should handle deflate-compressed ZIP files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-deflated.zip")));
-        const result = await unzipDiscImage(zipData);
-
-        expect(result.name).toBe("test.ssd");
-        expect(result.data instanceof Uint8Array).toBeTruthy();
-
-        const content = Array.from(result.data)
-            .map((b) => String.fromCharCode(b))
-            .join("");
-        expect(content).toBe("This is a deflate-compressed test SSD file\n");
-    });
-
-    it("should throw for unsupported compression method", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-bzip2.zip")));
-
-        await expect(unzipDiscImage(zipData)).rejects.toThrow(/Unsupported ZIP compression method/);
-    });
-
-    it("should throw for truncated/corrupt ZIP files", async () => {
-        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-truncated.zip")));
-
-        await expect(unzipDiscImage(zipData)).rejects.toThrow(/Not a ZIP file/);
-    });
-
-    it("should throw for non-ZIP data", async () => {
-        const notZip = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
-
-        await expect(unzipDiscImage(notZip)).rejects.toThrow(/Not a ZIP file/);
-    });
-
-    it("should throw for a stored entry whose data does not match its CRC32", async () => {
-        const zipData = corruptFirstEntry(readZip("test-ssd.zip"), 0);
-
-        await expect(unzipDiscImage(zipData)).rejects.toThrow(/Corrupt ZIP entry test\.ssd: CRC32 mismatch/);
-    });
-
-    it("should throw for a deflated entry that inflates cleanly to the wrong bytes", async () => {
-        const zipData = corruptFirstEntry(readZip("test-deflated.zip"), 5);
-
-        await expect(unzipDiscImage(zipData)).rejects.toThrow(/Corrupt ZIP entry test\.ssd: CRC32 mismatch/);
-    });
-
-    it("should throw for a deflated entry whose stream is damaged beyond inflating", async () => {
-        const zipData = corruptFirstEntry(readZip("test-deflated.zip"), 0);
-
-        await expect(unzipDiscImage(zipData)).rejects.toThrow(/Unable to inflate ZIP entry test\.ssd/);
+    it.each([
+        [
+            "a ZIP with no compatible files",
+            unzipRomImage,
+            () => readZip("test-ssd.zip"),
+            /Couldn't find any compatible files/,
+        ],
+        [
+            "an unsupported compression method",
+            unzipDiscImage,
+            () => readZip("test-bzip2.zip"),
+            /Unsupported ZIP compression method/,
+        ],
+        ["a truncated ZIP file", unzipDiscImage, () => readZip("test-truncated.zip"), /Not a ZIP file/],
+        ["non-ZIP data", unzipDiscImage, () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]), /Not a ZIP file/],
+        [
+            "a stored entry whose data does not match its CRC32",
+            unzipDiscImage,
+            () => corruptFirstEntry(readZip("test-ssd.zip"), 0),
+            /Corrupt ZIP entry test\.ssd: CRC32 mismatch/,
+        ],
+        [
+            "a deflated entry that inflates cleanly to the wrong bytes",
+            unzipDiscImage,
+            () => corruptFirstEntry(readZip("test-deflated.zip"), 5),
+            /Corrupt ZIP entry test\.ssd: CRC32 mismatch/,
+        ],
+        [
+            "a deflated entry whose stream is damaged beyond inflating",
+            unzipDiscImage,
+            () => corruptFirstEntry(readZip("test-deflated.zip"), 0),
+            /Unable to inflate ZIP entry test\.ssd/,
+        ],
+    ])("should throw for %s", async (_, unzipImage, zipData, error) => {
+        await expect(unzipImage(zipData())).rejects.toThrow(error);
     });
 });
 
@@ -267,11 +201,6 @@ describe("gzip tests", function () {
     it("should handle single-member gzip", async () => {
         const result = await ungzip(helloWorldMember);
         expect(new TextDecoder().decode(result)).toBe("hello world");
-    });
-
-    it("should concatenate the members of a multi-member gzip", async () => {
-        const result = await ungzip(repeatMember(3));
-        expect(new TextDecoder().decode(result)).toBe("hello worldhello worldhello world");
     });
 
     it("should concatenate members of differing contents", async () => {

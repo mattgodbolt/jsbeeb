@@ -149,6 +149,15 @@ export class SymbolNames {
         return candidates.find((address) => this.address(address, pc)?.name === name) ?? candidates[0];
     }
 
+    /**
+     * The matching region `address` is in, and its set; there is at most one, as overlapping regions don't match.
+     * @returns {{region: Region, set: SymbolSet} | undefined}
+     */
+    regionAt(address) {
+        const match = this._matchAt(address);
+        return match && { region: match.regions.find((region) => contains(region, address)), set: match.set };
+    }
+
     _matchAt(address) {
         return this._matches.find(({ regions }) => regions.some((region) => contains(region, address)));
     }

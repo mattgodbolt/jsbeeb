@@ -1,539 +1,310 @@
 import { describe, it, expect } from "vitest";
 import { isUefSnapshot, parseUefSnapshot } from "../../src/uef-snapshot.js";
+import { RomBankBytes } from "../../src/6502.js";
 
-// ── Test helpers ──────────────────────────────────────────────────────────────
+const UefStateVersion = 15;
+
+const ChunkId = {
+    Cpu: 0x0460,
+    RomRegs: 0x0461,
+    MainRam: 0x0462,
+    ShadowRam: 0x0463,
+    PrivateRam: 0x0464,
+    SwRam: 0x0466,
+    Via: 0x0467,
+    Video: 0x0468,
+    EmuState: 0x046a,
+    Sound: 0x046b,
+    BeebEmId: 0x046c,
+};
+
+function chunk(id, data) {
+    const bytes = new Uint8Array(6 + data.length);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, id, true);
+    view.setUint32(2, data.length, true);
+    bytes.set(data, 6);
+    return bytes;
+}
+
+function uefFile(chunks) {
+    const header = new Uint8Array(12);
+    new TextEncoder().encodeInto("UEF File!", header);
+    header[10] = UefStateVersion;
+    const file = new Uint8Array(12 + chunks.reduce((total, c) => total + c.length, 0));
+    file.set(header);
+    let pos = 12;
+    for (const c of chunks) {
+        file.set(c, pos);
+        pos += c.length;
+    }
+    return file.buffer;
+}
 
 /**
- * Build a minimal but structurally valid BeebEm UEF save state buffer.
- * Only the chunks needed for the tested fields are written; all others are omitted.
+ * A BeebEm UEF save state carrying the chunks the parser reads, each built from `opts` with
+ * harmless defaults. `omit` lists chunk ids to leave out.
  */
 function makeUefSnapshot(opts = {}) {
     const chunks = [];
+    const add = (id, data) => {
+        if (!opts.omit?.includes(id)) chunks.push(chunk(id, data));
+    };
 
-    // Helper: append a chunk with the given id and data bytes
-    function addChunk(id, data) {
-        const idBytes = new Uint8Array(2);
-        new DataView(idBytes.buffer).setUint16(0, id, true);
-        const lenBytes = new Uint8Array(4);
-        new DataView(lenBytes.buffer).setUint32(0, data.length, true);
-        chunks.push(idBytes, lenBytes, data instanceof Uint8Array ? data : new Uint8Array(data));
-    }
-
-    // 0x046C – BeebEm ID (required for detection)
     const idBlock = new Uint8Array(16);
     new TextEncoder().encodeInto("BeebEm", idBlock);
-    idBlock[14] = 5; // VERSION_MAJOR
-    idBlock[15] = 14; // VERSION_MINOR
-    addChunk(0x046c, idBlock);
+    idBlock[14] = 5;
+    idBlock[15] = 14;
+    add(ChunkId.BeebEmId, idBlock);
 
-    // 0x046A – Emulator state (model + FDC + tube)
-    const machineType = opts.machineType ?? 0; // 0 = BBC B
-    addChunk(0x046a, new Uint8Array([machineType, 0, 0]));
+    add(ChunkId.EmuState, [opts.machineType ?? 0, 0, 0]);
 
-    // 0x0460 – 6502 CPU
-    const cpuChunk = new Uint8Array(14);
-    const cpuView = new DataView(cpuChunk.buffer);
-    cpuView.setUint16(0, opts.pc ?? 0xd940, true);
-    cpuChunk[2] = opts.a ?? 0x42;
-    cpuChunk[3] = opts.x ?? 0x10;
-    cpuChunk[4] = opts.y ?? 0x20;
-    cpuChunk[5] = opts.s ?? 0xfd;
-    cpuChunk[6] = opts.flags ?? 0x34;
-    cpuView.setUint32(7, 0, true); // TotalCycles (ignored)
-    cpuChunk[11] = opts.interrupt ?? 0; // intStatus
-    cpuChunk[12] = opts.nmi ?? 0; // NMIStatus
-    cpuChunk[13] = 0; // NMILock
-    addChunk(0x0460, cpuChunk);
+    const cpu = new Uint8Array(14);
+    new DataView(cpu.buffer).setUint16(0, opts.pc ?? 0xd940, true);
+    cpu.set([opts.a ?? 0x42, opts.x ?? 0x10, opts.y ?? 0x20, opts.s ?? 0xfd, opts.flags ?? 0x34], 2);
+    cpu[12] = opts.nmi ?? 0;
+    add(ChunkId.Cpu, cpu);
 
-    // 0x0461 – ROM registers
-    addChunk(0x0461, new Uint8Array([opts.fe30 ?? 0x0f, opts.fe34 ?? 0x00]));
+    add(ChunkId.RomRegs, [opts.fe30 ?? 0x0f, 0]);
 
-    // 0x0462 – Main RAM (32 KB)
-    const mainRam = new Uint8Array(32768);
-    if (opts.ramAddr !== undefined && opts.ramByte !== undefined) {
-        mainRam[opts.ramAddr] = opts.ramByte;
-    }
-    addChunk(0x0462, mainRam);
+    const mainRam = new Uint8Array(0x8000);
+    if (opts.ramAddr !== undefined) mainRam[opts.ramAddr] = opts.ramByte;
+    add(ChunkId.MainRam, mainRam);
 
-    // 0x0463 – Shadow RAM (optional, 32 KB)
-    if (opts.shadowRam) {
-        addChunk(0x0463, opts.shadowRam);
+    if (opts.shadowRam) add(ChunkId.ShadowRam, opts.shadowRam);
+    if (opts.privateRam) add(ChunkId.PrivateRam, opts.privateRam);
+    for (const { bank, fill } of opts.swRamBanks ?? []) {
+        const bankData = new Uint8Array(1 + 16384).fill(fill);
+        bankData[0] = bank;
+        add(ChunkId.SwRam, bankData);
     }
 
-    // 0x0464 – Private RAM (optional, up to 12 KB)
-    if (opts.privateRam) {
-        addChunk(0x0464, opts.privateRam);
-    }
+    const via = opts.sysvia ?? {};
+    const sysVia = new Uint8Array(22);
+    const sysViaView = new DataView(sysVia.buffer);
+    sysVia[1] = 0xff;
+    sysVia[3] = 0xff;
+    sysViaView.setUint16(7, via.t1c ?? 0x7fff, true);
+    sysViaView.setUint16(9, via.t1l ?? 0xffff, true);
+    sysViaView.setUint16(11, 0x7fff, true);
+    sysViaView.setUint16(13, 0xffff, true);
+    sysVia.set([via.acr ?? 0, 0, 0, 0x80, via.t1hit ?? 1, 1, opts.ic32 ?? 0], 15);
+    add(ChunkId.Via, sysVia.subarray(0, opts.sysViaLength ?? sysVia.length));
+    add(ChunkId.Via, [1, ...new Uint8Array(20)]);
 
-    // 0x0466 – Sideways RAM banks (optional, one chunk per bank)
-    if (opts.swRamBanks) {
-        for (const { bank, fill } of opts.swRamBanks) {
-            const bankData = new Uint8Array(1 + 16384);
-            bankData[0] = bank;
-            bankData.fill(fill, 1);
-            addChunk(0x0466, bankData);
-        }
-    }
+    const video = new Uint8Array(35);
+    video[18] = opts.ulaControl ?? 0x9c;
+    if (opts.ulaPalette) video.set(opts.ulaPalette, 19);
+    add(ChunkId.Video, video);
 
-    // 0x0467 – System VIA (omit if opts.omitVia is set)
-    if (!opts.omitVia) {
-        const sysVia = new Uint8Array(22);
-        sysVia[0] = 0; // VIAType = sys
-        sysVia[1] = opts.sysvia?.orb ?? 0xff;
-        sysVia[3] = opts.sysvia?.ora ?? 0xff;
-        const svView = new DataView(sysVia.buffer);
-        svView.setUint16(7, opts.sysvia?.t1c ?? 0x7fff, true);
-        svView.setUint16(9, opts.sysvia?.t1l ?? 0xffff, true);
-        svView.setUint16(11, opts.sysvia?.t2c ?? 0x7fff, true);
-        svView.setUint16(13, opts.sysvia?.t2l ?? 0xffff, true);
-        sysVia[15] = opts.sysvia?.acr ?? 0x00;
-        sysVia[16] = opts.sysvia?.pcr ?? 0x00;
-        sysVia[17] = opts.sysvia?.ifr ?? 0x00;
-        sysVia[18] = opts.sysvia?.ier ?? 0x80;
-        sysVia[19] = opts.sysvia?.t1hit ?? 1;
-        sysVia[20] = opts.sysvia?.t2hit ?? 1;
-        sysVia[21] = opts.ic32 ?? 0x00; // IC32
-        addChunk(0x0467, sysVia);
-
-        // 0x0467 – User VIA
-        const userVia = new Uint8Array(21);
-        userVia[0] = 1; // VIAType = user
-        addChunk(0x0467, userVia);
-    }
-
-    // 0x0468 – Video
-    const videoChunk = new Uint8Array(35);
-    // CRTC regs 0-17 (leave as zero / harmless defaults)
-    videoChunk[18] = opts.ulaControl ?? 0x9c; // VideoULA_ControlReg
-    // Palette: BeebEm stores raw VideoULA_Palette values (no XOR)
-    if (opts.ulaPalette) {
-        for (let i = 0; i < 16; i++) videoChunk[19 + i] = opts.ulaPalette[i];
-    }
-    addChunk(0x0468, videoChunk);
-
-    // 0x046B – Sound
+    const sound = opts.sound ?? {};
     const soundChunk = new Uint8Array(19);
-    const sv = new DataView(soundChunk.buffer);
-    sv.setUint16(0, opts.sound?.toneFreq0 ?? 0, true); // ToneFreq[2] → ch 0
-    sv.setUint16(2, opts.sound?.toneFreq1 ?? 0, true); // ToneFreq[1] → ch 1
-    sv.setUint16(4, opts.sound?.toneFreq2 ?? 0, true); // ToneFreq[0] → ch 2
-    soundChunk[6] = opts.sound?.vol0 ?? 15; // ch 0 vol (15 = silent)
-    soundChunk[7] = opts.sound?.vol1 ?? 15;
-    soundChunk[8] = opts.sound?.vol2 ?? 15;
-    soundChunk[9] = opts.sound?.noiseReg ?? 0x00;
-    soundChunk[10] = opts.sound?.volNoise ?? 15;
-    addChunk(0x046b, soundChunk);
+    const soundView = new DataView(soundChunk.buffer);
+    soundView.setUint16(0, sound.toneFreq0 ?? 0, true);
+    soundView.setUint16(2, sound.toneFreq1 ?? 0, true);
+    soundView.setUint16(4, sound.toneFreq2 ?? 0, true);
+    soundChunk.set([sound.vol0 ?? 15, 15, 15, sound.noiseReg ?? 0, 15], 6);
+    add(ChunkId.Sound, soundChunk);
 
-    // Assemble: UEF header (10 bytes) + version (2 bytes) + all chunks
-    const header = new Uint8Array(12);
-    new TextEncoder().encodeInto("UEF File!", header);
-    header[9] = 0; // null terminator
-    header[10] = 15; // minor version (UEFSTATE_VERSION)
-    header[11] = 0; // major version
-
-    const totalLen = 12 + chunks.reduce((s, c) => s + c.length, 0);
-    const result = new Uint8Array(totalLen);
-    result.set(header, 0);
-    let pos = 12;
-    for (const c of chunks) {
-        result.set(c, pos);
-        pos += c.length;
-    }
-    return result.buffer;
+    return uefFile(chunks);
 }
 
-// ── isUefSnapshot ─────────────────────────────────────────────────────────────
+function corrupt(offset, value) {
+    const buffer = makeUefSnapshot();
+    new Uint8Array(buffer)[offset] = value;
+    return buffer;
+}
 
 describe("isUefSnapshot", () => {
-    it("returns true for a valid BeebEm UEF save state", () => {
-        const buffer = makeUefSnapshot();
-        expect(isUefSnapshot(buffer)).toBe(true);
+    it("accepts a BeebEm UEF save state", () => {
+        expect(isUefSnapshot(makeUefSnapshot())).toBe(true);
     });
 
-    it("returns false for a buffer that is too small", () => {
-        expect(isUefSnapshot(new ArrayBuffer(10))).toBe(false);
-    });
-
-    it("returns false when the header is not 'UEF File!'", () => {
-        const buffer = makeUefSnapshot();
-        new Uint8Array(buffer)[0] = 0x58; // corrupt first byte
-        expect(isUefSnapshot(buffer)).toBe(false);
-    });
-
-    it("returns false when the null terminator after the header is wrong", () => {
-        const buffer = makeUefSnapshot();
-        new Uint8Array(buffer)[9] = 0xff; // corrupt null byte
-        expect(isUefSnapshot(buffer)).toBe(false);
-    });
-
-    it("returns false when the first chunk ID is not 0x046C", () => {
-        const buffer = makeUefSnapshot();
-        // Bytes 12-13 are the first chunk ID; change it to 0x0100 (tape data chunk)
-        new DataView(buffer).setUint16(12, 0x0100, true);
+    it.each([
+        ["too small to hold a header", new ArrayBuffer(10)],
+        ["the header is not 'UEF File!'", corrupt(0, 0x58)],
+        ["the header's terminator is not zero", corrupt(9, 0xff)],
+        ["the first chunk is not BeebEm's id", corrupt(12, 0x00)],
+    ])("rejects a buffer when %s", (_, buffer) => {
         expect(isUefSnapshot(buffer)).toBe(false);
     });
 });
 
-// ── parseUefSnapshot ──────────────────────────────────────────────────────────
+const shadowRam = new Uint8Array(0x8000);
+shadowRam[0x0000] = 0xff;
+shadowRam[0x2fff] = 0xff;
+shadowRam[0x3000] = 0xdd;
+shadowRam[0x7fff] = 0xee;
+
+const privateRam = new Uint8Array(0x3000);
+privateRam[0x0000] = 0x11;
+privateRam[0x0fff] = 0x22;
+privateRam[0x1000] = 0x33;
+privateRam[0x2fff] = 0x44;
+
+const ulaPalette = new Uint8Array(16).fill(7);
+ulaPalette[0] = 4;
 
 describe("parseUefSnapshot", () => {
-    it("produces a jsbeeb-snapshot with the correct format and version", () => {
-        const buffer = makeUefSnapshot();
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.format).toBe("jsbeeb-snapshot");
-        expect(snap.version).toBe(3);
-        expect(snap.importedFrom).toBe("beebem-uef");
-    });
-
-    it("parses CPU registers correctly", () => {
-        const buffer = makeUefSnapshot({ a: 0x42, x: 0x10, y: 0x20, flags: 0xe5, s: 0xfd, pc: 0xd940 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.a).toBe(0x42);
-        expect(snap.state.x).toBe(0x10);
-        expect(snap.state.y).toBe(0x20);
-        expect(snap.state.p).toBe(0xe5 | 0x30); // bits 4+5 always set
-        expect(snap.state.s).toBe(0xfd);
-        expect(snap.state.pc).toBe(0xd940);
-    });
-
-    it("parses NMI state", () => {
-        const buffer = makeUefSnapshot({ nmi: 1 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.nmiLevel).toBe(true);
-    });
-
-    it("parses ROM select register (FE30)", () => {
-        const buffer = makeUefSnapshot({ fe30: 0x05 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.romsel).toBe(0x05);
-    });
-
-    it("masks the ROM bank to the low nibble of PagedRomReg", () => {
-        // BeebEm sometimes sets upper bits (e.g. IntegraB MemSel bit)
-        const buffer = makeUefSnapshot({ fe30: 0xf5 }); // 0xf5 & 0x0f = 5
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.romsel).toBe(0x05);
-    });
-
-    it("parses main RAM contents", () => {
-        const buffer = makeUefSnapshot({ ramAddr: 0x200, ramByte: 0xbb });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.ram[0x200]).toBe(0xbb);
-    });
-
-    it("populates 128 KB ram array with main RAM in first 32 KB", () => {
-        const buffer = makeUefSnapshot({ ramAddr: 0x7fff, ramByte: 0xcc });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.ram.length).toBe(128 * 1024);
-        expect(snap.state.ram[0x7fff]).toBe(0xcc);
-        // Bytes above 32 KB should be zero (no shadow RAM supplied)
-        expect(snap.state.ram[0x8000]).toBe(0);
-    });
-
-    it("defaults to BBC B model", () => {
-        const buffer = makeUefSnapshot({ machineType: 0 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.model).toBe("B");
-    });
-
-    it("maps machineType 3 to Master model", () => {
-        const buffer = makeUefSnapshot({ machineType: 3 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.model).toBe("Master");
-    });
-
-    it("maps machineType 4 (MasterET) to Master model", () => {
-        const buffer = makeUefSnapshot({ machineType: 4 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.model).toBe("Master");
-    });
-
-    it("maps machineType 2 (B+) to B model (no B+ in jsbeeb)", () => {
-        const buffer = makeUefSnapshot({ machineType: 2 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.model).toBe("B");
-    });
-
-    it("maps machineType 1 (IntegraB) to B model", () => {
-        const buffer = makeUefSnapshot({ machineType: 1 });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.model).toBe("B");
-    });
-
-    it("includes required sub-component state structures", () => {
-        const buffer = makeUefSnapshot();
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.scheduler).toBeDefined();
-        expect(snap.state.sysvia).toBeDefined();
-        expect(snap.state.uservia).toBeDefined();
-        expect(snap.state.video).toBeDefined();
-        expect(snap.state.soundChip).toBeDefined();
-        expect(snap.state.acia).toBeDefined();
-        expect(snap.state.adc).toBeDefined();
-    });
-
-    it("includes IC32 in the sys VIA state", () => {
-        const buffer = makeUefSnapshot({ ic32: 0x3f });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.sysvia.IC32).toBe(0x3f);
-    });
-
-    it("sets capsLockLight based on IC32", () => {
-        // bit 6 of IC32 = caps lock (0 = light on)
-        const buffer = makeUefSnapshot({ ic32: 0xbf }); // bit 6 clear → caps on
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.sysvia.capsLockLight).toBe(true);
-
-        const buffer2 = makeUefSnapshot({ ic32: 0xff }); // bit 6 set → caps off
-        const snap2 = parseUefSnapshot(buffer2);
-        expect(snap2.state.sysvia.capsLockLight).toBe(false);
-    });
-
-    it("converts VIA timer values to 2x peripheral-cycle units", () => {
-        // BeebEm saves counter / 2; file value * 2 = jsbeeb value
-        const buffer = makeUefSnapshot({ sysvia: { t1c: 0x1234, t1l: 0x5678 } });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.sysvia.t1c).toBe(0x1234 * 2);
-        expect(snap.state.sysvia.t1l).toBe(0x5678 * 2);
-    });
-
-    it("parses video ULA control register", () => {
-        const buffer = makeUefSnapshot({ ulaControl: 0x9c });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.video.ulactrl).toBe(0x9c);
-    });
-
-    it("reads ULA palette values directly (no XOR)", () => {
-        // BeebEm stores raw VideoULA_Palette values; value 4 means
-        // bits 0-2 = 4, which the hardware XOR-7 maps to physical colour 3
-        const ulaPalette = new Uint8Array(16).fill(7);
-        ulaPalette[0] = 4;
-        const buffer = makeUefSnapshot({ ulaPalette });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.video.actualPal[0]).toBe(4);
-    });
-
-    it("parses sound tone frequencies", () => {
-        const buffer = makeUefSnapshot({
-            sound: { toneFreq0: 0x03e8, toneFreq1: 0x01f4, toneFreq2: 0x00fa },
-        });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.soundChip.registers[0]).toBe(0x03e8);
-        expect(snap.state.soundChip.registers[1]).toBe(0x01f4);
-        expect(snap.state.soundChip.registers[2]).toBe(0x00fa);
-    });
-
-    it("parses sound noise register", () => {
-        // noise register bits 0-2 only
-        const buffer = makeUefSnapshot({ sound: { noiseReg: 0x07 } });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.soundChip.registers[3]).toBe(0x07);
-    });
-
-    it("converts sound volumes using the volume table (15 = silent)", () => {
-        const buffer = makeUefSnapshot({ sound: { vol0: 15 } });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.soundChip.volume[0]).toBe(0);
-        expect(snap.state.soundChip.outputBit[0]).toBe(false);
-    });
-
-    it("sets outputBit to true for non-silent channels", () => {
-        const buffer = makeUefSnapshot({ sound: { vol0: 0 } }); // 0 = maximum volume
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.soundChip.outputBit[0]).toBe(true);
-    });
-
-    it("throws for a non-UEF-snapshot buffer", () => {
-        expect(() => parseUefSnapshot(new ArrayBuffer(100))).toThrow();
-    });
-
-    it("throws for a buffer that is too small", () => {
-        expect(() => parseUefSnapshot(new ArrayBuffer(5))).toThrow();
-    });
-
-    it("does not include roms when no sideways RAM chunks are present", () => {
-        const buffer = makeUefSnapshot();
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.roms).toBeUndefined();
-        expect(snap.state.swRamBanks).toBeUndefined();
-    });
-
-    // ── Sideways RAM tests ──────────────────────────────────────────────
-
-    it("parses a single sideways RAM bank into swRamBanks object", () => {
-        const buffer = makeUefSnapshot({ swRamBanks: [{ bank: 4, fill: 0xaa }] });
-        const snap = parseUefSnapshot(buffer);
-        // Should NOT set roms (that would overwrite all ROM banks)
-        expect(snap.state.roms).toBeUndefined();
-        // Should set swRamBanks with only the specified bank
-        expect(snap.state.swRamBanks).toBeDefined();
-        expect(Object.keys(snap.state.swRamBanks)).toEqual(["4"]);
-        expect(snap.state.swRamBanks[4][0]).toBe(0xaa);
-        expect(snap.state.swRamBanks[4][16383]).toBe(0xaa);
-    });
-
-    it("parses multiple sideways RAM banks", () => {
-        const buffer = makeUefSnapshot({
-            swRamBanks: [
-                { bank: 4, fill: 0xaa },
-                { bank: 7, fill: 0xbb },
+    it.each([
+        [
+            "identifies itself as an imported snapshot",
+            {},
+            (s) => [s.format, s.version, s.importedFrom],
+            ["jsbeeb-snapshot", 3, "beebem-uef"],
+        ],
+        [
+            "reads the CPU registers, with P's bits 4 and 5 always set",
+            { a: 0x42, x: 0x10, y: 0x20, flags: 0xc5, s: 0xfd, pc: 0xd940 },
+            ({ state }) => [state.a, state.x, state.y, state.p, state.s, state.pc],
+            [0x42, 0x10, 0x20, 0xf5, 0xfd, 0xd940],
+        ],
+        ["reads the NMI level", { nmi: 1 }, (s) => s.state.nmiLevel, true],
+        ["reads ROMSEL", { fe30: 0x05 }, (s) => s.state.romsel, 0x05],
+        [
+            "keeps only ROMSEL's bank bits (IntegraB sets MemSel above them)",
+            { fe30: 0xf5 },
+            (s) => s.state.romsel,
+            0x05,
+        ],
+        ["reads main RAM", { ramAddr: 0x200, ramByte: 0xbb }, (s) => s.state.ram[0x200], 0xbb],
+        [
+            "puts main RAM at the bottom of a 64K array, leaving the rest clear",
+            { ramAddr: 0x7fff, ramByte: 0xcc },
+            ({ state }) => [
+                state.ram.length,
+                state.ram[0x7fff],
+                state.ram[0x8000],
+                state.ram[0x9000],
+                state.ram[0xb000],
             ],
-        });
-        const snap = parseUefSnapshot(buffer);
-        expect(Object.keys(snap.state.swRamBanks).length).toBe(2);
-        expect(snap.state.swRamBanks[4][0]).toBe(0xaa);
-        expect(snap.state.swRamBanks[7][0]).toBe(0xbb);
+            [64 * 1024, 0xcc, 0, 0, 0],
+        ],
+        ["imports a B as a B", { machineType: 0 }, (s) => s.model, "B"],
+        ["imports an IntegraB as a B", { machineType: 1 }, (s) => s.model, "B"],
+        ["imports a B+ as a B", { machineType: 2 }, (s) => s.model, "B"],
+        ["imports a Master as a Master", { machineType: 3 }, (s) => s.model, "Master"],
+        ["imports a Master ET as a Master", { machineType: 4 }, (s) => s.model, "Master"],
+        ["imports a machine that names no model as a B", { omit: [ChunkId.EmuState] }, (s) => s.model, "B"],
+        [
+            "gives every device a state",
+            {},
+            ({ state }) =>
+                ["scheduler", "sysvia", "uservia", "video", "soundChip", "acia", "adc"].filter((k) => !state[k]),
+            [],
+        ],
+        ["reads IC32 into the system VIA", { ic32: 0x3f }, (s) => s.state.sysvia.IC32, 0x3f],
+        ["lights caps lock when IC32 bit 6 is clear", { ic32: 0xbf }, (s) => s.state.sysvia.capsLockLight, true],
+        ["darkens caps lock when IC32 bit 6 is set", { ic32: 0xff }, (s) => s.state.sysvia.capsLockLight, false],
+        [
+            "doubles the VIA timers, which BeebEm stores in 1MHz ticks",
+            { sysvia: { t1c: 0x1234, t1l: 0x5678 } },
+            ({ state }) => [state.sysvia.t1c, state.sysvia.t1l],
+            [0x2468, 0xacf0],
+        ],
+        [
+            "clears T1's hit flag in free-running mode",
+            { sysvia: { acr: 0x40, t1hit: 1 } },
+            (s) => s.state.sysvia.t1hit,
+            false,
+        ],
+        [
+            "keeps T1's hit flag in one-shot mode",
+            { sysvia: { acr: 0x00, t1hit: 1 } },
+            (s) => s.state.sysvia.t1hit,
+            true,
+        ],
+        [
+            "powers the VIAs on when the file has none",
+            { omit: [ChunkId.Via] },
+            ({ state }) => [state.sysvia.IC32, state.sysvia.ier, state.sysvia.t1hit, state.uservia.IC32],
+            [0xff, 0x80, true, undefined],
+        ],
+        ["reads the video ULA's control register", { ulaControl: 0x4b }, (s) => s.state.video.ulactrl, 0x4b],
+        [
+            "reads the ULA palette as stored, without the hardware's XOR",
+            { ulaPalette },
+            (s) => s.state.video.actualPal[0],
+            4,
+        ],
+        [
+            "reads the tone periods",
+            { sound: { toneFreq0: 0x03e8, toneFreq1: 0x01f4, toneFreq2: 0x00fa } },
+            (s) => [...s.state.soundChip.registers.slice(0, 3)],
+            [0x03e8, 0x01f4, 0x00fa],
+        ],
+        ["reads the noise register", { sound: { noiseReg: 0x07 } }, (s) => s.state.soundChip.registers[3], 0x07],
+        [
+            "silences a channel at attenuation 15",
+            { sound: { vol0: 15 } },
+            ({ state }) => [state.soundChip.volume[0], state.soundChip.outputBit[0]],
+            [0, false],
+        ],
+        ["sounds a channel at attenuation 0", { sound: { vol0: 0 } }, (s) => s.state.soundChip.outputBit[0], true],
+        [
+            "loads no ROMs or sideways RAM when the file has none",
+            {},
+            ({ state }) => [state.roms, state.swram],
+            [undefined, undefined],
+        ],
+        [
+            "loads only the sideways RAM banks the file holds, never the ROM set",
+            { swRamBanks: [{ bank: 4, fill: 0xaa }] },
+            ({ state }) => [
+                state.roms,
+                state.swramBankMask,
+                state.swram.length,
+                state.swram[0],
+                state.swram[RomBankBytes - 1],
+            ],
+            [undefined, 1 << 4, RomBankBytes, 0xaa, 0xaa],
+        ],
+        [
+            "loads several sideways RAM banks",
+            {
+                swRamBanks: [
+                    { bank: 4, fill: 0xaa },
+                    { bank: 7, fill: 0xbb },
+                ],
+            },
+            ({ state }) => [state.swramBankMask, state.swram[0], state.swram[RomBankBytes]],
+            [(1 << 4) | (1 << 7), 0xaa, 0xbb],
+        ],
+        [
+            "keeps only a sideways RAM bank number's low nibble",
+            { swRamBanks: [{ bank: 0xf4, fill: 0xcc }] },
+            (s) => [s.state.swramBankMask, s.state.swram[0]],
+            [1 << 4, 0xcc],
+        ],
+        [
+            "puts shadow RAM's top 20K in LYNNE and drops the rest",
+            { shadowRam },
+            ({ state }) => [state.ram[0x8000], state.ram[0xafff], state.ram[0xb000], state.ram[0xffff]],
+            [0, 0, 0xdd, 0xee],
+        ],
+        [
+            "puts private RAM in ANDY and HAZEL",
+            { privateRam },
+            ({ state }) => [state.ram[0x8000], state.ram[0x8fff], state.ram[0x9000], state.ram[0xafff]],
+            [0x11, 0x22, 0x33, 0x44],
+        ],
+    ])("%s", (_, opts, pick, expected) => {
+        expect(pick(parseUefSnapshot(makeUefSnapshot(opts)))).toEqual(expected);
     });
 
-    it("masks sideways RAM bank number to low nibble", () => {
-        const buffer = makeUefSnapshot({ swRamBanks: [{ bank: 0xf4, fill: 0xcc }] });
-        const snap = parseUefSnapshot(buffer);
-        // 0xF4 & 0x0F = 4
-        expect(snap.state.swRamBanks[4][0]).toBe(0xcc);
+    it("ignores a final chunk that runs past the end of the file", () => {
+        const buffer = makeUefSnapshot({ sound: { noiseReg: 0x07 } });
+        const snap = parseUefSnapshot(buffer.slice(0, buffer.byteLength - 1));
+        expect(snap.state.soundChip.registers[3]).toBe(0);
     });
 
-    // ── Shadow RAM tests ────────────────────────────────────────────────
-
-    it("parses 32 KB shadow RAM into LYNNE region", () => {
-        const shadowRam = new Uint8Array(0x8000);
-        shadowRam[0x3000] = 0xdd; // first byte of LYNNE region
-        shadowRam[0x7fff] = 0xee; // last byte of LYNNE region
-        const buffer = makeUefSnapshot({ shadowRam });
-        const snap = parseUefSnapshot(buffer);
-        // LYNNE lives at ram[0xB000-0xFFFF]
-        expect(snap.state.ram[0xb000]).toBe(0xdd);
-        expect(snap.state.ram[0xffff]).toBe(0xee);
-        // Bytes before LYNNE should be unaffected (main RAM region)
-        expect(snap.state.ram[0xafff]).toBe(0);
-    });
-
-    it("ignores shadow RAM bytes outside the LYNNE region", () => {
-        const shadowRam = new Uint8Array(0x8000);
-        shadowRam[0x0000] = 0xff; // below LYNNE - should be ignored
-        shadowRam[0x2fff] = 0xff; // just below LYNNE - should be ignored
-        const buffer = makeUefSnapshot({ shadowRam });
-        const snap = parseUefSnapshot(buffer);
-        // These addresses in the ram array should not be affected
-        expect(snap.state.ram[0x8000]).toBe(0); // ANDY region, not shadow
-    });
-
-    // ── Private RAM tests ───────────────────────────────────────────────
-
-    it("parses private RAM into ANDY and HAZEL regions", () => {
-        const privateRam = new Uint8Array(0x3000); // 12 KB
-        privateRam[0x0000] = 0x11; // ANDY start
-        privateRam[0x0fff] = 0x22; // ANDY end
-        privateRam[0x1000] = 0x33; // HAZEL start
-        privateRam[0x2fff] = 0x44; // HAZEL end
-        const buffer = makeUefSnapshot({ privateRam });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.ram[0x8000]).toBe(0x11); // ANDY
-        expect(snap.state.ram[0x8fff]).toBe(0x22);
-        expect(snap.state.ram[0x9000]).toBe(0x33); // HAZEL
-        expect(snap.state.ram[0xafff]).toBe(0x44);
-    });
-
-    it("leaves ANDY/HAZEL/LYNNE as zero when no shadow/private chunks present", () => {
-        const buffer = makeUefSnapshot();
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.ram[0x8000]).toBe(0); // ANDY
-        expect(snap.state.ram[0x9000]).toBe(0); // HAZEL
-        expect(snap.state.ram[0xb000]).toBe(0); // LYNNE
-    });
-
-    // ── VIA edge cases ──────────────────────────────────────────────────
-
-    it("forces t1hit=false when ACR indicates free-running mode", () => {
-        const buffer = makeUefSnapshot({ sysvia: { acr: 0x40, t1hit: 1 } });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.sysvia.t1hit).toBe(false);
-    });
-
-    it("preserves t1hit=true in one-shot mode", () => {
-        const buffer = makeUefSnapshot({ sysvia: { acr: 0x00, t1hit: 1 } });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.sysvia.t1hit).toBe(true);
-    });
-
-    it("uses default VIA state when no VIA chunks present", () => {
-        const buffer = makeUefSnapshot({ omitVia: true });
-        const snap = parseUefSnapshot(buffer);
-        expect(snap.state.sysvia.IC32).toBe(0xff);
-        expect(snap.state.sysvia.ier).toBe(0x80);
-        expect(snap.state.sysvia.t1hit).toBe(true);
-        expect(snap.state.uservia.IC32).toBeUndefined();
-    });
-
-    // ── Error paths ─────────────────────────────────────────────────────
-
-    it("throws for a truncated VIA chunk", () => {
-        // Build a UEF with a sys VIA chunk that's too short (< 22 bytes)
-        const buffer = makeUefSnapshot();
-        // Find and truncate the sys VIA chunk in the buffer
-        const bytes = new Uint8Array(buffer);
-        // Overwrite the VIA chunk length to make it too short
-        for (let i = 12; i < bytes.length - 6;) {
-            const chunkId = bytes[i] | (bytes[i + 1] << 8);
-            const chunkLen = bytes[i + 2] | (bytes[i + 3] << 8) | (bytes[i + 4] << 16) | (bytes[i + 5] << 24);
-            if (chunkId === 0x0467 && bytes[i + 6] === 0) {
-                // Sys VIA - set length to 10 (too short)
-                bytes[i + 2] = 10;
-                bytes[i + 3] = 0;
-                bytes[i + 4] = 0;
-                bytes[i + 5] = 0;
-                break;
-            }
-            i += 6 + chunkLen;
-        }
-        expect(() => parseUefSnapshot(buffer)).toThrow("VIA chunk too short");
-    });
-
-    it("throws when CPU chunk is missing", () => {
-        // Build a minimal buffer with BeebEmID + MainRam but no CPU chunk
-        const header = new Uint8Array(12);
-        new TextEncoder().encodeInto("UEF File!", header);
-        header[9] = 0;
-        const chunks = [];
-        function addChunk(id, data) {
-            const h = new Uint8Array(6);
-            new DataView(h.buffer).setUint16(0, id, true);
-            new DataView(h.buffer).setUint32(2, data.length, true);
-            chunks.push(h, data instanceof Uint8Array ? data : new Uint8Array(data));
-        }
-        addChunk(0x046c, new Uint8Array(16)); // BeebEmID
-        addChunk(0x0462, new Uint8Array(32768)); // MainRam but no CPU
-        const totalLen = 12 + chunks.reduce((s, c) => s + c.length, 0);
-        const result = new Uint8Array(totalLen);
-        result.set(header, 0);
-        let pos = 12;
-        for (const c of chunks) {
-            result.set(c, pos);
-            pos += c.length;
-        }
-        expect(() => parseUefSnapshot(result.buffer)).toThrow("missing CPU chunk");
-    });
-
-    it("throws when main RAM chunk is missing", () => {
-        const header = new Uint8Array(12);
-        new TextEncoder().encodeInto("UEF File!", header);
-        header[9] = 0;
-        const chunks = [];
-        function addChunk(id, data) {
-            const h = new Uint8Array(6);
-            new DataView(h.buffer).setUint16(0, id, true);
-            new DataView(h.buffer).setUint32(2, data.length, true);
-            chunks.push(h, data instanceof Uint8Array ? data : new Uint8Array(data));
-        }
-        addChunk(0x046c, new Uint8Array(16)); // BeebEmID
-        addChunk(0x0460, new Uint8Array(14)); // CPU but no MainRam
-        const totalLen = 12 + chunks.reduce((s, c) => s + c.length, 0);
-        const result = new Uint8Array(totalLen);
-        result.set(header, 0);
-        let pos = 12;
-        for (const c of chunks) {
-            result.set(c, pos);
-            pos += c.length;
-        }
-        expect(() => parseUefSnapshot(result.buffer)).toThrow("missing main RAM chunk");
+    it.each([
+        ["too small to hold a header", new ArrayBuffer(5), "File too small"],
+        ["with no BeebEm id", new ArrayBuffer(100), "Not a BeebEm UEF save state"],
+        ["with a short system VIA chunk", makeUefSnapshot({ sysViaLength: 10 }), "VIA chunk too short"],
+        ["with no CPU chunk", makeUefSnapshot({ omit: [ChunkId.Cpu] }), "missing CPU chunk"],
+        ["with no main RAM chunk", makeUefSnapshot({ omit: [ChunkId.MainRam] }), "missing main RAM chunk"],
+    ])("rejects a file %s", (_, buffer, message) => {
+        expect(() => parseUefSnapshot(buffer)).toThrow(message);
     });
 });

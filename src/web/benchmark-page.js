@@ -9,8 +9,6 @@ const ChunksPerSecond = 1000 / TickMs;
 const DialogId = "benchmark";
 // Each changes what a pass measures or what an emulated second is.
 const MeasureChangingParams = ["fakeVideo", "frameSkip", "cpuMultiplier", "videoCyclesBatch", "lowLatency"];
-// Each adds its own polltime to every cycle the CPU runs.
-const Peripherals = { music5000: "a Music 5000", teletextAdaptor: "a teletext adaptor", econet: "Econet" };
 
 const fixed = (value) => value.toFixed(1);
 const noPaint = () => {};
@@ -42,6 +40,21 @@ export function summarise(values) {
 
 const describeSummary = (name, { median, min, q1, q3, first, last }) =>
     `${name} ${fixed(median)} [min ${fixed(min)}, IQR ${fixed(q1)}-${fixed(q3)}, first ${fixed(first)}, last ${fixed(last)}]`;
+
+/**
+ * Why the page's machine is not the one the workload runs on: each of the workload's fittings that `takenFromHost`
+ * (the page's, see takenFromHostValues) has otherwise, or null if none.
+ * @param {object} workload a manifest entry
+ * @param {object} takenFromHost
+ * @returns {string|null}
+ */
+export function misfitting({ name, fittings }, takenFromHost) {
+    const wanted = Object.entries(fittings)
+        .filter(([fitting, value]) => takenFromHost[fitting] !== value)
+        .map(([fitting, value]) => `${fitting}=${value}`);
+    if (!wanted.length) return null;
+    return `The ${name} workload runs with ${wanted.join(", ")}; set ${wanted.length > 1 ? "those" : "that"} in the URL`;
+}
 
 /** The one line a person pastes: every figure in `result`, in ms of wall time per emulated second. */
 export function resultLine(result) {
@@ -92,7 +105,8 @@ async function leaveAtStart(workload, processor, slots) {
  * `result` and its `line`, or the `error`; its `done` resolves to the record when the run ends either way.
  */
 export class BenchmarkPage {
-    constructor(workload, { target = window } = {}) {
+    constructor(workload, { target = window, readWorkload: read = readWorkload } = {}) {
+        this.readWorkload = read;
         let finish;
         this.record = { workload, status: "running", done: new Promise((resolve) => (finish = resolve)) };
         this.finish = finish;
@@ -105,7 +119,7 @@ export class BenchmarkPage {
      * Runs the benchmark on the page's machine and shows what it found. The machine is left at the workload's
      * start and the loop asked to run it, so the page carries on as usual once the dialog is closed.
      */
-    async run({ processor, display, audioHandler, slots, loop, modals, parsedQuery, commit, version }) {
+    async run({ processor, display, audioHandler, slots, loop, modals, parsedQuery, takenFromHost, commit, version }) {
         const { workload: name } = this.record;
         this.showStatus(`Loading the ${name} workload...`);
         modals.show(DialogId);
@@ -114,17 +128,14 @@ export class BenchmarkPage {
             const refused = MeasureChangingParams.filter((param) => Object.hasOwn(parsedQuery, param));
             if (refused.length)
                 throw new Error(`${refused.join(", ")} would change what is measured; take it out of the URL`);
-            const fitted = Object.keys(Peripherals).filter((peripheral) => processor[peripheral]);
-            if (fitted.length) {
-                const names = fitted.map((peripheral) => Peripherals[peripheral]).join(", ");
-                throw new Error(`The machine has ${names} fitted, which a workload does not have; turn it off`);
-            }
-            const workload = await readWorkload(name);
+            const workload = await this.readWorkload(name);
             if (!isSameModel(workload.model, processor.model.name)) {
                 throw new Error(
                     `The ${name} workload runs on the ${workload.model}: add &model=${workload.model} to the URL`,
                 );
             }
+            const misfit = misfitting(workload, takenFromHost);
+            if (misfit) throw new Error(misfit);
             const measured = await this.measure(workload, {
                 processor,
                 display,

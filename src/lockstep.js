@@ -5,6 +5,7 @@
 // what it executes, and the inputs it applied between executes, go out as commits
 // that every other machine replays exactly. See docs/shared-sessions-design.md.
 
+import { RomBankBytes } from "./6502.js";
 import { Disc, DiscConfig } from "./disc.js";
 import { KeyMatrixSize } from "./via.js";
 
@@ -16,7 +17,6 @@ export const MaxCatchUpSeconds = 0.1;
 const FnvOffset = 0x811c9dc5;
 const FnvPrime = 0x01000193;
 const MsPerMinute = 60 * 1000;
-const RomBankBytes = 16384;
 
 /**
  * The emulated cycle the machine has reached, counted from power on. Between

@@ -26,10 +26,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run benchmark` - Time the benchmark workloads in Node (`tests/bench`, one file per model and kind of video,
   run one after another); CI does not run it
 - `npm run benchmark:workloads` - Rebuild the workload snapshots in `public/benchmarks` from a boot and scripted
-  input (`tools/make-benchmark-workloads.js`); `-- --check` compares instead of writing. `src/benchmark-workloads.js`
-  restores one by name, in Node or the page, and checks it is running what its name says
+  input (`tools/make-benchmark-workloads.js`), each on the model and fittings its definition states.
+  `src/benchmark-workloads.js` restores one by name, in Node or the page, and checks it is running what its name says
+- `npm run test:benchmark-workloads` - Build the workloads in memory and fail, naming the JSON fields that differ, if
+  any checked-in file is not what `benchmark:workloads` builds. A change to what a boot does needs the rebuild, and then
+  `test:same-answer -- --record` if its hashes move
 - `npm run benchmark:ab -- <A> <B> [workload ...]` - Whether B is faster than A in Node, with a confidence interval,
   from fresh processes alternating between two refs or checkouts; see `docs/benchmarking.md`
+- `npm run benchmark:browser-ab -- <A> <B> [workload ...]` - The same in headless Chrome (or another Playwright
+  project): builds each side, serves both and alternates fresh pages of `?benchmark`; see `docs/benchmarking.md`
 - `npm run test:same-answer` - Run each benchmark workload for 100 frames and compare hashes of its state (framebuffer,
   registers, memory, cycles, sound, peripherals) against `tests/same-answer-hashes.json`, naming the parts that
   differ; `-- --record` rewrites the file after an intended change. A few seconds, for an optimisation's inner loop:

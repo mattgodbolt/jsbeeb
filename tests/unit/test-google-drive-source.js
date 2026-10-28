@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDriveSource } from "../../src/web/google-drive-source.js";
 import { teardownDom, toasts } from "./helpers.js";
+import { discFor } from "../../src/fdc.js";
+import { toSsdOrDsd } from "../../src/disc.js";
+
+const DsdByteSize = 2 * 80 * 10 * 256;
 
 describe("GoogleDriveSource", () => {
     let media;
@@ -120,9 +124,17 @@ describe("GoogleDriveSource", () => {
             expect(disc.name).toBe("fresh.ssd");
         });
 
-        it("refuses a blank disc whose format has no known size", async () => {
-            await expect(make().createBlank("fresh.hfe", "auto")).rejects.toThrow("no known size");
-            expect(loader.create).not.toHaveBeenCalled();
+        it("makes a blank HFE as a formatted, empty double-sided DFS disc", async () => {
+            loader.create.mockResolvedValue({ fileId: "xyz", disc: { name: "fresh.hfe" } });
+            const { ref } = await make().createBlank("fresh.hfe", "auto");
+            const [name, data] = loader.create.mock.calls[0];
+            expect(name).toBe("fresh.hfe");
+            expect(ref).toBe("gd:xyz/fresh.hfe");
+            const blank = discFor(name, data);
+            expect(blank.is40Track).toBe(false);
+            const expected = new Uint8Array(DsdByteSize);
+            expected.set(new TextEncoder().encode("fresh.hf"));
+            expect(Buffer.compare(toSsdOrDsd(blank), expected)).toBe(0);
         });
     });
 });

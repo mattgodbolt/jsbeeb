@@ -1002,6 +1002,10 @@ const { opcodes: opcodes65c02, undocumented: undocumented65c02 } = splitUndocume
 });
 
 const PrevInstructionWindow = 64;
+const PcInRunScore = 10;
+const CommonInstructions =
+    /^(?:RTS|B(?:CC|CS|EQ|NE|MI|PL|VC|VS|RA|IT)|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|ADC|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC)\b/;
+const UncommonInstructions = /,\s*([XY]|X\))$/;
 
 class Disassemble6502 {
     constructor(cpu, opcodes, undocumented) {
@@ -1106,34 +1110,27 @@ class Disassemble6502 {
      * also, just starting from the back of ROM and going up...
      */
     prevInstruction(address, pc) {
-        const commonInstructions =
-            /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC).*/;
-        const uncommonInstructions = /.*,\s*([XY]|X\))$/;
-
         address &= 0xffff;
-        let bestAddr = address - 1;
-        let bestScore = -1;
-        for (let startingPoint = address - PrevInstructionWindow; startingPoint !== address; startingPoint++) {
-            let score = 0;
-            let addr = startingPoint & 0xffff;
-            while (addr < address) {
-                if (!this.isDocumented(addr)) break;
-                const result = this.disassemble(addr);
-                if (addr === pc) score += 10;
-                if (result[0].match(commonInstructions) && !result[0].match(uncommonInstructions)) {
-                    score++;
-                }
-                if (result[1] === address) {
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestAddr = addr;
-                    }
-                    break;
-                }
-                addr = result[1];
+        const windowStart = Math.max(address - PrevInstructionWindow, 0);
+        // A run's score is its first instruction's plus that of the run from where that instruction ends.
+        const runs = new Array(address - windowStart);
+        for (let addr = address - 1; addr >= windowStart; addr--) {
+            if (!this.isDocumented(addr)) continue;
+            const [text, next] = this.disassemble(addr);
+            const isCommon = CommonInstructions.test(text) && !UncommonInstructions.test(text);
+            const score = (addr === pc ? PcInRunScore : 0) + (isCommon ? 1 : 0);
+            if (next === address) {
+                runs[addr - windowStart] = { score, last: addr };
+            } else if (next < address) {
+                const rest = runs[next - windowStart];
+                if (rest) runs[addr - windowStart] = { score: score + rest.score, last: rest.last };
             }
         }
-        return bestAddr & 0xffff;
+        let best = null;
+        for (const run of runs) {
+            if (run && (!best || run.score > best.score)) best = run;
+        }
+        return best ? best.last : (address - 1) & 0xffff;
     }
 }
 

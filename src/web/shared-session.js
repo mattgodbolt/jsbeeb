@@ -1,6 +1,6 @@
 // A shared session in the browser: one machine, the host's unless someone
 // has taken control, runs as usual, and its inputs and cycles stream to the
-// others over WebRTC data channels, which the rendezvous only helps to open. `?server=<room>` hosts and `?client=<room>`
+// others over the links session-transport.js opens. `?server=<room>` hosts and `?client=<room>`
 // joins. See docs/shared-sessions-design.md for the protocol and its limits.
 
 import { humanId } from "human-id";
@@ -18,37 +18,17 @@ import { AdcCentreValue } from "../adc.js";
 import { findModel } from "../models.js";
 import { buildUrlFromParams } from "../url-params.js";
 import { isSameModel, snapshotFromJSON, snapshotToJSON } from "../snapshot.js";
-import { reloadAsMachine } from "./machine-switch.js";
 import { matchesHost, parameterFor, readTakenFromHost, urlParamType } from "./parameters.js";
-import {
-    connectionStats,
-    IntervalStats,
-    numbersFrom,
-    rounded,
-    SessionLog,
-    StatsIntervalMs,
-    watchPage,
-} from "./session-log.js";
-import { LaggingMs, PeerStates, peerState, SessionPanel } from "./session-panel.js";
+import { IntervalStats, numbersFrom, rounded, SessionLog, StatsIntervalMs } from "./session-log.js";
+import { LaggingMs, PeerStates, peerState } from "./session-panel.js";
 import { KeyStamper, Sequencer } from "./session-sequencer.js";
-import { downloadBlob } from "./dom-utils.js";
-import { toast } from "./toast.js";
 import { note } from "./analytics.js";
 import { countBucket } from "./analytics-filters.js";
 
-const IceServers = [{ urls: "stun:stun.l.google.com:19302" }];
-const IceGatheringTimeoutMs = 3000;
-const HostPollMs = 1500;
-const GuestPollMs = 1000;
 const PasteWaitMs = 500;
-export const AnswerTimeoutMs = 30000;
-export const ConnectTimeoutMs = 20000;
 export const MinResyncIntervalMs = 2000;
-// Offers anyone who knows the room's name can post; this bounds the connections in progress at once.
-export const MaxConnectingGuests = 4;
 const SnapshotChunkBytes = 16 * 1024;
 const MaxSnapshotBytes = 64 * 1024 * 1024;
-const ToastTitle = "Shared session";
 const RoomGone = 404;
 const RoomTaken = 409;
 const TooManyOffers = 429;
@@ -103,16 +83,9 @@ export const SessionFailures = Object.freeze({
     other: "other",
 });
 
-const timedOut = (message) => Object.assign(new Error(message), { sessionFailure: SessionFailures.timeout });
-
 /** Notes a session reaching `stage`; `reason` is one of `SessionFailures`, never words. */
 function noteStage(role, stage, { reason, peers } = {}) {
     note("session", { role, stage, reason, peers: peers === undefined ? undefined : countBucket(peers) });
-}
-
-function notify(message) {
-    console.log(`Shared session: ${message}`);
-    toast(message, { title: ToastTitle });
 }
 
 /**
@@ -120,7 +93,7 @@ function notify(message) {
  * blip, so it asks for the report from `other` too; any after are only logged, so a machine that keeps desyncing
  * does not bury the page in toasts.
  */
-function announceDesync(desyncs, what, reason, other) {
+function announceDesync(notify, desyncs, what, reason, other) {
     if (desyncs === 1) notify(`${what}: ${reason}. Resyncing; please save a session report.`);
     if (desyncs === 2) {
         notify(
@@ -132,41 +105,15 @@ function announceDesync(desyncs, what, reason, other) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The rendezvous carries one offer and one answer per guest, so each side waits
-// for its candidates before sending its description rather than trickling them.
-async function gatheredDescription(pc) {
-    if (pc.iceGatheringState !== "complete") {
-        await Promise.race([
-            new Promise((resolve) =>
-                pc.addEventListener("icegatheringstatechange", () => {
-                    if (pc.iceGatheringState === "complete") resolve();
-                }),
-            ),
-            delay(IceGatheringTimeoutMs),
-        ]);
-    }
-    return pc.localDescription.sdp;
-}
-
-function opened(channel) {
-    if (channel.readyState === "open") return Promise.resolve();
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(timedOut("couldn't connect directly")), ConnectTimeoutMs);
-        channel.addEventListener("open", () => {
-            clearTimeout(timer);
-            resolve();
-        });
-    });
-}
-
-async function gzip(text) {
-    const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-async function gunzip(bytes) {
-    return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
-}
+export const gzipCodec = Object.freeze({
+    async compress(text) {
+        const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+    },
+    async decompress(bytes) {
+        return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
+    },
+});
 
 function randomId() {
     const bytes = crypto.getRandomValues(new Uint8Array(12));
@@ -197,8 +144,8 @@ const keysDown = (sysvia) =>
 
 /**
  * Keyboard input for a session: keys are mapped to the matrix here, with this
- * person's layout, and handed to `send` as session inputs. BREAK goes too only
- * if `allowBreak`.
+ * person's layout, or come as matrix positions from a paste, and are handed to
+ * `send` as session inputs. BREAK goes too only if `allowBreak`.
  */
 export function sessionInput(sysvia, send, { allowBreak }) {
     const keyInput = (mapping, down) => ({
@@ -217,6 +164,9 @@ export function sessionInput(sysvia, send, { allowBreak }) {
                 const mapping = sysvia.keyMapping(key, shiftDown);
                 if (mapping) send(keyInput(mapping, false));
             }
+        },
+        keyRaw(colRow, down) {
+            send(keyInput(colRow, down));
         },
         setReset(down) {
             if (allowBreak) send({ kind: "break", down });
@@ -251,9 +201,11 @@ function parsed(data) {
  * @property {object} takenFromHost - the page's takenFromHostValues, as its start gave them
  * @property {import("./emulation-loop.js").EmulationLoop} loop
  * @property {import("./keyboard.js").Keyboard} keyboard
- * @property {import("./url-state.js").UrlState} urlState
  * @property {string} version
- * @property {ReturnType<typeof import("./rendezvous-client.js").createRendezvousClient>} rendezvous
+ * @property {ReturnType<typeof import("./session-transport.js").webRtcTransport>} transport
+ * @property {{compress: function(string): Promise<Uint8Array>, decompress: function(Uint8Array): Promise<string>}} codec
+ * - how a snapshot is packed for the wire: `gzipCodec`
+ * @property {import("./session-page.js").SessionPage} page
  */
 
 export class SessionHost {
@@ -262,10 +214,9 @@ export class SessionHost {
         this.room = room;
         this.name = name;
         this.guests = new Map();
-        this.offersSeen = new Set();
-        this.secret = null;
-        this.polling = true;
+        this.listening = null;
         this.closed = false;
+        this.closing = new AbortController();
         this.log = new SessionLog({ role: "host", room, name, model: context.model.name, version: context.version });
         this.stats = new IntervalStats();
         this.guestsSeen = 0;
@@ -293,7 +244,7 @@ export class SessionHost {
         this.lastCommitMs = 0;
         // Whether a key press takes control, for everyone: the host's to set, and sent to every guest.
         this.takeOnKey = false;
-        this.panel = new SessionPanel({ ...sessionPane(this), setTakeOnKey: (on) => this.setTakeOnKey(on) });
+        this.panel = context.page.panel(this, (on) => this.setTakeOnKey(on));
         this.panel.showTakeOnKey(this.takeOnKey);
     }
 
@@ -305,20 +256,30 @@ export class SessionHost {
 
     /** @param {string} [secret] the room's, if it has been made already */
     async start(secret) {
-        const { processor, loop, keyboard, rendezvous } = this.context;
+        const { processor, loop, keyboard, transport, page } = this.context;
         while (keyboard.isPasting) await delay(PasteWaitMs);
-        this.secret = secret ?? (await rendezvous.createRoom(this.room));
+        const roomSecret = secret ?? (await transport.createRoom(this.room));
         this.sequence();
         loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
         holdAnalogue(processor, true);
-        window.addEventListener("pagehide", () => this.close());
-        notify(`Hosting "${this.room}". Guests join at ${joinLink(this.room)}`);
+        page.onPageHide(() => this.close(), this.closing.signal);
+        page.notify(`Hosting "${this.room}". Guests join at ${page.joinLink(this.room)}`);
         this.panel.open();
         this.log.record("hosting");
         noteStage(this.log.details.role, "created");
-        this.stopWatchingPage = watchPage(this.log, () => this.stats);
-        this.poll();
+        this.stopWatchingPage = page.watch(this.log, () => this.stats);
+        this.listening = transport.listen(this.room, roomSecret, {
+            connecting: (id, link) => this.connecting(id, link),
+            reopened: () => {
+                page.notify(`The room "${this.room}" had expired, and is open again.`);
+                this.log.record("room reopened");
+            },
+            gone: (error) => {
+                page.notify(`The room "${this.room}" has gone, so nobody else can join: ${error.message}`);
+                this.log.record("room gone", { reason: error.message });
+            },
+        });
     }
 
     sequence(rtcBaseMs) {
@@ -421,6 +382,7 @@ export class SessionHost {
             }
             this.log.record("desync", { guest: guest.id, reason, ...evidence });
             announceDesync(
+                this.context.page.notify,
                 ++this.desyncs,
                 `This machine desynced from ${guestName(guest)}, which was in control, and took control back`,
                 reason,
@@ -481,7 +443,7 @@ export class SessionHost {
         if (!this.controller) return;
         const former = this.controller;
         this.log.record("control", { guest: "host", reason });
-        notify(`The host has control again: ${reason}.`);
+        this.context.page.notify(`The host has control again: ${reason}.`);
         this.controller = null;
         this.releasing = false;
         this.heldBack.unshift(...this.forwarded.splice(0));
@@ -499,7 +461,7 @@ export class SessionHost {
     takeBackNow(reason, { jumped = false, unreplayed = this.replay?.commits ?? [], announce = true } = {}) {
         if (this.sequencer) return;
         this.log.record("control", { guest: "host", reason });
-        if (announce) notify(`The host has taken control back: ${reason}.`);
+        if (announce) this.context.page.notify(`The host has taken control back: ${reason}.`);
         this.controller = null;
         this.releasing = false;
         this.taker = null;
@@ -546,7 +508,7 @@ export class SessionHost {
         for (const other of this.guests.values()) {
             if (other === guest) continue;
             if (other.ready) this.sendTo(other, relayed);
-            else if (other.channel) other.backlog.push(relayed);
+            else if (other.welcomed) other.backlog.push(relayed);
         }
     }
 
@@ -571,13 +533,13 @@ export class SessionHost {
             }
         }
         this.stats.tick("frames");
-        if (document.hidden) this.stats.count("hiddenFrames");
+        if (this.context.page.hidden()) this.stats.count("hiddenFrames");
         const summary = this.stats.take();
         if (summary) {
             this.log.record("stats", summary);
             for (const guest of this.guests.values()) {
                 if (!guest.welcomed) continue;
-                connectionStats(guest.pc).then(
+                guest.link.stats().then(
                     (stats) => {
                         guest.rttMs = stats.rttMs;
                         this.log.record("connection", { guest: guest.id, ...stats });
@@ -635,53 +597,11 @@ export class SessionHost {
         this.deliverKey(guest.id, input, fields, snapshots === guest.snapshotsSent ? at : undefined);
     }
 
-    async poll() {
-        while (this.polling) {
-            try {
-                const offers = await this.context.rendezvous.listOffers(this.room, this.secret);
-                if (!this.polling) return;
-                // Each offer is answered once: one whose answer failed would otherwise be retried every poll.
-                for (const offer of offers) {
-                    if (!this.offersSeen.has(offer.guest) && this.connectingCount() < MaxConnectingGuests) {
-                        this.offersSeen.add(offer.guest);
-                        this.answer(offer);
-                    }
-                }
-            } catch (error) {
-                if (error.status === RoomGone) {
-                    await this.reopenRoom();
-                } else {
-                    console.warn(`Shared session: polling the rendezvous failed: ${error.message}`);
-                }
-            }
-            await delay(HostPollMs);
-        }
-    }
-
-    // A host that slept, or a dev server that restarted, finds its room gone; nobody
-    // could join it again until it is made afresh.
-    async reopenRoom() {
-        try {
-            this.secret = await this.context.rendezvous.createRoom(this.room);
-            notify(`The room "${this.room}" had expired, and is open again.`);
-            this.log.record("room reopened");
-        } catch (error) {
-            notify(`The room "${this.room}" has gone, so nobody else can join: ${error.message}`);
-            this.log.record("room gone", { reason: error.message });
-            this.polling = false;
-        }
-    }
-
-    connectingCount() {
-        return [...this.guests.values()].filter((guest) => guest.channel?.readyState !== "open").length;
-    }
-
     connectedCount() {
-        return this.guests.size - this.connectingCount();
+        return [...this.guests.values()].filter((guest) => guest.welcomed).length;
     }
 
-    async answer({ guest: id, sdp }) {
-        const pc = new RTCPeerConnection({ iceServers: IceServers });
+    connecting(id, link) {
         const guest = {
             id,
             number: ++this.guestsSeen,
@@ -692,8 +612,8 @@ export class SessionHost {
             // Summaries that came too soon after the last, counted in the next one logged.
             statsDropped: 0,
             rttMs: undefined,
-            pc,
-            channel: null,
+            link,
+            welcomed: false,
             ready: false,
             backlog: [],
             held: new Map(),
@@ -707,43 +627,25 @@ export class SessionHost {
         this.guests.set(id, guest);
         this.log.record("offer", { guest: id });
         this.showStatus();
-        // A guest has one channel; another would cost the host a snapshot each.
-        pc.addEventListener("datachannel", ({ channel }) => {
-            if (!guest.channel) this.adopt(guest, channel);
-        });
-        setTimeout(() => {
-            if (!guest.channel) this.drop(guest, "it never opened a channel");
-        }, ConnectTimeoutMs);
-        try {
-            await pc.setRemoteDescription({ type: "offer", sdp });
-            await pc.setLocalDescription(await pc.createAnswer());
-            await this.context.rendezvous.postAnswer(this.room, this.secret, id, await gatheredDescription(pc));
-        } catch (error) {
-            console.warn(`Shared session: answering ${id} failed: ${error.message}`);
-            this.drop(guest, `answering it failed: ${error.message}`);
-        }
+        return {
+            message: (data) => this.fromGuest(guest, data),
+            closed: (reason) => this.drop(guest, reason),
+        };
     }
 
-    adopt(guest, channel) {
-        guest.channel = channel;
-        channel.binaryType = "arraybuffer";
-        channel.addEventListener("close", () => this.drop(guest, "its channel closed"));
-        channel.addEventListener("message", ({ data }) => this.fromGuest(guest, data));
-        opened(channel).then(
-            () => {
-                const { model, takenFromHost, version } = this.context;
-                const welcome = { type: "welcome", model: model.name, takenFromHost, version, name: this.name };
-                if (!this.sendTo(guest, JSON.stringify(welcome))) return;
-                guest.welcomed = true;
-                this.sendSnapshot(guest);
-                notify(`A guest joined (${this.connectedCount()} connected).`);
-                this.log.record("joined", { guest: guest.id });
-                ++this.guestsJoined;
-                noteStage(this.log.details.role, "connected", { peers: this.connectedCount() });
-                this.showStatus();
-            },
-            () => this.drop(guest, "its channel never opened"),
-        );
+    // Sent once the guest has said hello: Chrome reports a channel the guest opened as open before it can carry
+    // anything, and silently drops what is sent on it until it can.
+    welcome(guest) {
+        const { model, takenFromHost, version } = this.context;
+        const welcome = { type: "welcome", model: model.name, takenFromHost, version, name: this.name };
+        if (!this.sendTo(guest, JSON.stringify(welcome))) return;
+        guest.welcomed = true;
+        this.sendSnapshot(guest);
+        this.context.page.notify(`A guest joined (${this.connectedCount()} connected).`);
+        this.log.record("joined", { guest: guest.id });
+        ++this.guestsJoined;
+        noteStage(this.log.details.role, "connected", { peers: this.connectedCount() });
+        this.showStatus();
     }
 
     fromGuest(guest, data) {
@@ -773,7 +675,7 @@ export class SessionHost {
             guest.saidHello = true;
             guest.name = cleanName(message.name);
             this.log.record("hello", { guest: guest.id, name: guest.name });
-            this.showStatus();
+            this.welcome(guest);
         } else if (message.type === "stats" && this.log.elapsed() - guest.statsMs < MinGuestStatsIntervalMs) {
             ++guest.statsDropped;
         } else if (message.type === "stats") {
@@ -800,7 +702,7 @@ export class SessionHost {
         if (!guest.ready || guest.resyncTimer) return;
         this.log.record("resync asked", { guest: guest.id, reason });
         const name = guestName(guest);
-        announceDesync(++this.desyncs, `${name} desynced`, reason, `${name}'s machine`);
+        announceDesync(this.context.page.notify, ++this.desyncs, `${name} desynced`, reason, `${name}'s machine`);
         const waitMs = guest.lastSnapshotMs + MinResyncIntervalMs - Date.now();
         if (waitMs <= 0) {
             this.sendSnapshot(guest);
@@ -817,7 +719,7 @@ export class SessionHost {
     resyncEveryone() {
         this.log.record("jump", { cycle: cycleCount(this.context.processor) });
         for (const guest of this.guests.values()) {
-            if (guest.channel) this.sendSnapshot(guest);
+            if (guest.welcomed) this.sendSnapshot(guest);
         }
     }
 
@@ -836,7 +738,7 @@ export class SessionHost {
         guest.backlog = pending;
         const json = snapshotToJSON(snapshot);
         const takeMs = rounded(this.log.elapsed() - startMs);
-        const bytes = await gzip(json);
+        const bytes = await this.context.codec.compress(json);
         if (generation !== guest.snapshotGeneration) return;
         const tookMs = rounded(this.log.elapsed() - startMs);
         this.log.record("snapshot", { guest: guest.id, bytes: bytes.length, takeMs, tookMs });
@@ -870,11 +772,10 @@ export class SessionHost {
         return { snapshot: sessionSnapshot(this.context.processor, this.rtcBaseMs), pending };
     }
 
-    /** Sends, or drops a guest whose channel has gone or whose send buffer is full. */
+    /** Sends, or drops a guest whose link has gone or whose send buffer is full. */
     sendTo(guest, data) {
         try {
-            if (guest.channel?.readyState !== "open") throw new Error("the channel is not open");
-            guest.channel.send(data);
+            guest.link.send(data);
             return true;
         } catch (error) {
             console.warn(`Shared session: dropping a guest: ${error.message}`);
@@ -886,7 +787,7 @@ export class SessionHost {
     broadcast(commit) {
         for (const guest of this.guests.values()) {
             if (guest.ready) this.sendTo(guest, commit);
-            else if (guest.channel) guest.backlog.push(commit);
+            else if (guest.welcomed) guest.backlog.push(commit);
         }
     }
 
@@ -911,8 +812,9 @@ export class SessionHost {
         this.showStatus();
         clearTimeout(guest.resyncTimer);
         this.releaseKeys(guest);
-        guest.pc.close();
-        if (guest.welcomed) notify(`${guest.name ?? "A guest"} left (${this.connectedCount()} connected).`);
+        guest.link.close();
+        if (guest.welcomed)
+            this.context.page.notify(`${guest.name ?? "A guest"} left (${this.connectedCount()} connected).`);
     }
 
     // A page kept for the back button comes back as an ordinary one. The keys let go
@@ -920,7 +822,8 @@ export class SessionHost {
     close() {
         if (this.closed) return;
         this.closed = true;
-        this.polling = false;
+        this.listening?.close();
+        this.closing.abort();
         this.stopWatchingPage?.();
         const { processor, loop, keyboard } = this.context;
         keyboard.setInput(null);
@@ -930,9 +833,8 @@ export class SessionHost {
         loop.setLockstep(null);
         for (const guest of this.guests.values()) {
             clearTimeout(guest.resyncTimer);
-            guest.pc.close();
+            guest.link.close();
         }
-        this.context.rendezvous.deleteRoom(this.room, this.secret).catch(() => {});
         holdAnalogue(processor, false);
         processor.sysvia.cmos.leaveSession();
         this.log.record("closed");
@@ -944,7 +846,7 @@ export class SessionHost {
             keysDown: keysDown(this.context.processor.sysvia),
             guests: [...this.guests.values()].map((guest) => ({
                 id: guest.id,
-                connected: guest.channel?.readyState === "open",
+                connected: guest.welcomed,
                 held: [...guest.held.values()],
             })),
         });
@@ -958,8 +860,7 @@ export class SessionGuest {
         this.name = name;
         this.hostName = null;
         this.id = randomId();
-        this.pc = null;
-        this.channel = null;
+        this.link = null;
         this.lockstep = null;
         this.incoming = null;
         this.buffering = null;
@@ -975,6 +876,7 @@ export class SessionGuest {
         this.keysForControl = [];
         this.lastCommitMs = 0;
         this.left = false;
+        this.closing = new AbortController();
         this.log = new SessionLog({
             role: "guest",
             room,
@@ -984,14 +886,14 @@ export class SessionGuest {
             version: context.version,
         });
         this.stats = new IntervalStats();
-        this.stopWatchingPage = watchPage(this.log, () => this.stats);
+        this.stopWatchingPage = context.page.watch(this.log, () => this.stats);
         this.lastStats = null;
         this.rttMs = undefined;
         this.leftReason = null;
         this.roster = [];
         this.takeOnKey = false;
         this.desyncs = 0;
-        this.panel = new SessionPanel(sessionPane(this));
+        this.panel = context.page.panel(this);
         this.showStatus();
     }
 
@@ -1033,29 +935,24 @@ export class SessionGuest {
     }
 
     async join() {
-        const { processor, loop, keyboard, rendezvous } = this.context;
+        const { processor, loop, keyboard, transport, page } = this.context;
         // Nothing runs until the host's snapshot arrives, and a paste or autoboot of this
         // page's own would only be thrown away by it.
         keyboard.cancelPaste();
         loop.setLockstep({ execute: () => true });
         holdAnalogue(processor, true);
-        const pc = (this.pc = new RTCPeerConnection({ iceServers: IceServers }));
-        const channel = (this.channel = pc.createDataChannel("session", { ordered: true }));
-        channel.binaryType = "arraybuffer";
-        channel.addEventListener("message", ({ data }) => this.fromHost(data));
-        channel.addEventListener("close", () => this.hostLeft());
-        window.addEventListener("pagehide", () => {
+        page.onPageHide(() => {
+            if (this.left) return;
             this.send({ type: "bye" });
-            if (!this.left) noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
+            noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed });
+        }, this.closing.signal);
+        page.notify(`Joining "${this.room}"...`);
+        this.link = await transport.join(this.room, this.id, {
+            offered: () => this.log.record("offer"),
+            answered: () => this.log.record("answer"),
+            message: (data) => this.fromHost(data),
+            closed: () => this.hostLeft(),
         });
-        await pc.setLocalDescription(await pc.createOffer());
-        notify(`Joining "${this.room}"...`);
-        await rendezvous.postOffer(this.room, this.id, await gatheredDescription(pc));
-        this.log.record("offer");
-        const answer = await this.awaitAnswer();
-        this.log.record("answer");
-        await pc.setRemoteDescription({ type: "answer", sdp: answer });
-        await opened(channel);
         this.log.record("connected");
         noteStage(this.log.details.role, "connected");
         this.send({ type: "hello", name: this.name });
@@ -1112,7 +1009,7 @@ export class SessionGuest {
         const ran = cycleCount(processor) - before;
         const lagMs = lockstep.behind() / cyclesPerMs;
         stats.tick("frames");
-        if (document.hidden) stats.count("hiddenFrames");
+        if (this.context.page.hidden()) stats.count("hiddenFrames");
         if (catchingUp) stats.count("catchingUp");
         else if (lockstep.behind() === 0 && ran < cycles) stats.count("starved");
         stats.peak("maxLagMs", Math.round(lagMs));
@@ -1125,7 +1022,7 @@ export class SessionGuest {
     executeInControl(cycles) {
         const running = this.sequencer.execute(cycles);
         this.stats.tick("frames");
-        if (document.hidden) this.stats.count("hiddenFrames");
+        if (this.context.page.hidden()) this.stats.count("hiddenFrames");
         this.summarise(0);
         return running;
     }
@@ -1147,7 +1044,7 @@ export class SessionGuest {
         for (const { source, input, at } of this.keysForControl.splice(0))
             this.sequencer.queue(source, input, { from: source }, at);
         this.log.record("control", { at: cycleCount(processor) });
-        notify("You have control.");
+        this.context.page.notify("You have control.");
         this.showStatus();
     }
 
@@ -1183,7 +1080,7 @@ export class SessionGuest {
             this.send({ type: "stats", stats: summary });
             this.lastStats = summary;
             this.showStatus();
-            connectionStats(this.pc).then(
+            this.link.stats().then(
                 (connection) => {
                     this.rttMs = connection.rttMs;
                     this.log.record("connection", connection);
@@ -1193,18 +1090,8 @@ export class SessionGuest {
         }
     }
 
-    async awaitAnswer() {
-        const deadline = Date.now() + AnswerTimeoutMs;
-        while (Date.now() < deadline) {
-            const answer = await this.context.rendezvous.getAnswer(this.room, this.id);
-            if (answer) return answer;
-            await delay(GuestPollMs);
-        }
-        throw timedOut("the host isn't answering");
-    }
-
     send(message) {
-        if (this.channel?.readyState === "open") this.channel.send(JSON.stringify(message));
+        if (this.link?.isOpen()) this.link.send(JSON.stringify(message));
     }
 
     fromHost(data) {
@@ -1308,7 +1195,7 @@ export class SessionGuest {
         if (!isSameModel(model, this.context.model.name) || !matchesHost(hostValues, this.context.takenFromHost)) {
             this.send({ type: "bye" });
             this.left = true;
-            reloadAsMachine(this.context.urlState, { model, ...hostValues }, { replace: true });
+            this.context.page.reloadAs({ model, ...hostValues });
         }
     }
 
@@ -1334,10 +1221,8 @@ export class SessionGuest {
 
     async restore(snapshot) {
         const { processor, loop } = this.context;
-        const restored = snapshotFromJSON(await gunzip(snapshot.bytes));
+        const restored = snapshotFromJSON(await this.context.codec.decompress(snapshot.bytes));
         if (this.left) return;
-        // Before the restore, which would cancel the typist's task and leave the keyboard it disabled.
-        this.context.keyboard.cancelPaste();
         restoreSessionSnapshot(processor, restored);
         this.rtcBaseMs = restored.rtcBaseMs;
         ++this.snapshotsRestored;
@@ -1352,7 +1237,7 @@ export class SessionGuest {
             // The first summary would otherwise cover the whole of joining.
             this.stats = new IntervalStats();
             loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
-            notify(`Joined "${this.room}".`);
+            this.context.page.notify(`Joined "${this.room}".`);
             this.showStatus();
             this.panel.open();
         }
@@ -1365,12 +1250,12 @@ export class SessionGuest {
         this.log.record("desync", { reason, ...evidence });
         this.stats.count("desyncs");
         this.send({ type: "resync", reason });
-        announceDesync(++this.desyncs, "This machine desynced", reason, "the host");
+        announceDesync(this.context.page.notify, ++this.desyncs, "This machine desynced", reason, "the host");
     }
 
     hostLeft() {
         if (this.left) return;
-        notify("Lost the host; the machine carries on here on its own.");
+        this.context.page.notify("Lost the host; the machine carries on here on its own.");
         this.log.record("left", { reason: "lost the host" });
         noteStage(this.log.details.role, "ended", { reason: SessionFailures.hostLeft });
         this.leave("lost the host");
@@ -1379,7 +1264,7 @@ export class SessionGuest {
     /** @param {string} code what went wrong, one of `SessionFailures`; `reason` says it in words */
     fail(code, reason) {
         if (this.left) return;
-        notify(`Leaving the session: ${reason}.`);
+        this.context.page.notify(`Leaving the session: ${reason}.`);
         this.log.record("left", { reason });
         noteStage(this.log.details.role, "failed", { reason: code });
         this.leave(reason);
@@ -1387,6 +1272,7 @@ export class SessionGuest {
 
     leave(reason = "couldn't join") {
         this.left = true;
+        this.closing.abort();
         this.sequencer = null;
         this.stopWatchingPage();
         this.leftReason = reason;
@@ -1394,7 +1280,7 @@ export class SessionGuest {
         this.context.processor.sysvia.cmos.leaveSession();
         this.context.loop.setLockstep(null);
         this.context.keyboard.setInput(null);
-        this.pc?.close();
+        this.link?.close();
         this.showStatus();
     }
 
@@ -1461,34 +1347,6 @@ export function roomFrom(text) {
     return RoomName.test(room) ? room : null;
 }
 
-async function copyJoinLink(room) {
-    if (!navigator.clipboard) {
-        notify(`Copying needs https. Guests join at ${joinLink(room)}`);
-        return;
-    }
-    try {
-        await navigator.clipboard.writeText(joinLink(room));
-        toast("The link to join is on the clipboard.", { title: ToastTitle });
-    } catch (error) {
-        notify(`Couldn't copy the link (${error.message}). Guests join at ${joinLink(room)}`);
-    }
-}
-
-const sessionPane = (session) => ({
-    name: session.name,
-    link: joinLink(session.room),
-    saveReport: () => saveReport(session),
-    copyLink: () => copyJoinLink(session.room),
-    requestControl: () => session.requestControl(null),
-});
-
-function saveReport(session) {
-    const report = session.report();
-    const stamp = report.savedAt.replace(/[:.]/g, "-");
-    const blob = new Blob([JSON.stringify(report)], { type: "application/json" });
-    downloadBlob(blob, `jsbeeb-session-${report.role}-${stamp}.json`);
-}
-
 /** Why this machine cannot host or join a session, or null if it can. */
 export function sessionRefusal({ model, processor }) {
     if (model.isAtom || processor.hasTube)
@@ -1529,12 +1387,12 @@ function startFailure(error, room, host) {
     return { code: error.sessionFailure ?? SessionFailures.other, words: error.message };
 }
 
-function refused(refusal, host) {
+function refused(notify, refusal, host) {
     notify(refusal);
     noteStage(host ? "host" : "guest", "failed", { reason: SessionFailures.unsupportedMachine });
 }
 
-function failedToStart(error, room, host) {
+function failedToStart(notify, error, room, host) {
     const { code, words } = startFailure(error, room, host);
     notify(`The session couldn't start: ${words}.`);
     noteStage(host ? "host" : "guest", "failed", { reason: code });
@@ -1549,12 +1407,12 @@ function failedToStart(error, room, host) {
 function startSession(context, { host, room, name, secret }) {
     const refusal = sessionRefusal(context);
     if (refusal) {
-        refused(refusal, host);
+        refused(context.page.notify, refusal, host);
         return null;
     }
     const cleanedName = cleanName(name) ?? randomName();
     const session = host ? new SessionHost(context, room, cleanedName) : new SessionGuest(context, room, cleanedName);
-    session.start(secret).catch((error) => failedToStart(error, room, host));
+    session.start(secret).catch((error) => failedToStart(context.page.notify, error, room, host));
     return session;
 }
 
@@ -1567,17 +1425,17 @@ function startSession(context, { host, room, name, secret }) {
 export async function hostSession(context, name) {
     const refusal = sessionRefusal(context);
     if (refusal) {
-        refused(refusal, true);
+        refused(context.page.notify, refusal, true);
         return null;
     }
     for (let tries = 1; ; ++tries) {
         const room = randomName();
         try {
-            const secret = await context.rendezvous.createRoom(room);
+            const secret = await context.transport.createRoom(room);
             return startSession(context, { host: true, room, name, secret });
         } catch (error) {
             if (error.status === RoomTaken && tries < MaxRoomNameTries) continue;
-            failedToStart(error, room, true);
+            failedToStart(context.page.notify, error, room, true);
             return null;
         }
     }

@@ -8,15 +8,30 @@ const PasteBoxId = "paste-text";
 /** The eight accessibility switches, on the number keys. */
 const SwitchKeys = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"];
 
-const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
-// Where keys are for the page, not the machine: the paste box, the media window's controls, and
-// the debugger's goto boxes, where a name's g must not resume the machine.
-const KeyboardSinks = `#${PasteBoxId}, #media-panel, .goto-addr`;
+const NotTypedIntoInputs = ["checkbox", "radio", "range", "file", "color", "button", "submit", "reset", "image"];
+const TypingTargets = [
+    "textarea",
+    "select",
+    '[contenteditable]:not([contenteditable="false"])',
+    `input:not(${NotTypedIntoInputs.map((type) => `[type="${type}"]`).join(", ")})`,
+].join(", ");
+const typingIntoField = () => !!document.activeElement?.matches(TypingTargets);
+// Where keys are for the page, not the machine: the paste box, the media window's controls and the watch add box.
+const KeyboardSinks = `#${PasteBoxId}, #media-panel, #watch-add`;
 // The media window's own shortcuts have to answer from inside it, or it cannot be re-aimed from
 // the keyboard at all. The paste box keeps every key, because on a Mac Alt is Option and types
 // an accented character rather than nothing.
 const ShortcutSinks = `#${PasteBoxId}`;
 const inKeyboardSink = () => !!document.activeElement?.closest(KeyboardSinks);
+
+// Chrome resets the input method when focus moves into a text field and out again.
+function resetInputMethod() {
+    const focused = document.activeElement;
+    const textField = document.getElementById("ime-reset");
+    textField.focus({ preventScroll: true });
+    textField.blur();
+    focused?.focus({ preventScroll: true, focusVisible: false });
+}
 
 /**
  * Builds the emulated keyboard and wires the browser's shortcuts around it,
@@ -38,6 +53,7 @@ export class KeyboardSetup {
             inputEnabledFunction: inKeyboardSink,
             shortcutsBlockedFunction: () => !!document.activeElement?.closest(ShortcutSinks),
             runningFunction: () => loop.isRunning(),
+            resetInputMethodFunction: resetInputMethod,
             keyLayout,
         }));
         keyboard.addEventListener("notice", showNotice);
@@ -77,7 +93,7 @@ export class KeyboardSetup {
         document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
         document.addEventListener("paste", (evt) => {
             const target = document.activeElement;
-            if (target && target.id !== PasteBoxId && target.matches(TypingTargets)) return;
+            if (target?.id !== PasteBoxId && typingIntoField()) return;
             const text = evt.clipboardData?.getData("text/plain");
             if (text) actions.paste(text);
         });
@@ -85,7 +101,7 @@ export class KeyboardSetup {
 
     /** The debugger's keys, and a pause's, are the characters they print, not positions. */
     keyPress(evt) {
-        if (inKeyboardSink()) return;
+        if (inKeyboardSink() || typingIntoField()) return;
         const { loop, dbgr } = this;
         if (loop.mode === RunMode.paused && evt.key === "n") loop.step();
         else if ((loop.mode === RunMode.paused || loop.mode === RunMode.debugging) && evt.key === "g") loop.go();

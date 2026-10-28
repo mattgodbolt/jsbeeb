@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DiscVisualiser } from "../../src/web/disc-visualiser.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
-import { IbmDiscFormat } from "../../src/disc.js";
+import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
 import { domFromIndexHtml, ssdImage, teardownDom } from "./helpers.js";
 

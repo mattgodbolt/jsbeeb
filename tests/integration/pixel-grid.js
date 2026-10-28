@@ -3,29 +3,19 @@ import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
 import { decodeLineGrid, findBands } from "../helpers/line-grid.js";
 
-// The logical pixel grid that display filters rely on is derived from the video
-// chips' own state, so the only test that really proves it is to render a real
-// screen and check the recorded grid against what the mode actually put in the
-// framebuffer. These assert the invariant the filters depend on: every texel
-// covered by one logical pixel holds the same colour.
-
 const FbWidth = 1024;
 const FbHeight = 625;
 
 /**
- * A Video that keeps a copy of a complete frame. Reading `fb32` and `lineGrid`
- * directly after running for a fixed time gives whatever part of the raster the
- * CPU had reached — about the top sixth of the screen — and the rest would never
- * be examined. Snapshotting at paint time gives the whole picture.
+ * A Video that copies the next complete frame painted once one is wanted: read straight after a run,
+ * `fb32` and `lineGrid` hold only as much of the raster as the beam had reached.
  */
 class FrameCapturingVideo extends Video {
     constructor(isAtom) {
-        super(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom });
+        super(false, FbWidth * FbHeight, () => {}, { isAtom });
         this.wanted = false;
         this.frame = null;
         this.paint_ext = () => {
-            // Only when asked: copying two megabytes on every painted frame of
-            // a fifteen-million-cycle warm-up is all cost and no information.
             if (!this.wanted) return;
             this.wanted = false;
             this.frame = { fb32: this.fb32.slice(), lineGrid: this.lineGrid.slice() };
@@ -39,8 +29,7 @@ async function render(model, program, { isAtom = false } = {}) {
     await machine.initialise();
     await machine.runUntilInput();
     for (const line of program) await machine.type(line);
-    await machine.runFor(15 * 1000 * 1000);
-    // Drawing has finished; take the next complete frame.
+    await machine.runUntilInput();
     video.wanted = true;
     for (let attempt = 0; attempt < 10 && !video.frame; ++attempt) await machine.runFor(1000 * 1000);
     if (!video.frame) throw new Error("no complete frame was painted");
@@ -61,11 +50,7 @@ function pictureBands(frame) {
     return findBands(frame.lineGrid, 0, FbHeight).filter((band) => band.bottom - band.top > 8);
 }
 
-/**
- * Check that the recorded grid agrees with the pixels: within each logical
- * pixel every texel must hold the same colour. If the grid claimed pixels were
- * wider than they are, this finds two different colours inside one.
- */
+/** Check that within each logical pixel the recorded grid describes, every texel holds the same colour. */
 function gridDescribesPixels(frame, band, left, right) {
     const { texelsWide, texelsHigh } = band;
     for (let y = band.top; y + texelsHigh <= band.bottom; y += texelsHigh) {
@@ -84,15 +69,9 @@ function gridDescribesPixels(frame, band, left, right) {
 }
 
 describe("logical pixel grid over real screens", () => {
-    // Single-pixel-wide vertical stripes with a gap between them. If the grid
-    // claimed pixels were wider than they are, a lit and an unlit pixel would
-    // land inside one and gridDescribesPixels would say so. A grid that claimed
-    // pixels were *narrower* would still look uniform, so the expected width is
-    // asserted outright as well, and the distinct-colour count from coloursIn
-    // guards against the whole thing passing on an empty screen.
-    //
-    // 16 graphics units is 8 pixels in MODE 0, 4 in MODE 1 and 4, and 2 in
-    // MODE 2 and 5 — a gap in every mode under test.
+    // A grid claiming pixels wider than they are puts a lit and an unlit pixel of these stripes in one; one
+    // claiming them narrower still looks uniform, so the width is asserted outright. 16 graphics units is 8
+    // pixels in MODE 0, 4 in MODE 1 and 4, and 2 in MODE 2 and 5, a gap in every mode under test.
     const stripes = (mode) => [
         `MODE ${mode}`,
         "VDU 23,1,0;0;0;0;",
@@ -127,8 +106,6 @@ describe("logical pixel grid over real screens", () => {
     });
 
     it("records a grid for the Atom's 6847 as well", async () => {
-        // Without this the Atom would offer the filter and get nothing from it,
-        // which is exactly the failure this whole mechanism exists to prevent.
         const frame = await render("Atom", ["CLEAR4", "MOVE0,0", "DRAW255,191"], { isAtom: true });
         const bands = pictureBands(frame);
         expect(bands).toHaveLength(1);

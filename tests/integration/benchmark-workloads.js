@@ -1,14 +1,30 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { benchmarkMachine, listBenchmarkWorkloads, newBenchmarkMachine } from "../../src/benchmark-machine.js";
 import { readWorkload, restoreWorkload } from "../../src/benchmark-workloads.js";
+import { RepoRoot } from "../../src/test-machine.js";
+import { workloadHashes } from "../../tools/same-answer.js";
+import { checkDrainsAgainstJs } from "../helpers/compare-drains.js";
 
 const workloads = await listBenchmarkWorkloads();
+const RecordedHashes = JSON.parse(readFileSync(path.join(RepoRoot, "tests", "same-answer-hashes.json"), "utf8"));
 const OsRomResetVector = 0xfffc;
+const CheckedFrames = 100;
+const FramesPerSecond = 50;
+const FittedOn = {
+    coProcessor: (cpu) => cpu.hasTube,
+    hasMusic5000: (cpu) => cpu.hasMusic5000,
+    hasTeletextAdaptor: (cpu) => cpu.hasTeletextAdaptor,
+    hasEconet: (cpu) => !!cpu.econet,
+    hasVideoNula: (cpu) => cpu.video.ula.hasVideoNula,
+};
 
 async function restoreAltered(name, alter) {
     const workload = await readWorkload(name);
-    const machine = await newBenchmarkMachine(workload.model);
+    const machine = await newBenchmarkMachine(workload.model, workload.fittings);
     alter(workload);
     return restoreWorkload(machine.processor, workload);
 }
@@ -21,6 +37,26 @@ describe("benchmark workloads", () => {
             expect(cpu.pc).toBe(workload.snapshot.state.pc);
             expect(cpu.currentCycles).toBe(workload.snapshot.state.currentCycles);
         });
+
+        it("draws every pending cell as the JS drain does", async () => {
+            const { cpu } = await benchmarkMachine(name);
+            const checked = checkDrainsAgainstJs(cpu.video.drain);
+            for (let frame = 0; frame < CheckedFrames; ++frame)
+                cpu.execute(cpu.model.cyclesPerSecond / FramesPerSecond);
+            expect(checked.differences).toEqual([]);
+            if (name === "mode7-text") expect(checked.teletextPaints).toBeGreaterThan(0);
+        });
+
+        it("ends in the state test:same-answer recorded when drawn by the JS drain", async () => {
+            expect(await workloadHashes(name, "js")).toEqual(RecordedHashes.workloads[name]);
+        });
+    });
+
+    it.each(Object.keys(workloads[0].fittings))("builds a machine with %s fitted and nothing else", async (fitted) => {
+        const fittings = Object.fromEntries(Object.keys(workloads[0].fittings).map((name) => [name, name === fitted]));
+        const { processor } = await newBenchmarkMachine("B-DFS1.2", fittings);
+        const found = Object.fromEntries(Object.keys(fittings).map((name) => [name, FittedOn[name](processor)]));
+        expect(found).toEqual(fittings);
     });
 
     it("puts back the disc a workload was made with, and empties a drive it had none in", async () => {

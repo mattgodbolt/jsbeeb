@@ -1,7 +1,7 @@
 import { isUserRemapped, keyCodes } from "../keymap.js";
 import { Typist } from "../typist.js";
 
-const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
+export const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 const InputMethodKeyCode = 229;
 const KeypadNavigationKeys = new Set([
     keyCodes.END,
@@ -26,6 +26,7 @@ const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMetho
  * @property {Object} processor - The processor instance
  * @property {Function} inputEnabledFunction - A function to check if input is enabled
  * @property {Function} runningFunction - Whether the machine is running, and so takes keys
+ * @property {Function} [resetInputMethodFunction] - Drops a dead key the host's input method is holding
  * @property {string} [keyLayout="physical"] - The keyboard layout
  */
 
@@ -44,6 +45,7 @@ export class Keyboard extends EventTarget {
             inputEnabledFunction,
             shortcutsBlockedFunction,
             runningFunction,
+            resetInputMethodFunction = () => {},
             keyLayout = "physical",
         } = config;
 
@@ -52,9 +54,11 @@ export class Keyboard extends EventTarget {
         this.inputEnabledFunction = inputEnabledFunction;
         this.shortcutsBlockedFunction = shortcutsBlockedFunction ?? (() => false);
         this.runningFunction = runningFunction;
+        this.resetInputMethodFunction = resetInputMethodFunction;
 
         this.keyInterface = processor.keyboardInterface;
-        this.typist = new Typist(processor);
+        this.machineTypist = new Typist(processor);
+        this.typist = this.machineTypist;
         this.input = this.directInput();
 
         // State
@@ -76,12 +80,17 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Routes key presses and BREAK through `input`, or straight to the machine again with
-     * null, which starts it with nothing held: a session's keys go with the session.
+     * Routes key presses, pastes and BREAK through `input`, or straight to the machine again with
+     * null, which starts it with nothing held: a session's keys go with the session. A paste is typed
+     * through `input.keyRaw(colRow, down)`.
      */
     setInput(input) {
+        this.cancelPaste();
         this.clearKeys();
         this.input = input ?? this.directInput();
+        this.typist = input
+            ? new Typist(this.processor, { input, isRunning: this.runningFunction })
+            : this.machineTypist;
         this.input.clearKeys();
     }
 
@@ -220,6 +229,8 @@ export class Keyboard extends EventTarget {
         const machineKey = this._machineKey(evt);
         this.input.keyDown(machineKey, evt.shiftKey);
         if (evt.key !== "Dead") return () => this.input.keyUp(machineKey);
+        // Stops the host's input method composing the next key with this one, as "Process" with no key up.
+        this.resetInputMethodFunction();
         this.heldDeadKeys.add(code);
         return () => {
             this.heldDeadKeys.delete(code);

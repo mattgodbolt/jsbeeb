@@ -52,21 +52,26 @@ describe("MediaLoader", () => {
         return media;
     };
 
-    describe("loadDiscImage", () => {
+    describe.each([
+        ["loadDiscImage", "sth", "x.hfe"],
+        ["loadTapeImage", "tapeSth", "x.uef"],
+    ])("%s", (load, source, name) => {
         it("returns nothing for no reference", async () => {
-            expect(await make().loadDiscImage(undefined)).toBeNull();
+            expect(await make()[load](undefined)).toBeNull();
         });
 
+        it("fails an image that is not one as a bad image", async () => {
+            sources[source].mockResolvedValue({ name, data: new Uint8Array(10), ignored: [] });
+            await expect(make()[load]("sth:X.zip")).rejects.toMatchObject({ loadFailure: "bad_image" });
+        });
+    });
+
+    describe("loadDiscImage", () => {
         it("fetches an sth: reference and names the disc after what was in the archive", async () => {
             sources.sth.mockResolvedValue({ name: "ELITE.ssd", data: ssdImage(), ignored: [] });
             const loaded = await make().loadDiscImage("sth:ELITE.zip");
             expect(sources.sth).toHaveBeenCalledWith("ELITE.zip");
             expect(loaded.name).toBe("ELITE.ssd");
-        });
-
-        it("fails a disc that is not one as a bad image", async () => {
-            sources.sth.mockResolvedValue({ name: "x.hfe", data: new Uint8Array(10), ignored: [] });
-            await expect(make().loadDiscImage("sth:X.zip")).rejects.toMatchObject({ loadFailure: "bad_image" });
         });
 
         it("reports what an archive held besides the file it loaded", async () => {
@@ -114,17 +119,6 @@ describe("MediaLoader", () => {
         });
     });
 
-    describe("loadTapeImage", () => {
-        it("returns nothing for no reference", async () => {
-            expect(await make().loadTapeImage(undefined)).toBeNull();
-        });
-
-        it("fails a tape that is not one as a bad image", async () => {
-            sources.tapeSth.mockResolvedValue({ name: "x.uef", data: new Uint8Array(10), ignored: [] });
-            await expect(make().loadTapeImage("sth:X.zip")).rejects.toMatchObject({ loadFailure: "bad_image" });
-        });
-    });
-
     describe("autoboot in the URL", () => {
         it("ticks and clears it", () => {
             const media = make();
@@ -167,8 +161,11 @@ describe("MediaLoader", () => {
             deps.loadSnapshot.mockResolvedValue(false);
             expect(await media.openFile(fileFor("bad.snp", new Uint8Array([1])))).toBeNull();
         });
+    });
 
-        it("puts a disc in the drive it was given and says so", async () => {
+    describe("files opened this session", () => {
+        it("remembers a disc file, lists it, and can put it in either drive again by reference", async () => {
+            deps.urlState.params.disc2 = "old.ssd";
             const media = make();
             expect(await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).toEqual({
                 kind: "disc",
@@ -178,17 +175,6 @@ describe("MediaLoader", () => {
                 words: "Loaded mine.ssd into drive 1.",
             });
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
-        });
-    });
-
-    describe("files opened this session", () => {
-        it("remembers a disc file, lists it, and can put it in either drive again by reference", async () => {
-            deps.urlState.params.disc2 = "old.ssd";
-            const media = make();
-            expect((await media.openFile(fileFor("mine.ssd", ssdImage()), 1)).words).toBe(
-                "Loaded mine.ssd into drive 1.",
-            );
-            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, expect.objectContaining({ name: "mine.ssd" }));
             expect(deps.urlState.params.disc2).toBeUndefined();
             const { descriptors } = await media.listAll();
             const listed = descriptors.find((d) => d.source === "session");
@@ -196,14 +182,6 @@ describe("MediaLoader", () => {
             const again = await media.loadDiscImage(listed.ref);
             expect(again.name).toBe("mine.ssd");
             expect(again.originalImageData).toBeTruthy();
-        });
-
-        it("says when a file joins the session, so an open list can show it", async () => {
-            const media = make();
-            const seen = vi.fn();
-            media.addEventListener("files-changed", seen);
-            await media.openFile(fileFor("mine.ssd", ssdImage()));
-            expect(seen).toHaveBeenCalledTimes(1);
         });
 
         it("does not list a tape file that turned out not to be one", async () => {
@@ -319,26 +297,21 @@ describe("MediaLoader", () => {
             await expect(media.describe("github:someone/else/disc.ssd")).resolves.toBeNull();
         });
 
-        it("keeps listing when one source fails, and says which", async () => {
+        it.each([
+            ["rejects", async () => Promise.reject(new Error("offline"))],
+            [
+                "throws before it can answer",
+                () => {
+                    throw new Error("offline");
+                },
+            ],
+        ])("keeps listing when a source %s, and says which", async (_, lister) => {
             vi.spyOn(console, "error").mockImplementation(() => {});
             const media = make();
-            media.addLister("sth", async () => {
-                throw new Error("offline");
-            });
+            media.addLister("sth", lister);
             const { descriptors, failures } = await media.listAll();
             expect(descriptors.length).toBe(BuiltInImages.length);
             expect(failures).toEqual(["sth: offline"]);
-        });
-
-        it("treats a source that throws before it can answer like one that fails", async () => {
-            vi.spyOn(console, "error").mockImplementation(() => {});
-            const media = make();
-            media.addLister("browser-broken", () => {
-                throw new Error("storage denied");
-            });
-            const { descriptors, failures } = await media.listAll();
-            expect(descriptors.length).toBe(BuiltInImages.length);
-            expect(failures).toEqual(["browser-broken: storage denied"]);
         });
 
         it("asks every source at once, and keeps them in the order they were added", async () => {

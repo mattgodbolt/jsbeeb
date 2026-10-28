@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { gzip } from "pako";
+import { gzip, ungzip } from "pako";
 import * as prettier from "prettier";
 
 import { newBenchmarkMachine } from "../src/benchmark-machine.js";
@@ -21,6 +21,7 @@ const FramesPerSecond = 50;
 // The snapshot records when it was taken; a fixed time keeps two runs byte for byte the same.
 const FixedTimestamp = new Date(Date.UTC(2026, 0, 1)).toISOString();
 const GzipLevel = 9;
+const DifferencesNamed = 5;
 const PromptTimeoutSecs = 30;
 const KeyHoldFrames = 10;
 const SettleSecs = 5;
@@ -73,10 +74,19 @@ const basicLoopCounter = {
 };
 const osModeIs = (mode) => ({ address: OsScreenMode, value: mode, what: `the OS screen mode, MODE ${mode}` });
 
+const StockFittings = {
+    coProcessor: false,
+    hasMusic5000: false,
+    hasTeletextAdaptor: false,
+    hasEconet: false,
+    hasVideoNula: false,
+};
+
 const Workloads = [
     {
         name: "elite",
         model: "B-DFS1.2",
+        fittings: StockFittings,
         description: "Elite in flight: launched from Lave station with the default commander, no keys held.",
         source: "public/discs/elite.ssd, Ian Bell's disc image as fixed for jsbeeb (see public/discs/README.elite)",
         async build(machine) {
@@ -102,6 +112,7 @@ const Workloads = [
     {
         name: "mode0-lines",
         model: "B-DFS1.2",
+        fittings: StockFittings,
         description: "A BASIC graphics demo in MODE 0: screen-wide lines EORed on a sweeping path.",
         source: "a BASIC program in tools/make-benchmark-workloads.js",
         program: [
@@ -123,6 +134,7 @@ const Workloads = [
     {
         name: "mode7-text",
         model: "B-DFS1.2",
+        fittings: StockFittings,
         description: "MODE 7 text scrolling up the screen: coloured text, backgrounds and graphics characters.",
         source: "a BASIC program in tools/make-benchmark-workloads.js",
         program: [
@@ -138,6 +150,7 @@ const Workloads = [
     {
         name: "master-shadow",
         model: "Master",
+        fittings: StockFittings,
         description: "A Master BASIC demo in shadow MODE 2 (MODE 130): filled triangles in changing colours.",
         source: "a BASIC program in tools/make-benchmark-workloads.js",
         program: [
@@ -163,7 +176,7 @@ const Workloads = [
 ];
 
 async function buildWorkload(workload) {
-    const machine = await newBenchmarkMachine(workload.model);
+    const machine = await newBenchmarkMachine(workload.model, workload.fittings);
     const media = workload.build ? await workload.build(machine) : await runBasic(machine, workload.program.join("\n"));
     const cpu = machine.processor;
     if (!cpu.onFastPath || cpu.debugInstruction.stopped) {
@@ -175,9 +188,10 @@ async function buildWorkload(workload) {
 }
 
 async function manifestFor(workloads) {
-    const entries = workloads.map(({ name, model, description, source, checks }) => ({
+    const entries = workloads.map(({ name, model, fittings, description, source, checks }) => ({
         name,
         model,
+        fittings,
         description,
         source,
         snapshot: `${name}.json.gz`,
@@ -188,6 +202,21 @@ async function manifestFor(workloads) {
 }
 
 const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
+const isObject = (value) => typeof value === "object" && value !== null;
+
+function differingPaths(expected, actual, at) {
+    if (!isObject(expected) || !isObject(actual)) return expected === actual ? [] : [at];
+    const keys = new Set([...Object.keys(expected), ...Object.keys(actual)]);
+    return [...keys].flatMap((key) => differingPaths(expected[key], actual[key], at ? `${at}.${key}` : key));
+}
+
+function describeDifference(file, checkedIn, built) {
+    const json = (bytes) => JSON.parse(new TextDecoder().decode(file.endsWith(".gz") ? ungzip(bytes) : bytes));
+    const paths = differingPaths(json(checkedIn), json(built), "");
+    if (!paths.length) return "the same JSON, encoded differently";
+    const more = paths.length > DifferencesNamed ? `, and ${paths.length - DifferencesNamed} more` : "";
+    return `at ${paths.slice(0, DifferencesNamed).join(", ")}${more}`;
+}
 
 async function main() {
     const { values } = parseArgs({ options: { check: { type: "boolean", default: false } } });
@@ -201,12 +230,21 @@ async function main() {
         if (!values.check) {
             writeFileSync(file, bytes);
             console.log(`${relative}: ${bytes.length} bytes`);
-        } else if (!sameBytes(readFileSync(file), bytes)) {
-            console.log(`${relative} differs from what this script builds`);
+        } else {
+            const checkedIn = readFileSync(file);
+            if (sameBytes(checkedIn, bytes)) continue;
+            console.log(
+                `${relative} differs from what this script builds, ${describeDifference(file, checkedIn, bytes)}`,
+            );
             stale++;
         }
     }
-    if (stale) process.exit(1);
+    if (stale) {
+        console.log(
+            "Rebuild with npm run benchmark:workloads, then npm run test:same-answer -- --record if its hashes change",
+        );
+        process.exit(1);
+    }
 }
 
 await main();

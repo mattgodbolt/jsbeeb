@@ -1,4 +1,4 @@
-import { IbmDiscFormat } from "../disc.js";
+import { IbmDiscFormat } from "../disc-format.js";
 import { FloatingPanel } from "./floating-panel.js";
 import {
     DensityPalette,

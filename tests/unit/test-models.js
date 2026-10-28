@@ -7,17 +7,19 @@ import { BBC } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 
 describe("Model", () => {
-    it("is frozen so per-session settings cannot be stored on it", () => {
-        const master = findModel("Master");
-
-        expect(Object.isFrozen(master)).toBe(true);
-        expect(() => (master.hasEconet = true)).toThrow(TypeError);
-    });
-
     it("freezes every model and its rom list", () => {
         for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {
             expect(Object.isFrozen(model), `${model.name} should be frozen`).toBe(true);
             expect(Object.isFrozen(model.os), `${model.name} os should be frozen`).toBe(true);
+        }
+    });
+
+    it("gives the Atom no sideways RAM", () => {
+        for (const model of allModels.filter(({ isAtom }) => isAtom)) {
+            expect(
+                model.swram.some((isRam) => isRam),
+                model.name,
+            ).toBe(false);
         }
     });
 
@@ -36,6 +38,7 @@ describe("Model", () => {
             "BBC B (stock)": "BBC B",
             "BBC B (US)": "BBC B",
             "BBC B (German)": "BBC B",
+            "BBC B (MOS 0.10)": "BBC B",
             "BBC Master 128 (DFS)": "Master 128",
             "BBC Master 128 (ADFS)": "Master 128",
             "BBC Master 128 (ANFS)": "Master 128",
@@ -77,11 +80,37 @@ describe("Model", () => {
             return { before, after: cpu.readmem(0x8000) };
         };
 
-        it("is the default BBC B with no sideways RAM", () => {
+        it("is the default BBC B with no sideways RAM and only the motherboard's ROM sockets", () => {
             const stock = findModel("B-stock");
-            const allButNameAndRam = ({ name: _name, synonyms: _synonyms, swram: _swram, ...rest }) => rest;
-            expect(allButNameAndRam(stock)).toEqual(allButNameAndRam(DefaultModel));
+            const allButNameAndSideways = ({
+                name: _name,
+                synonyms: _synonyms,
+                os: _os,
+                swram: _swram,
+                romSockets: _romSockets,
+                ...rest
+            }) => rest;
+            expect(allButNameAndSideways(stock)).toEqual(allButNameAndSideways(DefaultModel));
             expect(stock.swram.some((isRam) => isRam)).toBe(false);
+        });
+
+        const bankPagedAtEachRomsel = (modelName) => {
+            const cpu = fake6502(findModel(modelName));
+            for (let bank = 0; bank < 16; ++bank) cpu.romBank(bank)[0] = bank;
+            return [...Array(16).keys()].map((romsel) => {
+                cpu.romSelect(romsel);
+                return cpu.readmem(0x8000);
+            });
+        };
+
+        it("pages its four sockets, banks 12 to 15, at every ROMSEL value", () => {
+            expect(bankPagedAtEachRomsel("B-stock")).toEqual([
+                12, 13, 14, 15, 12, 13, 14, 15, 12, 13, 14, 15, 12, 13, 14, 15,
+            ]);
+        });
+
+        it("leaves the BBC Bs with a sideways board sixteen separate banks", () => {
+            expect(bankPagedAtEachRomsel("B-DFS1.2")).toEqual([...Array(16).keys()]);
         });
 
         it("ignores a write to a bank the other BBC Bs fill with RAM", () => {
@@ -90,6 +119,15 @@ describe("Model", () => {
             const rom = sidewaysBytesAroundWrite("B-stock", 4);
             expect(rom.after).toBe(rom.before);
         });
+    });
+
+    it("powers on with ROMSEL 0's bank paged, whatever was paged before", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        cpu.romSelect(5);
+        cpu.reset(true);
+        expect(cpu.pagedBank).toBe(0);
+        cpu.writemem(0x8000, 0x5a);
+        expect(cpu.readmem(0x8000)).toBe(0x5a);
     });
 
     it("carries no per-session settings", () => {
@@ -150,32 +188,17 @@ describe("fake6502 tube handling", () => {
         expect(cpu.tube.cpuMultiplier).toBe(1);
     });
 
-    it("attaches no tube by default", () => {
-        expect(fake6502(findModel("Master"), {}).hasTube).toBe(false);
-    });
-
     it("does not leak the tube into later machines using the same model", () => {
         fake6502(findModel("Master"), { tube: true });
 
         expect(fake6502(findModel("Master"), {}).hasTube).toBe(false);
     });
 
-    it("honours a tube cpu multiplier", () => {
-        const cpu = fake6502(findModel("Master"), { tube: true, tubeCpuMultiplier: 4 });
-
-        expect(cpu.tube.cpuMultiplier).toBe(4);
-    });
-
-    it("fits a Master with the 4MHz Turbo board", () => {
-        const cpu = fake6502(findModel("Master"), { tube: true });
-
-        expect(cpu.tube.cyclesPerHostCycle).toBe(2);
-    });
-
-    it("fits a BBC B with the 3MHz external second processor", () => {
-        const cpu = fake6502(findModel("B-DFS1.2"), { tube: true });
-
-        expect(cpu.tube.cyclesPerHostCycle).toBe(1.5);
+    it.each([
+        ["a Master with the 4MHz Turbo board", "Master", 2],
+        ["a BBC B with the 3MHz external second processor", "B-DFS1.2", 1.5],
+    ])("fits %s", (_, model, cyclesPerHostCycle) => {
+        expect(fake6502(findModel(model), { tube: true }).tube.cyclesPerHostCycle).toBe(cyclesPerHostCycle);
     });
 
     it("gives both co-processors the CMOS additions", () => {

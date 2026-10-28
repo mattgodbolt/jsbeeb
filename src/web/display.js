@@ -54,7 +54,6 @@ export class Display {
 
         // The animation frame asked for at flyback covers paints while the loop
         // is stopped; while it runs, its vsync tick presents.
-        this.videoFb32 = new Uint32Array(this.canvas.fb32.length);
         this.pendingFrame = {
             minx: 0,
             miny: 0,
@@ -77,7 +76,7 @@ export class Display {
                 : new FakeVideo()
             : new Video(
                   model.isMaster,
-                  this.videoFb32,
+                  this.canvas.fb32.length,
                   function paint(minx, miny, maxx, maxy, paintedTo) {
                       display.onPaint(this, minx, miny, maxx, maxy, paintedTo);
                   },
@@ -115,7 +114,7 @@ export class Display {
             }
         }
         const start = performance.now();
-        this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);
+        this.canvas.fb32.set(video.fb32.subarray(miny * 1024, paintedTo * 1024), miny * 1024);
         this.pendingFrame.lineGrid.set(video.lineGrid.subarray(miny, paintedTo), miny);
         Object.assign(this.pendingFrame, {
             minx,

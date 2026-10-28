@@ -2,6 +2,37 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { SysVia, UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+
+const ORB = 0x0,
+    ORA = 0x1,
+    DDRB = 0x2,
+    DDRA = 0x3,
+    T1CL = 0x4,
+    T1CH = 0x5,
+    T2CL = 0x8,
+    T2CH = 0x9,
+    SR = 0xa,
+    ACR = 0xb,
+    PCR = 0xc,
+    IFR = 0xd,
+    IER = 0xe,
+    ORAnh = 0xf;
+const AcrT1Continuous = 0x40;
+const AcrShiftOutFreeRunningT2 = 0x10;
+const AcrT2CountsPb6 = 0x20;
+const Pb6 = 0x40;
+const Timer1Int = 0x40;
+const Timer2Int = 0x20;
+const Ca2Int = 0x01;
+const PcrCa2FallingEdge = 0x00;
+const PcrCa2RisingEdge = 0x04;
+const PcrCa2OutputLow = 0x0c;
+const Ca1Int = 0x02;
+const Cb1Int = 0x10;
+const UserViaIrq = 0x02;
+const TicksPerMicrosecond = 2;
+const ScanPassTicks = 16 * TicksPerMicrosecond;
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -23,7 +54,25 @@ function makeFakeUserPortPeripheral() {
     return { read: () => 0xff, write: () => {} };
 }
 
+function makeSysVia(cpu, scheduler, { getGamepads } = {}) {
+    return new SysVia(cpu, scheduler, {
+        video: makeFakeVideo(),
+        soundChip: makeFakeSoundChip(),
+        cmos: makeFakeCmos(),
+        isMaster: false,
+        initialLayout: "physical",
+        getGamepads,
+    });
+}
+
 describe("Via snapshotState / restoreState", () => {
+    const AcrT1ContinuousOnPb7ShiftOutFreeRunningT2Latching = 0xd3;
+    const PcrCa1Cb1RisingCa2HighCb2PulseOnWrite = 0xbf;
+    const IerSetTimers = 0xe0;
+    const LatchSetBit6 = 0x0e,
+        LatchSetBit3 = 0x0b,
+        LatchClearBit3 = 0x03;
+
     let scheduler, cpu;
 
     beforeEach(() => {
@@ -31,167 +80,61 @@ describe("Via snapshotState / restoreState", () => {
         cpu = makeFakeCpu();
     });
 
-    describe("base Via (via UserVia)", () => {
-        function makeUserVia() {
-            return new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
-        }
+    function makeUserVia() {
+        return new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+    }
 
-        it("should snapshot and restore all register fields", () => {
-            const via = makeUserVia();
-            // Set some non-default state
-            via.ora = 0x42;
-            via.orb = 0x37;
-            via.ira = 0xaa;
-            via.irb = 0xbb;
-            via.ddra = 0xf0;
-            via.ddrb = 0x0f;
-            via.sr = 0x55;
-            via.acr = 0x60;
-            via.pcr = 0x22;
-            via.t1hit = false;
-            via.t2hit = false;
-            via.t1_pb7 = 1;
-            via.ca1 = true;
-            via.cb2 = true;
+    const makeSystemVia = () => makeSysVia(cpu, scheduler);
 
-            const snapshot = via.snapshotState();
+    function driveMidCb2PulseWithTimersRunning(via) {
+        via.write(DDRA, 0xf0);
+        via.write(DDRB, 0x0f);
+        via.write(ACR, AcrT1ContinuousOnPb7ShiftOutFreeRunningT2Latching);
+        via.write(IER, IerSetTimers);
+        via.write(T1CL, 0x34);
+        via.write(T1CH, 0x01);
+        via.write(T2CL, 7);
+        via.write(T2CH, 100);
+        via.write(SR, 0x55);
+        via.write(ORB, LatchSetBit6);
+        scheduler.polltime(1001);
+        via.write(PCR, PcrCa1Cb1RisingCa2HighCb2PulseOnWrite);
+        via.setca1(true);
+        via.setcb1(true);
+        via.write(ORA, 0x42);
+        via.write(ORB, LatchSetBit3);
+        scheduler.polltime(1);
+    }
 
-            // Create a fresh VIA and restore
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            expect(via2.ora).toBe(0x42);
-            expect(via2.orb).toBe(0x37);
-            expect(via2.ira).toBe(0xaa);
-            expect(via2.irb).toBe(0xbb);
-            expect(via2.ddra).toBe(0xf0);
-            expect(via2.ddrb).toBe(0x0f);
-            expect(via2.sr).toBe(0x55);
-            expect(via2.acr).toBe(0x60);
-            expect(via2.pcr).toBe(0x22);
-            expect(via2.t1hit).toBe(false);
-            expect(via2.t2hit).toBe(false);
-            expect(via2.t1_pb7).toBe(1);
-            expect(via2.ca1).toBe(true);
-            expect(via2.cb2).toBe(true);
-        });
-
-        it("should snapshot and restore timer state", () => {
-            const via = makeUserVia();
-            via.t1c = 12345;
-            via.t1l = 67890;
-            via.t2c = 11111;
-            via.t2l = 22222;
-
-            const snapshot = via.snapshotState();
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            expect(via2.t1c).toBe(12345);
-            expect(via2.t1l).toBe(67890);
-            expect(via2.t2c).toBe(11111);
-            expect(via2.t2l).toBe(22222);
-        });
-
-        it("should save task offset when task is scheduled", () => {
-            const via = makeUserVia();
-            // After reset, the via task should be scheduled
-            expect(via.task.scheduled()).toBe(true);
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.taskOffset).not.toBeNull();
-            // Task offset should be positive (relative to epoch)
-            expect(snapshot.taskOffset).toBeGreaterThan(0);
-        });
-
-        it("should save null task offset when task is not scheduled", () => {
-            const via = makeUserVia();
-            via.task.cancel();
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.taskOffset).toBeNull();
-        });
-
-        it("should re-register task with correct offset on restore", () => {
-            const via = makeUserVia();
-            scheduler.polltime(1000);
-            via._catchUp();
-
-            // Set up a known timer state
-            via.t1c = 500;
-            via.t1l = 500;
-            via.updateNextTime();
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.taskOffset).not.toBeNull();
-            const expectedOffset = snapshot.taskOffset;
-
-            // Restore to a new VIA on same scheduler
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            expect(via2.task.scheduled()).toBe(true);
-            // The task should expire at epoch + offset
-            expect(via2.task.expireEpoch).toBe(scheduler.epoch + expectedOffset);
-        });
-
-        it("should restore interrupt state correctly", () => {
-            const via = makeUserVia();
-            via.ier = 0x60; // Enable timer 1 and 2 interrupts
-            via.ifr = 0x40; // Timer 1 interrupt pending
-            via.updateIFR();
-            expect(cpu.interrupt & 0x02).toBe(0x02); // UserVia uses irq=0x02
-
-            const snapshot = via.snapshotState();
-
-            // Reset CPU interrupt state
-            cpu.interrupt = 0;
-            const via2 = makeUserVia();
-            via2.restoreState(snapshot);
-
-            // Interrupt should be re-asserted
-            expect(cpu.interrupt & 0x02).toBe(0x02);
-        });
+    it("round-trips a user VIA mid-pulse on CB2 with its timers running", async () => {
+        await expectSnapshotRoundTrips(makeUserVia, driveMidCb2PulseWithTimersRunning);
     });
 
-    describe("SysVia", () => {
-        function makeSysVia() {
-            return new SysVia(cpu, scheduler, {
-                video: makeFakeVideo(),
-                soundChip: makeFakeSoundChip(),
-                cmos: makeFakeCmos(),
-                isMaster: false,
-                initialLayout: "physical",
-            });
-        }
+    it("round-trips a system VIA with its addressable latch written, mid-pulse on CB2", async () => {
+        await expectSnapshotRoundTrips(makeSystemVia, driveMidCb2PulseWithTimersRunning);
+    });
 
-        it("should snapshot and restore SysVia-specific fields", () => {
-            const via = makeSysVia();
-            // IC32 bits 6,7 control lock lights: 0 = on, 1 = off
-            // Set IC32=0x23 so both lights are on (bits 6,7 clear)
-            via.IC32 = 0x23;
-            via.capsLockLight = true;
-            via.shiftLockLight = true;
+    it("should restore interrupt state correctly", () => {
+        const via = makeUserVia();
+        via.write(IER, 0x80 | Timer1Int);
+        via.write(T1CL, 2);
+        via.write(T1CH, 0);
+        scheduler.polltime(10);
+        expect(cpu.interrupt & UserViaIrq).toBe(UserViaIrq);
 
-            const snapshot = via.snapshotState();
-            expect(snapshot.IC32).toBe(0x23);
-            expect(snapshot.capsLockLight).toBe(true);
-            expect(snapshot.shiftLockLight).toBe(true);
+        const snapshot = via.snapshotState();
+        cpu.interrupt = 0;
+        makeUserVia().restoreState(snapshot);
 
-            const via2 = makeSysVia();
-            via2.restoreState(snapshot);
+        expect(cpu.interrupt & UserViaIrq).toBe(UserViaIrq);
+    });
 
-            expect(via2.IC32).toBe(0x23);
-            // Lock lights are derived from IC32 during portBUpdated
-            expect(via2.capsLockLight).toBe(true);
-            expect(via2.shiftLockLight).toBe(true);
-        });
-
+    describe("SysVia keyboard", () => {
         it("hands the held keys, including a forced and a physical SHIFT, to another machine", () => {
-            const via = makeSysVia();
+            const via = makeSystemVia();
             via.setMapped([BBC.A[0], BBC.A[1], true], 1);
             via.keyDown(keyCodes.SHIFT_LEFT, false);
-            const via2 = makeSysVia();
+            const via2 = makeSystemVia();
             via2.restoreKeyboard(via.keyboardState());
             expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
             via2.setMapped([BBC.A[0], BBC.A[1], true], 0);
@@ -201,43 +144,202 @@ describe("Via snapshotState / restoreState", () => {
         });
 
         it("hands over which way a held key forces SHIFT", () => {
-            const via = makeSysVia();
+            const via = makeSystemVia();
             via.setMapped([BBC.A[0], BBC.A[1], true], 1);
-            const via2 = makeSysVia();
+            const via2 = makeSystemVia();
             via2.restoreKeyboard(via.keyboardState());
             via2.setMapped(BBC.B, 1);
             expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
         });
 
-        it("leaves the held keys alone when restoring a snapshot", () => {
-            const via = makeSysVia();
+        function makeScanningVia(pcr) {
+            const via = makeSystemVia();
+            via.write(DDRB, 0x0f);
+            via.write(ORB, LatchSetBit3);
+            via.write(PCR, pcr);
+            return via;
+        }
+
+        const ca2Flag = (via) => via.read(IFR) & Ca2Int;
+
+        it.each([
+            ["rising", PcrCa2RisingEdge],
+            ["falling", PcrCa2FallingEdge],
+        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+            const via = makeScanningVia(pcr);
+            via.keyDownRaw(BBC.A);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        });
+
+        it("raises no keyboard interrupt while CA2 is an output", () => {
+            const via = makeScanningVia(PcrCa2OutputLow);
+            via.keyDownRaw(BBC.A);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("raises the keyboard interrupt when autoscan starts with a key held", () => {
+            const via = makeSystemVia();
+            via.write(DDRA, 0x7f);
+            via.write(DDRB, 0x0f);
+            via.write(PCR, PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(ORA, BBC.A[0]);
+            via.write(IFR, Ca2Int);
+            via.write(ORB, LatchSetBit3);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        });
+
+        function expectFlagAfter(via, ticks) {
+            scheduler.polltime(ticks - 1);
+            expect(ca2Flag(via)).toBe(0);
+            scheduler.polltime(1);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        }
+
+        // The counter is on column epoch / 2 (mod 16); A is in column 1, D in column 2 and P in column 7.
+        it.each([
+            ["an IFR write", (via) => via.write(IFR, Ca2Int)],
+            ["a port A write", (via) => via.write(ORA, 0)],
+            ["a port A read", (via) => via.read(ORA)],
+        ])("raises the keyboard interrupt again at the scan's next edge after %s clears it", (_, clear) => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            clear(via);
+            expectFlagAfter(via, 2);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, "comes back round to column 1", 10, 24],
+            ["rising", PcrCa2RisingEdge, "comes back round to column 1 from mid-column", 11, 23],
+            ["falling", PcrCa2FallingEdge, "leaves column 1", 2, 2],
+            ["falling", PcrCa2FallingEdge, "comes back round and leaves column 1", 10, 26],
+        ])("with CA2 on the %s edge, sets the flag when the counter %s", (_, pcr, __, startTicks, ticks) => {
+            scheduler.polltime(startTicks);
+            const via = makeScanningVia(pcr);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            expectFlagAfter(via, ticks);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, "reaches the first of the two columns again", 32],
+            ["falling", PcrCa2FallingEdge, "leaves the second of the two columns", 4],
+        ])(
+            "with keys held in neighbouring columns and CA2 on the %s edge, sets the flag when the counter %s",
+            (_, pcr, __, ticks) => {
+                scheduler.polltime(2);
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                via.keyDownRaw(BBC.D);
+                via.write(IFR, Ca2Int);
+                expectFlagAfter(via, ticks);
+            },
+        );
+
+        it("ignores a key the matrix has outside the keyboard's columns", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.keyDownRaw([14, 1]);
+            via.write(IFR, Ca2Int);
+            expectFlagAfter(via, 24);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, 4],
+            ["falling", PcrCa2FallingEdge, 6],
+        ])(
+            "with CA2 on the %s edge, brings the return forward when a key ahead of the counter goes down",
+            (_, pcr, ticks) => {
+                scheduler.polltime(10);
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                via.write(IFR, Ca2Int);
+                via.keyDownRaw(BBC.P);
+                expectFlagAfter(via, ticks);
+            },
+        );
+
+        it("puts the scan's return back when the key ahead of the counter goes up", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.keyDownRaw(BBC.P);
+            via.write(IFR, Ca2Int);
+            via.keyUpRaw(BBC.P);
+            expectFlagAfter(via, 24);
+        });
+
+        it.each([
+            ["the key is released", (via) => via.keyUpRaw(BBC.A)],
+            ["autoscan stops", (via) => via.write(ORB, LatchClearBit3)],
+        ])("gives CA2 no edge when %s", (_, stop) => {
+            const via = makeScanningVia(PcrCa2FallingEdge);
+            const levels = [];
+            via.ca2changecallback = (level) => levels.push(level);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            stop(via);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+            expect(levels).toEqual([]);
+        });
+
+        it("reports no CA2 level changes while the scan raises its interrupt", () => {
+            const via = makeScanningVia(PcrCa2FallingEdge);
+            const levels = [];
+            via.ca2changecallback = (level) => levels.push(level);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+            expect(levels).toEqual([]);
+        });
+
+        it("raises the keyboard interrupt when a snapshot is restored with a key held that it lacked", () => {
+            const snapshot = makeScanningVia(PcrCa2RisingEdge).snapshotState();
+            const via = makeSystemVia();
+            via.keyDownRaw(BBC.A);
+            via.restoreState(snapshot);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        });
+
+        it("restores a snapshot without the scan's return as having none pending", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            const { keyScanTaskOffset, ...olderSnapshot } = via.snapshotState();
+            expect(keyScanTaskOffset).toBe(2);
+            via.restoreState(olderSnapshot);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("carries the scan's return to a held key through a snapshot", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
             const snapshot = via.snapshotState();
-            const via2 = makeSysVia();
+            const via2 = makeSystemVia();
+            via2.restoreKeyboard(via.keyboardState());
+            via2.restoreState(snapshot);
+            expect(ca2Flag(via2)).toBe(0);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via2)).toBe(Ca2Int);
+        });
+
+        it("leaves the held keys alone when restoring a snapshot", () => {
+            const via = makeSystemVia();
+            const snapshot = via.snapshotState();
+            const via2 = makeSystemVia();
             via2.keyDown(keyCodes.A, false);
             via2.restoreState(snapshot);
             expect(via2.keys[BBC.A[0]][BBC.A[1]]).toBe(1);
-        });
-
-        it("should include base Via fields in SysVia snapshot", () => {
-            const via = makeSysVia();
-            via.ora = 0x77;
-            via.acr = 0x40;
-
-            const snapshot = via.snapshotState();
-            expect(snapshot.ora).toBe(0x77);
-            expect(snapshot.acr).toBe(0x40);
-            expect(snapshot.IC32).toBeDefined();
         });
     });
 });
 
 describe("Via CA2 write handshake", () => {
-    const ORB = 0x0,
-        ORA = 0x1,
-        DDRB = 0x2,
-        DDRA = 0x3,
-        PCR = 0xc,
-        ORAnh = 0xf;
     const PcrCa2Handshake = 0x08,
         PcrCa2Pulse = 0x0a;
     const SeededByte = 0x41,
@@ -259,14 +361,20 @@ describe("Via CA2 write handshake", () => {
         via.ca2changecallback = (level, output) => events.push({ level, output, ora: via.ora, pins: via.portapins });
     }
 
-    it("should present the new byte on port A before dropping CA2 in handshake mode", () => {
-        via.write(PCR, PcrCa2Handshake);
-        recordCa2Changes();
+    it.each([
+        ["A", "CA2", PcrCa2Handshake, ORA, "ca2changecallback", () => [via.ora, via.portapins]],
+        ["B", "CB2", PcrCa2Handshake << 4, ORB, "cb2changecallback", () => [via.orb, via.portbpins]],
+    ])(
+        "should present the new byte on port %s before dropping %s in handshake mode",
+        (_, __, pcr, register, callback, port) => {
+            via.write(PCR, pcr);
+            via[callback] = (level, output) => events.push({ level, output, port: port() });
 
-        via.write(ORA, WrittenByte);
+            via.write(register, WrittenByte);
 
-        expect(events).toEqual([{ level: false, output: true, ora: WrittenByte, pins: WrittenByte }]);
-    });
+            expect(events).toEqual([{ level: false, output: true, port: [WrittenByte, WrittenByte] }]);
+        },
+    );
 
     it("should present the new byte on port A before pulsing CA2 in pulse mode", () => {
         via.write(PCR, PcrCa2Pulse);
@@ -281,33 +389,23 @@ describe("Via CA2 write handshake", () => {
         ]);
     });
 
-    it("should hold CA2 low for a cycle in pulse mode", () => {
-        via.write(PCR, PcrCa2Pulse);
-        recordCa2Changes();
+    it.each([
+        ["CA2", PcrCa2Pulse, ORA, "ca2"],
+        ["CB2", PcrCa2Pulse << 4, ORB, "cb2"],
+    ])("should hold %s low for a cycle in pulse mode", (_, pcr, register, line) => {
+        via.write(PCR, pcr);
+        via[`${line}changecallback`] = (level, output) => events.push({ level, output });
 
-        via.write(ORA, WrittenByte);
-        expect(via.ca2).toBe(false);
-
-        scheduler.polltime(PulseWidthCycles - 1);
-        expect(via.ca2).toBe(false);
-
-        scheduler.polltime(1);
-        expect(via.ca2).toBe(true);
-    });
-
-    it("should hold CB2 low for a cycle in pulse mode", () => {
-        via.write(PCR, PcrCa2Pulse << 4);
-        const cb2Events = [];
-        via.cb2changecallback = (level, output) => cb2Events.push({ level, output });
-
-        via.write(ORB, WrittenByte);
-        expect(cb2Events).toEqual([{ level: false, output: true }]);
+        via.write(register, WrittenByte);
+        expect(via[line]).toBe(false);
+        expect(events).toEqual([{ level: false, output: true }]);
 
         scheduler.polltime(PulseWidthCycles - 1);
-        expect(via.cb2).toBe(false);
+        expect(via[line]).toBe(false);
 
         scheduler.polltime(1);
-        expect(cb2Events).toEqual([
+        expect(via[line]).toBe(true);
+        expect(events).toEqual([
             { level: false, output: true },
             { level: true, output: true },
         ]);
@@ -326,34 +424,17 @@ describe("Via CA2 write handshake", () => {
         expect(restored.ca2).toBe(true);
     });
 
-    it("should not touch CA2 when writing the no-handshake register", () => {
-        via.write(PCR, PcrCa2Handshake);
+    it.each([
+        ["writing the no-handshake register", PcrCa2Handshake, ORAnh],
+        ["PCR selects a manual output level", 0x0e, ORA],
+    ])("should leave CA2 alone when %s", (_, pcr, register) => {
+        via.write(PCR, pcr);
         recordCa2Changes();
 
-        via.write(ORAnh, WrittenByte);
+        via.write(register, WrittenByte);
 
         expect(events).toEqual([]);
         expect(via.portapins).toBe(WrittenByte);
-    });
-
-    it("should leave CA2 alone when PCR selects a manual output level", () => {
-        via.write(PCR, 0x0e);
-        recordCa2Changes();
-
-        via.write(ORA, WrittenByte);
-
-        expect(events).toEqual([]);
-        expect(via.portapins).toBe(WrittenByte);
-    });
-
-    it("should present the new byte on port B before dropping CB2 in handshake mode", () => {
-        via.write(PCR, PcrCa2Handshake << 4);
-        const cb2Events = [];
-        via.cb2changecallback = (level, output) => cb2Events.push({ level, output, orb: via.orb });
-
-        via.write(ORB, WrittenByte);
-
-        expect(cb2Events).toEqual([{ level: false, output: true, orb: WrittenByte }]);
     });
 });
 
@@ -377,64 +458,18 @@ describe("SysVia getJoysticks", () => {
         cpu = makeFakeCpu();
     });
 
-    function makeSysViaWithGamepads(pads) {
-        return new SysVia(cpu, scheduler, {
-            video: makeFakeVideo(),
-            soundChip: makeFakeSoundChip(),
-            cmos: makeFakeCmos(),
-            isMaster: false,
-            initialLayout: "physical",
-            getGamepads: () => pads,
-        });
-    }
-
-    it("should return no buttons pressed when no gamepads connected", () => {
-        const via = makeSysViaWithGamepads(null);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(false);
-    });
-
-    it("should detect FIRE1 (button 10) on first gamepad as button1", () => {
-        const pad = makeMockPad({ 10: true });
-        const via = makeSysViaWithGamepads([pad]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(true);
-        expect(result.button2).toBe(false);
-    });
-
-    it("should detect FIRE2 (button 11) on first gamepad as button2 with single gamepad", () => {
-        const pad = makeMockPad({ 11: true });
-        const via = makeSysViaWithGamepads([pad]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(true);
-    });
-
-    it("should detect FIRE1 (button 10) on second gamepad as button2", () => {
-        const pad1 = makeMockPad({});
-        const pad2 = makeMockPad({ 10: true });
-        const via = makeSysViaWithGamepads([pad1, pad2]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(true);
-    });
-
-    it("should detect FIRE2 (button 11) on first gamepad as button2 even with two gamepads", () => {
-        const pad1 = makeMockPad({ 11: true });
-        const pad2 = makeMockPad({});
-        const via = makeSysViaWithGamepads([pad1, pad2]);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(false);
-        expect(result.button2).toBe(true);
-    });
-
-    it("should combine mouse and gamepad button states with OR logic", () => {
-        const pad = makeMockPad({});
-        const via = makeSysViaWithGamepads([pad]);
-        via.setJoystickButton(0, true);
-        const result = via.getJoysticks();
-        expect(result.button1).toBe(true);
+    it.each([
+        ["no gamepads", null, false, [false, false]],
+        ["FIRE1 on the only gamepad", [{ 10: true }], false, [true, false]],
+        ["FIRE2 on the only gamepad", [{ 11: true }], false, [false, true]],
+        ["FIRE1 on the second gamepad", [{}, { 10: true }], false, [false, true]],
+        ["FIRE2 on the first of two gamepads", [{ 11: true }, {}], false, [false, true]],
+        ["the mouse's button with an idle gamepad", [{}], true, [true, false]],
+    ])("reads the fire buttons with %s", (_, pads, mouseButton, expected) => {
+        const via = makeSysVia(cpu, scheduler, { getGamepads: () => pads?.map(makeMockPad) ?? null });
+        if (mouseButton) via.setJoystickButton(0, true);
+        const { button1, button2 } = via.getJoysticks();
+        expect([button1, button2]).toEqual(expected);
     });
 });
 
@@ -457,81 +492,19 @@ describe("SysVia natural keyboard shift override", () => {
         return via.keys[bbcKey[0]][bbcKey[1]] === 1;
     }
 
-    it("holds no BBC shift for a `^`, which the BBC prints unshifted", () => {
+    it("holds the BBC's shift off for a shifted `^` and gives it back on release", () => {
         via.keyDown(keyCodes.SHIFT_LEFT, false);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-
         via.keyDown("^", true);
         expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-    });
-
-    it("gives the shift key back when the character is released", () => {
-        via.keyDown(keyCodes.SHIFT_LEFT, false);
-        via.keyDown("^", true);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
 
         via.keyUp("^");
         expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(false);
         expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
     });
-
-    it("keeps the shift suppressed when shift is let go first", () => {
-        via.keyDown(keyCodes.SHIFT_LEFT, false);
-        via.keyDown("^", true);
-
-        via.keyUp(keyCodes.SHIFT_LEFT);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-
-        via.keyUp("^");
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-    });
-
-    it('holds BBC shift for a `"`, which the BBC prints shifted', () => {
-        via.keyDown('"', false);
-        expect(bbcKeyPressed(BBC.K2)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-    });
-
-    it("leaves shift alone for the space bar, which prints the same either way", () => {
-        via.keyDown(" ", true);
-        via.keyDown(keyCodes.SHIFT_LEFT, true);
-
-        expect(bbcKeyPressed(BBC.SPACE)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-    });
-
-    it("leaves shift alone when the host is already holding what the BBC wants", () => {
-        // A `"` is shifted on both, so nothing needs correcting and nothing else should suffer.
-        via.keyDown(keyCodes.SHIFT_LEFT, true);
-        via.keyDown('"', true);
-        via.keyDown("A", true);
-
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
-        expect(bbcKeyPressed(BBC.A)).toBe(true);
-    });
-
-    it("asks for no shift either way for a plain digit", () => {
-        via.keyDown("6", false);
-        expect(bbcKeyPressed(BBC.K6)).toBe(true);
-        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
-    });
 });
 
 describe("Via T2 clocking the shift register", () => {
-    const ORB = 0x0,
-        DDRB = 0x2,
-        T2CL = 0x8,
-        T2CH = 0x9,
-        ACR = 0xb,
-        IFR = 0xd,
-        IER = 0xe;
-    const AcrShiftOutFreeRunningT2 = 0x10;
-    const AcrT2CountsPb6 = 0x20;
-    const Pb6 = 0x40;
-    const Timer2Int = 0x20;
-    const TicksPerMicrosecond = 2;
-
     let via, scheduler, cpu;
 
     beforeEach(() => {
@@ -581,31 +554,29 @@ describe("Via T2 clocking the shift register", () => {
         expect(cpu.interrupt).toBeTruthy();
     });
 
-    it("should assert the interrupt when T2 high wraps without the VIA being read", () => {
+    it.each([
+        ["when T2 high wraps without the VIA being read", () => start(4, 2), 3 * 6],
+        [
+            "moved when the low latch is rewritten mid-flight",
+            () => {
+                start(10, 1);
+                via.write(T2CL, 3);
+            },
+            12 + 5,
+        ],
+        [
+            "timed from a count already running when shift mode is entered",
+            () => {
+                via.write(ACR, 0);
+                start(4, 2);
+                via.write(ACR, AcrShiftOutFreeRunningT2);
+            },
+            3 * 6,
+        ],
+    ])("should assert the interrupt %s", (_, setUp, microseconds) => {
         via.write(IER, 0x80 | Timer2Int);
-        start(4, 2);
-        runMicroseconds(3 * 6 - 1);
-        expect(cpu.interrupt).toBeFalsy();
-        runMicroseconds(1);
-        expect(cpu.interrupt).toBeTruthy();
-    });
-
-    it("should move the interrupt when the low latch is rewritten mid-flight", () => {
-        via.write(IER, 0x80 | Timer2Int);
-        start(10, 1);
-        via.write(T2CL, 3);
-        runMicroseconds(12 + 5 - 1);
-        expect(cpu.interrupt).toBeFalsy();
-        runMicroseconds(1);
-        expect(cpu.interrupt).toBeTruthy();
-    });
-
-    it("should time the interrupt from a count already running when shift mode is entered", () => {
-        via.write(ACR, 0);
-        via.write(IER, 0x80 | Timer2Int);
-        start(4, 2);
-        via.write(ACR, AcrShiftOutFreeRunningT2);
-        runMicroseconds(3 * 6 - 1);
+        setUp();
+        runMicroseconds(microseconds - 1);
         expect(cpu.interrupt).toBeFalsy();
         runMicroseconds(1);
         expect(cpu.interrupt).toBeTruthy();
@@ -650,14 +621,6 @@ describe("Via T2 clocking the shift register", () => {
         expect([via.read(T2CH), via.read(T2CL)]).toEqual([4, 0xff]);
     });
 
-    it("should carry T2 high through a snapshot", () => {
-        start(7, 100);
-        runMicroseconds(3 * 9 + 2);
-        const restored = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
-        restored.restoreState(via.snapshotState());
-        expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
-    });
-
     it("should split a snapshot's 16-bit count when it has no T2 high", () => {
         start(7, 100);
         runMicroseconds(3 * 9 + 2);
@@ -697,16 +660,6 @@ describe("Via T2 clocking the shift register", () => {
 });
 
 describe("Via T2 toggling PB6 pulse counting", () => {
-    const T2CL = 0x8,
-        T2CH = 0x9,
-        ACR = 0xb,
-        IFR = 0xd;
-    const AcrT1Continuous = 0x40;
-    const AcrShiftOutFreeRunningT2 = 0x10;
-    const AcrT2CountsPb6 = 0x20;
-    const Timer2Int = 0x20;
-    const TicksPerMicrosecond = 2;
-
     let via, scheduler;
 
     beforeEach(() => {
@@ -724,8 +677,6 @@ describe("Via T2 toggling PB6 pulse counting", () => {
     }
 
     it("should count PB6 held low from power-on as one pulse at the first look at the port", () => {
-        const ORB = 0x0;
-        const Pb6 = 0x40;
         via = new UserVia(makeFakeCpu(), scheduler, false, { read: () => 0xff & ~Pb6, write: () => {} });
         via.write(ACR, AcrT2CountsPb6);
         start(0x80, 0x10);
@@ -816,23 +767,7 @@ describe("Via T2 toggling PB6 pulse counting", () => {
 });
 
 describe("Via peek", () => {
-    const ORB = 0x0,
-        ORA = 0x1,
-        DDRB = 0x2,
-        DDRA = 0x3,
-        T1CL = 0x4,
-        T1CH = 0x5,
-        ACR = 0xb,
-        PCR = 0xc,
-        IFR = 0xd,
-        IER = 0xe;
-    const RegisterCount = 16;
     const PcrCa1Cb1RisingEdge = 0x11;
-    const AcrT1Continuous = 0x40;
-    const Timer1Int = 0x40;
-    const Ca1Int = 0x02;
-    const Cb1Int = 0x10;
-    const TicksPerMicrosecond = 2;
 
     let via, scheduler, cpu;
 
@@ -852,24 +787,6 @@ describe("Via peek", () => {
         scheduler.polltime(us * TicksPerMicrosecond);
     }
 
-    it("gives what the next read of each register gives", () => {
-        via.write(DDRA, 0x0f);
-        via.write(ORA, 0x5a);
-        via.write(DDRB, 0xf0);
-        via.write(ORB, 0xa5);
-        runMicroseconds(37);
-        via.setca1(true);
-        for (let reg = 0; reg < RegisterCount; ++reg) {
-            const peeked = via.peek(reg);
-            expect(via.read(reg)).toBe(peeked);
-        }
-    });
-
-    it("sees the timer count up to the moment it is asked", () => {
-        runMicroseconds(5);
-        expect(via.peek(T1CL)).toBe(via.read(T1CL));
-    });
-
     it("leaves the timer interrupt raised when peeking the timer", () => {
         runMicroseconds(25);
         expect(via.peek(T1CL)).toBe(via.read(T1CL));
@@ -879,6 +796,19 @@ describe("Via peek", () => {
         expect(cpu.interrupt).toBeTruthy();
         via.read(T1CL);
         expect(via.peek(IFR) & Timer1Int).toBe(0);
+    });
+
+    it("gives the timers as the 16-bit values a program reads, caught up", () => {
+        via.write(T1CL, 0x1e);
+        via.write(T1CH, 0x4e);
+        via.write(T2CL, 0x34);
+        via.write(T2CH, 0x12);
+        runMicroseconds(100);
+        const timers = via.peekTimers();
+        expect(timers.t1l).toBe(0x4e1e);
+        expect(timers.t2l).toBe(0x1234);
+        expect(timers.t1c).toBe(via.read(T1CL) | (via.read(T1CH) << 8));
+        expect(timers.t2c).toBe(via.read(T2CL) | (via.read(T2CH) << 8));
     });
 
     it("leaves the port interrupts raised when peeking the ports", () => {

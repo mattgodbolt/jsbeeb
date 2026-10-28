@@ -1,533 +1,324 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
 import * as loader from "../../src/loader.js";
+import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+
+const TeletextIrq = 1 << 5;
+const Status = 0;
+const Row = 1;
+const Data = 2;
+const ClearStatus = 3;
+const Enable = 0x04;
+const Interrupts = 0x08;
+const DataReady = 0xd0;
+const FrameSize = 860;
+const RowSize = 43;
+const FirstRowOffset = 3 * RowSize;
+const PollThresholdCycles = 50000;
+const CyclesPerField = PollThresholdCycles + 1;
+const GraceFields = 10;
+
+/**
+ * A broadcast whose every byte in frame f reads `channel * 16 + f + 1`, so a row shows which
+ * stream and frame it came from; row 15 is left out of every frame.
+ */
+function broadcast(channel, frames, extraBytes = 0) {
+    const data = new Uint8Array(frames * FrameSize + extraBytes);
+    for (let frame = 0; frame < frames; frame++) {
+        data.fill(channel * 16 + frame + 1, frame * FrameSize, (frame + 1) * FrameSize);
+        data[frame * FrameSize + FirstRowOffset + 15 * RowSize] = 0;
+    }
+    return data;
+}
 
 describe("TeletextAdaptor", () => {
-    // Constants
-    const TELETEXT_IRQ = 5;
+    let cpu;
+    let adaptor;
+    let pending;
+    let loadData;
 
-    // Mock CPU
-    const mockCpu = {
-        interrupt: 0,
-        resetLine: true,
+    const irq = () => (cpu.interrupt & TeletextIrq) !== 0;
+    const dataReady = (target = adaptor) => target.read(Status) & DataReady;
+    const nextField = (target = adaptor) => target.polltime(CyclesPerField);
+    const readRow = (row, length, target = adaptor) => {
+        target.write(Row, row);
+        return Array.from({ length }, () => target.read(Data));
+    };
+    const sendChannel = (channel, frames, extraBytes) =>
+        pending.get(`teletext/txt${channel}.dat`).resolve(broadcast(channel, frames, extraBytes));
+    const failChannel = (channel, error) => pending.get(`teletext/txt${channel}.dat`).reject(error);
+    const settle = () => new Promise((resolve) => setTimeout(resolve));
+    const listenForNotices = () => {
+        const notices = [];
+        adaptor.addEventListener("notice", (e) => notices.push(e.detail));
+        return notices;
     };
 
-    let teletext;
-
     beforeEach(() => {
-        // Reset mocks
-        vi.clearAllMocks();
-        mockCpu.interrupt = 0;
-        mockCpu.resetLine = true;
-
-        // Create fresh teletext adaptor
-        teletext = new TeletextAdaptor(mockCpu);
-
-        // Silence console logs during tests
+        pending = new Map();
+        loadData = vi
+            .spyOn(loader, "loadData")
+            .mockImplementation((url) => new Promise((resolve, reject) => pending.set(url, { resolve, reject })));
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "error").mockImplementation(() => {});
-
-        // Override loadChannelStream to avoid actual network calls
-        teletext.loadChannelStream = vi.fn();
+        cpu = { interrupt: 0, resetLine: true };
+        adaptor = new TeletextAdaptor(cpu);
     });
 
     afterEach(() => {
         vi.restoreAllMocks();
     });
 
-    describe("Initialization", () => {
-        it("should initialize with default state", () => {
-            expect(teletext.teletextStatus).toBe(0x0f);
-            expect(teletext.teletextInts).toBe(false);
-            expect(teletext.teletextEnable).toBe(false);
-            expect(teletext.channel).toBe(0);
-            expect(teletext.currentFrame).toBe(0);
-            expect(teletext.totalFrames).toBe(0);
-            expect(teletext.rowPtr).toBe(0);
-            expect(teletext.colPtr).toBe(0);
-            expect(teletext.frameBuffer.length).toBe(16);
-            expect(teletext.frameBuffer[0].length).toBe(64);
-            expect(teletext.streamData).toBe(null);
-            expect(teletext.pollCount).toBe(0);
+    describe("registers", () => {
+        it("powers on with the links floating high, nothing latched and the row register reading zero", () => {
+            expect(adaptor.read(Status)).toBe(0x0f);
+            expect(adaptor.read(Row)).toBe(0);
         });
 
-        it("should call loadChannelStream on hard reset", () => {
-            // Hard reset
-            teletext.reset(true);
-
-            // Check if loadChannelStream was called with channel 0
-            expect(teletext.loadChannelStream).toHaveBeenCalledWith(0);
+        it("reads a row back from its start each time the row is selected", () => {
+            adaptor.write(Row, 5);
+            adaptor.write(Data, 0xaa);
+            adaptor.write(Data, 0x1bb);
+            expect(readRow(5, 3)).toEqual([0xaa, 0xbb, 0]);
         });
 
-        it("should not call loadChannelStream on soft reset", () => {
-            // Soft reset
-            teletext.reset(false);
-
-            // Check if loadChannelStream was not called
-            expect(teletext.loadChannelStream).not.toHaveBeenCalled();
-        });
-    });
-
-    describe("Register operations", () => {
-        describe("Read operations", () => {
-            it("should read status register (addr 0)", () => {
-                teletext.teletextStatus = 0x42;
-                expect(teletext.read(0)).toBe(0x42);
-            });
-
-            it("should read row register (addr 1)", () => {
-                // Row register reads always return 0
-                expect(teletext.read(1)).toBe(0);
-            });
-
-            it("should read from frame buffer and increment column pointer (addr 2)", () => {
-                // Set up known values in frame buffer
-                teletext.rowPtr = 5;
-                teletext.colPtr = 10;
-                teletext.frameBuffer[5][10] = 0xaa;
-                teletext.frameBuffer[5][11] = 0xbb;
-
-                // First read should return value at current position and increment column
-                expect(teletext.read(2)).toBe(0xaa);
-                expect(teletext.colPtr).toBe(11);
-
-                // Second read should return next value
-                expect(teletext.read(2)).toBe(0xbb);
-                expect(teletext.colPtr).toBe(12);
-            });
-
-            it("should clear status and interrupt on addr 3 read", () => {
-                // Set status and interrupt
-                teletext.teletextStatus = 0xff;
-                mockCpu.interrupt = 1 << TELETEXT_IRQ;
-
-                // Read from addr 3
-                teletext.read(3);
-
-                // Status should be cleared (INT, DOR, and FSYN latches)
-                expect(teletext.teletextStatus & 0xd0).toBe(0);
-
-                // Interrupt should be cleared
-                expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
-            });
+        it.each([
+            ["reading", () => adaptor.read(ClearStatus)],
+            ["writing", () => adaptor.write(ClearStatus, 0)],
+        ])("clears the latches and the IRQ on %s the clear register", (_, clear) => {
+            adaptor.write(Status, Interrupts);
+            nextField();
+            expect([dataReady(), irq()]).toEqual([DataReady, true]);
+            clear();
+            expect([dataReady(), irq()]).toEqual([0, false]);
         });
 
-        describe("Write operations", () => {
-            it("should update control bits on status register write (addr 0)", () => {
-                // Write with teletext enabled, interrupts enabled, channel 2
-                teletext.write(0, 0x0c | 2); // 0x0E
-
-                expect(teletext.teletextEnable).toBe(true);
-                expect(teletext.teletextInts).toBe(true);
-                expect(teletext.channel).toBe(2);
-
-                // Check if loadChannelStream was called
-                expect(teletext.loadChannelStream).toHaveBeenCalledWith(2);
-            });
-
-            it("should not reload channel if channel doesn't change", () => {
-                // Set initial state
-                teletext.channel = 1;
-                teletext.teletextEnable = true;
-
-                // Write same channel
-                teletext.write(0, 0x0c | 1); // 0x0D
-
-                // Check loadChannelStream wasn't called
-                expect(teletext.loadChannelStream).not.toHaveBeenCalled();
-            });
-
-            it("should not change channel or load channel if teletext not enabled", () => {
-                // Set initial values
-                teletext.channel = 1;
-                teletext.loadChannelStream.mockClear();
-
-                // Write with teletext disabled, channel 2
-                teletext.write(0, 2); // 0x02
-
-                // Teletext should be disabled
-                expect(teletext.teletextEnable).toBe(false);
-
-                // Channel should remain unchanged since teletext is disabled
-                // According to the implementation in write method, channel is only updated
-                // if teletext is enabled: if ((value & 0x03) !== this.channel && this.teletextEnable)
-                expect(teletext.channel).toBe(1);
-
-                // Check loadChannelStream wasn't called
-                expect(teletext.loadChannelStream).not.toHaveBeenCalled();
-            });
-
-            it("should set interrupt flag if INT and interrupts enabled", () => {
-                // Set INT latch
-                teletext.teletextStatus = 0x80;
-
-                // Enable interrupts
-                teletext.write(0, 0x08);
-
-                // Check if interrupt was set
-                expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
-            });
-
-            it("should clear interrupt flag if interrupts disabled", () => {
-                // Set interrupt
-                mockCpu.interrupt = 1 << TELETEXT_IRQ;
-
-                // Disable interrupts
-                teletext.write(0, 0x00);
-
-                // Check if interrupt was cleared
-                expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
-            });
-
-            it("should update row pointer and reset column pointer (addr 1)", () => {
-                // Set initial state
-                teletext.rowPtr = 0;
-                teletext.colPtr = 10;
-
-                // Write to row register
-                teletext.write(1, 5);
-
-                expect(teletext.rowPtr).toBe(5);
-                expect(teletext.colPtr).toBe(0);
-            });
-
-            it("should write to frame buffer and increment column (addr 2)", () => {
-                // Set initial position
-                teletext.rowPtr = 3;
-                teletext.colPtr = 7;
-
-                // Write to data register
-                teletext.write(2, 0xaa);
-
-                // Check if value was written and column incremented
-                expect(teletext.frameBuffer[3][7]).toBe(0xaa);
-                expect(teletext.colPtr).toBe(8);
-            });
-
-            it("should clear status and interrupt on addr 3 write", () => {
-                // Set status and interrupt
-                teletext.teletextStatus = 0xff;
-                mockCpu.interrupt = 1 << TELETEXT_IRQ;
-
-                // Write to addr 3
-                teletext.write(3, 0);
-
-                // Status should be cleared (INT, DOR, and FSYN latches)
-                expect(teletext.teletextStatus & 0xd0).toBe(0);
-
-                // Interrupt should be cleared
-                expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
-            });
+        it("raises its IRQ only while interrupts are enabled", () => {
+            nextField();
+            expect([dataReady(), irq()]).toEqual([DataReady, false]);
+            adaptor.write(Status, Interrupts);
+            expect(irq()).toBe(true);
+            adaptor.write(Status, 0);
+            expect(irq()).toBe(false);
         });
     });
 
-    describe("Channel stream loading", () => {
-        const TELETEXT_FRAME_SIZE = 860;
-
-        // Settlers for the fetches the adaptor has started, keyed by the URL it asked for.
-        const pending = new Map();
-        let adaptor;
-
-        beforeEach(() => {
-            pending.clear();
-            vi.spyOn(loader, "loadData").mockImplementation(
-                (url) => new Promise((resolve, reject) => pending.set(url, { resolve, reject })),
-            );
-            adaptor = new TeletextAdaptor(mockCpu);
+    describe("fields", () => {
+        it("latches data ready once a field's worth of cycles has passed", () => {
+            adaptor.polltime(PollThresholdCycles);
+            expect(dataReady()).toBe(0);
+            adaptor.polltime(1);
+            expect(dataReady()).toBe(DataReady);
         });
 
-        // Each byte holds the channel number, so the frame buffer shows which stream was applied.
-        const resolveChannel = (channel, length = TELETEXT_FRAME_SIZE) =>
-            pending.get(`teletext/txt${channel}.dat`).resolve(new Uint8Array(length).fill(channel));
+        it("holds off while the CPU is in reset, and for ten fields afterwards", () => {
+            cpu.resetLine = false;
+            nextField();
+            cpu.resetLine = true;
+            adaptor.polltime((GraceFields + 1) * PollThresholdCycles);
+            expect(dataReady()).toBe(0);
+            adaptor.polltime(1);
+            expect(dataReady()).toBe(DataReady);
+        });
 
-        const failChannel = (channel, error) => pending.get(`teletext/txt${channel}.dat`).reject(error);
+        it("starts each field's data at the top of row 0", () => {
+            adaptor.write(Row, 0);
+            adaptor.write(Data, 0x42);
+            adaptor.write(Row, 5);
+            adaptor.write(Data, 0x55);
+            nextField();
+            expect(adaptor.read(Data)).toBe(0x42);
+        });
+    });
 
-        const settle = () => new Promise((resolve) => setTimeout(resolve));
-
-        const listenForNotices = () => {
-            const notices = [];
-            adaptor.addEventListener("notice", (e) => notices.push(e.detail));
-            return notices;
-        };
-
-        it("should ignore a response that arrives after a newer channel's", async () => {
-            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
-            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
-
-            resolveChannel(2);
-            resolveChannel(1);
+    describe("broadcast", () => {
+        it("shows a frame per field once enabled, wrapping at the end of the stream", async () => {
+            adaptor.write(Status, Enable | 1);
+            sendChannel(1, 2);
             await settle();
-            adaptor.update();
-
-            expect(adaptor.frameBuffer[0][1]).toBe(2);
+            const rows = [];
+            for (let field = 0; field < 3; field++) {
+                nextField();
+                rows.push(readRow(0, 3));
+            }
+            expect(rows).toEqual([
+                [0x67, 0x11, 0x11],
+                [0x67, 0x12, 0x12],
+                [0x67, 0x11, 0x11],
+            ]);
         });
 
-        it("should round a truncated stream down to whole frames", async () => {
-            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
-
-            resolveChannel(1, 2 * TELETEXT_FRAME_SIZE + 100);
+        it("reads a row the broadcast leaves out as blank", async () => {
+            adaptor.write(Row, 15);
+            adaptor.write(Data, 0x67);
+            adaptor.write(Status, Enable | 1);
+            sendChannel(1, 1);
             await settle();
-
-            expect(adaptor.totalFrames).toBe(2);
+            nextField();
+            expect(readRow(15, 1)).toEqual([0]);
         });
 
-        it("should report a failed load, saying which channel and why", async () => {
+        it("keeps the fields coming but shows nothing while disabled", async () => {
+            adaptor.write(Status, Enable | 1);
+            sendChannel(1, 1);
+            await settle();
+            adaptor.write(Status, 1);
+            nextField();
+            expect([dataReady(), ...readRow(0, 2)]).toEqual([DataReady, 0, 0]);
+        });
+
+        it("keeps running when enabled before the stream has loaded", () => {
+            adaptor.write(Status, Enable | Interrupts);
+            nextField();
+            expect([dataReady(), irq(), ...readRow(0, 2)]).toEqual([DataReady, true, 0, 0]);
+        });
+
+        it("fetches a channel only when enabled on a different one", () => {
+            adaptor.write(Status, 2);
+            adaptor.write(Status, Enable);
+            adaptor.write(Status, Enable | 1);
+            adaptor.write(Status, Enable | 1);
+            expect(loadData.mock.calls).toEqual([["teletext/txt1.dat"]]);
+        });
+
+        it("ignores a response that arrives after a newer channel's", async () => {
+            adaptor.write(Status, Enable | 1);
+            adaptor.write(Status, Enable | 2);
+            sendChannel(2, 1);
+            sendChannel(1, 1);
+            await settle();
+            nextField();
+            expect(readRow(0, 2)).toEqual([0x67, 0x21]);
+        });
+
+        it("rounds a truncated stream down to whole frames", async () => {
+            adaptor.write(Status, Enable | 1);
+            sendChannel(1, 2, 100);
+            await settle();
+            for (let field = 0; field < 3; field++) nextField();
+            expect(readRow(0, 2)).toEqual([0x67, 0x11]);
+        });
+
+        it("reports a failed load, saying which channel and why", async () => {
             const notices = listenForNotices();
-
-            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            adaptor.write(Status, Enable | 1);
             failChannel(1, new Error("http code 404"));
             await settle();
-
             expect(notices).toHaveLength(1);
             expect(notices[0].message).toContain("channel 1");
             expect(notices[0].message).toContain("http code 404");
         });
 
-        it("should not report a failure from a superseded request", async () => {
+        it("does not report a failure from a superseded request", async () => {
             const notices = listenForNotices();
-
-            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
-            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
+            adaptor.write(Status, Enable | 1);
+            adaptor.write(Status, Enable | 2);
             failChannel(1, new Error("404"));
-            resolveChannel(2);
+            sendChannel(2, 1);
             await settle();
-
+            nextField();
             expect(notices).toEqual([]);
-            expect(adaptor.totalFrames).toBe(1);
-        });
-
-        it("should discard a fetch still in flight over a hard reset", async () => {
-            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
-            adaptor.reset(true);
-
-            resolveChannel(0, 3 * TELETEXT_FRAME_SIZE);
-            resolveChannel(1, 5 * TELETEXT_FRAME_SIZE);
-            await settle();
-
-            expect(adaptor.totalFrames).toBe(3);
-        });
-
-        it("should clear state on a hard reset", async () => {
-            adaptor.write(0, 0x0c | 1); // Teletext enable, interrupts, channel 1
-            resolveChannel(1);
-            await settle();
-            adaptor.update();
-            expect(adaptor.frameBuffer[0][1]).toBe(1);
-            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
-
-            adaptor.reset(true);
-
-            expect(adaptor.teletextStatus).toBe(0x0f);
-            expect(adaptor.teletextEnable).toBe(false);
-            expect(adaptor.teletextInts).toBe(false);
-            expect(adaptor.channel).toBe(0);
-            expect(adaptor.streamData).toBe(null);
-            expect(adaptor.totalFrames).toBe(0);
-            expect(adaptor.frameBuffer[0][1]).toBe(0);
-            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
+            expect(readRow(0, 2)).toEqual([0x67, 0x21]);
         });
     });
 
-    describe("Snapshots", () => {
-        let loadData;
-        let source;
+    describe("reset", () => {
+        it("does nothing on a soft reset", () => {
+            adaptor.write(Status, Interrupts);
+            nextField();
+            adaptor.reset(false);
+            expect([dataReady(), irq(), loadData.mock.calls]).toEqual([DataReady, true, []]);
+        });
+
+        it("clears everything and returns to channel 0 on a hard reset", async () => {
+            adaptor.write(Status, Enable | Interrupts | 1);
+            sendChannel(1, 1);
+            await settle();
+            nextField();
+            expect([irq(), ...readRow(0, 2)]).toEqual([true, 0x67, 0x11]);
+
+            adaptor.reset(true);
+
+            expect([adaptor.read(Status), irq(), ...readRow(0, 2)]).toEqual([0x0f, false, 0, 0]);
+            expect(loadData).toHaveBeenLastCalledWith("teletext/txt0.dat");
+            sendChannel(0, 1);
+            await settle();
+            nextField();
+            expect([irq(), ...readRow(0, 2)]).toEqual([false, 0, 0]);
+        });
+
+        it("discards a fetch still in flight over a hard reset", async () => {
+            adaptor.write(Status, Enable | 1);
+            adaptor.reset(true);
+            sendChannel(0, 1);
+            sendChannel(1, 1);
+            await settle();
+            adaptor.write(Status, Enable);
+            nextField();
+            expect(readRow(0, 2)).toEqual([0x67, 0x01]);
+        });
+    });
+
+    describe("snapshots", () => {
         let restoredCpu;
         let restored;
 
         beforeEach(() => {
-            loadData = vi.spyOn(loader, "loadData").mockImplementation(() => new Promise(() => {}));
-            source = new TeletextAdaptor(mockCpu);
             restoredCpu = { interrupt: 0, resetLine: true };
             restored = new TeletextAdaptor(restoredCpu);
-            loadData.mockClear();
         });
 
-        it("should restore the channel, control bits and frame buffer", () => {
-            source.write(0, 0x0c | 2); // Teletext enable, interrupts, channel 2
-            source.write(1, 3);
-            source.write(2, 0xaa);
-            source.write(2, 0xbb);
-
-            restored.restoreState(source.snapshotState());
-
-            expect(restored.channel).toBe(2);
-            expect(restored.teletextEnable).toBe(true);
-            expect(restored.teletextInts).toBe(true);
-            restored.write(1, 3);
-            expect(restored.read(2)).toBe(0xaa);
-            expect(restored.read(2)).toBe(0xbb);
+        it("round-trips an adaptor on another channel, part way through writing a row", async () => {
+            await expectSnapshotRoundTrips(
+                () => new TeletextAdaptor({ interrupt: 0, resetLine: true }),
+                (target) => {
+                    target.write(Status, Enable | Interrupts | 2);
+                    nextField(target);
+                    target.write(Row, 3);
+                    target.write(Data, 0xaa);
+                    target.write(Data, 0xbb);
+                    target.polltime(1234);
+                },
+            );
         });
 
-        it("should restore the status register and its pointers", () => {
-            source.write(0, 0x0c); // Teletext enable, interrupts, channel 0
-            source.update();
-            source.write(1, 4);
-            source.read(2);
-
-            restored.restoreState(source.snapshotState());
-
-            expect(restored.teletextStatus).toBe(source.teletextStatus);
-            expect(restored.rowPtr).toBe(4);
-            expect(restored.colPtr).toBe(1);
+        it("reasserts an IRQ the adaptor was holding", () => {
+            adaptor.write(Status, Interrupts);
+            nextField();
+            restored.restoreState(adaptor.snapshotState());
+            expect(restoredCpu.interrupt & TeletextIrq).toBe(TeletextIrq);
         });
 
-        it("should reassert an IRQ the adaptor was holding", () => {
-            source.write(0, 0x0c); // Teletext enable, interrupts, channel 0
-            source.update();
-            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
-
-            restored.restoreState(source.snapshotState());
-
-            expect(restoredCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
+        it("clears an IRQ the adaptor was not holding", () => {
+            nextField();
+            restoredCpu.interrupt = TeletextIrq;
+            restored.restoreState(adaptor.snapshotState());
+            expect(restoredCpu.interrupt & TeletextIrq).toBe(0);
         });
 
-        it("should clear an IRQ the adaptor was not holding", () => {
-            source.update();
-            restoredCpu.interrupt = 1 << TELETEXT_IRQ;
-
-            restored.restoreState(source.snapshotState());
-
-            expect(restoredCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
-        });
-
-        it("should not share the frame buffer with the snapshot it came from", () => {
-            source.write(1, 3);
-            source.write(2, 0xaa);
-            const state = source.snapshotState();
+        it("does not share the frame buffer with the snapshot it came from", () => {
+            adaptor.write(Row, 3);
+            adaptor.write(Data, 0xaa);
+            const state = adaptor.snapshotState();
 
             restored.restoreState(state);
-            restored.write(1, 3);
-            restored.write(2, 0x55);
+            restored.write(Row, 3);
+            restored.write(Data, 0x55);
 
-            expect(source.frameBuffer[3][0]).toBe(0xaa);
+            expect(readRow(3, 1)).toEqual([0xaa]);
             expect(state.frameBuffer[3][0]).toBe(0xaa);
         });
 
-        it("should refetch the stream when the restored channel differs", () => {
-            source.write(0, 0x04 | 2); // Teletext enable, channel 2
-
-            restored.restoreState(source.snapshotState());
-
-            expect(loadData).toHaveBeenCalledWith("teletext/txt2.dat");
+        it("refetches the stream when the restored channel differs", () => {
+            adaptor.write(Status, Enable | 2);
+            loadData.mockClear();
+            restored.restoreState(adaptor.snapshotState());
+            expect(loadData.mock.calls).toEqual([["teletext/txt2.dat"]]);
         });
 
-        it("should leave the loaded stream alone when the channel is unchanged", () => {
-            restored.restoreState(source.snapshotState());
-
+        it("leaves the loaded stream alone when the channel is unchanged", () => {
+            restored.restoreState(adaptor.snapshotState());
             expect(loadData).not.toHaveBeenCalled();
-        });
-    });
-
-    describe("Update and polling", () => {
-        it("should update status and frame counter on update()", () => {
-            // Set initial state
-            teletext.teletextEnable = true;
-            teletext.currentFrame = 2;
-            teletext.totalFrames = 5;
-
-            // Call update
-            teletext.update();
-
-            // Check status latches were set
-            expect(teletext.teletextStatus & 0xd0).toBe(0xd0);
-
-            // Check frame was incremented
-            expect(teletext.currentFrame).toBe(3);
-
-            // Check pointers were reset
-            expect(teletext.rowPtr).toBe(0);
-            expect(teletext.colPtr).toBe(0);
-        });
-
-        it("should wrap to the start of the stream past the last frame", () => {
-            // Past the end of a five frame stream
-            teletext.currentFrame = 5;
-            teletext.totalFrames = 5;
-
-            // Call update
-            teletext.update();
-
-            // Wrapped back to frame 0, which this update then consumed
-            expect(teletext.currentFrame).toBe(1);
-        });
-
-        it("should tolerate being enabled before the stream has loaded", () => {
-            // Teletext enable and interrupts, channel 0
-            teletext.write(0, 0x0c);
-
-            teletext.polltime(50001);
-
-            expect(teletext.streamData).toBe(null);
-            expect(teletext.teletextStatus & 0xd0).toBe(0xd0);
-            expect(teletext.frameBuffer[0][0]).toBe(0);
-            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
-        });
-
-        it("should generate interrupt if interrupts enabled", () => {
-            // Enable interrupts
-            teletext.teletextInts = true;
-
-            // Clear interrupt
-            mockCpu.interrupt = 0;
-
-            // Call update
-            teletext.update();
-
-            // Check interrupt was generated
-            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
-        });
-
-        it("should not generate interrupt if interrupts disabled", () => {
-            // Disable interrupts
-            teletext.teletextInts = false;
-
-            // Clear interrupt
-            mockCpu.interrupt = 0;
-
-            // Call update
-            teletext.update();
-
-            // Check interrupt wasn't generated
-            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
-        });
-
-        it("should trigger update when poll cycles exceed threshold", () => {
-            // Mock update method
-            const updateSpy = vi.spyOn(teletext, "update");
-
-            // Poll with cycles just below threshold (50000)
-            teletext.pollCount = 0;
-            teletext.polltime(49999);
-
-            // Check update wasn't called
-            expect(updateSpy).not.toHaveBeenCalled();
-
-            // Poll with cycles to exceed threshold
-            teletext.polltime(2);
-
-            // Check update was called
-            expect(updateSpy).toHaveBeenCalled();
-
-            // Check poll count was reset
-            expect(teletext.pollCount).toBe(0);
-        });
-
-        it("should not update when CPU reset line is low", () => {
-            // Set CPU reset line low
-            mockCpu.resetLine = false;
-
-            // Mock update method
-            const updateSpy = vi.spyOn(teletext, "update");
-
-            // Poll with cycles to exceed threshold
-            teletext.pollCount = 0;
-            teletext.polltime(50001);
-
-            // Check update wasn't called
-            expect(updateSpy).not.toHaveBeenCalled();
-
-            // Check poll count was set to negative value
-            expect(teletext.pollCount).toBeLessThan(0);
         });
     });
 });

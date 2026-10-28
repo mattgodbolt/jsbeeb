@@ -1,15 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { AutobootMaxFrames, MachineSession } from "../../src/machine-session.js";
+import { MachineSession } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { RepoRoot } from "./helpers.js";
+import { BootTimeout, bootedSession } from "../helpers/machine-session.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
-const CyclesPerSecond = 2000000;
-const BootTimeout = 60000;
 
 // A run stops at the instruction boundary after the paint, so cyclesRun lands
 // either side of the frame length by up to one instruction: seven cycles, plus
@@ -21,12 +20,18 @@ function expectCyclesNear(actual, expected) {
     expect(Math.abs(actual - expected)).toBeLessThanOrEqual(MaxOvershootCycles);
 }
 
-async function bootedSession() {
-    const session = new MachineSession("B-DFS1.2");
-    await session.initialise();
-    await session.boot(30);
+async function frameAlignedSession() {
+    const session = await bootedSession();
     await session.runFrames();
     return session;
+}
+
+const Irq1v = 0x204;
+const ResetVector = 0xfffc;
+
+function vectorAt(session, address) {
+    const [lo, hi] = session.readMemory(address, 2);
+    return lo | (hi << 8);
 }
 
 async function cyclesOverFrames(session, frames) {
@@ -39,7 +44,7 @@ describe("MachineSession frame stepping", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
     }, BootTimeout);
 
     afterAll(() => session.destroy());
@@ -87,8 +92,7 @@ describe("MachineSession frame stepping", () => {
     });
 
     it("stops short when a breakpoint fires", async () => {
-        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
-        const id = session.addBreakpoint("execute", lo | (hi << 8));
+        const id = session.addBreakpoint("execute", vectorAt(session, Irq1v));
 
         const result = await session.runFrames(5);
         const hit = session.hitBreakpoint();
@@ -104,15 +108,12 @@ describe("MachineSession running for cycles", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
     }, BootTimeout);
 
     afterAll(() => session.destroy());
 
-    function breakOnNextInterrupt() {
-        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
-        return session.addBreakpoint("execute", lo | (hi << 8));
-    }
+    const breakOnNextInterrupt = () => session.addBreakpoint("execute", vectorAt(session, Irq1v));
 
     it("reports the cycles it ran", async () => {
         const before = session.elapsedCycles;
@@ -152,7 +153,7 @@ describe("MachineSession watching execution", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
     }, BootTimeout);
 
     afterAll(() => session.destroy());
@@ -162,10 +163,7 @@ describe("MachineSession watching execution", () => {
         session.resetBreakpointHits();
     });
 
-    function irqHandler() {
-        const [lo, hi] = session.readMemory(0x204, 2);
-        return lo | (hi << 8);
-    }
+    const irqHandler = () => vectorAt(session, Irq1v);
 
     async function stopAtProgramStart(program = Program, { keepBreakpoint = false } = {}) {
         session.writeMemory(ProgramAddress, program);
@@ -435,6 +433,17 @@ describe("MachineSession watching execution", () => {
         expect(afterStore).toEqual({ id: write, type: "write", address: StoreAddress, value: 42 });
     });
 
+    it("reports the value a zero page read breakpoint saw", async () => {
+        const LoadAddress = 0x70;
+        await stopAtProgramStart([0xa5, LoadAddress, 0x60]); // LDA &70, RTS
+        session.writeMemory(LoadAddress, [42]);
+        const read = session.addBreakpoint("read", LoadAddress);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toEqual({ id: read, type: "read", address: LoadAddress, value: 42 });
+    });
+
     it("does not report the address it was added stopped at once reset moves the pc", async () => {
         const handler = irqHandler();
         await session.runUntilAddress(handler);
@@ -445,8 +454,7 @@ describe("MachineSession watching execution", () => {
         await session.runFor(100);
         remove();
 
-        const [lo, hi] = session.readMemory(0xfffc, 2);
-        expect(pcs[0]).toBe(lo | (hi << 8));
+        expect(pcs[0]).toBe(vectorAt(session, ResetVector));
         expect(pcs).not.toContain(handler);
     });
 });
@@ -455,8 +463,7 @@ describe("MachineSession breakpoints across a reset", () => {
     it("stops again at the reset address after a reset while stopped there", async () => {
         const session = new MachineSession("B-DFS1.2");
         await session.initialise();
-        const [lo, hi] = session.readMemory(0xfffc, 2);
-        const id = session.addBreakpoint("execute", lo | (hi << 8));
+        const id = session.addBreakpoint("execute", vectorAt(session, ResetVector));
         expect((await session.runFor(CyclesPerInterlacedFrame)).completed).toBe(false);
         session.resetBreakpointHits();
 
@@ -474,7 +481,7 @@ describe("MachineSession keyboard", () => {
     const HoldCycles = 200000; // a tenth of a second, several OS keyboard scans
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
     }, BootTimeout);
 
     afterAll(() => session.destroy());
@@ -582,42 +589,6 @@ describe("MachineSession keyboard", () => {
     });
 });
 
-describe("MachineSession keyboard buffer", () => {
-    const AutorepeatFrames = 100;
-    const PastTheWait = 3 * CyclesPerSecond;
-    const ReportAfterWait =
-        'T%=TIME:REPEAT UNTIL TIME>T%+300:A$="":REPEAT K$=INKEY$(0):A$=A$+K$:UNTIL K$="":PRINT "<";A$;">"';
-
-    async function keysLeftAfterHolding(model, flush) {
-        const session = new MachineSession(model);
-        await session.initialise();
-        await session.boot(30);
-        await session.type(ReportAfterWait);
-        session.keyDownRaw(BBC.K1);
-        await session.runFrames(AutorepeatFrames);
-        session.keyUpRaw(BBC.K1);
-        if (flush) session.flushKeyboardBuffer();
-        await session.runFor(PastTheWait);
-        const { screenText } = session.drainOutput();
-        session.destroy();
-        return screenText.match(/<(\w*)>/)[1];
-    }
-
-    it.each(["B-DFS1.2", "Master"])(
-        "%s: a held key's autorepeats wait in the buffer until it is flushed",
-        async (model) => {
-            expect(await keysLeftAfterHolding(model, false)).toMatch(/^11+$/);
-            expect(await keysLeftAfterHolding(model, true)).toBe("");
-        },
-        BootTimeout,
-    );
-
-    it("refuses on the Atom, whose OS has no keyboard buffer", () => {
-        const session = new MachineSession("Atom");
-        expect(() => session.flushKeyboardBuffer()).toThrow(/Atom/);
-    });
-});
-
 describe("MachineSession keyboard on the Atom", () => {
     let session;
 
@@ -627,11 +598,6 @@ describe("MachineSession keyboard on the Atom", () => {
     });
 
     afterAll(() => session.destroy());
-
-    it("refuses a key it does not know, as the BBC does", () => {
-        expect(() => session.keyDown("Shift_Left")).toThrow(/"Shift_Left" is not a key/);
-        expect(() => session.keyUp(16)).toThrow(/keyUp: 16 is a numeric key code/);
-    });
 
     it("presses a key it knows", () => {
         session.keyDown(keyCodes.A);
@@ -647,9 +613,7 @@ describe("MachineSession paged memory", () => {
     const OtherSidewaysRamBank = 5;
 
     beforeAll(async () => {
-        session = new MachineSession("Master");
-        await session.initialise();
-        await session.boot(30);
+        session = await bootedSession("Master");
     }, BootTimeout);
 
     afterAll(() => session.destroy());
@@ -657,7 +621,11 @@ describe("MachineSession paged memory", () => {
     it("reports what is paged in, agreeing with the OS's copy of ROMSEL", () => {
         const [romselCopy] = session.readMemory(0xf4, 1);
 
-        expect(session.pagingState()).toEqual({ romsel: romselCopy, acccon: expect.any(Number) });
+        expect(session.pagingState()).toEqual({
+            romsel: romselCopy,
+            bank: romselCopy & 15,
+            acccon: expect.any(Number),
+        });
     });
 
     it("reads and writes a sideways bank other than the one paged in", () => {
@@ -668,7 +636,7 @@ describe("MachineSession paged memory", () => {
 
         expect(session.readMemory(0x8000, 3, { bank: SidewaysRamBank })).toEqual([1, 2, 3]);
         expect(session.readMemory(0x8000, 3, { bank: OtherSidewaysRamBank })).toEqual([9, 9, 9]);
-        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.romsel & 15 }));
+        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.bank }));
         expect(session.pagingState()).toEqual(before);
     });
 
@@ -692,13 +660,13 @@ describe("MachineSession paged memory on a machine without shadow RAM", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
     }, BootTimeout);
 
     afterAll(() => session.destroy());
 
-    it("reports ROMSEL alone", () => {
-        expect(session.pagingState()).toEqual({ romsel: expect.any(Number) });
+    it("reports ROMSEL and its bank, without ACCCON", () => {
+        expect(session.pagingState()).toEqual({ romsel: expect.any(Number), bank: expect.any(Number) });
     });
 
     it("refuses to page shadow RAM", () => {
@@ -718,7 +686,7 @@ describe("MachineSession frame stepping across a hard reset", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
     }, BootTimeout);
 
     afterAll(() => session.destroy());
@@ -739,7 +707,7 @@ describe("MachineSession frame stepping with interlace off", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
         await session.runUntilPrompt(30);
         await session.type("*TV 0,1\rMODE 1\r");
         await session.runUntilPrompt(30);
@@ -757,7 +725,7 @@ describe("MachineSession snapshots", () => {
     let session;
 
     beforeAll(async () => {
-        session = await bootedSession();
+        session = await frameAlignedSession();
         await session.runUntilPrompt(30);
     }, BootTimeout);
 
@@ -858,676 +826,56 @@ describe("MachineSession snapshots", () => {
     );
 });
 
-describe("MachineSession tapes", () => {
-    afterEach(() => vi.restoreAllMocks());
-    const Welcome = path.join(RepoRoot, "public/tapes/Welcome.uef");
-    const LoadCycles = 10 * CyclesPerSecond;
-
-    async function firstProgramLoading(load) {
-        const session = new MachineSession("B-DFS1.2");
-        await session.initialise();
-        await session.boot(30);
-        await load(session);
-        await session.type("*TAPE");
-        await session.type('CHAIN""');
-        await session.runFor(LoadCycles);
-        const { screenText } = session.drainOutput();
-        session.destroy();
-        return screenText;
-    }
-
-    it(
-        "plays a tape from a file",
-        async () => {
-            expect(await firstProgramLoading((session) => session.loadTape(Welcome))).toMatch(/Loading\s+INTRO/);
-        },
-        BootTimeout,
-    );
-
-    it(
-        "plays a tape from bytes already read",
-        async () => {
-            const data = new Uint8Array(readFileSync(Welcome));
-            expect(await firstProgramLoading((session) => session.loadTape("welcome.uef", data))).toMatch(
-                /Loading\s+INTRO/,
-            );
-        },
-        BootTimeout,
-    );
-
-    it(
-        "runs an Atom's tape as soon as it is in, since its recorder has no relay",
-        async () => {
-            const session = new MachineSession("Atom-Tape");
-            await session.initialise();
-            await session.loadTape(Welcome);
-            expect(session._machine.processor.tapeInterface.tapeRunning).toBe(true);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it("resolves an sth: tape from the archive's tape images", async () => {
-        const zip = readFileSync(path.join(RepoRoot, "tests/unit/zip/test-ssd.zip"));
-        const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(zip));
-        vi.spyOn(console, "log").mockImplementation(() => {});
-        const session = new MachineSession("B-DFS1.2");
-        expect((await session.mediaResolver().resolve("tape", "sth:Acornsoft/Elite.zip")).name).toBe("test.ssd");
-        expect(fetch).toHaveBeenCalledWith("https://bbc.xania.org/archive/sth/tapeimages/Acornsoft/Elite.zip");
-    });
-});
-
 describe("MachineSession disc images", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
     afterEach(() => vi.restoreAllMocks());
 
-    it(
-        "puts a github: disc in a drive from the raw file in the repo",
-        async () => {
-            const session = new MachineSession("B-DFS1.2");
-            await session.initialise();
-            await session.boot(30);
-            const elite = readFileSync(path.join(RepoRoot, "public/discs/elite.ssd"));
-            const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(elite));
-            expect(await session.loadDiscImage("github:someone/games@v1/discs/elite.ssd", 1)).toEqual({
-                name: "elite.ssd",
-                ignored: [],
-            });
-            expect(fetch).toHaveBeenCalledWith("https://raw.githubusercontent.com/someone/games/v1/discs/elite.ssd");
-            await session.type("*CAT 1");
-            const { screenText } = await session.runUntilPrompt(30);
-            expect(screenText).toContain("Elite");
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "puts a built-in disc in drive 0 by its bare name and catalogues it",
-        async () => {
-            const session = new MachineSession("B-DFS1.2");
-            await session.initialise();
-            await session.boot(30);
-            expect(await session.loadDiscImage("elite.ssd")).toEqual({ name: "elite.ssd", ignored: [] });
-            await session.type("*CAT");
-            const { screenText } = await session.runUntilPrompt(30);
-            expect(screenText).toContain("Elite");
-            session.destroy();
-        },
-        BootTimeout,
-    );
-});
-
-describe("MachineSession autoboot", () => {
-    const WelcomeBootMessage = "This message was automatically loaded.";
-    const FramesToRunWelcomeBoot = 200;
-    const DfsBank = 14;
-    // In DFS 1.2, reached only once service call 3 has asked it to boot, and before it starts the drive.
-    const DfsBootPathAddress = 0xb475;
-    const ResetVector = 0xfffc;
-    const Oswrch = 0xffee;
-
-    async function freshSession(modelName, opts) {
-        const session = new MachineSession(modelName, opts);
-        await session.initialise();
-        await session.boot(30);
-        return session;
-    }
-
-    const driveZero = (session) => session._machine.processor.fdc.drives[0];
-
-    function expectHeldForAWhile({ framesHeld }) {
-        expect(framesHeld).toBeGreaterThan(0);
-        expect(framesHeld).toBeLessThan(AutobootMaxFrames);
-    }
-
-    async function expectWelcomeBooted(session) {
-        await session.runFrames(FramesToRunWelcomeBoot);
-        expect(session.drainOutput().screenText).toContain(WelcomeBootMessage);
-    }
-
-    for (const modelName of ["B-DFS1.2", "B1770", "Master"]) {
-        it(
-            `boots the Welcome disc on a ${modelName} and lets go of SHIFT`,
-            async () => {
-                const session = await freshSession(modelName);
-                const booted = await session.bootDisc("Welcome.ssd");
-                expect(booted).toMatchObject({
-                    name: "Welcome.ssd",
-                    ignored: [],
-                    bootRequested: true,
-                    completed: true,
-                });
-                expectHeldForAWhile(booted);
-                expect(driveZero(session).spinning).toBe(true);
-                expect(session.heldKeys()).toEqual([]);
-                await expectWelcomeBooted(session);
-                session.destroy();
-            },
-            BootTimeout,
-        );
-
-        it(
-            `leaves drive 0 alone on a ${modelName}'s plain reset with a disc in`,
-            async () => {
-                const session = await freshSession(modelName);
-                await session.loadDiscImage("Welcome.ssd");
-                let starts = 0;
-                driveZero(session).addEventListener("startSpinning", () => starts++);
-                session.reset(true);
-                await session.runFrames(FramesToRunWelcomeBoot);
-                expect(starts).toBe(0);
-                session.destroy();
-            },
-            BootTimeout,
-        );
-    }
-
-    for (const modelName of ["B-DFS1.2", "Master"]) {
-        it(
-            `boots a disc already in a ${modelName}'s drive with a soft reset`,
-            async () => {
-                const session = await freshSession(modelName);
-                await session.loadDiscImage("Welcome.ssd");
-                const booted = await session.autoboot({ hard: false });
-                expect(booted.completed).toBe(true);
-                expectHeldForAWhile(booted);
-                await expectWelcomeBooted(session);
-                session.destroy();
-            },
-            BootTimeout,
-        );
-    }
-
-    it(
-        "spins a MasterADFS's drive for the boot, though ADFS cannot boot a DFS disc",
-        async () => {
-            const session = await freshSession("MasterADFS");
-            expect(await session.bootDisc("Welcome.ssd")).toMatchObject({ completed: true });
-            await session.runFrames(FramesToRunWelcomeBoot);
-            expect(session.drainOutput().screenText).not.toContain(WelcomeBootMessage);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "has a MasterADFS start drive 0 on a plain BREAK after *CAT, so the motor alone does not show a boot",
-        async () => {
-            const session = await freshSession("MasterADFS");
-            await session.loadDiscImage("Welcome.ssd");
-            await session.type("*CAT");
-            await session.runFrames();
-            let starts = 0;
-            driveZero(session).addEventListener("startSpinning", () => starts++);
-            session.reset(false);
-            await session.runFrames(FramesToRunWelcomeBoot);
-            expect(starts).toBeGreaterThan(0);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "throws on a B1770A, whose boot goes to ADFS without starting drive 0",
-        async () => {
-            const session = await freshSession("B1770A");
-            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow(/drive 0 did not start/);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "throws on a Master configured to boot, where SHIFT means do not",
-        async () => {
-            const session = await freshSession("Master");
-            await session.type("*CONFIGURE BOOT");
-            await session.runUntilPrompt(5);
-            let starts = 0;
-            driveZero(session).addEventListener("startSpinning", () => starts++);
-            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow(
-                /did not ask the filing system to boot.*CONFIGURE BOOT/,
-            );
-            expect(session.heldKeys()).toEqual([]);
-            expect(starts).toBe(0);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "refuses while a key is held, before touching the drive",
-        async () => {
-            const session = await freshSession("B-DFS1.2");
-            session.keyDownRaw(BBC.CTRL);
-            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow("release the keys held first");
-            expect(driveZero(session).disc).toBeUndefined();
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "refuses while typing is pending, before touching the drive",
-        async () => {
-            const session = await freshSession("B-DFS1.2");
-            const id = session.addBreakpoint("execute", Oswrch);
-            await session.type("X");
-            session.removeBreakpoint(id);
-            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow(/cancelTyping/);
-            expect(driveZero(session).disc).toBeUndefined();
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "refuses an empty drive",
-        async () => {
-            const session = await freshSession("B-DFS1.2");
-            await expect(session.autoboot()).rejects.toThrow("there is no disc in drive 0");
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "throws when the boot goes to another filing system and the drive never starts",
-        async () => {
-            const session = await freshSession("MasterANFS", { econet: true });
-            await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow(/drive 0 did not start/);
-            expect(session.heldKeys()).toEqual([]);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    for (const [where, breakAt] of [
-        ["the reset", (session) => session.readMemory(ResetVector, 2).reduce((low, high) => low | (high << 8))],
-        ["the banner", () => Oswrch],
-    ]) {
-        for (const modelName of ["B-DFS1.2", "Master"]) {
-            it(
-                `stops a ${modelName} at a breakpoint in ${where}, before the boot is asked for, and running on does not boot`,
-                async () => {
-                    const session = await freshSession(modelName);
-                    session.addBreakpoint("execute", breakAt(session));
-                    expect(await session.bootDisc("Welcome.ssd")).toMatchObject({
-                        bootRequested: false,
-                        completed: false,
-                    });
-                    expect(session.hitBreakpoint()).not.toBeNull();
-                    expect(session.heldKeys()).toEqual([]);
-                    session.clearBreakpoints();
-                    await session.runFrames(FramesToRunWelcomeBoot);
-                    expect(session.drainOutput().screenText).not.toContain(WelcomeBootMessage);
-                    session.destroy();
-                },
-                BootTimeout,
-            );
-        }
-    }
-
-    it(
-        "stops at a breakpoint after the boot is asked for, and running on boots",
-        async () => {
-            const session = await freshSession("B-DFS1.2");
-            session.addBreakpoint("execute", DfsBootPathAddress, { bank: DfsBank });
-            expect(await session.bootDisc("Welcome.ssd")).toMatchObject({ bootRequested: true, completed: false });
-            expect(session.hitBreakpoint()).not.toBeNull();
-            session.clearBreakpoints();
-            await expectWelcomeBooted(session);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it("refuses on the Atom, before touching the drive", async () => {
-        const session = new MachineSession("Atom");
-        await session.initialise();
-        await expect(session.bootDisc("Welcome.ssd")).rejects.toThrow("the Atom has no SHIFT+BREAK disc boot");
-        expect(driveZero(session).disc).toBeUndefined();
-        session.destroy();
-    });
-});
-
-describe("MachineSession filing system", () => {
-    async function bootedText(modelName, opts) {
-        const session = new MachineSession(modelName, opts);
-        await session.initialise();
-        const { screenText } = await session.boot(30);
-        session.destroy();
-        return screenText;
-    }
-
-    it(
-        "boots a MasterADFS into ADFS",
-        async () => {
-            expect(await bootedText("MasterADFS")).toContain("Acorn ADFS");
-        },
-        BootTimeout,
-    );
-
-    it(
-        "boots a MasterANFS into ANFS, shown by its Econet banner",
-        async () => {
-            expect(await bootedText("MasterANFS", { econet: true })).toContain("Econet Station");
-        },
-        BootTimeout,
-    );
-});
-
-describe("MachineSession Econet", () => {
-    async function typeAll(session, lines) {
-        for (const line of lines) await session.type(line);
-        return (await session.runUntilPrompt(30)).screenText;
-    }
-
-    it(
-        "logs a Master on to the file server through ANFS",
-        async () => {
-            const session = new MachineSession("Master", { econet: true });
-            await session.initialise();
-            await session.boot(30);
-            expect(await typeAll(session, ["*NET", "*I AM SYST", "*CAT"])).toMatch(/Dir\. \$ .*Lib\. LIBRARY/);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "answers to the web page's station number unless given one",
-        async () => {
-            const session = new MachineSession("B-DFS1.2", { econet: true });
-            await session.initialise();
-            await session.boot(30);
-            expect(await typeAll(session, ["PRINT ?&FE18"])).toMatch(/^\s+101$/m);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "keeps the station number it is given in a Master's CMOS",
-        async () => {
-            const session = new MachineSession("Master", { econet: true, stationId: 42 });
-            await session.initialise();
-            await session.boot(30);
-            const readCmosStation = ["A%=161", "X%=0", "PRINT (USR&FFF4 AND &FF0000) DIV &10000"];
-            expect(await typeAll(session, readCmosStation)).toMatch(/^\s+42$/m);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it("refuses a station number it cannot be, or one without Econet", () => {
-        for (const stationId of [1, 253]) {
-            expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).not.toThrow();
-        }
-        for (const stationId of [0, 254, 255, 1.5, "42"]) {
-            expect(() => new MachineSession("B-DFS1.2", { econet: true, stationId })).toThrow(/is not 1 to 253/);
-        }
-        expect(() => new MachineSession("B-DFS1.2", { stationId: 42 })).toThrow("A station number needs Econet fitted");
-    });
-});
-
-describe("MachineSession breakpoints in sideways ROM", () => {
-    const ServiceEntry = 0x8003;
-    const RomTypeByte = 0x8006;
-    const DfsBank = 14;
-    const SpareBank = 4;
-    const HigherSpareBank = 5;
-    const RomTitle = 0x8009;
-    // The MOS ignores a ROM identical to one in a higher bank.
-    const UnduplicatedTitle = 0x55;
-    const ServiceWrite = 0x70;
-    const RunSecs = 5;
-    const RomselBankMask = 0x0f;
-    // A service ROM titled "T" whose service handler stores A at ServiceWrite and returns.
-    const ServiceRom = [
-        0,
-        0,
-        0,
-        0x4c,
-        0x0e,
-        0x80,
-        0x82,
-        0x0a,
-        0x01,
-        0x54,
-        0x00,
-        0x28,
-        0x43,
-        0x29,
-        0x85,
-        ServiceWrite,
-        0x60,
-    ];
-
-    async function sessionWithSpareRom() {
-        const session = new MachineSession("B-DFS1.2");
-        await session.initialise();
-        session.writeMemory(0x8000, ServiceRom, { bank: SpareBank });
-        session.writeMemory(0x8000, ServiceRom, { bank: HigherSpareBank });
-        session.writeMemory(RomTitle, [UnduplicatedTitle], { bank: HigherSpareBank });
-        return session;
-    }
-
-    const pagedBank = (session) => session.pagingState().romsel & RomselBankMask;
-
-    it("breaks in whichever bank is paged in when given none", async () => {
-        const session = await sessionWithSpareRom();
-        session.addBreakpoint("execute", ServiceEntry);
-
-        await session.runFor(RunSecs * CyclesPerSecond);
-
-        expect(pagedBank(session)).toBe(DfsBank);
-        session.destroy();
-    });
-
-    it("breaks only while the bank it is given is paged in", async () => {
-        const session = await sessionWithSpareRom();
-        const id = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
-
-        const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
-
-        expect(completed).toBe(false);
-        expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: ServiceEntry, bank: SpareBank });
-        expect(session.registers().pc).toBe(ServiceEntry);
-        expect(pagedBank(session)).toBe(SpareBank);
-        session.destroy();
-    });
-
-    it("breaks on a read only while the bank it is given is paged in", async () => {
-        const session = await sessionWithSpareRom();
-        const [dfsType] = session.readMemory(RomTypeByte, 1, { bank: DfsBank });
-        const id = session.addBreakpoint("read", RomTypeByte, { bank: DfsBank });
-
-        await session.runFor(RunSecs * CyclesPerSecond);
-
-        expect(session.hitBreakpoint()).toEqual({
-            id,
-            type: "read",
-            address: RomTypeByte,
-            bank: DfsBank,
-            value: dfsType,
+    it("puts a github: disc in a drive from the raw file in the repo", async () => {
+        const elite = readFileSync(path.join(RepoRoot, "public/discs/elite.ssd"));
+        const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(elite));
+        expect(await session.loadDiscImage("github:someone/games@v1/discs/elite.ssd", 1)).toEqual({
+            name: "elite.ssd",
+            ignored: [],
         });
-        expect(pagedBank(session)).toBe(DfsBank);
-        session.destroy();
+        expect(fetch).toHaveBeenCalledWith("https://raw.githubusercontent.com/someone/games/v1/discs/elite.ssd");
+        await session.type("*CAT 1");
+        expect((await session.runUntilPrompt(30)).screenText).toContain("Elite");
     });
 
-    it("breaks on a write only while the bank it is given is paged in", async () => {
-        const session = await sessionWithSpareRom();
-        const id = session.addBreakpoint("write", ServiceWrite, { bank: SpareBank });
-
-        await session.runFor(RunSecs * CyclesPerSecond);
-
-        expect(session.hitBreakpoint()).toMatchObject({ id, type: "write", address: ServiceWrite, bank: SpareBank });
-        expect(pagedBank(session)).toBe(SpareBank);
-        session.destroy();
+    it("puts a built-in disc in drive 0 by its bare name and catalogues it", async () => {
+        expect(await session.loadDiscImage("elite.ssd")).toEqual({ name: "elite.ssd", ignored: [] });
+        await session.type("*CAT");
+        expect((await session.runUntilPrompt(30)).screenText).toContain("Elite");
     });
-
-    it("runs until an address in the bank it is given", async () => {
-        const session = await sessionWithSpareRom();
-
-        await session.runUntilAddress(ServiceEntry, RunSecs, { bank: SpareBank });
-
-        expect(session.registers().pc).toBe(ServiceEntry);
-        expect(pagedBank(session)).toBe(SpareBank);
-        session.destroy();
-    });
-
-    it("refuses a bank that does not exist", async () => {
-        const session = await sessionWithSpareRom();
-
-        expect(() => session.addBreakpoint("execute", ServiceEntry, { bank: 16 })).toThrow("Bank 16 is not 0 to 15");
-        await expect(session.runUntilAddress(ServiceEntry, RunSecs, { bank: -1 })).rejects.toThrow(
-            "Bank -1 is not 0 to 15",
-        );
-        session.destroy();
-    });
-});
-
-describe("MachineSession bank breakpoints on a Master with ANDY paged in", () => {
-    const SidewaysRamBank = 4;
-    const RomselWithAndy = 0x80 | SidewaysRamBank;
-    const CodeAddress = 0x2000;
-    const AndyLoop = 0x8000;
-    const BankLoop = 0x9000;
-    const RunSecs = 1;
-    const lo = (address) => address & 0xff;
-    const hi = (address) => address >> 8;
-
-    // Pages in ANDY over SidewaysRamBank, writes a JMP-to-self into ANDY, then jumps to `target`.
-    const pageAndyAndJumpTo = (target) => [
-        0x78,
-        0xa9,
-        RomselWithAndy,
-        0x8d,
-        0x30,
-        0xfe,
-        ...[0x4c, lo(AndyLoop), hi(AndyLoop)].flatMap((byte, i) => [0xa9, byte, 0x8d, lo(AndyLoop + i), hi(AndyLoop)]),
-        0x4c,
-        lo(target),
-        hi(target),
-    ];
-
-    async function sessionLooping(target) {
-        const session = new MachineSession("Master");
-        await session.initialise();
-        await session.boot(30);
-        session.writeMemory(BankLoop, [0x4c, lo(BankLoop), hi(BankLoop)], { bank: SidewaysRamBank });
-        session.writeMemory(CodeAddress, pageAndyAndJumpTo(target));
-        await session.type(`CALL &${CodeAddress.toString(16)}`);
-        return session;
-    }
-
-    it(
-        "does not count ANDY at &8000 to &8FFF as the bank",
-        async () => {
-            const session = await sessionLooping(AndyLoop);
-
-            await expect(session.runUntilAddress(AndyLoop, RunSecs, { bank: SidewaysRamBank })).rejects.toThrow(
-                "did not hit appropriate breakpoint in time",
-            );
-            expect(session.pagingState().romsel).toBe(RomselWithAndy);
-            expect(session.registers().pc).toBe(AndyLoop);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "still counts &9000 to &BFFF as the bank",
-        async () => {
-            const session = await sessionLooping(BankLoop);
-
-            await session.runUntilAddress(BankLoop, RunSecs, { bank: SidewaysRamBank });
-
-            expect(session.registers().pc).toBe(BankLoop);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "does not break in ANDY on a breakpoint given the bank",
-        async () => {
-            const session = await sessionLooping(AndyLoop);
-            session.addBreakpoint("execute", AndyLoop, { bank: SidewaysRamBank });
-
-            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
-
-            expect(completed).toBe(true);
-            expect(session.hitBreakpoint()).toBeNull();
-            expect(session.registers().pc).toBe(AndyLoop);
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "does not break on a read in ANDY given the bank",
-        async () => {
-            const session = await sessionLooping(AndyLoop);
-            session.addBreakpoint("read", AndyLoop + 1, { bank: SidewaysRamBank });
-
-            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
-
-            expect(completed).toBe(true);
-            expect(session.hitBreakpoint()).toBeNull();
-            session.destroy();
-        },
-        BootTimeout,
-    );
-
-    it(
-        "breaks above ANDY on a breakpoint given the bank",
-        async () => {
-            const session = await sessionLooping(BankLoop);
-            const id = session.addBreakpoint("execute", BankLoop, { bank: SidewaysRamBank });
-
-            const { completed } = await session.runFor(RunSecs * CyclesPerSecond);
-
-            expect(completed).toBe(false);
-            expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: BankLoop, bank: SidewaysRamBank });
-            session.destroy();
-        },
-        BootTimeout,
-    );
 });
 
 describe("MachineSession VideoNuLA", () => {
+    // Palette mode on, for a VideoNuLA; a stock ULA takes it as a plain control register write.
+    const NulaPaletteModeOn = 0x11;
     const Mode7UlaControl = 0x4a;
     const UlaFlashBit = 0x01;
 
-    async function videoAfterNulaPaletteModeOn(opts) {
-        const session = new MachineSession("B-DFS1.2", opts);
-        await session.initialise();
-        await session.boot(30);
-        await session.type("?&FE22=&11");
-        await session.runUntilPrompt();
-        const { video } = session.snapshot({ includeRoms: false }).machine;
-        session.destroy();
-        return video;
-    }
+    it.each([
+        ["has a stock video ULA unless one is asked for", undefined, 0xff, NulaPaletteModeOn, 0],
+        ["fits a VideoNuLA when asked", { hasVideoNula: true }, ~UlaFlashBit, Mode7UlaControl, 1],
+    ])(
+        "%s",
+        async (_, opts, ulaControlMask, ulaControl, paletteMode) => {
+            const session = await bootedSession("B-DFS1.2", opts);
+            await session.type(`?&FE22=&${NulaPaletteModeOn.toString(16)}`);
+            await session.runUntilPrompt();
+            const { video } = session.snapshot({ includeRoms: false }).machine;
+            session.destroy();
 
-    it(
-        "has a stock video ULA unless one is asked for",
-        async () => {
-            const video = await videoAfterNulaPaletteModeOn();
-            expect(video.ulactrl).toBe(0x11);
-            expect(video.ula.paletteMode).toBe(0);
-        },
-        BootTimeout,
-    );
-
-    it(
-        "fits a VideoNuLA when asked",
-        async () => {
-            const video = await videoAfterNulaPaletteModeOn({ hasVideoNula: true });
-            expect(video.ulactrl & ~UlaFlashBit).toBe(Mode7UlaControl);
-            expect(video.ula.paletteMode).toBe(1);
+            expect(video.ulactrl & ulaControlMask).toBe(ulaControl);
+            expect(video.ula.paletteMode).toBe(paletteMode);
         },
         BootTimeout,
     );

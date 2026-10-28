@@ -4,7 +4,7 @@
 import { Cpu6502, NmiSource } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
 import { attachDriveNoise, BaseDiscDrive, DiscDrive } from "./disc-drive.js";
-import { IbmDiscFormat } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import { hexbyte } from "./hex.js";
@@ -102,6 +102,10 @@ const Status = Object.freeze({
     typeIIorIIIDrq: 0x02,
     busy: 0x01,
 });
+
+// The type I bits that follow the drive's lines. Write protect is polled like track 0 after a type I
+// command (Jean Louis-Guerin's WD1772 specification, status register summary, note 4).
+const TypeIPolledStatus = Status.typeITrack0 | Status.typeIIndex | Status.writeProtected;
 
 /**
  * Controller state.
@@ -225,8 +229,11 @@ export class WdFdc {
         this._logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
         this._logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
 
-        const callback = (pulses, count) => this._pulsesCallback(pulses, count);
-        for (const drive of this._drives) drive.setPulsesCallback(callback);
+        for (const drive of this._drives) {
+            drive.setPulsesCallback((pulses, count) => {
+                if (drive === this._currentDrive) this._pulsesCallback(pulses, count);
+            });
+        }
 
         this.powerOnReset();
     }
@@ -374,9 +381,6 @@ export class WdFdc {
             case 2:
             case 3:
                 this._logCommand(`control register now ${hexbyte(val)}`);
-                if (this._statusRegister & Status.busy && !this._isReset(val)) {
-                    throw new Error(`Control register updated while busy; without reset`);
-                }
                 this._writeControl(val);
                 break;
             case 4:
@@ -406,11 +410,10 @@ export class WdFdc {
     }
 
     _doCommand(val) {
-        if (!this._currentDrive) throw new Error("Command while no selected drive");
         this._logCommand(
             `command ${hexbyte(val)} tr ${this._trackRegister} sr ${this._sectorRegister} dr ${this._dataRegister} ` +
                 `cr ${hexbyte(this._controlRegister)} ` +
-                `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
+                `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
         );
         const command = val & 0xf0;
 
@@ -486,8 +489,7 @@ export class WdFdc {
             // Short circuit spin-up if motor is on.
             this._settleThenDispatch();
         } else {
-            this._statusRegister |= Status.motorOn;
-            this._currentDrive.startSpinning();
+            this._setMotor(true);
             // Short circuit spin-up if command requests it.
             // /* NOTE: disabling spin-up wait is a strange facility. It makes a lot of
             // sense for a seek because the disc head can usefully get moving while the
@@ -513,7 +515,7 @@ export class WdFdc {
                 `State ${this._state} -> ${state} @ tr ${this._trackRegister} ` +
                     `sr ${this._sectorRegister} dr ${this._dataRegister} ` +
                     `cr ${hexbyte(this._controlRegister)} ` +
-                    `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
+                    `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
             );
         }
         this._state = state;
@@ -567,10 +569,7 @@ export class WdFdc {
             this._indexPulseCount = 0;
             this._commandType = 1;
             this._statusRegister &= Status.motorOn;
-            if (!(this._statusRegister & Status.motorOn)) {
-                this._statusRegister |= Status.motorOn;
-                this._currentDrive.startSpinning();
-            }
+            this._setMotor(true);
         }
         if (forceInterruptBits & ForceInterruptBits.immediate) this._setIntRq(true);
         this._isInterruptOnIndexPulse = !!(forceInterruptBits & ForceInterruptBits.indexPulse);
@@ -635,21 +634,10 @@ export class WdFdc {
      * @param {Control|Number} val
      */
     _writeControl(val) {
-        const isMotorOn = !!(this._statusRegister & Status.motorOn);
         const drive = val & (Control.drive0 | Control.drive1) ? this._drives[val & Control.drive0 ? 0 : 1] : null;
-        if (this._currentDrive && this._currentDrive.spinning) {
-            if (!isMotorOn) {
-                throw new Error(
-                    `Unexpected motor control bit off when setting the control register to ${hexbyte(val)}`,
-                );
-            }
-            if (this._currentDrive !== drive) this._currentDrive.stopSpinning();
-        }
+        if (this._currentDrive !== drive) this._currentDrive?.notifySeekEnd();
         this._currentDrive = drive;
-        if (this._currentDrive) {
-            if (isMotorOn) this._currentDrive.startSpinning();
-            this._currentDrive.selectSide(this._isSide(val));
-        }
+        this._currentDrive?.selectSide(this._isSide(val));
 
         // Set up single or double density
         for (const drive of this._drives) drive.set32usMode(this._isDoubleDensity(val));
@@ -659,7 +647,7 @@ export class WdFdc {
         if (this._isReset(val)) {
             // Go idle, etc
             this._clearState();
-            if (this._currentDrive && isMotorOn) this._currentDrive.stopSpinning();
+            this._setMotor(false);
             this._statusRegister = 0;
 
             // EMU NOTE: on a real machine, the reset condition appears to hold the
@@ -680,13 +668,26 @@ export class WdFdc {
         }
     }
 
+    /**
+     * MO is one line on the drive cable, so every drive turns while it is on, selected or not.
+     *
+     * @param {boolean} isOn
+     */
+    _setMotor(isOn) {
+        if (isOn) this._statusRegister |= Status.motorOn;
+        else this._statusRegister &= ~Status.motorOn;
+        for (const drive of this._drives) {
+            if (isOn) drive.startSpinning();
+            else drive.stopSpinning();
+        }
+    }
+
     _makeSeekNoise(delta) {
         if (this._currentDrive) this._currentDrive.notifySeekAmount(delta, this._commandStepRateMs);
     }
 
     _dispatchCommand() {
-        if (!this._currentDrive) throw new Error("Unexpectedly dispatching a command with no drive set");
-        if (this._isCommandWrite && this._currentDrive.writeProtect) {
+        if (this._isCommandWrite && this._currentDrive?.writeProtect) {
             this._statusRegister |= Status.writeProtected;
             this._commandDone(true);
             return;
@@ -698,7 +699,7 @@ export class WdFdc {
                 this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
                 // The head steps out from wherever it is, whatever the track register says
-                this._makeSeekNoise(-this._currentDrive.logicalTrack);
+                if (this._currentDrive) this._makeSeekNoise(-this._currentDrive.logicalTrack);
                 this._doSeekStepOrVerify();
                 break;
             case Command.seek:
@@ -842,11 +843,11 @@ export class WdFdc {
         // different sources disagree on 10 vs 9 index pulses for spin down.
         if (this._indexPulseCount < 9) return;
         this._logCommand("automatic motor off");
-        this._currentDrive.stopSpinning();
-        this._statusRegister &= ~Status.motorOn;
-        // In @scarybeasts's testing on a 1772 the polled type 1 status bits get cleared on spin down.
+        this._setMotor(false);
+        // In @scarybeasts's testing on a 1772 the polled track 0 and index bits get cleared on spin down;
+        // write protect, polled the same way, is assumed to go with them.
         if (this._commandType === 1) {
-            this._statusRegister &= ~(Status.typeITrack0 | Status.typeIIndex);
+            this._statusRegister &= ~TypeIPolledStatus;
         }
     }
 
@@ -1129,9 +1130,11 @@ export class WdFdc {
 
     _updateTypeIStatusBits() {
         if (this._commandType !== 1) return;
-        this._statusRegister &= ~(Status.typeITrack0 | Status.typeIIndex);
+        this._statusRegister &= ~TypeIPolledStatus;
+        if (!this._currentDrive) return;
         if (this._currentDrive.track === 0) this._statusRegister |= Status.typeITrack0;
         if (this._currentDrive.indexPulse) this._statusRegister |= Status.typeIIndex;
+        if (this._currentDrive.writeProtect) this._statusRegister |= Status.writeProtected;
     }
 
     _startTimer(timerState, waitUs) {
@@ -1161,6 +1164,13 @@ export class WdFdc {
         this._logCommand(`result status ${hexbyte(this._statusRegister)}`);
     }
 
+    /** A restore that steps 255 times without seeing track 0 stops there, with a seek error if it was to verify. */
+    _giveUpRestore() {
+        if (this._currentDrive) this._currentDrive.notifySeekEnd();
+        if (this._isCommandVerify) this._statusRegister |= Status.recordNotFound;
+        this._commandDone(true);
+    }
+
     _checkVerify() {
         if (this._currentDrive) this._currentDrive.notifySeekEnd();
         if (this._isCommandVerify) {
@@ -1171,7 +1181,7 @@ export class WdFdc {
     }
 
     _doSeekStep(stepDirection, doUpdateTr) {
-        this._currentDrive.seekOneTrack(stepDirection);
+        this._currentDrive?.seekOneTrack(stepDirection);
         if (doUpdateTr) this._trackRegister += stepDirection;
         // TRK0 signal may have been raised or lowered.
         this._updateTypeIStatusBits();
@@ -1180,11 +1190,15 @@ export class WdFdc {
 
     _doSeekStepOrVerify() {
         if (this._trackRegister === this._dataRegister) {
+            if (this._command === Command.restore && this._currentDrive?.track !== 0) {
+                this._giveUpRestore();
+                return;
+            }
             this._checkVerify();
             return;
         }
         const stepDirection = this._trackRegister > this._dataRegister ? -1 : 1;
-        if (this._currentDrive.track === 0 && stepDirection === -1) {
+        if (this._currentDrive?.track === 0 && stepDirection === -1) {
             this._trackRegister = 0;
             this._checkVerify();
             return;
@@ -1436,6 +1450,8 @@ export class WdFdc {
         if (this._controlRegister & Control.drive0 || this._controlRegister & Control.drive1) {
             this._currentDrive = this._drives[this._controlRegister & Control.drive0 ? 0 : 1];
         }
+        // A snapshot from before the drives shared the motor line has only the selected one turning.
+        if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
 
         // Restore timer
         this._timerTask.cancel();
@@ -1460,8 +1476,9 @@ export class WdFdc {
         this._drives[drive].tracksPerStep = tracksPerStep;
     }
 
+    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
     get motorOn() {
-        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
     }
 
     get drives() {

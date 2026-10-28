@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { loadData, LoadFailures } from "../../src/loader.js";
 
+const httpFailure = (status, loadFailure) => ({ message: expect.stringContaining(`http code ${status}`), loadFailure });
+
 describe("loadData in node", () => {
     afterEach(() => vi.unstubAllGlobals());
 
@@ -25,12 +27,17 @@ describe("loadData in node", () => {
         expect(fetch).toHaveBeenCalledWith("https://example.com/a.ssd");
     });
 
-    it("reports a URL that is not there", async () => {
-        vi.stubGlobal(
-            "fetch",
-            vi.fn(async () => new Response(null, { status: 404 })),
-        );
-        await expect(loadData("https://example.com/nosuch.ssd")).rejects.toThrow("http code 404");
+    it.each([
+        ["an HTTP 404 as not_found", async () => new Response(null, { status: 404 }), httpFailure(404, "not_found")],
+        ["an HTTP 500 as http", async () => new Response(null, { status: 500 }), httpFailure(500, "http")],
+        [
+            "a request that never got a response as a network failure",
+            async () => Promise.reject(new TypeError("Failed to fetch")),
+            { loadFailure: "network" },
+        ],
+    ])("fails %s", async (_, fetchResult, failure) => {
+        vi.stubGlobal("fetch", vi.fn(fetchResult));
+        await expect(loadData("https://example.com/a.ssd")).rejects.toMatchObject(failure);
     });
 });
 
@@ -56,25 +63,22 @@ describe("loadData in a browser", () => {
 
     afterEach(() => vi.unstubAllGlobals());
 
-    it.each([
-        [404, "not_found"],
-        [500, "http"],
-    ])("fails an HTTP %i as %s", async (status, reason) => {
-        respond = (xhr) => {
-            xhr.status = status;
-            xhr.onload();
-        };
-        await expect((await browserLoadData())("https://example.com/a.ssd")).rejects.toMatchObject({
-            message: expect.stringContaining(`http code ${status}`),
-            loadFailure: reason,
-        });
-    });
+    const httpStatus = (status) => (xhr) => {
+        xhr.status = status;
+        xhr.onload();
+    };
 
-    it("fails a request that never got a response as a network failure", async () => {
-        respond = (xhr) => xhr.onerror();
-        await expect((await browserLoadData())("https://example.com/a.ssd")).rejects.toMatchObject({
-            loadFailure: "network",
-        });
+    it.each([
+        ["an HTTP 404 as not_found", httpStatus(404), httpFailure(404, "not_found")],
+        ["an HTTP 500 as http", httpStatus(500), httpFailure(500, "http")],
+        [
+            "a request that never got a response as a network failure",
+            (xhr) => xhr.onerror(),
+            { loadFailure: "network" },
+        ],
+    ])("fails %s", async (_, response, failure) => {
+        respond = response;
+        await expect((await browserLoadData())("https://example.com/a.ssd")).rejects.toMatchObject(failure);
     });
 });
 

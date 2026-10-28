@@ -204,7 +204,7 @@ const template = [
         label: "Machine",
         submenu: [
             {
-                label: "Configuration...",
+                label: "Settings...",
                 click: showModal("configuration"),
             },
             { type: "separator" },

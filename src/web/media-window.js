@@ -28,18 +28,25 @@ const FoldableDrive = 1;
 
 const targetFrom = (slot) => (slot === "tape" ? "tape" : Number(slot));
 
-/** The keys that load from the search box, and what they do, aimed at `target`: only drive 0 boots. */
-function hintKeys(target, autoboot) {
+/**
+ * What a disc going into `driveIndex` does. Only drive 0 boots: as the Autoboot tick says, the other way
+ * with Shift, or as `boot` says whatever the tick. `urlAutoboot` is what the URL's autoboot becomes,
+ * undefined to leave it alone; it says the load booted only where the URL names the disc (`inUrl`).
+ */
+export function bootDecision({ driveIndex, ticked, shift = false, boot, inUrl = false }) {
+    if (driveIndex !== 0) return { boots: false, urlAutoboot: undefined };
+    const boots = boot ?? shift !== ticked;
+    return { boots, urlAutoboot: boots && inUrl };
+}
+
+/** The keys that load from the search box, and what they do, aimed at `target`. */
+function hintKeys(target, ticked) {
     if (target === "tape") return [["Enter", "loads into the deck"]];
-    if (target !== 0) return [["Enter", `loads into drive ${target}, which does not boot`]];
-    if (autoboot)
-        return [
-            ["Enter", "boots from drive 0"],
-            ["Shift+Enter", "loads without booting"],
-        ];
+    const boots = (shift) => bootDecision({ driveIndex: target, ticked, shift }).boots;
+    if (!boots(false) && !boots(true)) return [["Enter", `loads into drive ${target}, which does not boot`]];
     return [
-        ["Enter", "loads into drive 0"],
-        ["Shift+Enter", "loads and boots"],
+        ["Enter", boots(false) ? `boots from drive ${target}` : `loads into drive ${target}`],
+        ["Shift+Enter", boots(true) ? "loads and boots" : "loads without booting"],
     ];
 }
 
@@ -244,7 +251,7 @@ export class MediaWindow {
             const opened = await this.media.openFile(file, this.targetDrive, entry);
             if (!opened) return;
             toast(opened.words, { title });
-            if (opened.kind === "disc") this.loaded(opened.driveIndex, this.bootsFrom(opened.driveIndex));
+            if (opened.kind === "disc") this.loaded(opened.driveIndex);
             this.close();
         } catch (error) {
             reportLoadFailure(file.name, error);
@@ -763,12 +770,14 @@ export class MediaWindow {
     /** What a plain click on something named `label` does when it goes to `target`. */
     actionWords(target, label) {
         if (target === "tape") return `Load ${label} into the cassette deck`;
-        return this.bootsFrom(target) ? `Boot ${label} from drive ${target}` : `Load ${label} into drive ${target}`;
+        return this.decideBoot(target).boots
+            ? `Boot ${label} from drive ${target}`
+            : `Load ${label} into drive ${target}`;
     }
 
-    /** Whether a load into `driveIndex` boots: only drive 0 does, as Autoboot says, or the other way with Shift. */
-    bootsFrom(driveIndex, shift = false) {
-        return driveIndex === 0 && shift !== this.list.autoboot.checked;
+    /** What a load into `driveIndex` does, by the Autoboot tick as it is now. */
+    decideBoot(driveIndex, asked = {}) {
+        return bootDecision({ driveIndex, ticked: this.list.autoboot.checked, ...asked });
     }
 
     /** Which slot a descriptor's media is loaded in, as text, or null. */
@@ -813,10 +822,9 @@ export class MediaWindow {
     async loadDisc(driveIndex, d, { shift = false, boot, stayOpen = false, entry } = {}) {
         this.unfold(driveIndex);
         const slot = this.slots.drive(driveIndex);
-        const bootsOnLoad = () => driveIndex === 0 && (boot ?? this.bootsFrom(driveIndex, shift));
         if (
             !this.machineSwitch.satisfies(d) &&
-            (await this.machineSwitch.switchFor(d, slot, { boot: bootsOnLoad() }))
+            (await this.machineSwitch.switchFor(d, slot, { boot: this.decideBoot(driveIndex, { shift, boot }).boots }))
         ) {
             this.slots.recent.note(d.ref, "disc");
             return;
@@ -826,7 +834,7 @@ export class MediaWindow {
         if (outcome !== "failed" && this.asked[driveIndex] === asked) this.asked[driveIndex] = null;
         if (outcome !== "loaded") return;
         // The tick is read now, not before the wait, in case it was changed meanwhile.
-        this.loaded(driveIndex, bootsOnLoad());
+        this.loaded(driveIndex, asked);
         if (!stayOpen) this.close();
     }
 
@@ -838,14 +846,15 @@ export class MediaWindow {
         return this.asked[driveIndex] ?? { boot: this.media.params.autoboot !== undefined };
     }
 
-    /** Boots what has just gone into drive 0 if it is to, and has the URL say whether a link to it boots. */
-    loaded(driveIndex, boots) {
-        if (driveIndex !== 0) return;
+    /** Boots what has just gone into a drive if it is to, and has the URL say whether a link to it boots. */
+    loaded(driveIndex, asked) {
+        const { inUrl } = this.slots.drive(driveIndex);
+        const { boots, urlAutoboot } = this.decideBoot(driveIndex, { ...asked, inUrl });
         if (boots) {
             this.processor.reset(true);
             this.boot();
         }
-        this.media.setAutoboot(boots && this.slots.drive(0).inUrl);
+        if (urlAutoboot !== undefined) this.media.setAutoboot(urlAutoboot);
     }
 
     async loadTape(d, { entry } = {}) {
@@ -887,12 +896,14 @@ export class MediaWindow {
     /**
      * A disc kept in this browser or on Google Drive, put in the aimed drive:
      * blank and formatted, or a copy of what a drive holds. A name with no
-     * extension is an SSD.
+     * extension is an SSD; an HFE can only be a blank on Google Drive.
      */
     async createDisc(name, where) {
         if (!name) return;
-        if (!guessDiscTypeFromName(name).supportsCatalogue) name = replaceOrAddExtension(name, ".ssd");
         const copyFrom = this.list.copyFrom;
+        const discType = guessDiscTypeFromName(name);
+        const blankFluxOnDrive = discType.isFluxImage && copyFrom === null && where === "gdrive";
+        if (!discType.supportsCatalogue && !blankFluxOnDrive) name = replaceOrAddExtension(name, ".ssd");
         const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;
         if (copyFrom === null && where === "browser")
@@ -912,7 +923,7 @@ export class MediaWindow {
             },
         });
         if (outcome !== "loaded") return;
-        this.loaded(driveIndex, false);
+        this.loaded(driveIndex, { boot: false });
         this.close();
     }
 

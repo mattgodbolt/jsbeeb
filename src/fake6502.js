@@ -35,8 +35,11 @@ export function fake6502(model, opts = {}) {
             tube: opts.tube ? tubeModelFor(model) : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
             cpuMultiplier: opts.cpuMultiplier,
+            hasMusic5000: opts.hasMusic5000,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
-            extraRoms: econet && model.isMaster ? [MasterAnfsRom] : [],
+            fittedRoms: econet && model.isMaster ? [MasterAnfsRom] : [],
+            bankRoms: opts.bankRoms,
+            extraRoms: opts.extraRoms,
         }),
         cycleAccurate: opts.cycleAccurate,
     });

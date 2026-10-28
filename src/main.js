@@ -5,12 +5,12 @@ import "./jsbeeb.css";
 
 import { Debugger } from "./web/debug.js";
 import { GamePad } from "./web/gamepads.js";
-import { initialise as electron } from "./app/electron.js";
+import { initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
-import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
+import { MediaLoader } from "./web/media-loader.js";
 import { SthSource } from "./web/sth-source.js";
 import { HfeSource } from "./web/hfe-source.js";
 import { BitshiftersSource } from "./web/bitshifters-source.js";
@@ -21,10 +21,11 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
+import { EmulationLoop } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { labelPageShortcuts } from "./web/shortcuts.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
 import { FrontPanel } from "./web/front-panel.js";
@@ -42,16 +43,19 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
-import { bootModeOf, parseMediaParams, processAutobootParams, processDriveTrackParams } from "./url-params.js";
+import { processDriveTrackParams } from "./url-params.js";
 import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
-import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { gzipCodec, hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
 import { SessionDialog } from "./web/session-dialog.js";
+import { sessionPage } from "./web/session-page.js";
+import { webRtcTransport } from "./web/session-transport.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
 import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
+import { hostAndRun, startAsTheUrlAsks, startupPlan } from "./web/startup.js";
 
 const SymbolsBaseUrl = "https://bbc.xania.org/meta/symbols/";
 
@@ -66,13 +70,8 @@ const benchmarkPage = parsedQuery.benchmark ? new BenchmarkPage(parsedQuery.benc
 if (benchmarkPage) silenceAnalytics();
 configureAnalytics();
 installIcons();
-let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
-
-let discImage = BuiltInImages[0].file;
-let secondDiscImage = null;
-const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
-if (queryDiscImage) discImage = queryDiscImage;
-if (querySecondDisc) secondDiscImage = querySecondDisc;
+labelPageShortcuts();
+const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 const extraRoms = [];
@@ -122,15 +121,17 @@ speak(settings.speechOutput);
 settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
-const keyMappingWarnings = processInputParams(parsedQuery, {
+const bankRoms = [];
+const familyWarnings = processInputParams(parsedQuery, {
     machineKeys: model.keys,
     hostKeyCodes,
     userKeymap,
     gamepad,
+    bankRoms,
 });
-if (keyMappingWarnings.length) {
-    toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
-        title: "Mappings in the URL",
+if (familyWarnings.length) {
+    toast(`${familyWarnings.join(" ")} The key names and ROM banks are listed in the README.`, {
+        title: "Parameters in the URL",
     });
 }
 if (driveTrackWarnings.length) {
@@ -192,6 +193,7 @@ const machine = new Machine({
     keyLayout,
     cpuMultiplier,
     extraRoms,
+    bankRoms,
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,
@@ -353,68 +355,9 @@ const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI
 // Start it up.
 // ------------------------------------------------------------------------
 
-const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
-if (parsedQuery.loadBasic) needsAutoboot = "";
-
-// The boot disc is described while the machine starts, so a link that boots a disc without
-// naming a model can be switched to the machine the disc needs before the boot.
-const bootDisc = needsAutoboot === "boot" && !parsedQuery.model ? media.describe(discImage) : null;
-/** @returns {Promise<boolean>} whether the page is on its way to the machine its boot disc needs */
-const switchForBootDisc = async (d) =>
-    !!d &&
-    !machineSwitch.satisfies(d) &&
-    machineSwitch.switchFor(d, media.slots.drive(0), { boot: true, replace: true });
-const startPromise = machine.start({
-    media,
-    autoBoot,
-    discImage,
-    discImageInUrl: !!queryDiscImage,
-    secondDiscImage,
-    tape: parsedQuery.tape,
-    mmcImage,
-    loadBasic: parsedQuery.loadBasic,
-    embedBasic: parsedQuery.embedBasic,
-    basicNeedsRun,
-});
-
-/** @returns {Promise<boolean>} false when the page is reloading as the machine its boot disc needs */
-async function startAsTheUrlAsks() {
-    if (await switchForBootDisc(await bootDisc)) return false;
-    noteMachineStart(
-        settings,
-        parsedQuery,
-        { boot_mode: bootModeOf(parsedQuery), renderer: display.canvas.renderer },
-        audioHandler.ready,
-    );
-    if (hasVideoNula) noteFeature(VideoNulaFeature, "fitted");
-
-    switch (needsAutoboot) {
-        case "boot":
-            autoBoot.boot();
-            break;
-        case "type":
-            autoBoot.type(autoType);
-            break;
-        case "chain":
-            autoBoot.chainTape();
-            break;
-        case "run":
-            autoBoot.runTape();
-            break;
-        default:
-            break;
-    }
-
-    if (parsedQuery.patch) {
-        dbgr.setPatch(parsedQuery.patch);
-    }
-
-    // Restore the state a cross-model reload stashed, if there is one.
-    await snapshots.restorePendingState();
-
-    if (loop.mode !== RunMode.debugging) loop.go();
-    return true;
-}
+// Described while the machine starts, so a switch to the machine the disc needs comes before the boot.
+const bootDisc = plan.mayNeedAnotherModel ? media.describe(plan.media.discImage) : null;
+const startPromise = machine.start({ media, autoBoot, ...plan.media });
 
 (async () => {
     try {
@@ -430,29 +373,44 @@ async function startAsTheUrlAsks() {
                 loop,
                 modals,
                 parsedQuery,
+                takenFromHost,
                 commit,
                 version,
             });
-        } else if (!(await startAsTheUrlAsks())) return;
-        const rendezvous = createRendezvousClient();
+        } else {
+            const started = await startAsTheUrlAsks(plan, {
+                bootDisc,
+                machineSwitch,
+                drive0: media.slots.drive(0),
+                renderer: display.canvas.renderer,
+                noteStart: (details) => {
+                    noteMachineStart(settings, parsedQuery, details, audioHandler.ready);
+                    if (hasVideoNula) noteFeature(VideoNulaFeature, "fitted");
+                },
+                autoBoot,
+                dbgr,
+                snapshots,
+                loop,
+            });
+            if (!started) return;
+        }
+        // A shared session's way in is the More menu, which the desktop app has removed by now.
+        if (isDesktopApp()) return;
         const sessionContext = {
             processor,
             model,
             takenFromHost,
             loop,
             keyboard,
-            urlState,
             version,
-            rendezvous,
+            transport: webRtcTransport(createRendezvousClient()),
+            codec: gzipCodec,
+            page: sessionPage(urlState),
         };
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
             refusal: sessionRefusal(sessionContext),
-            host: async (name) => {
-                const session = await hostSession(sessionContext, name);
-                if (session) loop.go();
-                return session;
-            },
+            host: hostAndRun(loop, (name) => hostSession(sessionContext, name)),
             join: (room, name) => window.location.assign(joinLink(room, name, urlState.params)),
         });
     } catch (error) {

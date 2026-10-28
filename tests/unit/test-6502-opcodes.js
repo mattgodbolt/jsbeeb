@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Cpu6502 as cpu6502Opcodes, Cpu65c02 as cpu65c02Opcodes } from "../../src/6502.opcodes.js";
+import {
+    Cpu6502 as cpu6502Opcodes,
+    Cpu65c02 as cpu65c02Opcodes,
+    Cpu65c12 as cpu65c12Opcodes,
+} from "../../src/6502.opcodes.js";
 
 describe("Disassemble6502", () => {
     const mem = new Uint8Array(0x10000);
@@ -121,6 +125,28 @@ describe("Disassemble6502", () => {
         });
     });
 
+    it.each([
+        ["a BRK", cpu6502Opcodes, 0x1ffd, [0xad, 0x00, 0x60], "LDA $6000", 0x1ffd],
+        ["a TSB", cpu65c12Opcodes, 0x1ffd, [0x0e, 0x04, 0x04], "ASL $0404", 0x1ffd],
+        ["a BBR0", cpu65c02Opcodes, 0x1ffc, [0xc0, 0x0f, 0xe0, 0x41], "CPY #$0f", 0x1ffe],
+    ])(
+        "does not count %s parsed out of an operand as a common instruction",
+        (_, opcodes, at, bytes, listing, expected) => {
+            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            mem.set(bytes, at);
+            expect(dis.disassemble(at, true)[0]).toBe(listing);
+            expect(dis.prevInstruction(0x2000, 0x0000)).toBe(expected);
+        },
+    );
+
+    it("counts BIT as a common instruction", () => {
+        // The CPY run starts first, so it would win the 1-1 tie were BIT not to score.
+        mem.fill(0x02, 0x1fc0, 0x1ff9);
+        mem.set([0xc0, 0x2c, 0x08, 0xa9, 0xad, 0x08, 0x28], 0x1ff9);
+        expect(disassembler.disassemble(0x1ffa, true)[0]).toBe("BIT $a908");
+        expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffd);
+    });
+
     it("returns the previous instruction in an unambiguous run", () => {
         expect(disassembler.prevInstruction(0x2002, 0x1000)).toBe(0x2001);
     });
@@ -136,5 +162,16 @@ describe("Disassemble6502", () => {
         }
         mem[0x1fff] = 0xad;
         expect(disassembler.prevInstruction(0x2002, 0x2000)).toBe(0x2000);
+    });
+
+    it.each([
+        ["the earliest-starting run on a tie, here through JSR $41A9", 0x1ffd, [0x20, 0xa9, 0x41], undefined, 0x1ffd],
+        ["the overlapping LDA #$41 when pc is on it", 0x1ffd, [0x20, 0xa9, 0x41], 0x1ffe, 0x1ffe],
+        ["an instruction whose operand is data", 0x1ffd, [0x8d, 0x02, 0x02], undefined, 0x1ffd],
+        ["the byte before when the only runs overrun the target", 0x1fff, [0x20], 0x1fff, 0x1fff],
+        ["the byte before when nothing in the window decodes", 0x1fc0, new Array(0x40).fill(0x02), undefined, 0x1fff],
+    ])("before $2000 picks %s", (_, at, bytes, pc, expected) => {
+        mem.set(bytes, at);
+        expect(disassembler.prevInstruction(0x2000, pc)).toBe(expected);
     });
 });

@@ -14,7 +14,7 @@ carries its own commentary.
 jsbeeb's framebuffer is a 1024-wide **raster**, not a grid of BBC pixels. One
 logical pixel covers several framebuffer texels:
 
-- horizontally, `Video.blitFb` writes `pixelsPerChar` texels per byte, so a
+- horizontally, `Video.renderPending` writes `pixelsPerChar` texels per byte, so a
   logical pixel is one texel wide in MODE 0, two in MODE 1, and four in MODE 2
   and MODE 5;
 - vertically, non-interlaced modes write each CRTC scanline into two adjacent

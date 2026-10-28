@@ -1,3 +1,4 @@
+import { RomBankBytes } from "./6502.js";
 import { installBasic } from "./basic-loader.js";
 import * as fdc from "./fdc.js";
 import { fake6502 } from "./fake6502.js";
@@ -13,10 +14,10 @@ import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 
 export const MaxCyclesPerIter = 100 * 1000;
-const RomselBankMask = 0x0f;
 const RomselAndy = 0x80;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
+const VblankSearchCycles = 10 * 1000 * 1000;
 export const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HostKeyCodes = new Set(Object.values(keyCodes));
 
@@ -163,46 +164,20 @@ export class TestMachine {
     }
 
     async runUntilVblank() {
-        let hit = false;
         const { vsyncAddress } = this.model;
         if (vsyncAddress === null) throw new Error(`runUntilVblank does not know the ${this.model.name} OS`);
-        const hook = this.processor.debugInstruction.add((addr) => {
-            if (!this.processor.resumingFromStop && addr === vsyncAddress) {
-                hit = true;
-                return true;
-            }
-        });
-        try {
-            await this.runFor(10 * 1000 * 1000);
-        } finally {
-            hook.remove();
-        }
-        assert(hit, "did not hit appropriate breakpoint in time");
+        await this._runUntilAddress(vsyncAddress, VblankSearchCycles);
     }
 
     async runUntilInput(secs) {
-        if (!secs) secs = 120;
         console.log("Running until keyboard input requested");
-        const idleAddr = this.model.idleAddress;
-        let hit = false;
-        const hook = this.processor.debugInstruction.add((addr) => {
-            if (!this.processor.resumingFromStop && addr === idleAddr) {
-                hit = true;
-                return true;
-            }
-        });
-        try {
-            await this.runFor(secs * this.model.cyclesPerSecond);
-        } finally {
-            hook.remove();
-        }
-        assert(hit, "did not hit appropriate breakpoint in time");
+        await this.runUntilAddress(this.model.idleAddress, secs);
         return this.runFor(10 * 1000);
     }
 
     /** The sideways bank paged in at &8000 to &BFFF. */
     get pagedBank() {
-        return this.processor.romsel & RomselBankMask;
+        return this.processor.pagedBank;
     }
 
     /**
@@ -221,19 +196,43 @@ export class TestMachine {
      */
     async runUntilAddress(targetAddr, secs, { bank } = {}) {
         if (!secs) secs = 120;
+        await this._runUntilAddress(targetAddr, secs * this.model.cyclesPerSecond, { bank });
+    }
+
+    /**
+     * Stop any run when the CPU executes, reads or writes `address`, only
+     * while sideways `bank` is paged in there if one is given, calling
+     * `onHit` first with the byte read or written. An execute breakpoint
+     * never fires for the instruction the CPU resumes at after a stop.
+     * Returns the debug hook, whose `remove()` ends the watch.
+     * @param {"execute"|"read"|"write"} type
+     * @param {number} address
+     * @param {{bank: (number|undefined)}} opts
+     * @param {function(number=): void} onHit
+     */
+    addBreakpoint(type, address, { bank }, onHit) {
+        const cpu = this.processor;
+        const debugHook = new Map([
+            ["execute", cpu.debugInstruction],
+            ["read", cpu.debugRead],
+            ["write", cpu.debugWrite],
+        ]).get(type);
+        if (!debugHook) throw new Error(`Unknown breakpoint type: ${type}`);
+        return debugHook.add((addr, value) => {
+            if (addr !== address || (type === "execute" && cpu.resumingFromStop)) return false;
+            if (bank !== undefined && !this.isBankPagedAt(bank, address)) return false;
+            onHit(type === "execute" ? undefined : value);
+            return true;
+        });
+    }
+
+    async _runUntilAddress(address, cycles, { bank } = {}) {
         let hit = false;
-        const hook = this.processor.debugInstruction.add((addr) => {
-            if (
-                !this.processor.resumingFromStop &&
-                addr === targetAddr &&
-                (bank === undefined || this.isBankPagedAt(bank, targetAddr))
-            ) {
-                hit = true;
-                return true;
-            }
+        const hook = this.addBreakpoint("execute", address, { bank }, () => {
+            hit = true;
         });
         try {
-            await this.runFor(secs * this.model.cyclesPerSecond);
+            await this.runFor(cycles);
         } finally {
             hook.remove();
         }
@@ -325,11 +324,11 @@ export class TestMachine {
     /**
      * Load a ROM image directly into a sideways RAM slot.
      * @param {number} slot - slot number (0-15, typically 4-7 for SWRAM)
-     * @param {Uint8Array|Buffer} data - ROM data (up to 16384 bytes)
+     * @param {Uint8Array|Buffer} data - ROM data (up to one 16KB bank)
      */
     loadSidewaysRam(slot, data) {
-        const offset = this.processor.romOffset + slot * 16384;
-        for (let i = 0; i < data.length && i < 16384; i++) {
+        const offset = this.processor.romOffset + slot * RomBankBytes;
+        for (let i = 0; i < data.length && i < RomBankBytes; i++) {
             this.processor.ramRomOs[offset + i] = data[i];
         }
     }

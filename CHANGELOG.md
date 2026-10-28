@@ -1,5 +1,113 @@
 # Changelog
 
+## [2.12.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.12.0...v2.12.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* start the desktop app's emulator without the More menu's shared session item ([#1564](https://github.com/mattgodbolt/jsbeeb/issues/1564)) ([6555a71](https://github.com/mattgodbolt/jsbeeb/commit/6555a71be81ecb7ca57e08a20ce624e9ec8364af))
+
+## [2.12.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.11.1...v2.12.0) (2026-10-28)
+
+
+### Features
+
+* a Model B with MOS 0.10 ([#1543](https://github.com/mattgodbolt/jsbeeb/issues/1543)) ([25a674c](https://github.com/mattgodbolt/jsbeeb/commit/25a674c4b577385196d04ba498b0fcef988b30f1))
+* create blank HFE discs on Google Drive ([#1531](https://github.com/mattgodbolt/jsbeeb/issues/1531)) ([f0bf8d5](https://github.com/mattgodbolt/jsbeeb/commit/f0bf8d5177899b52069ba2823a4d42e420167c5e))
+* fit sideways ROMs to a MachineSession with extraRoms and bankRoms ([#1557](https://github.com/mattgodbolt/jsbeeb/issues/1557)) ([42f39bc](https://github.com/mattgodbolt/jsbeeb/commit/42f39bc7a681fe5f23b0cbf46e88067f5753bca8))
+* load a ROM into a chosen bank with rom.N, and take github: references in rom= ([#1542](https://github.com/mattgodbolt/jsbeeb/issues/1542)) ([ca3a273](https://github.com/mattgodbolt/jsbeeb/commit/ca3a273927939c07ad00d751160a437f81f04d59))
+* mark symbol sets' regions in the memory view, and watch addresses from a panel or a right-click ([#1541](https://github.com/mattgodbolt/jsbeeb/issues/1541)) ([5fb140e](https://github.com/mattgodbolt/jsbeeb/commit/5fb140ee7d96651241bd9d89c86dde6c9fa75cdc))
+
+
+### Bug Fixes
+
+* clear the Master's ACCCON on a hard reset ([#1548](https://github.com/mattgodbolt/jsbeeb/issues/1548)) ([d5833b9](https://github.com/mattgodbolt/jsbeeb/commit/d5833b9400c40f02058b59cfabab6bd45d276dca))
+* hold a seconds, minutes or hours byte that is not a time as written ([#1530](https://github.com/mattgodbolt/jsbeeb/issues/1530)) ([1c8bc0a](https://github.com/mattgodbolt/jsbeeb/commit/1c8bc0a9f279f42d382d337eea4dfc25b30bb35c))
+* keep glEnabled=false and lowLatency=false in the URLs the page writes ([#1532](https://github.com/mattgodbolt/jsbeeb/issues/1532)) ([df935b5](https://github.com/mattgodbolt/jsbeeb/commit/df935b59fba5f4f5199d1534809913bc210aa5c5))
+* mirror the stock BBC B's four ROM sockets and fit BASIC in IC52 ([#1535](https://github.com/mattgodbolt/jsbeeb/issues/1535)) ([ef87f85](https://github.com/mattgodbolt/jsbeeb/commit/ef87f8575b2155198ff57e7c5e96097db3e27347))
+* play drive seeks from recordings made at each step rate ([#1520](https://github.com/mattgodbolt/jsbeeb/issues/1520)) ([81ee6ab](https://github.com/mattgodbolt/jsbeeb/commit/81ee6ab2f9087bdd168b00ddd9c60a6a05a226be))
+* score only real common mnemonics in the debugger's previous-instruction guess ([#1533](https://github.com/mattgodbolt/jsbeeb/issues/1533)) ([c878d22](https://github.com/mattgodbolt/jsbeeb/commit/c878d22ece5dcd5fb2adeed8b1fa536abf52057a))
+* send a paste on a shared session through the session as keys ([#1536](https://github.com/mattgodbolt/jsbeeb/issues/1536)) ([a4b90e3](https://github.com/mattgodbolt/jsbeeb/commit/a4b90e3936d9ba877f0046724ad9c944285381d5))
+* set the keyboard's CA2 flag from the autoscan, and bring it back at the scan's next edge after a clear ([#1547](https://github.com/mattgodbolt/jsbeeb/issues/1547)) ([c749e8d](https://github.com/mattgodbolt/jsbeeb/commit/c749e8d5d9f090bb28569f2d6e7b7e9151e3ed75))
+* show the debugger's VIA timers as a program would read them ([#1555](https://github.com/mattgodbolt/jsbeeb/issues/1555)) ([4cee286](https://github.com/mattgodbolt/jsbeeb/commit/4cee286e0411e728bbf6d28807585aad5e8764d1))
+* skip an empty ROM name in MachineSession's extraRoms and bankRoms, as the page does ([#1561](https://github.com/mattgodbolt/jsbeeb/issues/1561)) ([1ece536](https://github.com/mattgodbolt/jsbeeb/commit/1ece536b8c2add537d47ce971dc09dd21e484110))
+* use the bank a stock BBC B's ROMSEL aliases to for paging state, breakpoints and power-on ([#1544](https://github.com/mattgodbolt/jsbeeb/issues/1544)) ([8ff233d](https://github.com/mattgodbolt/jsbeeb/commit/8ff233d50b6aa3ec340585013ef6225f91f954d9))
+
+
+### Performance Improvements
+
+* page memory through read and write offset tables that debug hooks fault through ([#1513](https://github.com/mattgodbolt/jsbeeb/issues/1513)) ([360a3f1](https://github.com/mattgodbolt/jsbeeb/commit/360a3f1793e7e837375124bcfce9dc52728fe195))
+
+## [2.11.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.11.0...v2.11.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* latch the 8271's drive status on every index pulse ([#1524](https://github.com/mattgodbolt/jsbeeb/issues/1524)) ([76d5c3c](https://github.com/mattgodbolt/jsbeeb/commit/76d5c3c949493f08bc6cff0b1979c15a8ea26cb3))
+
+
+### Performance Improvements
+
+* clear only the box each field drew in ([#1521](https://github.com/mattgodbolt/jsbeeb/issues/1521)) ([55d9aca](https://github.com/mattgodbolt/jsbeeb/commit/55d9acab625227dd9fc260e6cc31d0c7c13c4d31))
+* expand the SAA5050's glyph rows with Wasm SIMD ([#1506](https://github.com/mattgodbolt/jsbeeb/issues/1506)) ([801dc90](https://github.com/mattgodbolt/jsbeeb/commit/801dc90317514cb6a35500abda5abaf2f9fbc8aa))
+* paint MODE 7 from the SAA5050's log, outside the render loop ([#1504](https://github.com/mattgodbolt/jsbeeb/issues/1504)) ([d64497f](https://github.com/mattgodbolt/jsbeeb/commit/d64497fdb2541349f06b99260f575c644473066d))
+* run the SAA5050 only when something reads it ([#1501](https://github.com/mattgodbolt/jsbeeb/issues/1501)) ([25e98f9](https://github.com/mattgodbolt/jsbeeb/commit/25e98f9f6a97644bd7bd4f60c5329456dbab4b55))
+
+## [2.11.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.2...v2.11.0) (2026-10-24)
+
+
+### Features
+
+* list Eben Upton's Solid Elite, 2048, Lander and DOOM in the GitHub discs ([#1482](https://github.com/mattgodbolt/jsbeeb/issues/1482)) ([4be96b6](https://github.com/mattgodbolt/jsbeeb/commit/4be96b6cd0b2aab530cf2ae60e5bc525df7a9982))
+
+
+### Bug Fixes
+
+* clip teletext cells above an odd field to their spill onto row 0 ([#1508](https://github.com/mattgodbolt/jsbeeb/issues/1508)) ([6a9c696](https://github.com/mattgodbolt/jsbeeb/commit/6a9c6968516cb7c6fcd4707b1e14cc7489ae806a))
+* double the cursor with its cell in a stuck interlaced field ([#1496](https://github.com/mattgodbolt/jsbeeb/issues/1496)) ([470a378](https://github.com/mattgodbolt/jsbeeb/commit/470a378a3b5adb95ec3b2506c2140cd6985e652a))
+* save sideways RAM in save states and rewind snapshots ([#1511](https://github.com/mattgodbolt/jsbeeb/issues/1511)) ([0f23ece](https://github.com/mattgodbolt/jsbeeb/commit/0f23ece941aa0403f44324ee022ad0dd79253889))
+
+
+### Performance Improvements
+
+* draw pending bitmap cells with a generated Wasm SIMD drain ([#1497](https://github.com/mattgodbolt/jsbeeb/issues/1497)) ([ba0605d](https://github.com/mattgodbolt/jsbeeb/commit/ba0605d759fae129b517f8a0e34102d79ffce9dc))
+
+## [2.10.2](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.1...v2.10.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* a host welcomes a guest once it has said hello, as Chrome can drop what is sent the moment a guest's channel opens ([#1447](https://github.com/mattgodbolt/jsbeeb/issues/1447)) ([968da1d](https://github.com/mattgodbolt/jsbeeb/commit/968da1d6916f70c03aebc371aeab4788d5a0750d))
+* a power-on reset re-enables a VideoNuLA that software disabled ([#1444](https://github.com/mattgodbolt/jsbeeb/issues/1444)) ([3d89cd1](https://github.com/mattgodbolt/jsbeeb/commit/3d89cd177fe107aa92adc4d92fbff1dd07f07f5f))
+* an Atom hard reset takes the speaker's last level from the cleared port C latch ([#1461](https://github.com/mattgodbolt/jsbeeb/issues/1461)) ([096a982](https://github.com/mattgodbolt/jsbeeb/commit/096a982ab8d93154f71a1d0f8a11b9fe370f6aa9))
+* an error in the loop stops the machine like any other stop ([#1437](https://github.com/mattgodbolt/jsbeeb/issues/1437)) ([5a0143d](https://github.com/mattgodbolt/jsbeeb/commit/5a0143d6420e0fcc9e0ead201fc4f7f49d54207b))
+* call the settings dialog settings everywhere, and place the : * key by position in help ([#1438](https://github.com/mattgodbolt/jsbeeb/issues/1438)) ([8eaf2ec](https://github.com/mattgodbolt/jsbeeb/commit/8eaf2ecd93210a6ebe0e533dd54d0a0747667bfa)), closes [#1404](https://github.com/mattgodbolt/jsbeeb/issues/1404)
+* hold the machine when a shared session ends in a hidden tab ([#1451](https://github.com/mattgodbolt/jsbeeb/issues/1451)) ([43df695](https://github.com/mattgodbolt/jsbeeb/commit/43df695bf47a2d2fc5e5f62bc9396fe5010f1cf5))
+* keep the Master RTC working after writing October, and read the year as two digits ([#1452](https://github.com/mattgodbolt/jsbeeb/issues/1452)) ([1e26700](https://github.com/mattgodbolt/jsbeeb/commit/1e26700bbdc65fd1c916f8d4468c724c08193e5c))
+* restoring an Atom state restores the speaker's level ([#1442](https://github.com/mattgodbolt/jsbeeb/issues/1442)) ([2a76b51](https://github.com/mattgodbolt/jsbeeb/commit/2a76b51d07147995032413d4ba102539b5a81f21))
+* score the debugger's previous-instruction guess in one pass ([#1470](https://github.com/mattgodbolt/jsbeeb/issues/1470)) ([a12b8ed](https://github.com/mattgodbolt/jsbeeb/commit/a12b8edee75b4434a866cc7dac3e35aa528f2bc0))
+* the ADC status register reports the result's top bits in bits 5 and 4, not over the channel ([#1422](https://github.com/mattgodbolt/jsbeeb/issues/1422)) ([d88bc37](https://github.com/mattgodbolt/jsbeeb/commit/d88bc373ce95edace3e020f3dae1b754debbb1eb))
+* the ADC's low byte reads bits 3-0 as zero ([#1440](https://github.com/mattgodbolt/jsbeeb/issues/1440)) ([18caa5b](https://github.com/mattgodbolt/jsbeeb/commit/18caa5b2527918b16bbe3bad48309c65be827c06))
+* the Master clock keeps a 31st set while it reads a shorter month ([#1466](https://github.com/mattgodbolt/jsbeeb/issues/1466)) ([36a20a1](https://github.com/mattgodbolt/jsbeeb/commit/36a20a1dc2b7811cd2362b33042afea3eda459a9))
+* typing g or n into any text field leaves a paused machine paused ([#1441](https://github.com/mattgodbolt/jsbeeb/issues/1441)) ([69a945b](https://github.com/mattgodbolt/jsbeeb/commit/69a945b50542f3da9ef3784d47360804ccd58d2d))
+
+## [2.10.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.10.0...v2.10.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* a Return pressed after a dead key reaches the machine, held as long as it is held ([#1412](https://github.com/mattgodbolt/jsbeeb/issues/1412)) ([babfb56](https://github.com/mattgodbolt/jsbeeb/commit/babfb56f9af5731dd86cab5fcf72026aee3dee31))
+* a shared session's offer and answer wait for a first ICE candidate, however long it takes ([#1411](https://github.com/mattgodbolt/jsbeeb/issues/1411)) ([a390603](https://github.com/mattgodbolt/jsbeeb/commit/a39060395281f58a8e866b3a5208c164b4db175c))
+* a wider help dialog that fits a desktop screen and scrolls under its header on smaller screens, and ⌥ for Alt on a Mac ([#1378](https://github.com/mattgodbolt/jsbeeb/issues/1378)) ([ff1c3ec](https://github.com/mattgodbolt/jsbeeb/commit/ff1c3ec1d0fd061b6a4402463feeba6605d37f62))
+* an 8271 seek with the head unloaded reaches no drive, and a seek to track 0 then gives up with &14 ([#1403](https://github.com/mattgodbolt/jsbeeb/issues/1403)) ([2eb4d1b](https://github.com/mattgodbolt/jsbeeb/commit/2eb4d1bff03ccc8713761ef3c2fa7dd4657b2405))
+* benchmark workloads state the fittings they run on, the page refuses a machine fitted otherwise, and CI checks they are current ([#1398](https://github.com/mattgodbolt/jsbeeb/issues/1398)) ([3cbbae6](https://github.com/mattgodbolt/jsbeeb/commit/3cbbae63e3186ab96a84ff0e4a729db7cf167828))
+* both disc drives turn while the motor line is on, not only the selected one ([#1390](https://github.com/mattgodbolt/jsbeeb/issues/1390)) ([627586e](https://github.com/mattgodbolt/jsbeeb/commit/627586ed68f766f1827fea22d7dda046a4097805))
+* debug read hooks see the value of zero page and stack reads ([#1408](https://github.com/mattgodbolt/jsbeeb/issues/1408)) ([d39676e](https://github.com/mattgodbolt/jsbeeb/commit/d39676e549a910b5067730094bd6405b93982a92)), closes [#1399](https://github.com/mattgodbolt/jsbeeb/issues/1399)
+* the drive noise follows a snapshot restore and stops when the motor does ([#1397](https://github.com/mattgodbolt/jsbeeb/issues/1397)) ([8e4b9b1](https://github.com/mattgodbolt/jsbeeb/commit/8e4b9b19e82dceca05915bf99b587b32e4977fdf))
+* the emulation loop owns why the machine is stopped ([#1386](https://github.com/mattgodbolt/jsbeeb/issues/1386)) ([47290de](https://github.com/mattgodbolt/jsbeeb/commit/47290de8e93be25e1cdaa8b383939112ead006be))
+* the WD1770's status shows a write-protected disc after a restore, seek or step ([#1382](https://github.com/mattgodbolt/jsbeeb/issues/1382)) ([d7ada41](https://github.com/mattgodbolt/jsbeeb/commit/d7ada41a7868309cf6f40bf0a78f3fa7a68b1b17))
+* writing the WD1770's drive control register mid-command no longer stops the emulator ([#1384](https://github.com/mattgodbolt/jsbeeb/issues/1384)) ([9598cb7](https://github.com/mattgodbolt/jsbeeb/commit/9598cb7047d2f792580b8cbe15b8fffb7bb8528b))
+
 ## [2.10.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.9.0...v2.10.0) (2026-10-19)
 
 

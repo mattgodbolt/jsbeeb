@@ -10,16 +10,40 @@ import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
-import { unzipRomImage } from "./archive.js";
 import { signExtend } from "./binary.js";
 import { hexbyte, hexword } from "./hex.js";
 import { loadData } from "./loader.js";
+import { MediaResolver } from "./media-resolver.js";
+
+async function romImage(name) {
+    return (await new MediaResolver().resolve("rom", name)).data;
+}
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
 
 const UnpeekableDevice = 0xff;
+export const BaseRamBytes = 64 * 1024;
+export const RomBankBytes = 16 * 1024;
+export const NumRomBanks = 16;
+const RomOffset = BaseRamBytes;
+const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
+const BbcMemoryBytes = OsOffset + RomBankBytes;
+// Further from every real offset than any address, and a small integer in every V8 build.
+const SlowPathOffset = -0x40000000;
+
+/**
+ * Packs sideways RAM banks into a snapshot's `swram` and `swramBankMask`: the banks back to back in ascending
+ * order, and a mask with bit n set when bank n is among them.
+ * @param {Map<number, Uint8Array>} banks 16KB of contents for each bank number
+ */
+export function packSidewaysRam(banks) {
+    const bankNumbers = [...banks.keys()].sort((a, b) => a - b);
+    const swram = new Uint8Array(bankNumbers.length * RomBankBytes);
+    bankNumbers.forEach((bank, index) => swram.set(banks.get(bank), index * RomBankBytes));
+    return { swram, swramBankMask: bankNumbers.reduce((mask, bank) => mask | (1 << bank), 0) };
+}
 
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
@@ -601,6 +625,7 @@ class DebugHook {
                 }
                 return stop;
             };
+            this.cpu.refreshLook();
         }
         handler.remove = () => this.remove(handler);
         return handler;
@@ -612,12 +637,14 @@ class DebugHook {
         this.handlers = this.handlers.slice(0, i).concat(this.handlers.slice(i + 1));
         if (this.handlers.length === 0) {
             this.cpu[this.functionName] = null;
+            this.cpu.refreshLook();
         }
     }
 
     clear() {
         this.handlers = [];
         this.cpu[this.functionName] = null;
+        this.cpu.refreshLook();
     }
 
     get stopped() {
@@ -685,9 +712,11 @@ export class Cpu6502 extends Base6502 {
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
         this.memLook = new Int32Array(512); // Cannot be unsigned as we use negative offsets
-        this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
-        this.romOffset = 128 * 1024;
-        this.osOffset = this.romOffset + 16 * 16 * 1024;
+        this.readLook = new Int32Array(512).fill(SlowPathOffset);
+        this.writeLook = new Int32Array(512).fill(SlowPathOffset);
+        this.ramRomOs = new Uint8Array(this.memoryBytes);
+        this.romOffset = RomOffset;
+        this.osOffset = OsOffset;
         this.romsel = 0;
         this.acccon = 0;
         this.oldPcArray = new Uint16Array(256);
@@ -742,6 +771,10 @@ export class Cpu6502 extends Base6502 {
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
     }
 
+    get memoryBytes() {
+        return BbcMemoryBytes;
+    }
+
     getPrevPc(index) {
         return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
     }
@@ -753,19 +786,38 @@ export class Cpu6502 extends Base6502 {
     // 0b000 - 10000 -> LYNNE - 20KB
     romSelect(b) {
         this.romsel = b;
-        const bankOffset = ((b & 15) << 14) + this.romOffset;
-        const offset = bankOffset - 0x8000;
-        for (let c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
-        const swram = this.model.swram[b & 15] ? 1 : 2;
-        for (let c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
+        const bank = this.pagedBank;
+        const offset = bank * RomBankBytes + this.romOffset - 0x8000;
+        const swram = this.model.swram[bank] ? 1 : 2;
+        this.mapBothHalves(0x80, 0xc0, swram, offset);
         if (this.model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
             // Zero offset as 0x8000 mapped to 0x8000
-            for (let c = 128; c < 144; ++c) {
-                this.memLook[c] = this.memLook[256 + c] = 0;
-                this.memStat[c] = this.memStat[256 + c] = 1;
-            }
+            this.mapBothHalves(0x80, 0x90, 1, 0);
         }
+    }
+
+    /** The sideways bank ROMSEL pages in. */
+    get pagedBank() {
+        const { romSockets } = this.model;
+        return NumRomBanks - romSockets + (this.romsel & (romSockets - 1));
+    }
+
+    mapPages(start, end, stat, offset) {
+        this.memStat.fill(stat, start, end);
+        this.memLook.fill(offset, start, end);
+        // While a debug hook is set, every access of its kind takes the slow path, which calls it.
+        this.readLook.fill(stat && !this._debugRead ? offset : SlowPathOffset, start, end);
+        this.writeLook.fill(stat === 1 && !this._debugWrite ? offset : SlowPathOffset, start, end);
+    }
+
+    mapBothHalves(fromPage, toPage, stat, offset) {
+        this.mapPages(fromPage, toPage, stat, offset);
+        this.mapPages(256 + fromPage, 256 + toPage, stat, offset);
+    }
+
+    refreshLook() {
+        for (let i = 0; i < this.memStat.length; ++i) this.mapPages(i, i + 1, this.memStat[i], this.memLook[i]);
     }
 
     writeAcccon(b) {
@@ -782,47 +834,33 @@ export class Cpu6502 extends Base6502 {
         const bitE = !!(b & 2);
         const bitX = !!(b & 4);
         const bitY = !!(b & 8);
-        // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
-        // This loop rewires which paged RAM 0x3000 - 0x7fff hits.
-        for (let i = 48; i < 128; ++i) {
-            // For "normal" access, it's simple: shadow or not.
-            this.memLook[i] = bitX ? 0x8000 : 0;
-            // For special Master opcode access at 0xc000 - 0xdfff,
-            // it's more involved.
-            if (bitY) {
-                // If 0xc000 is mapped as RAM, the Master opcode access
-                // is disabled; follow what normal access does.
-                this.memLook[i + 256] = this.memLook[i];
-            } else {
-                // Master opcode access enabled; bit E determines whether
-                // it hits shadow RAM or normal RAM. This is independent
-                // of bit X.
-                this.memLook[i + 256] = bitE ? 0x8000 : 0;
-            }
-        }
+        // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE at 0x3000 - 0x7fff.
+        const normal = bitX ? 0x8000 : 0;
+        this.mapPages(0x30, 0x80, 1, normal);
+        // Opcodes at 0xc000 - 0xdfff see shadow RAM by bit E, independent of bit X, unless HAZEL
+        // is paged in there, when they see what normal access does.
+        this.mapPages(256 + 0x30, 256 + 0x80, 1, bitY ? normal : bitE ? 0x8000 : 0);
         // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
         // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
         const hazelRAM = bitY ? 1 : 2;
         const hazelOff = bitY ? -0x3000 : this.osOffset - 0xc000;
-        for (let i = 192; i < 224; ++i) {
-            this.memLook[i] = this.memLook[i + 256] = hazelOff;
-            this.memStat[i] = this.memStat[i + 256] = hazelRAM;
-        }
+        this.mapBothHalves(0xc0, 0xe0, hazelRAM, hazelOff);
     }
 
-    // Works for unpaged RAM only (ie stack and zp)
+    // Pages 0 and 1 are the same in both halves of the tables, so these skip memStatOffset.
     readmemZpStack(addr) {
         addr &= 0xffff;
-        const res = this.ramRomOs[addr];
-        if (this._debugRead) this._debugRead(addr, 0, res);
-        return res | 0;
+        const offset = this.readLook[addr >>> 8];
+        if (offset !== SlowPathOffset) return this.ramRomOs[offset + addr] | 0;
+        return this.readmemSlow(addr);
     }
 
     writememZpStack(addr, b) {
         addr &= 0xffff;
         b |= 0;
-        if (this._debugWrite) this._debugWrite(addr, b);
-        this.ramRomOs[addr] = b;
+        const offset = this.writeLook[addr >>> 8];
+        if (offset !== SlowPathOffset) this.ramRomOs[offset + addr] = b;
+        else this.writememSlow(addr, b);
     }
 
     // Handy debug function to read a string zero or \n terminated.
@@ -1017,17 +1055,23 @@ export class Cpu6502 extends Base6502 {
 
     readmem(addr) {
         addr &= 0xffff;
+        const offset = this.readLook[this.memStatOffset + (addr >>> 8)];
+        if (offset !== SlowPathOffset) return this.ramRomOs[offset + addr] | 0;
+        return this.readmemSlow(addr);
+    }
+
+    readmemSlow(addr) {
         const statOffset = this.memStatOffset + (addr >>> 8);
+        let offset = 0;
+        let res;
         if (this.memStat[statOffset]) {
-            const offset = this.memLook[statOffset];
-            const res = this.ramRomOs[offset + addr];
-            if (this._debugRead) this._debugRead(addr, res, offset);
-            return res | 0;
+            offset = this.memLook[statOffset];
+            res = this.ramRomOs[offset + addr];
         } else {
-            const res = this.readDevice(addr);
-            if (this._debugRead) this._debugRead(addr, res, 0);
-            return res | 0;
+            res = this.readDevice(addr);
         }
+        if (this._debugRead) this._debugRead(addr, res, offset);
+        return res | 0;
     }
 
     peekmem(addr) {
@@ -1153,15 +1197,17 @@ export class Cpu6502 extends Base6502 {
     writemem(addr, b) {
         addr &= 0xffff;
         b |= 0;
+        const offset = this.writeLook[this.memStatOffset + (addr >>> 8)];
+        if (offset !== SlowPathOffset) this.ramRomOs[offset + addr] = b;
+        else this.writememSlow(addr, b);
+    }
+
+    writememSlow(addr, b) {
         if (this._debugWrite) this._debugWrite(addr, b);
         const statOffset = this.memStatOffset + (addr >>> 8);
-        if (this.memStat[statOffset] === 1) {
-            const offset = this.memLook[statOffset];
-            this.ramRomOs[offset + addr] = b;
-            return;
-        }
-        if (addr < 0xfc00 || addr >= 0xff00) return;
-        this.writeDevice(addr, b);
+        const stat = this.memStat[statOffset];
+        if (stat === 1) this.ramRomOs[this.memLook[statOffset] + addr] = b;
+        else if (stat === 0) this.writeDevice(addr, b);
     }
 
     writeDevice(addr, b) {
@@ -1305,44 +1351,78 @@ export class Cpu6502 extends Base6502 {
     }
 
     async loadRom(name, offset) {
-        if (name.indexOf("http") !== 0) name = "roms/" + name;
-        console.log("Loading ROM from " + name);
-        const ramRomOs = this.ramRomOs;
-        let data = await loadData(name);
-        if (/\.zip/i.test(name)) {
-            data = (await unzipRomImage(data)).data;
-        }
-        ramRomOs.set(data, offset);
+        console.log(`Loading ROM from ${name}`);
+        this.ramRomOs.set(await romImage(name), offset);
     }
 
-    async loadOs(os) {
-        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+    /**
+     * Loads the OS and then the model's sideways ROMs into the highest free banks, in order, an empty name leaving its
+     * socket empty. The fittings' ROMs follow, into the empty sockets before any lower bank; then each of the config's
+     * `bankRoms` goes into the bank it names, which must be free after those and named only once, and the config's
+     * extra ROMs into the empty sockets and highest banks left.
+     */
+    async loadOs(os, ...modelRoms) {
         os = "roms/" + os;
         console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
         const data = await loadData(os);
         const len = data.length;
-        if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
-        ramRomOs.set(data, this.osOffset);
-        const numExtraBanks = (len - 16384) / 16384;
-        let romIndex = 16 - numExtraBanks;
+        if (len < RomBankBytes || len % RomBankBytes) throw new Error(`Broken OS ROM file (length=${len})`);
+        ramRomOs.set(data.subarray(0, RomBankBytes), this.osOffset);
+        const numExtraBanks = (len - RomBankBytes) / RomBankBytes;
+        let romIndex = NumRomBanks - numExtraBanks;
+        const filledBy = new Map();
         for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
-            const srcBase = 16384 + 16384 * i_1;
-            const destBase = this.romOffset + (romIndex + i_1) * 16384;
-            ramRomOs.set(data.subarray(srcBase, srcBase + 16384), destBase);
+            const srcBase = RomBankBytes * (i_1 + 1);
+            const destBase = this.romOffset + (romIndex + i_1) * RomBankBytes;
+            ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
+            filledBy.set(romIndex + i_1, `a ROM from ${os}`);
         }
-        const awaiting = [];
-        for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
-            // Skip over banks 4-7 (sideways RAM on a Master)
+        const placed = [];
+        const place = (bank, rom) => placed.push({ bank, rom });
+        const { romSockets } = this.model;
+        const lowestBank = NumRomBanks - romSockets;
+        const nextFreeBank = (isTaken) => {
             romIndex--;
-            while (this.model.swram[romIndex]) {
-                romIndex--;
+            while (isTaken(romIndex)) romIndex--;
+            if (romIndex < lowestBank) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
+            return romIndex;
+        };
+        const isRam = (bank) => this.model.swram[bank];
+        let emptySockets = [];
+        for (const rom of modelRoms) {
+            const bank = nextFreeBank(isRam);
+            if (!rom) {
+                emptySockets.push(bank);
+                continue;
             }
-            if (romIndex < 0) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
-
-            awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 16384));
+            filledBy.set(bank, rom);
+            place(bank, rom);
         }
-        return await Promise.all(awaiting);
+        for (const rom of this.config.fittedRoms) {
+            const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
+            filledBy.set(bank, rom);
+            place(bank, rom);
+        }
+        const { bankRoms } = this.config;
+        for (const { bank, rom } of bankRoms) {
+            if (bank < lowestBank || bank >= NumRomBanks)
+                throw new Error(
+                    `Can't load ${rom} into ROM bank ${bank}: the ${this.model.name} has ${romSockets} ROM sockets, banks ${lowestBank} to ${NumRomBanks - 1}`,
+                );
+            if (filledBy.has(bank))
+                throw new Error(`Can't load ${rom} into ROM bank ${bank}, which already holds ${filledBy.get(bank)}`);
+            filledBy.set(bank, rom);
+            place(bank, rom);
+        }
+        const isNamed = (bank) => bankRoms.some((named) => named.bank === bank);
+        emptySockets = emptySockets.filter((bank) => !isNamed(bank));
+        const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
+        for (const rom of this.config.extraRoms)
+            place(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
+        return await Promise.all(
+            placed.map(({ bank, rom }) => this.loadRom(rom, this.romOffset + bank * RomBankBytes)),
+        );
     }
 
     setReset(resetOn) {
@@ -1374,10 +1454,9 @@ export class Cpu6502 extends Base6502 {
             peripheralCycles: this.peripheralCycles,
             videoCycles: this.videoCycles,
             music5000PageSel: this.music5000PageSel,
-            // RAM only by default; pass includeRoms:true to also capture
-            // sideways ROM/RAM slots (adds ~256KB to the snapshot).
             ram: this.ramRomOs.slice(0, this.romOffset),
-            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * 16384) : undefined,
+            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.osOffset) : undefined,
+            ...(includeRoms ? {} : this.packedSidewaysRam()),
             // Sub-component state
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
@@ -1391,6 +1470,28 @@ export class Cpu6502 extends Base6502 {
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
+    }
+
+    romBank(bank) {
+        const start = this.romOffset + bank * RomBankBytes;
+        return this.ramRomOs.subarray(start, start + RomBankBytes);
+    }
+
+    packedSidewaysRam() {
+        const banks = new Map();
+        this.model.swram.forEach((isRam, bank) => {
+            if (isRam) banks.set(bank, this.romBank(bank));
+        });
+        return packSidewaysRam(banks);
+    }
+
+    restoreSidewaysRam(swram, swramBankMask) {
+        let packedOffset = 0;
+        for (let bank = 0; bank < NumRomBanks; ++bank) {
+            if (!(swramBankMask & (1 << bank))) continue;
+            this.romBank(bank).set(swram.subarray(packedOffset, packedOffset + RomBankBytes));
+            packedOffset += RomBankBytes;
+        }
     }
 
     restoreState(state) {
@@ -1413,18 +1514,12 @@ export class Cpu6502 extends Base6502 {
         else this.debugInstruction.forgetStop();
 
         // 3. Memory
-        this.ramRomOs.set(state.ram);
-        // Load ROMs if present (e.g. from BEM snapshot import)
+        // Older snapshots saved 128KB of ram; only the first 64KB was ever mapped.
+        this.ramRomOs.set(state.ram.subarray(0, this.romOffset));
         if (state.roms) {
-            this.ramRomOs.set(state.roms.slice(0, 16 * 16384), this.romOffset);
+            this.ramRomOs.set(state.roms.slice(0, NumRomBanks * RomBankBytes), this.romOffset);
         }
-        // Selectively overwrite individual sideways RAM banks (e.g. from BeebEm UEF import)
-        // without touching ROM banks that jsbeeb has already loaded.
-        if (state.swRamBanks) {
-            for (const [bank, data] of Object.entries(state.swRamBanks)) {
-                this.ramRomOs.set(data.slice(0, 16384), this.romOffset + Number(bank) * 16384);
-            }
-        }
+        if (state.swram) this.restoreSidewaysRam(state.swram, state.swramBankMask);
         this.videoDisplayPage = state.videoDisplayPage;
         this.music5000PageSel = state.music5000PageSel;
 
@@ -1487,19 +1582,13 @@ export class Cpu6502 extends Base6502 {
         // redirected to shadow RAM.
         this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
         if (!this.model.isTest) {
-            for (let i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
-            for (let i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
-            for (let i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-            for (let i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
-            for (let i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
-
-            for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+            this.mapBothHalves(0, 0x80, 1, 0);
+            this.romSelect(0);
+            this.mapBothHalves(0xc0, 0x100, 2, this.osOffset - 0xc000);
+            this.mapBothHalves(0xfc, 0xff, 0, 0);
         } else {
             // Test sets everything as RAM.
-            for (let i = 0; i < 256; ++i) {
-                this.memStat[i] = this.memStat[256 + i] = 1;
-                this.memLook[i] = this.memLook[256 + i] = 0;
-            }
+            this.mapBothHalves(0, 0x100, 1, 0);
         }
         // DRAM content is not guaranteed to contain any particular
         // value on start up, so we choose values that help avoid
@@ -1514,6 +1603,7 @@ export class Cpu6502 extends Base6502 {
             }
         }
         this.videoDisplayPage = 0;
+        if (this.model.isMaster) this.writeAcccon(0);
     }
 
     // Override in subclasses for different peripheral sets.
@@ -1772,13 +1862,17 @@ export class Cpu6502 extends Base6502 {
 // bank is visible at 0xA000-0xAFFF. Banks can contain ROM or RAM.
 // The latch is write-only; bit 6 is a lock bit.
 
-// Storage for Branquart banks starts after the BBC ROM area.
-const BranquartOffset = 128 * 1024 + 17 * 16 * 16384;
+const BranquartOffset = BbcMemoryBytes;
 const BranquartBankSize = 0x1000; // 4KB per bank
 const NumBranquartBanks = 16;
+const AtomMemoryBytes = BranquartOffset + NumBranquartBanks * BranquartBankSize;
 const AtomRomBlockSize = 0x1000; // 4KB
 
 export class AtomCpu6502 extends Cpu6502 {
+    get memoryBytes() {
+        return AtomMemoryBytes;
+    }
+
     setKeyLayout(layout) {
         this.keyLayout = layout;
         this.atomppia.setKeyLayout(layout);
@@ -1798,14 +1892,6 @@ export class AtomCpu6502 extends Cpu6502 {
         // Track which banks are ROM (false) vs RAM (true) for write protection.
         this.branquartRam = new Array(NumBranquartBanks).fill(true);
 
-        // Expand ramRomOs to include Branquart bank storage.
-        const expandedSize = BranquartOffset + NumBranquartBanks * BranquartBankSize;
-        if (this.ramRomOs.length < expandedSize) {
-            const expanded = new Uint8Array(expandedSize);
-            expanded.set(this.ramRomOs);
-            this.ramRomOs = expanded;
-        }
-
         // reset() and debugger.setCpu() are called by initialise() after loadOs().
     }
 
@@ -1814,50 +1900,32 @@ export class AtomCpu6502 extends Cpu6502 {
     selectBranquartBank(bank) {
         bank &= 0x0f;
         const offset = BranquartOffset + bank * BranquartBankSize - 0xa000;
-        for (let i = 0xa0; i < 0xb0; ++i) {
-            this.memLook[i] = this.memLook[256 + i] = offset;
-        }
         // ROM banks are read-only, RAM banks are writable
         const stat = this.branquartRam[bank] ? 1 : 2;
-        for (let i = 0xa0; i < 0xb0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = stat;
-        }
+        this.mapBothHalves(0xa0, 0xb0, stat, offset);
     }
 
     setupMemoryMap() {
         this.memStatOffsetByIFetchBank = 0; // no shadow RAM on Atom
 
         // 0x0000-0x9FFF: RAM (including video RAM at 0x8000)
-        for (let i = 0; i < 0xa0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 1;
-            this.memLook[i] = this.memLook[256 + i] = 0;
-        }
+        this.mapBothHalves(0, 0xa0, 1, 0);
 
         // 0xA000-0xAFFF: Branquart banked region (set up via selectBranquartBank)
         this.branquartLatch = 0;
         this.selectBranquartBank(0);
 
         // 0xB000-0xBFFF: Device I/O (PPIA, MMC, VIA, bank latch)
-        for (let i = 0xb0; i < 0xc0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 0;
-        }
+        this.mapBothHalves(0xb0, 0xc0, 0, 0);
 
         // 0xC000-0xEFFF: ROM (4KB blocks loaded into romOffset area)
-        for (let i = 0xc0; i < 0xf0; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 2;
-            this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0xa000;
-        }
+        this.mapBothHalves(0xc0, 0xf0, 2, this.romOffset - 0xa000);
 
         // 0xF000-0xFFFF: OS kernel ROM
-        for (let i = 0xf0; i < 0x100; ++i) {
-            this.memStat[i] = this.memStat[256 + i] = 2;
-            this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
-        }
+        this.mapBothHalves(0xf0, 0x100, 2, this.osOffset - 0xf000);
 
         // FDC at 0x0A00 (device hole in RAM, if model uses FDC)
-        if (this.model.Fdc) {
-            this.memStat[0x0a] = this.memStat[256 + 0x0a] = 0;
-        }
+        if (this.model.Fdc) this.mapBothHalves(0x0a, 0x0b, 0, 0);
 
         // Randomise video RAM and seed bytes
         for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
@@ -1979,7 +2047,10 @@ export class AtomCpu6502 extends Cpu6502 {
     // Extra ROMs (BASIC, FP, DOS) are 4KB blocks at romOffset+0..romOffset+0x5000
     // mapped at 0xC000, 0xD000, 0xE000 etc.
     async loadOs(os) {
-        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+        if (this.config.bankRoms.length) throw new Error("The Atom has no sideways ROM banks to load a ROM into");
+        const extraRoms = Array.prototype.slice
+            .call(arguments, 1)
+            .concat(this.config.fittedRoms, this.config.extraRoms);
         const bankRoms = this.model.banks || [];
         os = "roms/" + os;
         console.log(`Loading Atom OS from ${os}`);
@@ -2022,11 +2093,7 @@ export class AtomCpu6502 extends Cpu6502 {
 
     // Override loadRom to accept 4KB ROMs
     async loadRom(name, offset) {
-        if (name.indexOf("http") !== 0) name = "roms/" + name;
-        let data = await loadData(name);
-        if (/\.zip/i.test(name)) {
-            data = (await unzipRomImage(data)).data;
-        }
+        const data = await romImage(name);
         const len = data.length;
         if (len !== 16384 && len !== 8192 && len !== 4096) {
             throw new Error(`Broken ROM file ${name} (length=${len})`);

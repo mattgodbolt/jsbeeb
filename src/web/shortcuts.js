@@ -1,3 +1,5 @@
+import { isMac } from "./keyboard.js";
+
 /**
  * Every shortcut jsbeeb answers. The handlers in keyboard-setup.js and both lists of documentation, in the
  * README and in the page's own help, are checked against this, so a shortcut cannot be added
@@ -18,3 +20,17 @@ export const Shortcuts = [
     { combo: "Alt-C", key: "C", run: "openMediaTape", description: "Media window, aimed at the cassette" },
     { combo: "Alt-1 to Alt-8", description: "Hold an accessibility switch down" },
 ];
+
+/** A shortcut, or text naming some, as the keyboard prints it: ⌥ and ⇧ on a Mac. */
+export function shortcutLabel(text, mac = isMac) {
+    return mac ? text.replaceAll("Alt-Shift-", "⌥⇧").replaceAll(/\bAlt\b-?/g, "⌥") : text;
+}
+
+/** Relabels the shortcuts the page's own markup names: the help's key caps and the tooltips. */
+export function labelPageShortcuts(mac = isMac) {
+    if (!mac) return;
+    for (const key of document.querySelectorAll("#help .key")) key.textContent = shortcutLabel(key.textContent, mac);
+    for (const element of document.querySelectorAll("[title*='Alt']")) {
+        element.title = shortcutLabel(element.title, mac);
+    }
+}

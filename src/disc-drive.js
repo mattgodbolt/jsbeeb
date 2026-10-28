@@ -4,7 +4,7 @@
 import { Scheduler } from "./scheduler.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc } from "./disc.js";
-import { IbmDiscFormat } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
 
 const SpinDebounceMs = 2;
 const RevolutionMs = 200;
@@ -380,7 +380,10 @@ export class DiscDrive extends BaseDiscDrive {
      * @param {Disc} disc
      */
     setDisc(disc) {
+        // Discs differ in track length, so the head keeps its angle round the disc.
+        const fraction = this.positionFraction;
         this._disc = disc;
+        this.positionFraction = fraction;
     }
 
     /** @returns {Number} how many of the surface's tracks the head crosses for one of the format's */
@@ -513,6 +516,7 @@ export class DiscDrive extends BaseDiscDrive {
 
         // Restore spinning state and timer
         this._timer.cancel();
+        const wasSpinning = this._spinning;
         this._spinning = state.spinning;
         this._speedThen = state.speed ?? 1;
         this._speedEpoch = this._scheduler.epoch;
@@ -522,5 +526,8 @@ export class DiscDrive extends BaseDiscDrive {
         if (state.disc && this._disc) {
             this._disc.restoreState(state.disc);
         }
+
+        if (this._spinning !== wasSpinning)
+            this.dispatchEvent(new Event(this._spinning ? "startSpinning" : "stopSpinning"));
     }
 }

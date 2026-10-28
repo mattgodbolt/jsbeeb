@@ -56,7 +56,7 @@ When `discNCrc32` is present, it is compared against the CRC32 of the reloaded d
 - **v3** — Added second processor state (`state.tube`) and the top-level `coProcessor` flag. Nothing before v3 captured tube state, so earlier snapshots are always host-only and load into a machine without a co-processor unchanged.
 - **v4**: TypedArrays of 1024 bytes or more are deflated before their base64 encoding (see [TypedArray encoding](#typedarray-encoding)). The state itself is unchanged, and plain base64 arrays from earlier versions still load.
 
-The benchmark workloads in `public/benchmarks` are snapshots in this format, restored in CI. After a change that stops them loading, `npm run benchmark:workloads` rebuilds them.
+The benchmark workloads in `public/benchmarks` are snapshots in this format, restored in CI, which also checks they are what `npm run benchmark:workloads` builds (`npm run test:benchmark-workloads`). After a change to the snapshot format or to what a boot does, that command rebuilds them.
 
 ### Imported snapshots
 
@@ -69,7 +69,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 
 Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc or touchscreen state (`state.fdc` and `state.touchScreen` will be absent).
 
-B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
+B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots include only the sideways RAM banks they saved, in `swram` and `swramBankMask`.
 
 ### Model compatibility
 
@@ -134,10 +134,16 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                  |
 | `videoCycles`         | number     | Video cycle accumulator                                                                                       |
 | `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
-| `ram`                 | Uint8Array | RAM contents (128KB, excludes ROMs)                                                                           |
-| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em.             |
+| `ram`                 | Uint8Array | RAM contents (64KB; on a Master, ANDY at 0x8000, HAZEL at 0x9000 and LYNNE at 0xB000)                         |
+| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.         |
+| `swram`               | Uint8Array | _(Optional)_ Sideways RAM banks, 16KB each, back to back in ascending bank order (see below)                  |
+| `swramBankMask`       | number     | _(Optional)_ Which banks `swram` holds: bit n set for bank n                                                  |
+
+`swram` holds every bank the model has as sideways RAM (banks 0-7 on a B, mask `0x00FF`; 4-7 on a Master, mask `0x00F0`; none on a stock B or an Atom). The mask is saved rather than read from the model, so a later change to a model's banks cannot misplace an older file's. Both fields are left out when `roms` already carries every bank. On restore each bank in the mask overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots from before sideways RAM was saved have neither field, and then sideways RAM keeps its current contents, so it needed no format version bump.
 
 **Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
+
+Snapshots written before `ram` was 64KB, and earlier b-em and BeebEm imports, hold 128KB of `ram`. They still load: only the first 64KB is used, as the rest was never mapped, so it needed no format version bump.
 
 The NMI level is rebuilt the same way: the CPU clears every device's line and each device re-drives its own, the FDC from its restored registers and econet from its live state (econet state itself is not saved). `nmiLevel` is read back only when the snapshot carries no FDC state (v1 and imported snapshots), where it stands in for the disc controller's line. `nmiEdge` is applied after the devices have re-driven their lines, so a line coming back up on restore is not mistaken for a fresh edge.
 
@@ -190,11 +196,32 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 
 System VIA additionally includes:
 
-| Field            | Type    | Description                                 |
-| ---------------- | ------- | ------------------------------------------- |
-| `IC32`           | number  | IC32 latch (keyboard, sound, screen select) |
-| `capsLockLight`  | boolean | Caps lock LED state                         |
-| `shiftLockLight` | boolean | Shift lock LED state                        |
+| Field               | Type         | Description                                                                       |
+| ------------------- | ------------ | --------------------------------------------------------------------------------- |
+| `IC32`              | number       | IC32 latch (keyboard, sound, screen select)                                       |
+| `capsLockLight`     | boolean      | Caps lock LED state                                                               |
+| `shiftLockLight`    | boolean      | Shift lock LED state                                                              |
+| `keyScanTaskOffset` | number\|null | Offset at which the autoscan next sets the CA2 flag for a held key (null if none) |
+
+During autoscan, `ca2` is true while the scan finds a held key: it stands for the pulse train the scan puts on the line, not one level. `keyScanTaskOffset` is set after the CA2 flag is cleared while that is so. It is absent from snapshots written before it was saved and from imported snapshots; absent means none is pending.
+
+### Atom PPIA (`state.atomppia`)
+
+Present only on the Atom.
+
+| Field             | Type       | Description                                          |
+| ----------------- | ---------- | ---------------------------------------------------- |
+| `latcha`          | number     | Port A output latch (keyboard row, VDG mode)         |
+| `latchc`          | number     | Port C latch (output bits 0-3, input bits 4-7)       |
+| `portapins`       | number     | Port A pin levels                                    |
+| `portbpins`       | number     | Always 0; port B reads come from the keyboard matrix |
+| `portcpins`       | number     | Port C pin levels                                    |
+| `creg`            | number     | Last control register write                          |
+| `keys`            | number[][] | Keyboard matrix, 1 where a key is down               |
+| `keyboardEnabled` | boolean    | Whether host key events reach the matrix             |
+| `lastSpeakerBit`  | number     | Port C bit 2 as last sent to the speaker             |
+
+Older snapshots also carry `latchb`, which was always 0 since port B is input only; it is ignored on restore.
 
 ### Video (`state.video`)
 
@@ -288,20 +315,21 @@ A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option;
 
 ### Sound chip (`state.soundChip`)
 
-| Field             | Type         | Description                                    |
-| ----------------- | ------------ | ---------------------------------------------- |
-| `registers`       | Uint16Array  | 4 channel tone/noise period registers          |
-| `counter`         | Float32Array | 4 channel counters                             |
-| `outputBit`       | boolean[]    | 4 channel output states                        |
-| `volume`          | Float32Array | 4 channel volume levels                        |
-| `lfsr`            | number       | Noise generator linear feedback shift register |
-| `latchedRegister` | number       | Last latched register address                  |
-| `residual`        | number       | Sub-sample residual (float)                    |
-| `sineOn`          | boolean      | Sine tone generator active                     |
-| `sineStep`        | number       | Sine generator step size                       |
-| `sineTime`        | number       | Sine generator phase                           |
-| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)        |
-| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)       |
+| Field             | Type         | Description                                          |
+| ----------------- | ------------ | ---------------------------------------------------- |
+| `registers`       | Uint16Array  | 4 channel tone/noise period registers                |
+| `counter`         | Float32Array | 4 channel counters                                   |
+| `outputBit`       | boolean[]    | 4 channel output states                              |
+| `volume`          | Float32Array | 4 channel volume levels                              |
+| `lfsr`            | number       | Noise generator linear feedback shift register       |
+| `latchedRegister` | number       | Last latched register address                        |
+| `residual`        | number       | Sub-sample residual (float)                          |
+| `sineOn`          | boolean      | Sine tone generator active                           |
+| `sineStep`        | number       | Sine generator step size                             |
+| `sineTime`        | number       | Sine generator phase                                 |
+| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)              |
+| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)             |
+| `speakerBit`      | number       | Atom only: the speaker's level, 0 or 1 (0 if absent) |
 
 ### ACIA (`state.acia`)
 
@@ -398,7 +426,7 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `timerTaskOffset`    | number\|null | Timer task offset from scheduler epoch                          |
 | `drives`             | object[]     | Array of 2 drive states (see Disc drive below)                  |
 
-`_currentDrive` is derived from `driveOut` select bits on restore.
+`_currentDrive` is derived from `driveOut` on restore: its select bits, and none while LOAD HEAD is low.
 
 #### WD1770 (`state.fdc` when model is Master)
 
@@ -521,6 +549,6 @@ The parasite's NMI does not. The ULA latches its request rather than presenting 
 
 ## Known limitations (v3)
 
-- **No tape position** — tape playback position is not saved.
-- **BeebEm UEF co-processor state is not imported** — BeebEm records a tube type in its `EmuState` chunk, but jsbeeb does not read it, so a UEF save state taken with a second processor imports as host-only.
-- **ROMs not saved** (in jsbeeb-native snapshots) — ROMs are loaded from files and don't change at runtime. Imported b-em snapshots include ROMs in the optional `roms` field.
+- **No tape position**: tape playback position is not saved.
+- **BeebEm UEF co-processor state is not imported**: BeebEm records a tube type in its `EmuState` chunk, but jsbeeb does not read it, so a UEF save state taken with a second processor imports as host-only.
+- **ROMs not saved** (in jsbeeb-native snapshots): ROMs are loaded from files and don't change at runtime. Sideways RAM is saved, in `swram`. Imported b-em snapshots and shared session joins include ROMs in the optional `roms` field.

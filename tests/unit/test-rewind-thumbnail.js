@@ -23,6 +23,7 @@ function createMockVideo() {
         fb32: new Uint32Array(1024 * 625),
         frameCount: 0,
         clearPaintBuffer: vi.fn(),
+        renderPending: vi.fn(),
     };
 }
 
@@ -109,6 +110,18 @@ describe("renderThumbnails", () => {
 
         const calls = processor.restoreState.mock.calls;
         expect(calls[calls.length - 1][0]).toEqual({ saved: true });
+    });
+
+    it("should draw the pending cells once a snapshot has run, before the next restore", () => {
+        const video = createMockVideo();
+        const processor = createMockProcessor(video);
+
+        renderThumbnails(processor, [{ id: 1 }], video, 50);
+
+        expect(video.renderPending).toHaveBeenCalledTimes(1);
+        const [drawnAt] = video.renderPending.mock.invocationCallOrder;
+        expect(drawnAt).toBeGreaterThan(Math.max(...processor.execute.mock.invocationCallOrder));
+        expect(drawnAt).toBeLessThan(Math.max(...processor.restoreState.mock.invocationCallOrder));
     });
 
     it("should restore each snapshot and execute until frame advances", () => {

@@ -1,5 +1,14 @@
 [
   {
+    "repo": "ebenupton/2048",
+    "path": "2048.ssd",
+    "title": "2048",
+    "publisher": "Eben Upton",
+    "authors": "Gabriele Cirulli (original game); BBC Micro version by Eben Upton",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
     "repo": "ebenupton/cleo",
     "path": "cleo.ssd",
     "title": "Cleo",
@@ -7,6 +16,34 @@
     "authors": "High Energy Magic (original game); port by Eben Upton",
     "year": 2026,
     "type": "Game"
+  },
+  {
+    "repo": "ebenupton/doom",
+    "path": "doom_walk.ssd",
+    "title": "DOOM E1M1 (wireframe)",
+    "publisher": "Eben Upton",
+    "authors": "id Software (original game); wireframe renderer by Eben Upton",
+    "year": 2026,
+    "type": "Demo"
+  },
+  {
+    "repo": "ebenupton/lander",
+    "path": "lander.ssd",
+    "title": "Lander",
+    "publisher": "Eben Upton",
+    "authors": "David Braben (original Archimedes demo); port by Eben Upton",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "ebenupton/solid-elite-bbc-master",
+    "path": "solid-elite-bbc-master.ssd",
+    "title": "Solid Elite",
+    "publisher": "Eben Upton",
+    "authors": "Ian Bell and David Braben (original game); port by Eben Upton, built on Mark Moxon's documented source",
+    "year": 2026,
+    "type": "Game",
+    "machine": "Master"
   },
   {
     "repo": "mattgodbolt/beeb-scorched-earth",

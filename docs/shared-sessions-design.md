@@ -51,7 +51,10 @@ matrix position: in the symbolic layout a key can force BBC SHIFT up or down whi
 so an event carries the position and the SHIFT it forces. With two people on one matrix, whose SHIFT wins needs
 a rule; the simplest is that each person's held keys are tracked separately and a forced SHIFT applies only
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
-change, and reset, disc changes and pastes would be events too; in v0 only keys and the host's BREAK are.
+change, and reset and disc changes would be events too; in v0 only keys and the host's BREAK are. A paste is
+typed as keys through `Keyboard.setInput`'s input, so it goes to whoever orders the inputs, from host or guest, as
+typing does; it is paced by the wall clock rather than the machine's scheduler, so its keys arrive between
+executes as key events do.
 
 **Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of a
 second, and nudges itself to keep the audio buffer full (`EmulationLoop.advance` and `setEmulationLead`). In a
@@ -64,7 +67,7 @@ not use the speedy frame skip: `FRAMESKIPENABLE` also gates video memory reads a
 session never runs speedy.
 
 **Late joining.** The host takes a snapshot where its next commit will start, and sends it with what ordinary
-snapshots leave out: the ROMs and sideways RAM, the keys held down and the CMOS. Commits made
+snapshots leave out: the ROMs, the keys held down and the CMOS. Commits made
 while it is being compressed wait for it. On my desktop, Node emulates a 50Hz frame of a B running Elite in
 about 3ms, so catching up is quick. The host does not pause.
 
@@ -97,8 +100,8 @@ Ranked by how much they would bite.
    fires (`Keyboard._press`), as does BREAK, and the Mac caps lock "tap" is released by a `setTimeout`
    (`Keyboard.handleMacCapsLock`). Gamepad keys are polled at the start of each tick (`EmulationLoop.advance`
    into `src/web/gamepads.js:168`). All of it lands at whatever cycle the current tick happens to have reached.
-   In v0, keys, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which stamps
-   each with a cycle, and gamepad keys are not polled while a session runs.
+   In v0, keys, pastes, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which
+   stamps each with a cycle, and gamepad keys are not polled while a session runs.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
    OS converts continuously into RAM whether a program reads them or not. The system VIA reads gamepad fire
@@ -108,16 +111,16 @@ Ranked by how much they would bite.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
-   - sideways RAM, which lives in the ROM area and is only saved with `includeRoms` (`src/6502.js:1235`);
    - the Master's CMOS RAM, which comes from each person's `localStorage` (persisted by `localStoragePersistence`);
-   - a paste in progress (the typist's queue) and the mouse buttons;
+   - a paste in progress (the typist's queue), which in a session is typed through it instead, and the mouse
+     buttons;
    - later, with the peripherals that need them: tape position (a known limitation in
      `docs/snapshot-format.md`), Music 5000 and Econet state.
 
    It also leaves out the framebuffer, which is only cosmetic: a joiner sees black until the next frame. With
    media by reference and dirty tracks only, a B with Elite running comes to about 25KB gzipped; a full
-   in-memory snapshot with every disc track is about 190KB gzipped. v0 sends the in-memory form with sideways
-   RAM (`includeRoms`), and the held keys and CMOS beside it, and leaves the snapshot format alone, so a rewind
+   in-memory snapshot with every disc track is about 190KB gzipped. v0 sends the in-memory form with the ROMs
+   (`includeRoms`), and the held keys and CMOS beside it, and leaves the snapshot format alone, so a rewind
    or a loaded state keeps the keys the person is actually holding.
 
 4. **Wall clock leaks into the Master.** The RTC read `Date.now()` on every access, and kept the offset a
@@ -127,7 +130,7 @@ Ranked by how much they would bite.
    (`src/filestore.js:84`) is the same problem, later, with Econet.
 5. **The machine must be configured identically.** `restoreSnapshot` checks only the model and co-processor
    (`src/snapshot.js:96`). CPU multiplier, `videoCyclesBatch`, Music 5000, teletext adaptor, Econet and extra
-   ROMs (`?rom=`) all change behaviour. A joiner adopts the host's model, and every setting the Parameters table
+   ROMs (`?rom=`, `?rom.N=`) all change behaviour. A joiner adopts the host's model, and every setting the Parameters table
    marks `takenFromHost`, by reloading as the host's machine, the way a cross-model snapshot load reloads the page
    as the right machine (`src/web/snapshot-ui.js:132`); the ROMs come with the snapshot, which carries every
    sideways bank. The emulator itself must match too: every merge to main is
@@ -139,7 +142,7 @@ Ranked by how much they would bite.
    be fetchable by everyone: `sth:` and URLs are, embedded local files are, a `gd:` Google Drive reference is not
    without the viewer's own authorisation. v0 sidesteps this by sending the images themselves.
 6. **Local controls that change state.** Rewind, loading a state, the debugger, fast-as-possible and fast
-   tape, hidden-tab pause (`EmulationLoop.handleVisibilityChange`), media changes and reset all act on one peer's
+   tape, hidden-tab pause (`EmulationLoop.holdWhileHidden`), media changes and reset all act on one peer's
    machine. In a session each either becomes a session event (reset, disc change, perhaps rewind for everyone)
    or is turned off for guests. A hidden guest tab must not stall everybody, and with a sequencer that only
    waits on time it does not. A hidden host tab is different, because the host is the sequencer: today the loop
@@ -153,9 +156,8 @@ Ranked by how much they would bite.
    it. The existing emulation lead logic (`setEmulationLead`) is the place for that. In v0 a guest simply runs
    no faster than the host's commits and catches up when more than 40 ms behind (see
    Pacing), so its audio stalls, or skips ahead after it catches up, rather than drifting.
-8. **Smaller ones.** The disc noise picks its clicks with `Math.random` (`src/ddnoise.js:84`), but that is
-   audio only and harmless. Later, the Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a
-   session-wide seed.
+8. **Smaller ones.** The Atom randomises some RAM on reset (`src/6502.js:1706`), so it will need a session-wide
+   seed.
 
 ## Prior art
 
@@ -185,15 +187,19 @@ and a snapshot of a few hundred KB once per join. Any option that charges per me
 | Small always-on box running a relay       | Simplest relay; flat cost                                     | A server to keep patched and up; one region                                                                    |
 
 The recommendation is WebRTC with the host as hub and sequencer, and a small Lambda for rendezvous only (see
-v0). The protocol stays transport-agnostic: the session code talks to a channel, so the tests can run two
-or more headless machines exchanging messages in-process with no server at all, and a local stand-in for the
-rendezvous endpoint is enough to try two browsers on one machine. If too many people cannot connect
-directly, a hosted TURN service is the next step, and one of the relays above is the fallback after that.
+v0). The protocol stays transport-agnostic: the session code talks to a link (`src/web/session-transport.js` opens
+them over WebRTC), so the tests can run two or more headless machines exchanging messages in-process with no server
+at all (`tests/helpers/session-link.js`, which `tests/integration/shared-session.js` uses to pass control between
+real machines), and a local stand-in for the rendezvous endpoint is enough to try two browsers on one machine. If
+too many people cannot connect directly, a hosted TURN service is the next step, and one of the relays above is the
+fallback after that.
 
 ## v0
 
 The smallest session worth having, on the machines in the scope above, built in `src/lockstep.js` (the
-protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`. `?server=<room>` hosts and
+protocol, with no browser in it), `rendezvous/` and `src/web/shared-session.js`, whose sessions reach the other
+machines only through the links `src/web/session-transport.js` opens, and the page (its notices, lights and pane,
+visibility, going and reloading) only through `src/web/session-page.js`. `?server=<room>` hosts and
 `?client=<room>` joins. Shared session in the More menu does either without editing the URL: Start hosting
 hosts the machine as it is, in a room with a generated name and without touching the URL, so a reload ends the
 session; Join takes a room's name or the link and goes to its `?client=` URL, keeping the page's own `localToPage`
@@ -208,8 +214,9 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   go. Every machine's ADC reads its centre for the session's duration.
 - **Transport:** WebRTC data channels in a star: each guest connects to the host only, over a reliable, ordered
   channel. A joiner's snapshot goes gzipped and in chunks over the same channel, discs included, so local and
-  `gd:` discs need no fetching; each of the guest's drives takes a fresh copy of the host's disc, or is emptied,
-  so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
+  `gd:` discs need no fetching. The host sends a guest nothing until the guest has said hello, which proves the
+  channel can carry what the host sends (`SessionHost.welcome` has why). Each of the guest's drives takes a fresh
+  copy of the host's disc, or is emptied, so nothing the session writes reaches the guest's own discs. Public STUN and no TURN: a guest that cannot
   connect is told "couldn't connect directly". The host and each guest see each other's public IP address. A
   guest whose model, or any setting its Parameters entry marks `takenFromHost`, differs from the host's reloads
   as the host's machine before it joins: the host's welcome carries every such setting, so a new one is its one
@@ -226,9 +233,12 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   distribution as a second origin at `/api/rendezvous/*` with caching disabled, so it is same-origin with the
   page and needs no CORS. A DynamoDB table with a TTL holds each room's offers and answers. Creating a room
   returns a host secret, which the host sends to the rendezvous with each request that needs it and never to a
-  guest. A guest creates an offer, waits for ICE gathering to finish (or a short timeout) so the full SDP goes
-  in one message, posts it under an ID of its own, and polls for its answer. The host polls the room every
-  second or two, answers each new offer, and keeps polling for the life of the session, for late joiners.
+  guest. A guest creates an offer, waits for its ICE candidates so the full SDP goes in one message, posts it
+  under an ID of its own, and polls for its answer. The host polls the room every second or two, answers each
+  new offer after the same wait, and keeps polling for the life of the session, for late joiners. Gathering
+  rarely finishes before a connection is up, so the wait usually ends a short time after the first candidate,
+  however long that takes to come, since a description without one cannot connect; a side still gathering with
+  none gives up after the connection timeout.
   Listing offers, answering and extending the room need the host secret; a guest can only post its offer and
   read its answer, so no guest sees another's address. Offers expire on their own short clock, so a guest that
   closes its tab while waiting cannot fill the room's cap of pending offers. The function checks IDs, caps
@@ -264,7 +274,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   can, and the keys after it keep their gaps from it, a gap over 40 ms shrinking to 40 ms until the lag is made
   up, so no key is lost and the lag does not last; a release held up that long still lengthens its hold, enough to
   start the OS's auto-repeat. The margin is a guess until session reports show the jitter.
-- Anything that changes a machine without going through the session (pasting, the reset menu, rewind, loading
+- Anything that changes a machine without going through the session (the reset menu, rewind, loading
   a state, the debugger, changing a disc) is not blocked. On the host, one that moves the cycle count resyncs
   every guest at once; anything else shows as soon as it reaches RAM, registers or the keyboard, and the
   guests are resynced from the host. A disc change or a poke at a device may not show until the program reads

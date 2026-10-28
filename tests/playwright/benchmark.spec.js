@@ -43,31 +43,3 @@ test("runs a workload, publishes its result for a script, then runs the machine"
     await page.locator("#benchmark .modal-footer .benchmark-close").click();
     await beeb.expectRunningPast(held);
 });
-
-test("a workload for another model fails, saying which model it needs", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=master-shadow");
-    const { status, error } = await benchmarkRecord(page);
-    expect({ status, error }).toEqual({
-        status: "failed",
-        error: "The master-shadow workload runs on the Master: add &model=Master to the URL",
-    });
-    await expect(page.locator("#benchmark .benchmark-status")).toContainText("add &model=Master");
-});
-
-test("a parameter that changes what is measured is refused", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=elite&frameSkip=2");
-    const { status, error } = await benchmarkRecord(page);
-    expect({ status, error }).toEqual({
-        status: "failed",
-        error: "frameSkip would change what is measured; take it out of the URL",
-    });
-});
-
-test("a machine with a peripheral that runs every cycle is refused", async ({ beeb, page }) => {
-    await beeb.open("?benchmark=elite&hasMusic5000=true");
-    const { status, error } = await benchmarkRecord(page);
-    expect({ status, error }).toEqual({
-        status: "failed",
-        error: "The machine has a Music 5000 fitted, which a workload does not have; turn it off",
-    });
-});

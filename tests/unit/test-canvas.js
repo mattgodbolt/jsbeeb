@@ -79,6 +79,13 @@ function fakeCanvasElement(gl) {
     };
 }
 
+/** Has `gl` record each call to the methods `names`, as [name, ...args]. */
+function recordCalls(gl, names) {
+    const calls = [];
+    for (const name of names) gl[name] = (...args) => calls.push([name, ...args]);
+    return calls;
+}
+
 /** Make `gl` reject one particular shader, as a device without the features for it would. */
 function failToCompile(gl, shaderSource) {
     const sources = new Map();
@@ -277,22 +284,16 @@ describe("low latency canvas", () => {
         };
     }
 
-    it("asks for a desynchronized context by default", () => {
+    it.each([
+        ["by default", (element) => new GlCanvas(element, PassthroughFilter), true],
+        ["not when turned off", (element) => new GlCanvas(element, PassthroughFilter, false), false],
+        ["not when turned off through bestCanvas", (element) => bestCanvas(element, PassthroughFilter, false), false],
+    ])("asks for a desynchronized context %s, and always keeps the drawing buffer it needs", (_, make, desync) => {
         const element = attributeRecordingElement(recordingGl());
 
-        new GlCanvas(element, PassthroughFilter);
+        make(element);
 
-        expect(element.asked[0].desynchronized).toBe(true);
-        expect(element.asked[0].preserveDrawingBuffer).toBe(true);
-    });
-
-    it("does not when turned off, but still keeps the drawing buffer, which a desynchronized context needs", () => {
-        const element = attributeRecordingElement(recordingGl());
-
-        new GlCanvas(element, PassthroughFilter, false);
-
-        expect(element.asked[0].desynchronized).toBe(false);
-        expect(element.asked[0].preserveDrawingBuffer).toBe(true);
+        expect(element.asked[0]).toMatchObject({ desynchronized: desync, preserveDrawingBuffer: true });
     });
 
     it("survives a context that reports no attributes at all", () => {
@@ -301,73 +302,59 @@ describe("low latency canvas", () => {
 
         expect(() => new GlCanvas(attributeRecordingElement(gl), PassthroughFilter)).not.toThrow();
     });
-
-    it("passes the choice on through bestCanvas", () => {
-        const element = attributeRecordingElement(recordingGl());
-
-        bestCanvas(element, PassthroughFilter, false);
-
-        expect(element.asked[0].desynchronized).toBe(false);
-    });
 });
 
 describe("phosphor persistence", () => {
     const frame = { lineGrid: new Uint8Array(0), lineBaseEven: 0, lineBaseOdd: 0, phaseBaseEven: 0, phaseBaseOdd: 0 };
 
-    it("scales the old picture down by the persistence, keeps the brighter of it and the frame, then shows it", () => {
+    it("decays the old picture off screen, keeps the brighter of it and the frame, then shows it; with none, just draws", () => {
         const gl = recordingGl();
-        const calls = [];
-        for (const name of ["enable", "disable", "blendEquation", "blendColor", "blendFunc", "drawArrays"])
-            gl[name] = (...args) => calls.push([name, ...args]);
+        const calls = recordCalls(gl, [
+            "enable",
+            "disable",
+            "blendEquation",
+            "blendColor",
+            "blendFunc",
+            "drawArrays",
+            "bindFramebuffer",
+            "useProgram",
+        ]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        const draw = ["drawArrays", gl.TRIANGLE_STRIP, 0, 4];
+        calls.length = 0;
 
         canvas.setPersistence(0.6);
         expect(calls).toEqual([]);
         canvas.paint(0, 0, 1024, 625, frame);
         expect(calls).toEqual([
+            ["bindFramebuffer", gl.FRAMEBUFFER, canvas.phosphorFramebuffer],
+            ["useProgram", canvas.decayProgram],
             ["enable", gl.BLEND],
             ["blendEquation", gl.FUNC_REVERSE_SUBTRACT],
             ["blendFunc", gl.ONE, gl.CONSTANT_ALPHA],
             ["blendColor", 0, 0, 0, 0.6],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            draw,
+            ["useProgram", canvas.filter.program],
             ["enable", gl.BLEND],
             ["blendEquation", gl.MAX_EXT],
             ["blendFunc", gl.ONE, gl.ONE],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            draw,
+            ["bindFramebuffer", gl.FRAMEBUFFER, null],
+            ["useProgram", canvas.copyProgram],
             ["disable", gl.BLEND],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
+            draw,
+            ["useProgram", canvas.filter.program],
         ]);
+
         calls.length = 0;
         canvas.setPersistence(0);
         canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls).toEqual([
-            ["disable", gl.BLEND],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
-        ]);
-    });
-
-    it("decays and blends off screen, and puts the finished picture on the screen in one draw", () => {
-        const gl = recordingGl();
-        const calls = [];
-        for (const name of ["bindFramebuffer", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
-        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
-        canvas.setPersistence(0.6);
-        calls.length = 0;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls).toEqual([
-            ["bindFramebuffer", gl.FRAMEBUFFER, canvas.phosphorFramebuffer],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
-            ["bindFramebuffer", gl.FRAMEBUFFER, null],
-            ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
-        ]);
+        expect(calls).toEqual([["disable", gl.BLEND], draw]);
     });
 
     it("binds the phosphor to its unit before the copy, whatever a filter left there", () => {
         const gl = recordingGl();
-        const calls = [];
-        for (const name of ["activeTexture", "bindTexture", "drawArrays"])
-            gl[name] = (...args) => calls.push([name, ...args]);
+        const calls = recordCalls(gl, ["activeTexture", "bindTexture", "drawArrays"]);
         // xBR puts its line grid on that unit as it draws.
         const canvas = new GlCanvas(fakeCanvasElement(gl), XbrFilter);
         canvas.setPersistence(0.6);
@@ -390,17 +377,6 @@ describe("phosphor persistence", () => {
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         expect(filters.get(`${canvas.phosphorTexture.id}:${gl.TEXTURE_MAG_FILTER}`)).toBe(gl.LINEAR);
         expect(filters.get(`${canvas.phosphorTexture.id}:${gl.TEXTURE_MIN_FILTER}`)).toBe(gl.LINEAR);
-    });
-
-    it("never touches the phosphor framebuffer with the afterglow off", () => {
-        const gl = recordingGl();
-        const calls = [];
-        for (const name of ["bindFramebuffer", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
-        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
-        canvas.setPersistence(0);
-        calls.length = 0;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(calls).toEqual([["drawArrays", gl.TRIANGLE_STRIP, 0, 4]]);
     });
 
     it("starts the phosphor black again when afterglow is turned back on, not from what it last held", () => {
@@ -447,8 +423,7 @@ describe("phosphor persistence", () => {
 
     it("decays over every field since the frame last shown, and not at all for the same frame again", () => {
         const gl = recordingGl();
-        const calls = [];
-        for (const name of ["blendColor", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const calls = recordCalls(gl, ["blendColor", "drawArrays"]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         canvas.setPersistence(0.5);
         calls.length = 0;
@@ -465,8 +440,7 @@ describe("phosphor persistence", () => {
     it("shows each frame plain when the driver cannot keep the brighter of two colours", () => {
         const gl = recordingGl();
         gl.getExtension = () => null;
-        const calls = [];
-        for (const name of ["enable", "disable", "drawArrays"]) gl[name] = (...args) => calls.push([name, ...args]);
+        const calls = recordCalls(gl, ["enable", "disable", "drawArrays"]);
         const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
         canvas.setPersistence(0.6);
         canvas.paint(0, 0, 1024, 625, frame);
@@ -475,45 +449,30 @@ describe("phosphor persistence", () => {
             ["drawArrays", gl.TRIANGLE_STRIP, 0, 4],
         ]);
     });
-
-    it("draws the frame with the filter's program between the decay and the copy, and leaves it current", () => {
-        const gl = recordingGl();
-        const programs = [];
-        gl.useProgram = (program) => programs.push(program);
-        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
-        canvas.setPersistence(0.6);
-        programs.length = 0;
-        canvas.paint(0, 0, 1024, 625, frame);
-        expect(programs).toEqual([
-            canvas.decayProgram,
-            canvas.filter.program,
-            canvas.copyProgram,
-            canvas.filter.program,
-        ]);
-    });
 });
 
-describe("bestCanvas", () => {
-    it("falls back to the passthrough filter when the one asked for will not build", () => {
-        // The 2D fallback is unreachable once a WebGL context exists, so a
-        // filter that fails to build has to be replaced on the context we have.
-        const gl = recordingGl();
-        failToCompile(gl, PAL_FRAG_SHADER);
-
-        const canvas = bestCanvas(fakeCanvasElement(gl), PALCompositeFilter);
-
-        expect(canvas.filterClass).toBe(PassthroughFilter);
-        expect(canvas.fallbackReason).toMatch(/Failed to compile PAL composite/);
-    });
-});
-
-describe("useBestFilter", () => {
-    it("falls back to the passthrough filter when the one asked for will not build", () => {
-        const gl = recordingGl();
-        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
-        failToCompile(gl, PAL_FRAG_SHADER);
-
-        useBestFilter(canvas, PALCompositeFilter);
+describe("falling back to passthrough", () => {
+    // The 2D fallback is unreachable once a WebGL context exists, so a filter
+    // that fails to build has to be replaced on the context we have.
+    it.each([
+        [
+            "bestCanvas",
+            (gl) => {
+                failToCompile(gl, PAL_FRAG_SHADER);
+                return bestCanvas(fakeCanvasElement(gl), PALCompositeFilter);
+            },
+        ],
+        [
+            "useBestFilter",
+            (gl) => {
+                const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+                failToCompile(gl, PAL_FRAG_SHADER);
+                useBestFilter(canvas, PALCompositeFilter);
+                return canvas;
+            },
+        ],
+    ])("falls back to the passthrough filter through %s when the one asked for will not build", (_, make) => {
+        const canvas = make(recordingGl());
 
         expect(canvas.filterClass).toBe(PassthroughFilter);
         expect(canvas.fallbackReason).toMatch(/Failed to compile PAL composite/);

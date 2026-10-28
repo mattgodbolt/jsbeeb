@@ -135,10 +135,6 @@ describe("parseCatalogue", () => {
         expect(entries[0].dfsTitle).toEqual(["2201,181-01"]);
     });
 
-    it("still splits a DFS title per side when there is one for each", () => {
-        expect(parseCatalogue(sheet(FlippyRow)).entries[0].dfsTitle).toEqual(["T E S T", "T E S T"]);
-    });
-
     // Dropping the gap would slide side 1's value into side 0's place and
     // reject a perfectly good disc.
     it("keeps a blank side in its place", () => {
@@ -177,15 +173,11 @@ describe("parseFingerprints", () => {
         ]);
     });
 
-    it("copes with a disc that has no DFS catalogue", () => {
+    it("reports one side, and copes with no DFS catalogue, for a single-sided unformatted disc", () => {
         const output = "info:disc:disc side 0 CRC32 fingerprint BBBB0001 title  count FFFFFFFF";
-        expect(parseFingerprints(output)[0]).toMatchObject({ full: "BBBB0001", dfsTitle: "", dfsCycle: "FFFFFFFF" });
-    });
-
-    it("reports only one side for a single-sided disc", () => {
-        expect(parseFingerprints("info:disc:disc side 0 CRC32 fingerprint BBBB0001 title TEST count 02")).toHaveLength(
-            1,
-        );
+        expect(parseFingerprints(output)).toEqual([
+            { full: "BBBB0001", as40: null, dfsTitle: "", dfsCycle: "FFFFFFFF" },
+        ]);
     });
 });
 
@@ -193,24 +185,17 @@ describe("compareFingerprints", () => {
     const flippy = () => parseCatalogue(sheet(FlippyRow)).entries[0];
 
     it("accepts a disc matching every column the sheet claims", () => {
-        expect(compareFingerprints(flippy(), parseFingerprints(FlippyFingerprints))).toEqual([]);
-    });
-
-    it("reads a 40 track side's fingerprint from its even tracks", () => {
-        // Picking the whole-surface fingerprint here would fail a good disc.
         const sides = parseFingerprints(FlippyFingerprints);
-        expect(sides[0].full).not.toBe(flippy().crc32[0]);
+        expect(sides[0].full, "side 0 must match only by its even tracks").not.toBe(flippy().crc32[0]);
         expect(compareFingerprints(flippy(), sides)).toEqual([]);
     });
 
-    it("catches a disc whose 80 track side has drifted from the sheet", () => {
-        const sides = parseFingerprints(FlippyFingerprints.replace("AAAA0002", "AAAA000F"));
-        expect(compareFingerprints(flippy(), sides)).toEqual(["side 1 CRC32: sheet says AAAA0002, disc says AAAA000F"]);
-    });
-
-    it("catches a mismatched DFS cycle number", () => {
-        const sides = parseFingerprints(FlippyFingerprints.replace("count 80", "count 81"));
-        expect(compareFingerprints(flippy(), sides)).toEqual(["side 1 DFS cycle number: sheet says 80, disc says 81"]);
+    it.each([
+        ["80 track side's CRC32", "AAAA0002", "AAAA000F", "side 1 CRC32: sheet says AAAA0002, disc says AAAA000F"],
+        ["DFS cycle number", "count 80", "count 81", "side 1 DFS cycle number: sheet says 80, disc says 81"],
+    ])("catches a disc whose %s has drifted from the sheet", (_, from, to, expected) => {
+        const sides = parseFingerprints(FlippyFingerprints.replace(from, to));
+        expect(compareFingerprints(flippy(), sides)).toEqual([expected]);
     });
 
     it("reports a column the sheet filled in but the disc has nothing to say about", () => {
@@ -231,32 +216,26 @@ describe("compareFingerprints", () => {
         expect(compareFingerprints(flippy(), sides)).toEqual(["sheet describes 2 side(s), disc has 1"]);
     });
 
+    const singleSidedTitled = (title) =>
+        parseFingerprints(`info:disc:disc side 0 CRC32 fingerprint BBBB0001 title ${title} count 04`);
+
     // beebjit writes `?` for any byte of a title that isn't printable, and the
     // sheet copies it verbatim, so it compares as an ordinary character rather
     // than as a marker meaning "unsure".
-    it("matches a DFS title containing beebjit's placeholder for unprintable bytes", () => {
-        const entry = singleSided({ dfsTitle: ["?Test?"] });
-        const sides = parseFingerprints("info:disc:disc side 0 CRC32 fingerprint BBBB0001 title ?Test?  count 04");
-        expect(compareFingerprints(entry, sides)).toEqual([]);
+    it.each([
+        ["a DFS title containing beebjit's placeholder for unprintable bytes", "?Test?", "?Test? "],
+        ["<blank> against a disc with no DFS title", "<blank>", ""],
+        ["<empty> against a disc with no DFS title", "<empty>", ""],
+    ])("accepts %s", (_, sheetTitle, discTitle) => {
+        expect(compareFingerprints(singleSided({ dfsTitle: [sheetTitle] }), singleSidedTitled(discTitle))).toEqual([]);
     });
 
-    it("still reports a DFS title that genuinely differs", () => {
-        const entry = singleSided({ dfsTitle: ["?Test?"] });
-        const sides = parseFingerprints("info:disc:disc side 0 CRC32 fingerprint BBBB0001 title Test count 04");
-        expect(compareFingerprints(entry, sides)).toEqual(['side 0 DFS title: sheet says "?Test?", disc says "Test"']);
-    });
-
-    it.each(["<blank>", "<empty>"])("accepts %s against a disc with no DFS title", (marker) => {
-        const entry = singleSided({ dfsTitle: [marker] });
-        const sides = parseFingerprints("info:disc:disc side 0 CRC32 fingerprint BBBB0001 title  count 04");
-        expect(compareFingerprints(entry, sides)).toEqual([]);
-    });
-
-    it("reports a disc that has a DFS title where the sheet says it has none", () => {
-        const entry = singleSided({ dfsTitle: ["<blank>"] });
-        const sides = parseFingerprints("info:disc:disc side 0 CRC32 fingerprint BBBB0001 title TESTDISC count 04");
-        expect(compareFingerprints(entry, sides)).toEqual([
-            'side 0 DFS title: sheet says "<blank>", disc says "TESTDISC"',
+    it.each([
+        ["a DFS title that genuinely differs", "?Test?", "Test"],
+        ["a disc that has a DFS title where the sheet says it has none", "<blank>", "TESTDISC"],
+    ])("reports %s", (_, sheetTitle, discTitle) => {
+        expect(compareFingerprints(singleSided({ dfsTitle: [sheetTitle] }), singleSidedTitled(discTitle))).toEqual([
+            `side 0 DFS title: sheet says "${sheetTitle}", disc says "${discTitle}"`,
         ]);
     });
 });
@@ -361,29 +340,21 @@ describe("a full run", () => {
         expect(files.every((f) => !f.path.includes("/"))).toBe(true);
     });
 
-    it("says the same thing when run again over what it just built", async () => {
-        expect((await run()).code).toBe(0);
-        const first = await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8");
-        const firstBlobs = await blobs();
-
-        expect((await run()).code).toBe(0);
-        expect(await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8")).toBe(first);
-        expect(await blobs()).toEqual(firstBlobs);
-    });
-
     // The upload compares modification times, so a blob rewritten with the same
     // bytes is still a blob re-uploaded.
-    it("leaves the blobs it already has alone", async () => {
-        expect((await run()).code).toBe(0);
+    it("says the same thing, and leaves the blobs it already has alone, when run again over what it built", async () => {
         const written = async () =>
             Object.fromEntries(
                 await Promise.all(
                     (await blobs()).map(async (name) => [name, (await stat(join(dir, "out", "hfe", name))).mtimeMs]),
                 ),
             );
+        expect((await run()).code).toBe(0);
+        const first = await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8");
         const before = await written();
 
         expect((await run()).code).toBe(0);
+        expect(await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8")).toBe(first);
         expect(await written()).toEqual(before);
     });
 

@@ -4,8 +4,17 @@
 
 import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
 import { inflate } from "./archive.js";
+import { BaseRamBytes } from "./6502.js";
 
 const BemV1Size = 327885;
+
+// Indexed by b-em's model number; jsbeeb has no Model A, so the A w/OS 0.1 becomes the B w/OS 0.1.
+const BemV1Models = {
+    0: "B-MOS0.10",
+    1: "B-MOS0.10",
+    3: "B",
+    4: "B",
+};
 
 // v1 struct offsets
 const V1Off = {
@@ -180,8 +189,9 @@ function parseBemV1(buffer) {
     const view = new DataView(buffer);
 
     const bemModel = bytes[V1Off.model];
-    if (bemModel !== 3 && bemModel !== 4) {
-        throw new Error(`Unsupported BEM v1 model: ${bemModel} (only BBC Model B supported)`);
+    const modelName = BemV1Models[bemModel];
+    if (!modelName) {
+        throw new Error(`Unsupported BEM v1 model: ${bemModel} (only the BBC B and the OS 0.1 models are supported)`);
     }
 
     const cpuState = {
@@ -190,7 +200,7 @@ function parseBemV1(buffer) {
         fe34: bytes[V1Off.fe34],
     };
 
-    const ram = new Uint8Array(128 * 1024);
+    const ram = new Uint8Array(BaseRamBytes);
     ram.set(bytes.slice(V1Off.ram, V1Off.ram + 65536));
     const roms = bytes.slice(V1Off.rom, V1Off.rom + 262144);
 
@@ -220,7 +230,7 @@ function parseBemV1(buffer) {
 
     return buildSnapshot(
         "b-em",
-        "B",
+        modelName,
         cpuState,
         ram,
         roms,
@@ -424,7 +434,9 @@ async function parseBemV3(buffer) {
         readVar(data, pos); // curmodel index (skip)
         const name = readString(data, pos);
         tubeName = readBemTubeName(data, pos);
-        if (name.includes("Master")) {
+        if (name.includes("OS 0.1")) {
+            modelName = "B-MOS0.10";
+        } else if (name.includes("Master")) {
             if (name.includes("ADFS")) modelName = "MasterADFS";
             else if (name.includes("ANFS")) modelName = "MasterANFS";
             else modelName = "Master";
@@ -443,7 +455,7 @@ async function parseBemV3(buffer) {
     }
 
     // Parse memory (zlib-compressed in v3)
-    const ram = new Uint8Array(128 * 1024);
+    const ram = new Uint8Array(BaseRamBytes);
     let roms = null;
     const memSection = sections["M"];
     if (memSection) {

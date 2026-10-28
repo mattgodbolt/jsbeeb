@@ -12,9 +12,13 @@ const Clear4Mode = 0xf0;
 const AtomCyclesBeforeSnapshot = 12345;
 const AtomCyclesAfterRestore = 5000;
 
+const withVideo = (model, options) =>
+    new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
+const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
+
 describe("save state round trip", () => {
     it("continues identically in a fresh machine restored through the gzipped file format", async () => {
-        const original = new TestMachine();
+        const original = withVideo();
         await original.initialise();
         await original.runUntilInput();
         await original.type('PRINT "SNAPSHOT"');
@@ -32,7 +36,7 @@ describe("save state round trip", () => {
         ).text();
         const snapshot = snapshotFromJSON(decompressed);
 
-        const restored = new TestMachine();
+        const restored = withVideo();
         await restored.initialise();
         restoreSnapshot(restored.processor, restored.model, snapshot);
 
@@ -43,16 +47,12 @@ describe("save state round trip", () => {
         await original.runFor(cycles);
         await restored.runFor(cycles);
 
-        for (const reg of ["pc", "a", "x", "y", "s"]) expect(restored.processor[reg]).toBe(original.processor[reg]);
-        expect(mode7Text(restored)).toBe(mode7Text(original));
+        expect(stateOf(restored)).toEqual(stateOf(original));
         expect(mode7Text(restored)).toContain("SNAPSHOT");
     });
 
     it("carries an Atom's picture on mid-field in a fresh machine restored from the file format", async () => {
-        const atom = () =>
-            new TestMachine("Atom", {
-                video: new Video(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom: true }),
-            });
+        const atom = () => withVideo("Atom", { isAtom: true });
         const original = atom();
         await original.initialise();
         await original.runUntilInput();
