@@ -539,10 +539,9 @@ export class Teletext {
         if (++this.flashTime === 64) this.flashTime = 0;
     }
 
-    // Flashing text starts off in sync with a slow cursor, extinguished together. Multiple MODE
-    // changes gradually desynchronise the frame counters.
-    // TODO(#1057) setDEW is reached a MOS-dependent number of times before Video.frameCount rises, so
-    // the initial sync here holds under MOS 1.20 only.
+    // This counts DEW (VSYNC) pulses while the cursor blink counts R6 hits, so their phase starts at
+    // the MOS-dependent number of pulses before the first R6 hit and moves whenever a field has one
+    // without the other. The SAA5050 has no reset, so hardware presumably has no fixed phase either.
     get hideFlashing() {
         return this.flashTime < 16;
     }

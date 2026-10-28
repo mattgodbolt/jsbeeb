@@ -615,6 +615,10 @@ div.modal-body > div:not(:first-child) {
   color: #66f;
 }
 
+#disassembly .note {
+  opacity: 0.65;
+}
+
 .instr_mem_ref:hover,
 .instr_instr_ref:hover {
   text-decoration: underline;
