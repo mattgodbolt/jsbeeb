@@ -291,22 +291,17 @@ describe("panel layout", () => {
     describe("when nothing fits", () => {
         const open = ["media", "session", "watches", "disc", "memory", "disassembly"];
 
-        it("keeps every panel inside the area, none exactly over another", () => {
-            const rects = layOut(emptyLayout(), tiny, open);
-            expectInside(rects, tiny);
-            const corners = Object.values(rects).map(({ x, y }) => `${x},${y}`);
-            expect(new Set(corners).size).toBe(corners.length);
-            expect(Object.values(rects).some((rect) => rect.overlapping)).toBe(true);
-        });
-
         it("never puts two panels on the same spot, even in an area shorter than a panel's minimum", () => {
             const rects = layOut(emptyLayout(), areaOf(640, NavbarHeight + 100), ["watches", "session", "memory"]);
             const corners = Object.values(rects).map(({ x, y }) => `${x},${y}`);
             expect(new Set(corners).size).toBe(corners.length);
         });
 
-        it("leaves every header uncovered by the panels stacked above it", () => {
-            const rects = Object.entries(layOut(emptyLayout(), tiny, open));
+        it("keeps every panel inside the area, every header uncovered by the panels stacked above it", () => {
+            const placed = layOut(emptyLayout(), tiny, open);
+            expectInside(placed, tiny);
+            expect(Object.values(placed).some((rect) => rect.overlapping)).toBe(true);
+            const rects = Object.entries(placed);
             for (const [i, [id, rect]] of rects.entries()) {
                 const header = { x: rect.x, y: rect.y, w: rect.w, h: HeaderHeight };
                 for (const [above, aboveRect] of rects.slice(i + 1))
