@@ -397,6 +397,7 @@ describe("Cpu6502 econet NMI line on a Master", () => {
 
         cpu.readDevice(MasterNmiEnableRegister);
         for (const addr of ModelBOnlyMirrors) cpu.readDevice(addr);
+        for (const addr of addressesFrom(0xfe1c, 0xfe20)) cpu.writeDevice(addr, 0);
         expect(cpu.nmi).toBe(true);
 
         cpu.readDevice(MasterStationIdRegister);
