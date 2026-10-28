@@ -56,13 +56,15 @@ function dragged(start, edges, dx, dy, min) {
 }
 
 const AxisSpans = { x: ["x", "w"], y: ["y", "h"] };
+/** In px, for the rounding between where a panel was put and where the page drew it. */
+const AbutTolerance = 1;
 
 /** Whether `rect` sits a Gap from `neighbour` on `axis`, on the `side` it is attached to. */
 function abuts(rect, neighbour, axis, side) {
     const [pos, size] = AxisSpans[axis];
     const gap =
         side === "after" ? rect[pos] - (neighbour[pos] + neighbour[size]) : neighbour[pos] - (rect[pos] + rect[size]);
-    return Math.abs(gap - Gap) <= 1;
+    return Math.abs(gap - Gap) <= AbutTolerance;
 }
 
 /** `rect` kept inside `area`: moved for a move, cut at the moving edges for a resize. */

@@ -420,6 +420,12 @@ describe("FloatingPanel", () => {
             expect(relayout).not.toHaveBeenCalled();
         });
 
+        it("are measured rounded up, so content laid out at a fraction of a pixel never wraps", () => {
+            const floating = watches();
+            boxFromStyle(floating.panel, { w: 150.4, h: 80.2 });
+            expect(floating.measure().natural).toEqual({ w: 151, h: 81 });
+        });
+
         it("are measured at the width their default place gives them", () => {
             const floating = make("memory", { x: StartEdge, y: StartEdge, w: 150 }, true);
             floating.open();

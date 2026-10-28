@@ -6,9 +6,9 @@ import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
-import { describeAction, helpRows, keyLine } from "./panel-keys.js";
+import { helpRows, keyLine } from "./panel-keys.js";
 
 const noop = () => {};
 
@@ -312,14 +312,18 @@ export class Debugger {
      * @param {object} options
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
+     * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
      */
-    constructor({ symbolSets, keys }) {
+    constructor({ symbolSets, keys, arrangement }) {
+        this._arrangement = arrangement;
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
         this._inDebugger = false;
         this._hidingPanels = false;
         this._frameHandle = null;
+        /** The machine's cycle count when the open panels were last drawn. */
+        this._shownAt = null;
         this._screenBounds = () => null;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
@@ -334,7 +338,7 @@ export class Debugger {
             () => ({ names: this._names, pc: this.cpu.pc }),
             (sets) => this._credit(this._credits.memory, sets),
         );
-        this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
+        this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.disassPc = 0;
@@ -352,6 +356,7 @@ export class Debugger {
             this._matchSymbols();
             this.updateDisassembly(this.disassPc);
             this._memoryView.update();
+            arrangement.keepAttached();
         });
 
         this.panels = Object.fromEntries(DebugPanelIds.map((id) => [id, this._makePanel(id)]));
@@ -432,7 +437,7 @@ export class Debugger {
             place: () => ({ ...place, w: this._columnWidth(side) }),
             minSize: MinSizes[id],
             reopens: true,
-            arrangement: panelArrangement,
+            arrangement: this._arrangement,
         });
         floating.addEventListener("open", () => {
             this._rememberOpenPanels();
@@ -440,7 +445,7 @@ export class Debugger {
             if (!this.cpu) return;
             this._matchSymbols();
             this._showPanel(id);
-            panelArrangement.keepAttached();
+            this._arrangement.keepAttached();
         });
         floating.addEventListener("close", () => {
             this._rememberOpenPanels();
@@ -478,11 +483,7 @@ export class Debugger {
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
         };
-        for (const [run, button] of Object.entries(this._buttons)) {
-            button.addEventListener("click", actions[run]);
-            if (run === "runToCursor") button.title = describeAction(DisassemblyKeys, run);
-            else if (run !== "stop") button.title = describeAction(ToolbarKeys, run);
-        }
+        for (const [run, button] of Object.entries(this._buttons)) button.addEventListener("click", actions[run]);
     }
 
     _bindKeys(keys) {
@@ -549,18 +550,20 @@ export class Debugger {
         return Object.values(this.panels).some((floating) => floating.isOpen);
     }
 
-    /** Opens the panels that were open when the debugger's were last seen, or the defaults if none were. */
+    /**
+     * Opens the panels that were open when the debugger's were last seen, or the defaults if none were. The
+     * toolbar always comes with them, as the run and step keys are its.
+     */
     showPanels() {
         const remembered = rememberedPanels();
-        const ids = remembered.length
-            ? remembered
-            : window.innerWidth >= PeripheralsWindowWidth
-              ? DebugPanelIds
-              : NarrowWindowPanels;
+        const wide = window.innerWidth >= PeripheralsWindowWidth;
+        const chosen = remembered.length ? remembered : wide ? DebugPanelIds : NarrowWindowPanels;
+        const ids = DebugPanelIds.filter((id) => id === "toolbar" || chosen.includes(id));
         // Filled first, so that they are laid out at the size they will be.
         if (this.cpu) {
             this._matchSymbols();
             for (const id of ids) this._showPanel(id);
+            this._shownAt = this._cycles();
         }
         for (const id of ids) this.panels[id].open();
     }
@@ -589,13 +592,27 @@ export class Debugger {
         rememberPanels(DebugPanelIds.filter((id) => this.panels[id].isOpen));
     }
 
+    _cycles() {
+        return this.cpu.cycleSeconds * this.cpu.model.cyclesPerSecond + this.cpu.currentCycles;
+    }
+
+    /**
+     * Redraws the open panels once a frame, but only when the machine has moved on since they were drawn: while
+     * it runs, and once after it stops or has its state replaced. Left alone while nothing moves, a click on an
+     * operand lands on what was under the pointer when it went down.
+     */
     _tick() {
         this._frameHandle = null;
         if (!this.panelsShown()) return;
-        if (this._loop?.isRunning()) {
-            for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
-        }
+        if (this.cpu && this._cycles() !== this._shownAt) this._showOpenPanels();
         this._frameHandle = requestAnimationFrame(() => this._tick());
+    }
+
+    _showOpenPanels() {
+        for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
+        this._shownAt = this._cycles();
+        // Not while it runs, when the names in view, and so the credit's height, can change every frame.
+        if (!this._loop?.isRunning()) this._arrangement.keepAttached();
     }
 
     /** Brings one panel up to date with the machine; the disassembly follows the program counter while it runs. */
@@ -622,8 +639,7 @@ export class Debugger {
             hasEconet: !!cpu.econet,
             hasVideoNula: cpu.video.ula.hasVideoNula,
         });
-        for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
-        panelArrangement.keepAttached();
+        this._showOpenPanels();
     }
     disassemble(addr) {
         return this.cpu.disassembler.disassemble(addr);
@@ -809,11 +825,13 @@ export class Debugger {
         this.sysvia();
         this.uservia();
         this.crtc();
+        this._shownAt = this._cycles();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
             this.showPanels();
         }
+        this._arrangement.keepAttached();
         this.cpu.video.debugPaint();
     }
 
@@ -837,7 +855,6 @@ export class Debugger {
                 return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
             }),
         );
-        panelArrangement.keepAttached();
     }
 
     _namesNow() {
@@ -963,8 +980,6 @@ export class Debugger {
     _showRunning() {
         const running = this._loop.isRunning();
         for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
-        // Its last frame may have run on after the panels' last look at it.
-        if (!running && this.cpu) for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
     }
 
     /** Runs one instruction, stepping off a breakpoint on it; false when a watch stopped the machine in it. */

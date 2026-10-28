@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { describeAction, helpRows, keyLine, PanelKeys } from "../../src/web/panel-keys.js";
+import { helpRows, keyLine, PanelKeys } from "../../src/web/panel-keys.js";
 import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
 import { DisassemblyKeys, MemoryKeys, ToolbarKeys } from "../../src/web/debug.js";
 import { PauseKeys } from "../../src/web/keyboard-setup.js";
@@ -109,12 +109,6 @@ describe("Key tables", () => {
     it("makes a panel's line of keys from its labelled rows", () => {
         expect(keyLine(DisassemblyKeys)).toBe("c run to cursor · t breakpoint · j/k move · b back");
         expect(keyLine(MemoryKeys)).toBe("u/i/U/I ±8, ±64");
-    });
-
-    it("names a button's key in its tooltip, from the row documenting it", () => {
-        expect(describeAction(ToolbarKeys, "stepOver")).toBe(
-            "Step over a call, or a loop from its backward branch (m)",
-        );
     });
 
     it("makes Help's rows, a key cap for each key", () => {

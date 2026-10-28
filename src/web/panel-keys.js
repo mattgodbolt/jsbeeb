@@ -48,13 +48,6 @@ export function keyLine(table) {
         .join(" · ");
 }
 
-/** The description of the action `run` names in `table`, and the keys that do it, for a button's tooltip. */
-export function describeAction(table, run) {
-    const { key } = table.find((row) => row.run === run);
-    const { description } = documented(table).find((row) => row.combo.split(" ").includes(key));
-    return `${description} (${key})`;
-}
-
 /** Help's rows for `tables`: each documented combo, its keys as key caps, and what they do. */
 export function helpRows(tables) {
     return tables.flatMap(documented).map(({ combo, description }) => {

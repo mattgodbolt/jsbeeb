@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Debugger } from "../../src/web/debug.js";
+import { Debugger, DisassemblyKeys, ToolbarKeys } from "../../src/web/debug.js";
+import { Gap } from "../../src/web/panel-layout.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel, TEST_65C12 } from "../../src/models.js";
@@ -9,7 +10,7 @@ import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
-import { panelArrangement } from "../../src/web/floating-panel.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 const PanelElements = [
@@ -22,14 +23,18 @@ const PanelElements = [
     "watch-menu",
 ];
 
-/** Stops and runs as the emulation loop does, without running anything; it starts in the debugger. */
-class StoppedLoop extends EventTarget {
+const MachineSecond = 2000000;
+
+/** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
+class StandInLoop extends EventTarget {
     constructor(dbgr, cpu) {
         super();
         this.dbgr = dbgr;
         this.cpu = cpu;
         this.mode = RunMode.debugging;
         this.running = false;
+        this.lockstep = null;
+        this.clocksPerSecond = MachineSecond;
     }
     isRunning() {
         return this.running;
@@ -37,11 +42,19 @@ class StoppedLoop extends EventTarget {
     go() {
         this.mode = RunMode.running;
         this.dbgr.hide();
+        this.running = true;
     }
     stop(debug) {
         this.mode = debug ? RunMode.debugging : RunMode.paused;
+        this.running = false;
         if (debug) this.dbgr.debug(this.cpu.pc);
         else this.dbgr.hide();
+    }
+    tick(cycles) {
+        if (this.cpu.execute(cycles)) return;
+        this.mode = RunMode.debugging;
+        this.running = false;
+        this.dbgr.debug(this.cpu.pc);
     }
 }
 
@@ -50,14 +63,16 @@ describe("Debugger", () => {
     let video;
     let dbgr;
     let keys;
+    let arrangement;
     let stoppedLoop;
 
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
-        keys = new PanelKeys(panelArrangement);
-        const made = new Debugger({ symbolSets, keys });
+        arrangement = new PanelArrangement(() => window.localStorage);
+        keys = new PanelKeys(arrangement);
+        const made = new Debugger({ symbolSets, keys, arrangement });
         made.setCpu(cpu);
-        stoppedLoop = new StoppedLoop(made, cpu);
+        stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
         return made;
     };
@@ -181,11 +196,51 @@ describe("Debugger", () => {
             expect(stoppedLoop.mode).toBe(RunMode.running);
         });
 
-        it("are listed for a menu of panels by their titles", () => {
-            const titles = panelArrangement.listed().map((floating) => floating.title);
-            expect(titles).toEqual(
-                expect.arrayContaining(["Debugger toolbar", "Disassembly", "Memory", "Registers", "Peripherals"]),
-            );
+        it("are listed for a menu of panels by their titles, with the watches", () => {
+            expect(arrangement.listed().map((floating) => floating.title)).toEqual([
+                "Watches",
+                "Debugger toolbar",
+                "Disassembly",
+                "Memory",
+                "Registers",
+                "Peripherals",
+            ]);
+        });
+
+        it("bring the toolbar with them, whatever else was open last", () => {
+            stoppedLoop.mode = RunMode.running;
+            dbgr.panels.registers.open();
+            dbgr.panels.registers.close();
+            dbgr.panels.registers.open();
+            dbgr.hidePanels();
+            dbgr.toggleDebugger();
+            expect(shown()).toEqual(["debug-toolbar", "registers-panel"]);
+        });
+
+        describe("in their default places", () => {
+            const gutters = (left, right) => dbgr.placeBesideScreen(() => ({ left, right: window.innerWidth - right }));
+
+            it("take the width of a gutter wide enough for a column, and their natural width beside a narrower one", () => {
+                gutters(300, 250);
+                expect(dbgr.panels.memory.place().w).toBe(300 - Gap);
+                expect(dbgr.panels.disassembly.place().w).toBe(null);
+                gutters(250, 300);
+                expect(dbgr.panels.memory.place().w).toBe(null);
+                expect(dbgr.panels.disassembly.place().w).toBe(300 - Gap);
+            });
+
+            it("are worked out afresh for the window as it is each time they are laid out", () => {
+                dbgr.placeBesideScreen(() => ({ left: 300, right: 724 }));
+                expect(dbgr.panels.registers.place().w).toBe(300 - Gap);
+                vi.spyOn(window, "innerWidth", "get").mockReturnValue(1200);
+                expect(dbgr.panels.registers.place().w).toBe(1200 - 724 - Gap);
+            });
+
+            it("stack under one another down each side", () => {
+                expect(dbgr.panels.registers.place().y.attach).toEqual({ to: "disassembly", side: "after" });
+                expect(dbgr.panels.disassembly.place().y.attach).toEqual({ to: "toolbar", side: "after" });
+                expect(dbgr.panels.peripherals.place().y.attach).toEqual({ to: "memory", side: "after" });
+            });
         });
 
         it("show the stack from its top and the cycles run", () => {
@@ -212,13 +267,15 @@ describe("Debugger", () => {
             expect(visible("disassembly-panel")).toBe(true);
         });
 
-        describe("while the machine runs", () => {
+        describe("once a frame", () => {
             let frames;
             const runFrame = () => {
                 const pending = [...frames.values()];
                 frames.clear();
                 for (const callback of pending) callback();
             };
+            const shownA = () => document.getElementById("cpu6502_a").textContent;
+            const shownPc = () => document.getElementById("cpu6502_pc").textContent;
 
             beforeEach(() => {
                 frames = new Map();
@@ -229,36 +286,50 @@ describe("Debugger", () => {
                 });
                 vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
                 dbgr.debug(cpu.pc);
-                stoppedLoop.go();
-                stoppedLoop.running = true;
             });
 
-            it("keep up once a frame, following the program counter, without side effects", () => {
-                const read = vi.spyOn(cpu, "readmem");
-                cpu.a = 0x99;
-                cpu.pc = 0x2002;
+            it("keep up with the machine as it runs, following the program counter, without side effects", () => {
+                stoppedLoop.go();
                 cpu.writemem(0x0000, 0x77);
+                stoppedLoop.tick(2);
+                const read = vi.spyOn(cpu, "readmem");
                 runFrame();
-                expect(document.getElementById("cpu6502_a").textContent).toBe("99");
+                expect(shownA()).toBe("41");
                 expect(addrOf(document.querySelector("#disassembly .current"))).toBe("2002");
                 expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe("77");
                 expect(read).not.toHaveBeenCalled();
             });
 
+            it("draw nothing while the machine stands still, so a click lands on what it went down on", () => {
+                const operand = () => disRows()[8].querySelector(".disassembly").firstChild;
+                const before = operand();
+                const peek = vi.spyOn(cpu, "peekmem");
+                runFrame();
+                runFrame();
+                expect(peek).not.toHaveBeenCalled();
+                expect(operand()).toBe(before);
+            });
+
+            it("catch up with a state put in while the machine is paused", () => {
+                const start = cpu.snapshotState();
+                stoppedLoop.go();
+                stoppedLoop.tick(2);
+                stoppedLoop.stop(false);
+                runFrame();
+                expect(shownPc()).toBe("2002");
+                cpu.restoreState(start);
+                runFrame();
+                expect(shownPc()).toBe("2000");
+            });
+
             it("read nothing once closed", () => {
+                stoppedLoop.go();
                 dbgr.hidePanels();
                 expect(frames.size).toBe(0);
                 const peek = vi.spyOn(cpu, "peekmem");
+                stoppedLoop.tick(2);
                 runFrame();
                 expect(peek).not.toHaveBeenCalled();
-            });
-
-            it("catch up with the machine once it stops", () => {
-                cpu.a = 0x42;
-                stoppedLoop.running = false;
-                stoppedLoop.mode = RunMode.paused;
-                stoppedLoop.dispatchEvent(new Event("running"));
-                expect(document.getElementById("cpu6502_a").textContent).toBe("42");
             });
         });
 
@@ -267,13 +338,18 @@ describe("Debugger", () => {
             const enabled = () =>
                 ["go", "stop", "step", "stepOver", "stepOut", "runToCursor"].filter((run) => !button(run).disabled);
 
-            it("offers what the machine can do as it is, and names each button's key", () => {
+            it("offers what the machine can do as it is", () => {
                 expect(enabled()).toEqual(["go", "step", "stepOver", "stepOut", "runToCursor"]);
                 stoppedLoop.running = true;
                 stoppedLoop.dispatchEvent(new Event("running"));
                 expect(enabled()).toEqual(["stop"]);
-                expect(button("stepOver").title).toBe("Step over a call, or a loop from its backward branch (m)");
-                expect(button("runToCursor").title).toBe("Run to the highlighted instruction (c)");
+            });
+
+            it("names in each button's tooltip the key that does the same", () => {
+                const keyFor = (run) =>
+                    [...ToolbarKeys, ...DisassemblyKeys].find((row) => row.run === run && row.key).key;
+                for (const run of ["go", "step", "stepOver", "stepOut", "runToCursor"])
+                    expect(button(run).title).toMatch(new RegExp(`\\(${keyFor(run)}\\)$`));
             });
 
             it("steps from a pause by entering the debugger first", () => {
@@ -582,45 +658,11 @@ describe("Debugger", () => {
         const pc = () => document.getElementById("cpu6502_pc").textContent;
         // LDX #3; DEX; BNE $2002; LDA #$41
         const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
-        const MachineSecond = 2000000;
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
-        class StandInLoop extends EventTarget {
-            mode = RunMode.debugging;
-            running = false;
-            lockstep = null;
-            clocksPerSecond = MachineSecond;
-            isRunning() {
-                return this.running;
-            }
-            go() {
-                this.mode = RunMode.running;
-                dbgr.hide();
-                this.running = true;
-            }
-            stop(debug) {
-                this.mode = debug ? RunMode.debugging : RunMode.paused;
-                this.running = false;
-                if (debug) dbgr.debug(cpu.pc);
-                else dbgr.hide();
-            }
-            pause() {
-                this.mode = RunMode.paused;
-                dbgr.hide();
-                this.running = false;
-            }
-            tick(cycles) {
-                if (cpu.execute(cycles)) return;
-                this.mode = RunMode.debugging;
-                this.running = false;
-                dbgr.debug(cpu.pc);
-            }
-        }
-
         beforeEach(() => {
-            loop = new StandInLoop();
-            dbgr.attachLoop(loop);
+            loop = stoppedLoop;
         });
 
         it("runs to the cursor from a pause by entering the debugger first", () => {
@@ -828,7 +870,7 @@ describe("Debugger", () => {
 
                 it("when the machine is paused", () => {
                     keyPress("c");
-                    loop.pause();
+                    loop.stop(false);
                     expect(reachesCursor()).toBe(true);
                 });
 

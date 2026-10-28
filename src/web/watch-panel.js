@@ -1,6 +1,6 @@
 import { hexword } from "../hex.js";
 import { formatWatch, WatchFormats } from "../watches.js";
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 200, h: 80 };
@@ -15,8 +15,9 @@ export class WatchPanel {
      * @param {object} options
      * @param {(address: number) => number} options.peek - reads without side effects
      * @param {(text: string) => {address: number, label: string} | undefined} options.resolve
+     * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      */
-    constructor({ peek, resolve }) {
+    constructor({ peek, resolve, arrangement }) {
         this._peek = peek;
         this._resolve = resolve;
         /** @type {{address: number, format: import("../watches.js").WatchFormat, value: HTMLElement}[]} */
@@ -50,7 +51,7 @@ export class WatchPanel {
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: MinPanelSize,
             reopens: true,
-            arrangement: panelArrangement,
+            arrangement,
         });
         this.floating.addEventListener("open", () => this._tick());
         this.floating.addEventListener("close", () => {

@@ -406,7 +406,13 @@
         <div class="debug-panel-header">
           <span class="disc-title">Debugger</span>
           <div class="btn-group btn-group-sm" role="group" aria-label="Run and stop">
-            <button type="button" class="btn btn-outline-light" data-run="go" aria-label="Run">
+            <button
+              type="button"
+              class="btn btn-outline-light"
+              data-run="go"
+              aria-label="Run"
+              title="Resume running (g)"
+            >
               <span data-icon="play-fill" aria-hidden="true"></span>
             </button>
             <button
@@ -420,10 +426,33 @@
             </button>
           </div>
           <div class="btn-group btn-group-sm" role="group" aria-label="Step">
-            <button type="button" class="btn btn-outline-light" data-run="step">Step</button>
-            <button type="button" class="btn btn-outline-light" data-run="stepOver">Over</button>
-            <button type="button" class="btn btn-outline-light" data-run="stepOut">Out</button>
-            <button type="button" class="btn btn-outline-light" data-run="runToCursor">Cursor</button>
+            <button type="button" class="btn btn-outline-light" data-run="step" title="Step one instruction (n)">
+              Step
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-light"
+              data-run="stepOver"
+              title="Step over a call, or a loop from its backward branch (m)"
+            >
+              Over
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-light"
+              data-run="stepOut"
+              title="Run until this subroutine or interrupt handler returns (o)"
+            >
+              Out
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-light"
+              data-run="runToCursor"
+              title="Run to the highlighted instruction (c)"
+            >
+              Cursor
+            </button>
           </div>
           <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
             &times;
@@ -1148,7 +1177,7 @@
                 <h5>Paused or debugging</h5>
                 <p>
                   After <span class="key">Alt-P</span>, <span class="key">g</span> resumes and
-                  <span class="key">n</span> runs a frame. In the debugger:
+                  <span class="key">n</span> runs a frame. With their panel open:
                 </p>
                 <table class="table table-sm">
                   <tbody id="debug-keys-help"></tbody>

@@ -96,7 +96,11 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 // ------------------------------------------------------------------------
 
 const panelKeys = new PanelKeys(panelArrangement);
-const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }), keys: panelKeys });
+const dbgr = new Debugger({
+    symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }),
+    keys: panelKeys,
+    arrangement: panelArrangement,
+});
 document.getElementById("debug-keys-help").append(...debuggerHelpRows());
 
 const gamepad = new GamePad();

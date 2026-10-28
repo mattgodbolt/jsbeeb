@@ -81,6 +81,7 @@ body {
 #debug-toolbar .floating-panel-header {
   flex-wrap: wrap;
   gap: 4px;
+  margin-bottom: 0;
 }
 
 #debug-toolbar,
@@ -94,10 +95,6 @@ body {
 
 .debug-panel .panel-close {
   margin-left: auto;
-}
-
-#debug-toolbar .floating-panel-header {
-  margin-bottom: 0;
 }
 
 /* A width of its own, not its rows', so that it keeps it as the names in view come and go. */
@@ -988,7 +985,7 @@ small {
 .disc-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 8px;
 }
 
