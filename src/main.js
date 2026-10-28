@@ -5,7 +5,7 @@ import "./jsbeeb.css";
 
 import { Debugger } from "./web/debug.js";
 import { GamePad } from "./web/gamepads.js";
-import { initialise as electron } from "./app/electron.js";
+import { initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
@@ -394,6 +394,9 @@ const startPromise = machine.start({ media, autoBoot, ...plan.media });
             });
             if (!started) return;
         }
+        // Its way in is the More menu, which the desktop app has removed by now, and a guest's link would name a
+        // file on this computer.
+        if (isDesktopApp()) return;
         const sessionContext = {
             processor,
             model,

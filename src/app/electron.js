@@ -55,8 +55,11 @@ function init(args) {
     }
 }
 
+/** Whether the page is running inside the desktop app, whose preload removes the `.not-electron` page furniture. */
+export function isDesktopApp() {
+    return typeof window.electronAPI !== "undefined";
+}
+
 export function initialise(args) {
-    if (typeof window.electronAPI !== "undefined") {
-        init(args);
-    }
+    if (isDesktopApp()) init(args);
 }
