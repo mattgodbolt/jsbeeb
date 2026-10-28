@@ -1006,7 +1006,7 @@ small {
   white-space: nowrap;
 }
 
-#hardware_debug .sysvia-open {
+#peripherals-panel .sysvia-open {
   color: #aaaaff;
   font-family: inherit;
   font-size: inherit;

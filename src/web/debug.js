@@ -253,9 +253,8 @@ export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, Me
 const RememberedPanelsKey = "debugPanels";
 /** In the order they open, so that each opens after the panel it sits under. */
 const DebuggerOwnPanels = ["toolbar", "disassembly", "registers", "memory", "peripherals"];
-/** Every panel Alt-D and Alt-S show and hide, the decoded system VIA, which is its own, included. */
+/** Every panel Alt-D and Alt-S show and hide: the debugger's own, and the decoded system VIA. */
 const DebugPanelIds = [...DebuggerOwnPanels, "sysvia"];
-const WideWindowPanels = DebuggerOwnPanels;
 const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
 const PeripheralsWindowWidth = 1600;
@@ -370,7 +369,10 @@ export class Debugger {
 
         this.panels = Object.fromEntries(DebuggerOwnPanels.map((id) => [id, this._makePanel(id)]));
         this.panels.sysvia = this.sysViaPanel.floating;
-        for (const [id, floating] of Object.entries(this.panels)) this._track(id, floating);
+        for (const floating of Object.values(this.panels)) {
+            floating.addEventListener("open", () => this._rememberOpenPanels());
+            floating.addEventListener("close", () => this._rememberOpenPanels());
+        }
         this._bindToolbar();
         this._bindKeys(keys);
 
@@ -450,13 +452,7 @@ export class Debugger {
             reopens: true,
             arrangement: this._arrangement,
         });
-        return floating;
-    }
-
-    /** Remembers whether `floating` is open, and keeps it, as each of the debugger's own panels, up to date. */
-    _track(id, floating) {
         floating.addEventListener("open", () => {
-            this._rememberOpenPanels();
             if (this._frameHandle === null) this._tick();
             if (!this.cpu) return;
             this._matchSymbols();
@@ -464,11 +460,15 @@ export class Debugger {
             this._arrangement.keepAttached();
         });
         floating.addEventListener("close", () => {
-            this._rememberOpenPanels();
-            if (this.panelsShown()) return;
+            if (this._ownPanelsShown()) return;
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
         });
+        return floating;
+    }
+
+    _ownPanelsShown() {
+        return DebuggerOwnPanels.some((id) => this.panels[id].isOpen);
     }
 
     /**
@@ -572,7 +572,7 @@ export class Debugger {
     showPanels() {
         const remembered = rememberedPanels();
         const wide = window.innerWidth >= PeripheralsWindowWidth;
-        const chosen = remembered.length ? remembered : wide ? WideWindowPanels : NarrowWindowPanels;
+        const chosen = remembered.length ? remembered : wide ? DebuggerOwnPanels : NarrowWindowPanels;
         const ids = DebugPanelIds.filter(
             (id) => (id === "toolbar" || chosen.includes(id)) && this.panels[id].title !== null,
         );
@@ -620,7 +620,7 @@ export class Debugger {
      */
     _tick() {
         this._frameHandle = null;
-        if (!this.panelsShown()) return;
+        if (!this._ownPanelsShown()) return;
         if (this.cpu && this._cycles() !== this._shownAt) this._showOpenPanels();
         this._frameHandle = requestAnimationFrame(() => this._tick());
     }
@@ -652,7 +652,6 @@ export class Debugger {
         this.cpu = cpu;
         if (cpu.model.isAtom) {
             this.sysViaPanel.floating.close();
-            // Nor is it offered there.
             this.sysViaPanel.floating.title = null;
         }
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);

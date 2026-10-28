@@ -392,6 +392,17 @@ describe("Debugger", () => {
             expect(awaiting()).toBe(true);
         });
 
+        it("leave the decoded system VIA out of the panels shown on an Atom, though it was open last on a BBC", () => {
+            dbgr.togglePanels();
+            dbgr.sysViaPanel.floating.open();
+            dbgr.togglePanels();
+            cpu.model = findModel("Atom");
+            dbgr.setCpu(cpu);
+            dbgr.togglePanels();
+            expect(visible("sysvia-panel")).toBe(false);
+            expect(shown()).toEqual(NarrowSet);
+        });
+
         it("note the debugger opening each time it is entered, not each time it stops", () => {
             const sent = sentEvents();
             dbgr.debug(cpu.pc);
@@ -1701,6 +1712,12 @@ describe("Debugger", () => {
             dbgr.togglePanels();
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             expect(credited()).toBe(true);
+        });
+
+        it("fetches nothing for the decoded system VIA open on its own", async () => {
+            dbgr.sysViaPanel.floating.open();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(load).not.toHaveBeenCalled();
         });
 
         it("waits for the next stop to look for sets when the index arrives with the panels shut", async () => {

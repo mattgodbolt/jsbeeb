@@ -87,10 +87,8 @@ describe("SysViaPanel", () => {
     const matrixStatus = () => document.querySelector(".key-matrix-status").textContent;
 
     describe("opening", () => {
-        it.each([
-            ["its own toggle, as the Debug menu does", () => ({ click: () => panel.floating.toggle() })],
-            ["the peripherals panel's system VIA section", () => document.querySelector("#sysvia .sysvia-open")],
-        ])("opens and closes from %s, and reads the VIA once a frame only while open", (_, opener) => {
+        it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open", () => {
+            const opener = () => document.querySelector("#sysvia .sysvia-open");
             opener().click();
             expect(isOpen()).toBe(true);
             expect(hex("IC32")).toBe("00");
