@@ -165,7 +165,9 @@ describe("RewindUI", () => {
             const snapshots = captured(2);
             ui.open();
             key("ArrowLeft");
+            loop.replacingState.mockClear();
             key("Enter");
+            expect(loop.replacingState).toHaveBeenCalled();
             expect(lastRestored()).toBe(snapshots[0]);
             expect(panel().hidden).toBe(true);
             expect(thumbs()).toHaveLength(0);

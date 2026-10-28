@@ -418,6 +418,18 @@ describe("Debugger", () => {
             expect(loop.running).toBe(false);
         });
 
+        it("steps over a loop that makes a call with the stack about to wrap", () => {
+            // LDX #1; TXS; LDX #3; JSR $3000; DEX; BNE $2005; NOP, with an RTS at $3000
+            load(0x2000, [0xa2, 0x01, 0x9a, 0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea]);
+            load(0x3000, [0x60]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2009");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("200b");
+            expect(cpu.x).toBe(0);
+        });
+
         it("steps out past the returns of the calls it makes", () => {
             load(0x2000, [0x20, 0x00, 0x30]);
             load(0x3000, [0x20, 0x00, 0x31, 0x60]);

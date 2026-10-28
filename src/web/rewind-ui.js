@@ -148,6 +148,7 @@ export class RewindUI {
         this.snapshots = [];
         this.savedState = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
+        this.loop.replacingState();
         this.resumeLoop?.();
         this.resumeLoop = null;
     }

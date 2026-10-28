@@ -27,6 +27,11 @@ function operandAccesses(instruction) {
     return ["read"];
 }
 
+// S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
+function notDeeper(s, startS) {
+    return ((s - startS) & 0xff) < 0x80;
+}
+
 function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }
@@ -696,10 +701,10 @@ export class Debugger {
         const next = end & 0xffff;
         if (UnconditionalJump.test(text)) return this.step();
         if (Branch.test(text) && target <= pc) {
-            return this.runTo(() => this.cpu.s >= s && (this.cpu.pc < target || this.cpu.pc > pc), false);
+            return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
         }
         if (Branch.test(text)) return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, false);
-        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && this.cpu.s >= s, false);
+        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), false);
         this.runTo(() => this.cpu.pc === next, false);
     }
 
@@ -708,7 +713,7 @@ export class Debugger {
         let returning = false;
         this.runTo(() => {
             if (returning) return true;
-            returning = this.cpu.s >= s && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+            returning = notDeeper(this.cpu.s, s) && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
             return false;
         }, false);
     }
