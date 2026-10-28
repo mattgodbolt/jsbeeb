@@ -495,7 +495,25 @@ describe("Debugger", () => {
             expect(Object.keys(named)).toContain("ORA");
             expect(Object.keys(named)).toContain("IC32");
             expect(named.ORA.textContent).toBe("00");
-            expect(named.T1C.textContent).toHaveLength(6);
+        });
+
+        it("shows the VIA timers as a program reads them, without clearing the interrupt", () => {
+            const [T1CL, T1CH, IFR] = [0x4, 0x5, 0xd];
+            const Timer1Int = 0x40;
+            const via = cpu.sysvia;
+            via.write(T1CL, 0x1e);
+            via.write(T1CH, 0x4e);
+            cpu.scheduler.polltime(0x4e1e * 2 + 100);
+            dbgr.debug(cpu.pc);
+            const shown = Object.fromEntries(
+                [...document.querySelectorAll("#sysvia tr:not(.template)")].map((row) => [
+                    row.querySelector(".register").textContent,
+                    row.querySelector(".value").textContent,
+                ]),
+            );
+            expect(shown.T1L).toBe("4e1e");
+            expect(via.peek(IFR) & Timer1Int).toBe(Timer1Int);
+            expect(shown.T1C).toBe(hexword(via.read(T1CL) | (via.read(T1CH) << 8)));
         });
 
         it("lists the CRTC registers and state", () => {

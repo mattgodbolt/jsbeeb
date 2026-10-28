@@ -616,6 +616,19 @@ describe("Via peek", () => {
         expect(via.peek(IFR) & Timer1Int).toBe(0);
     });
 
+    it("gives the timers as the 16-bit values a program reads, caught up", () => {
+        via.write(T1CL, 0x1e);
+        via.write(T1CH, 0x4e);
+        via.write(T2CL, 0x34);
+        via.write(T2CH, 0x12);
+        runMicroseconds(100);
+        const timers = via.peekTimers();
+        expect(timers.t1l).toBe(0x4e1e);
+        expect(timers.t2l).toBe(0x1234);
+        expect(timers.t1c).toBe(via.read(T1CL) | (via.read(T1CH) << 8));
+        expect(timers.t2c).toBe(via.read(T2CL) | (via.read(T2CH) << 8));
+    });
+
     it("leaves the port interrupts raised when peeking the ports", () => {
         via.setca1(true);
         via.setcb1(true);

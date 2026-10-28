@@ -362,19 +362,14 @@ export class Debugger {
             "IC32",
         ];
         for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
+        let timers;
         for (const elem of regs) {
             if (via[elem] === undefined) continue;
             const row = cloneTemplate(node);
             row.querySelector(".register").textContent = elem.toUpperCase();
             const value = row.querySelector(".value");
             if (elem.match(/t[12][cl]/)) {
-                updates.push(() => {
-                    const reg = via[elem];
-                    this.updateElem(
-                        value,
-                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff),
-                    );
-                });
+                updates.push(() => this.updateElem(value, hexword(timers[elem])));
             } else {
                 updates.push(() => {
                     this.updateElem(value, hexbyte(via[elem]));
@@ -382,6 +377,7 @@ export class Debugger {
             }
         }
         const update = () => {
+            timers = via.peekTimers();
             for (const update of updates) update();
         };
         update();
