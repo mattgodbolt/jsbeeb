@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 import path from "node:path";
 import sharp from "sharp";
 import { TestMachine } from "../../src/test-machine.js";
@@ -46,12 +46,11 @@ const RefDir = path.join(RepoRoot, "tests/integration/teletext");
 
 const FieldCycles = 40000;
 const FlashCycleFields = 64;
-const FlashHiddenFields = 16;
 // The flash and cursor phases both count fields since power-on, 64 and 32 to a cycle, so a
 // capture at a given field of the flash cycle is the same picture whatever ran before it.
 // Which field each reference was taken at was found by capturing every field and comparing.
-const FlashHiddenField = 22;
-const FlashShownField = 56;
+const FlashHiddenField = 56;
+const FlashShownField = 26;
 const CursorJustOnField = 15;
 const CursorOnField = 8;
 
@@ -114,27 +113,5 @@ describe("Test other teletext test pages", () => {
         );
         await testMachine.runUntilInput();
         await compare(video, testMachine, `expected_bug_469.png`, CursorOnField);
-    });
-});
-
-describe.each(["B-DFS1.2", "B-US", "B-German", "Master"])("flash phase under the %s MOS", (model) => {
-    it("hides flashing text for exactly the fields of one cursor-off period", async () => {
-        const fields = [];
-        const video = new Video(false, new Uint32Array(1024 * 1024), () => {});
-        video.paint_ext = () => fields.push({ hidden: video.teletext.hideFlashing, cursorOn: video.cursorOnThisFrame });
-        const testMachine = new TestMachine(model, { video });
-        await testMachine.initialise();
-        await testMachine.runUntilInput();
-        fields.length = 0;
-        await testMachine.runFor(3 * FlashCycleFields * FieldCycles);
-        // Input is requested before the first counted frame, so the first fields are still out of phase.
-        const hiddenStart = fields.findIndex(
-            (field, i) => i > FlashCycleFields && field.hidden && !fields[i - 1].hidden,
-        );
-        const hiddenEnd = fields.findIndex((field, i) => i > hiddenStart && !field.hidden);
-        expect(hiddenEnd - hiddenStart).toBe(FlashHiddenFields);
-        expect(fields.slice(hiddenStart, hiddenEnd).every((field) => !field.cursorOn)).toBe(true);
-        expect(fields[hiddenStart - 1].cursorOn).toBe(true);
-        expect(fields[hiddenEnd].cursorOn).toBe(true);
     });
 });

@@ -539,12 +539,9 @@ export class Teletext {
         if (++this.flashTime === 64) this.flashTime = 0;
     }
 
-    restartFlashCycle() {
-        this.flashTime = 0;
-    }
-
-    // Flashing text starts off in sync with a slow cursor, extinguished together. Multiple MODE
-    // changes gradually desynchronise the frame counters.
+    // The phase against the cursor blink depends on how many DEW pulses precede the MOS programming
+    // the CRTC. The SAA5050 has no reset and the 6845's registers power up undefined, so real hardware
+    // presumably has no fixed phase either.
     get hideFlashing() {
         return this.flashTime < 16;
     }

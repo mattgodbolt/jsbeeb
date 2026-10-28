@@ -1296,9 +1296,6 @@ export class Video {
             const r6Hit = this.vertCounter === regs[6];
             if (r6Hit && !this.firstScanline && this.dispEnabled & VDISPENABLE) {
                 this.dispEnableClear(VDISPENABLE);
-                // Before the MOS programs the CRTC, its all-zero registers pulse DEW every 128
-                // one-scanline rows without counting a frame.
-                if (this.frameCount === 0) this.teletext.restartFlashCycle();
                 // Perhaps surprisingly, this happens here. Both cursor
                 // blink and interlace cease if R6 > R4.
                 this.frameCount++;
