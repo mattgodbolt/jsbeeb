@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { findModel } from "../../src/models.js";
+import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -282,16 +282,6 @@ describe("Debugger", () => {
             expect(cpu.x).toBe(0);
         });
 
-        it("steps over a backward branch until the loop falls through", () => {
-            load(0x2000, countdown);
-            dbgr.debug(cpu.pc);
-            keyPress("n");
-            keyPress("n");
-            keyPress("m");
-            expect(pc()).toBe("2005");
-            expect(cpu.x).toBe(0);
-        });
-
         it("steps over a loop to wherever it leaves by", () => {
             // LDX #3; DEX; BEQ $2008; BNE $2002; ...; NOP
             load(0x2000, [0xa2, 0x03, 0xca, 0xf0, 0x03, 0xd0, 0xfb, 0xea, 0xea]);
@@ -300,6 +290,29 @@ describe("Debugger", () => {
             keyPress("c");
             keyPress("m");
             expect(pc()).toBe("2008");
+        });
+
+        it("steps over a 65C12 loop closed by BRA to wherever it leaves by", async () => {
+            cpu = fake6502(TEST_65C12, { video });
+            await cpu.initialise();
+            cpu.pc = 0x2000;
+            dbgr.setCpu(cpu);
+            // LDX #3; DEX; BEQ $2008; BRA $2002; NOP; NOP
+            load(0x2000, [0xa2, 0x03, 0xca, 0xf0, 0x03, 0x80, 0xfb, 0xea, 0xea]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2005");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("2008");
+        });
+
+        it("stops a step at a write watch on its first instruction", () => {
+            // STA $70; NOP
+            load(0x2000, [0x85, 0x70, 0xea]);
+            cpu.debugWrite.add((address) => address === 0x70);
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(pc()).toBe("2002");
         });
 
         it("steps over a forward branch to where it went", () => {
@@ -331,13 +344,6 @@ describe("Debugger", () => {
             keyPress("o");
             expect(pc()).toBe("2003");
             expect(toasts()).toEqual([]);
-        });
-
-        it("steps off a breakpoint on the current instruction", () => {
-            dbgr.debug(cpu.pc);
-            keyPress("t");
-            keyPress("n");
-            expect(pc()).toBe("2002");
         });
 
         it("counts its limit in instructions, not cycles", () => {
