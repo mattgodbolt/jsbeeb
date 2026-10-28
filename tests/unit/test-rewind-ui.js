@@ -40,7 +40,7 @@ describe("RewindUI", () => {
             }),
         };
         resume = vi.fn();
-        loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume) });
+        loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), replacingState: vi.fn() });
     });
 
     afterEach(teardownDom);
@@ -74,6 +74,7 @@ describe("RewindUI", () => {
             const snapshots = captured(3);
             document.getElementById("rewind-open").click();
             expect(loop.hold).toHaveBeenCalledWith("the rewind panel");
+            expect(loop.replacingState).toHaveBeenCalled();
             expect(panel().hidden).toBe(false);
             expect(thumbs().map((thumb) => thumb.querySelector(".rewind-thumb-label").textContent)).toEqual([
                 "-2s",

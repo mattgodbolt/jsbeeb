@@ -102,7 +102,7 @@ describe("SnapshotUI", () => {
             },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
-            loop: { hold: vi.fn(() => resume), stop: vi.fn() },
+            loop: { hold: vi.fn(() => resume), stop: vi.fn(), replacingState: vi.fn() },
         };
     });
 
@@ -166,6 +166,7 @@ describe("SnapshotUI", () => {
             deps.processor.restoreState = vi.fn();
             await make().loadStateFromFile(null, snapshotBuffer());
             expect(deps.processor.restoreState).toHaveBeenCalledWith({});
+            expect(deps.loop.replacingState).toHaveBeenCalled();
             expect(deps.video.paint).toHaveBeenCalledTimes(1);
             expect(deps.modals.showError).not.toHaveBeenCalled();
             expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
@@ -202,6 +203,7 @@ describe("SnapshotUI", () => {
             vi.useFakeTimers();
             const loop = {
                 holds: 0,
+                replacingState() {},
                 isRunning() {
                     return this.holds === 0;
                 },

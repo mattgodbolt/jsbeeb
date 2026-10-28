@@ -37,7 +37,7 @@ async function station(transport, { boot }) {
         processor: machine.processor,
         model: machine.model,
         takenFromHost: StockTakenFromHost,
-        loop: { setLockstep: (lockstep) => (page.lockstep = lockstep) },
+        loop: { setLockstep: (lockstep) => (page.lockstep = lockstep), replacingState: () => {} },
         keyboard,
         version: "test",
         transport,
