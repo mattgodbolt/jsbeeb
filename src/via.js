@@ -32,6 +32,12 @@ const PulseWidthCycles = 2;
 // Reset makes every pin an input, and undriven inputs float high.
 const IdlePins = 0xff;
 
+// The autoscan counter steps through 16 columns, one per 1MHz cycle (two 2MHz scheduler ticks), of which the keyboard
+// wires 10 on a B and 13 on a Master.
+const ScanCounterColumns = 16;
+const TicksPerScanColumn = 2;
+const KeyboardColumns = 13;
+
 class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
@@ -685,8 +691,27 @@ export class SysVia extends Via {
         this.cmos = cmos;
         this.isMaster = isMaster;
         this.getGamepadsFunc = getGamepads;
+        this.keyScanTask = this.scheduler.newTask(() => this.scanPassesHeldKey());
 
         this.reset();
+    }
+
+    reset() {
+        super.reset();
+        this.keyScanTask.cancel();
+    }
+
+    write(addr, val) {
+        const ca2WasFlagged = this.ifr & INT_CA2;
+        super.write(addr, val);
+        this._scanAfterCa2Cleared(ca2WasFlagged);
+    }
+
+    read(addr) {
+        const ca2WasFlagged = this.ifr & INT_CA2;
+        const result = super.read(addr);
+        this._scanAfterCa2Cleared(ca2WasFlagged);
+        return result;
     }
 
     snapshotState() {
@@ -695,6 +720,7 @@ export class SysVia extends Via {
             IC32: this.IC32,
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
+            keyScanTaskOffset: this._taskOffset(this.keyScanTask),
         };
     }
 
@@ -717,6 +743,7 @@ export class SysVia extends Via {
 
     restoreState(state) {
         super.restoreState(state);
+        this._restoreTask(this.keyScanTask, state.keyScanTaskOffset);
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;
@@ -817,18 +844,24 @@ export class SysVia extends Via {
     }
 
     updateKeys() {
-        // 10 for BBC, 13 for Master 128
-        const numCols = 13;
         if (this.IC32 & 8) {
-            for (let i = 0; i < numCols; ++i) {
-                for (let j = 1; j < 8; ++j) {
-                    if (this.keys[i][j]) {
-                        this.setca2(true);
-                        return;
+            for (let column = 0; column < KeyboardColumns; ++column) {
+                if (this._columnHasScannedKey(column)) {
+                    // ca2 stands for the whole pulse train here, so a snapshot keeps whether it is running.
+                    if (!this.ca2) {
+                        this.ca2 = true;
+                        this.scanPassesHeldKey();
+                    } else if (this.keyScanTask.scheduled()) {
+                        this._scheduleScanEdge();
                     }
+                    return;
                 }
             }
+            this.keyScanTask.cancel();
+            this.ca2 = false;
+            return;
         } else {
+            this.keyScanTask.cancel();
             // Keyboard sets bit 7 to 0 or 1, and testing shows it always
             // "wins" vs. CMOS.
             // At 0 also wins against an output pin.
@@ -842,16 +875,58 @@ export class SysVia extends Via {
                 this.portapins |= 0x80;
             }
 
-            if (keycol < numCols) {
-                for (let j = 1; j < 8; ++j) {
-                    if (this.keys[keycol][j]) {
-                        this.setca2(true);
-                        return;
-                    }
-                }
+            if (this._columnHasScannedKey(keycol)) {
+                this.setca2(true);
+                return;
             }
         }
         this.setca2(false);
+    }
+
+    /**
+     * The autoscan putting an edge on CA2 for a held key. A press sets the flag at once whichever edge the PCR selects,
+     * as the scan's pulses have both.
+     */
+    scanPassesHeldKey() {
+        if (this.pcr & 0x08) return;
+        this.ifr |= INT_CA2;
+        this.updateIFR();
+    }
+
+    _scanAfterCa2Cleared(ca2WasFlagged) {
+        if (ca2WasFlagged && !(this.ifr & INT_CA2) && this.IC32 & 8 && this.ca2) {
+            this._scheduleScanEdge();
+        }
+    }
+
+    /**
+     * Schedules the flag for the scan's next edge of the kind the PCR selects: rising as the counter moves from a column
+     * with no key held onto one with a key held, falling the other way. The counter's power-on phase is arbitrary, so
+     * its column is taken from the scheduler epoch.
+     */
+    _scheduleScanEdge() {
+        this.keyScanTask.cancel();
+        const epoch = this.scheduler.epoch;
+        const column = Math.floor(epoch / TicksPerScanColumn) % ScanCounterColumns;
+        const risingEdge = !!(this.pcr & 0x04);
+        let leavingHeld = this._columnHasScannedKey(column);
+        for (let step = 1; step <= ScanCounterColumns; ++step) {
+            const enteringHeld = this._columnHasScannedKey((column + step) % ScanCounterColumns);
+            if (enteringHeld !== leavingHeld && enteringHeld === risingEdge) {
+                this.keyScanTask.schedule(step * TicksPerScanColumn - (epoch % TicksPerScanColumn));
+                return;
+            }
+            leavingHeld = enteringHeld;
+        }
+    }
+
+    _columnHasScannedKey(column) {
+        if (column >= KeyboardColumns) return false;
+        const rows = this.keys[column];
+        for (let row = 1; row < 8; ++row) {
+            if (rows[row]) return true;
+        }
+        return false;
     }
 
     portAUpdated() {
@@ -872,8 +947,11 @@ export class SysVia extends Via {
 
     portBUpdated() {
         const portbpins = this.portbpins;
+        const wasAutoscanning = this.IC32 & 8;
         if (portbpins & 8) this.IC32 |= 1 << (portbpins & 7);
         else this.IC32 &= ~(1 << (portbpins & 7));
+        // CA2 rests low between the scan's pulses, so switching scan mode starts from there.
+        if ((wasAutoscanning ^ this.IC32) & 8) this.ca2 = false;
 
         this.capsLockLight = !(this.IC32 & 0x40);
         this.shiftLockLight = !(this.IC32 & 0x80);
