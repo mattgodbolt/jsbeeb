@@ -191,7 +191,7 @@ function parseBemV1(buffer) {
     const bemModel = bytes[V1Off.model];
     const modelName = BemV1Models[bemModel];
     if (!modelName) {
-        throw new Error(`Unsupported BEM v1 model: ${bemModel} (only BBC Model B supported)`);
+        throw new Error(`Unsupported BEM v1 model: ${bemModel} (only the BBC B and the OS 0.1 models are supported)`);
     }
 
     const cpuState = {
