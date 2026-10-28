@@ -61,6 +61,8 @@ describe("parseBemSnapshot", () => {
         ["builds a 64K RAM array", {}, (s) => s.state.ram.length, 64 * 1024],
         ["imports a B as a B", { model: 3 }, (s) => s.model, "B"],
         ["imports a B with sideways RAM as a B", { model: 4 }, (s) => s.model, "B"],
+        ["imports an A with OS 0.1 as a B with MOS 0.10", { model: 0 }, (s) => s.model, "B-MOS0.10"],
+        ["imports a B with OS 0.1 as a B with MOS 0.10", { model: 1 }, (s) => s.model, "B-MOS0.10"],
     ])("%s", async (_, overrides, pick, expected) => {
         expect(pick(await parseBemSnapshot(makeMinimalBemSnapshot(overrides)))).toEqual(expected);
     });
@@ -121,6 +123,7 @@ function section(key, data, compressed = false) {
  * needs. `ula` and `parasite` are sparse overrides applied to otherwise-zeroed state.
  */
 async function makeBemV3WithTube({
+    modelName = "BBC B",
     tubeName = "6502 External",
     tubeState = true,
     ula = {},
@@ -131,7 +134,7 @@ async function makeBemV3WithTube({
 } = {}) {
     const model = [
         ...encodeVar(3),
-        ...["BBC B", "os12", "", "std", "none"].flatMap(encodeString),
+        ...[modelName, "os12", "", "std", "none"].flatMap(encodeString),
         ...new Array(6).fill(0), // model flag bytes
         ...(tubeName ? [1, ...encodeString(tubeName)] : [0]),
     ];
@@ -153,6 +156,20 @@ async function makeBemV3WithTube({
         ...(tubeState ? section("P", await deflate(parasiteBytes), true) : []),
     ]).buffer;
 }
+
+describe("b-em v3 model import", () => {
+    it.each([
+        ["BBC B w/8271 FDC", "B"],
+        ["BBC B w/1770 FDC", "B1770"],
+        ["Master 128", "Master"],
+        ["BBC A w/OS 0.1", "B-MOS0.10"],
+        ["BBC B w/OS 0.1", "B-MOS0.10"],
+    ])("imports a %s as %s", async (modelName, expected) => {
+        const buffer = await makeBemV3WithTube({ modelName, tubeName: null, tubeState: false });
+
+        expect((await parseBemSnapshot(buffer)).model).toBe(expected);
+    });
+});
 
 describe("b-em tube import", () => {
     it("imports the parasite processor state", async () => {

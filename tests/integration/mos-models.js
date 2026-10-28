@@ -15,17 +15,18 @@ function screenLines(machine) {
 }
 
 describe.each([
-    { model: "B-DFS1.2", banner: "BBC Computer 32K", vsyncAddress: 0xdd15 },
-    { model: "B-US", banner: "Acorn OS", vsyncAddress: 0xdcec },
-    { model: "B-German", banner: "Acorn OS 32K", vsyncAddress: 0xdd15 },
-])("the $model MOS", ({ model, banner, vsyncAddress }) => {
+    { model: "B-DFS1.2", startup: ["BBC Computer 32K", "Acorn DFS", "BASIC", ">"], vsyncAddress: 0xdd15 },
+    { model: "B-US", startup: ["Acorn OS", "Acorn DFS", "BASIC", ">"], vsyncAddress: 0xdcec },
+    { model: "B-German", startup: ["Acorn OS 32K", "Acorn DFS", "BASIC", ">"], vsyncAddress: 0xdd15 },
+    { model: "B-MOS0.10", startup: ["BBC Computer 32K", "BASIC", ">"], vsyncAddress: 0xdf12 },
+])("the $model MOS", ({ model, startup, vsyncAddress }) => {
     it("boots to BASIC with its own banner, runs a line and changes mode without touching a VideoNuLA", async () => {
         const onMissingVideoNula = vi.fn();
         const video = new Video(false, FramebufferPixels, () => {}, { onMissingVideoNula });
         const machine = new TestMachine(model, { video });
         await machine.initialise();
         await machine.runUntilInput(10);
-        expect(screenLines(machine)).toEqual([banner, "Acorn DFS", "BASIC", ">"]);
+        expect(screenLines(machine)).toEqual(startup);
 
         await machine.type("PRINT 6*7");
         await machine.runUntilInput(10);
@@ -84,4 +85,13 @@ describe("the Master's TIME$", () => {
         await machine.runUntilInput(10);
         expect(screenLines(machine).slice(-2)).toEqual([shown, ">"]);
     });
+});
+
+it("MOS 0.10 names itself to *FX0", async () => {
+    const machine = new TestMachine("B-MOS0.10");
+    await machine.initialise();
+    await machine.runUntilInput(10);
+    await machine.type("*FX0");
+    await machine.runUntilInput(10);
+    expect(screenLines(machine).slice(-2)).toEqual(["OS EPROM 0.10", ">"]);
 });

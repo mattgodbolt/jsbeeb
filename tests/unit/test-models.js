@@ -38,6 +38,7 @@ describe("Model", () => {
             "BBC B (stock)": "BBC B",
             "BBC B (US)": "BBC B",
             "BBC B (German)": "BBC B",
+            "BBC B (MOS 0.10)": "BBC B",
             "BBC Master 128 (DFS)": "Master 128",
             "BBC Master 128 (ADFS)": "Master 128",
             "BBC Master 128 (ANFS)": "Master 128",
