@@ -65,9 +65,10 @@ export class MachineSession {
      *   ROM, as the web page does
      * @param {number} [opts.stationId=101] - the Econet station number, 1 to 253
      * @param {string[]} [opts.extraRoms] - sideways ROMs for the free banks, highest first, as the page's `rom=`
-     *   takes them: a name or path under roms/, a `file:` or `http(s):` URL, or a `github:` reference
+     *   takes them: a name or path under roms/, a `file:` or `http(s):` URL, or a `github:` reference; an empty
+     *   name is skipped, as the page skips it
      * @param {{bank: number, rom: string}[]} [opts.bankRoms] - sideways ROMs for the banks they name, as the page's
-     *   `rom.N=`; initialise() throws for a bank the model has no socket for, one the model or its fittings fill,
+     *   `rom.N=`, skipping one with an empty name; initialise() throws for a bank the model has no socket for, one the model or its fittings fill,
      *   or one named twice
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
@@ -117,8 +118,8 @@ export class MachineSession {
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
             econet: opts.econet,
             stationId: opts.stationId,
-            extraRoms: opts.extraRoms,
-            bankRoms: opts.bankRoms,
+            extraRoms: opts.extraRoms?.filter((rom) => rom),
+            bankRoms: opts.bankRoms?.filter(({ rom }) => rom),
         });
 
         // Accumulated VDU text output, drained by callers
