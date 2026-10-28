@@ -7,7 +7,7 @@ import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
-import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 describe("Debugger", () => {
     let cpu;
@@ -365,6 +365,30 @@ describe("Debugger", () => {
         const pc = () => document.getElementById("cpu6502_pc").textContent;
         // LDX #3; DEX; BNE $2002; LDA #$41
         const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
+        let loop;
+
+        /** Runs and stops as the emulation loop does, a tick at a time. */
+        class StandInLoop extends EventTarget {
+            running = false;
+            go() {
+                this.running = true;
+                this.dispatchEvent(new Event("running"));
+            }
+            halt() {
+                this.running = false;
+                this.dispatchEvent(new Event("running"));
+            }
+            tick(cycles) {
+                if (cpu.execute(cycles)) return;
+                this.halt();
+                dbgr.debug(cpu.pc);
+            }
+        }
+
+        beforeEach(() => {
+            loop = new StandInLoop();
+            dbgr.attachLoop(loop);
+        });
 
         it("steps over a loop that leaves backwards", () => {
             // NOP; LDX #3; DEX; BEQ $2000; BNE $2003
@@ -374,7 +398,7 @@ describe("Debugger", () => {
             keyPress("c");
             keyPress("m");
             expect(pc()).toBe("2000");
-            expect(toasts()).toEqual([]);
+            expect(loop.running).toBe(false);
         });
 
         it("steps out past the returns of the calls it makes", () => {
@@ -401,12 +425,13 @@ describe("Debugger", () => {
             expect(pc()).toBe("2008");
         });
 
-        it("stops a step at a write watch on its first instruction", () => {
-            // STA $70; NOP
-            load(0x2000, [0x85, 0x70, 0xea]);
+        it("stops a run at a write watch on its first instruction", () => {
+            // STA $70; NOP; NOP
+            load(0x2000, [0x85, 0x70, 0xea, 0xea]);
             cpu.debugWrite.add((address) => address === 0x70);
             dbgr.debug(cpu.pc);
-            keyPress("m");
+            goTo("goto-dis-addr-form", "$2003");
+            keyPress("c");
             expect(pc()).toBe("2002");
         });
 
@@ -419,15 +444,6 @@ describe("Debugger", () => {
             expect(pc()).toBe("2006");
         });
 
-        it("says so when it gives up on a call that never comes back", () => {
-            load(0x2000, [0x20, 0x00, 0x30]);
-            load(0x3000, [0x4c, 0x00, 0x30]);
-            dbgr.debug(cpu.pc);
-            keyPress("m");
-            expect(pc()).toBe("3000");
-            expect(toasts()).toEqual([expect.stringContaining("instructions without returning to $2003")]);
-        });
-
         it("stops a step over at a breakpoint inside the call, and steps out from it", () => {
             load(0x2000, [0x20, 0x00, 0x30]);
             load(0x3000, [0xea, 0x60]);
@@ -438,18 +454,72 @@ describe("Debugger", () => {
             expect(pc()).toBe("3000");
             keyPress("o");
             expect(pc()).toBe("2003");
-            expect(toasts()).toEqual([]);
         });
 
-        it("counts its limit in instructions, not cycles", () => {
-            // Four times round 256 * 256 DEX/BNE: over half a million instructions, and well over a million cycles.
-            load(0x2000, [0xa0, 0x00, 0xa2, 0x00, 0xca, 0xd0, 0xfd, 0x88, 0xd0, 0xf8, 0xc6, 0x70, 0xd0, 0xf2, 0xea]);
-            cpu.writemem(0x70, 4);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$200E");
-            keyPress("c");
-            expect(pc()).toBe("200e");
-            expect(toasts()).toEqual([]);
+        describe("past a frame", () => {
+            // Four times round 256 * 256 DEX/BNE, then NOP at $200E: about 1.3 million cycles.
+            const long = [0xa0, 0x00, 0xa2, 0x00, 0xca, 0xd0, 0xfd, 0x88, 0xd0, 0xf8, 0xc6, 0x70, 0xd0, 0xf2, 0xea];
+            const MachineSecond = 2000000;
+
+            beforeEach(() => {
+                load(0x2000, long);
+                cpu.writemem(0x70, 4);
+                dbgr.debug(cpu.pc);
+                goTo("goto-dis-addr-form", "$200E");
+            });
+
+            it("runs the machine to the cursor, stopping there however long it takes", () => {
+                keyPress("c");
+                expect(loop.running).toBe(true);
+                loop.tick(MachineSecond);
+                expect(loop.running).toBe(false);
+                expect(pc()).toBe("200e");
+            });
+
+            it("steps over a call that runs for longer, stopping where it returns", () => {
+                load(0x200e, [0x60]);
+                load(0x3000, [0x20, 0x00, 0x20, 0xea]);
+                cpu.pc = 0x3000;
+                dbgr.debug(cpu.pc);
+                keyPress("m");
+                expect(loop.running).toBe(true);
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("3003");
+            });
+
+            it("waits with no limit for a cursor the machine does not reach", () => {
+                goTo("goto-dis-addr-form", "$3000");
+                keyPress("c");
+                for (let i = 0; i < 10; i++) loop.tick(MachineSecond);
+                expect(loop.running).toBe(true);
+            });
+
+            describe("forgets where it was going", () => {
+                // Runs on to the cursor at $200E once nothing stops it there.
+                const reachesCursor = () => {
+                    cpu.targetCycles = cpu.currentCycles;
+                    return cpu.execute(MachineSecond);
+                };
+
+                it("when the loop stops for any reason", () => {
+                    keyPress("c");
+                    loop.halt();
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the debugger is entered some other way", () => {
+                    keyPress("c");
+                    dbgr.debug(cpu.pc);
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the machine is reset", () => {
+                    keyPress("c");
+                    cpu.reset(false);
+                    cpu.execute(100);
+                    expect(cpu.onFastPath).toBe(true);
+                });
+            });
         });
 
         it("steps over a loop that makes a call", () => {

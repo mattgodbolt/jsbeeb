@@ -5,12 +5,12 @@ import { isHttps, nameUrl } from "../symbol-sets.js";
 import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
-import { toast } from "./toast.js";
 
 const noop = () => {};
 
 const numToShow = 16;
-const MaxStepInstructions = 1 << 20;
+const FramesPerSecond = 50;
+const ResetVector = 0xfffc;
 const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
 const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
 const Call = /^JSR\b/;
@@ -191,6 +191,8 @@ export class Debugger {
      */
     constructor({ symbolSets = null } = {}) {
         this.patchInstructions = new Map();
+        this._loop = null;
+        this._runningTo = null;
         this._enabled = false;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
@@ -472,6 +474,7 @@ export class Debugger {
     }
 
     debug(where) {
+        this._endRunTo();
         this.enable(true);
         this._matchSymbols();
         this.updateDisassembly(where);
@@ -619,75 +622,85 @@ export class Debugger {
         this.enable(false);
     }
 
-    /**
-     * Runs one instruction at a time until `done()` holds after one, a breakpoint stops the machine, or
-     * MaxStepInstructions have run; `goal` finishes the sentence that says the last happened.
-     */
-    stepUntil(done, goal) {
+    /** The loop that runs the machine for the steps that need running; any halt of it ends them. */
+    attachLoop(loop) {
+        this._loop = loop;
+        loop.addEventListener("running", () => {
+            if (!loop.running) this._endRunTo();
+        });
+    }
+
+    /** Runs one instruction, stepping off a breakpoint on it; false when a watch stopped the machine in it. */
+    executeOne() {
         const cpu = this.cpu;
-        let ran = 0;
-        for (; ran < MaxStepInstructions; ran++) {
-            // Each execute(1) then runs exactly one instruction. TODO(#1062) this drops the residual cycles.
-            cpu.targetCycles = cpu.currentCycles;
-            if (!cpu.execute(1)) {
-                // A breakpoint on the first instruction stops it before it runs, and is stepped off.
-                if (ran > 0 || !cpu.debugInstruction.stopped) break;
-                continue;
-            }
-            if (done()) break;
-        }
-        if (ran === MaxStepInstructions) {
-            toast(`Stopped after ${MaxStepInstructions} instructions without ${goal}.`, { title: "Debugger" });
-        }
-        this.debug(cpu.pc);
+        // TODO(#1062) this drops the residual cycles.
+        cpu.targetCycles = cpu.currentCycles;
+        if (cpu.execute(1)) return true;
+        if (!cpu.debugInstruction.stopped) return false;
+        cpu.targetCycles = cpu.currentCycles;
+        return cpu.execute(1);
+    }
+
+    /**
+     * Runs the machine until `stopsHere()`, asked before each instruction, says to stop at it, or anything else
+     * stops the machine. Its answer at the first instruction is not taken, so a run can come round to where it
+     * starts. A run that ends within a frame ends here, so the debugger never leaves the screen; a longer one
+     * goes on in the loop, with the machine shown running.
+     */
+    runTo(stopsHere) {
+        this.updatePrevMem();
+        const cpu = this.cpu;
+        stopsHere();
+        if (!this.executeOne()) return this.debug(cpu.pc);
+        const resetEntry = cpu.peekmem(ResetVector) | (cpu.peekmem(ResetVector + 1) << 8);
+        this._runningTo = cpu.debugInstruction.add((pc) => {
+            if (pc !== resetEntry) return stopsHere();
+            // A reset starts the machine afresh, so where it was going no longer means anything.
+            this._endRunTo();
+            return false;
+        });
+        cpu.targetCycles = cpu.currentCycles;
+        if (!cpu.execute(cpu.model.cyclesPerSecond / FramesPerSecond)) return this.debug(cpu.pc);
+        this._loop.go();
+    }
+
+    _endRunTo() {
+        this._runningTo?.remove();
+        this._runningTo = null;
     }
 
     step() {
         this.updatePrevMem();
-        const curpc = this.cpu.pc;
-        this.stepUntil(() => this.cpu.pc !== curpc, `leaving $${hexword(curpc)}`);
+        this.executeOne();
+        this.debug(this.cpu.pc);
     }
 
     stepOver() {
-        this.updatePrevMem();
         const { pc, s } = this.cpu;
         const [text, end, target] = this.disassemble(pc);
         const next = end & 0xffff;
         if (UnconditionalJump.test(text)) return this.step();
-        if (Branch.test(text)) {
-            if (target <= pc) {
-                return this.stepUntil(
-                    () => this.cpu.s >= s && (this.cpu.pc < target || this.cpu.pc > pc),
-                    `leaving the loop at $${hexword(target)}-$${hexword(pc)}`,
-                );
-            }
-            return this.stepUntil(
-                () => this.cpu.pc === next || this.cpu.pc === target,
-                `reaching $${hexword(next)} or $${hexword(target)}`,
-            );
+        if (Branch.test(text) && target <= pc) {
+            return this.runTo(() => this.cpu.s >= s && (this.cpu.pc < target || this.cpu.pc > pc));
         }
-        if (Call.test(text)) {
-            return this.stepUntil(() => this.cpu.pc === next && this.cpu.s >= s, `returning to $${hexword(next)}`);
-        }
-        this.stepUntil(() => this.cpu.pc === next, `reaching $${hexword(next)}`);
+        if (Branch.test(text)) return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target);
+        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && this.cpu.s >= s);
+        this.runTo(() => this.cpu.pc === next);
     }
 
     stepOut() {
-        this.updatePrevMem();
         const s = this.cpu.s;
-        const returnsHere = () => this.cpu.s >= s && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
-        let returning = returnsHere();
-        this.stepUntil(() => {
+        let returning = false;
+        this.runTo(() => {
             if (returning) return true;
-            returning = returnsHere();
+            returning = this.cpu.s >= s && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
             return false;
-        }, "reaching an RTS or RTI at this stack depth");
+        });
     }
 
     runToCursor() {
-        this.updatePrevMem();
         const target = this.disassPc;
-        this.stepUntil(() => this.cpu.pc === target, `reaching $${hexword(target)}`);
+        this.runTo(() => this.cpu.pc === target);
     }
 
     nextInstruction(address) {

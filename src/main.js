@@ -215,6 +215,7 @@ const loop = new EmulationLoop({
     fastTape: !!parsedQuery.fasttape,
     audioStatsNode,
 });
+dbgr.attachLoop(loop);
 
 new RunControls({ loop });
 
