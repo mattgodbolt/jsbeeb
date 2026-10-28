@@ -295,6 +295,8 @@ export class FloatingPanel extends EventTarget {
         this.reopens = reopens;
         this.isOpen = false;
         this._arrangement = arrangement;
+        panel.classList.add("floating-panel");
+        header.classList.add("floating-panel-header");
         this._gesture = null;
         closeButton.addEventListener("click", () => this.close());
         panel.addEventListener("keydown", (e) => {

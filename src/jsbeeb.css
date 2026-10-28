@@ -354,13 +354,7 @@ span.accesskey {
 }
 
 #session-pane {
-  position: fixed;
   width: min(460px, calc(100vw - 16px));
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
   color: #ddd;
   font-size: 13px;
 }
@@ -768,13 +762,7 @@ small {
 }
 
 #watch-panel {
-  position: fixed;
   width: min(300px, 80vw);
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
   font-family: monospace;
   font-size: 9pt;
 }
@@ -860,21 +848,19 @@ small {
 }
 
 #disc-panel {
-  position: fixed;
   width: min(420px, 46vw);
+}
+
+.floating-panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid #555;
   border-radius: 4px;
   z-index: 10;
   padding: 8px;
-}
-
-#session-pane,
-#disc-panel,
-#watch-panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .panel-body {
@@ -947,9 +933,7 @@ small {
   cursor: nesw-resize;
 }
 
-.disc-header,
-.watch-header,
-.session-pane-header {
+.floating-panel-header {
   flex-shrink: 0;
   display: flex;
   align-items: baseline;
@@ -968,9 +952,7 @@ small {
   margin-bottom: 8px;
 }
 
-.disc-header button,
-.watch-header button,
-.session-pane-header button {
+.floating-panel-header button {
   cursor: pointer;
 }
 
@@ -1031,12 +1013,13 @@ small {
   margin-left: auto;
 }
 
+/* The disc takes the body's spare height: square at the panel's width, and smaller in a shorter body rather than
+   the body scrolling. */
 #disc-panel .panel-body {
   display: flex;
   flex-direction: column;
 }
 
-/* Square at the panel's width, and given less height the disc shrinks to fit it rather than the body scrolling. */
 .disc-stack {
   position: relative;
   flex: 1 1 auto;
@@ -1134,29 +1117,10 @@ div.smoothie-chart-tooltip {
   --olive: #6b6a3e;
   --olive-lo: #4f4e2c;
   --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.09 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
-  position: fixed;
   width: min(860px, 96vw);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
   background: rgba(0, 0, 0, 0.92);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.65);
   font-size: 14px;
-}
-
-.media-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
-  cursor: move;
-  user-select: none;
-  touch-action: none;
 }
 
 #media-summary {
