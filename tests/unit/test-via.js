@@ -196,7 +196,7 @@ describe("Via snapshotState / restoreState", () => {
             expect(ca2Flag(via)).toBe(Ca2Int);
         }
 
-        // The counter is on column epoch / 2 (mod 16); A is in column 1 and P in column 7.
+        // The counter is on column epoch / 2 (mod 16); A is in column 1, D in column 2 and P in column 7.
         it.each([
             ["an IFR write", (via) => via.write(IFR, Ca2Int)],
             ["a port A write", (via) => via.write(ORA, 0)],
@@ -220,6 +220,39 @@ describe("Via snapshotState / restoreState", () => {
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
             expectFlagAfter(via, ticks);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, "reaches the first of the two columns again", 32],
+            ["falling", PcrCa2FallingEdge, "leaves the second of the two columns", 4],
+        ])(
+            "with keys held in neighbouring columns and CA2 on the %s edge, sets the flag when the counter %s",
+            (_, pcr, __, ticks) => {
+                scheduler.polltime(2);
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                via.keyDownRaw(BBC.D);
+                via.write(IFR, Ca2Int);
+                expectFlagAfter(via, ticks);
+            },
+        );
+
+        it("ignores a key the matrix has outside the keyboard's columns", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.keyDownRaw([14, 1]);
+            via.write(IFR, Ca2Int);
+            expectFlagAfter(via, 24);
+        });
+
+        it("brings a falling-edge return forward when a key ahead of the counter goes down", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2FallingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            via.keyDownRaw(BBC.P);
+            expectFlagAfter(via, 6);
         });
 
         it("brings the scan's return forward when a key ahead of the counter goes down", () => {

@@ -32,10 +32,11 @@ const PulseWidthCycles = 2;
 // Reset makes every pin an input, and undriven inputs float high.
 const IdlePins = 0xff;
 
-// The autoscan counter steps through 16 columns, one per 1MHz cycle (two 2MHz scheduler ticks). Its power-on phase is
-// arbitrary, so jsbeeb takes its column from the scheduler epoch.
+// The autoscan counter steps through 16 columns, one per 1MHz cycle (two 2MHz scheduler ticks), of which the keyboard
+// wires 10 on a B and 13 on a Master.
 const ScanCounterColumns = 16;
 const TicksPerScanColumn = 2;
+const KeyboardColumns = 13;
 
 class Via {
     constructor(cpu, scheduler, irq) {
@@ -832,21 +833,17 @@ export class SysVia extends Via {
     }
 
     updateKeys() {
-        // 10 for BBC, 13 for Master 128
-        const numCols = 13;
         if (this.IC32 & 8) {
-            for (let i = 0; i < numCols; ++i) {
-                for (let j = 1; j < 8; ++j) {
-                    if (this.keys[i][j]) {
-                        // ca2 stands for the whole pulse train here, so a snapshot keeps whether it is running.
-                        if (!this.ca2) {
-                            this.ca2 = true;
-                            this.scanPassesHeldKey();
-                        } else if (this.keyScanTask.scheduled()) {
-                            this._scheduleScanEdge();
-                        }
-                        return;
+            for (let column = 0; column < KeyboardColumns; ++column) {
+                if (this._columnHasScannedKey(column)) {
+                    // ca2 stands for the whole pulse train here, so a snapshot keeps whether it is running.
+                    if (!this.ca2) {
+                        this.ca2 = true;
+                        this.scanPassesHeldKey();
+                    } else if (this.keyScanTask.scheduled()) {
+                        this._scheduleScanEdge();
                     }
+                    return;
                 }
             }
             this.keyScanTask.cancel();
@@ -867,21 +864,17 @@ export class SysVia extends Via {
                 this.portapins |= 0x80;
             }
 
-            if (keycol < numCols) {
-                for (let j = 1; j < 8; ++j) {
-                    if (this.keys[keycol][j]) {
-                        this.setca2(true);
-                        return;
-                    }
-                }
+            if (this._columnHasScannedKey(keycol)) {
+                this.setca2(true);
+                return;
             }
         }
         this.setca2(false);
     }
 
     /**
-     * The autoscan counter reaching a held key's column. The pulse it gives CA2 has both edges, so whichever one the
-     * PCR selects sets the flag.
+     * The autoscan putting an edge on CA2 for a held key. A press sets the flag at once whichever edge the PCR selects,
+     * as the scan's pulses have both.
      */
     scanPassesHeldKey() {
         if (this.pcr & 0x08) return;
@@ -890,29 +883,34 @@ export class SysVia extends Via {
     }
 
     _scanAfterCa2Cleared(ca2WasFlagged) {
-        if (ca2WasFlagged && !(this.ifr & INT_CA2) && this.IC32 & 8 && this.ca2 && !this.keyScanTask.scheduled()) {
+        if (ca2WasFlagged && !(this.ifr & INT_CA2) && this.IC32 & 8 && this.ca2) {
             this._scheduleScanEdge();
         }
     }
 
     /**
-     * Schedules the flag for the next edge the PCR selects: a rising edge as the counter reaches a column with a key
-     * held in rows 1-7, a falling one as it leaves it.
+     * Schedules the flag for the scan's next edge of the kind the PCR selects: rising as the counter moves from a column
+     * with no key held onto one with a key held, falling the other way. The counter's power-on phase is arbitrary, so
+     * its column is taken from the scheduler epoch.
      */
     _scheduleScanEdge() {
         this.keyScanTask.cancel();
         const epoch = this.scheduler.epoch;
         const column = Math.floor(epoch / TicksPerScanColumn) % ScanCounterColumns;
-        const edgeColumnOffset = this.pcr & 0x04 ? 0 : 1;
+        const risingEdge = !!(this.pcr & 0x04);
+        let leavingHeld = this._columnHasScannedKey(column);
         for (let step = 1; step <= ScanCounterColumns; ++step) {
-            if (this._columnHasScannedKey((column + step - edgeColumnOffset) % ScanCounterColumns)) {
+            const enteringHeld = this._columnHasScannedKey((column + step) % ScanCounterColumns);
+            if (enteringHeld !== leavingHeld && enteringHeld === risingEdge) {
                 this.keyScanTask.schedule(step * TicksPerScanColumn - (epoch % TicksPerScanColumn));
                 return;
             }
+            leavingHeld = enteringHeld;
         }
     }
 
     _columnHasScannedKey(column) {
+        if (column >= KeyboardColumns) return false;
         const rows = this.keys[column];
         for (let row = 1; row < 8; ++row) {
             if (rows[row]) return true;
