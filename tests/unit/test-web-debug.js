@@ -273,23 +273,25 @@ describe("Debugger", () => {
         // LDX #3; DEX; BNE $2002; LDA #$41
         const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
 
-        it("runs to the instruction under the cursor on c", () => {
-            load(0x2000, countdown);
+        it("steps over a loop that leaves backwards", () => {
+            // NOP; LDX #3; DEX; BEQ $2000; BNE $2003
+            load(0x2000, [0xea, 0xa2, 0x03, 0xca, 0xf0, 0xfa, 0xd0, 0xfb]);
             dbgr.debug(cpu.pc);
-            for (let i = 0; i < 3; i++) keyPress("j");
-            keyPress("c");
-            expect(pc()).toBe("2005");
-            expect(cpu.x).toBe(0);
-        });
-
-        it("steps over a loop to wherever it leaves by", () => {
-            // LDX #3; DEX; BEQ $2008; BNE $2002; ...; NOP
-            load(0x2000, [0xa2, 0x03, 0xca, 0xf0, 0x03, 0xd0, 0xfb, 0xea, 0xea]);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$2005");
+            goTo("goto-dis-addr-form", "$2006");
             keyPress("c");
             keyPress("m");
-            expect(pc()).toBe("2008");
+            expect(pc()).toBe("2000");
+            expect(toasts()).toEqual([]);
+        });
+
+        it("steps out past the returns of the calls it makes", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x20, 0x00, 0x31, 0x60]);
+            load(0x3100, [0x60]);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("o");
+            expect(pc()).toBe("2003");
         });
 
         it("steps over a 65C12 loop closed by BRA to wherever it leaves by", async () => {
