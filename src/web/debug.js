@@ -185,7 +185,8 @@ export class Debugger {
             },
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
-        this.sysViaPanel = new SysViaPanel({ via: () => this.cpu?.sysvia });
+        // The Atom's CPU carries a system VIA it never wires up.
+        this.sysViaPanel = new SysViaPanel({ via: () => (this.cpu?.model.isAtom ? undefined : this.cpu?.sysvia) });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");

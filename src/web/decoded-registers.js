@@ -89,13 +89,10 @@ function meaningNode({ text, title, lit }) {
 
 /**
  * Decodes a register of flags, most significant first, each lit while its bit is set.
- * @param {({name: string, title: string} | null)[]} names by bit number; null for a bit with no meaning
+ * @param {{name: string, title: string}[]} names by bit number
  * @returns {(value: number) => Meaning[]}
  */
 export function namedBits(names) {
     return (value) =>
-        names
-            .map((named, bit) => named && { text: named.name, title: named.title, lit: !!(value & (1 << bit)) })
-            .filter((meaning) => meaning !== null)
-            .reverse();
+        names.map((named, bit) => ({ text: named.name, title: named.title, lit: !!(value & (1 << bit)) })).reverse();
 }

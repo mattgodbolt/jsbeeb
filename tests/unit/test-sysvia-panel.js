@@ -30,8 +30,7 @@ const PcrCa1RisingCa2RisingIndependentCb2PulseOut = 0xa7;
 const AcrT1ContinuousT2CountsPb6 = 0x60;
 const TicksPerMicrosecond = 2;
 const TicksPerScanColumn = 2;
-const ModelBColumns = 10;
-const MasterColumns = 13;
+const MatrixColumns = 13;
 
 describe("SysViaPanel", () => {
     let scheduler;
@@ -111,7 +110,7 @@ describe("SysViaPanel", () => {
             }
         });
 
-        it("shows nothing for a machine without a system VIA", () => {
+        it("shows nothing before the debugger has a machine", () => {
             via = undefined;
             panel.floating.open();
             expect(hex("IC32")).toBe("");
@@ -189,12 +188,13 @@ describe("SysViaPanel", () => {
             ]);
             const sources = ["T1", "T2", "CB1 ADC", "CB2 light pen", "SR", "CA1 vsync", "CA2 keyboard"];
             expect(meanings("IFR")).toEqual(["+IRQ", "+T1", ...sources.slice(1).map((name) => `-${name}`)]);
+            expect(hex("IER")).toBe("c1");
             expect(meanings("IER")).toEqual([
                 "+T1",
                 ...sources.slice(1, -1).map((name) => `-${name}`),
                 "+CA2 keyboard",
             ]);
-            expect(meanings("T2C")).toEqual([`${via.peekTimers().t2c} pulses`]);
+            expect(meanings("T2C")).toEqual(["65534 pulses"]);
         });
 
         it("gives the timers in cycles as a program would read them now, without clearing the flag", () => {
@@ -204,12 +204,10 @@ describe("SysViaPanel", () => {
             via.write(T2CH, 0x03);
             scheduler.polltime(100 * TicksPerMicrosecond);
             panel.update();
-            const t1 = via.peekTimers().t1c;
             expect(hex("T1L")).toBe("2710");
             expect(meanings("T1L")).toEqual(["10000 cycles"]);
-            expect(meanings("T1C")).toEqual([`${t1} cycles`]);
-            expect(t1).toBeLessThan(10000 - 98);
-            expect(meanings("T2C")).toEqual([`${via.peekTimers().t2c} cycles`]);
+            expect(meanings("T1C")).toEqual(["9901 cycles"]);
+            expect(meanings("T2C")).toEqual(["901 cycles"]);
             scheduler.polltime(1000 * TicksPerMicrosecond);
             panel.update();
             expect(meanings("IFR")).toContain("+T2");
@@ -235,14 +233,11 @@ describe("SysViaPanel", () => {
     describe("the keyboard matrix", () => {
         beforeEach(() => panel.floating.open());
 
-        it("lays out a B's ten columns and a Master's thirteen, keys named where they sit", () => {
-            expect(matrixColumns()).toBe(ModelBColumns);
+        it("lays out the thirteen columns the keyboard is scanned on, keys named where they sit", () => {
+            expect(matrixColumns()).toBe(MatrixColumns);
             expect(matrixCell(BBC.A).textContent).toBe("A");
             expect(matrixCell(BBC.K1).textContent).toBe("1");
             expect(matrixCell(BBC.SHIFT).title).toBe("shift: column 0, row 0");
-            via = makeVia(true);
-            panel.update();
-            expect(matrixColumns()).toBe(MasterColumns);
             expect(matrixCell(BBC.NUMPAD7).textContent).toBe("k7");
             expect(matrixCell(BBC.NUMPAD7).title).toBe("keypad 7: column 11, row 1");
         });
@@ -258,10 +253,10 @@ describe("SysViaPanel", () => {
             expect(matrixCell(BBC.A).classList.contains("held")).toBe(false);
             expect(scannedColumn()).toBe("7");
             expect(matrixStatus()).toBe("Autoscan on column 7");
-            scheduler.polltime(5 * TicksPerScanColumn);
+            scheduler.polltime(7 * TicksPerScanColumn);
             panel.update();
             expect(scannedColumn()).toBeUndefined();
-            expect(matrixStatus()).toBe("Autoscan on column 12, which has no keys");
+            expect(matrixStatus()).toBe("Autoscan on column 14, which has no keys");
         });
 
         it("marks the key port A selects while the keyboard is not scanning itself", () => {

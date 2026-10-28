@@ -1203,6 +1203,7 @@ describe("the system VIA panel", () => {
             await tm.runFor(ReadEveryCycles);
             if (readPanel) sysViaState(tm.processor.sysvia);
         }
+        expect(tm.typist.isTyping).toBe(false);
         // Reading catches the VIA's counters up to now, as the machine's next access to it would.
         tm.processor.sysvia.peekTimers();
         return tm.snapshot();

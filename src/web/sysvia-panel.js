@@ -4,9 +4,10 @@ import { HwScrollSubtract } from "../video.js";
 import { DecodedRegisters, namedBits } from "./decoded-registers.js";
 import { FloatingPanel } from "./floating-panel.js";
 
-const ModelBColumns = 10;
-const MasterColumns = 13;
+// The keypad's columns, 10 to 12, are scanned on a B as well, and the host's keypad reaches them.
+const MatrixColumns = 13;
 const MatrixRows = 8;
+const IerReadsSet = 0x80;
 const ScreenEnd = 0x8000;
 const HwScrollUnit = 0x800;
 
@@ -269,7 +270,7 @@ export function sysViaState(via) {
         pcr: via.pcr,
         acr: via.acr,
         ifr: via.ifr,
-        ier: via.ier,
+        ier: via.ier | IerReadsSet,
         t1c,
         t1l,
         t2c,
@@ -283,20 +284,12 @@ export function sysViaState(via) {
 /** The keyboard's matrix of keys, with those held and the column being scanned or read marked. */
 class KeyMatrix {
     constructor(container, status) {
-        this._container = container;
         this._status = status;
-        this._columns = 0;
-        this._headers = [];
-        this._cells = [];
-    }
-
-    _build(columns) {
-        this._columns = columns;
         const table = document.createElement("table");
         const header = table.createTHead().insertRow();
         header.append(document.createElement("th"));
         this._headers = [];
-        for (let column = 0; column < columns; ++column) {
+        for (let column = 0; column < MatrixColumns; ++column) {
             const th = document.createElement("th");
             th.textContent = String(column);
             header.append(th);
@@ -309,7 +302,7 @@ class KeyMatrix {
             const th = document.createElement("th");
             th.textContent = String(row);
             tr.append(th);
-            for (let column = 0; column < columns; ++column) {
+            for (let column = 0; column < MatrixColumns; ++column) {
                 const cell = tr.insertCell();
                 const key = KeysByPlace.get(`${column},${row}`);
                 cell.textContent = key?.label ?? "";
@@ -317,12 +310,10 @@ class KeyMatrix {
                 this._cells.push({ cell, column, row });
             }
         }
-        this._container.replaceChildren(table);
+        container.replaceChildren(table);
     }
 
-    update({ isMaster, keys, ic32, portA, scanColumn }) {
-        const columns = isMaster ? MasterColumns : ModelBColumns;
-        if (columns !== this._columns) this._build(columns);
+    update({ keys, ic32, portA, scanColumn }) {
         const autoscan = !!(ic32 & 8);
         const selected = keyboardSelection(portA);
         const column = autoscan ? scanColumn : selected.column;
@@ -332,7 +323,7 @@ class KeyMatrix {
             cell.classList.toggle("selected", !autoscan && c === selected.column && row === selected.row);
         }
         const status = autoscan
-            ? `Autoscan on column ${scanColumn}${scanColumn >= columns ? ", which has no keys" : ""}`
+            ? `Autoscan on column ${scanColumn}${scanColumn >= MatrixColumns ? ", which has no keys" : ""}`
             : `Port A reads column ${selected.column}, row ${selected.row}`;
         if (this._status.textContent !== status) this._status.textContent = status;
     }

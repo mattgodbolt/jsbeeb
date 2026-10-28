@@ -91,6 +91,16 @@ describe("Debugger", () => {
             expect(visible("debug")).toBe(false);
         });
 
+        it("open the decoded system VIA on a BBC, but show none on an Atom", () => {
+            const ic32 = () => document.querySelector("#sysvia-panel .decoded-hex").textContent;
+            dbgr.sysViaPanel.update();
+            expect(ic32()).toBe(hexbyte(cpu.sysvia.IC32));
+            document.querySelector("#sysvia-panel .decoded-hex").textContent = "";
+            cpu.model = findModel("Atom");
+            dbgr.sysViaPanel.update();
+            expect(ic32()).toBe("");
+        });
+
         it("note the debugger opening each time it is entered, not each time it stops", () => {
             const sent = sentEvents();
             dbgr.debug(cpu.pc);
