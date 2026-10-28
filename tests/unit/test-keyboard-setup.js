@@ -155,6 +155,7 @@ describe("KeyboardSetup", () => {
     describe("where keys go", () => {
         it("reach the machine from the page at large, but not from the media window", () => {
             domFromIndexHtml("media-panel");
+            document.getElementById("media-panel").hidden = false;
             document.dispatchEvent(keyEvent("keydown", keyCodes.A));
             expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
             document.getElementById("media-close").focus();
@@ -164,6 +165,7 @@ describe("KeyboardSetup", () => {
 
         it("reach the page from the watch panel's add box, and the machine from the rest of the panel", () => {
             domFromIndexHtml("watch-panel");
+            document.getElementById("watch-panel").hidden = false;
             document.getElementById("watch-add").focus();
             document.dispatchEvent(keyEvent("keydown", keyCodes.A));
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();

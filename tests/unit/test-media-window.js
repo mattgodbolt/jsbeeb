@@ -210,6 +210,10 @@ describe("MediaWindow", () => {
 
         const deckFolded = () => panel().classList.contains("deck-collapsed");
         const bayFolded = () => bay(1).classList.contains("folded");
+        const fromOpenWindow = (act) => () => {
+            made.open();
+            act();
+        };
         it.each([
             ["drive 1's line in the LED panel", () => readoutLine("1").click(), () => bay(1), bayFolded],
             [
@@ -218,10 +222,20 @@ describe("MediaWindow", () => {
                 () => byId("deck-window"),
                 deckFolded,
             ],
-            ["drive 1's slot", () => bay(1).querySelector(".bay-slot").click(), () => bay(1), bayFolded],
-            ["the deck's window", () => byId("deck-window").click(), () => byId("deck-window"), deckFolded],
-            ["the Into control at drive 1", () => aim("1"), () => bay(1), bayFolded],
-            ["the Into control at the deck", () => aim("tape"), () => byId("deck-window"), deckFolded],
+            [
+                "drive 1's slot",
+                fromOpenWindow(() => bay(1).querySelector(".bay-slot").click()),
+                () => bay(1),
+                bayFolded,
+            ],
+            [
+                "the deck's window",
+                fromOpenWindow(() => byId("deck-window").click()),
+                () => byId("deck-window"),
+                deckFolded,
+            ],
+            ["the Into control at drive 1", fromOpenWindow(() => aim("1")), () => bay(1), bayFolded],
+            ["the Into control at the deck", fromOpenWindow(() => aim("tape")), () => byId("deck-window"), deckFolded],
         ])("aims the list from %s, unfolding the target, ready to type into", (_, act, target, folded) => {
             make();
             act();
