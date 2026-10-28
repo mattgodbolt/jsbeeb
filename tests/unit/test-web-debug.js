@@ -217,7 +217,6 @@ describe("Debugger", () => {
             });
 
             it.each([
-                ["STA", 0x8d, "SysVIA.ORB"],
                 ["STX", 0x8e, "SysVIA.ORB"],
                 ["STY", 0x8c, "SysVIA.ORB"],
                 ["*SAX", 0x8f, "SysVIA.ORB"],
@@ -247,6 +246,14 @@ describe("Debugger", () => {
                 program([opcode, 0x40, 0xfe]);
                 dbgr.debug(cpu.pc);
                 expect(codeAt(0x2002).textContent).toBe(`${mnemonic} ${name}`);
+            });
+
+            it("names the registers of what is fitted", () => {
+                video.ula.hasVideoNula = true;
+                dbgr.setCpu(cpu);
+                program([0x8d, 0x22, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA VideoULA.NULA_CONTROL");
             });
 
             it("leaves a jump into SHEILA as an address", () => {
