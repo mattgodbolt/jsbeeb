@@ -134,7 +134,7 @@ describe("GoogleDriveSource", () => {
             expect(blank.is40Track).toBe(false);
             const expected = new Uint8Array(DsdByteSize);
             expected.set(new TextEncoder().encode("fresh.hf"));
-            expect(toSsdOrDsd(blank)).toEqual(expected);
+            expect(Buffer.compare(toSsdOrDsd(blank), expected)).toBe(0);
         });
     });
 });

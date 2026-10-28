@@ -388,13 +388,10 @@ export class BitWindow64 {
 
     /**
      * @param {Number} bit 0 or 1, shifted into bit 0
-     * @returns {Number} the bit shifted out of bit 63
      */
     shiftIn(bit) {
-        const shiftedOut = this.hi >>> 31;
         this.hi = ((this.hi << 1) | (this.lo >>> 31)) >>> 0;
         this.lo = ((this.lo << 1) | bit) >>> 0;
-        return shiftedOut;
     }
 
     /**
@@ -418,11 +415,15 @@ export class BitWindow64 {
     }
 }
 
+const BitWindowBits = 64;
 // What the mark detector holds at an address mark. The FM case only pins down the high half,
 // the tail of the zero sync run; the low half is the marker byte itself, decoded separately.
 const FmSyncHi = 0x88888888;
 const MfmMarkerHi = 0xaaaa4489;
 const MfmMarkerLo = 0x44894489;
+// FM puts each data bit's clock pulse in the top bit of its nibble.
+const FmClockPulses = 0x88888888;
+const FmMarkClockPulses = IbmDiscFormat.fmTo2usPulses(IbmDiscFormat.markClockPattern, 0);
 // One data bit of zero, FM encoded with its clock, is the pulse nibble 0x8.
 const FmZeroBitPulses = 0x8;
 // FmSyncHi is eight of those, so a match has already seen this much of the sync run.
@@ -460,6 +461,28 @@ class Track {
     }
 
     /**
+     * @param {Number} bitIndex
+     * @returns {Number} the pulse at `bitIndex`, 0 or 1; the first word's top bit is bit 0
+     */
+    _pulseAt(bitIndex) {
+        const word = this.pulses2Us[Math.floor(bitIndex / PulsesPerWord)];
+        const bitFromTop = bitIndex % PulsesPerWord;
+        return (word >>> (PulsesPerWord - 1 - bitFromTop)) & 1;
+    }
+
+    /**
+     * @param {Number} lastBit
+     * @returns {BitWindow64} the pulses up to and including `lastBit`; bits before the track's start
+     *     read as zero
+     */
+    _pulseWindowEndingAt(lastBit) {
+        const window = new BitWindow64();
+        const firstBit = Math.max(0, lastBit - BitWindowBits + 1);
+        for (let bit = firstBit; bit <= lastBit; ++bit) window.shiftIn(this._pulseAt(bit));
+        return window;
+    }
+
+    /**
      * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
@@ -472,25 +495,23 @@ class Track {
         let doMfmMarkerByte = false;
         let isMfm = false;
         let pulses = 0;
-        // The mark detector is a 64 bit sliding window over the pulse stream; the bits leaving it
-        // spill into a second window, which the sync run length is counted from.
         const markDetector = new BitWindow64();
-        const markDetectorPrev = new BitWindow64();
         let dataByte;
         let sector = null;
         for (let pulseIndex = 0; pulseIndex < bitLength; ++pulseIndex) {
             if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >>> 5];
             const pulseBit = pulses >>> 31;
-            markDetectorPrev.shiftIn(markDetector.shiftIn(pulseBit));
+            markDetector.shiftIn(pulseBit);
             shiftRegister = ((shiftRegister << 1) | pulseBit) & 0xffffffff;
             numShifts++;
             pulses = (pulses << 1) & 0xffffffff;
-            if (markDetector.hi === FmSyncHi) {
+            if (markDetector.hi === FmSyncHi && (markDetector.lo & FmClockPulses) >>> 0 === FmMarkClockPulses) {
                 const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(markDetector.lo);
                 if (iffyPulses || clocks !== IbmDiscFormat.markClockPattern) continue;
                 isMfm = false;
                 doMfmMarkerByte = false;
-                const num0s = FmSyncHiZeroBits + markDetectorPrev.countTrailingNibbles(FmZeroBitPulses);
+                const syncBefore = this._pulseWindowEndingAt(pulseIndex - BitWindowBits);
+                const num0s = FmSyncHiZeroBits + syncBefore.countTrailingNibbles(FmZeroBitPulses);
                 if (num0s <= ShortSyncZeros) {
                     warn(`Short zeros sync ${this.description}`);
                 }
@@ -881,21 +902,32 @@ function ssdOffsetOf(sector, isSideUpper, numSides) {
 }
 
 /**
+ * @param {Disc} disc
+ * @returns {{sector: Sector, isSideUpper: boolean}[]} every sector on `disc`, track by track
+ */
+function sectorsOnSurface(disc) {
+    const found = [];
+    for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
+        for (const isSideUpper of disc.isDoubleSided ? [false, true] : [false]) {
+            for (const sector of disc.getTrack(isSideUpper, trackNum).findSectors())
+                found.push({ sector, isSideUpper });
+        }
+    }
+    return found;
+}
+
+/**
  * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
  * have held is lost. Copy protection usually shows up as one of these.
  *
- * @returns {string[]} what `disc` holds that an SSD or DSD cannot, worst first
- * @param {Disc} disc
+ * @param {{sector: Sector}[]} sectors
+ * @returns {string[]} what `sectors` hold that an SSD or DSD cannot, worst first
  */
-export function ssdOrDsdShortfalls(disc) {
+function describeShortfalls(sectors) {
     const counts = new Map();
-    for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
-        for (const upper of disc.isDoubleSided ? [false, true] : [false]) {
-            for (const sector of disc.getTrack(upper, trackNum).findSectors()) {
-                const shortfall = sectorShortfall(sector);
-                if (shortfall) counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
-            }
-        }
+    for (const { sector } of sectors) {
+        const shortfall = sectorShortfall(sector);
+        if (shortfall) counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
     }
     return [...counts]
         .sort(([, a], [, b]) => b - a)
@@ -910,8 +942,9 @@ export function ssdOrDsdShortfalls(disc) {
  * @throws if the disc holds anything an SSD or DSD cannot, and `force` is not set
  */
 export function toSsdOrDsd(disc, { force = false } = {}) {
+    const sectors = sectorsOnSurface(disc);
     if (!force) {
-        const shortfalls = ssdOrDsdShortfalls(disc);
+        const shortfalls = describeShortfalls(sectors);
         if (shortfalls.length)
             throw new Error(
                 `This disc cannot be saved as SSD or DSD: it has ${shortfalls.join(", ")}. ` +
@@ -921,15 +954,10 @@ export function toSsdOrDsd(disc, { force = false } = {}) {
     const numSides = disc.isDoubleSided ? 2 : 1;
     const result = new Uint8Array(numSides * SsdFormat.tracksPerDisc * SsdFormat.trackSize);
     let numTracks = 0;
-    for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
-        for (let side = 0; side < numSides; ++side) {
-            const trackObj = disc.getTrack(side === 1, trackNum);
-            for (const sector of trackObj.findSectors()) {
-                if (sectorShortfall(sector)) continue;
-                result.set(sector.sectorData, ssdOffsetOf(sector, side === 1, numSides));
-                numTracks = Math.max(numTracks, sector.trackNumber + 1);
-            }
-        }
+    for (const { sector, isSideUpper } of sectors) {
+        if (sectorShortfall(sector)) continue;
+        result.set(sector.sectorData, ssdOffsetOf(sector, isSideUpper, numSides));
+        numTracks = Math.max(numTracks, sector.trackNumber + 1);
     }
     return result.slice(0, numTracks * numSides * SsdFormat.trackSize);
 }

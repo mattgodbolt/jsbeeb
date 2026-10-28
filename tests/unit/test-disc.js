@@ -35,12 +35,6 @@ describe("BitWindow64", function () {
         expect([window.hi, window.lo]).toEqual([hi, lo]);
     });
 
-    it("returns the bit leaving bit 63", () => {
-        const window = shiftIn(new BitWindow64(), 0x8000000000000000n);
-        expect(window.shiftIn(0)).toBe(1);
-        expect(window.shiftIn(0)).toBe(0);
-    });
-
     it("matches a 64 bit value only in full", () => {
         const window = shiftIn(new BitWindow64(), 0xaaaa448944894489n);
         expect(window.equals(0xaaaa4489, 0x44894489)).toBe(true);
@@ -548,6 +542,27 @@ describe("sector decoding warnings", () => {
         track.findSectors();
 
         expect(console).toHaveBeenCalled();
+    });
+
+    it.each([
+        ["warns of an FM mark after only two sync bytes", IbmDiscFormat.stdGap1FFs, 2, true],
+        ["takes three sync bytes before an FM mark as enough", IbmDiscFormat.stdGap1FFs, 3, false],
+        ["counts nothing before the track's start as sync", 0, 2, true],
+    ])("%s", (_, gapBytes, syncBytes, isShort) => {
+        const disc = Disc.createBlank();
+        disc.buildTrack(false, 0)
+            .appendRepeatFmByte(0xff, gapBytes)
+            .appendRepeatFmByte(0x00, syncBytes)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendRepeatFmByte(0, 4)
+            .appendCrc()
+            .fillFmByte(0xff);
+        const warnings = [];
+        const sectors = disc.getTrack(false, 0).findSectors((message) => warnings.push(message));
+
+        expect(sectors).toHaveLength(1);
+        expect(warnings.some((message) => message.startsWith("Short zeros sync"))).toBe(isShort);
     });
 });
 
