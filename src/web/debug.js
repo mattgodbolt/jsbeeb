@@ -551,36 +551,31 @@ export class Debugger {
             const disNode = elem.querySelector(".disassembly");
             disNode.innerHTML = result[0];
             const accesses = operandAccesses(result[0]);
-            const notes = [];
+            let note;
             for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
                 const register = ref.classList.contains("instr_mem_ref")
                     ? sheilaName(this._sheila, target, accesses)
                     : undefined;
-                // The machine's names are known by their address, so they sit beside it; a program's replace it.
-                const machine = operand?.set.system ? operand : undefined;
-                const inline = machine ? undefined : operand;
+                // A register's name is a note beside its well-known address. It displaces a MOS's name for the
+                // register, but not a program's, which says what the register is for.
+                const inline = register && operand?.set.system ? undefined : operand;
                 if (inline) {
                     showName(ref, inline, target);
                     if (register) ref.title += `\n${register.title}`;
                     shown.add(inline.set);
                     ref.dataset.name = inline.name;
-                } else if (register || machine) {
-                    const { name } = register ?? machine;
-                    notes.push({ name, titles: [register?.title, machine && nameTitle(machine, target)] });
-                    if (!register) shown.add(machine.set);
-                    ref.dataset.name = name;
+                } else if (register) {
+                    note = { name: register.name, title: [register.title, operand && nameTitle(operand, target)] };
+                    ref.dataset.name = register.name;
                 }
             }
-            if (notes.length) {
+            if (note) {
                 const comment = document.createElement("span");
                 comment.className = "note";
-                comment.textContent = `${result[0].includes(";") ? "," : " ;"} ${notes.map(({ name }) => name).join(", ")}`;
-                comment.title = notes
-                    .flatMap(({ titles }) => titles)
-                    .filter(Boolean)
-                    .join("\n");
+                comment.textContent = ` ; ${note.name}`;
+                comment.title = note.title.filter(Boolean).join("\n");
                 disNode.append(comment);
             }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {

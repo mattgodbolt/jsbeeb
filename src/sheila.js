@@ -4,7 +4,7 @@ import { NoiseAwareWdFdc } from "./wd-fdc.js";
 
 /**
  * Which chip answers where in SHEILA (&FE00-&FEFF) on each BBC model, and what its registers are called, read
- * and written. The ranges follow the hardware's address decoding, even where jsbeeb's leaves a mirror out.
+ * and written. The ranges follow the hardware's address decoding.
  *
  * @typedef {object} SheilaRegister
  * @property {string | undefined} read - undefined where the chip doesn't answer a read

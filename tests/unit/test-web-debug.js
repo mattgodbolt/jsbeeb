@@ -667,20 +667,20 @@ describe("Debugger", () => {
             dbgr.setCpu(cpu);
         });
 
-        it("notes a system set's names beside the address once the sets have arrived, and credits them", async () => {
+        it("names operands once the sets that match have arrived, noting a register by its own name", async () => {
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR $3000");
             expect(credited()).toBe(false);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             expect(code(0x2005).textContent).toBe("STA $fe40 ; SysVIA.ORB");
             expect(code(0x2005).querySelector(".note").title).toBe(
                 "System VIA ORB: $fe40\nsystem_via_register_b: $fe40, from Test MOS",
             );
-            expect(code(0x2008).textContent).toMatch(/^LDA \(\$f2\),Y ; \$[0-9a-f]{4} \+ Y, os_text_ptr$/);
-            expect(code(0x200a).textContent).toMatch(/^JMP \(\$020e\) ; \$[0-9a-f]{4}, wrchv$/);
-            expect(code(0x200d).textContent).toBe("LDA $f2 ; os_text_ptr");
+            expect(code(0x2008).textContent).toMatch(/^LDA \(os_text_ptr\),Y ; \$[0-9a-f]{4} \+ Y$/);
+            expect(code(0x200a).textContent).toMatch(/^JMP \(wrchv\) ; \$/);
+            expect(code(0x200d).textContent).toBe("LDA os_text_ptr");
             expect(code(0x2000).textContent).toBe("LDA #$41");
-            expect(code(0x2002).querySelector(".note").title).toBe("oswrch: $3000, from Test MOS");
+            expect(code(0x2002).querySelector(".instr_instr_ref").title).toBe("oswrch: $3000, from Test MOS");
             expect(credited()).toBe(true);
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
@@ -712,20 +712,20 @@ describe("Debugger", () => {
 
         it("names an address in the address column, and still follows a named operand", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             expect(addrOf(rowAt(0x2002))).toBe("2002");
             code(0x2002)
                 .querySelector(".instr_instr_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
             expect(addrOf(currentRow())).toBe("3000 oswrch");
             expect(currentRow().querySelector(".dis_addr .symbol").title).toBe("oswrch: $3000, from Test MOS");
-            expect(code(0x3004).textContent).toBe("BNE $3000 ; oswrch");
+            expect(code(0x3004).textContent).toBe("BNE oswrch");
         });
 
         it("goes to a name typed in either box, over reading it as hex", async () => {
             withMos((mos) => (mos.regions.rom.symbols.fade = "0x3004"));
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             const box = document.querySelector("#goto-dis-addr-form .goto-addr");
             box.focus();
             goTo("goto-dis-addr-form", " oswrch ");
@@ -748,7 +748,7 @@ describe("Debugger", () => {
 
         it("still follows a named zero-page operand to the memory view", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA $f2 ; os_text_ptr"));
+            await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA os_text_ptr"));
             code(0x200d)
                 .querySelector(".instr_mem_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -877,7 +877,7 @@ describe("Debugger", () => {
 
         it("watches a disassembly operand, or an instruction's address, by its name from a right-click", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             rightClick(code(0x2002).querySelector(".instr_instr_ref"));
             pickFromMenu("Watch dec");
             rightClick(rowAt(0x2002).querySelector(".dis_addr"));
@@ -1003,15 +1003,12 @@ describe("Debugger", () => {
                 expect(press.defaultPrevented).toBe(true);
             });
 
-            it("keeps a noted operand following its address, saying where the name is defined", async () => {
+            it("keeps a named operand following its address, saying where it's defined", async () => {
                 dbgr.debug(cpu.pc);
-                await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
-                expect(code(0x2002).querySelector(".note").title).toBe(
-                    `oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`,
-                );
-                code(0x2002)
-                    .querySelector(".instr_instr_ref")
-                    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+                await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+                const operand = code(0x2002).querySelector(".instr_instr_ref");
+                expect(operand.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
+                operand.dispatchEvent(new MouseEvent("click", { bubbles: true }));
                 expect(addrOf(currentRow())).toBe("3000 oswrch");
             });
 
@@ -1035,7 +1032,7 @@ describe("Debugger", () => {
 
         it("checks the anchors again at each stop", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
             dbgr.hide();
             cpu.writemem(OswrchAt + 3, 0xea);
             dbgr.debug(cpu.pc);
@@ -1061,7 +1058,7 @@ describe("Debugger", () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(load).toHaveBeenCalledTimes(1);
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
         });
     });
 
