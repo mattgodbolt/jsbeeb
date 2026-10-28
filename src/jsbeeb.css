@@ -852,6 +852,10 @@ small {
   font-size: 9pt;
 }
 
+.awaiting-machine {
+  visibility: hidden;
+}
+
 .register-panel-close {
   margin-left: auto;
 }
@@ -885,7 +889,6 @@ small {
 
 .decoded-hex {
   color: #80d0d0;
-  box-sizing: content-box;
 }
 
 .sysvia-ports .decoded-meaning {

@@ -1,5 +1,6 @@
 import { hexword } from "../hex.js";
 import { BBC } from "../keymap.js";
+import { KeyMatrixSize } from "../via.js";
 import { HwScrollSubtract } from "../video.js";
 import { DecodedRegisters, namedBits } from "./decoded-registers.js";
 import { FloatingPanel, panelArrangement } from "./floating-panel.js";
@@ -114,6 +115,14 @@ const KeysByPlace = new Map(
 );
 
 const lit = (text, title, on) => ({ text, title, lit: !!on });
+
+/** A line the B and Master wire differently, in a slot that fits either, so the panel lays out alike on both. */
+function wiredAs(isMaster, [bText, bTitle, onB], [masterText, masterTitle, onMaster]) {
+    const width = widest([bText, masterText]);
+    return isMaster
+        ? { text: masterText, title: masterTitle, lit: !!onMaster, width }
+        : { text: bText, title: bTitle, lit: !!onB, width };
+}
 const widest = (texts) => Math.max(...texts.map((text) => text.length));
 /** A value spelt out, in a slot as wide as the widest of the `forms` it can take, so the panel keeps its size. */
 const spelt = (text, title, forms) => ({ text, title, width: widest(forms) });
@@ -136,12 +145,16 @@ function decodeIc32(ic32, { isMaster }) {
     const wrapTo = ScreenEnd - HwScrollSubtract[scroll] * HwScrollUnit;
     return [
         lit("sound write", "B0, active low: the sound chip takes the slow data bus", !(ic32 & 1)),
-        isMaster
-            ? lit("RTC read", "B1: the real-time clock's read/write line, high to read", ic32 & 2)
-            : lit("speech read", "B1, active low: the speech processor's read select", !(ic32 & 2)),
-        isMaster
-            ? lit("RTC data", "B2: the real-time clock's data strobe", ic32 & 4)
-            : lit("speech write", "B2, active low: the speech processor's write select", !(ic32 & 4)),
+        wiredAs(
+            isMaster,
+            ["speech read", "B1, active low: the speech processor's read select", !(ic32 & 2)],
+            ["RTC read", "B1: the real-time clock's read/write line, high to read", ic32 & 2],
+        ),
+        wiredAs(
+            isMaster,
+            ["speech write", "B2, active low: the speech processor's write select", !(ic32 & 4)],
+            ["RTC data", "B2: the real-time clock's data strobe", ic32 & 4],
+        ),
         spelt(
             KeyboardModes[ic32 & 8 ? 0 : 1],
             "B3, the keyboard's write enable: high, the keyboard scans itself and raises CA2 for a key held; " +
@@ -180,12 +193,16 @@ function decodePortB(pins, { isMaster }) {
         ),
         lit("fire 1", "PB4, active low: joystick 1's fire button", !(pins & 0x10)),
         lit("fire 2", "PB5, active low: joystick 2's fire button", !(pins & 0x20)),
-        isMaster
-            ? lit("RTC enable", "PB6: the real-time clock's chip enable", pins & 0x40)
-            : lit("speech ready", "PB6, active low: the speech processor is ready", !(pins & 0x40)),
-        isMaster
-            ? lit("RTC address", "PB7: the real-time clock's address strobe", pins & 0x80)
-            : lit("speech IRQ", "PB7, active low: the speech processor's interrupt", !(pins & 0x80)),
+        wiredAs(
+            isMaster,
+            ["speech ready", "PB6, active low: the speech processor is ready", !(pins & 0x40)],
+            ["RTC enable", "PB6: the real-time clock's chip enable", pins & 0x40],
+        ),
+        wiredAs(
+            isMaster,
+            ["speech IRQ", "PB7, active low: the speech processor's interrupt", !(pins & 0x80)],
+            ["RTC address", "PB7: the real-time clock's address strobe", pins & 0x80],
+        ),
     ];
 }
 
@@ -359,6 +376,28 @@ class KeyMatrix {
     }
 }
 
+/** What the panel lays itself out with, unseen, until there is a machine to read. */
+const NoMachineState = {
+    ic32: 0,
+    ora: 0,
+    ddra: 0,
+    portA: 0,
+    orb: 0,
+    ddrb: 0,
+    portB: 0,
+    pcr: 0,
+    acr: 0,
+    ifr: 0,
+    ier: 0,
+    t1c: 0,
+    t1l: 0,
+    t2c: 0,
+    t2l: 0,
+    isMaster: false,
+    keys: Array.from({ length: KeyMatrixSize }, () => new Uint8Array(KeyMatrixSize)),
+    scanColumn: 0,
+};
+
 /**
  * A floating panel showing the system VIA decoded, with the keyboard matrix beside it, read once a frame while it is
  * open and not at all while it is closed.
@@ -381,6 +420,10 @@ export class SysViaPanel {
             this.panel.querySelector(".key-matrix"),
             this.panel.querySelector(".key-matrix-status"),
         );
+        // Filled before it can be opened, as the layout measures it on opening and what it shows never changes its size.
+        this._body = this.panel.querySelector(".panel-body");
+        this._body.classList.add("awaiting-machine");
+        this._show(NoMachineState);
         this.floating = new FloatingPanel({
             panel: this.panel,
             header: this.panel.querySelector(".register-panel-header"),
@@ -411,8 +454,11 @@ export class SysViaPanel {
 
     update() {
         const via = this._via();
-        if (!via) return;
-        const state = sysViaState(via);
+        this._body.classList.toggle("awaiting-machine", !via);
+        if (via) this._show(sysViaState(via));
+    }
+
+    _show(state) {
         for (const registers of this._registers) registers.update(state);
         this._matrix.update(state);
     }

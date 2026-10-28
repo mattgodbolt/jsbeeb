@@ -92,14 +92,17 @@ describe("Debugger", () => {
             expect(visible("debug")).toBe(false);
         });
 
-        it("give the decoded system VIA the machine's VIA on a BBC, and none on an Atom", () => {
-            const ic32 = () => document.querySelector("#sysvia-panel .decoded-hex").textContent;
-            dbgr.sysViaPanel.update();
-            expect(ic32()).toBe(hexbyte(cpu.sysvia.IC32));
-            document.querySelector("#sysvia-panel .decoded-hex").textContent = "";
+        it("give the decoded system VIA the machine's VIA on a BBC, and close it and read nothing on an Atom", () => {
+            const panel = dbgr.sysViaPanel;
+            const awaiting = () =>
+                document.querySelector("#sysvia-panel .panel-body").classList.contains("awaiting-machine");
+            panel.floating.open();
+            expect(awaiting()).toBe(false);
             cpu.model = findModel("Atom");
-            dbgr.sysViaPanel.update();
-            expect(ic32()).toBe("");
+            dbgr.setCpu(cpu);
+            expect(panel.floating.isOpen).toBe(false);
+            panel.update();
+            expect(awaiting()).toBe(true);
         });
 
         it("note the debugger opening each time it is entered, not each time it stops", () => {

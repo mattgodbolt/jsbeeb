@@ -110,10 +110,17 @@ describe("SysViaPanel", () => {
             }
         });
 
-        it("shows nothing before the debugger has a machine", () => {
+        it("is laid out unseen before the debugger has a machine, and shows the machine once there is one", () => {
+            const machine = via;
             via = undefined;
+            const awaiting = () =>
+                document.querySelector("#sysvia-panel .panel-body").classList.contains("awaiting-machine");
             panel.floating.open();
-            expect(hex("IC32")).toBe("");
+            expect(awaiting()).toBe(true);
+            expect(meanings("IFR")).toHaveLength(8);
+            via = machine;
+            nextFrame();
+            expect(awaiting()).toBe(false);
         });
     });
 

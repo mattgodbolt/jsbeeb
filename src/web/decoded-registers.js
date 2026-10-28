@@ -5,8 +5,8 @@ import { hexbyte, hexword } from "../hex.js";
  * @property {string} text
  * @property {string} title
  * @property {boolean} [lit] for a named bit or line, whether it is active; absent for a value spelt out
- * @property {number} [width] for a value spelt out, the most characters its text can take. Every value in a row is
- * given the widest of the row's, so that they line up and a change of value moves nothing.
+ * @property {number} [width] the most characters its text can take, so that a change moves nothing. Every value
+ * spelt out in a row is given the widest of the row's, so that they line up.
  */
 
 /**
@@ -55,8 +55,6 @@ export class DecodedRegisters {
                 name.title = register.title;
                 const hex = row.insertCell();
                 hex.className = "decoded-hex";
-                // Sized before the first value arrives, so the panel is measured at the size it keeps.
-                hex.style.width = `${register.bits / 4}ch`;
                 const meaning = row.insertCell();
                 meaning.className = "decoded-meaning";
                 row.prepend(name);
@@ -78,18 +76,19 @@ export class DecodedRegisters {
             const shown = meanings.map(({ text, lit, width }) => `${text}\u0000${lit}\u0000${width}`).join("\u0001");
             if (shown === row.shown) continue;
             row.shown = shown;
-            const valueWidth = Math.max(0, ...meanings.map(({ width }) => width ?? 0));
+            const valueWidth = Math.max(0, ...meanings.map(({ lit, width }) => (lit === undefined ? width : 0)));
             row.meaning.replaceChildren(...meanings.map((meaning) => meaningNode(meaning, valueWidth)));
         }
     }
 }
 
-function meaningNode({ text, title, lit }, valueWidth) {
+function meaningNode({ text, title, lit, width }, valueWidth) {
     const node = document.createElement("span");
     node.className = lit === undefined ? "decoded-value" : `decoded-bit${lit ? " lit" : ""}`;
     node.textContent = text;
     node.title = title;
-    if (lit === undefined) node.style.width = `${valueWidth}ch`;
+    const slot = lit === undefined ? valueWidth : width;
+    if (slot !== undefined) node.style.width = `${slot}ch`;
     return node;
 }
 

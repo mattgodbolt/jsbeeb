@@ -306,6 +306,7 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
+        if (cpu.model.isAtom) this.sysViaPanel.floating.close();
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);
