@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.12.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.11.1...v2.12.0) (2026-10-28)
+
+
+### Features
+
+* a Model B with MOS 0.10 ([#1543](https://github.com/mattgodbolt/jsbeeb/issues/1543)) ([25a674c](https://github.com/mattgodbolt/jsbeeb/commit/25a674c4b577385196d04ba498b0fcef988b30f1))
+* create blank HFE discs on Google Drive ([#1531](https://github.com/mattgodbolt/jsbeeb/issues/1531)) ([f0bf8d5](https://github.com/mattgodbolt/jsbeeb/commit/f0bf8d5177899b52069ba2823a4d42e420167c5e))
+* fit sideways ROMs to a MachineSession with extraRoms and bankRoms ([#1557](https://github.com/mattgodbolt/jsbeeb/issues/1557)) ([42f39bc](https://github.com/mattgodbolt/jsbeeb/commit/42f39bc7a681fe5f23b0cbf46e88067f5753bca8))
+* load a ROM into a chosen bank with rom.N, and take github: references in rom= ([#1542](https://github.com/mattgodbolt/jsbeeb/issues/1542)) ([ca3a273](https://github.com/mattgodbolt/jsbeeb/commit/ca3a273927939c07ad00d751160a437f81f04d59))
+* mark symbol sets' regions in the memory view, and watch addresses from a panel or a right-click ([#1541](https://github.com/mattgodbolt/jsbeeb/issues/1541)) ([5fb140e](https://github.com/mattgodbolt/jsbeeb/commit/5fb140ee7d96651241bd9d89c86dde6c9fa75cdc))
+
+
+### Bug Fixes
+
+* clear the Master's ACCCON on a hard reset ([#1548](https://github.com/mattgodbolt/jsbeeb/issues/1548)) ([d5833b9](https://github.com/mattgodbolt/jsbeeb/commit/d5833b9400c40f02058b59cfabab6bd45d276dca))
+* hold a seconds, minutes or hours byte that is not a time as written ([#1530](https://github.com/mattgodbolt/jsbeeb/issues/1530)) ([1c8bc0a](https://github.com/mattgodbolt/jsbeeb/commit/1c8bc0a9f279f42d382d337eea4dfc25b30bb35c))
+* keep glEnabled=false and lowLatency=false in the URLs the page writes ([#1532](https://github.com/mattgodbolt/jsbeeb/issues/1532)) ([df935b5](https://github.com/mattgodbolt/jsbeeb/commit/df935b59fba5f4f5199d1534809913bc210aa5c5))
+* mirror the stock BBC B's four ROM sockets and fit BASIC in IC52 ([#1535](https://github.com/mattgodbolt/jsbeeb/issues/1535)) ([ef87f85](https://github.com/mattgodbolt/jsbeeb/commit/ef87f8575b2155198ff57e7c5e96097db3e27347))
+* play drive seeks from recordings made at each step rate ([#1520](https://github.com/mattgodbolt/jsbeeb/issues/1520)) ([81ee6ab](https://github.com/mattgodbolt/jsbeeb/commit/81ee6ab2f9087bdd168b00ddd9c60a6a05a226be))
+* score only real common mnemonics in the debugger's previous-instruction guess ([#1533](https://github.com/mattgodbolt/jsbeeb/issues/1533)) ([c878d22](https://github.com/mattgodbolt/jsbeeb/commit/c878d22ece5dcd5fb2adeed8b1fa536abf52057a))
+* send a paste on a shared session through the session as keys ([#1536](https://github.com/mattgodbolt/jsbeeb/issues/1536)) ([a4b90e3](https://github.com/mattgodbolt/jsbeeb/commit/a4b90e3936d9ba877f0046724ad9c944285381d5))
+* set the keyboard's CA2 flag from the autoscan, and bring it back at the scan's next edge after a clear ([#1547](https://github.com/mattgodbolt/jsbeeb/issues/1547)) ([c749e8d](https://github.com/mattgodbolt/jsbeeb/commit/c749e8d5d9f090bb28569f2d6e7b7e9151e3ed75))
+* show the debugger's VIA timers as a program would read them ([#1555](https://github.com/mattgodbolt/jsbeeb/issues/1555)) ([4cee286](https://github.com/mattgodbolt/jsbeeb/commit/4cee286e0411e728bbf6d28807585aad5e8764d1))
+* skip an empty ROM name in MachineSession's extraRoms and bankRoms, as the page does ([#1561](https://github.com/mattgodbolt/jsbeeb/issues/1561)) ([1ece536](https://github.com/mattgodbolt/jsbeeb/commit/1ece536b8c2add537d47ce971dc09dd21e484110))
+* use the bank a stock BBC B's ROMSEL aliases to for paging state, breakpoints and power-on ([#1544](https://github.com/mattgodbolt/jsbeeb/issues/1544)) ([8ff233d](https://github.com/mattgodbolt/jsbeeb/commit/8ff233d50b6aa3ec340585013ef6225f91f954d9))
+
+
+### Performance Improvements
+
+* page memory through read and write offset tables that debug hooks fault through ([#1513](https://github.com/mattgodbolt/jsbeeb/issues/1513)) ([360a3f1](https://github.com/mattgodbolt/jsbeeb/commit/360a3f1793e7e837375124bcfce9dc52728fe195))
+
 ## [2.11.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.11.0...v2.11.1) (2026-10-26)
 
 
