@@ -786,8 +786,7 @@ export class Cpu6502 extends Base6502 {
     // 0b000 - 10000 -> LYNNE - 20KB
     romSelect(b) {
         this.romsel = b;
-        const { romSockets } = this.model;
-        const bank = NumRomBanks - romSockets + (b & (romSockets - 1));
+        const bank = this.pagedBank;
         const offset = bank * RomBankBytes + this.romOffset - 0x8000;
         const swram = this.model.swram[bank] ? 1 : 2;
         this.mapBothHalves(0x80, 0xc0, swram, offset);
@@ -796,6 +795,12 @@ export class Cpu6502 extends Base6502 {
             // Zero offset as 0x8000 mapped to 0x8000
             this.mapBothHalves(0x80, 0x90, 1, 0);
         }
+    }
+
+    /** The sideways bank ROMSEL pages in. */
+    get pagedBank() {
+        const { romSockets } = this.model;
+        return NumRomBanks - romSockets + (this.romsel & (romSockets - 1));
     }
 
     mapPages(start, end, stat, offset) {
@@ -1578,7 +1583,7 @@ export class Cpu6502 extends Base6502 {
         this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
         if (!this.model.isTest) {
             this.mapBothHalves(0, 0x80, 1, 0);
-            this.mapBothHalves(0x80, 0xc0, 2, this.romOffset - 0x8000);
+            this.romSelect(0);
             this.mapBothHalves(0xc0, 0x100, 2, this.osOffset - 0xc000);
             this.mapBothHalves(0xfc, 0xff, 0, 0);
         } else {

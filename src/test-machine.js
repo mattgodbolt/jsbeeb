@@ -14,7 +14,6 @@ import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 
 export const MaxCyclesPerIter = 100 * 1000;
-const RomselBankMask = 0x0f;
 const RomselAndy = 0x80;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
@@ -178,7 +177,7 @@ export class TestMachine {
 
     /** The sideways bank paged in at &8000 to &BFFF. */
     get pagedBank() {
-        return this.processor.romsel & RomselBankMask;
+        return this.processor.pagedBank;
     }
 
     /**

@@ -38,12 +38,19 @@ describe("Cpu6502 extra ROM loading", () => {
             expect([12, 13, 14, 15].map((bank) => romTitle(cpu, bank))).toEqual(["BAS", "DFS", "ATS", "AMP"]);
         });
 
+        const pagedTitle = (cpu) =>
+            String.fromCharCode(...[9, 10, 11, 12, 13].map((offset) => cpu.readmem(0x8000 + offset)));
+
+        it("powers on with IC52, BASIC, at &8000", async () => {
+            const cpu = await loadStock([]);
+            cpu.reset(true);
+            expect(pagedTitle(cpu)).toBe("BASIC");
+        });
+
         it("keeps BASIC paged when a program writes the Master's ACCCON value to &FE34", async () => {
             const cpu = await loadStock([]);
             cpu.writemem(0xfe34, 0x18);
-            expect(String.fromCharCode(...[9, 10, 11, 12, 13].map((offset) => cpu.readmem(0x8000 + offset)))).toBe(
-                "BASIC",
-            );
+            expect(pagedTitle(cpu)).toBe("BASIC");
         });
 
         it("throws, starting no load, rather than load a ROM no ROMSEL value reaches", async () => {

@@ -179,7 +179,6 @@ describe("MachineSession breakpoints in sideways ROM", () => {
     const UnduplicatedTitle = 0x55;
     const ServiceWrite = 0x70;
     const RunSecs = 5;
-    const RomselBankMask = 0x0f;
     // A service ROM titled "T" whose service handler stores A at ServiceWrite and returns.
     // prettier-ignore
     const ServiceRom = [
@@ -203,8 +202,6 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         return session;
     }
 
-    const pagedBank = (session) => session.pagingState().romsel & RomselBankMask;
-
     it("breaks only while the bank it is given is paged in", async () => {
         const session = await sessionWithSpareRom();
         const id = session.addBreakpoint("execute", ServiceEntry, { bank: SpareBank });
@@ -214,7 +211,7 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         expect(completed).toBe(false);
         expect(session.hitBreakpoint()).toEqual({ id, type: "execute", address: ServiceEntry, bank: SpareBank });
         expect(session.registers().pc).toBe(ServiceEntry);
-        expect(pagedBank(session)).toBe(SpareBank);
+        expect(session.pagingState().bank).toBe(SpareBank);
         session.destroy();
     });
 
@@ -224,7 +221,31 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         await session.runUntilAddress(ServiceEntry, RunSecs, { bank: SpareBank });
 
         expect(session.registers().pc).toBe(ServiceEntry);
-        expect(pagedBank(session)).toBe(SpareBank);
+        expect(session.pagingState().bank).toBe(SpareBank);
+        session.destroy();
+    });
+
+    it("on a stock BBC B, breaks in socket 12 and reports it when code pages it as ROMSEL 0", async () => {
+        const session = await bootedSession("B-stock");
+        const ProgramAddress = 0x2000;
+        const LoopAddress = ProgramAddress + 6;
+        const BasicFirstByte = 0xc9;
+        // prettier-ignore
+        session.writeMemory(ProgramAddress, [
+            0x78, // SEI
+            0xa9, 0x00, // LDA #0
+            0x8d, 0x30, 0xfe, // STA &FE30
+            0xad, 0x00, 0x80, // LDA &8000
+            0x4c, LoopAddress & 0xff, LoopAddress >> 8, // JMP LoopAddress
+        ]);
+        const id = session.addBreakpoint("read", 0x8000, { bank: 12 });
+
+        await session.type(`CALL &${ProgramAddress.toString(16)}`);
+        await session.runFor(RunSecs * CyclesPerSecond);
+
+        expect(session.hitBreakpoint()).toEqual({ id, type: "read", address: 0x8000, bank: 12, value: BasicFirstByte });
+        expect(session.registers().pc).toBe(LoopAddress + 3);
+        expect(session.pagingState()).toEqual({ romsel: 0, bank: 12 });
         session.destroy();
     });
 
@@ -235,6 +256,14 @@ describe("MachineSession breakpoints in sideways ROM", () => {
         await expect(session.runUntilAddress(ServiceEntry, RunSecs, { bank: -1 })).rejects.toThrow(
             "Bank -1 is not 0 to 15",
         );
+        session.destroy();
+    });
+
+    it("refuses, on a stock BBC B, a bank no ROMSEL value reaches", async () => {
+        const session = new MachineSession("B-stock");
+
+        expect(() => session.addBreakpoint("execute", ServiceEntry, { bank: 0 })).toThrow("Bank 0 is not 12 to 15");
+        expect(() => session.readMemory(0x8000, 1, { bank: 11 })).toThrow("Bank 11 is not 12 to 15");
         session.destroy();
     });
 });

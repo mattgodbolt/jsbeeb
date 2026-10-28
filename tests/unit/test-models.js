@@ -121,6 +121,15 @@ describe("Model", () => {
         });
     });
 
+    it("powers on with ROMSEL 0's bank paged, whatever was paged before", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        cpu.romSelect(5);
+        cpu.reset(true);
+        expect(cpu.pagedBank).toBe(0);
+        cpu.writemem(0x8000, 0x5a);
+        expect(cpu.readmem(0x8000)).toBe(0x5a);
+    });
+
     it("carries no per-session settings", () => {
         const master = findModel("Master");
 

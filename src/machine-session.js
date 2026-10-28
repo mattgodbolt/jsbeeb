@@ -24,6 +24,7 @@ import { BitshiftersArchive } from "./bitshifters.js";
 import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
+import { NumRomBanks } from "./6502.js";
 import { setNodeBasePath } from "./loader.js";
 
 // BBC framebuffer is 1024×625 pixels
@@ -453,7 +454,7 @@ export class MachineSession {
      *     while ANDY is paged over &8000 to &8FFF)
      */
     async runUntilAddress(addr, timeoutSecs = 30, { bank } = {}) {
-        requireBank(bank);
+        requireBank(bank, this._machine.model);
         await this._machine.runUntilAddress(addr, timeoutSecs, { bank });
     }
 
@@ -469,7 +470,7 @@ export class MachineSession {
      * @returns {number} breakpoint id
      */
     addBreakpoint(type, address, { bank } = {}) {
-        requireBank(bank);
+        requireBank(bank, this._machine.model);
         const id = this._nextBreakpointId++;
         const bp = { type, address, bank, hit: false, id, value: undefined };
         bp.hook = this._machine.addBreakpoint(type, address, { bank }, (value) => {
@@ -610,14 +611,14 @@ export class MachineSession {
     }
 
     /**
-     * What the memory map has paged in: `romsel`, the sideways bank at
-     * &8000 to &BFFF, and on a Master `acccon`, whose bit 2 puts shadow
-     * RAM at &3000 to &7FFF.
-     * @returns {{romsel: number, acccon?: number}}
+     * What the memory map has paged in: `romsel` as last written, `bank`,
+     * the sideways bank it pages at &8000 to &BFFF, and on a Master
+     * `acccon`, whose bit 2 puts shadow RAM at &3000 to &7FFF.
+     * @returns {{romsel: number, bank: number, acccon?: number}}
      */
     pagingState() {
         const cpu = this._machine.processor;
-        const state = { romsel: cpu.romsel };
+        const state = { romsel: cpu.romsel, bank: cpu.pagedBank };
         if (cpu.model.isMaster) state.acccon = cpu.acccon;
         return state;
     }
@@ -630,7 +631,7 @@ export class MachineSession {
     _withPaging({ bank, shadow }, fn) {
         const cpu = this._machine.processor;
         const { romsel, acccon } = cpu;
-        requireBank(bank);
+        requireBank(bank, cpu.model);
         if (shadow !== undefined && !cpu.model.isMaster) throw new Error("Only a Master has shadow RAM");
         try {
             if (bank !== undefined) cpu.romSelect(bank);
@@ -749,9 +750,11 @@ export class MachineSession {
 // ---------------------------------------------------------------------------
 
 /** Throws unless `bank`, if given, is a sideways bank. */
-function requireBank(bank) {
-    if (bank !== undefined && (!Number.isInteger(bank) || bank < 0 || bank > 15))
-        throw new Error(`Bank ${bank} is not 0 to 15`);
+function requireBank(bank, { romSockets }) {
+    const lowest = NumRomBanks - romSockets;
+    const highest = NumRomBanks - 1;
+    if (bank !== undefined && (!Number.isInteger(bank) || bank < lowest || bank > highest))
+        throw new Error(`Bank ${bank} is not ${lowest} to ${highest}`);
 }
 
 /**
