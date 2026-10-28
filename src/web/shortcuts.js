@@ -11,6 +11,12 @@ import { isMac } from "./keyboard.js";
  */
 export const Shortcuts = [
     { combo: "Alt-S", key: "S", run: "toggleDebugger", description: "Enter the debugger, or leave it and resume" },
+    {
+        combo: "Alt-D",
+        key: "D",
+        run: "toggleDebugPanels",
+        description: "Show or hide the debug panels, leaving the machine running or stopped",
+    },
     { combo: "Alt-P", key: "P", run: "togglePause", description: "Pause emulation, or resume" },
     { combo: "Alt-T", key: "T", run: "toggleFast", description: "Toggle turbo (fast-as-possible)" },
     { combo: "Alt-B", key: "B", run: "openPrinter", description: "Open printer output window" },
@@ -29,7 +35,8 @@ export function shortcutLabel(text, mac = isMac) {
 /** Relabels the shortcuts the page's own markup names: the help's key caps and the tooltips. */
 export function labelPageShortcuts(mac = isMac) {
     if (!mac) return;
-    for (const key of document.querySelectorAll("#help .key")) key.textContent = shortcutLabel(key.textContent, mac);
+    for (const key of document.querySelectorAll("#help .key, .menu-key"))
+        key.textContent = shortcutLabel(key.textContent, mac);
     for (const element of document.querySelectorAll("[title*='Alt']")) {
         element.title = shortcutLabel(element.title, mac);
     }

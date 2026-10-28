@@ -3,7 +3,9 @@ import { version } from "../package.json";
 import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
-import { Debugger } from "./web/debug.js";
+import { Debugger, debuggerHelpRows } from "./web/debug.js";
+import { DebugMenu } from "./web/debug-menu.js";
+import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
 import { initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -21,7 +23,7 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop } from "./web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
@@ -93,7 +95,9 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 // The pieces that exist before the machine: settings, screen, sound.
 // ------------------------------------------------------------------------
 
-const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }) });
+const panelKeys = new PanelKeys(panelArrangement);
+const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }), keys: panelKeys });
+document.getElementById("debug-keys-help").append(...debuggerHelpRows());
 
 const gamepad = new GamePad();
 if (!window.isSecureContext)
@@ -236,6 +240,7 @@ const { keyboard } = new KeyboardSetup({
     processor,
     loop,
     dbgr,
+    keys: panelKeys,
     keyLayout,
 });
 
@@ -317,6 +322,8 @@ const layout = new Layout({
     embed: !!parsedQuery.embed,
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
+dbgr.placeBesideScreen(() => layout.screenBounds());
+new DebugMenu({ arrangement: panelArrangement, dbgr, inDebugger: () => loop.mode === RunMode.debugging });
 panelArrangement.reopen();
 
 // Everything a setting can reach now exists.

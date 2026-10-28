@@ -8,16 +8,64 @@ import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
+import { PanelKeys } from "../../src/web/panel-keys.js";
+import { panelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
+
+const PanelElements = [
+    "debug-toolbar",
+    "disassembly-panel",
+    "memory-panel",
+    "registers-panel",
+    "peripherals-panel",
+    "watch-panel",
+    "watch-menu",
+];
+
+/** Stops and runs as the emulation loop does, without running anything; it starts in the debugger. */
+class StoppedLoop extends EventTarget {
+    constructor(dbgr, cpu) {
+        super();
+        this.dbgr = dbgr;
+        this.cpu = cpu;
+        this.mode = RunMode.debugging;
+        this.running = false;
+    }
+    isRunning() {
+        return this.running;
+    }
+    go() {
+        this.mode = RunMode.running;
+        this.dbgr.hide();
+    }
+    stop(debug) {
+        this.mode = debug ? RunMode.debugging : RunMode.paused;
+        if (debug) this.dbgr.debug(this.cpu.pc);
+        else this.dbgr.hide();
+    }
+}
 
 describe("Debugger", () => {
     let cpu;
     let video;
     let dbgr;
+    let keys;
+    let stoppedLoop;
+
+    /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
+    const makeDebugger = (symbolSets) => {
+        keys = new PanelKeys(panelArrangement);
+        const made = new Debugger({ symbolSets, keys });
+        made.setCpu(cpu);
+        stoppedLoop = new StoppedLoop(made, cpu);
+        made.attachLoop(stoppedLoop);
+        return made;
+    };
 
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
+        window.localStorage.clear();
+        domFromIndexHtml(...PanelElements);
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });
@@ -25,17 +73,21 @@ describe("Debugger", () => {
         cpu.writemem(0x2000, 0xa9);
         cpu.writemem(0x2001, 0x41);
         cpu.pc = 0x2000;
-        dbgr = new Debugger();
-        dbgr.setCpu(cpu);
+        dbgr = makeDebugger(null);
     });
 
-    afterEach(teardownDom);
+    afterEach(() => {
+        // Closed, they stop looking at the machine once a frame.
+        dbgr.hidePanels();
+        return teardownDom();
+    });
 
-    const visible = (id) => document.getElementById(id).style.display !== "none";
+    const visible = (id) => !document.getElementById(id).hidden;
     const disRows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
     const currentRow = () => document.querySelector("#disassembly .highlight");
     const memHighlight = () => document.querySelector("#memory .highlight");
-    const keyPress = (char) => dbgr.keyPress(char);
+    /** A key as the page hands it on while the machine is stopped. */
+    const keyPress = (char) => keys.press(char);
     const addrOf = (row) => row.querySelector(".dis_addr").textContent;
     const goTo = (formId, text) => {
         const form = document.getElementById(formId);
@@ -71,17 +123,171 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
-        it("start hidden, show when the debugger is entered, and hide again on leaving", () => {
-            expect(visible("debug")).toBe(false);
-            expect(visible("hardware_debug")).toBe(false);
-            expect(visible("crtc_debug")).toBe(false);
+        const DebugPanels = [
+            "debug-toolbar",
+            "disassembly-panel",
+            "registers-panel",
+            "memory-panel",
+            "peripherals-panel",
+        ];
+        const shown = () => DebugPanels.filter(visible);
+        const NarrowSet = ["debug-toolbar", "disassembly-panel", "registers-panel", "memory-panel"];
+
+        it("open on entering the debugger, and stay open once the machine goes on", () => {
+            expect(shown()).toEqual([]);
             dbgr.debug(cpu.pc);
             expect(dbgr.enabled()).toBe(true);
-            expect(visible("debug")).toBe(true);
-            expect(visible("hardware_debug")).toBe(true);
-            dbgr.hide();
+            expect(shown()).toEqual(NarrowSet);
+            stoppedLoop.go();
             expect(dbgr.enabled()).toBe(false);
-            expect(visible("debug")).toBe(false);
+            expect(shown()).toEqual(NarrowSet);
+        });
+
+        it("include the peripherals by default only on a wide window", () => {
+            vi.spyOn(window, "innerWidth", "get").mockReturnValue(1920);
+            dbgr.debug(cpu.pc);
+            expect(shown()).toEqual(DebugPanels);
+        });
+
+        it("close on leaving the debugger by its toggle, and the same ones open on entering it again", () => {
+            dbgr.debug(cpu.pc);
+            dbgr.panels.peripherals.open();
+            dbgr.panels.memory.close();
+            dbgr.toggleDebugger();
+            expect(stoppedLoop.mode).toBe(RunMode.running);
+            expect(shown()).toEqual([]);
+            dbgr.toggleDebugger();
+            expect(stoppedLoop.mode).toBe(RunMode.debugging);
+            expect(shown()).toEqual(["debug-toolbar", "disassembly-panel", "registers-panel", "peripherals-panel"]);
+        });
+
+        it("open the defaults again once every one has been closed by hand", () => {
+            dbgr.debug(cpu.pc);
+            for (const floating of Object.values(dbgr.panels)) floating.close();
+            dbgr.toggleDebugger();
+            dbgr.toggleDebugger();
+            expect(shown()).toEqual(NarrowSet);
+        });
+
+        it("show and hide on their own toggle, leaving the machine running or stopped as it was", () => {
+            stoppedLoop.mode = RunMode.running;
+            dbgr.togglePanels();
+            expect(shown()).toEqual(NarrowSet);
+            expect(stoppedLoop.mode).toBe(RunMode.running);
+            expect(dbgr.enabled()).toBe(false);
+            expect(addrOf(currentRow())).toBe("2000");
+            dbgr.togglePanels();
+            expect(shown()).toEqual([]);
+            expect(stoppedLoop.mode).toBe(RunMode.running);
+        });
+
+        it("are listed for a menu of panels by their titles", () => {
+            const titles = panelArrangement.listed().map((floating) => floating.title);
+            expect(titles).toEqual(
+                expect.arrayContaining(["Debugger toolbar", "Disassembly", "Memory", "Registers", "Peripherals"]),
+            );
+        });
+
+        it("show the stack from its top and the cycles run", () => {
+            cpu.s = 0xfc;
+            cpu.writemem(0x1fd, 0x12);
+            cpu.writemem(0x1fe, 0x34);
+            cpu.writemem(0x1ff, 0x56);
+            dbgr.debug(cpu.pc);
+            expect(document.getElementById("cpu6502_stack").textContent).toBe("12 34 56");
+            expect(Number(document.getElementById("cpu6502_cycles").textContent)).toBe(
+                cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles,
+            );
+            cpu.s = 0xff;
+            dbgr.debug(cpu.pc);
+            expect(document.getElementById("cpu6502_stack").textContent).toBe("");
+        });
+
+        it("give the keyboard back on Escape in a goto box, staying open", () => {
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            box.focus();
+            box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            expect(document.activeElement).not.toBe(box);
+            expect(visible("disassembly-panel")).toBe(true);
+        });
+
+        describe("while the machine runs", () => {
+            let frames;
+            const runFrame = () => {
+                const pending = [...frames.values()];
+                frames.clear();
+                for (const callback of pending) callback();
+            };
+
+            beforeEach(() => {
+                frames = new Map();
+                let handle = 0;
+                vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+                    frames.set(++handle, callback);
+                    return handle;
+                });
+                vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+                dbgr.debug(cpu.pc);
+                stoppedLoop.go();
+                stoppedLoop.running = true;
+            });
+
+            it("keep up once a frame, following the program counter, without side effects", () => {
+                const read = vi.spyOn(cpu, "readmem");
+                cpu.a = 0x99;
+                cpu.pc = 0x2002;
+                cpu.writemem(0x0000, 0x77);
+                runFrame();
+                expect(document.getElementById("cpu6502_a").textContent).toBe("99");
+                expect(addrOf(document.querySelector("#disassembly .current"))).toBe("2002");
+                expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe("77");
+                expect(read).not.toHaveBeenCalled();
+            });
+
+            it("read nothing once closed", () => {
+                dbgr.hidePanels();
+                expect(frames.size).toBe(0);
+                const peek = vi.spyOn(cpu, "peekmem");
+                runFrame();
+                expect(peek).not.toHaveBeenCalled();
+            });
+
+            it("catch up with the machine once it stops", () => {
+                cpu.a = 0x42;
+                stoppedLoop.running = false;
+                stoppedLoop.mode = RunMode.paused;
+                stoppedLoop.dispatchEvent(new Event("running"));
+                expect(document.getElementById("cpu6502_a").textContent).toBe("42");
+            });
+        });
+
+        describe("the toolbar", () => {
+            const button = (run) => document.querySelector(`#debug-toolbar [data-run="${run}"]`);
+            const enabled = () =>
+                ["go", "stop", "step", "stepOver", "stepOut", "runToCursor"].filter((run) => !button(run).disabled);
+
+            it("offers what the machine can do as it is, and names each button's key", () => {
+                expect(enabled()).toEqual(["go", "step", "stepOver", "stepOut", "runToCursor"]);
+                stoppedLoop.running = true;
+                stoppedLoop.dispatchEvent(new Event("running"));
+                expect(enabled()).toEqual(["stop"]);
+                expect(button("stepOver").title).toBe("Step over a call, or a loop from its backward branch (m)");
+                expect(button("runToCursor").title).toBe("Run to the highlighted instruction (c)");
+            });
+
+            it("steps from a pause by entering the debugger first", () => {
+                stoppedLoop.mode = RunMode.paused;
+                button("step").click();
+                expect(stoppedLoop.mode).toBe(RunMode.debugging);
+                expect(document.getElementById("cpu6502_pc").textContent).toBe("2002");
+            });
+
+            it("keeps its buttons from focus", () => {
+                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+                button("step").dispatchEvent(press);
+                expect(press.defaultPrevented).toBe(true);
+            });
         });
 
         it("note the debugger opening each time it is entered, not each time it stops", () => {
@@ -353,11 +559,21 @@ describe("Debugger", () => {
             expect(addrOf(currentRow())).toBe("2002");
         });
 
-        it("leaves the keys alone while a form field has focus", () => {
+        it("keeps the run and step keys for the debugger, and the panels' own for whenever it is stopped", () => {
             dbgr.debug(cpu.pc);
-            document.querySelector("#goto-dis-addr-form .goto-addr").focus();
-            expect(keyPress("j")).toBe(false);
-            expect(addrOf(currentRow())).toBe("2000");
+            stoppedLoop.mode = RunMode.paused;
+            expect(keyPress("n")).toBe(false);
+            expect(keyPress("j")).toBe(true);
+            expect(addrOf(currentRow())).toBe("2002");
+        });
+
+        it("keeps a panel's keys to it while it is open", () => {
+            dbgr.debug(cpu.pc);
+            dbgr.panels.memory.close();
+            expect(keyPress("u")).toBe(false);
+            dbgr.panels.toolbar.close();
+            expect(keyPress("n")).toBe(false);
+            expect(document.getElementById("cpu6502_pc").textContent).toBe("2000");
         });
     });
 
@@ -370,15 +586,24 @@ describe("Debugger", () => {
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
-        class StandInLoop {
+        class StandInLoop extends EventTarget {
             mode = RunMode.debugging;
             running = false;
             lockstep = null;
             clocksPerSecond = MachineSecond;
+            isRunning() {
+                return this.running;
+            }
             go() {
                 this.mode = RunMode.running;
                 dbgr.hide();
                 this.running = true;
+            }
+            stop(debug) {
+                this.mode = debug ? RunMode.debugging : RunMode.paused;
+                this.running = false;
+                if (debug) dbgr.debug(cpu.pc);
+                else dbgr.hide();
             }
             pause() {
                 this.mode = RunMode.paused;
@@ -396,6 +621,15 @@ describe("Debugger", () => {
         beforeEach(() => {
             loop = new StandInLoop();
             dbgr.attachLoop(loop);
+        });
+
+        it("runs to the cursor from a pause by entering the debugger first", () => {
+            dbgr.debug(cpu.pc);
+            loop.mode = RunMode.paused;
+            keyPress("j");
+            keyPress("c");
+            expect(loop.mode).toBe(RunMode.debugging);
+            expect(pc()).toBe("2002");
         });
 
         it("steps one instruction on n even when it goes nowhere", () => {
@@ -724,7 +958,7 @@ describe("Debugger", () => {
         afterEach(() => vi.restoreAllMocks());
 
         const panelOpen = () => !document.getElementById("watch-panel").hidden;
-        const openFromMenu = () => document.getElementById("watch-open").click();
+        const openFromMenu = () => dbgr.watches.floating.toggle();
 
         it("takes an address while the machine runs, giving the keyboard back once it is added", () => {
             openFromMenu();
@@ -751,7 +985,7 @@ describe("Debugger", () => {
         it("reads its watches once a frame, without side effects, while open, and not at all while closed", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
-            dbgr.hide();
+            dbgr.toggleDebugger();
             const peek = vi.spyOn(cpu, "peekmem");
             const read = vi.spyOn(cpu, "readmem");
             openFromMenu();
@@ -951,11 +1185,11 @@ describe("Debugger", () => {
         });
 
         it("lists the CRTC registers and state", () => {
-            const regRows = [...document.querySelectorAll("#crtc_debug .crtc_regs tr:not(.template)")];
+            const regRows = [...document.querySelectorAll("#crtc .crtc_regs tr:not(.template)")];
             expect(regRows.map((row) => row.querySelector(".register").textContent)).toHaveLength(16);
             expect(regRows[0].querySelector(".register").textContent).toBe("R0");
             expect(regRows[0].querySelector(".value").textContent).toBe("00");
-            const stateRows = [...document.querySelectorAll("#crtc_debug .crtc_state tr:not(.template)")];
+            const stateRows = [...document.querySelectorAll("#crtc .crtc_state tr:not(.template)")];
             expect(stateRows.map((row) => row.querySelector(".register").textContent)).toContain("vertCounter");
         });
     });
@@ -993,7 +1227,7 @@ describe("Debugger", () => {
             });
         const rowAt = (address) => disRows().find((row) => Number(row.dataset.addr) === address);
         const code = (address) => rowAt(address).querySelector(".disassembly");
-        const symbolsLine = () => document.getElementById("debug-symbols");
+        const symbolsLine = () => document.querySelector("#disassembly-panel .debug-symbols");
         const credited = () => symbolsLine().style.visibility !== "hidden";
 
         beforeEach(() => {
@@ -1002,10 +1236,10 @@ describe("Debugger", () => {
             );
             [0x6c, 0x0e, 0x02, 0x60, 0xd0, 0xfa].forEach((byte, i) => cpu.writemem(OswrchAt + i, byte));
             load = vi.fn(async (url) => structuredClone(files.get(url)));
+            dbgr.hidePanels();
             document.body.innerHTML = "";
-            domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
-            dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: BaseUrl, load }) });
-            dbgr.setCpu(cpu);
+            domFromIndexHtml(...PanelElements);
+            dbgr = makeDebugger(new SymbolSets({ baseUrl: BaseUrl, load }));
         });
 
         it("names operands once the sets that match have arrived, noting a register by its own name", async () => {
@@ -1170,19 +1404,21 @@ describe("Debugger", () => {
             expect(memByte(0xf2).title).toBe("os_text_ptr: $00f2");
         });
 
-        it("credits a set whose names only the memory view shows", async () => {
+        it("credits a set whose names only the memory view shows in the memory panel's own line", async () => {
+            const memoryLine = () => document.querySelector("#memory-panel .debug-symbols");
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(credited()).toBe(true));
             dbgr.updateDisassembly(0x8000);
             expect(credited()).toBe(false);
             goTo("goto-mem-addr-form", "$3000");
-            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
-            goTo("goto-mem-addr-form", "$1000");
+            expect(memoryLine().textContent).toBe("names from Test MOS (source)");
             expect(credited()).toBe(false);
+            goTo("goto-mem-addr-form", "$1000");
+            expect(memoryLine().style.visibility).toBe("hidden");
         });
 
         it("watches a name typed while the machine runs, once opening the panel has fetched its set", async () => {
-            document.getElementById("watch-open").click();
+            dbgr.watches.floating.toggle();
             await vi.waitFor(() => expect(load).toHaveBeenCalledWith(`${BaseUrl}mos.json`));
             await vi.waitFor(() => expect(load.mock.settledResults.at(-1)?.type).toBe("fulfilled"));
             await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1277,7 +1513,7 @@ describe("Debugger", () => {
             await vi.waitFor(() => expect(credited()).toBe(true));
             dbgr.updateDisassembly(0x8000);
             expect(credited()).toBe(false);
-            expect(visible("debug-symbols")).toBe(true);
+            expect(symbolsLine().hidden).toBe(false);
         });
 
         it("names a clashing global in the address column after the set whose code the CPU is in", async () => {

@@ -6,6 +6,9 @@ import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
+import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
+import { describeAction, helpRows, keyLine } from "./panel-keys.js";
 
 const noop = () => {};
 
@@ -61,8 +64,6 @@ function externalLink(url, text = "") {
     link.target = "_blank";
     link.rel = "noopener";
     link.textContent = text;
-    // A focused link would keep the debugger's keys from reaching it, so no button may focus it.
-    link.addEventListener("mousedown", (e) => e.preventDefault());
     return link;
 }
 
@@ -190,52 +191,172 @@ class MemoryView {
     }
 }
 
+/** The keys of the debugger's toolbar, answering only in the debugger; see panel-keys.js for the shape. */
+export const ToolbarKeys = [
+    { combo: "g", key: "g", run: "go", label: "run", description: "Resume running" },
+    {
+        combo: "n N",
+        label: "step",
+        description: "Step one instruction (N: one clock cycle)",
+    },
+    { key: "n", run: "step" },
+    { key: "N", run: "stepCycle" },
+    {
+        combo: "m",
+        key: "m",
+        run: "stepOver",
+        label: "step over",
+        description: "Step over a call, or a loop from its backward branch",
+    },
+    {
+        combo: "o",
+        key: "o",
+        run: "stepOut",
+        label: "step out",
+        description: "Run until this subroutine or interrupt handler returns",
+    },
+];
+
+export const DisassemblyKeys = [
+    {
+        combo: "c",
+        key: "c",
+        run: "runToCursor",
+        label: "run to cursor",
+        description: "Run to the highlighted instruction",
+    },
+    {
+        combo: "t",
+        key: "t",
+        run: "toggleBreakpoint",
+        label: "breakpoint",
+        description: "Set or clear a breakpoint on the highlighted instruction",
+    },
+    { combo: "j k", label: "move", description: "Move the highlight down or up" },
+    { key: "j", run: "down" },
+    { key: "k", run: "up" },
+    { combo: "b", key: "b", run: "back", label: "back", description: "Back after clicking a jump target" },
+];
+
+export const MemoryKeys = [
+    { combo: "u i U I", label: "±8, ±64", description: "Memory forward (u, U) or back (i, I), 8 or 64 bytes" },
+    { key: "u", run: "forward" },
+    { key: "i", run: "back" },
+    { key: "U", run: "pageForward" },
+    { key: "I", run: "pageBack" },
+];
+
+/** Help's rows for every key the debugger's panels answer. */
+export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys]);
+
+const RememberedPanelsKey = "debugPanels";
+/** In the order they open, so that each opens after the panel it sits under. */
+const DebugPanelIds = ["toolbar", "disassembly", "registers", "memory", "peripherals"];
+const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
+/** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
+const PeripheralsWindowWidth = 1600;
+const MinPanelWidth = 220;
+/** The narrowest gutter the panels go in by default; narrower, the disassembly loses its operands. */
+const MinColumnWidth = 280;
+const StackBytesShown = 8;
+const MinSizes = {
+    toolbar: { w: 200, h: 30 },
+    disassembly: { w: MinPanelWidth, h: 120 },
+    registers: { w: 150, h: 60 },
+    memory: { w: MinPanelWidth, h: 100 },
+    peripherals: { w: MinPanelWidth, h: 120 },
+};
+const Titles = {
+    toolbar: "Debugger toolbar",
+    disassembly: "Disassembly",
+    registers: "Registers",
+    memory: "Memory",
+    peripherals: "Peripherals",
+};
+const below = (id) => ({ ...StartEdge, attach: { to: id, side: "after" } });
+/** Their places until the user arranges them: down the right of the screen, and down its left. */
+const DefaultPlaces = {
+    toolbar: { side: "right", x: EndEdge, y: StartEdge },
+    disassembly: { side: "right", x: EndEdge, y: below("toolbar") },
+    registers: { side: "right", x: EndEdge, y: below("disassembly") },
+    memory: { side: "left", x: StartEdge, y: StartEdge },
+    peripherals: { side: "left", x: StartEdge, y: below("memory") },
+};
+
+function rememberedPanels() {
+    try {
+        const ids = JSON.parse(window.localStorage.getItem(RememberedPanelsKey));
+        return Array.isArray(ids) ? DebugPanelIds.filter((id) => ids.includes(id)) : [];
+    } catch (error) {
+        console.warn(`Could not read which debug panels were open: ${error}`);
+        return [];
+    }
+}
+
+function rememberPanels(ids) {
+    try {
+        window.localStorage.setItem(RememberedPanelsKey, JSON.stringify(ids));
+    } catch (error) {
+        console.warn(`Could not save which debug panels were open: ${error}`);
+    }
+}
+
+/**
+ * The debugger: its panels (a toolbar, disassembly, memory, registers and peripherals), their
+ * keys, and running the machine to a stop. The panels open on entering the debugger, stay open
+ * and keep up with the machine once it runs again, and close on leaving it with Alt-S. They read
+ * the machine once a frame while it runs, and only while open, and nothing they read changes it.
+ */
 export class Debugger {
     /**
-     * @param {object} [options]
-     * @param {import("../symbol-sets.js").SymbolSets} [options.symbolSets] - where names for addresses come from
+     * @param {object} options
+     * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
+     * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      */
-    constructor({ symbolSets = null } = {}) {
+    constructor({ symbolSets, keys }) {
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
-        this._enabled = false;
+        this._inDebugger = false;
+        this._hidingPanels = false;
+        this._frameHandle = null;
+        this._screenBounds = () => null;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
         this._peek = peek;
+        this._credits = {
+            disassembly: { line: document.querySelector("#disassembly-panel .debug-symbols"), sets: null },
+            memory: { line: document.querySelector("#memory-panel .debug-symbols"), sets: null },
+        };
         this._memoryView = new MemoryView(
             document.getElementById("memory"),
             peek,
             () => ({ names: this._names, pc: this.cpu.pc }),
-            (sets) => {
-                this._memorySets = sets;
-                this._credit();
-            },
+            (sets) => this._credit(this._credits.memory, sets),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
-        this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
         this.disassStack = [];
-        this.uservia = this.sysvia = this.crtc = null;
+        this.uservia = this.sysvia = this.crtc = noop;
         this._sheila = [];
         this.breakpoints = {};
         this._symbolSets = symbolSets;
         this._names = NoNames;
-        this._symbolsLine = document.getElementById("debug-symbols");
-        this._credited = null;
-        this._disassemblySets = new Set();
-        this._memorySets = new Set();
-        toggle(this._symbolsLine, symbolSets !== null);
+        for (const credit of Object.values(this._credits)) toggle(credit.line, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
             // The index arriving is what lets the sets matching memory be fetched.
             if (this.watches.floating.isOpen) this._namesNow();
-            if (!this._enabled) return;
+            if (!this._inDebugger) return;
             this._matchSymbols();
             this.updateDisassembly(this.disassPc);
             this._memoryView.update();
         });
+
+        this.panels = Object.fromEntries(DebugPanelIds.map((id) => [id, this._makePanel(id)]));
+        this._bindToolbar();
+        this._bindKeys(keys);
 
         const setupGoto = (form, func) => {
             const addr = form.querySelector(".goto-addr");
@@ -255,8 +376,6 @@ export class Debugger {
 
         setupGoto(document.getElementById("goto-mem-addr-form"), (address) => this._memoryView.update(address));
         setupGoto(document.getElementById("goto-dis-addr-form"), this.updateDisassembly.bind(this));
-
-        this.enable(false);
 
         for (let i = 0; i < numToShow; i++) {
             cloneTemplate(this.disass);
@@ -301,19 +420,211 @@ export class Debugger {
         });
     }
 
+    _makePanel(id) {
+        const panel = document.getElementById(id === "toolbar" ? "debug-toolbar" : `${id}-panel`);
+        const { side, ...place } = DefaultPlaces[id];
+        const floating = new FloatingPanel({
+            panel,
+            header: panel.querySelector(".debug-panel-header"),
+            closeButton: panel.querySelector(".panel-close"),
+            id,
+            title: Titles[id],
+            place: () => ({ ...place, w: this._columnWidth(side) }),
+            minSize: MinSizes[id],
+            reopens: true,
+            arrangement: panelArrangement,
+        });
+        floating.addEventListener("open", () => {
+            this._rememberOpenPanels();
+            if (this._frameHandle === null) this._tick();
+            if (!this.cpu) return;
+            this._matchSymbols();
+            this._showPanel(id);
+            panelArrangement.keepAttached();
+        });
+        floating.addEventListener("close", () => {
+            this._rememberOpenPanels();
+            if (this.panelsShown()) return;
+            cancelAnimationFrame(this._frameHandle);
+            this._frameHandle = null;
+        });
+        return floating;
+    }
+
+    /**
+     * Has the panels' default places beside the screen, in the gutter on each side, when a gutter is
+     * wide enough for one.
+     * @param {function(): {left: number, right: number}} screenBounds - where the screen is across the window
+     */
+    placeBesideScreen(screenBounds) {
+        this._screenBounds = screenBounds;
+    }
+
+    _columnWidth(side) {
+        const screen = this._screenBounds();
+        if (!screen) return null;
+        const room = Math.floor((side === "left" ? screen.left : window.innerWidth - screen.right) - Gap);
+        return room >= MinColumnWidth ? room : null;
+    }
+
+    _bindToolbar() {
+        const panel = this.panels.toolbar.panel;
+        this._buttons = Object.fromEntries([...panel.querySelectorAll("[data-run]")].map((b) => [b.dataset.run, b]));
+        const actions = {
+            go: () => this._loop.go(),
+            stop: () => this._loop.stop(true),
+            step: () => this._fromDebugger(() => this.step()),
+            stepOver: () => this._fromDebugger(() => this.stepOver()),
+            stepOut: () => this._fromDebugger(() => this.stepOut()),
+            runToCursor: () => this._fromDebugger(() => this.runToCursor()),
+        };
+        for (const [run, button] of Object.entries(this._buttons)) {
+            button.addEventListener("click", actions[run]);
+            if (run === "runToCursor") button.title = describeAction(DisassemblyKeys, run);
+            else if (run !== "stop") button.title = describeAction(ToolbarKeys, run);
+        }
+    }
+
+    _bindKeys(keys) {
+        const { toolbar, disassembly, memory } = this.panels;
+        keys.register({
+            table: ToolbarKeys,
+            actions: {
+                go: () => this._loop.go(),
+                step: () => this.step(),
+                stepCycle: () => {
+                    this.updatePrevMem();
+                    this.cpu.execute(1);
+                    this.debug(this.cpu.pc);
+                },
+                stepOver: () => this.stepOver(),
+                stepOut: () => this.stepOut(),
+            },
+            isLive: () => toolbar.isOpen && this._loop.mode === RunMode.debugging,
+            panel: toolbar,
+        });
+        keys.register({
+            table: DisassemblyKeys,
+            actions: {
+                runToCursor: () => this._fromDebugger(() => this.runToCursor()),
+                toggleBreakpoint: () => {
+                    this.toggleBreakpoint(this.disassPc);
+                    this.updateDisassembly(this.disassPc);
+                },
+                down: () => this.updateDisassembly(this.nextInstruction(this.disassPc)),
+                up: () => this.updateDisassembly(this.prevInstruction(this.disassPc)),
+                back: () => {
+                    if (this.disassStack.length) this.updateDisassembly(this.disassStack.pop());
+                },
+            },
+            isLive: () => disassembly.isOpen,
+            panel: disassembly,
+        });
+        keys.register({
+            table: MemoryKeys,
+            actions: {
+                forward: () => this._memoryView.step(8),
+                back: () => this._memoryView.step(-8),
+                pageForward: () => this._memoryView.step(64),
+                pageBack: () => this._memoryView.step(-64),
+            },
+            isLive: () => memory.isOpen,
+            panel: memory,
+        });
+        disassembly.panel.querySelector(".panel-keys").textContent = keyLine(DisassemblyKeys);
+        memory.panel.querySelector(".panel-keys").textContent = keyLine(MemoryKeys);
+    }
+
+    /** Runs `act`, entering the debugger first, with the cursor where it was, if the machine is merely paused. */
+    _fromDebugger(act) {
+        if (this._loop.mode !== RunMode.debugging) {
+            const cursor = this.disassPc;
+            this._loop.stop(true);
+            this.updateDisassembly(cursor);
+        }
+        act();
+    }
+
+    panelsShown() {
+        return Object.values(this.panels).some((floating) => floating.isOpen);
+    }
+
+    /** Opens the panels that were open when the debugger's were last seen, or the defaults if none were. */
+    showPanels() {
+        const remembered = rememberedPanels();
+        const ids = remembered.length
+            ? remembered
+            : window.innerWidth >= PeripheralsWindowWidth
+              ? DebugPanelIds
+              : NarrowWindowPanels;
+        // Filled first, so that they are laid out at the size they will be.
+        if (this.cpu) {
+            this._matchSymbols();
+            for (const id of ids) this._showPanel(id);
+        }
+        for (const id of ids) this.panels[id].open();
+    }
+
+    /** Closes the debugger's panels, remembering which were open for the next showPanels. */
+    hidePanels() {
+        this._hidingPanels = true;
+        for (const floating of Object.values(this.panels)) floating.close();
+        this._hidingPanels = false;
+    }
+
+    togglePanels() {
+        if (this.panelsShown()) this.hidePanels();
+        else this.showPanels();
+    }
+
+    /** Enters the debugger, stopping the machine; or leaves it, closing its panels, and runs the machine on. */
+    toggleDebugger() {
+        if (this._loop.mode !== RunMode.debugging) return this._loop.stop(true);
+        this._loop.go();
+        this.hidePanels();
+    }
+
+    _rememberOpenPanels() {
+        if (this._hidingPanels) return;
+        rememberPanels(DebugPanelIds.filter((id) => this.panels[id].isOpen));
+    }
+
+    _tick() {
+        this._frameHandle = null;
+        if (!this.panelsShown()) return;
+        if (this._loop?.isRunning()) {
+            for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
+        }
+        this._frameHandle = requestAnimationFrame(() => this._tick());
+    }
+
+    /** Brings one panel up to date with the machine; the disassembly follows the program counter while it runs. */
+    _showPanel(id) {
+        if (id === "disassembly")
+            this.updateDisassembly(this._loop?.isRunning() || !this._inDebugger ? this.cpu.pc : this.disassPc);
+        else if (id === "memory") this._memoryView.update();
+        else if (id === "registers") this.updateRegisters();
+        else if (id === "peripherals") {
+            this.sysvia();
+            this.uservia();
+            this.crtc();
+        }
+    }
+
     setCpu(cpu) {
         this.cpu = cpu;
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
-        this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);
+        this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
         this._sheila = sheilaBlocks({
             model: cpu.model,
             hasTube: cpu.hasTube,
             hasEconet: !!cpu.econet,
             hasVideoNula: cpu.video.ula.hasVideoNula,
         });
+        for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
+        panelArrangement.keepAttached();
     }
-
     disassemble(addr) {
         return this.cpu.disassembler.disassemble(addr);
     }
@@ -428,6 +739,16 @@ export class Debugger {
     }
 
     updateRegisters() {
+        const cpu = this.cpu;
+        const top = (cpu.s + 1) & 0xff;
+        const stack = [];
+        for (let at = top; at <= 0xff && at > cpu.s && stack.length < StackBytesShown; at++)
+            stack.push(hexbyte(cpu.peekmem(0x100 + at)));
+        this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
+        this.updateElem(
+            document.getElementById("cpu6502_cycles"),
+            String(cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles),
+        );
         this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
         this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
         this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
@@ -481,7 +802,6 @@ export class Debugger {
 
     debug(where) {
         this.cancelRun();
-        this.enable(true);
         this._matchSymbols();
         this.updateDisassembly(where);
         this.updateRegisters();
@@ -489,6 +809,11 @@ export class Debugger {
         this.sysvia();
         this.uservia();
         this.crtc();
+        if (!this._inDebugger) {
+            noteFeature("debugger", "open");
+            this._inDebugger = true;
+            this.showPanels();
+        }
         this.cpu.video.debugPaint();
     }
 
@@ -496,14 +821,15 @@ export class Debugger {
         this._names = this._namesNow();
     }
 
-    _credit() {
-        const sets = this._names.sets.filter((set) => this._disassemblySets.has(set) || this._memorySets.has(set));
-        if (this._credited?.length === sets.length && sets.every((set, i) => set === this._credited[i])) return;
-        this._credited = sets;
-        this._symbolsLine.style.visibility = sets.length > 0 ? "" : "hidden";
-        this._symbolsLine.replaceChildren(
+    /** Credits the sets whose names a panel shows, in its own line. */
+    _credit(credit, sets) {
+        const credited = this._names.sets.filter((set) => sets.has(set));
+        if (credit.sets?.size === credited.length && credited.every((set) => credit.sets.has(set))) return;
+        credit.sets = new Set(credited);
+        credit.line.style.visibility = credited.length > 0 ? "" : "hidden";
+        credit.line.replaceChildren(
             "names from ",
-            ...sets.flatMap((set, i) => {
+            ...credited.flatMap((set, i) => {
                 const title = document.createElement("span");
                 title.className = "symbol-set";
                 title.textContent = set.title;
@@ -511,19 +837,7 @@ export class Debugger {
                 return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
             }),
         );
-    }
-
-    enable(e) {
-        // A run handed to the loop keeps the memory it started from, to show what it changed.
-        if (this._enabled && !e && !this._runningTo) {
-            this.updatePrevMem();
-        }
-        if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
-        if (this._enabled && !e) this.watches.dismissMenu();
-        this._enabled = e;
-        const focused = document.activeElement;
-        if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();
-        for (const node of this.debugNodes) toggle(node, this._enabled);
+        panelArrangement.keepAttached();
     }
 
     _namesNow() {
@@ -539,8 +853,9 @@ export class Debugger {
         return { address, label: label ?? `$${hexword(address)}` };
     }
 
+    /** Whether the machine is stopped in the debugger. */
     enabled() {
-        return this._enabled;
+        return this._inDebugger;
     }
 
     updateDisassembly(address) {
@@ -613,8 +928,7 @@ export class Debugger {
             address = this.prevInstruction(address);
             updateDisElem(elems[i], address);
         }
-        this._disassemblySets = shown;
-        this._credit();
+        this._credit(this._credits.disassembly, shown);
     }
 
     prevInstruction(address) {
@@ -625,15 +939,32 @@ export class Debugger {
         this._memoryView.snapshot();
     }
 
+    /** Leaves the debugger as the machine runs or pauses, leaving its panels open. */
     hide() {
         // Only running carries a run on; a pause or a frame step ends it, as entering the debugger does.
         if (this._loop?.mode !== RunMode.running) this.cancelRun();
-        this.enable(false);
+        if (!this._inDebugger) return;
+        // A run handed to the loop keeps the memory it started from, to show what it changed.
+        if (!this._runningTo) this.updatePrevMem();
+        this.watches.dismissMenu();
+        this._inDebugger = false;
+        // Focus left in a goto box would keep the keyboard from the machine.
+        const focused = document.activeElement;
+        if (Object.values(this.panels).some((floating) => floating.panel.contains(focused))) focused.blur();
     }
 
     /** The loop that runs the machine for the steps that need running. */
     attachLoop(loop) {
         this._loop = loop;
+        loop.addEventListener("running", () => this._showRunning());
+        this._showRunning();
+    }
+
+    _showRunning() {
+        const running = this._loop.isRunning();
+        for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
+        // Its last frame may have run on after the panels' last look at it.
+        if (!running && this.cpu) for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
     }
 
     /** Runs one instruction, stepping off a breakpoint on it; false when a watch stopped the machine in it. */
@@ -759,56 +1090,5 @@ export class Debugger {
         const address = parseInt(disElem.dataset.addr, 10);
         this.toggleBreakpoint(address);
         e.target.closest(".bp_gutter").classList.toggle("active", !!this.breakpoints[address]);
-    }
-
-    keyPress(key) {
-        if (document.activeElement && document.activeElement !== document.body) {
-            return false;
-        }
-        switch (key) {
-            case "b":
-                if (this.disassStack.length) this.updateDisassembly(this.disassStack.pop());
-                break;
-            case "k":
-                this.updateDisassembly(this.prevInstruction(this.disassPc));
-                break;
-            case "j":
-                this.updateDisassembly(this.nextInstruction(this.disassPc));
-                break;
-            case "t":
-                this.toggleBreakpoint(this.disassPc);
-                this.updateDisassembly(this.disassPc);
-                break;
-            case "u":
-                this._memoryView.step(8);
-                break;
-            case "i":
-                this._memoryView.step(-8);
-                break;
-            case "U":
-                this._memoryView.step(64);
-                break;
-            case "I":
-                this._memoryView.step(-64);
-                break;
-            case "n":
-                this.step();
-                break;
-            case "N":
-                this.updatePrevMem();
-                this.cpu.execute(1);
-                this.debug(this.cpu.pc);
-                break;
-            case "m":
-                this.stepOver();
-                break;
-            case "o":
-                this.stepOut();
-                break;
-            case "c":
-                this.runToCursor();
-                break;
-        }
-        return true;
     }
 }

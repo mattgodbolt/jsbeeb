@@ -1,4 +1,5 @@
 import arrowCounterclockwise from "bootstrap-icons/icons/arrow-counterclockwise.svg?raw";
+import bug from "bootstrap-icons/icons/bug.svg?raw";
 import cassette from "bootstrap-icons/icons/cassette.svg?raw";
 import clockHistory from "bootstrap-icons/icons/clock-history.svg?raw";
 import display from "bootstrap-icons/icons/display.svg?raw";
@@ -17,6 +18,7 @@ import volumeUp from "bootstrap-icons/icons/volume-up.svg?raw";
 /** The Bootstrap Icons the page uses, by their upstream names; nothing else of the set is bundled. */
 const Icons = {
     "arrow-counterclockwise": arrowCounterclockwise,
+    bug,
     cassette,
     "clock-history": clockHistory,
     display,

@@ -55,7 +55,8 @@ describe("FloatingPanel", () => {
             header,
             closeButton: panel.querySelector(".close"),
             id,
-            place,
+            title: reopens ? id : null,
+            place: () => place,
             minSize: { w: 120, h: 60 },
             reopens,
             arrangement,
@@ -339,6 +340,91 @@ describe("FloatingPanel", () => {
             drag(header(floating), { x: 20, y: 70 }, { x: 220, y: 270 });
             expect(rectOf(floating)).toMatchObject({ x: 200, y: NavbarHeight + 200 });
             expect(warn).toHaveBeenCalled();
+        });
+    });
+
+    describe("the keyboard", () => {
+        it("keeps its buttons and links from focus", () => {
+            const floating = watches();
+            floating.open();
+            floating.panel.insertAdjacentHTML("beforeend", `<a href="#" class="link">link</a>`);
+            for (const target of [floating.panel.querySelector(".close"), floating.panel.querySelector(".link")]) {
+                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+                target.dispatchEvent(press);
+                expect(press.defaultPrevented).toBe(true);
+            }
+        });
+
+        it("gives the keyboard back on Escape in one of its text fields, and closes on Escape elsewhere in it", () => {
+            const floating = watches();
+            floating.open();
+            const field = floating.panel.querySelector(".inside");
+            field.classList.add("panel-field");
+            const pageSaw = vi.fn();
+            document.addEventListener("keydown", pageSaw);
+            field.focus();
+            field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            expect(document.activeElement).not.toBe(field);
+            expect(floating.isOpen).toBe(true);
+            floating.panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            expect(floating.isOpen).toBe(false);
+            document.removeEventListener("keydown", pageSaw);
+            expect(pageSaw).not.toHaveBeenCalled();
+        });
+
+        it("ranks panels by which was clicked or opened last", () => {
+            const [one, two] = [watches(), disc()];
+            one.open();
+            two.open();
+            expect(arrangement.frontmost([one, two])).toBe(two);
+            one.panel.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+            expect(arrangement.frontmost([one, two])).toBe(one);
+            expect(arrangement.frontmost([])).toBe(null);
+        });
+
+        it("lists the panels with a title, in the registry's order", () => {
+            media();
+            disc();
+            watches();
+            expect(arrangement.listed().map((floating) => floating.id)).toEqual(["watches", "disc"]);
+        });
+    });
+
+    describe("attached panels", () => {
+        const above = () => make("disassembly", { x: StartEdge, y: StartEdge }, true);
+        const below = () =>
+            make(
+                "registers",
+                { x: StartEdge, y: { ...StartEdge, attach: { to: "disassembly", side: "after" } } },
+                true,
+            );
+
+        it("sit under the panel they are attached to by default, and follow it as its content grows", () => {
+            const top = above();
+            const under = below();
+            top.open();
+            under.open();
+            expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + Gap);
+            boxFromStyle(top.panel, { w: Natural.w, h: Natural.h + 40 });
+            arrangement.keepAttached();
+            expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + 40 + Gap);
+        });
+
+        it("lay out nothing again while they still abut", () => {
+            const top = above();
+            const under = below();
+            top.open();
+            under.open();
+            const relayout = vi.spyOn(arrangement, "relayout");
+            arrangement.keepAttached();
+            expect(relayout).not.toHaveBeenCalled();
+        });
+
+        it("are measured at the width their default place gives them", () => {
+            const floating = make("memory", { x: StartEdge, y: StartEdge, w: 150 }, true);
+            floating.open();
+            expect(rectOf(floating).w).toBe(150);
+            expect(floating.measure().natural.w).toBe(150);
         });
     });
 });

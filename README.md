@@ -185,17 +185,18 @@ same for that row.
 
 ### Emulator Shortcuts
 
-| Shortcut         | Action                                     |
-| ---------------- | ------------------------------------------ |
-| `Alt-S`          | Enter the debugger, or leave it and resume |
-| `Alt-P`          | Pause emulation, or resume                 |
-| `Alt-T`          | Toggle turbo (fast-as-possible)            |
-| `Alt-B`          | Open printer output window                 |
-| `Alt-W`          | Open rewind scrubber                       |
-| `Alt-M`          | Media window, aimed at drive 0             |
-| `Alt-Shift-M`    | Media window, aimed at drive 1             |
-| `Alt-C`          | Media window, aimed at the cassette        |
-| `Alt-1 to Alt-8` | Hold an accessibility switch down          |
+| Shortcut         | Action                                                                |
+| ---------------- | --------------------------------------------------------------------- |
+| `Alt-S`          | Enter the debugger, or leave it and resume                            |
+| `Alt-D`          | Show or hide the debug panels, leaving the machine running or stopped |
+| `Alt-P`          | Pause emulation, or resume                                            |
+| `Alt-T`          | Toggle turbo (fast-as-possible)                                       |
+| `Alt-B`          | Open printer output window                                            |
+| `Alt-W`          | Open rewind scrubber                                                  |
+| `Alt-M`          | Media window, aimed at drive 0                                        |
+| `Alt-Shift-M`    | Media window, aimed at drive 1                                        |
+| `Alt-C`          | Media window, aimed at the cassette                                   |
+| `Alt-1 to Alt-8` | Hold an accessibility switch down                                     |
 
 Every shortcut is on `Alt`, so that `Ctrl` belongs to the emulated machine: `Ctrl-B` is `VDU 2` on a BBC, `Ctrl-L`
 clears the screen, and jsbeeb should not be taking any of them.

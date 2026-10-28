@@ -95,7 +95,6 @@ export class DiscVisualiser {
         this.hoverWhatElem = document.getElementById("disc-hover-what");
         this.legendElem = document.getElementById("disc-legend");
         this.sideControls = document.getElementById("disc-side-controls");
-        this.openBtn = document.getElementById("disc-visualiser-open");
 
         this._view = "density";
         this._driveIndex = 0;
@@ -122,16 +121,13 @@ export class DiscVisualiser {
         };
         this._onResize = () => this._resize();
         this._resizeObserver = new ResizeObserver(this._onResize);
-        this.openBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            this.toggle();
-        });
         this.floating = new FloatingPanel({
             panel: this.panel,
             header: this.panel.querySelector(".disc-header"),
             closeButton: document.getElementById("disc-close"),
             id: "disc",
-            place: { x: EndEdge, y: StartEdge },
+            title: "Disc surface",
+            place: () => ({ x: EndEdge, y: StartEdge }),
             minSize: MinPanelSize,
             reopens: true,
             arrangement: panelArrangement,

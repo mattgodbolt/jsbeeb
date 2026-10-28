@@ -117,6 +117,33 @@
               <a
                 href="#"
                 class="nav-link dropdown-toggle"
+                id="navbarDebug"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                aria-label="Debug"
+                title="Debug"
+                ><span class="nav-icon d-xl-none me-1" data-icon="bug" aria-hidden="true"></span
+                ><span class="nav-word d-none d-xl-inline">Debug</span></a
+              >
+              <ul class="dropdown-menu dropdown-menu-dark" id="debug-menu" aria-labelledby="navbarDebug">
+                <li>
+                  <a href="#" id="debugger-toggle" class="dropdown-item menu-with-key"
+                    ><span class="menu-label">Enter the debugger</span><span class="menu-key">Alt-S</span></a
+                  >
+                </li>
+                <li>
+                  <a href="#" id="debug-views-toggle" class="dropdown-item menu-with-key"
+                    ><span class="menu-label">Show the debug panels</span><span class="menu-key">Alt-D</span></a
+                  >
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown embed-hide">
+              <a
+                href="#"
+                class="nav-link dropdown-toggle"
                 id="navbarMore"
                 role="button"
                 data-bs-toggle="dropdown"
@@ -128,8 +155,6 @@
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
                 <li><a href="#" id="fs" data-feature="fullscreen" class="dropdown-item">Fullscreen</a></li>
-                <li><a href="#" id="disc-visualiser-open" class="dropdown-item">Disc surface</a></li>
-                <li><a href="#" id="watch-open" class="dropdown-item">Watches</a></li>
                 <li><hr class="dropdown-divider" /></li>
                 <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
                 <li id="fsmenuitem">
@@ -364,7 +389,7 @@
             <input
               type="text"
               id="watch-add"
-              class="form-control form-control-sm"
+              class="form-control form-control-sm panel-field"
               aria-label="Name or address to watch"
               placeholder="Name or address, then Enter"
               autocomplete="off"
@@ -377,6 +402,167 @@
         </div>
       </div>
       <div id="watch-menu" hidden></div>
+      <div id="debug-toolbar" class="debug-panel" hidden>
+        <div class="debug-panel-header">
+          <span class="disc-title">Debugger</span>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Run and stop">
+            <button type="button" class="btn btn-outline-light" data-run="go" aria-label="Run">
+              <span data-icon="play-fill" aria-hidden="true"></span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-light"
+              data-run="stop"
+              aria-label="Stop"
+              title="Stop in the debugger (Alt-S)"
+            >
+              <span data-icon="pause-fill" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Step">
+            <button type="button" class="btn btn-outline-light" data-run="step">Step</button>
+            <button type="button" class="btn btn-outline-light" data-run="stepOver">Over</button>
+            <button type="button" class="btn btn-outline-light" data-run="stepOut">Out</button>
+            <button type="button" class="btn btn-outline-light" data-run="runToCursor">Cursor</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
+            &times;
+          </button>
+        </div>
+      </div>
+      <div id="disassembly-panel" class="debug-panel" hidden>
+        <div class="debug-panel-header">
+          <span class="disc-title">Disassembly</span>
+          <form role="form" id="goto-dis-addr-form" class="goto-form">
+            <input
+              type="text"
+              class="form-control form-control-sm goto-addr panel-field"
+              placeholder="Go to"
+              aria-label="Disassembly address"
+              autocomplete="off"
+            />
+          </form>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+        </div>
+        <div class="panel-body">
+          <div id="disassembly">
+            <div class="template dis_elem">
+              <span class="bp_gutter"></span><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span
+              ><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span>
+            </div>
+          </div>
+          <div class="debug-symbols"></div>
+          <div class="panel-keys"></div>
+        </div>
+      </div>
+      <div id="memory-panel" class="debug-panel" hidden>
+        <div class="debug-panel-header">
+          <span class="disc-title">Memory</span>
+          <form role="form" id="goto-mem-addr-form" class="goto-form">
+            <input
+              type="text"
+              class="form-control form-control-sm goto-addr panel-field"
+              placeholder="Go to"
+              aria-label="Memory address"
+              autocomplete="off"
+            />
+          </form>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+        </div>
+        <div class="panel-body">
+          <div id="memory">
+            <div class="template">
+              <span class="dis_addr">0000</span
+              ><span class="mem_bytes"
+                ><span>11</span> <span>22</span> <span>33</span> <span>44</span> <span>55</span> <span>66</span>
+                <span>77</span> <span>88</span></span
+              ><span class="mem_asc"
+                ><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span
+                ><span>A</span></span
+              >
+            </div>
+          </div>
+          <div class="debug-symbols"></div>
+          <div class="panel-keys"></div>
+        </div>
+      </div>
+      <div id="registers-panel" class="debug-panel" hidden>
+        <div class="debug-panel-header">
+          <span class="disc-title">Registers</span>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+        </div>
+        <div class="panel-body" id="registers">
+          <div>
+            <span class="register">A</span> <span id="cpu6502_a">00</span> <span class="register">X</span>
+            <span id="cpu6502_x">00</span> <span class="register">Y</span> <span id="cpu6502_y">00</span>
+            <span class="register">S</span> <span id="cpu6502_s">00</span>
+          </div>
+          <div>
+            <span class="register">PC</span> <span id="cpu6502_pc">0000</span>
+            <span class="flags"
+              ><span class="flag" id="cpu6502_flag_n">N</span><span class="flag" id="cpu6502_flag_v">V</span
+              ><span class="flag" id="cpu6502_flag_d">D</span><span class="flag" id="cpu6502_flag_i">I</span
+              ><span class="flag" id="cpu6502_flag_z">Z</span><span class="flag" id="cpu6502_flag_c">C</span></span
+            >
+          </div>
+          <div><span class="register">Stack</span> <span id="cpu6502_stack"></span></div>
+          <div><span class="register">Cycles</span> <span id="cpu6502_cycles"></span></div>
+        </div>
+      </div>
+      <div id="peripherals-panel" class="debug-panel" hidden>
+        <div class="debug-panel-header">
+          <span class="disc-title">Peripherals</span>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+        </div>
+        <div class="panel-body">
+          <div class="via_regs" id="sysvia">
+            <h6 class="dbg">System VIA</h6>
+            <table>
+              <tbody>
+                <tr class="template">
+                  <th><span class="register"></span>:</th>
+                  <td class="value"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="via_regs" id="uservia">
+            <h6 class="dbg">User VIA</h6>
+            <table>
+              <tbody>
+                <tr class="template">
+                  <th><span class="register"></span>:</th>
+                  <td class="value"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="crtc">
+            <div class="crtc_state">
+              <h6 class="dbg">6845 state</h6>
+              <table>
+                <tbody>
+                  <tr class="template">
+                    <th><span class="register"></span>:</th>
+                    <td class="value"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="crtc_regs">
+              <h6 class="dbg">6845 regs</h6>
+              <table>
+                <tbody>
+                  <tr class="template">
+                    <th><span class="register"></span>:</th>
+                    <td class="value"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="leds">
         <div class="slot-readouts" role="group" aria-label="What is loaded">
           <button type="button" class="slot-readout media-window-open bbc-only" data-slot="0">
@@ -730,123 +916,6 @@
           </div>
         </section>
       </template>
-      <div id="crtc_debug" class="initially-hidden">
-        <div class="crtc_state">
-          <h6 class="dbg">6845 state</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="crtc_regs">
-          <h6 class="dbg">6845 regs</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div id="debug" data-feature="debugger" class="initially-hidden">
-        <div class="debug-container">
-          <form id="goto-mem-addr-form" role="form">
-            <div class="input-group input-group-sm">
-              <span accesskey="m" class="input-group-text" id="mem_addr_text">
-                <span class="accesskey">M</span>em addr:
-              </span>
-              <input
-                type="text"
-                class="form-control form-control-sm goto-addr"
-                placeholder="$0000"
-                aria-label="Memory address"
-                aria-describedby="mem_addr_text"
-              />
-            </div>
-          </form>
-          <div id="memory">
-            <div class="template">
-              <span class="dis_addr">0000</span
-              ><span class="mem_bytes"
-                ><span>11</span> <span>22</span> <span>33</span> <span>44</span> <span>55</span> <span>66</span>
-                <span>77</span> <span>88</span></span
-              ><span class="mem_asc"
-                ><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span
-                ><span>A</span></span
-              >
-            </div>
-          </div>
-        </div>
-        <div class="debug-container">
-          <form role="form" id="goto-dis-addr-form">
-            <div class="input-group input-group-sm">
-              <span accesskey="a" class="input-group-text" id="dis_addr_text"
-                ><span class="accesskey">A</span>ddr:</span
-              >
-              <input
-                type="text"
-                class="form-control form-control-sm goto-addr"
-                placeholder="$0000"
-                aria-label="Disassembly address"
-                aria-describedby="dis_addr_text"
-              />
-            </div>
-          </form>
-          <div id="disassembly">
-            <div class="template dis_elem">
-              <span class="bp_gutter"></span><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span
-              ><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span>
-            </div>
-          </div>
-        </div>
-        <div id="registers">
-          <div>
-            <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span
-            ><span class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span
-            ><span class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
-          </div>
-          <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
-          <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
-          <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
-          <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
-          <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
-        </div>
-        <div id="debug-symbols"></div>
-        <div id="debug-keys">
-          g run &middot; n step &middot; m step over &middot; o step out &middot; c run to cursor &middot; t breakpoint
-          &middot; j/k move &middot; b back &middot; u/i memory &plusmn;8 &middot; U/I memory &plusmn;64
-        </div>
-      </div>
-      <div id="hardware_debug" class="initially-hidden">
-        <div class="via_regs" id="sysvia">
-          <h6 class="dbg">System VIA</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="via_regs" id="uservia">
-          <h6 class="dbg">User VIA</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
 
     <div class="modal fade" id="info" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
@@ -1039,6 +1108,10 @@
                       <td>Stop or start; when stopped, the debugger shows</td>
                     </tr>
                     <tr>
+                      <td><span class="key">Alt-D</span></td>
+                      <td>Show or hide the debug panels, leaving the machine as it is</td>
+                    </tr>
+                    <tr>
                       <td><span class="key">Alt-P</span></td>
                       <td>Pause or resume, no debugger</td>
                     </tr>
@@ -1075,50 +1148,10 @@
                 <h5>Paused or debugging</h5>
                 <p>
                   After <span class="key">Alt-P</span>, <span class="key">g</span> resumes and
-                  <span class="key">n</span> runs one frame. In the debugger (<span class="key">Alt-S</span>):
+                  <span class="key">n</span> runs a frame. In the debugger:
                 </p>
                 <table class="table table-sm">
-                  <tbody>
-                    <tr>
-                      <td><span class="key">g</span></td>
-                      <td>Resume running</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">n</span></td>
-                      <td>Step one instruction</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">m</span></td>
-                      <td>Step over a subroutine call, or over a loop from its backward branch</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">o</span></td>
-                      <td>Run until the current subroutine or interrupt handler returns</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">c</span></td>
-                      <td>Run to the highlighted instruction</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">t</span></td>
-                      <td>Set or clear a breakpoint on the highlighted instruction</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">j</span> <span class="key">k</span></td>
-                      <td>Move the highlight down or up</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">b</span></td>
-                      <td>Back after clicking a jump target</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="key">u</span> <span class="key">i</span> <span class="key">U</span>
-                        <span class="key">I</span>
-                      </td>
-                      <td>Memory forward (u, U) or back (i, I), 8 or 64 bytes</td>
-                    </tr>
-                  </tbody>
+                  <tbody id="debug-keys-help"></tbody>
                 </table>
               </div>
             </div>

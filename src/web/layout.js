@@ -128,10 +128,17 @@ export class Layout {
         return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
     }
 
-    resize() {
+    /** Where the monitor goes across the window as it is now, worked out afresh rather than read from the page. */
+    screenBounds() {
+        const { width } = this._fit().monitor;
+        const left = (window.innerWidth - width) / 2;
+        return { left, right: left + width };
+    }
+
+    _fit() {
         // The display config can change when the display mode switches.
         const displayConfig = this.display.filterClass.getDisplayConfig();
-        const fitted = fitMonitor(
+        return fitMonitor(
             displayConfig,
             {
                 innerWidth: window.innerWidth,
@@ -143,7 +150,10 @@ export class Layout {
             },
             { width: this.screenCanvas.getAttribute("width"), height: this.screenCanvas.getAttribute("height") },
         );
+    }
 
+    resize() {
+        const fitted = this._fit();
         this.cubMonitor.style.height = fitted.monitor.height + "px";
         this.cubMonitor.style.width = fitted.monitor.width + "px";
         this.cubMonitorPic.style.height = fitted.monitor.height + "px";
