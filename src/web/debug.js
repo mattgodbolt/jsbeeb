@@ -652,8 +652,8 @@ export class Debugger {
     }
 
     /**
-     * Runs the machine until `stopsHere()`, asked before each instruction, says to stop at it, or anything else
-     * stops the machine. Its answer at the first instruction is not taken, so a run can come round to where it
+     * Runs the machine until `stopsHere()`, asked before each instruction after the first, says to stop at it, or
+     * anything else stops the machine. The first instruction always runs, so a run can come round to where it
      * starts. A reset ends the run without stopping, unless `stopsAtReset` and `stopsHere()` holds at the entry.
      * A run that ends within a fiftieth of a second ends here, so the debugger never leaves the screen; a longer
      * one goes on in the loop, with the machine shown running, and lasts through holds such as a dialog or a
@@ -662,7 +662,6 @@ export class Debugger {
     runTo(stopsHere, stopsAtReset) {
         this.updatePrevMem();
         const cpu = this.cpu;
-        stopsHere();
         if (!this.executeOne()) return this.debug(cpu.pc);
         const resetEntry = this.resetEntry();
         this._runningTo = cpu.debugInstruction.add((pc) => {
@@ -716,7 +715,7 @@ export class Debugger {
 
     stepOut() {
         const s = this.cpu.s;
-        let returning = false;
+        let returning = ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
         this.runTo(() => {
             if (returning) return true;
             returning = notDeeper(this.cpu.s, s) && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
