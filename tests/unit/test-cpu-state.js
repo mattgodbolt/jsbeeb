@@ -68,6 +68,13 @@ function addressesFrom(start, end) {
     return Array.from({ length: end - start }, (_, i) => start + i);
 }
 
+function expectAdlcStatusAtEveryMirror(cpu) {
+    const statusMirrors = addressesFrom(AdlcStatus1, AdcStart).filter((addr) => (addr & 3) < 2);
+    expect(statusMirrors.map((addr) => cpu.readDevice(addr))).toEqual(
+        statusMirrors.map((addr) => cpu.readDevice(AdlcStatus1 + (addr & 3))),
+    );
+}
+
 const ProgramStart = 0x2000;
 const ProgramCycles = 12345;
 const RomSelect = 0xfe30;
@@ -357,11 +364,13 @@ describe("Cpu6502 econet NMI line", () => {
 
     it("reads the ADLC's status registers at every mirror", () => {
         raiseAdlcIrq(cpu);
-        const statusMirrors = addressesFrom(AdlcStatus1, AdcStart).filter((addr) => (addr & 3) < 2);
+        expectAdlcStatusAtEveryMirror(cpu);
+    });
 
-        expect(statusMirrors.map((addr) => cpu.readDevice(addr))).toEqual(
-            statusMirrors.map((addr) => cpu.readDevice(AdlcStatus1 + (addr & 3))),
-        );
+    it("leaves the line alone when the station ID mirrors are peeked", () => {
+        raiseAdlcIrq(cpu);
+        for (const addr of addressesFrom(StationIdRegister, NmiEnableRegister)) cpu.peekmem(addr);
+        expect(cpu.nmi).toBe(true);
     });
 
     it("does not touch the disc controller's line", () => {
@@ -393,6 +402,13 @@ describe("Cpu6502 econet NMI line on a Master", () => {
         cpu.readDevice(MasterStationIdRegister);
         for (const addr of ModelBOnlyMirrors) cpu.readDevice(addr);
         expect(cpu.nmi).toBe(false);
+    });
+
+    it("reads the ADLC's status registers at every mirror", async () => {
+        const cpu = fake6502(findModel("Master"), { econet: true });
+        await cpu.initialise();
+        raiseAdlcIrq(cpu);
+        expectAdlcStatusAtEveryMirror(cpu);
     });
 });
 
