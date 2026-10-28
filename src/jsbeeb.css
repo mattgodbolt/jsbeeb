@@ -1031,19 +1031,33 @@ small {
   margin-left: auto;
 }
 
-.disc-stack {
+#disc-panel .panel-body {
+  display: flex;
+  flex-direction: column;
+}
+
+#disc-panel .panel-body > * {
+  flex-shrink: 0;
+}
+
+/* Square at the panel's width, and given less height the disc shrinks to fit it rather than the body scrolling. */
+#disc-panel .disc-stack {
   position: relative;
+  flex: 1 1 auto;
+  aspect-ratio: 1;
+  min-height: 120px;
+  container-type: size;
 }
 
 .disc-stack canvas {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
 }
 
 #disc-overlay {
-  position: absolute;
-  inset: 0;
   cursor: crosshair;
   /* Claim wheel and drag gestures, or the page scrolls instead. */
   touch-action: none;

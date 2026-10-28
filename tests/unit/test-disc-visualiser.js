@@ -5,7 +5,6 @@ import { DiscVisualiser } from "../../src/web/disc-visualiser.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
-import { Gap } from "../../src/web/panel-layout.js";
 import { domFromIndexHtml, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
@@ -125,8 +124,8 @@ describe("DiscVisualiser", () => {
             expect(panel().style.left).toBe(`${left - 100}px`);
             expect(panel().style.top).toBe(`${top + 15}px`);
             header.dispatchEvent(new PointerEvent("pointermove", at(-1000, -1000)));
-            expect(panel().style.left).toBe(`${Gap}px`);
-            expect(panel().style.top).toBe(`${Gap}px`);
+            expect(panel().style.left).toBe("0px");
+            expect(panel().style.top).toBe("0px");
         });
 
         it("redraws its surface at the size the canvas is resized to, while open", () => {

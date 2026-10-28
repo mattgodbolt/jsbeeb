@@ -21,10 +21,9 @@ import {
 } from "../../src/web/panel-layout.js";
 
 const NavbarHeight = 56;
-const LightsHeight = 50;
 const HeaderHeight = 30;
 
-const areaOf = (width, height) => ({ left: 0, top: NavbarHeight, right: width, bottom: height - LightsHeight });
+const areaOf = (width, height) => ({ left: 0, top: NavbarHeight, right: width, bottom: height });
 const small = areaOf(1280, 720);
 const large = areaOf(1920, 1080);
 const huge = areaOf(2560, 1440);
@@ -71,12 +70,12 @@ function expectInside(rects, area) {
 
 describe("panel layout", () => {
     describe("defaults", () => {
-        it("puts each panel against its edges, a Gap inside the area", () => {
+        it("puts each panel against its edges, flush with the area's edges", () => {
             const rects = layOut(emptyLayout(), small, ["watches", "disc", "session", "media"]);
-            expect(rects.watches).toMatchObject({ x: Gap, y: small.top + Gap });
-            expect(rects.disc.x + rects.disc.w).toBe(small.right - Gap);
-            expect(rects.session.x).toBe(Gap);
-            expect(rects.session.y + rects.session.h).toBe(small.bottom - Gap);
+            expect(rects.watches).toMatchObject({ x: 0, y: small.top });
+            expect(rects.disc.x + rects.disc.w).toBe(small.right);
+            expect(rects.session.x).toBe(0);
+            expect(rects.session.y + rects.session.h).toBe(small.bottom);
             expectApart(rects);
             expectInside(rects, small);
         });
@@ -86,8 +85,8 @@ describe("panel layout", () => {
             expect(placeOf(layout, "disc")).toBeNull();
             const before = layOut(layout, small, ["disc"]).disc;
             const after = layOut(layout, large, ["disc"]).disc;
-            expect(before.x + before.w).toBe(small.right - Gap);
-            expect(after.x + after.w).toBe(large.right - Gap);
+            expect(before.x + before.w).toBe(small.right);
+            expect(after.x + after.w).toBe(large.right);
         });
     });
 
@@ -99,14 +98,14 @@ describe("panel layout", () => {
                 small,
                 ["watches"],
                 "watches",
-                { x: Gap + 5, y: midY, w: 300, h: 200 },
+                { x: 5, y: midY, w: 300, h: 200 },
                 unsized,
             );
             expect(layout.panels.watches.x).toEqual(StartEdge);
             expect(layout.panels.watches.y.anchor).toBe("centre");
             const before = layOut(layout, small, ["watches"]).watches;
             const after = layOut(layout, huge, ["watches"]).watches;
-            expect(after.x).toBe(huge.left + Gap);
+            expect(after.x).toBe(huge.left);
             const middle = (rect, area) => (rect.y + rect.h / 2 - area.top) / (area.bottom - area.top);
             expect(middle(after, huge)).toBeCloseTo(middle(before, small), 2);
         });
@@ -122,7 +121,7 @@ describe("panel layout", () => {
             );
             expect(layout.panels.watches.x).toEqual(EndEdge);
             const grown = layOut(layout, huge, ["watches"]).watches;
-            expect(grown.x + grown.w).toBe(huge.right - Gap);
+            expect(grown.x + grown.w).toBe(huge.right);
         });
 
         it("keeps a panel near the right edge near it, growing or shrinking", () => {
@@ -131,14 +130,14 @@ describe("panel layout", () => {
                 huge,
                 ["watches"],
                 "watches",
-                { x: 2560 - Gap - 500, y: 200, w: 300, h: 200 },
+                { x: 2560 - 500, y: 200, w: 300, h: 200 },
                 unsized,
             );
             expect(layout.panels.watches.x).toMatchObject({ anchor: "end", offset: 200 });
-            expect(layOut(layout, areaOf(3840, 2160), ["watches"]).watches.x).toBe(3840 - Gap - 500);
+            expect(layOut(layout, areaOf(3840, 2160), ["watches"]).watches.x).toBe(3840 - 500);
             const shrunk = layOut(layout, small, ["watches"]).watches;
-            const free = small.right - small.left - 2 * Gap - shrunk.w;
-            expect((shrunk.x - Gap) / free).toBeGreaterThan(2 / 3);
+            const free = small.right - small.left - shrunk.w;
+            expect(shrunk.x / free).toBeGreaterThan(2 / 3);
         });
 
         it("puts everything back where it was after shrinking and growing again", () => {
@@ -153,16 +152,16 @@ describe("panel layout", () => {
         });
 
         it("keeps a panel stretched top to bottom full height", () => {
-            const full = small.bottom - small.top - 2 * Gap;
-            const rect = { x: 900, y: small.top + Gap, w: 300, h: full };
+            const full = small.bottom - small.top;
+            const rect = { x: 900, y: small.top, w: 300, h: full };
             const layout = drop(emptyLayout(), small, ["disassembly"], "disassembly", rect, { w: 300, h: full });
             expect(layout.panels.disassembly.y).toEqual({ anchor: "stretch" });
-            expect(layOut(layout, huge, ["disassembly"]).disassembly.h).toBe(huge.bottom - huge.top - 2 * Gap);
+            expect(layOut(layout, huge, ["disassembly"]).disassembly.h).toBe(huge.bottom - huge.top);
         });
 
         it("does not stretch a panel that only follows its content to full height", () => {
-            const full = small.bottom - small.top - 2 * Gap;
-            const rect = { x: 900, y: small.top + Gap, w: 300, h: full };
+            const full = small.bottom - small.top;
+            const rect = { x: 900, y: small.top, w: 300, h: full };
             const layout = drop(emptyLayout(), small, ["disassembly"], "disassembly", rect, unsized);
             expect(layout.panels.disassembly.y).toEqual(StartEdge);
         });
@@ -176,7 +175,7 @@ describe("panel layout", () => {
                 small,
                 ["memory"],
                 "memory",
-                { x: Gap, y: small.top + Gap, w: 290, h: 270 },
+                { x: 0, y: small.top, w: 290, h: 270 },
                 unsized,
             );
             const memory = layOut(layout, small, ["memory"]).memory;
@@ -205,7 +204,7 @@ describe("panel layout", () => {
             const squeezed = layOut(stacked(), short, open);
             expectApart(squeezed);
             expectInside(squeezed, short);
-            expect(squeezed.memory.y).toBe(short.top + Gap);
+            expect(squeezed.memory.y).toBe(short.top);
             expect(squeezed.watches.y).toBe(squeezed.memory.y + squeezed.memory.h + Gap);
             expect(squeezed.memory.h).toBeLessThan(270);
             expect(squeezed.watches.h).toBeLessThan(200);
@@ -213,7 +212,7 @@ describe("panel layout", () => {
         });
 
         it("go back to their own edge when the neighbour is closed", () => {
-            expect(layOut(stacked(), small, ["watches"]).watches.x).toBe(Gap);
+            expect(layOut(stacked(), small, ["watches"]).watches.x).toBe(0);
         });
 
         it("never attach to each other both ways", () => {
@@ -224,7 +223,7 @@ describe("panel layout", () => {
                 huge,
                 open,
                 "memory",
-                { x: Gap, y: watches.y + watches.h + Gap, w: 290, h: 270 },
+                { x: 0, y: watches.y + watches.h + Gap, w: 290, h: 270 },
                 unsized,
             );
             expect(layout.panels.memory.y.attach).toEqual({ to: "watches", side: "after" });
@@ -234,14 +233,14 @@ describe("panel layout", () => {
         });
 
         it("attach above a neighbour when dropped against its top, and stay above it", () => {
-            const below = drop(emptyLayout(), huge, ["memory"], "memory", { x: Gap, y: 700, w: 290, h: 270 }, unsized);
+            const below = drop(emptyLayout(), huge, ["memory"], "memory", { x: 0, y: 700, w: 290, h: 270 }, unsized);
             const memory = layOut(below, huge, ["memory"]).memory;
             const layout = drop(
                 below,
                 huge,
                 open,
                 "watches",
-                { x: Gap, y: memory.y - Gap - 200 - 5, w: 300, h: 200 },
+                { x: 0, y: memory.y - Gap - 200 - 5, w: 300, h: 200 },
                 unsized,
             );
             expect(layout.panels.watches.y.attach).toEqual({ to: "memory", side: "before" });
@@ -268,13 +267,13 @@ describe("panel layout", () => {
     describe("a narrow window", () => {
         it("keeps each panel on its own edge, apart", () => {
             const open = ["watches", "disc"];
-            let layout = drop(emptyLayout(), large, open, "watches", { x: Gap, y: 400, w: 300, h: 200 }, unsized);
-            layout = drop(layout, large, open, "disc", { x: 1920 - Gap - 420, y: 380, w: 420, h: 480 }, unsized);
+            let layout = drop(emptyLayout(), large, open, "watches", { x: 0, y: 400, w: 300, h: 200 }, unsized);
+            layout = drop(layout, large, open, "disc", { x: 1920 - 420, y: 380, w: 420, h: 480 }, unsized);
             const rects = layOut(layout, narrow, open);
             expectApart(rects);
             expectInside(rects, narrow);
-            expect(rects.disc.x + rects.disc.w).toBe(narrow.right - Gap);
-            expect(rects.watches.x).toBe(narrow.left + Gap);
+            expect(rects.disc.x + rects.disc.w).toBe(narrow.right);
+            expect(rects.watches.x).toBe(narrow.left);
         });
     });
 
@@ -290,11 +289,7 @@ describe("panel layout", () => {
         });
 
         it("never puts two panels on the same spot, even in an area shorter than a panel's minimum", () => {
-            const rects = layOut(emptyLayout(), areaOf(640, NavbarHeight + LightsHeight + 100), [
-                "watches",
-                "session",
-                "memory",
-            ]);
+            const rects = layOut(emptyLayout(), areaOf(640, NavbarHeight + 100), ["watches", "session", "memory"]);
             const corners = Object.values(rects).map(({ x, y }) => `${x},${y}`);
             expect(new Set(corners).size).toBe(corners.length);
         });
@@ -344,12 +339,12 @@ describe("panel layout", () => {
                 small,
                 ["watches"],
                 "watches",
-                { x: 1280 - Gap - 300, y: small.top + Gap, w: 300, h: 200 },
+                { x: 1280 - 300, y: small.top, w: 300, h: 200 },
                 unsized,
             );
             const rects = layOut(layout, small, ["watches", "disc"]);
             expectApart(rects);
-            expect(rects.watches).toMatchObject({ x: 1280 - Gap - 300, y: small.top + Gap });
+            expect(rects.watches).toMatchObject({ x: 1280 - 300, y: small.top });
         });
 
         it("remembers which panels are open", () => {
@@ -364,21 +359,21 @@ describe("panel layout", () => {
 
     describe("snapping", () => {
         it("pulls a dragged panel to the area's edge within the snap distance, and not beyond it", () => {
-            const toEdge = snap({ x: 1280 - Gap - 300 - 11, y: 300, w: 300, h: 200 }, small, {}, AllEdges);
-            expect(toEdge.x + toEdge.w).toBe(1280 - Gap);
-            const tooFar = snap({ x: 1280 - Gap - 300 - 13, y: 300, w: 300, h: 200 }, small, {}, AllEdges);
-            expect(tooFar.x).toBe(1280 - Gap - 300 - 13);
+            const toEdge = snap({ x: 1280 - 300 - 11, y: 300, w: 300, h: 200 }, small, {}, AllEdges);
+            expect(toEdge.x + toEdge.w).toBe(1280);
+            const tooFar = snap({ x: 1280 - 300 - 13, y: 300, w: 300, h: 200 }, small, {}, AllEdges);
+            expect(tooFar.x).toBe(1280 - 300 - 13);
         });
 
         it("abuts a neighbour a Gap away and lines its top up with it", () => {
-            const others = { memory: { x: Gap, y: 100, w: 290, h: 270 } };
-            const beside = snap({ x: Gap + 290 + Gap + 9, y: 104, w: 300, h: 200 }, small, others, AllEdges);
-            expect(beside).toMatchObject({ x: Gap + 290 + Gap, y: 100 });
+            const others = { memory: { x: 0, y: 100, w: 290, h: 270 } };
+            const beside = snap({ x: 290 + Gap + 9, y: 104, w: 300, h: 200 }, small, others, AllEdges);
+            expect(beside).toMatchObject({ x: 290 + Gap, y: 100 });
         });
 
         it("moves only the dragged edge of a resize", () => {
-            const resized = snap({ x: 100, y: 100, w: 1280 - 100 - Gap - 6, h: 200 }, small, {}, { right: true });
-            expect(resized).toEqual({ x: 100, y: 100, w: 1280 - 100 - Gap, h: 200 });
+            const resized = snap({ x: 100, y: 100, w: 1280 - 100 - 6, h: 200 }, small, {}, { right: true });
+            expect(resized).toEqual({ x: 100, y: 100, w: 1280 - 100, h: 200 });
         });
     });
 

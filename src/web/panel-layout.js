@@ -6,10 +6,11 @@
  * content. Window changes never rewrite a place; `resolve` works the screen out from it each time,
  * so shrinking the window and growing it back puts everything where it was.
  *
- * Terms: an area is `{left, top, right, bottom}`, the window less the navbar and the lights; a rect
+ * Terms: an area is `{left, top, right, bottom}`, the window below the navbar; a rect
  * is `{x, y, w, h}`.
  */
 
+/** Between neighbouring panels; a panel goes flush against the area's edges. */
 export const Gap = 8;
 export const SnapDistance = 12;
 export const LayoutVersion = 1;
@@ -36,7 +37,7 @@ const Axes = {
 const clamp = (value, lo, hi) => Math.min(Math.max(value, lo), Math.max(lo, hi));
 const endOf = (rect, axis) => rect[Axes[axis].pos] + rect[Axes[axis].size];
 const spansOverlap = (a, b, axis) => a[Axes[axis].pos] < endOf(b, axis) && b[Axes[axis].pos] < endOf(a, axis);
-const innerSpan = (area, axis) => ({ lo: area[Axes[axis].lo] + Gap, hi: area[Axes[axis].hi] - Gap });
+const spanOf = (area, axis) => ({ lo: area[Axes[axis].lo], hi: area[Axes[axis].hi] });
 const rectOf = ({ x, y, w, h }) => ({ x, y, w, h });
 const headerOf = (rect) => ({ x: rect.x, y: rect.y, w: rect.w, h: rect.header });
 const without = (list, id) => list.filter((other) => other !== id);
@@ -57,7 +58,7 @@ export function placeOf(layout, id) {
 
 function captureAxis(rect, axis, area, others, sized) {
     const { pos, size, other } = Axes[axis];
-    const { lo, hi } = innerSpan(area, axis);
+    const { lo, hi } = spanOf(area, axis);
     const free = hi - lo - rect[size];
     const fromStart = rect[pos] - lo;
     const fromEnd = free - fromStart;
@@ -95,14 +96,14 @@ export function capture(rect, area, others, size) {
 
 function sizeOn(place, axis, area, panel) {
     const { size } = Axes[axis];
-    const { lo, hi } = innerSpan(area, axis);
+    const { lo, hi } = spanOf(area, axis);
     const room = hi - lo;
     if (place[axis].anchor === "stretch") return Math.max(panel.min[size], room);
     return Math.round(clamp(place[size] ?? panel.natural[size], panel.min[size], room));
 }
 
 function positionOn(anchor, axis, area, size, placed) {
-    const { lo, hi } = innerSpan(area, axis);
+    const { lo, hi } = spanOf(area, axis);
     const free = Math.max(0, hi - lo - size);
     const neighbour = anchor.attach && placed[anchor.attach.to];
     let at;
@@ -120,7 +121,7 @@ function fitChains(panels, places, sizes, area) {
     const byId = Object.fromEntries(panels.map((panel) => [panel.id, panel]));
     for (const axis of AxisNames) {
         const { size } = Axes[axis];
-        const { lo, hi } = innerSpan(area, axis);
+        const { lo, hi } = spanOf(area, axis);
         const next = new Map();
         const hasPrevious = new Set();
         for (const panel of panels) {
@@ -156,8 +157,8 @@ function fitChains(panels, places, sizes, area) {
 function findRoom(want, panel, placed, area) {
     const others = Object.values(placed);
     if (!others.some((other) => overlaps(want, other))) return { ...want, overlapping: false };
-    const ix = innerSpan(area, "x");
-    const iy = innerSpan(area, "y");
+    const ix = spanOf(area, "x");
+    const iy = spanOf(area, "y");
     const xs = new Set([want.x, ix.lo, ix.hi - want.w]);
     const ys = new Set([want.y, iy.lo, iy.hi - want.h]);
     for (const other of others) {
@@ -270,7 +271,7 @@ export function snap(rect, area, others, edges) {
     const isMove = edges.left && edges.right && edges.top && edges.bottom;
     for (const axis of AxisNames) {
         const { pos, size, lo: loEdge, hi: hiEdge, other } = Axes[axis];
-        const { lo, hi } = innerSpan(area, axis);
+        const { lo, hi } = spanOf(area, axis);
         // Judged against `out`, so y sees where x snapped to, and lines up with the panel it now sits beside.
         const reach = Gap + SnapDistance;
         const near = Object.values(others).filter(

@@ -4,7 +4,6 @@ import {
     arranged,
     capture,
     closed,
-    Gap,
     opened,
     parseLayout,
     placeOf,
@@ -53,10 +52,10 @@ function dragged(start, edges, dx, dy, min) {
     return rect;
 }
 
-/** `rect` kept a Gap inside `area`: moved for a move, cut at the moving edges for a resize. */
+/** `rect` kept inside `area`: moved for a move, cut at the moving edges for a resize. */
 function keptInside(rect, area, edges, min) {
-    const lo = { x: area.left + Gap, y: area.top + Gap };
-    const hi = { x: area.right - Gap, y: area.bottom - Gap };
+    const lo = { x: area.left, y: area.top };
+    const hi = { x: area.right, y: area.bottom };
     if (edges === AllEdges)
         return {
             ...rect,
@@ -131,15 +130,13 @@ export class PanelArrangement {
         }
     }
 
-    /** The window less the navbar and the lights. */
+    /** The window below the navbar. Panels may go over the lights. */
     workArea() {
-        const lights = document.getElementById("leds");
-        const shown = lights && lights.getClientRects().length > 0;
         return {
             left: 0,
             top: navbarHeightOf(document.getElementById("header-bar")),
             right: window.innerWidth,
-            bottom: shown ? lights.getBoundingClientRect().top : window.innerHeight,
+            bottom: window.innerHeight,
         };
     }
 
@@ -202,7 +199,7 @@ export class PanelArrangement {
         } else {
             // Following its content, it may grow into the room below, unless it was squeezed.
             style.height = "";
-            style.maxHeight = `${rect.h < spec.natural.h ? rect.h : area.bottom - Gap - rect.y}px`;
+            style.maxHeight = `${rect.h < spec.natural.h ? rect.h : area.bottom - rect.y}px`;
         }
     }
 
@@ -223,7 +220,7 @@ export class PanelArrangement {
             style.height = `${kept.h}px`;
             style.maxHeight = "";
         } else if (!style.height) {
-            style.maxHeight = `${gesture.area.bottom - Gap - kept.y}px`;
+            style.maxHeight = `${gesture.area.bottom - kept.y}px`;
         }
         return kept;
     }

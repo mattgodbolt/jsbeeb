@@ -2,11 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingPanel, navbarHeightOf, PanelArrangement } from "../../src/web/floating-panel.js";
-import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
+import { EndEdge, overlaps, StartEdge } from "../../src/web/panel-layout.js";
 import { sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
-const LightsHeight = 40;
 const HeaderHeight = 30;
 const Natural = { w: 200, h: 100 };
 
@@ -29,7 +28,6 @@ describe("FloatingPanel", () => {
     let storage;
     let arrangement;
 
-    const workArea = () => ({ top: NavbarHeight, bottom: window.innerHeight - LightsHeight });
     const resizeWindow = (width, height) => {
         vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
         vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
@@ -88,11 +86,8 @@ describe("FloatingPanel", () => {
     /** A fresh page, as after a reload. */
     function load() {
         arrangement = new PanelArrangement(() => storage);
-        document.body.innerHTML = `<nav id="header-bar"></nav><div id="leds"></div>`;
+        document.body.innerHTML = `<nav id="header-bar"></nav>`;
         Object.defineProperty(document.getElementById("header-bar"), "offsetHeight", { value: NavbarHeight });
-        const lights = document.getElementById("leds");
-        lights.getClientRects = () => [{}];
-        lights.getBoundingClientRect = () => ({ top: window.innerHeight - LightsHeight });
     }
 
     beforeEach(() => {
@@ -149,15 +144,15 @@ describe("FloatingPanel", () => {
             expect(document.activeElement).toBe(document.body);
         });
 
-        it("opens in its default place, a Gap inside the window less the navbar and the lights", () => {
+        it("opens in its default place, flush with the window below the navbar", () => {
             const left = watches();
             const right = media();
             left.open();
             right.open();
-            expect(rectOf(left)).toEqual({ x: Gap, y: NavbarHeight + Gap, ...Natural });
+            expect(rectOf(left)).toEqual({ x: 0, y: NavbarHeight, ...Natural });
             expect(rectOf(right)).toMatchObject({
-                x: window.innerWidth - Gap - Natural.w,
-                y: workArea().bottom - Gap - Natural.h,
+                x: window.innerWidth - Natural.w,
+                y: window.innerHeight - Natural.h,
             });
         });
 
@@ -194,7 +189,7 @@ describe("FloatingPanel", () => {
     });
 
     describe("moving and resizing", () => {
-        it("is dragged by its header, kept a Gap inside the work area", () => {
+        it("is dragged by its header, kept inside the work area", () => {
             const floating = watches();
             floating.open();
             const start = rectOf(floating);
@@ -202,11 +197,11 @@ describe("FloatingPanel", () => {
             pointer(header(floating), "pointermove", start.x + 210, start.y + 110, {});
             expect(rectOf(floating)).toMatchObject({ x: start.x + 200, y: start.y + 100 });
             pointer(header(floating), "pointermove", -500, -500, {});
-            expect(rectOf(floating)).toMatchObject({ x: Gap, y: NavbarHeight + Gap });
+            expect(rectOf(floating)).toMatchObject({ x: 0, y: NavbarHeight });
             pointer(header(floating), "pointermove", 5000, 5000, {});
             expect(rectOf(floating)).toMatchObject({
-                x: window.innerWidth - Gap - Natural.w,
-                y: workArea().bottom - Gap - Natural.h,
+                x: window.innerWidth - Natural.w,
+                y: window.innerHeight - Natural.h,
             });
         });
 
@@ -214,12 +209,12 @@ describe("FloatingPanel", () => {
             const floating = watches();
             floating.open();
             drag(header(floating), { x: 20, y: 70 }, { x: 20 + 300, y: 70 + 200 });
-            const nearEdge = window.innerWidth - Gap - Natural.w - 10;
+            const nearEdge = window.innerWidth - Natural.w - 10;
             const start = rectOf(floating);
             drag(header(floating), { x: start.x, y: start.y }, { x: nearEdge, y: start.y }, { shiftKey: true });
             expect(rectOf(floating).x).toBe(nearEdge);
             drag(header(floating), { x: nearEdge, y: start.y }, { x: nearEdge + 1, y: start.y });
-            expect(rectOf(floating).x).toBe(window.innerWidth - Gap - Natural.w);
+            expect(rectOf(floating).x).toBe(window.innerWidth - Natural.w);
         });
 
         it("ignores a drag that starts on a button in the header, or with another mouse button", () => {
@@ -249,7 +244,7 @@ describe("FloatingPanel", () => {
         it("stays at its minimum when a resized edge snaps inward past it", () => {
             const neighbour = disc();
             neighbour.open();
-            const lined = { x: Gap + Natural.w - 120 + 10, y: NavbarHeight + Gap + Natural.h + 12 };
+            const lined = { x: Natural.w - 120 + 10, y: NavbarHeight + Natural.h + 12 };
             const at = rectOf(neighbour);
             drag(header(neighbour), { x: at.x, y: at.y }, lined, { shiftKey: true });
             expect(rectOf(neighbour)).toMatchObject(lined);
@@ -321,7 +316,7 @@ describe("FloatingPanel", () => {
             const floating = watches();
             floating.open();
             drag(header(floating), { x: 20, y: 70 }, { x: 220, y: 270 });
-            expect(rectOf(floating)).toMatchObject({ x: Gap + 200, y: NavbarHeight + Gap + 200 });
+            expect(rectOf(floating)).toMatchObject({ x: 200, y: NavbarHeight + 200 });
             expect(warn).toHaveBeenCalled();
         });
     });
