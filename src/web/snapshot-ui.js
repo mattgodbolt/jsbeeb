@@ -164,6 +164,7 @@ export class SnapshotUI {
         // Order matters: reload disc media first so the base disc is in the
         // drive before restoreSnapshot applies dirty track overlays on top.
         await this.reloadSnapshotMedia(snapshot.media);
+        this.loop.replacingState();
         restoreSnapshot(this.processor, this.model, snapshot);
         // The drives' pitch and the recorder's latch came back with the state, behind the slots' backs.
         this.slots.restored();
