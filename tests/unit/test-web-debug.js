@@ -16,7 +16,15 @@ describe("Debugger", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
+        domFromIndexHtml(
+            "crtc_debug",
+            "debug",
+            "hardware_debug",
+            "watch-panel",
+            "watch-menu",
+            "watch-open",
+            "sysvia-panel",
+        );
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });
@@ -569,7 +577,15 @@ describe("Debugger", () => {
             [0x6c, 0x0e, 0x02, 0x60, 0xd0, 0xfa].forEach((byte, i) => cpu.writemem(OswrchAt + i, byte));
             load = vi.fn(async (url) => structuredClone(files.get(url)));
             document.body.innerHTML = "";
-            domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
+            domFromIndexHtml(
+                "crtc_debug",
+                "debug",
+                "hardware_debug",
+                "watch-panel",
+                "watch-menu",
+                "watch-open",
+                "sysvia-panel",
+            );
             dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: BaseUrl, load }) });
             dbgr.setCpu(cpu);
         });

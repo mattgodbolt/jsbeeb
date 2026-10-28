@@ -899,15 +899,19 @@ export class SysVia extends Via {
         }
     }
 
+    /** The column the autoscan counter is on. Its power-on phase is arbitrary, so it is taken from the scheduler epoch. */
+    scanColumn() {
+        return Math.floor(this.scheduler.epoch / TicksPerScanColumn) % ScanCounterColumns;
+    }
+
     /**
      * Schedules the flag for the scan's next edge of the kind the PCR selects: rising as the counter moves from a column
-     * with no key held onto one with a key held, falling the other way. The counter's power-on phase is arbitrary, so
-     * its column is taken from the scheduler epoch.
+     * with no key held onto one with a key held, falling the other way.
      */
     _scheduleScanEdge() {
         this.keyScanTask.cancel();
         const epoch = this.scheduler.epoch;
-        const column = Math.floor(epoch / TicksPerScanColumn) % ScanCounterColumns;
+        const column = this.scanColumn();
         const risingEdge = !!(this.pcr & 0x04);
         let leavingHeld = this._columnHasScannedKey(column);
         for (let step = 1; step <= ScanCounterColumns; ++step) {

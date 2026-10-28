@@ -143,6 +143,28 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     expect(await panelWidth()).toBe(creditedWidth);
 });
 
+test("the system VIA panel opens from the More menu, keeps up with the running machine, and leaves it the keyboard", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#sysvia-open");
+    const panel = page.locator("#sysvia-panel");
+    await expect(panel).toBeVisible();
+    const register = (name) => panel.locator(`.decoded-registers tr:has(th:text-is("${name}"))`);
+    const timer1 = register("T1C").locator(".decoded-hex");
+    const shown = await timer1.textContent();
+    await expect.poll(() => timer1.textContent()).not.toBe(shown);
+    await expect(register("IC32").locator(".decoded-meaning")).toContainText("keys: autoscan");
+    const keyA = panel.locator('.key-matrix td[title="a: column 1, row 4"]');
+    await page.keyboard.down("a");
+    await expect(keyA).toHaveClass(/held/);
+    await page.keyboard.up("a");
+    await expect(keyA).not.toHaveClass(/held/);
+});
+
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
     page,

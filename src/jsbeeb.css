@@ -863,6 +863,129 @@ small {
   color: #aaaaaa;
 }
 
+.register-panel {
+  position: fixed;
+  top: 80px;
+  left: 324px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 104px);
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid #555;
+  border-radius: 4px;
+  z-index: 10;
+  padding: 8px;
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+.register-panel-close {
+  margin-left: auto;
+}
+
+.register-panel-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.decoded-registers th,
+.decoded-registers td {
+  padding: 1px 4px;
+  vertical-align: top;
+}
+
+.decoded-heading,
+.decoded-registers .decoded-heading th {
+  color: #aaaaaa;
+  font-weight: normal;
+  padding-top: 6px;
+}
+
+.decoded-registers th {
+  color: #f0d080;
+  font-weight: normal;
+}
+
+.decoded-hex {
+  color: #80d0d0;
+}
+
+.decoded-meaning {
+  max-width: 44ch;
+}
+
+.decoded-value,
+.decoded-bit {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 0 3px;
+  border: 1px solid #444444;
+  border-radius: 3px;
+}
+
+.decoded-value {
+  border-color: #262626;
+  background: #262626;
+  color: #cccccc;
+}
+
+.decoded-bit {
+  color: #777777;
+}
+
+.decoded-bit.lit {
+  border-color: #80d0d0;
+  color: #000000;
+  background: #80d0d0;
+}
+
+.key-matrix table {
+  border-collapse: collapse;
+}
+
+.key-matrix th {
+  color: #aaaaaa;
+  font-weight: normal;
+  text-align: center;
+  padding: 0 2px;
+}
+
+.key-matrix thead th.scanned {
+  color: #000000;
+  background: #f0d080;
+}
+
+.key-matrix td {
+  min-width: 3.5ch;
+  height: 1.6em;
+  border: 1px solid #444444;
+  color: #999999;
+  text-align: center;
+}
+
+.key-matrix td.held {
+  color: #000000;
+  background: #80d0d0;
+}
+
+.key-matrix td.selected {
+  outline: 2px solid #f0d080;
+  outline-offset: -2px;
+}
+
+.key-matrix-status {
+  margin-top: 4px;
+  color: #cccccc;
+}
+
+#hardware_debug .sysvia-open {
+  color: #aaaaff;
+  font-family: inherit;
+  font-size: inherit;
+}
+
 #disc-panel {
   position: fixed;
   top: 80px;
@@ -879,6 +1002,7 @@ small {
 
 .disc-header,
 .watch-header,
+.register-panel-header,
 .session-pane-header {
   display: flex;
   align-items: baseline;
@@ -899,6 +1023,7 @@ small {
 
 .disc-header button,
 .watch-header button,
+.register-panel-header button,
 .session-pane-header button {
   cursor: pointer;
 }

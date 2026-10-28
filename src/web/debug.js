@@ -3,6 +3,7 @@ import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
+import { SysViaPanel } from "./sysvia-panel.js";
 import { WatchPanel } from "./watch-panel.js";
 
 const noop = () => {};
@@ -184,6 +185,7 @@ export class Debugger {
             },
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
+        this.sysViaPanel = new SysViaPanel({ via: () => this.cpu?.sysvia });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
