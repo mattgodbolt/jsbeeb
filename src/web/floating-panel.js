@@ -35,7 +35,7 @@ export function navbarHeightOf(header) {
 }
 
 /**
- * `start` moved or resized by the pointer having travelled `dx`, `dy`, for `edges` (all four
+ * `start` moved or resized by the pointer having travelled `dx`, `dy`, for `edges` (`AllEdges`
  * for a move), never smaller than `min`.
  */
 function dragged(start, edges, dx, dy, min) {

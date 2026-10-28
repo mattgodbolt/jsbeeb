@@ -263,7 +263,7 @@ export function placeOpened(layout, area, panel, others, avoid) {
 
 /**
  * `rect` pulled to the nearest edge of the area or of `others` within the snap distance, on each
- * axis. `edges` are the ones moving: all four for a drag, the dragged ones for a resize.
+ * axis. `edges` are the ones moving: `AllEdges` for a drag, the dragged ones for a resize.
  */
 export function snap(rect, area, others, edges) {
     const out = { ...rect };
