@@ -665,7 +665,8 @@ export class Debugger {
         if (!this.executeOne()) return this.debug(cpu.pc);
         const resetEntry = this.resetEntry();
         this._runningTo = cpu.debugInstruction.add((pc) => {
-            if (pc !== resetEntry || stopsAtReset) return stopsHere();
+            if (pc !== resetEntry) return stopsHere();
+            if (stopsAtReset && stopsHere()) return true;
             this.cancelRun();
             return false;
         });

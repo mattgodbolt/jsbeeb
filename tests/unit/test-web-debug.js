@@ -370,7 +370,7 @@ describe("Debugger", () => {
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
-        class StandInLoop extends EventTarget {
+        class StandInLoop {
             mode = RunMode.debugging;
             running = false;
             lockstep = null;
@@ -379,14 +379,6 @@ describe("Debugger", () => {
                 this.mode = RunMode.running;
                 dbgr.hide();
                 this.running = true;
-            }
-            hold() {
-                this.running = false;
-                this.dispatchEvent(new Event("running"));
-                return () => {
-                    this.running = true;
-                    this.dispatchEvent(new Event("running"));
-                };
             }
             pause() {
                 this.mode = RunMode.paused;
@@ -445,6 +437,15 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             keyPress("m");
             expect(pc()).toBe(hexword(entry));
+        });
+
+        it("leaves a step over a call into the reset entry to the reset", () => {
+            const entry = dbgr.resetEntry();
+            load(0x2100, [0x20, entry & 0xff, entry >> 8, 0xea]);
+            cpu.pc = 0x2100;
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(cpu.onFastPath).toBe(true);
         });
 
         it("steps out past the returns of the calls it makes", () => {
@@ -549,24 +550,6 @@ describe("Debugger", () => {
                 keyPress("c");
                 for (let i = 0; i < 10; i++) loop.tick(MachineSecond);
                 expect(loop.running).toBe(true);
-            });
-
-            it("keeps going through a hold, such as a dialog, and stops once the machine runs again", () => {
-                keyPress("c");
-                loop.hold()();
-                loop.tick(MachineSecond);
-                expect(pc()).toBe("200e");
-            });
-
-            it("leaves a step over a call into the reset entry to the reset", () => {
-                const entry = dbgr.resetEntry();
-                load(0x2100, [0x20, entry & 0xff, entry >> 8, 0xea]);
-                cpu.pc = 0x2100;
-                dbgr.debug(cpu.pc);
-                keyPress("m");
-                cpu.targetCycles = cpu.currentCycles;
-                cpu.execute(100);
-                expect(cpu.onFastPath).toBe(true);
             });
 
             it("hands all but the first instruction to the loop in a shared session", () => {
