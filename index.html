@@ -130,6 +130,7 @@
                 <li><a href="#" id="fs" data-feature="fullscreen" class="dropdown-item">Fullscreen</a></li>
                 <li><a href="#" id="disc-visualiser-open" class="dropdown-item">Disc surface</a></li>
                 <li><a href="#" id="watch-open" class="dropdown-item">Watches</a></li>
+                <li class="bbc-only"><a href="#" id="sysvia-open" class="dropdown-item sysvia-open">System VIA</a></li>
                 <li><hr class="dropdown-divider" /></li>
                 <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
                 <li id="fsmenuitem">
@@ -377,6 +378,21 @@
         </div>
       </div>
       <div id="watch-menu" hidden></div>
+      <div id="sysvia-panel" data-feature="system_via" hidden>
+        <div class="register-panel-header">
+          <span class="disc-title">System VIA</span>
+          <button type="button" class="btn btn-sm btn-outline-light register-panel-close" tabindex="-1">Close</button>
+        </div>
+        <div class="panel-body register-panel-body">
+          <div class="sysvia-ports"></div>
+          <div>
+            <div class="decoded-heading">Keyboard</div>
+            <div class="key-matrix"></div>
+            <div class="key-matrix-status"></div>
+            <div class="sysvia-latch"></div>
+          </div>
+        </div>
+      </div>
       <div id="leds">
         <div class="slot-readouts" role="group" aria-label="What is loaded">
           <button type="button" class="slot-readout media-window-open bbc-only" data-slot="0">
@@ -825,7 +841,17 @@
       </div>
       <div id="hardware_debug" class="initially-hidden">
         <div class="via_regs" id="sysvia">
-          <h6 class="dbg">System VIA</h6>
+          <h6 class="dbg">
+            System VIA
+            <button
+              type="button"
+              class="txt-btn sysvia-open bbc-only"
+              tabindex="-1"
+              title="Open the system VIA decoded"
+            >
+              decoded
+            </button>
+          </h6>
           <table>
             <tbody>
               <tr class="template">

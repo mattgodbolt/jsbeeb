@@ -4,6 +4,7 @@ import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
 import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
+import { SysViaPanel } from "./sysvia-panel.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 
@@ -213,6 +214,8 @@ export class Debugger {
             },
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
+        // The Atom's CPU carries a system VIA it never wires up.
+        this.sysViaPanel = new SysViaPanel({ via: () => (this.cpu?.model.isAtom ? undefined : this.cpu?.sysvia) });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
@@ -303,6 +306,7 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
+        if (cpu.model.isAtom) this.sysViaPanel.floating.close();
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);

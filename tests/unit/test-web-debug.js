@@ -17,7 +17,15 @@ describe("Debugger", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
+        domFromIndexHtml(
+            "crtc_debug",
+            "debug",
+            "hardware_debug",
+            "watch-panel",
+            "watch-menu",
+            "watch-open",
+            "sysvia-panel",
+        );
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });
@@ -82,6 +90,19 @@ describe("Debugger", () => {
             dbgr.hide();
             expect(dbgr.enabled()).toBe(false);
             expect(visible("debug")).toBe(false);
+        });
+
+        it("give the decoded system VIA the machine's VIA on a BBC, and close it and read nothing on an Atom", () => {
+            const panel = dbgr.sysViaPanel;
+            const awaiting = () =>
+                document.querySelector("#sysvia-panel .panel-body").classList.contains("awaiting-machine");
+            panel.floating.open();
+            expect(awaiting()).toBe(false);
+            cpu.model = findModel("Atom");
+            dbgr.setCpu(cpu);
+            expect(panel.floating.isOpen).toBe(false);
+            panel.update();
+            expect(awaiting()).toBe(true);
         });
 
         it("note the debugger opening each time it is entered, not each time it stops", () => {
@@ -1003,7 +1024,15 @@ describe("Debugger", () => {
             [0x6c, 0x0e, 0x02, 0x60, 0xd0, 0xfa].forEach((byte, i) => cpu.writemem(OswrchAt + i, byte));
             load = vi.fn(async (url) => structuredClone(files.get(url)));
             document.body.innerHTML = "";
-            domFromIndexHtml("crtc_debug", "debug", "hardware_debug", "watch-panel", "watch-menu", "watch-open");
+            domFromIndexHtml(
+                "crtc_debug",
+                "debug",
+                "hardware_debug",
+                "watch-panel",
+                "watch-menu",
+                "watch-open",
+                "sysvia-panel",
+            );
             dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: BaseUrl, load }) });
             dbgr.setCpu(cpu);
         });

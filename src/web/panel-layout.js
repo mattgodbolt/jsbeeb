@@ -15,7 +15,17 @@ export const Gap = 8;
 export const SnapDistance = 12;
 export const LayoutVersion = 1;
 /** Every panel there is or will be. Saved entries under any other id are dropped. */
-export const PanelIds = ["media", "session", "watches", "disc", "disassembly", "memory", "registers", "peripherals"];
+export const PanelIds = [
+    "media",
+    "session",
+    "watches",
+    "disc",
+    "disassembly",
+    "memory",
+    "registers",
+    "peripherals",
+    "sysvia",
+];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
 export const StartEdge = { anchor: "start", offset: 0, fraction: 0 };
 export const EndEdge = { anchor: "end", offset: 0, fraction: 1 };

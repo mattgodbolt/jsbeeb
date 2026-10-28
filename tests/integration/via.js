@@ -1,5 +1,6 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
+import { sysViaState } from "../../src/web/sysvia-panel.js";
 import assert from "assert";
 
 async function runViaProgram(source, model) {
@@ -1186,5 +1187,30 @@ RTS
 CALL MC%
 `);
         expectArray(tm, [1, 5, 0xff, 0x00, 0x20, 100, 7, 0xfe]);
+    });
+});
+
+describe("the system VIA panel", () => {
+    const ReadEveryCycles = 997;
+    const RunCycles = 4000000;
+
+    async function typeWhileRunning(readPanel) {
+        const tm = new TestMachine("B-DFS1.2");
+        await tm.initialise();
+        await tm.runUntilInput();
+        tm.typist.type(tm.model.stringToKeys("PRINT TIME\n"), true);
+        for (let cycles = 0; cycles < RunCycles; cycles += ReadEveryCycles) {
+            await tm.runFor(ReadEveryCycles);
+            if (readPanel) sysViaState(tm.processor.sysvia);
+        }
+        expect(tm.typist.isTyping).toBe(false);
+        // Reading catches the VIA's counters up to now, as the machine's next access to it would.
+        tm.processor.sysvia.peekTimers();
+        return tm.snapshot();
+    }
+
+    it("reads the machine as it runs without changing what it does", async () => {
+        const [read, unread] = [await typeWhileRunning(true), await typeWhileRunning(false)];
+        expect(read).toEqual(unread);
     });
 });

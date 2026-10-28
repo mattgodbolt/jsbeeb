@@ -38,6 +38,8 @@ const PalNominalSubcarrierHz = 4433618.75;
 const PalLineHz = 15625;
 export const PalCyclesPerLine = (PalNominalSubcarrierHz + PalSubcarrierOffsetHz) / PalLineHz;
 export const PalPhasePerLine = PalCyclesPerLine % 1;
+// By the system VIA's IC32 screen size bits, in the 2K units of screen address bits 11-14.
+export const HwScrollSubtract = [8, 4, 10, 5];
 
 // The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
 export const LineCountPeriod = 2500;
@@ -386,7 +388,7 @@ export class Video {
                 0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
             ]),
         );
-        this.screenAddrSubtract = new Uint8Array([8, 4, 10, 5]);
+        this.screenAddrSubtract = new Uint8Array(HwScrollSubtract);
         this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
         this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x08, 0x10]);
         this.regs = new Uint8Array(32);

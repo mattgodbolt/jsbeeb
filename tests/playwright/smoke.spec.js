@@ -32,6 +32,15 @@ const OsScreenMode = 0x355;
 // only after the frame count has gone up three times.
 const FramesToClearModeSeven = 3;
 const RgbBits = 0xffffff;
+// [register, value, what the panel then says] for the system VIA: PCR with independent edges then outputs, ACR
+// shifting out by T2 then counting pulses, and IC32's keyboard enable cleared, so port A selects a key.
+const SysViaModeWrites = [
+    [0xc, 0x66, "CB2 light pen: rising edge, independent"],
+    [0xc, 0xee, "CB2 light pen: high output"],
+    [0xb, 0x10, "SR out free-running by T2"],
+    [0xb, 0x60, "T2 counts PB6 pulses"],
+    [0x0, 0x03, "keys: port A"],
+];
 const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.meta.url), "utf8");
 // The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
 const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
@@ -141,6 +150,70 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     await goTo(Unnamed);
     await expect(credit).toHaveCSS("visibility", "hidden");
     expect(await panelWidth()).toBe(creditedWidth);
+});
+
+test("the system VIA panel opens from the More menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#sysvia-open");
+    const panel = page.locator("#sysvia-panel");
+    await expect(panel).toBeVisible();
+    const register = (name) => panel.locator(`.decoded-registers tr:has(th:text-is("${name}"))`);
+    const timer1 = register("T1C").locator(".decoded-hex");
+    const shown = await timer1.textContent();
+    await expect.poll(() => timer1.textContent()).not.toBe(shown);
+    await expect(register("IC32").locator(".decoded-meaning")).toContainText("keys: autoscan");
+    const keyA = panel.locator('.key-matrix td[title="a: column 1, row 4"]');
+    await page.keyboard.down("a");
+    await expect(keyA).toHaveClass(/held/);
+    await page.keyboard.up("a");
+    await expect(keyA).not.toHaveClass(/held/);
+    await page.reload();
+    await expect(panel).toBeVisible();
+    await expect(timer1).not.toBeEmpty();
+});
+
+test("the system VIA panel's content fits the size it opened at, and keeps its size as the machine runs, keys come and go, and its modes change", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#sysvia-open");
+    await page.evaluate(() => {
+        const body = document.querySelector("#sysvia-panel .panel-body");
+        window.e2eSizes = new Set();
+        window.e2eSampling = true;
+        const sample = () => {
+            const fits = body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight;
+            window.e2eSizes.add(`${body.scrollWidth}x${body.scrollHeight}, fits: ${fits}`);
+            if (window.e2eSampling) requestAnimationFrame(sample);
+        };
+        sample();
+    });
+    await beeb.pressKey("a");
+    await beeb.pressKey("Enter");
+    await page.click("#debug-pause");
+    const shown = await page.evaluate(async (writes) => {
+        const panel = document.getElementById("sysvia-panel");
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+        const seen = [];
+        for (const [register, value, text] of writes) {
+            window.processor.sysvia.write(register, value);
+            await frame();
+            await frame();
+            if (panel.textContent.includes(text)) seen.push(text);
+        }
+        window.e2eSampling = false;
+        return seen;
+    }, SysViaModeWrites);
+    expect(shown).toEqual(SysViaModeWrites.map(([, , text]) => text));
+    expect(await page.evaluate(() => [...window.e2eSizes])).toEqual([expect.stringMatching(/fits: true$/)]);
 });
 
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({

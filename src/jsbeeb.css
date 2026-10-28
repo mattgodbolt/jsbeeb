@@ -847,6 +847,134 @@ small {
   color: #aaaaaa;
 }
 
+#sysvia-panel {
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+.awaiting-machine {
+  visibility: hidden;
+}
+
+.register-panel-close {
+  margin-left: auto;
+}
+
+.register-panel-body {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: start;
+  gap: 16px;
+}
+
+/* Chips are as tall as a line, so a row is as tall with them as without. */
+.decoded-registers th,
+.decoded-registers td {
+  padding: 0 4px;
+  line-height: 20px;
+  vertical-align: top;
+}
+
+.decoded-heading,
+.decoded-registers .decoded-heading th {
+  color: #aaaaaa;
+  font-weight: normal;
+  padding-top: 6px;
+}
+
+.decoded-registers th {
+  color: #f0d080;
+  font-weight: normal;
+}
+
+.decoded-hex {
+  color: #80d0d0;
+}
+
+.sysvia-ports .decoded-meaning {
+  width: 43ch;
+}
+
+.sysvia-latch .decoded-meaning {
+  width: 37ch;
+}
+
+.decoded-value,
+.decoded-bit {
+  display: inline-block;
+  vertical-align: top;
+  margin: 0 4px 2px 0;
+  padding: 0 3px;
+  line-height: 16px;
+  border: 1px solid #444444;
+  border-radius: 3px;
+  white-space: nowrap;
+  /* A value's width is set in characters, which Bootstrap's border-box would take its padding from. */
+  box-sizing: content-box;
+}
+
+.decoded-value {
+  border-color: #262626;
+  background: #262626;
+  color: #cccccc;
+}
+
+.decoded-bit {
+  color: #777777;
+}
+
+.decoded-bit.lit {
+  border-color: #80d0d0;
+  color: #000000;
+  background: #80d0d0;
+}
+
+.key-matrix table {
+  border-collapse: collapse;
+}
+
+.key-matrix th {
+  color: #aaaaaa;
+  font-weight: normal;
+  text-align: center;
+  padding: 0 2px;
+}
+
+.key-matrix thead th.scanned {
+  color: #000000;
+  background: #f0d080;
+}
+
+.key-matrix td {
+  min-width: 3.5ch;
+  height: 1.6em;
+  border: 1px solid #444444;
+  color: #999999;
+  text-align: center;
+}
+
+.key-matrix td.held {
+  color: #000000;
+  background: #80d0d0;
+}
+
+.key-matrix td.selected {
+  outline: 2px solid #f0d080;
+  outline-offset: -2px;
+}
+
+.key-matrix-status {
+  margin-top: 4px;
+  color: #cccccc;
+  white-space: nowrap;
+}
+
+#hardware_debug .sysvia-open {
+  color: #aaaaff;
+  font-family: inherit;
+  font-size: inherit;
+}
+
 #disc-panel {
   width: min(420px, 46vw);
 }
