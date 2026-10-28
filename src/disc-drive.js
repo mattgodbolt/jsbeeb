@@ -4,7 +4,7 @@
 import { Scheduler } from "./scheduler.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc } from "./disc.js";
-import { IbmDiscFormat } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
 
 const SpinDebounceMs = 2;
 const RevolutionMs = 200;

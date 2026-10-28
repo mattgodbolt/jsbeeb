@@ -3,7 +3,8 @@ import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { IbmDiscFormat } from "../../src/disc-format.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import {

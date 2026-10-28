@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { IbmDiscFormat } from "../../src/disc-format.js";
 import { attachDriveNoise, DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";

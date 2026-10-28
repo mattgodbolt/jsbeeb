@@ -1,4 +1,5 @@
-import { Disc, DiscConfig, IbmDiscFormat } from "../../src/disc.js";
+import { Disc, DiscConfig } from "../../src/disc.js";
+import { IbmDiscFormat } from "../../src/disc-format.js";
 
 export const SectorLengthCode = 1;
 export const SectorBytes = 256;
