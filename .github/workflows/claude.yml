@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write # comment the video link
       issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
@@ -36,7 +36,12 @@ jobs:
 
           # Pin the model explicitly: the action's own default has pointed at a
           # retired model in the past, which 404s every run.
-          claude_args: "--model claude-opus-5"
+          plugin_marketplaces: https://github.com/bisque-cloud/presenter.git
+          plugins: presenter@bisque-cloud
+          claude_args: |
+            --model claude-opus-5
+            --allowedTools "Skill,Write,Edit,WebFetch,Bash(node:*),Bash(mkdir:*)"
+            --append-system-prompt "When you are asked to review or explain a pull request, after you have answered, decide whether it is worth a short video for someone who did not write it: yes for a design decision, a new command or option, a migration, or a change where the reasoning matters more than the diff; no for a dependency bump, formatting, a typo or a small fix. If it is, use the present skill from the presenter plugin to make a presentation of the pull request from what you have already read: what it changes, why, and what a reviewer should look at. Write index.html, context.md, assets/ and title.txt (one line, the title) to ${{ runner.temp }}/explainer. Run the skill's plan, pronunciation-report and narrate with --voice kokoro:af_heart and fix what they report. Do not run login or publish: the next step of this job publishes the folder and comments the link. If it is not worth a video, write nothing there."
 
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
@@ -56,3 +61,22 @@ jobs:
           # Optional: Custom environment variables for Claude
           # claude_env: |
           #   NODE_ENV: test
+
+      # Publishes the presentation the session above wrote, as this
+      # repository, to its bisque.today channel, and comments the link on the
+      # pull request. A separate step because claude-code-action keeps the
+      # token that publishes away from Claude's session. No folder, no publish.
+      - name: Check for a presentation
+        id: explainer
+        run: |
+          if [ -f "$RUNNER_TEMP/explainer/index.html" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the presentation
+        if: steps.explainer.outputs.ready == 'true'
+        continue-on-error: true
+        uses: bisque-cloud/presenter@v1
+        with:
+          source: pull-request
+          presentation: ${{ runner.temp }}/explainer
