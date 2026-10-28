@@ -557,8 +557,7 @@ export class Debugger {
                 const register = ref.classList.contains("instr_mem_ref")
                     ? sheilaName(this._sheila, target, accesses)
                     : undefined;
-                // A register's name is a note beside its well-known address. It displaces a MOS's name for the
-                // register, but not a program's, which says what the register is for.
+                // A register's name displaces a MOS's name for it, but not a program's, which says what it is for.
                 const inline = register && operand?.set.system ? undefined : operand;
                 if (inline) {
                     showName(ref, inline, target);
