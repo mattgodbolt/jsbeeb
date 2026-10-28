@@ -599,7 +599,7 @@ class Track {
     _pulseAt(bitIndex) {
         const word = this.pulses2Us[Math.floor(bitIndex / PulsesPerWord)];
         const bitFromTop = bitIndex % PulsesPerWord;
-        return (word >>> (31 - bitFromTop)) & 1;
+        return (word >>> (PulsesPerWord - 1 - bitFromTop)) & 1;
     }
 
     /**
