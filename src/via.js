@@ -847,6 +847,8 @@ export class SysVia extends Via {
                 }
             }
             this.keyScanTask.cancel();
+            this.ca2 = false;
+            return;
         } else {
             this.keyScanTask.cancel();
             // Keyboard sets bit 7 to 0 or 1, and testing shows it always
@@ -911,8 +913,8 @@ export class SysVia extends Via {
         const wasAutoscanning = this.IC32 & 8;
         if (portbpins & 8) this.IC32 |= 1 << (portbpins & 7);
         else this.IC32 &= ~(1 << (portbpins & 7));
-        // The counter moves off the column port A selected, so the scan starts its pulses afresh.
-        if (!wasAutoscanning && this.IC32 & 8) this.ca2 = false;
+        // CA2 rests low between the scan's pulses, so switching scan mode starts from there.
+        if ((wasAutoscanning ^ this.IC32) & 8) this.ca2 = false;
 
         this.capsLockLight = !(this.IC32 & 0x40);
         this.shiftLockLight = !(this.IC32 & 0x80);
