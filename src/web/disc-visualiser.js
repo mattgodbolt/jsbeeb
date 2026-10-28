@@ -120,7 +120,8 @@ export class DiscVisualiser {
         this._onTrackWrite = (isSideUpper, trackNum) => {
             if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
         };
-        this._resizeObserver = new ResizeObserver(() => this._resize());
+        this._onResize = () => this._resize();
+        this._resizeObserver = new ResizeObserver(this._onResize);
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
             this.toggle();
@@ -235,6 +236,8 @@ export class DiscVisualiser {
 
     _start() {
         this._resizeObserver.observe(this.surfaceCanvas);
+        // A zoom changes the device pixel ratio without resizing the canvas.
+        window.addEventListener("resize", this._onResize);
         this._resize();
         this._tick();
     }
@@ -247,6 +250,7 @@ export class DiscVisualiser {
         this._hover = null;
         this._needsFullRepaint = true;
         this._resizeObserver.disconnect();
+        window.removeEventListener("resize", this._onResize);
     }
 
     _tick() {

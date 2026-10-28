@@ -136,6 +136,9 @@ describe("DiscVisualiser", () => {
             Object.defineProperty(surface, "clientWidth", { value: 2 * CanvasSize, configurable: true });
             resizeObserved.callback();
             expect(surface.width).toBe(2 * CanvasSize);
+            vi.spyOn(window, "devicePixelRatio", "get").mockReturnValue(3);
+            window.dispatchEvent(new Event("resize"));
+            expect(surface.width).toBe(6 * CanvasSize);
             document.getElementById("disc-close").click();
             expect(resizeObserved).toBeNull();
         });

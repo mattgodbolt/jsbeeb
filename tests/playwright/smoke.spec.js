@@ -321,7 +321,7 @@ test("settings hold the emulator while open, a restart is asked about from insid
     await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
 });
 
-test("a panel dragged to the right edge stays on it as the window grows, returns unchanged after a shrink, and reopens there", async ({
+test("a panel dragged to the right edge stays on it as the window grows, returns unchanged after a shrink, and reopens there, and a resize keeps a panel's scroll", async ({
     beeb,
     page,
 }) => {
@@ -353,6 +353,15 @@ test("a panel dragged to the right edge stays on it as the window grows, returns
     await beeb.expectScreenText(">");
     await expect(page.locator("#watch-panel")).toBeVisible();
     expect(await box()).toEqual(onEdge);
+
+    await page.setViewportSize({ width: 1280, height: 500 });
+    await page.click("#navbarMore");
+    await page.click("#disc-visualiser-open");
+    const discBody = page.locator("#disc-panel .panel-body");
+    const scrolled = await discBody.evaluate((body) => (body.scrollTop = body.scrollHeight - body.clientHeight));
+    expect(scrolled).toBeGreaterThan(0);
+    await page.setViewportSize({ width: 1279, height: 500 });
+    await expect.poll(() => discBody.evaluate((body) => body.scrollTop)).toBe(scrolled);
 });
 
 test("every display mode on the bar can be picked", async ({ beeb, page }) => {
