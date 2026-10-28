@@ -965,13 +965,16 @@ export class Cpu6502 extends Base6502 {
                 return this.serial.read(addr);
             case 0xfe18:
                 return this.model.isMaster ? this.adconverter.read(addr) : this.handleEconetStationId();
+            case 0xfe1c:
+                if (!this.model.isMaster) return this.handleEconetStationId();
+                break;
             case 0xfe20:
+            case 0xfe2c:
                 if (!this.model.isMaster) return this.handleEconetNmiEnable();
                 break;
             case 0xfe24:
             case 0xfe28:
-                if (this.model.isMaster) return this.fdc.read(addr);
-                break;
+                return this.model.isMaster ? this.fdc.read(addr) : this.handleEconetNmiEnable();
             case 0xfe30:
                 if (this.model.isMaster) return this.romsel & 0x8f;
                 break;
@@ -1013,10 +1016,14 @@ export class Cpu6502 extends Base6502 {
                 if (!this.model.isMaster) return this.fdc.read(addr);
                 break;
             case 0xfea0:
-                // Econet status register
-                if (this.econet) {
-                    return this.econet.readRegister(addr & 3);
-                }
+            case 0xfea4:
+            case 0xfea8:
+            case 0xfeac:
+            case 0xfeb0:
+            case 0xfeb4:
+            case 0xfeb8:
+            case 0xfebc:
+                if (this.econet) return this.econet.readRegister(addr & 3);
                 break;
             case 0xfec0:
             case 0xfec4:
@@ -1113,13 +1120,16 @@ export class Cpu6502 extends Base6502 {
                 return this.acia.peek(addr);
             case 0xfe18:
                 return isMaster ? this.adconverter.peek(addr) : this.econetStationId();
+            case 0xfe1c:
+                if (!isMaster) return this.econetStationId();
+                break;
             case 0xfe20:
+            case 0xfe2c:
                 if (!isMaster) return UnpeekableDevice;
                 break;
             case 0xfe24:
             case 0xfe28:
-                if (isMaster) return this.fdc.peek(addr);
-                break;
+                return isMaster ? this.fdc.peek(addr) : UnpeekableDevice;
             case 0xfe30:
                 if (isMaster) return this.romsel & 0x8f;
                 break;
@@ -1161,6 +1171,13 @@ export class Cpu6502 extends Base6502 {
                 if (!isMaster) return this.fdc.peek(addr);
                 break;
             case 0xfea0:
+            case 0xfea4:
+            case 0xfea8:
+            case 0xfeac:
+            case 0xfeb0:
+            case 0xfeb4:
+            case 0xfeb8:
+            case 0xfebc:
                 if (this.econet) return UnpeekableDevice;
                 break;
             case 0xfec0:
@@ -1259,6 +1276,9 @@ export class Cpu6502 extends Base6502 {
                 return this.serial.write(addr, b);
             case 0xfe18:
                 if (this.model.isMaster) return this.adconverter.write(addr, b);
+                if (this.econet) this.setEconetNmiEnabled(false);
+                break;
+            case 0xfe1c:
                 if (!this.model.isMaster && this.econet) this.setEconetNmiEnabled(false);
                 break;
             case 0xfe20:
@@ -1282,7 +1302,8 @@ export class Cpu6502 extends Base6502 {
                 }
                 return this.romSelect(b);
             case 0xfe38:
-                if (this.model.isMaster && this.econet) this.setEconetNmiEnabled(false);
+                if (!this.model.isMaster) return this.romSelect(b);
+                if (this.econet) this.setEconetNmiEnabled(false);
                 break;
             case 0xfe3c:
                 if (!this.model.isMaster) {
