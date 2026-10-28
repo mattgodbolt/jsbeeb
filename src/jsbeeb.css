@@ -1037,7 +1037,7 @@ small {
 }
 
 /* Square at the panel's width, and given less height the disc shrinks to fit it rather than the body scrolling. */
-#disc-panel .disc-stack {
+.disc-stack {
   position: relative;
   flex: 1 1 auto;
   aspect-ratio: 1;

@@ -4,6 +4,7 @@ import {
     arranged,
     capture,
     closed,
+    emptyLayout,
     Gap,
     opened,
     parseLayout,
@@ -109,9 +110,10 @@ export class PanelArrangement {
     /** Opens again the panels that were open when the page was last left, of those that reopen. */
     reopen() {
         const layout = this._read();
-        for (const id of layout.order)
-            for (const floating of this._stack)
-                if (floating.id === id && floating.reopens && layout.panels[id]?.open) floating.open();
+        for (const id of layout.order) {
+            const floating = this._stack.find((other) => other.id === id);
+            if (floating?.reopens && layout.panels[id]?.open) floating.open();
+        }
     }
 
     _read() {
@@ -119,7 +121,7 @@ export class PanelArrangement {
             return parseLayout(this._storage().getItem(StorageKey));
         } catch (error) {
             console.warn(`Could not read the panel layout: ${error}`);
-            return parseLayout(null);
+            return emptyLayout();
         }
     }
 
@@ -150,10 +152,8 @@ export class PanelArrangement {
         const layout = opened(this._read(), floating.id);
         this._save(layout);
         this.raise(floating);
-        if (!floating.movable) {
-            floating.clearGeometry();
-            return;
-        }
+        floating.clearGeometry();
+        if (!floating.movable) return;
         const area = this.workArea();
         const spec = floating.measure();
         const avoid = this._defaultsAvoid();
@@ -174,7 +174,12 @@ export class PanelArrangement {
     /** Lays every open panel out again for the window as it is now. */
     relayout() {
         const open = this._stack.filter((floating) => floating.isOpen);
-        for (const floating of open) if (!floating.movable) floating.clearGeometry();
+        // Cleared to be measured, nothing inside overflows and the browser forgets how far it was scrolled.
+        const scrolled = open
+            .flatMap((floating) => [...floating.panel.querySelectorAll("*")])
+            .filter((element) => element.scrollTop > 0)
+            .map((element) => [element, element.scrollTop]);
+        for (const floating of open) floating.clearGeometry();
         const movable = open.filter((floating) => floating.movable);
         const specs = movable.map((floating) => floating.measure());
         const layout = this._read();
@@ -184,9 +189,9 @@ export class PanelArrangement {
         for (const [id, rect] of Object.entries(rects)) {
             const index = movable.findIndex((floating) => floating.id === id);
             this._apply(movable[index], rect, specs[index], layout, area, avoid);
-            movable[index].restoreScroll();
             if (rect.overlapping) this.raise(movable[index]);
         }
+        for (const [element, scrollTop] of scrolled) element.scrollTop = scrollTop;
     }
 
     /** Panels may be put over the lights, but do not open over them by default. */
@@ -211,7 +216,7 @@ export class PanelArrangement {
         style.top = `${rect.y}px`;
         style.width = `${rect.w}px`;
         const place = placeOf(layout, floating.id);
-        if (place && place.h !== null) {
+        if (place?.h) {
             style.height = `${rect.h}px`;
             style.maxHeight = "";
         } else {
@@ -291,7 +296,6 @@ export class FloatingPanel extends EventTarget {
         this.isOpen = false;
         this._arrangement = arrangement;
         this._gesture = null;
-        this._scrolled = [];
         closeButton.addEventListener("click", () => this.close());
         panel.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
@@ -341,13 +345,8 @@ export class FloatingPanel extends EventTarget {
         return this.header.getBoundingClientRect().bottom - this.panel.getBoundingClientRect().top;
     }
 
-    /** Its size as its content and stylesheet would have it, for the layout. */
+    /** Its size as its content and stylesheet would have it, once its geometry is cleared, for the layout. */
     measure() {
-        // Laid out at full height, nothing inside overflows and the browser forgets how far it was scrolled.
-        this._scrolled = [...this.panel.querySelectorAll("*")]
-            .filter((element) => element.scrollTop > 0)
-            .map((element) => [element, element.scrollTop]);
-        this.clearGeometry();
         return {
             id: this.id,
             natural: { w: this.panel.offsetWidth, h: this.panel.offsetHeight },
@@ -355,11 +354,6 @@ export class FloatingPanel extends EventTarget {
             header: this.headerHeight(),
             place: this.place,
         };
-    }
-
-    restoreScroll() {
-        for (const [element, scrollTop] of this._scrolled) element.scrollTop = scrollTop;
-        this._scrolled = [];
     }
 
     _bindGestures() {
@@ -386,14 +380,13 @@ export class FloatingPanel extends EventTarget {
                 this.minSize,
             );
             gesture.rect = this._arrangement.follow(this, gesture.context, rect, gesture.edges, !e.shiftKey);
-            gesture.moved = true;
         });
         for (const ending of ["pointerup", "pointercancel"])
             this.panel.addEventListener(ending, (e) => {
                 const gesture = this._gesture;
                 if (!gesture || gesture.pointerId !== e.pointerId) return;
                 this._gesture = null;
-                if (gesture.moved) this._arrangement.settle(this, gesture.context, gesture.rect, gesture.edges);
+                if (gesture.rect) this._arrangement.settle(this, gesture.context, gesture.rect, gesture.edges);
             });
     }
 
@@ -407,7 +400,6 @@ export class FloatingPanel extends EventTarget {
             edges,
             context: this._arrangement.beginGesture(this),
             rect: null,
-            moved: false,
         };
         target.setPointerCapture(e.pointerId);
         // Also keeps the focus where it was: the keyboard belongs to the machine.

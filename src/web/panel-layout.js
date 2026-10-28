@@ -38,7 +38,6 @@ const clamp = (value, lo, hi) => Math.min(Math.max(value, lo), Math.max(lo, hi))
 const endOf = (rect, axis) => rect[Axes[axis].pos] + rect[Axes[axis].size];
 const spansOverlap = (a, b, axis) => a[Axes[axis].pos] < endOf(b, axis) && b[Axes[axis].pos] < endOf(a, axis);
 const spanOf = (area, axis) => ({ lo: area[Axes[axis].lo], hi: area[Axes[axis].hi] });
-const rectOf = ({ x, y, w, h }) => ({ x, y, w, h });
 const headerOf = (rect) => ({ x: rect.x, y: rect.y, w: rect.w, h: rect.header });
 const without = (list, id) => list.filter((other) => other !== id);
 
@@ -48,13 +47,8 @@ export function emptyLayout() {
     return { version: LayoutVersion, order: [], panels: {} };
 }
 
-/** The panel's place if the user has arranged it, else null. */
-export function placeOf(layout, id) {
-    const entry = layout.panels[id];
-    if (!entry?.x) return null;
-    const { x, y, w, h } = entry;
-    return { x, y, w, h };
-}
+/** The panel's saved entry, holding its place, if the user has arranged it, else null. */
+export const placeOf = (layout, id) => (layout.panels[id]?.x ? layout.panels[id] : null);
 
 function captureAxis(rect, axis, area, others, sized) {
     const { pos, size, other } = Axes[axis];
@@ -251,7 +245,7 @@ export function resolve(layout, area, panels, avoid) {
         const [panel] = pending.splice(Math.max(0, pending.findIndex(isReady)), 1);
         const want = wantedRect(places[panel.id], sizes[panel.id], area, placed);
         const rect = findRoom(want, panel, obstaclesFor(layout, panel, placed, avoid), area);
-        placed[panel.id] = { ...rectOf(rect), header: panel.header };
+        placed[panel.id] = { ...rect, header: panel.header };
         result[panel.id] = rect;
     }
     return result;
@@ -273,7 +267,7 @@ export function placeOpened(layout, area, panel, others, avoid) {
  */
 export function snap(rect, area, others, edges) {
     const out = { ...rect };
-    const isMove = edges.left && edges.right && edges.top && edges.bottom;
+    const isMove = edges === AllEdges;
     for (const axis of AxisNames) {
         const { pos, size, lo: loEdge, hi: hiEdge, other } = Axes[axis];
         const { lo, hi } = spanOf(area, axis);
@@ -289,14 +283,12 @@ export function snap(rect, area, others, edges) {
         if (edges[hiEdge])
             for (const line of [hi, ...near.flatMap((o) => [o[pos] - Gap, endOf(o, axis)])])
                 candidates.push({ shift: line - endOf(rect, axis), isStart: false });
-        let best = null;
-        for (const candidate of candidates)
-            if (
-                Math.abs(candidate.shift) <= SnapDistance &&
-                (!best || Math.abs(candidate.shift) < Math.abs(best.shift))
-            )
-                best = candidate;
-        if (!best) continue;
+        const best = candidates.reduce(
+            (nearest, candidate) =>
+                !nearest || Math.abs(candidate.shift) < Math.abs(nearest.shift) ? candidate : nearest,
+            null,
+        );
+        if (!best || Math.abs(best.shift) > SnapDistance) continue;
         if (isMove) out[pos] += best.shift;
         else if (best.isStart) {
             out[pos] += best.shift;
@@ -311,12 +303,12 @@ export function snap(rect, area, others, edges) {
  * panel attached to it on an axis it now attaches back on lets go, so attachments never pair up.
  */
 export function arranged(layout, id, place) {
-    const panels = { ...layout.panels, [id]: { open: layout.panels[id]?.open ?? false, ...place } };
+    const panels = { ...layout.panels, [id]: { ...layout.panels[id], ...place } };
     for (const [other, entry] of Object.entries(panels)) {
         if (other === id || !entry.x) continue;
         for (const axis of AxisNames)
             if (entry[axis].attach?.to === id && place[axis].attach?.to === other) {
-                const own = Object.fromEntries(Object.entries(entry[axis]).filter(([key]) => key !== "attach"));
+                const { attach: _letGo, ...own } = entry[axis];
                 panels[other] = { ...panels[other], [axis]: own };
             }
     }

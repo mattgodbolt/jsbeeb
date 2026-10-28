@@ -35,13 +35,6 @@ describe("DiscVisualiser", () => {
         });
         overlay.getContext = overlayContext;
         overlay.getBoundingClientRect = () => ({ left: 0, top: 0, width: CanvasSize, height: CanvasSize });
-        const header = document.querySelector(".disc-header");
-        header.setPointerCapture = () => {};
-        header.style.cursor = "move";
-        panel().getBoundingClientRect = () => {
-            const { left, top } = panel().style;
-            return { left: parseFloat(left) || 0, top: parseFloat(top) || 0, width: 300, height: 300 };
-        };
         resizeObserved = null;
         vi.stubGlobal(
             "ResizeObserver",
@@ -111,21 +104,6 @@ describe("DiscVisualiser", () => {
             pumpFrame();
             document.getElementById("disc-close").click();
             expect(rafCallbacks.size).toBe(0);
-        });
-
-        it("can be dragged around by its header, kept inside the window", () => {
-            make().open();
-            const header = document.querySelector(".disc-header");
-            const at = (x, y) => ({ pointerId: 1, button: 0, clientX: x, clientY: y, bubbles: true });
-            const left = parseFloat(panel().style.left);
-            const top = parseFloat(panel().style.top);
-            header.dispatchEvent(new PointerEvent("pointerdown", at(500, 100)));
-            header.dispatchEvent(new PointerEvent("pointermove", at(400, 115)));
-            expect(panel().style.left).toBe(`${left - 100}px`);
-            expect(panel().style.top).toBe(`${top + 15}px`);
-            header.dispatchEvent(new PointerEvent("pointermove", at(-1000, -1000)));
-            expect(panel().style.left).toBe("0px");
-            expect(panel().style.top).toBe("0px");
         });
 
         it("redraws its surface at the size the canvas is resized to, while open", () => {
