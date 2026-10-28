@@ -4,6 +4,7 @@ import {
     arranged,
     capture,
     closed,
+    Gap,
     opened,
     parseLayout,
     placeOf,
@@ -155,12 +156,14 @@ export class PanelArrangement {
         }
         const area = this.workArea();
         const spec = floating.measure();
+        const avoid = this._defaultsAvoid();
         this._apply(
             floating,
-            placeOpened(layout, area, spec, this._others(floating), this._defaultsAvoid()),
+            placeOpened(layout, area, spec, this._others(floating), avoid),
             spec,
             layout,
             area,
+            avoid,
         );
     }
 
@@ -176,10 +179,11 @@ export class PanelArrangement {
         const specs = movable.map((floating) => floating.measure());
         const layout = this._read();
         const area = this.workArea();
-        const rects = resolve(layout, area, specs, this._defaultsAvoid());
+        const avoid = this._defaultsAvoid();
+        const rects = resolve(layout, area, specs, avoid);
         for (const [id, rect] of Object.entries(rects)) {
             const index = movable.findIndex((floating) => floating.id === id);
-            this._apply(movable[index], rect, specs[index], layout, area);
+            this._apply(movable[index], rect, specs[index], layout, area, avoid);
             movable[index].restoreScroll();
             if (rect.overlapping) this.raise(movable[index]);
         }
@@ -189,7 +193,8 @@ export class PanelArrangement {
     _defaultsAvoid() {
         const lights = document.getElementById("leds");
         if (!lights || lights.getClientRects().length === 0) return {};
-        return { lights: { ...boundsOf(lights), header: lights.getBoundingClientRect().height } };
+        const bounds = boundsOf(lights);
+        return { lights: { ...bounds, header: bounds.h } };
     }
 
     _others(except) {
@@ -200,7 +205,7 @@ export class PanelArrangement {
         return others;
     }
 
-    _apply(floating, rect, spec, layout, area) {
+    _apply(floating, rect, spec, layout, area, avoid) {
         const style = floating.panel.style;
         style.left = `${rect.x}px`;
         style.top = `${rect.y}px`;
@@ -210,9 +215,14 @@ export class PanelArrangement {
             style.height = `${rect.h}px`;
             style.maxHeight = "";
         } else {
-            // Following its content, it may grow into the room below, unless it was squeezed.
+            // Following its content, it may grow into the room below, unless it was squeezed, and in its
+            // default place not into what it was placed clear of.
+            const below = Object.values(place ? {} : avoid).filter(
+                (other) => other.y >= rect.y + rect.h && other.x < rect.x + rect.w && rect.x < other.x + other.w,
+            );
+            const floor = Math.min(area.bottom, ...below.map((other) => other.y - Gap));
             style.height = "";
-            style.maxHeight = `${rect.h < spec.natural.h ? rect.h : area.bottom - rect.y}px`;
+            style.maxHeight = `${rect.h < spec.natural.h ? rect.h : floor - rect.y}px`;
         }
     }
 

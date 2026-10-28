@@ -156,7 +156,7 @@ describe("FloatingPanel", () => {
             });
         });
 
-        it("opens above the lights by default, but goes over them where the user puts it", () => {
+        it("opens above the lights by default and grows no further down, but goes over them where the user puts it", () => {
             const LightsHeight = 60;
             document.body.insertAdjacentHTML("beforeend", `<div id="leds"></div>`);
             const lights = document.getElementById("leds");
@@ -170,6 +170,7 @@ describe("FloatingPanel", () => {
             const floating = make("session", { x: StartEdge, y: EndEdge }, false);
             floating.open();
             expect(rectOf(floating)).toMatchObject({ x: 0, y: window.innerHeight - LightsHeight - Gap - Natural.h });
+            expect(floating.panel.style.maxHeight).toBe(`${Natural.h}px`);
             const start = rectOf(floating);
             drag(header(floating), { x: start.x, y: start.y }, { x: start.x, y: window.innerHeight });
             window.dispatchEvent(new Event("resize"));
