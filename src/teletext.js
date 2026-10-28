@@ -539,9 +539,9 @@ export class Teletext {
         if (++this.flashTime === 64) this.flashTime = 0;
     }
 
-    // The phase against the cursor blink depends on how many DEW pulses precede the MOS programming
-    // the CRTC. The SAA5050 has no reset and the 6845's registers power up undefined, so real hardware
-    // presumably has no fixed phase either.
+    // This counts DEW (VSYNC) pulses while the cursor blink counts R6 hits, so their phase starts at
+    // the MOS-dependent number of pulses before the first R6 hit and moves whenever a field has one
+    // without the other. The SAA5050 has no reset, so hardware presumably has no fixed phase either.
     get hideFlashing() {
         return this.flashTime < 16;
     }
