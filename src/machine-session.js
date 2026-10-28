@@ -68,8 +68,8 @@ export class MachineSession {
      *   takes them: a name or path under roms/, a `file:` or `http(s):` URL, or a `github:` reference; an empty
      *   name is skipped, as the page skips it
      * @param {{bank: number, rom: string}[]} [opts.bankRoms] - sideways ROMs for the banks they name, as the page's
-     *   `rom.N=`, skipping one with an empty name; initialise() throws for a bank the model has no socket for, one the model or its fittings fill,
-     *   or one named twice
+     *   `rom.N=`, skipping one with an empty name; initialise() throws for a bank the model has no socket for, one
+     *   the model or its fittings fill, or one named twice
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
