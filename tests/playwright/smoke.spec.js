@@ -10,6 +10,8 @@
 //
 // BASE_URL=http://localhost:5173/ points a run at a server that is already up.
 
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "./fixtures.js";
 
 const OneRowWidth = 4000;
@@ -30,6 +32,12 @@ const OsScreenMode = 0x355;
 // only after the frame count has gone up three times.
 const FramesToClearModeSeven = 3;
 const RgbBits = 0xffffff;
+const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.meta.url), "utf8");
+// The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
+const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
+    contextBridge: { exposeInMainWorld: (key, api) => (window[key] = api) },
+    ipcRenderer: { on: () => {}, send: () => {} },
+}));`;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     const headerBar = async (width) => {
@@ -48,6 +56,16 @@ test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
     for (const width of LaptopWidths) {
         expect(await headerBar(width), `the bar at ${width}px`).toEqual({ height: oneRow.height, pasteFits: true });
     }
+});
+
+test("the desktop app's page starts the machine with the page furniture its preload removes gone", async ({
+    beeb,
+    page,
+}) => {
+    await page.addInitScript(DesktopPreloadScript);
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#header-bar")).toHaveCount(0);
 });
 
 test("every label and lamp in the lights bar sits on one of its shared lines, and on a Mac its tooltips say ⌥ for Alt", async ({
