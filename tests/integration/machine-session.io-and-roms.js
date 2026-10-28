@@ -162,6 +162,12 @@ describe("MachineSession sideways ROMs", () => {
         BootTimeout,
     );
 
+    it("skips an empty ROM name, as the page does", async () => {
+        const session = new MachineSession("B-DFS1.2", { extraRoms: [""], bankRoms: [{ bank: 7, rom: "" }] });
+        await expect(session.initialise()).resolves.toBeUndefined();
+        session.destroy();
+    });
+
     it("refuses a bank the model fills already, as the page does", async () => {
         const session = new MachineSession("B-DFS1.2", { bankRoms: [{ bank: 15, rom: "ample.rom" }] });
         await expect(session.initialise()).rejects.toThrow(
