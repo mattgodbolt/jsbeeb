@@ -654,9 +654,10 @@ export class Debugger {
     /**
      * Runs the machine until `stopsHere()`, asked before each instruction, says to stop at it, or anything else
      * stops the machine. Its answer at the first instruction is not taken, so a run can come round to where it
-     * starts. A reset ends the run without stopping, unless `stopsAtReset` and `stopsHere()` holds at the entry. A run that ends within a fiftieth of a
-     * second ends here, so the debugger never leaves the screen; a longer one goes on in the loop, with the
-     * machine shown running, and lasts through holds such as a dialog or a hidden tab.
+     * starts. A reset ends the run without stopping, unless `stopsAtReset` and `stopsHere()` holds at the entry.
+     * A run that ends within a fiftieth of a second ends here, so the debugger never leaves the screen; a longer
+     * one goes on in the loop, with the machine shown running, and lasts through holds such as a dialog or a
+     * hidden tab.
      */
     runTo(stopsHere, stopsAtReset) {
         this.updatePrevMem();
