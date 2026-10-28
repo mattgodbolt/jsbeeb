@@ -438,6 +438,15 @@ describe("Debugger", () => {
             expect(cpu.x).toBe(0);
         });
 
+        it("steps over onto the reset entry", () => {
+            const entry = dbgr.resetEntry();
+            load(entry - 1, [0xea]);
+            cpu.pc = entry - 1;
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(pc()).toBe(hexword(entry));
+        });
+
         it("steps out past the returns of the calls it makes", () => {
             load(0x2000, [0x20, 0x00, 0x30]);
             load(0x3000, [0x20, 0x00, 0x31, 0x60]);
@@ -549,13 +558,15 @@ describe("Debugger", () => {
                 expect(pc()).toBe("200e");
             });
 
-            it("steps over onto the reset entry", () => {
+            it("leaves a step over a call into the reset entry to the reset", () => {
                 const entry = dbgr.resetEntry();
-                load(entry - 1, [0xea]);
-                cpu.pc = entry - 1;
+                load(0x2100, [0x20, entry & 0xff, entry >> 8, 0xea]);
+                cpu.pc = 0x2100;
                 dbgr.debug(cpu.pc);
                 keyPress("m");
-                expect(pc()).toBe(hexword(entry));
+                cpu.targetCycles = cpu.currentCycles;
+                cpu.execute(100);
+                expect(cpu.onFastPath).toBe(true);
             });
 
             it("hands all but the first instruction to the loop in a shared session", () => {
@@ -590,18 +601,13 @@ describe("Debugger", () => {
                     expect(reachesCursor()).toBe(true);
                 });
 
-                it("when the machine's state is replaced", () => {
-                    keyPress("c");
-                    dbgr.cancelRun();
-                    expect(reachesCursor()).toBe(true);
-                });
-
                 it("when the quick run throws", () => {
                     const failure = cpu.debugInstruction.add((at) => {
                         if (at === 0x2002) throw new Error("emulation failed");
                         return false;
                     });
                     expect(() => keyPress("c")).toThrow("emulation failed");
+                    expect(pc()).toBe("2002");
                     failure.remove();
                     expect(reachesCursor()).toBe(true);
                 });

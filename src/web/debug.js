@@ -700,14 +700,16 @@ export class Debugger {
         const { pc, s } = this.cpu;
         const [text, end, target] = this.disassemble(pc);
         const next = end & 0xffff;
-        const atReset = next === this.resetEntry() || target === this.resetEntry();
+        const entry = this.resetEntry();
         if (UnconditionalJump.test(text)) return this.step();
         if (Branch.test(text) && target <= pc) {
-            return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), atReset);
+            return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
         }
-        if (Branch.test(text)) return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, atReset);
-        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), atReset);
-        this.runTo(() => this.cpu.pc === next, atReset);
+        if (Branch.test(text)) {
+            return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, next === entry || target === entry);
+        }
+        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), next === entry);
+        this.runTo(() => this.cpu.pc === next, next === entry);
     }
 
     stepOut() {
