@@ -32,6 +32,10 @@ const PulseWidthCycles = 2;
 // Reset makes every pin an input, and undriven inputs float high.
 const IdlePins = 0xff;
 
+// The autoscan counter steps one of 16 columns per 1MHz cycle, so it comes back to a held key within this many
+// 2MHz scheduler ticks.
+const KeyScanPassTicks = 32;
+
 class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
@@ -674,8 +678,27 @@ export class SysVia extends Via {
         this.cmos = cmos;
         this.isMaster = isMaster;
         this.getGamepadsFunc = getGamepads;
+        this.keyScanTask = this.scheduler.newTask(() => this.scanPassesHeldKey());
 
         this.reset();
+    }
+
+    reset() {
+        super.reset();
+        this.keyScanTask.cancel();
+    }
+
+    write(addr, val) {
+        const ca2WasFlagged = this.ifr & INT_CA2;
+        super.write(addr, val);
+        this._scanAfterCa2Cleared(ca2WasFlagged);
+    }
+
+    read(addr) {
+        const ca2WasFlagged = this.ifr & INT_CA2;
+        const result = super.read(addr);
+        this._scanAfterCa2Cleared(ca2WasFlagged);
+        return result;
     }
 
     snapshotState() {
@@ -684,6 +707,7 @@ export class SysVia extends Via {
             IC32: this.IC32,
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
+            keyScanTaskOffset: this._taskOffset(this.keyScanTask),
         };
     }
 
@@ -706,6 +730,7 @@ export class SysVia extends Via {
 
     restoreState(state) {
         super.restoreState(state);
+        this._restoreTask(this.keyScanTask, state.keyScanTaskOffset);
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;
@@ -812,16 +837,18 @@ export class SysVia extends Via {
             for (let i = 0; i < numCols; ++i) {
                 for (let j = 1; j < 8; ++j) {
                     if (this.keys[i][j]) {
-                        // The scan pulses CA2 each time it passes the held key's column, so both edges arrive:
-                        // MOS 0.10 interrupts on the falling one.
-                        this.setca2(true);
-                        this.setca2(false);
-                        this.setca2(true);
+                        // ca2 stands for the whole pulse train here, so a snapshot keeps whether it is running.
+                        if (!this.ca2) {
+                            this.ca2 = true;
+                            this.scanPassesHeldKey();
+                        }
                         return;
                     }
                 }
             }
+            this.keyScanTask.cancel();
         } else {
+            this.keyScanTask.cancel();
             // Keyboard sets bit 7 to 0 or 1, and testing shows it always
             // "wins" vs. CMOS.
             // At 0 also wins against an output pin.
@@ -847,6 +874,22 @@ export class SysVia extends Via {
         this.setca2(false);
     }
 
+    /**
+     * The autoscan counter reaching a held key's column. The pulse it gives CA2 has both edges, so whichever one the
+     * PCR selects sets the flag.
+     */
+    scanPassesHeldKey() {
+        if (this.pcr & 0x08) return;
+        this.ifr |= INT_CA2;
+        this.updateIFR();
+    }
+
+    _scanAfterCa2Cleared(ca2WasFlagged) {
+        if (ca2WasFlagged && !(this.ifr & INT_CA2) && this.IC32 & 8 && this.ca2) {
+            if (!this.keyScanTask.scheduled()) this.keyScanTask.schedule(KeyScanPassTicks);
+        }
+    }
+
     portAUpdated() {
         this.updateKeys();
         this.soundChip.updateSlowDataBus(this.portapins, !(this.IC32 & 1));
@@ -865,8 +908,11 @@ export class SysVia extends Via {
 
     portBUpdated() {
         const portbpins = this.portbpins;
+        const wasAutoscanning = this.IC32 & 8;
         if (portbpins & 8) this.IC32 |= 1 << (portbpins & 7);
         else this.IC32 &= ~(1 << (portbpins & 7));
+        // The counter moves off the column port A selected, so the scan starts its pulses afresh.
+        if (!wasAutoscanning && this.IC32 & 8) this.ca2 = false;
 
         this.capsLockLight = !(this.IC32 & 0x40);
         this.shiftLockLight = !(this.IC32 & 0x80);

@@ -27,10 +27,12 @@ const Timer2Int = 0x20;
 const Ca2Int = 0x01;
 const PcrCa2FallingEdge = 0x00;
 const PcrCa2RisingEdge = 0x04;
+const PcrCa2OutputHigh = 0x0e;
 const Ca1Int = 0x02;
 const Cb1Int = 0x10;
 const UserViaIrq = 0x02;
 const TicksPerMicrosecond = 2;
+const KeyScanPassTicks = 16 * TicksPerMicrosecond;
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -68,7 +70,8 @@ describe("Via snapshotState / restoreState", () => {
     const PcrCa1Cb1RisingCa2HighCb2PulseOnWrite = 0xbf;
     const IerSetTimers = 0xe0;
     const LatchSetBit6 = 0x0e,
-        LatchSetBit3 = 0x0b;
+        LatchSetBit3 = 0x0b,
+        LatchClearBit3 = 0x03;
 
     let scheduler, cpu;
 
@@ -149,28 +152,103 @@ describe("Via snapshotState / restoreState", () => {
             expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
         });
 
-        it.each([
-            ["rising", PcrCa2RisingEdge],
-            ["falling", PcrCa2FallingEdge],
-        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+        function makeScanningVia(pcr) {
             const via = makeSystemVia();
             via.write(DDRB, 0x0f);
             via.write(ORB, LatchSetBit3);
             via.write(PCR, pcr);
+            return via;
+        }
+
+        const ca2Flag = (via) => via.read(IFR) & Ca2Int;
+
+        it.each([
+            ["rising", PcrCa2RisingEdge],
+            ["falling", PcrCa2FallingEdge],
+        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+            const via = makeScanningVia(pcr);
             via.keyDownRaw(BBC.A);
-            expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
+            expect(ca2Flag(via)).toBe(Ca2Int);
         });
 
-        it("raises the keyboard interrupt again on a port A write after it is cleared while a key is held", () => {
+        it("raises no keyboard interrupt while CA2 is an output", () => {
+            const via = makeScanningVia(PcrCa2OutputHigh);
+            via.keyDownRaw(BBC.A);
+            scheduler.polltime(KeyScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("raises the keyboard interrupt when autoscan starts with a key held", () => {
             const via = makeSystemVia();
+            via.write(DDRA, 0x7f);
             via.write(DDRB, 0x0f);
-            via.write(ORB, LatchSetBit3);
             via.write(PCR, PcrCa2RisingEdge);
             via.keyDownRaw(BBC.A);
+            via.write(ORA, BBC.A[0]);
             via.write(IFR, Ca2Int);
-            expect(via.read(IFR) & Ca2Int).toBe(0);
-            via.write(ORA, 0);
-            expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
+            via.write(ORB, LatchSetBit3);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        });
+
+        describe.each([
+            ["rising", PcrCa2RisingEdge],
+            ["falling", PcrCa2FallingEdge],
+        ])("with CA2 on the %s edge", (_, pcr) => {
+            it.each([
+                ["an IFR write", (via) => via.write(IFR, Ca2Int)],
+                ["a port A write", (via) => via.write(ORA, 0)],
+                ["a port A read", (via) => via.read(ORA)],
+            ])("raises the keyboard interrupt again one scan pass after %s clears it", (_, clear) => {
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                clear(via);
+                scheduler.polltime(KeyScanPassTicks - 1);
+                expect(ca2Flag(via)).toBe(0);
+                scheduler.polltime(1);
+                expect(ca2Flag(via)).toBe(Ca2Int);
+            });
+        });
+
+        it("does not raise the keyboard interrupt again once the key is released", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            via.keyUpRaw(BBC.A);
+            scheduler.polltime(KeyScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("does not raise the keyboard interrupt again once autoscan stops", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            via.write(ORB, LatchClearBit3);
+            scheduler.polltime(KeyScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("reports no CA2 level changes while the scan raises its interrupt", () => {
+            const via = makeScanningVia(PcrCa2FallingEdge);
+            const levels = [];
+            via.ca2changecallback = (level) => levels.push(level);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            scheduler.polltime(KeyScanPassTicks);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+            expect(levels).toEqual([]);
+        });
+
+        it("carries the scan's return to a held key through a snapshot", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            const snapshot = via.snapshotState();
+            const via2 = makeSystemVia();
+            via2.restoreKeyboard(via.keyboardState());
+            via2.restoreState(snapshot);
+            expect(ca2Flag(via2)).toBe(0);
+            scheduler.polltime(KeyScanPassTicks);
+            expect(ca2Flag(via2)).toBe(Ca2Int);
         });
 
         it("leaves the held keys alone when restoring a snapshot", () => {
