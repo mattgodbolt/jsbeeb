@@ -4,6 +4,7 @@ import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
 import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
+import { SysViaPanel } from "./sysvia-panel.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 import { FloatingPanel } from "./floating-panel.js";
@@ -251,7 +252,10 @@ export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, Me
 
 const RememberedPanelsKey = "debugPanels";
 /** In the order they open, so that each opens after the panel it sits under. */
-const DebugPanelIds = ["toolbar", "disassembly", "registers", "memory", "peripherals"];
+const DebuggerOwnPanels = ["toolbar", "disassembly", "registers", "memory", "peripherals"];
+/** Every panel Alt-D and Alt-S show and hide, the decoded system VIA, which is its own, included. */
+const DebugPanelIds = [...DebuggerOwnPanels, "sysvia"];
+const WideWindowPanels = DebuggerOwnPanels;
 const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
 const PeripheralsWindowWidth = 1600;
@@ -341,6 +345,11 @@ export class Debugger {
             (sets) => this._credit(this._credits.memory, sets),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
+        // The Atom's CPU carries a system VIA it never wires up.
+        this.sysViaPanel = new SysViaPanel({
+            via: () => (this.cpu?.model.isAtom ? undefined : this.cpu?.sysvia),
+            arrangement,
+        });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.disassPc = 0;
@@ -359,7 +368,9 @@ export class Debugger {
             this._showOpenPanels();
         });
 
-        this.panels = Object.fromEntries(DebugPanelIds.map((id) => [id, this._makePanel(id)]));
+        this.panels = Object.fromEntries(DebuggerOwnPanels.map((id) => [id, this._makePanel(id)]));
+        this.panels.sysvia = this.sysViaPanel.floating;
+        for (const [id, floating] of Object.entries(this.panels)) this._track(id, floating);
         this._bindToolbar();
         this._bindKeys(keys);
 
@@ -439,6 +450,11 @@ export class Debugger {
             reopens: true,
             arrangement: this._arrangement,
         });
+        return floating;
+    }
+
+    /** Remembers whether `floating` is open, and keeps it, as each of the debugger's own panels, up to date. */
+    _track(id, floating) {
         floating.addEventListener("open", () => {
             this._rememberOpenPanels();
             if (this._frameHandle === null) this._tick();
@@ -453,7 +469,6 @@ export class Debugger {
             cancelAnimationFrame(this._frameHandle);
             this._frameHandle = null;
         });
-        return floating;
     }
 
     /**
@@ -557,8 +572,10 @@ export class Debugger {
     showPanels() {
         const remembered = rememberedPanels();
         const wide = window.innerWidth >= PeripheralsWindowWidth;
-        const chosen = remembered.length ? remembered : wide ? DebugPanelIds : NarrowWindowPanels;
-        const ids = DebugPanelIds.filter((id) => id === "toolbar" || chosen.includes(id));
+        const chosen = remembered.length ? remembered : wide ? WideWindowPanels : NarrowWindowPanels;
+        const ids = DebugPanelIds.filter(
+            (id) => (id === "toolbar" || chosen.includes(id)) && this.panels[id].title !== null,
+        );
         // Filled first, so that they are laid out at the size they will be.
         if (this.cpu) {
             this._matchSymbols();
@@ -633,6 +650,11 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
+        if (cpu.model.isAtom) {
+            this.sysViaPanel.floating.close();
+            // Nor is it offered there.
+            this.sysViaPanel.floating.title = null;
+        }
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);

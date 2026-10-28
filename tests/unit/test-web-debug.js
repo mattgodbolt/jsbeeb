@@ -21,6 +21,7 @@ const PanelElements = [
     "peripherals-panel",
     "watch-panel",
     "watch-menu",
+    "sysvia-panel",
 ];
 
 const MachineSecond = 2000000;
@@ -196,7 +197,7 @@ describe("Debugger", () => {
             expect(stoppedLoop.mode).toBe(RunMode.running);
         });
 
-        it("are listed for a menu of panels by their titles, with the watches", () => {
+        it("are listed for a menu of panels by their titles, with the watches and the decoded system VIA", () => {
             expect(arrangement.listed().map((floating) => floating.title)).toEqual([
                 "Watches",
                 "Debugger toolbar",
@@ -204,6 +205,7 @@ describe("Debugger", () => {
                 "Memory",
                 "Registers",
                 "Peripherals",
+                "System VIA",
             ]);
         });
 
@@ -215,6 +217,16 @@ describe("Debugger", () => {
             dbgr.hidePanels();
             dbgr.toggleDebugger();
             expect(shown()).toEqual(["debug-toolbar", "registers-panel"]);
+        });
+
+        it("count the decoded system VIA among them, hiding it and showing it again with the rest", () => {
+            dbgr.togglePanels();
+            dbgr.sysViaPanel.floating.open();
+            dbgr.togglePanels();
+            expect(visible("sysvia-panel")).toBe(false);
+            dbgr.togglePanels();
+            expect(visible("sysvia-panel")).toBe(true);
+            expect(shown()).toEqual(NarrowSet);
         });
 
         describe("in their default places", () => {
@@ -364,6 +376,20 @@ describe("Debugger", () => {
                 button("step").dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);
             });
+        });
+
+        it("give the decoded system VIA the machine's VIA on a BBC, and close it and read nothing on an Atom", () => {
+            const panel = dbgr.sysViaPanel;
+            const awaiting = () =>
+                document.querySelector("#sysvia-panel .panel-body").classList.contains("awaiting-machine");
+            panel.floating.open();
+            expect(awaiting()).toBe(false);
+            cpu.model = findModel("Atom");
+            dbgr.setCpu(cpu);
+            expect(panel.floating.isOpen).toBe(false);
+            expect(arrangement.listed()).not.toContain(panel.floating);
+            panel.update();
+            expect(awaiting()).toBe(true);
         });
 
         it("note the debugger opening each time it is entered, not each time it stops", () => {

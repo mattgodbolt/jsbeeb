@@ -25,6 +25,7 @@ export const PanelIds = [
     "memory",
     "registers",
     "peripherals",
+    "sysvia",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
 export const StartEdge = { anchor: "start", offset: 0, fraction: 0 };
