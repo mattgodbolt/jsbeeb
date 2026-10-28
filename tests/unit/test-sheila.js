@@ -29,7 +29,7 @@ describe("SHEILA register names", () => {
         expect(status.name).toBe("STATUS");
         expect(named(blocks, 0xfe80, "write")).toBe("FDC.COMMAND");
         expect(named(blocks, 0xfe82, "write")).toBe("FDC.RESET");
-        expect(named(blocks, 0xfe82, "read")).toBeUndefined();
+        expect(named(blocks, 0xfe82, "read")).toBe("FDC.COUNT_HI");
         expect(named(blocks, 0xfe9c, "read")).toBe("FDC.DATA");
     });
 
@@ -67,6 +67,7 @@ describe("SHEILA register names", () => {
         const b = blocksOf("B-DFS1.2", { hasEconet: true });
         expect(named(b, 0xfe18, "read")).toBe("Econet.INTOFF");
         expect(named(b, 0xfe20, "read")).toBe("Econet.INTON");
+        expect(named(b, 0xfe2c, "read")).toBe("Econet.INTON");
         expect(named(b, 0xfe20, "write")).toBe("VideoULA.CONTROL");
         expect(named(b, 0xfea0, "read")).toBe("ADLC.SR1");
         const master = blocksOf("Master", { hasEconet: true });

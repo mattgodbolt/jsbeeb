@@ -3,7 +3,7 @@ import { NoiseAwareWdFdc } from "./wd-fdc.js";
 
 /**
  * Which chip answers where in SHEILA (&FE00-&FEFF) on each BBC model, and what its registers are called, read
- * and written.
+ * and written. The ranges follow the hardware's address decoding, even where jsbeeb's leaves a mirror out.
  *
  * @typedef {object} SheilaRegister
  * @property {string | undefined} read - undefined where the chip doesn't answer a read
@@ -55,15 +55,14 @@ const ViaRegisters = [
 const Intel8271Registers = [
     readWrite("STATUS", "COMMAND"),
     readWrite("RESULT", "PARAMETER"),
-    writeOnly("RESET"),
-    Unanswered,
+    readWrite("COUNT_HI", "RESET"),
+    readOnly("COUNT_LO"),
     both("DATA"),
     both("DATA"),
     both("DATA"),
     both("DATA"),
 ];
 
-// The drive control latch, then the 1770's own four.
 const Wd1770Registers = [
     writeOnly("CONTROL"),
     writeOnly("CONTROL"),
@@ -142,7 +141,7 @@ export function sheilaBlocks({ model, hasTube, hasEconet, hasVideoNula }) {
         if (hasEconet)
             blocks.push(
                 block("Econet", "Econet station and interrupt off", 0xfe18, 0xfe20, [both("INTOFF")]),
-                block("Econet", "Econet interrupt on", 0xfe20, 0xfe24, [readOnly("INTON")]),
+                block("Econet", "Econet interrupt on", 0xfe20, 0xfe30, [readOnly("INTON")]),
             );
     }
     if (hasEconet) blocks.push(block("ADLC", "6854 ADLC", 0xfea0, 0xfec0, AdlcRegisters));

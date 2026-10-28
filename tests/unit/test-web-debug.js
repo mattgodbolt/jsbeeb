@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { findModel } from "../../src/models.js";
+import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -214,6 +214,45 @@ describe("Debugger", () => {
                     .querySelector(".instr_mem_ref")
                     .dispatchEvent(new MouseEvent("click", { bubbles: true }));
                 expect(addrOf(memHighlight())).toBe("fe40");
+            });
+
+            it.each([
+                ["STA", 0x8d, "SysVIA.ORB"],
+                ["STX", 0x8e, "SysVIA.ORB"],
+                ["STY", 0x8c, "SysVIA.ORB"],
+                ["*SAX", 0x8f, "SysVIA.ORB"],
+                ["LDX", 0xae, "SysVIA.IRB"],
+                ["CMP", 0xcd, "SysVIA.IRB"],
+                ["*NOP", 0x0c, "SysVIA.IRB"],
+                ["ASL", 0x0e, "SysVIA.IRB/SysVIA.ORB"],
+                ["ROR", 0x6e, "SysVIA.IRB/SysVIA.ORB"],
+                ["*SLO", 0x0f, "SysVIA.IRB/SysVIA.ORB"],
+                ["*DCP", 0xcf, "SysVIA.IRB/SysVIA.ORB"],
+                ["*ISB", 0xef, "SysVIA.IRB/SysVIA.ORB"],
+            ])("takes %s's operand as the register it accesses", (mnemonic, opcode, name) => {
+                program([opcode, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} ${name}`);
+            });
+
+            it.each([
+                ["STZ", 0x9c, "SysVIA.ORB"],
+                ["TSB", 0x0c, "SysVIA.IRB/SysVIA.ORB"],
+                ["TRB", 0x1c, "SysVIA.IRB/SysVIA.ORB"],
+            ])("takes the 65C12's %s's operand as the register it accesses", async (mnemonic, opcode, name) => {
+                cpu = fake6502(TEST_65C12, { video });
+                await cpu.initialise();
+                dbgr.setCpu(cpu);
+                cpu.pc = 0x2000;
+                program([opcode, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} ${name}`);
+            });
+
+            it("leaves a jump into SHEILA as an address", () => {
+                program([0x20, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("JSR $fe40");
             });
 
             it("names the registers the model has where it has them", async () => {
@@ -649,6 +688,16 @@ describe("Debugger", () => {
             expect(code(OswrchAt + 6).querySelector(".instr_mem_ref").title).toBe(
                 "system_via_register_b: $fe40, from Test MOS\nSystem VIA ORB: $fe40",
             );
+        });
+
+        it("doesn't credit a system set whose only name in view gives way to a register's", async () => {
+            [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(0x5000 + i, byte));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            expect(code(0x2005).textContent).toBe("STA SysVIA.ORB");
+            dbgr.updateDisassembly(0x5000);
+            expect(code(0x5000).textContent).toBe("STA SysVIA.ORB");
+            expect(credited()).toBe(false);
         });
 
         it("names an address in the address column, and still follows a named operand", async () => {
