@@ -7,15 +7,16 @@ import { FloatingPanel } from "./floating-panel.js";
 // The keypad's columns, 10 to 12, are scanned on a B as well, and the host's keypad reaches them.
 const MatrixColumns = 13;
 const MatrixRows = 8;
+const StatusForms = ["Autoscan: column 15, no keys", "Port A: column 15, row 7"];
 const IerReadsSet = 0x80;
 const ScreenEnd = 0x8000;
 const HwScrollUnit = 0x800;
 
 const ControlLineModes = [
-    "input, falling edge",
-    "input, falling edge, independent",
-    "input, rising edge",
-    "input, rising edge, independent",
+    "falling edge",
+    "falling edge, independent",
+    "rising edge",
+    "rising edge, independent",
     "handshake output",
     "pulse output",
     "low output",
@@ -25,11 +26,11 @@ const Timer1Modes = ["one-shot", "continuous", "one-shot, PB7 pulse", "continuou
 const ShiftRegisterModes = [
     "off",
     "in by T2",
-    "in by φ2",
+    "in by clock",
     "in by CB1",
     "out free-running by T2",
     "out by T2",
-    "out by φ2",
+    "out by clock",
     "out by CB1",
 ];
 
@@ -111,7 +112,18 @@ const KeysByPlace = new Map(
 );
 
 const lit = (text, title, on) => ({ text, title, lit: !!on });
-const spelt = (text, title) => ({ text, title });
+const widest = (texts) => Math.max(...texts.map((text) => text.length));
+/** A value spelt out, in a slot as wide as the widest of the `forms` it can take, so the panel keeps its size. */
+const spelt = (text, title, forms) => ({ text, title, width: widest(forms) });
+const fixed = (text, title) => spelt(text, title, [text]);
+
+const KeyboardModes = ["keys: autoscan", "keys: port A"];
+const ScreenSizes = HwScrollSubtract.map((subtract) => `screen ${(subtract * HwScrollUnit) / 1024}K`);
+const KeySelections = ["column 15, row 7"];
+const Timer2Modes = ["T2 counts PB6 pulses", "T2 one-shot"];
+const Timer1Forms = Timer1Modes.map((mode) => `T1 ${mode}`);
+const ShiftRegisterForms = ShiftRegisterModes.map((mode) => `SR ${mode}`);
+const CountForms = ["65535 cycles", "65535 pulses"];
 
 function keyboardSelection(portA) {
     return { column: portA & 0xf, row: (portA >>> 4) & 7 };
@@ -129,14 +141,16 @@ function decodeIc32(ic32, { isMaster }) {
             ? lit("RTC data", "B2: the real-time clock's data strobe", ic32 & 4)
             : lit("speech write", "B2, active low: the speech processor's write select", !(ic32 & 4)),
         spelt(
-            ic32 & 8 ? "keys: autoscan" : "keys: port A",
+            KeyboardModes[ic32 & 8 ? 0 : 1],
             "B3, the keyboard's write enable: high, the keyboard scans itself and raises CA2 for a key held; " +
                 "low, port A reads the key it selects",
+            KeyboardModes,
         ),
         spelt(
-            `screen ${(HwScrollSubtract[scroll] * HwScrollUnit) / 1024}K`,
+            ScreenSizes[scroll],
             `B4 and B5 (C0 and C1): the hardware scroll wraps screen addresses at &${hexword(ScreenEnd)} ` +
                 `back to &${hexword(wrapTo)}`,
+            ScreenSizes,
         ),
         lit("caps lock", "B6, active low: the caps lock light", !(ic32 & 0x40)),
         lit("shift lock", "B7, active low: the shift lock light", !(ic32 & 0x80)),
@@ -147,15 +161,19 @@ function decodePortA(pins, { ic32 }) {
     if (ic32 & 8) return [];
     const { column, row } = keyboardSelection(pins);
     return [
-        spelt(`column ${column}, row ${row}`, "PA0-PA3 and PA4-PA6: the key the keyboard is asked about"),
+        spelt(
+            `column ${column}, row ${row}`,
+            "PA0-PA3 and PA4-PA6: the key the keyboard is asked about",
+            KeySelections,
+        ),
         lit("key down", "PA7: the keyboard pulls it low unless the selected key is held", pins & 0x80),
     ];
 }
 
 function decodePortB(pins, { isMaster }) {
     return [
-        spelt(
-            `latch B${pins & 7} ← ${(pins >>> 3) & 1}`,
+        fixed(
+            `latch B${pins & 7} = ${(pins >>> 3) & 1}`,
             "PB0-PB2 address an IC32 latch bit and PB3 is the level written to it",
         ),
         lit("fire 1", "PB4, active low: joystick 1's fire button", !(pins & 0x10)),
@@ -171,12 +189,20 @@ function decodePortB(pins, { isMaster }) {
 
 function edgeLine(line, risingBit) {
     const edge = risingBit ? "rising edge" : "falling edge";
-    return spelt(`${line.name} ${line.wiring}: ${edge}`, `${line.name}, ${line.title}: interrupts on a ${edge}`);
+    return spelt(
+        `${line.name} ${line.wiring}: ${edge}`,
+        `${line.name}, ${line.title}: interrupts on a ${edge}`,
+        ControlLineModes.map((mode) => `${line.name} ${line.wiring}: ${mode}`),
+    );
 }
 
 function controlLine(line, mode) {
     const what = ControlLineModes[mode];
-    return spelt(`${line.name} ${line.wiring}: ${what}`, `${line.name}, ${line.title}: ${what}`);
+    return spelt(
+        `${line.name} ${line.wiring}: ${what}`,
+        `${line.name}, ${line.title}: ${what}`,
+        ControlLineModes.map((mode) => `${line.name} ${line.wiring}: ${mode}`),
+    );
 }
 
 function decodePcr(pcr) {
@@ -190,67 +216,68 @@ function decodePcr(pcr) {
 
 function decodeAcr(acr) {
     return [
-        spelt(`T1 ${Timer1Modes[acr >>> 6]}`, "Bits 6 and 7: timer 1's mode"),
-        spelt(acr & 0x20 ? "T2 counts PB6 pulses" : "T2 one-shot", "Bit 5: timer 2's mode"),
-        spelt(`SR ${ShiftRegisterModes[(acr >>> 2) & 7]}`, "Bits 2 to 4: the shift register's mode"),
+        spelt(Timer1Forms[acr >>> 6], "Bits 6 and 7: timer 1's mode", Timer1Forms),
+        spelt(Timer2Modes[acr & 0x20 ? 0 : 1], "Bit 5: timer 2's mode", Timer2Modes),
+        spelt(ShiftRegisterForms[(acr >>> 2) & 7], "Bits 2 to 4: the shift register's mode", ShiftRegisterForms),
         lit("PB latch", "Bit 1: port B latches its input on CB1's active edge", acr & 2),
         lit("PA latch", "Bit 0: port A latches its input on CA1's active edge", acr & 1),
     ];
 }
 
 function inCycles(value) {
-    return [spelt(`${value} cycles`, "In cycles: the VIA counts at 1 MHz")];
+    return [spelt(`${value} cycles`, "In cycles: the VIA counts at 1 MHz", CountForms)];
 }
 
 function decodeT2Counter(value, { acr }) {
-    if (acr & 0x20) return [spelt(`${value} pulses`, "Falling edges on PB6 still to count")];
+    if (acr & 0x20) return [spelt(`${value} pulses`, "Falling edges on PB6 still to count", CountForms)];
     return inCycles(value);
 }
 
 const register = (name, title, bits, value, decode) => ({ name, title, bits, value, decode });
 const noMeaning = () => [];
 
-const SysViaSections = [
-    {
-        heading: "IC32 latch",
-        registers: [register("IC32", "The addressable latch port B writes", 8, (s) => s.ic32, decodeIc32)],
-    },
-    {
-        heading: "Ports",
-        registers: [
-            register("ORA", "Output register A", 8, (s) => s.ora, noMeaning),
-            register("DDRA", "Port A's data direction: a set bit drives its line", 8, (s) => s.ddra, noMeaning),
-            register("PA", "Port A's lines: the slow data bus", 8, (s) => s.portA, decodePortA),
-            register("ORB", "Output register B", 8, (s) => s.orb, noMeaning),
-            register("DDRB", "Port B's data direction: a set bit drives its line", 8, (s) => s.ddrb, noMeaning),
-            register("PB", "Port B's lines", 8, (s) => s.portB, decodePortB),
-        ],
-    },
-    {
-        heading: "Control",
-        registers: [
-            register("PCR", "Peripheral control: CA1, CA2, CB1 and CB2", 8, (s) => s.pcr, decodePcr),
-            register("ACR", "Auxiliary control: the timers, shift register and latches", 8, (s) => s.acr, decodeAcr),
-            register(
-                "IFR",
-                "Interrupt flags",
-                8,
-                (s) => s.ifr,
-                namedBits([...InterruptSources, { name: "IRQ", title: "Some enabled flag is set" }]),
-            ),
-            register("IER", "Interrupts enabled", 8, (s) => s.ier, namedBits(InterruptSources)),
-        ],
-    },
-    {
-        heading: "Timers",
-        registers: [
-            register("T1C", "Timer 1's counter, as a program reads it", 16, (s) => s.t1c, inCycles),
-            register("T1L", "Timer 1's latch", 16, (s) => s.t1l, inCycles),
-            register("T2C", "Timer 2's counter, as a program reads it", 16, (s) => s.t2c, decodeT2Counter),
-            register("T2L", "Timer 2's latch, as last written", 16, (s) => s.t2l, inCycles),
-        ],
-    },
-];
+const Ic32Section = {
+    heading: "IC32 latch",
+    registers: [register("IC32", "The addressable latch port B writes", 8, (s) => s.ic32, decodeIc32)],
+};
+
+const PortsSection = {
+    heading: "Ports",
+    registers: [
+        register("ORA", "Output register A", 8, (s) => s.ora, noMeaning),
+        register("DDRA", "Port A's data direction: a set bit drives its line", 8, (s) => s.ddra, noMeaning),
+        register("PA", "Port A's lines: the slow data bus", 8, (s) => s.portA, decodePortA),
+        register("ORB", "Output register B", 8, (s) => s.orb, noMeaning),
+        register("DDRB", "Port B's data direction: a set bit drives its line", 8, (s) => s.ddrb, noMeaning),
+        register("PB", "Port B's lines", 8, (s) => s.portB, decodePortB),
+    ],
+};
+
+const ControlSection = {
+    heading: "Control",
+    registers: [
+        register("PCR", "Peripheral control: CA1, CA2, CB1 and CB2", 8, (s) => s.pcr, decodePcr),
+        register("ACR", "Auxiliary control: the timers, shift register and latches", 8, (s) => s.acr, decodeAcr),
+        register(
+            "IFR",
+            "Interrupt flags",
+            8,
+            (s) => s.ifr,
+            namedBits([...InterruptSources, { name: "IRQ", title: "Some enabled flag is set" }]),
+        ),
+        register("IER", "Interrupts enabled", 8, (s) => s.ier, namedBits(InterruptSources)),
+    ],
+};
+
+const TimersSection = {
+    heading: "Timers",
+    registers: [
+        register("T1C", "Timer 1's counter, as a program reads it", 16, (s) => s.t1c, inCycles),
+        register("T1L", "Timer 1's latch", 16, (s) => s.t1l, inCycles),
+        register("T2C", "Timer 2's counter, as a program reads it", 16, (s) => s.t2c, decodeT2Counter),
+        register("T2L", "Timer 2's latch, as last written", 16, (s) => s.t2l, inCycles),
+    ],
+};
 
 /**
  * The system VIA and its keyboard as the panel shows them. Reading changes nothing the machine sees: the timers are
@@ -285,6 +312,7 @@ export function sysViaState(via) {
 class KeyMatrix {
     constructor(container, status) {
         this._status = status;
+        status.style.width = `${widest(StatusForms)}ch`;
         const table = document.createElement("table");
         const header = table.createTHead().insertRow();
         header.append(document.createElement("th"));
@@ -323,8 +351,8 @@ class KeyMatrix {
             cell.classList.toggle("selected", !autoscan && c === selected.column && row === selected.row);
         }
         const status = autoscan
-            ? `Autoscan on column ${scanColumn}${scanColumn >= MatrixColumns ? ", which has no keys" : ""}`
-            : `Port A reads column ${selected.column}, row ${selected.row}`;
+            ? `Autoscan: column ${scanColumn}${scanColumn >= MatrixColumns ? ", no keys" : ""}`
+            : `Port A: column ${selected.column}, row ${selected.row}`;
         if (this._status.textContent !== status) this._status.textContent = status;
     }
 }
@@ -342,7 +370,11 @@ export class SysViaPanel {
         this._via = via;
         this._frameHandle = null;
         this.panel = document.getElementById("sysvia-panel");
-        this._registers = new DecodedRegisters(this.panel.querySelector(".sysvia-registers"), SysViaSections);
+        // The keyboard matrix heads the second column, which is why the sections are split as they are.
+        this._registers = [
+            new DecodedRegisters(this.panel.querySelector(".sysvia-ports"), [PortsSection, ControlSection]),
+            new DecodedRegisters(this.panel.querySelector(".sysvia-latch"), [Ic32Section, TimersSection]),
+        ];
         this._matrix = new KeyMatrix(
             this.panel.querySelector(".key-matrix"),
             this.panel.querySelector(".key-matrix-status"),
@@ -374,7 +406,7 @@ export class SysViaPanel {
         const via = this._via();
         if (!via) return;
         const state = sysViaState(via);
-        this._registers.update(state);
+        for (const registers of this._registers) registers.update(state);
         this._matrix.update(state);
     }
 

@@ -32,6 +32,15 @@ const OsScreenMode = 0x355;
 // only after the frame count has gone up three times.
 const FramesToClearModeSeven = 3;
 const RgbBits = 0xffffff;
+// [register, value] for the system VIA: PCR with independent edges then outputs, ACR shifting out by T2 then counting
+// pulses, and IC32's keyboard enable cleared, so port A selects a key.
+const SysViaModeWrites = [
+    [0xc, 0x66],
+    [0xc, 0xee],
+    [0xb, 0x10],
+    [0xb, 0x60],
+    [0x0, 0x03],
+];
 const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.meta.url), "utf8");
 // The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
 const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
@@ -163,6 +172,40 @@ test("the system VIA panel opens from the More menu, keeps up with the running m
     await expect(keyA).toHaveClass(/held/);
     await page.keyboard.up("a");
     await expect(keyA).not.toHaveClass(/held/);
+});
+
+test("the system VIA panel keeps its size while the machine runs, keys come and go, and its modes change", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#sysvia-open");
+    await page.evaluate(() => {
+        const panel = document.getElementById("sysvia-panel");
+        window.e2eSizes = new Set();
+        window.e2eSampling = true;
+        const sample = () => {
+            const { width, height } = panel.getBoundingClientRect();
+            window.e2eSizes.add(`${width}x${height}`);
+            if (window.e2eSampling) requestAnimationFrame(sample);
+        };
+        sample();
+    });
+    await beeb.pressKey("a");
+    await beeb.pressKey("Enter");
+    // The modes with the longest and shortest words, and port A selecting a key, last too briefly to catch running.
+    const sizes = await page.evaluate(async (writes) => {
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+        for (const [register, value] of writes) {
+            window.processor.sysvia.write(register, value);
+            await frame();
+        }
+        window.e2eSampling = false;
+        return [...window.e2eSizes];
+    }, SysViaModeWrites);
+    expect(sizes).toHaveLength(1);
 });
 
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({

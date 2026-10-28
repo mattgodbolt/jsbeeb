@@ -155,7 +155,7 @@ describe("SysViaPanel", () => {
             via.write(ORB, 0x40 | 1 | LatchSet);
             panel.update();
             expect(meanings("IC32").slice(1, 3)).toEqual(["+RTC read", "-RTC data"]);
-            expect(meanings("PB")).toEqual(["latch B1 ← 1", "-fire 1", "-fire 2", "+RTC enable", "-RTC address"]);
+            expect(meanings("PB")).toEqual(["latch B1 = 1", "-fire 1", "-fire 2", "+RTC enable", "-RTC address"]);
         });
 
         it("spells out port B's lines and the PCR's roles with their wiring", () => {
@@ -163,10 +163,10 @@ describe("SysViaPanel", () => {
             via.write(PCR, PcrCa1RisingCa2RisingIndependentCb2PulseOut);
             via.setJoystickButton(0, true);
             panel.update();
-            expect(meanings("PB")).toEqual(["latch B3 ← 1", "+fire 1", "-fire 2", "-speech ready", "-speech IRQ"]);
+            expect(meanings("PB")).toEqual(["latch B3 = 1", "+fire 1", "-fire 2", "-speech ready", "-speech IRQ"]);
             expect(meanings("PCR")).toEqual([
                 "CA1 vsync: rising edge",
-                "CA2 keyboard: input, rising edge, independent",
+                "CA2 keyboard: rising edge, independent",
                 "CB1 ADC: falling edge",
                 "CB2 light pen: pulse output",
             ]);
@@ -252,11 +252,11 @@ describe("SysViaPanel", () => {
             expect(matrixCell(BBC.Q).classList.contains("held")).toBe(true);
             expect(matrixCell(BBC.A).classList.contains("held")).toBe(false);
             expect(scannedColumn()).toBe("7");
-            expect(matrixStatus()).toBe("Autoscan on column 7");
+            expect(matrixStatus()).toBe("Autoscan: column 7");
             scheduler.polltime(7 * TicksPerScanColumn);
             panel.update();
             expect(scannedColumn()).toBeUndefined();
-            expect(matrixStatus()).toBe("Autoscan on column 14, which has no keys");
+            expect(matrixStatus()).toBe("Autoscan: column 14, no keys");
         });
 
         it("marks the key port A selects while the keyboard is not scanning itself", () => {
@@ -266,7 +266,7 @@ describe("SysViaPanel", () => {
             expect(scannedColumn()).toBe(String(BBC.RETURN[0]));
             expect(matrixCell(BBC.RETURN).classList.contains("selected")).toBe(true);
             expect(document.querySelectorAll(".key-matrix td.selected")).toHaveLength(1);
-            expect(matrixStatus()).toBe(`Port A reads column ${BBC.RETURN[0]}, row ${BBC.RETURN[1]}`);
+            expect(matrixStatus()).toBe(`Port A: column ${BBC.RETURN[0]}, row ${BBC.RETURN[1]}`);
         });
     });
 });

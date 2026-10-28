@@ -5,6 +5,8 @@ import { hexbyte, hexword } from "../hex.js";
  * @property {string} text
  * @property {string} title
  * @property {boolean} [lit] for a named bit or line, whether it is active; absent for a value spelt out
+ * @property {number} [width] for a value spelt out, the most characters its text can take. Every value in a row is
+ * given the widest of the row's, so that they line up and a change of value moves nothing.
  */
 
 /**
@@ -71,19 +73,21 @@ export class DecodedRegisters {
             const hex = register.bits === 16 ? hexword(value) : hexbyte(value);
             if (row.hex.textContent !== hex) row.hex.textContent = hex;
             const meanings = register.decode(value, state);
-            const shown = meanings.map(({ text, lit }) => `${text}\u0000${lit}`).join("\u0001");
+            const shown = meanings.map(({ text, lit, width }) => `${text}\u0000${lit}\u0000${width}`).join("\u0001");
             if (shown === row.shown) continue;
             row.shown = shown;
-            row.meaning.replaceChildren(...meanings.map(meaningNode));
+            const valueWidth = Math.max(0, ...meanings.map(({ width }) => width ?? 0));
+            row.meaning.replaceChildren(...meanings.map((meaning) => meaningNode(meaning, valueWidth)));
         }
     }
 }
 
-function meaningNode({ text, title, lit }) {
+function meaningNode({ text, title, lit }, valueWidth) {
     const node = document.createElement("span");
     node.className = lit === undefined ? "decoded-value" : `decoded-bit${lit ? " lit" : ""}`;
     node.textContent = text;
     node.title = title;
+    if (lit === undefined) node.style.width = `${valueWidth}ch`;
     return node;
 }
 
