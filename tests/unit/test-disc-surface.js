@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadAdf, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, loadAdf, loadSsd } from "../../src/disc.js";
+import { IbmDiscFormat } from "../../src/disc-format.js";
 import {
     DensityPalette,
     DensityRampHex,
