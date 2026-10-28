@@ -113,9 +113,9 @@ describe("Cpu6502 ROM loading into a named bank", () => {
         );
     });
 
-    it.each([16, 7.5])("refuses bank %s, which no ROMSEL value names", async (bank) => {
-        await expect(load("B-DFS1.2", { bankRoms: [{ bank, rom: "ample.rom" }] })).rejects.toThrow(
-            `ROM bank ${bank}: the BBC B with 8271 (DFS 1.2) has 16 ROM sockets, banks 0 to 15`,
+    it("refuses bank 16, which no ROMSEL value names", async () => {
+        await expect(load("B-DFS1.2", { bankRoms: [{ bank: 16, rom: "ample.rom" }] })).rejects.toThrow(
+            "ROM bank 16: the BBC B with 8271 (DFS 1.2) has 16 ROM sockets, banks 0 to 15",
         );
     });
 

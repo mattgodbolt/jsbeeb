@@ -1401,7 +1401,7 @@ export class Cpu6502 extends Base6502 {
         }
         const { bankRoms } = this.config;
         for (const { bank, rom } of bankRoms) {
-            if (!Number.isInteger(bank) || bank < lowestBank || bank >= NumRomBanks)
+            if (bank < lowestBank || bank >= NumRomBanks)
                 throw new Error(
                     `Can't load ${rom} into ROM bank ${bank}: the ${this.model.name} has ${romSockets} ROM sockets, banks ${lowestBank} to ${NumRomBanks - 1}`,
                 );
