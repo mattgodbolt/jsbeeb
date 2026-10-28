@@ -259,6 +259,7 @@ const MinPanelWidth = 220;
 /** The narrowest gutter the panels go in by default; narrower, the disassembly loses its operands. */
 const MinColumnWidth = 280;
 const StackBytesShown = 8;
+const RunningNameMatchMs = 1000;
 const MinSizes = {
     toolbar: { w: 200, h: 30 },
     disassembly: { w: MinPanelWidth, h: 120 },
@@ -324,6 +325,7 @@ export class Debugger {
         this._frameHandle = null;
         /** The machine's cycle count when the open panels were last drawn. */
         this._shownAt = null;
+        this._matchedAt = 0;
         this._screenBounds = () => null;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
@@ -352,11 +354,9 @@ export class Debugger {
         symbolSets?.addEventListener("loaded", () => {
             // The index arriving is what lets the sets matching memory be fetched.
             if (this.watches.floating.isOpen) this._namesNow();
-            if (!this._inDebugger) return;
+            if (!this._inDebugger && !this.panelsShown()) return;
             this._matchSymbols();
-            this.updateDisassembly(this.disassPc);
-            this._memoryView.update();
-            arrangement.keepAttached();
+            this._showOpenPanels();
         });
 
         this.panels = Object.fromEntries(DebugPanelIds.map((id) => [id, this._makePanel(id)]));
@@ -609,6 +609,9 @@ export class Debugger {
     }
 
     _showOpenPanels() {
+        const now = performance.now();
+        // Names are matched to what is in memory now; while it runs, not every frame, as matching peeks at it.
+        if (!this._loop?.isRunning() || now - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
         for (const id of DebugPanelIds) if (this.panels[id].isOpen) this._showPanel(id);
         this._shownAt = this._cycles();
         // Not while it runs, when the names in view, and so the credit's height, can change every frame.
@@ -639,7 +642,7 @@ export class Debugger {
             hasEconet: !!cpu.econet,
             hasVideoNula: cpu.video.ula.hasVideoNula,
         });
-        this._showOpenPanels();
+        if (this.panelsShown()) this._showOpenPanels();
     }
     disassemble(addr) {
         return this.cpu.disassembler.disassemble(addr);
@@ -761,10 +764,7 @@ export class Debugger {
         for (let at = top; at <= 0xff && at > cpu.s && stack.length < StackBytesShown; at++)
             stack.push(hexbyte(cpu.peekmem(0x100 + at)));
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
-        this.updateElem(
-            document.getElementById("cpu6502_cycles"),
-            String(cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles),
-        );
+        this.updateElem(document.getElementById("cpu6502_cycles"), String(this._cycles()));
         this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
         this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
         this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
@@ -837,6 +837,7 @@ export class Debugger {
 
     _matchSymbols() {
         this._names = this._namesNow();
+        this._matchedAt = performance.now();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */

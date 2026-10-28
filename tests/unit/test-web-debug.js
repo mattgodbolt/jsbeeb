@@ -1670,9 +1670,16 @@ describe("Debugger", () => {
             expect(addrOf(currentRow())).toBe("2002");
         });
 
-        it("waits for the next stop to look for sets when the index arrives while the machine runs", async () => {
+        it("names the panels shown while the machine runs once the index and its sets arrive", async () => {
+            stoppedLoop.go();
+            dbgr.togglePanels();
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            expect(credited()).toBe(true);
+        });
+
+        it("waits for the next stop to look for sets when the index arrives with the panels shut", async () => {
             dbgr.debug(cpu.pc);
-            dbgr.hide();
+            dbgr.toggleDebugger();
             await vi.waitFor(() => expect(load.mock.settledResults[0]?.type).toBe("fulfilled"));
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(load).toHaveBeenCalledTimes(1);
