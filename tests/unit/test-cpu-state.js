@@ -348,7 +348,6 @@ describe("Cpu6502 econet NMI line", () => {
 
     it("disables the line from every INTOFF mirror, by read or write, and enables it from every INTON mirror", () => {
         raiseAdlcIrq(cpu);
-        takesNmi(cpu);
         const intoff = addressesFrom(StationIdRegister, NmiEnableRegister);
         const inton = addressesFrom(NmiEnableRegister, RomSelect);
         const lineAfter = (before, access) => {
