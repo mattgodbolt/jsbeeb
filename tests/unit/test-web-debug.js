@@ -91,7 +91,7 @@ describe("Debugger", () => {
             expect(visible("debug")).toBe(false);
         });
 
-        it("open the decoded system VIA on a BBC, but show none on an Atom", () => {
+        it("give the decoded system VIA the machine's VIA on a BBC, and none on an Atom", () => {
             const ic32 = () => document.querySelector("#sysvia-panel .decoded-hex").textContent;
             dbgr.sysViaPanel.update();
             expect(ic32()).toBe(hexbyte(cpu.sysvia.IC32));

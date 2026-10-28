@@ -198,13 +198,13 @@ function decodeAcr(acr) {
     ];
 }
 
-function counted(unit) {
-    return (value) => [spelt(`${value} ${unit}`, `In ${unit}: the VIA counts at 1 MHz`)];
+function inCycles(value) {
+    return [spelt(`${value} cycles`, "In cycles: the VIA counts at 1 MHz")];
 }
 
 function decodeT2Counter(value, { acr }) {
     if (acr & 0x20) return [spelt(`${value} pulses`, "Falling edges on PB6 still to count")];
-    return counted("cycles")(value);
+    return inCycles(value);
 }
 
 const register = (name, title, bits, value, decode) => ({ name, title, bits, value, decode });
@@ -244,10 +244,10 @@ const SysViaSections = [
     {
         heading: "Timers",
         registers: [
-            register("T1C", "Timer 1's counter, as a program reads it", 16, (s) => s.t1c, counted("cycles")),
-            register("T1L", "Timer 1's latch", 16, (s) => s.t1l, counted("cycles")),
+            register("T1C", "Timer 1's counter, as a program reads it", 16, (s) => s.t1c, inCycles),
+            register("T1L", "Timer 1's latch", 16, (s) => s.t1l, inCycles),
             register("T2C", "Timer 2's counter, as a program reads it", 16, (s) => s.t2c, decodeT2Counter),
-            register("T2L", "Timer 2's latch, as last written", 16, (s) => s.t2l, counted("cycles")),
+            register("T2L", "Timer 2's latch, as last written", 16, (s) => s.t2l, inCycles),
         ],
     },
 ];
