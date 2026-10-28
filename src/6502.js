@@ -1353,8 +1353,8 @@ export class Cpu6502 extends Base6502 {
     /**
      * Loads the OS and then the model's sideways ROMs into the highest free banks, in order, an empty name leaving its
      * socket empty. The fittings' ROMs follow, into the empty sockets before any lower bank; then each of the config's
-     * `bankRoms` goes into the bank it names, which must be one those leave free, and the config's extra ROMs into the
-     * empty sockets and highest banks left.
+     * `bankRoms` goes into the bank it names, which must be free after those and named only once, and the config's
+     * extra ROMs into the empty sockets and highest banks left.
      */
     async loadOs(os, ...modelRoms) {
         os = "roms/" + os;
@@ -1373,8 +1373,8 @@ export class Cpu6502 extends Base6502 {
             ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
             filledBy.set(romIndex + i_1, `a ROM from ${os}`);
         }
-        const awaiting = [];
-        const loadInto = (bank, rom) => awaiting.push(this.loadRom(rom, this.romOffset + bank * RomBankBytes));
+        const placed = [];
+        const place = (bank, rom) => placed.push({ bank, rom });
         const { romSockets } = this.model;
         const lowestBank = NumRomBanks - romSockets;
         const nextFreeBank = (isTaken) => {
@@ -1392,29 +1392,32 @@ export class Cpu6502 extends Base6502 {
                 continue;
             }
             filledBy.set(bank, rom);
-            loadInto(bank, rom);
+            place(bank, rom);
         }
         for (const rom of this.config.fittedRoms) {
             const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
             filledBy.set(bank, rom);
-            loadInto(bank, rom);
+            place(bank, rom);
         }
         const { bankRoms } = this.config;
         for (const { bank, rom } of bankRoms) {
-            if (bank < lowestBank)
+            if (bank < lowestBank || bank >= NumRomBanks)
                 throw new Error(
                     `Can't load ${rom} into ROM bank ${bank}: the ${this.model.name} has ${romSockets} ROM sockets, banks ${lowestBank} to ${NumRomBanks - 1}`,
                 );
             if (filledBy.has(bank))
                 throw new Error(`Can't load ${rom} into ROM bank ${bank}, which already holds ${filledBy.get(bank)}`);
-            loadInto(bank, rom);
+            filledBy.set(bank, rom);
+            place(bank, rom);
         }
         const isNamed = (bank) => bankRoms.some((named) => named.bank === bank);
         emptySockets = emptySockets.filter((bank) => !isNamed(bank));
         const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
         for (const rom of this.config.extraRoms)
-            loadInto(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
-        return await Promise.all(awaiting);
+            place(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
+        return await Promise.all(
+            placed.map(({ bank, rom }) => this.loadRom(rom, this.romOffset + bank * RomBankBytes)),
+        );
     }
 
     setReset(resetOn) {

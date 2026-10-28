@@ -39,6 +39,7 @@ export function fake6502(model, opts = {}) {
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
             fittedRoms: econet && model.isMaster ? [MasterAnfsRom] : [],
             bankRoms: opts.bankRoms,
+            extraRoms: opts.extraRoms,
         }),
         cycleAccurate: opts.cycleAccurate,
     });
