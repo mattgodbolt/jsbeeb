@@ -551,7 +551,6 @@ export class Debugger {
             const disNode = elem.querySelector(".disassembly");
             disNode.innerHTML = result[0];
             const accesses = operandAccesses(result[0]);
-            let note;
             for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
@@ -567,16 +566,13 @@ export class Debugger {
                     shown.add(inline.set);
                     ref.dataset.name = inline.name;
                 } else if (register) {
-                    note = { name: register.name, title: [register.title, operand && nameTitle(operand, target)] };
+                    const note = document.createElement("span");
+                    note.className = "note";
+                    note.textContent = ` ; ${register.name}`;
+                    note.title = operand ? `${register.title}\n${nameTitle(operand, target)}` : register.title;
+                    disNode.append(note);
                     ref.dataset.name = register.name;
                 }
-            }
-            if (note) {
-                const comment = document.createElement("span");
-                comment.className = "note";
-                comment.textContent = ` ; ${note.name}`;
-                comment.title = note.title.filter(Boolean).join("\n");
-                disNode.append(comment);
             }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
                 ref.addEventListener("click", (e) => this.memClick(e));
