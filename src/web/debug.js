@@ -2,6 +2,7 @@ import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
+import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
 
@@ -9,15 +10,29 @@ const noop = () => {};
 
 const numToShow = 16;
 
+const Writes = /^\*?(?:ST[AXYZ]|SAX|SH[ASXY])\b/;
+const ReadModifyWrites = /^\*?(?:ASL|LSR|ROL|ROR|INC|DEC|TSB|TRB|DCP|ISB|RLA|RRA|SLO|SRE)\b/;
+
+/** @returns {("read" | "write")[]} */
+function operandAccesses(instruction) {
+    if (Writes.test(instruction)) return ["write"];
+    if (ReadModifyWrites.test(instruction)) return ["read", "write"];
+    return ["read"];
+}
+
 function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }
 
-function showName(node, { name, set }, addr) {
+function nameTitle({ name, set }, addr) {
     const url = nameUrl(set, name, addr);
+    return `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
+}
+
+function showName(node, named, addr) {
     node.classList.add("named");
-    node.textContent = name;
-    node.title = `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
+    node.textContent = named.name;
+    node.title = nameTitle(named, addr);
 }
 
 function nameNode(named, addr) {
@@ -190,6 +205,7 @@ export class Debugger {
         this.disassPc = 0;
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
+        this._sheila = [];
         this.breakpoints = {};
         this._symbolSets = symbolSets;
         this._names = NoNames;
@@ -236,24 +252,23 @@ export class Debugger {
             if (e.target.closest(".bp_gutter")) this.bpClick(e);
         });
 
-        const offerWatch = (e, address, named) => {
+        const offerWatch = (e, address, name) => {
             e.preventDefault();
-            this.watches.offer({ address, label: named?.name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
+            this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
         };
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            offerWatch(e, address, this._names.address(address, this.cpu.pc));
+            offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
         });
         this.disass.addEventListener("contextmenu", (e) => {
             const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
             const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
             if (operand) {
-                const target = Number(operand.dataset.ref);
-                offerWatch(e, target, this._names.operand(at, target));
+                offerWatch(e, Number(operand.dataset.ref), operand.dataset.name);
             } else if (e.target.closest(".dis_addr")) {
-                offerWatch(e, at, this._names.address(at, this.cpu.pc));
+                offerWatch(e, at, this._names.address(at, this.cpu.pc)?.name);
             }
         });
 
@@ -277,6 +292,12 @@ export class Debugger {
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);
+        this._sheila = sheilaBlocks({
+            model: cpu.model,
+            hasTube: cpu.hasTube,
+            hasEconet: !!cpu.econet,
+            hasVideoNula: cpu.video.ula.hasVideoNula,
+        });
     }
 
     disassemble(addr) {
@@ -529,12 +550,27 @@ export class Debugger {
             elem.querySelector(".instr_asc").textContent = dump.asc.join("");
             const disNode = elem.querySelector(".disassembly");
             disNode.innerHTML = result[0];
+            const accesses = operandAccesses(result[0]);
             for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
-                if (operand) {
-                    showName(ref, operand, target);
-                    shown.add(operand.set);
+                const register = ref.classList.contains("instr_mem_ref")
+                    ? sheilaName(this._sheila, target, accesses)
+                    : undefined;
+                // A register's name displaces a MOS's name for it, but not a program's, which says what it is for.
+                const inline = register && operand?.set.system ? undefined : operand;
+                if (inline) {
+                    showName(ref, inline, target);
+                    if (register) ref.title += `\n${register.title}`;
+                    shown.add(inline.set);
+                    ref.dataset.name = inline.name;
+                } else if (register) {
+                    const note = document.createElement("span");
+                    note.className = "note";
+                    note.textContent = ` ; ${register.name}`;
+                    note.title = operand ? `${register.title}\n${nameTitle(operand, target)}` : register.title;
+                    disNode.append(note);
+                    ref.dataset.name = register.name;
                 }
             }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {

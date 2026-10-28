@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { findModel } from "../../src/models.js";
+import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -189,6 +189,99 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             keyPress("t");
             expect(currentRow().querySelector(".bp_gutter").classList.contains("active")).toBe(true);
+        });
+
+        describe("SHEILA registers", () => {
+            const codeAt = (address) =>
+                disRows()
+                    .find((row) => Number(row.dataset.addr) === address)
+                    .querySelector(".disassembly");
+            const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
+
+            it("notes the register an operand writes, reads, or both, still following it to the memory view", () => {
+                program([0x8d, 0x40, 0xfe, 0xad, 0x40, 0xfe, 0xee, 0x80, 0xfe, 0x2c, 0x4d, 0xfe, 0xad, 0x00, 0x30]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+                expect(codeAt(0x2002).querySelector(".note").title).toBe("System VIA ORB: $fe40");
+                expect(codeAt(0x2005).textContent).toBe("LDA $fe40 ; SysVIA.IRB");
+                expect(codeAt(0x2008).textContent).toBe("INC $fe80 ; FDC.STATUS/COMMAND");
+                expect(codeAt(0x200b).textContent).toBe("BIT $fe4d ; SysVIA.IFR");
+                expect(codeAt(0x200e).textContent).toBe("LDA $3000");
+                codeAt(0x2002)
+                    .querySelector(".instr_mem_ref")
+                    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+                expect(addrOf(memHighlight())).toBe("fe40");
+            });
+
+            it.each([
+                ["STX", 0x8e, "SysVIA.ORB"],
+                ["STY", 0x8c, "SysVIA.ORB"],
+                ["*SAX", 0x8f, "SysVIA.ORB"],
+                ["LDX", 0xae, "SysVIA.IRB"],
+                ["CMP", 0xcd, "SysVIA.IRB"],
+                ["*NOP", 0x0c, "SysVIA.IRB"],
+                ["ASL", 0x0e, "SysVIA.IRB/ORB"],
+                ["ROR", 0x6e, "SysVIA.IRB/ORB"],
+                ["*SLO", 0x0f, "SysVIA.IRB/ORB"],
+                ["*DCP", 0xcf, "SysVIA.IRB/ORB"],
+                ["*ISB", 0xef, "SysVIA.IRB/ORB"],
+            ])("takes %s's operand as the register it accesses", (mnemonic, opcode, name) => {
+                program([opcode, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
+            });
+
+            it.each([
+                ["STZ", 0x9c, "SysVIA.ORB"],
+                ["TSB", 0x0c, "SysVIA.IRB/ORB"],
+                ["TRB", 0x1c, "SysVIA.IRB/ORB"],
+            ])("takes the 65C12's %s's operand as the register it accesses", async (mnemonic, opcode, name) => {
+                cpu = fake6502(TEST_65C12, { video });
+                await cpu.initialise();
+                dbgr.setCpu(cpu);
+                cpu.pc = 0x2000;
+                program([opcode, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
+            });
+
+            it("names the registers of what is fitted", () => {
+                video.ula.hasVideoNula = true;
+                dbgr.setCpu(cpu);
+                program([0x8d, 0x22, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA $fe22 ; VideoULA.NULA_CONTROL");
+            });
+
+            it("leaves a jump into SHEILA as an address", () => {
+                program([0x20, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("JSR $fe40");
+            });
+
+            it("names the registers the model has where it has them", async () => {
+                const master = findModel("Master");
+                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(master)), master, { os: [] }), {
+                    video,
+                });
+                await cpu.initialise();
+                dbgr.setCpu(cpu);
+                cpu.pc = 0x2000;
+                program([0x8d, 0x34, 0xfe, 0x8d, 0x28, 0xfe, 0xad, 0x80, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA $fe34 ; Paging.ACCCON");
+                expect(codeAt(0x2005).textContent).toBe("STA $fe28 ; FDC.COMMAND");
+                expect(codeAt(0x2008).textContent).toBe("LDA $fe80");
+            });
+
+            it("watches a register by its name from a right-click", () => {
+                program([0x8d, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                rightClick(codeAt(0x2002).querySelector(".instr_mem_ref"));
+                pickFromMenu("Watch hex");
+                expect(watchRows().map(([name]) => name)).toEqual(["SysVIA.ORB"]);
+                document.getElementById("watch-close").click();
+            });
         });
     });
 
@@ -574,12 +667,15 @@ describe("Debugger", () => {
             dbgr.setCpu(cpu);
         });
 
-        it("names operands once the sets that match have arrived, and says where the names came from", async () => {
+        it("names operands once the sets that match have arrived, noting a register by its own name", async () => {
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR $3000");
             expect(credited()).toBe(false);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
-            expect(code(0x2005).textContent).toBe("STA system_via_register_b");
+            expect(code(0x2005).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+            expect(code(0x2005).querySelector(".note").title).toBe(
+                "System VIA ORB: $fe40\nsystem_via_register_b: $fe40, from Test MOS",
+            );
             expect(code(0x2008).textContent).toMatch(/^LDA \(os_text_ptr\),Y ; \$[0-9a-f]{4} \+ Y$/);
             expect(code(0x200a).textContent).toMatch(/^JMP \(wrchv\) ; \$/);
             expect(code(0x200d).textContent).toBe("LDA os_text_ptr");
@@ -589,6 +685,29 @@ describe("Debugger", () => {
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
+        });
+
+        it("keeps a program's own name for a SHEILA register, over the register's", async () => {
+            withMos((mos) => (mos.system = false));
+            [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(OswrchAt + 6 + i, byte));
+            dbgr.debug(OswrchAt);
+            await vi.waitFor(() => expect(code(OswrchAt + 6).textContent).toBe("STA system_via_register_b"));
+            expect(code(OswrchAt + 6).querySelector(".instr_mem_ref").title).toBe(
+                "system_via_register_b: $fe40, from Test MOS\nSystem VIA ORB: $fe40",
+            );
+            rightClick(code(OswrchAt + 6).querySelector(".instr_mem_ref"));
+            pickFromMenu("Watch hex");
+            expect(watchRows().map(([name]) => name)).toEqual(["system_via_register_b"]);
+            document.getElementById("watch-close").click();
+        });
+
+        it("doesn't credit a system set whose only name in view gives way to a register's", async () => {
+            [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(0x5000 + i, byte));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            dbgr.updateDisassembly(0x5000);
+            expect(code(0x5000).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+            expect(credited()).toBe(false);
         });
 
         it("names an address in the address column, and still follows a named operand", async () => {
