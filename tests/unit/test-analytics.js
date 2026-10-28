@@ -48,10 +48,12 @@ describe("analytics", () => {
             ).toBe(`${base}?disc1=gdrive&disc2=browser&model=B&tape=browser&autoboot`);
         });
 
-        it("names each ROM on its own", () => {
-            expect(analyticsLocation(`${base}?rom=https%3A%2F%2Fexample.com%2Fa.rom&rom=file:mine.rom`)).toBe(
-                `${base}?rom=https://example.com/a.rom&rom=file`,
-            );
+        it("names each ROM on its own, whichever bank it goes in", () => {
+            expect(
+                analyticsLocation(
+                    `${base}?rom=https%3A%2F%2Fexample.com%2Fa.rom&rom=file:mine.rom&rom.7=github:o/r/x.rom&ROM.8=file:b.rom`,
+                ),
+            ).toBe(`${base}?rom=https://example.com/a.rom&rom=file&rom.7=github:o/r/x.rom&ROM.8=file`);
         });
 
         it("redacts what the URL would have typed or run", () => {

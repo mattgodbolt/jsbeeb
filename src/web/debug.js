@@ -3,6 +3,7 @@ import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
+import { WatchPanel } from "./watch-panel.js";
 
 const noop = () => {};
 
@@ -57,10 +58,31 @@ function cloneTemplate(container) {
     return clone;
 }
 
+function addressFor(names, text, pc) {
+    return names.addressOf(text, pc) ?? parseAddr(text);
+}
+
+function memoryTitle(address, named, inRegion) {
+    const lines = [named ? `${named.name}: $${hexword(address)}` : `$${hexword(address)}`];
+    if (inRegion) {
+        const { region, set } = inRegion;
+        lines.push(`in ${region.name}, $${hexword(region.start)}-$${hexword(region.end - 1)}, from ${set.title}`);
+    }
+    return lines.join("\n");
+}
+
 class MemoryView {
-    constructor(widget, peekMem) {
+    /**
+     * @param {HTMLElement} widget
+     * @param {(address: number) => number} peekMem
+     * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
+     * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
+     */
+    constructor(widget, peekMem, naming, showing) {
         this._widget = widget;
         this._peekMem = peekMem;
+        this._naming = naming;
+        this._showing = showing;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
         this._rows = [];
@@ -83,6 +105,8 @@ class MemoryView {
         if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
         let addr = this._addr - 8 * Math.floor(this._rows.length / 2);
         if (addr < 0) addr = 0;
+        const { names, pc } = this._naming();
+        const shown = new Set();
         for (const row of this._rows) {
             row.querySelector(".dis_addr").innerHTML = labelHtml(addr);
             row.classList.toggle("highlight", addr === this._addr);
@@ -90,13 +114,24 @@ class MemoryView {
             const bytes = row.querySelectorAll(".mem_bytes span");
             const ascii = row.querySelectorAll(".mem_asc span");
             for (let i = 0; i < 8; ++i) {
+                const address = (addr + i) & 0xffff;
+                const inRegion = names.regionAt(address);
+                const named = names.address(address, pc);
+                if (inRegion) shown.add(inRegion.set);
+                if (named) shown.add(named.set);
                 bytes[i].textContent = dump.hex[i];
-                bytes[i].classList.toggle("changed", dump.changed[i]);
                 ascii[i].textContent = dump.asc[i];
-                ascii[i].classList.toggle("changed", dump.changed[i]);
+                for (const span of [bytes[i], ascii[i]]) {
+                    span.dataset.addr = address;
+                    span.classList.toggle("changed", dump.changed[i]);
+                    span.classList.toggle("region", !!inRegion);
+                    span.classList.toggle("region-start", inRegion?.region.start === address);
+                    span.title = inRegion || named ? memoryTitle(address, named, inRegion) : "";
+                }
             }
             addr = (addr + 8) & 0xffff;
         }
+        this._showing(shown);
     }
 
     // TODO(#1062) extract memory part from view part and reuse in disassembler etc. also peekmem can go then
@@ -137,9 +172,20 @@ export class Debugger {
         this.patchInstructions = new Map();
         this._enabled = false;
         this.disass = document.getElementById("disassembly");
-        this._memoryView = new MemoryView(document.getElementById("memory"), (address) =>
-            this.cpu ? this.cpu.peekmem(address) : 0,
+        const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
+        this._peek = peek;
+        this._memoryView = new MemoryView(
+            document.getElementById("memory"),
+            peek,
+            () => ({ names: this._names, pc: this.cpu.pc }),
+            (sets) => {
+                this._memorySets = sets;
+                this._credit();
+            },
         );
+        this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text) });
+        // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
+        this.watches.floating.addEventListener("open", () => this._namesNow());
         this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
         this.disassStack = [];
@@ -149,11 +195,16 @@ export class Debugger {
         this._names = NoNames;
         this._symbolsLine = document.getElementById("debug-symbols");
         this._credited = null;
+        this._disassemblySets = new Set();
+        this._memorySets = new Set();
         toggle(this._symbolsLine, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
+            // The index arriving is what lets the sets matching memory be fetched.
+            if (this.watches.floating.isOpen) this._namesNow();
             if (!this._enabled) return;
             this._matchSymbols();
             this.updateDisassembly(this.disassPc);
+            this._memoryView.update();
         });
 
         const setupGoto = (form, func) => {
@@ -163,7 +214,7 @@ export class Debugger {
                 e.preventDefault();
                 const text = addr.value.trim();
                 if (!text) return;
-                const address = this._names.addressOf(text, this.cpu.pc) ?? parseAddr(text);
+                const address = addressFor(this._names, text, this.cpu.pc);
                 addr.classList.toggle("is-invalid", address === undefined);
                 if (address === undefined) return;
                 func(address);
@@ -183,6 +234,27 @@ export class Debugger {
 
         this.disass.addEventListener("click", (e) => {
             if (e.target.closest(".bp_gutter")) this.bpClick(e);
+        });
+
+        const offerWatch = (e, address, named) => {
+            e.preventDefault();
+            this.watches.offer({ address, label: named?.name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
+        };
+        document.getElementById("memory").addEventListener("contextmenu", (e) => {
+            const byte = e.target.closest("[data-addr]");
+            if (!byte) return;
+            const address = Number(byte.dataset.addr);
+            offerWatch(e, address, this._names.address(address, this.cpu.pc));
+        });
+        this.disass.addEventListener("contextmenu", (e) => {
+            const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
+            const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
+            if (operand) {
+                const target = Number(operand.dataset.ref);
+                offerWatch(e, target, this._names.operand(at, target));
+            } else if (e.target.closest(".dis_addr")) {
+                offerWatch(e, at, this._names.address(at, this.cpu.pc));
+            }
         });
 
         this.disass.addEventListener("wheel", (evt) => {
@@ -290,19 +362,14 @@ export class Debugger {
             "IC32",
         ];
         for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
+        let timers;
         for (const elem of regs) {
             if (via[elem] === undefined) continue;
             const row = cloneTemplate(node);
             row.querySelector(".register").textContent = elem.toUpperCase();
             const value = row.querySelector(".value");
             if (elem.match(/t[12][cl]/)) {
-                updates.push(() => {
-                    const reg = via[elem];
-                    this.updateElem(
-                        value,
-                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff),
-                    );
-                });
+                updates.push(() => this.updateElem(value, hexword(timers[elem])));
             } else {
                 updates.push(() => {
                     this.updateElem(value, hexbyte(via[elem]));
@@ -310,6 +377,7 @@ export class Debugger {
             }
         }
         const update = () => {
+            timers = via.peekTimers();
             for (const update of updates) update();
         };
         update();
@@ -389,11 +457,11 @@ export class Debugger {
     }
 
     _matchSymbols() {
-        this._names = this._symbolSets?.names((addr) => this.cpu.peekmem(addr)) ?? NoNames;
+        this._names = this._namesNow();
     }
 
-    _credit(shown) {
-        const sets = this._names.sets.filter((set) => shown.has(set));
+    _credit() {
+        const sets = this._names.sets.filter((set) => this._disassemblySets.has(set) || this._memorySets.has(set));
         if (this._credited?.length === sets.length && sets.every((set, i) => set === this._credited[i])) return;
         this._credited = sets;
         this._symbolsLine.style.visibility = sets.length > 0 ? "" : "hidden";
@@ -414,10 +482,24 @@ export class Debugger {
             this.updatePrevMem();
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
+        if (this._enabled && !e) this.watches.dismissMenu();
         this._enabled = e;
         const focused = document.activeElement;
         if (!e && [...this.debugNodes].some((node) => node.contains(focused))) focused.blur();
         for (const node of this.debugNodes) toggle(node, this._enabled);
+    }
+
+    _namesNow() {
+        return this._symbolSets?.names(this._peek) ?? NoNames;
+    }
+
+    _resolveWatch(text) {
+        const names = this._namesNow();
+        const pc = this.cpu?.pc;
+        const address = addressFor(names, text, pc);
+        if (address === undefined) return undefined;
+        const label = parseAddr(text) === address ? names.address(address, pc)?.name : text;
+        return { address, label: label ?? `$${hexword(address)}` };
     }
 
     enabled() {
@@ -479,7 +561,8 @@ export class Debugger {
             address = this.prevInstruction(address);
             updateDisElem(elems[i], address);
         }
-        this._credit(shown);
+        this._disassemblySets = shown;
+        this._credit();
     }
 
     prevInstruction(address) {

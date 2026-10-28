@@ -196,11 +196,14 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 
 System VIA additionally includes:
 
-| Field            | Type    | Description                                 |
-| ---------------- | ------- | ------------------------------------------- |
-| `IC32`           | number  | IC32 latch (keyboard, sound, screen select) |
-| `capsLockLight`  | boolean | Caps lock LED state                         |
-| `shiftLockLight` | boolean | Shift lock LED state                        |
+| Field               | Type         | Description                                                                       |
+| ------------------- | ------------ | --------------------------------------------------------------------------------- |
+| `IC32`              | number       | IC32 latch (keyboard, sound, screen select)                                       |
+| `capsLockLight`     | boolean      | Caps lock LED state                                                               |
+| `shiftLockLight`    | boolean      | Shift lock LED state                                                              |
+| `keyScanTaskOffset` | number\|null | Offset at which the autoscan next sets the CA2 flag for a held key (null if none) |
+
+During autoscan, `ca2` is true while the scan finds a held key: it stands for the pulse train the scan puts on the line, not one level. `keyScanTaskOffset` is set after the CA2 flag is cleared while that is so. It is absent from snapshots written before it was saved and from imported snapshots; absent means none is pending.
 
 ### Atom PPIA (`state.atomppia`)
 

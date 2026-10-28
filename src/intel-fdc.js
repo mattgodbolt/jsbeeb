@@ -3,7 +3,8 @@
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502, NmiSource } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
-import { Disc, IbmDiscFormat } from "./disc.js";
+import { Disc } from "./disc.js";
+import { IbmDiscFormat } from "./disc-format.js";
 
 // eslint-disable-next-line no-unused-vars
 import { attachDriveNoise, BaseDiscDrive, DiscDrive } from "./disc-drive.js";

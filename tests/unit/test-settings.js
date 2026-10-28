@@ -131,7 +131,7 @@ describe("Settings", () => {
             expect(settings.model).toBe(findModel("Master"));
             expect(settings.hasMusic5000).toBe(true);
             expect(settings.coProcessor).toBe(false);
-            expect(settings.extraRoms).toEqual(["master/anfs-4.25.rom", "ample.rom"]);
+            expect(settings.fittedRoms).toEqual(["master/anfs-4.25.rom", "ample.rom"]);
         });
 
         it("falls back to the default model with a notice when the name is unknown", () => {

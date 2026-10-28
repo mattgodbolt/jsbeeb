@@ -2,6 +2,7 @@
 // https://github.com/scarybeasts/beebjit
 
 import { crc32 } from "./archive.js";
+import { IbmDiscFormat } from "./disc-format.js";
 import { hexbyte } from "./hex.js";
 
 export const PulsesPerWord = 32;
