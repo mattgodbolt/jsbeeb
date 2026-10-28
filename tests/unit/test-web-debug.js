@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Debugger } from "../../src/web/debug.js";
+import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
@@ -369,21 +370,25 @@ describe("Debugger", () => {
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
-        class StandInLoop extends EventTarget {
+        class StandInLoop {
+            mode = RunMode.debugging;
             running = false;
+            lockstep = null;
             clocksPerSecond = MachineSecond;
             go() {
+                this.mode = RunMode.running;
                 dbgr.hide();
                 this.running = true;
-                this.dispatchEvent(new Event("running"));
             }
-            halt() {
+            pause() {
+                this.mode = RunMode.paused;
+                dbgr.hide();
                 this.running = false;
-                this.dispatchEvent(new Event("running"));
             }
             tick(cycles) {
                 if (cpu.execute(cycles)) return;
-                this.halt();
+                this.mode = RunMode.debugging;
+                this.running = false;
                 dbgr.debug(cpu.pc);
             }
         }
@@ -517,6 +522,25 @@ describe("Debugger", () => {
                 expect(loop.running).toBe(true);
             });
 
+            it("hands the whole run to the loop in a shared session", () => {
+                loop.lockstep = {};
+                keyPress("c");
+                expect(cpu.pc).toBe(0x2002);
+                expect(loop.running).toBe(true);
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("200e");
+            });
+
+            it("stops at a cursor on the reset entry when the machine is reset", () => {
+                const entry = dbgr.resetEntry();
+                goTo("goto-dis-addr-form", `$${hexword(entry)}`);
+                keyPress("c");
+                cpu.reset(false);
+                loop.tick(MachineSecond);
+                expect(cpu.pc).toBe(entry);
+                expect(loop.running).toBe(false);
+            });
+
             describe("forgets where it was going", () => {
                 // Runs on to the cursor at $200E once nothing stops it there.
                 const reachesCursor = () => {
@@ -524,9 +548,25 @@ describe("Debugger", () => {
                     return cpu.execute(MachineSecond);
                 };
 
-                it("when the loop stops for any reason", () => {
+                it("when the machine is paused", () => {
                     keyPress("c");
-                    loop.halt();
+                    loop.pause();
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the machine's state is replaced", () => {
+                    keyPress("c");
+                    dbgr.cancelRun();
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the quick run throws", () => {
+                    const failure = cpu.debugInstruction.add((at) => {
+                        if (at === 0x2002) throw new Error("emulation failed");
+                        return false;
+                    });
+                    expect(() => keyPress("c")).toThrow("emulation failed");
+                    failure.remove();
                     expect(reachesCursor()).toBe(true);
                 });
 

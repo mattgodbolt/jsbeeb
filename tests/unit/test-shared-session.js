@@ -213,7 +213,7 @@ function fakeContext({
         processor,
         model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
         takenFromHost,
-        loop: { setLockstep: vi.fn() },
+        loop: { setLockstep: vi.fn(), replacingState: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         version: "1.0",
         transport: sessionTransport,
@@ -1462,6 +1462,11 @@ describe("SessionGuest", () => {
             const [, second] = sentKeys(channel);
             expect(second).toMatchObject({ at: 700 + (200 + 20) * MsCycles, snapshots: 2 });
         });
+    });
+
+    it("ends a debugger run to a stop when it takes the host's machine", async () => {
+        const { context } = await joinedAt(150);
+        expect(context.loop.replacingState).toHaveBeenCalled();
     });
 
     it("tells the host once a second how it kept up", async () => {

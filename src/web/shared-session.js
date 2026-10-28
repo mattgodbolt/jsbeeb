@@ -1223,6 +1223,7 @@ export class SessionGuest {
         const { processor, loop } = this.context;
         const restored = snapshotFromJSON(await this.context.codec.decompress(snapshot.bytes));
         if (this.left) return;
+        loop.replacingState();
         restoreSessionSnapshot(processor, restored);
         this.rtcBaseMs = restored.rtcBaseMs;
         ++this.snapshotsRestored;

@@ -43,7 +43,7 @@ describe("EmulationLoop", () => {
                 flushChipEvents: vi.fn(),
                 takeEventCounts: () => ({ leadMinMs: 1, stall: 0, skip: 0 }),
             },
-            dbgr: { debug: vi.fn(), hide: vi.fn() },
+            dbgr: { debug: vi.fn(), hide: vi.fn(), cancelRun: vi.fn() },
             gamepad: { update: vi.fn() },
             clocksPerSecond: ClocksPerSecond,
             cpuSpeed: ClocksPerSecond,
@@ -409,6 +409,11 @@ describe("EmulationLoop", () => {
         expect(deps.audioHandler.unmute).toHaveBeenCalledTimes(1);
     });
 
+    it("ends the debugger's run to a stop when the machine's state is replaced", () => {
+        make().replacingState();
+        expect(deps.dbgr.cancelRun).toHaveBeenCalled();
+    });
+
     describe("being held", () => {
         it("stops while held and runs again once let go", () => {
             const loop = started();
@@ -417,6 +422,14 @@ describe("EmulationLoop", () => {
             expect(deps.audioHandler.mute).toHaveBeenCalled();
             resume();
             expect(loop.isRunning()).toBe(true);
+        });
+
+        it("leaves the debugger's run to a stop to carry on after it", () => {
+            const loop = started();
+            deps.dbgr.hide.mockClear();
+            loop.hold("the test")();
+            expect(deps.dbgr.hide).not.toHaveBeenCalled();
+            expect(deps.dbgr.cancelRun).not.toHaveBeenCalled();
         });
 
         it("counts letting go twice as once", () => {
