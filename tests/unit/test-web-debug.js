@@ -365,12 +365,13 @@ describe("Debugger", () => {
         const pc = () => document.getElementById("cpu6502_pc").textContent;
         // LDX #3; DEX; BNE $2002; LDA #$41
         const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
+        const MachineSecond = 2000000;
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
         class StandInLoop extends EventTarget {
             running = false;
-            clocksPerSecond = 2000000;
+            clocksPerSecond = MachineSecond;
             go() {
                 dbgr.hide();
                 this.running = true;
@@ -390,6 +391,15 @@ describe("Debugger", () => {
         beforeEach(() => {
             loop = new StandInLoop();
             dbgr.attachLoop(loop);
+        });
+
+        it("steps one instruction on n even when it goes nowhere", () => {
+            load(0x2000, [0x4c, 0x00, 0x20]);
+            dbgr.debug(cpu.pc);
+            const before = cpu.currentCycles;
+            keyPress("n");
+            expect(pc()).toBe("2000");
+            expect(cpu.currentCycles - before).toBe(3);
         });
 
         it("steps over a loop that leaves backwards", () => {
@@ -458,10 +468,9 @@ describe("Debugger", () => {
             expect(pc()).toBe("2003");
         });
 
-        describe("past a frame", () => {
+        describe("past a fiftieth of a second", () => {
             // Four times round 256 * 256 DEX/BNE, then NOP at $200E: about 1.3 million cycles.
             const long = [0xa0, 0x00, 0xa2, 0x00, 0xca, 0xd0, 0xfd, 0x88, 0xd0, 0xf8, 0xc6, 0x70, 0xd0, 0xf2, 0xea];
-            const MachineSecond = 2000000;
 
             beforeEach(() => {
                 load(0x2000, long);
@@ -489,7 +498,7 @@ describe("Debugger", () => {
                 expect(pc()).toBe("3003");
             });
 
-            it("shows what the whole run changed in memory, from its first frame on", () => {
+            it("shows what the whole run changed in memory, from its very start", () => {
                 // LDA #$41; STA $60; JMP $2000
                 load(0x2100, [0xa9, 0x41, 0x85, 0x60, 0x4c, 0x00, 0x20]);
                 cpu.pc = 0x2100;
