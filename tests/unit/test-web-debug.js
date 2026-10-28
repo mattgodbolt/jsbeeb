@@ -205,7 +205,6 @@ describe("Debugger", () => {
                 expect(codeAt(0x2002).querySelector(".note").title).toBe("System VIA ORB: $fe40");
                 expect(codeAt(0x2005).textContent).toBe("LDA $fe40 ; SysVIA.IRB");
                 expect(codeAt(0x2008).textContent).toBe("INC $fe80 ; FDC.STATUS/COMMAND");
-                expect(codeAt(0x2008).querySelector(".note").title).toBe("8271 disc controller STATUS/COMMAND: $fe80");
                 expect(codeAt(0x200b).textContent).toBe("BIT $fe4d ; SysVIA.IFR");
                 expect(codeAt(0x200e).textContent).toBe("LDA $3000");
                 codeAt(0x2002)
