@@ -2581,9 +2581,7 @@ div.smoothie-chart-tooltip {
 @media (max-width: 700px) {
   #media-panel {
     inset: 0;
-    transform: none;
     width: auto;
-    max-height: none;
     border: 0;
     border-radius: 0;
   }

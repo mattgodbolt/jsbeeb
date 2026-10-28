@@ -64,6 +64,15 @@ function keptInside(rect, area, edges, min) {
             y: Math.max(lo.y, Math.min(rect.y, hi.y - rect.h)),
         };
     const out = { ...rect };
+    // Snapping can pull a dragged left or top edge inward past the minimum.
+    if (edges.left && out.w < min.w) {
+        out.x -= min.w - out.w;
+        out.w = min.w;
+    }
+    if (edges.top && out.h < min.h) {
+        out.y -= min.h - out.h;
+        out.h = min.h;
+    }
     if (edges.left && out.x < lo.x) {
         out.w = Math.max(min.w, out.w - (lo.x - out.x));
         out.x = lo.x;
@@ -168,6 +177,7 @@ export class PanelArrangement {
         for (const [id, rect] of Object.entries(rects)) {
             const index = movable.findIndex((floating) => floating.id === id);
             this._apply(movable[index], rect, specs[index], layout, area);
+            movable[index].restoreScroll();
             if (rect.overlapping) this.raise(movable[index]);
         }
     }
@@ -261,6 +271,7 @@ export class FloatingPanel extends EventTarget {
         this.isOpen = false;
         this._arrangement = arrangement;
         this._gesture = null;
+        this._scrolled = [];
         closeButton.addEventListener("click", () => this.close());
         panel.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
@@ -312,6 +323,10 @@ export class FloatingPanel extends EventTarget {
 
     /** Its size as its content and stylesheet would have it, for the layout. */
     measure() {
+        // Laid out at full height, nothing inside overflows and the browser forgets how far it was scrolled.
+        this._scrolled = [...this.panel.querySelectorAll("*")]
+            .filter((element) => element.scrollTop > 0)
+            .map((element) => [element, element.scrollTop]);
         this.clearGeometry();
         return {
             id: this.id,
@@ -320,6 +335,11 @@ export class FloatingPanel extends EventTarget {
             header: this.headerHeight(),
             place: this.place,
         };
+    }
+
+    restoreScroll() {
+        for (const [element, scrollTop] of this._scrolled) element.scrollTop = scrollTop;
+        this._scrolled = [];
     }
 
     _bindGestures() {

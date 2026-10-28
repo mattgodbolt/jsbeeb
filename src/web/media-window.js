@@ -16,6 +16,8 @@ import { guessDiscTypeFromName } from "../fdc.js";
 import { toast } from "./toast.js";
 import { noteFeature } from "./analytics.js";
 
+const MinPanelSize = { w: 420, h: 240 };
+
 const CounterDigits = 3;
 const CounterDivisions = 10 ** CounterDigits;
 
@@ -105,7 +107,7 @@ export class MediaWindow {
             closeButton: document.getElementById("media-close"),
             id: "media",
             place: { x: Centred, y: EndEdge },
-            minSize: { w: 420, h: 240 },
+            minSize: MinPanelSize,
             reopens: false,
             arrangement: panelArrangement,
         });

@@ -179,7 +179,11 @@ function findRoom(want, panel, placed, area) {
     if (free) return { ...free, overlapping: false };
     const squeezed = { w: Math.min(panel.min.w, ix.hi - ix.lo), h: SqueezedHeaders * panel.header };
     const covering = nearest(rooms.map((room) => trimmedClear(room, squeezed, others.map(headerOf))));
-    return { ...(covering ?? rectOf(want)), overlapping: true };
+    if (covering) return { ...covering, overlapping: true };
+    // Below the lowest header it would cover, as far as the area allows, so it never sits exactly on another.
+    const below = Math.max(...others.filter((other) => overlaps(want, other)).map((other) => other.y + other.header));
+    const y = Math.max(iy.lo, Math.min(below, iy.hi - panel.header));
+    return { x: want.x, y, w: want.w, h: Math.max(panel.header, Math.min(want.h, iy.hi - y)), overlapping: true };
 }
 
 /** `rect` trimmed on its right or bottom, whichever loses less, until it clears `obstacles`; null if it cannot. */

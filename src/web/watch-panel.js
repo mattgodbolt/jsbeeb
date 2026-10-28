@@ -3,6 +3,8 @@ import { formatWatch, WatchFormats } from "../watches.js";
 import { FloatingPanel, panelArrangement } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
 
+const MinPanelSize = { w: 200, h: 80 };
+
 /**
  * A floating list of addresses and their values, read once a frame while it is open and not at all
  * while it is closed. Watches are added by name or address, or from a menu offered at an address
@@ -49,7 +51,7 @@ export class WatchPanel {
             closeButton: document.getElementById("watch-close"),
             id: "watches",
             place: { x: StartEdge, y: StartEdge },
-            minSize: { w: 200, h: 80 },
+            minSize: MinPanelSize,
             reopens: true,
             arrangement: panelArrangement,
         });

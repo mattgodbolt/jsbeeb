@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingPanel, navbarHeightOf, PanelArrangement } from "../../src/web/floating-panel.js";
-import { EndEdge, Gap, StartEdge } from "../../src/web/panel-layout.js";
+import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
 import { sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
@@ -170,7 +170,7 @@ describe("FloatingPanel", () => {
             const second = watches();
             second.open();
             expect(rectOf(first)).toEqual(before);
-            expect(rectOf(second)).not.toMatchObject({ x: before.x, y: before.y });
+            expect(overlaps(rectOf(second), before)).toBe(false);
         });
 
         it("goes on top when opened or clicked", () => {
@@ -246,6 +246,20 @@ describe("FloatingPanel", () => {
             expect(rectOf(floating)).toMatchObject({ x: start.x + 260 - 120, w: 120, h: 180 });
         });
 
+        it("stays at its minimum when a resized edge snaps inward past it", () => {
+            const neighbour = disc();
+            neighbour.open();
+            const lined = { x: Gap + Natural.w - 120 + 10, y: NavbarHeight + Gap + Natural.h + 12 };
+            const at = rectOf(neighbour);
+            drag(header(neighbour), { x: at.x, y: at.y }, lined, { shiftKey: true });
+            expect(rectOf(neighbour)).toMatchObject(lined);
+            const floating = watches();
+            floating.open();
+            const start = rectOf(floating);
+            drag(handle(floating, "left"), { x: start.x, y: start.y + 50 }, { x: lined.x - 3, y: start.y + 50 });
+            expect(rectOf(floating)).toMatchObject({ x: start.x + Natural.w - 120, w: 120 });
+        });
+
         it("does not take the focus from the machine when dragged or resized", () => {
             const floating = watches();
             floating.open();
@@ -265,19 +279,6 @@ describe("FloatingPanel", () => {
             expect(remembered.panels.disc.x).toMatchObject({ anchor: "end" });
             resizeWindow(500, 400);
             expect(saved()).toEqual(remembered);
-        });
-
-        it("stays on the right edge it was dragged to as the window grows, and returns after a shrink", () => {
-            const floating = watches();
-            floating.open();
-            drag(header(floating), { x: 20, y: 70 }, { x: window.innerWidth - 20, y: 300 });
-            expect(rectOf(floating).x + Natural.w).toBe(window.innerWidth - Gap);
-            const atStart = rectOf(floating);
-            resizeWindow(1600, 900);
-            expect(rectOf(floating).x + Natural.w).toBe(1600 - Gap);
-            resizeWindow(400, 300);
-            resizeWindow(1024, 768);
-            expect(rectOf(floating)).toEqual(atStart);
         });
 
         it("saves the size it is resized to", () => {

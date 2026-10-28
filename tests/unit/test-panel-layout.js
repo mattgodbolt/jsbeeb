@@ -233,6 +233,22 @@ describe("panel layout", () => {
             expectApart(rects);
         });
 
+        it("attach above a neighbour when dropped against its top, and stay above it", () => {
+            const below = drop(emptyLayout(), huge, ["memory"], "memory", { x: Gap, y: 700, w: 290, h: 270 }, unsized);
+            const memory = layOut(below, huge, ["memory"]).memory;
+            const layout = drop(
+                below,
+                huge,
+                open,
+                "watches",
+                { x: Gap, y: memory.y - Gap - 200 - 5, w: 300, h: 200 },
+                unsized,
+            );
+            expect(layout.panels.watches.y.attach).toEqual({ to: "memory", side: "before" });
+            const grown = layOut(layout, areaOf(3840, 2160), open);
+            expect(grown.watches.y + grown.watches.h + Gap).toBe(grown.memory.y);
+        });
+
         it("are placed even when saved attachments form a cycle", () => {
             const attached = (to) => ({ ...StartEdge, attach: { to, side: "after" } });
             const layout = {
@@ -271,6 +287,16 @@ describe("panel layout", () => {
             const corners = Object.values(rects).map(({ x, y }) => `${x},${y}`);
             expect(new Set(corners).size).toBe(corners.length);
             expect(Object.values(rects).some((rect) => rect.overlapping)).toBe(true);
+        });
+
+        it("never puts two panels on the same spot, even in an area shorter than a panel's minimum", () => {
+            const rects = layOut(emptyLayout(), areaOf(640, NavbarHeight + LightsHeight + 100), [
+                "watches",
+                "session",
+                "memory",
+            ]);
+            const corners = Object.values(rects).map(({ x, y }) => `${x},${y}`);
+            expect(new Set(corners).size).toBe(corners.length);
         });
 
         it("leaves every header uncovered by the panels stacked above it", () => {

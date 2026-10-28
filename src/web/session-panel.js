@@ -5,6 +5,8 @@
 import { FloatingPanel, panelArrangement } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 
+const MinPaneSize = { w: 300, h: 120 };
+
 // A guest catches up by a large slice per execute (see MaxCatchUpSeconds), so one still this far behind after an
 // execute has fallen a long way behind, not just had a burst of commits.
 export const LaggingMs = 100;
@@ -103,7 +105,7 @@ export class SessionPanel {
             closeButton: pane.querySelector(".session-pane-close"),
             id: "session",
             place: { x: StartEdge, y: EndEdge },
-            minSize: { w: 300, h: 120 },
+            minSize: MinPaneSize,
             reopens: false,
             arrangement: panelArrangement,
         });

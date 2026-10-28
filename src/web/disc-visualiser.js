@@ -17,6 +17,8 @@ import {
     trackRegions,
 } from "../disc-surface.js";
 
+const MinPanelSize = { w: 300, h: 300 };
+
 /** 300 rpm. */
 const RevolutionMs = 200;
 
@@ -129,7 +131,7 @@ export class DiscVisualiser {
             closeButton: document.getElementById("disc-close"),
             id: "disc",
             place: { x: EndEdge, y: StartEdge },
-            minSize: { w: 300, h: 300 },
+            minSize: MinPanelSize,
             reopens: true,
             arrangement: panelArrangement,
         });

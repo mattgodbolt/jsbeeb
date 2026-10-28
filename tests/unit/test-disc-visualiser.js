@@ -23,12 +23,13 @@ const overlayContext = () => ({
 describe("DiscVisualiser", () => {
     let fdc;
     let rafCallbacks;
+    let resizeObserved;
 
     beforeEach(() => {
         domFromIndexHtml("disc-visualiser-open", "disc-panel");
         const surface = document.getElementById("disc-surface");
         const overlay = document.getElementById("disc-overlay");
-        Object.defineProperty(surface, "clientWidth", { value: CanvasSize });
+        Object.defineProperty(surface, "clientWidth", { value: CanvasSize, configurable: true });
         surface.getContext = () => ({
             createImageData: (width, height) => ({ data: new Uint8Array(width * height * 4) }),
             putImageData: vi.fn(),
@@ -42,11 +43,19 @@ describe("DiscVisualiser", () => {
             const { left, top } = panel().style;
             return { left: parseFloat(left) || 0, top: parseFloat(top) || 0, width: 300, height: 300 };
         };
+        resizeObserved = null;
         vi.stubGlobal(
             "ResizeObserver",
             class {
-                observe() {}
-                disconnect() {}
+                constructor(callback) {
+                    this.callback = callback;
+                }
+                observe(element) {
+                    resizeObserved = { element, callback: this.callback };
+                }
+                disconnect() {
+                    resizeObserved = null;
+                }
             },
         );
 
@@ -118,6 +127,17 @@ describe("DiscVisualiser", () => {
             header.dispatchEvent(new PointerEvent("pointermove", at(-1000, -1000)));
             expect(panel().style.left).toBe(`${Gap}px`);
             expect(panel().style.top).toBe(`${Gap}px`);
+        });
+
+        it("redraws its surface at the size the canvas is resized to, while open", () => {
+            make().open();
+            const surface = document.getElementById("disc-surface");
+            expect(resizeObserved.element).toBe(surface);
+            Object.defineProperty(surface, "clientWidth", { value: 2 * CanvasSize, configurable: true });
+            resizeObserved.callback();
+            expect(surface.width).toBe(2 * CanvasSize);
+            document.getElementById("disc-close").click();
+            expect(resizeObserved).toBeNull();
         });
 
         it("opens on a named drive", () => {
