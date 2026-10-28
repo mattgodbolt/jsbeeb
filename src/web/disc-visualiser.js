@@ -1,5 +1,6 @@
 import { IbmDiscFormat } from "../disc-format.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { EndEdge, StartEdge } from "./panel-layout.js";
 import {
     DensityPalette,
     DensityRampHex,
@@ -15,6 +16,8 @@ import {
     trackPulseDensity,
     trackRegions,
 } from "../disc-surface.js";
+
+const MinPanelSize = { w: 300, h: 300 };
 
 /** 300 rpm. */
 const RevolutionMs = 200;
@@ -118,6 +121,7 @@ export class DiscVisualiser {
             if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
         };
         this._onResize = () => this._resize();
+        this._resizeObserver = new ResizeObserver(this._onResize);
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
             this.toggle();
@@ -126,6 +130,11 @@ export class DiscVisualiser {
             panel: this.panel,
             header: this.panel.querySelector(".disc-header"),
             closeButton: document.getElementById("disc-close"),
+            id: "disc",
+            place: { x: EndEdge, y: StartEdge },
+            minSize: MinPanelSize,
+            reopens: true,
+            arrangement: panelArrangement,
         });
         this.floating.addEventListener("open", () => this._start());
         this.floating.addEventListener("close", () => this._stop());
@@ -226,7 +235,9 @@ export class DiscVisualiser {
     }
 
     _start() {
+        // Catches a zoom, which changes the device pixel ratio but not the canvas's size.
         window.addEventListener("resize", this._onResize);
+        this._resizeObserver.observe(this.surfaceCanvas);
         this._resize();
         this._tick();
     }
@@ -238,6 +249,7 @@ export class DiscVisualiser {
         this._detach();
         this._hover = null;
         this._needsFullRepaint = true;
+        this._resizeObserver.disconnect();
         window.removeEventListener("resize", this._onResize);
     }
 
