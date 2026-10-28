@@ -394,9 +394,17 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   problems on smaller screens; bottom taller than 100 or so similarly.
 - `videoCyclesBatch` - the number of video cycles to batch up before running the video emulation. Defaults to zero:
   anything higher leads to emulation inaccuracies. Useful for showing why accuracy is important, even if less efficient.
-- `rom` - load the given URL or path as an extra ROM. If a URL is provided, that URL must allow cross-site requests.
-  Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom`
-  file assumed to be within.
+- `rom` - load the given URL or path as an extra ROM, in the highest sideways ROM bank the machine leaves free. A URL
+  must allow cross-site requests, and `github:OWNER/REPO/PATH` loads a ROM from a public GitHub repo as
+  `disc1=github:` does a disc. Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file
+  will attempt to use the `.rom` file assumed to be within. May be given more than once.
+- `rom.N=X` - loads ROM `X`, named as for `rom`, into sideways bank `N`, 0 to 15 (10 to 15 may also be written A to
+  F), e.g. `model=Master&rom.7=github:mattgodbolt/xmos/original.rom`. If the model has sideways RAM in that bank, the
+  ROM goes into the RAM and can still be written. A bank that already holds a ROM, the model's own (BASIC, a filing
+  system) or one a fitted peripheral needs (Music 5000, teletext, Econet), cannot be named; the boot stops with an
+  error saying what is there. The ROMs `rom` loads go in the banks left over. The stock BBC B (`model=B-stock`) has
+  only four ROM sockets, banks 12 to 15, so it takes only those, and of them only the two AUX sockets, 14 and 15, that
+  BASIC and the DFS leave empty.
 - `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in
   `public/benchmarks/workloads.json`, on the model it names there (e.g. `benchmark=elite`, or
   `benchmark=master-shadow&model=Master`) instead of starting as usual. It runs the workload unthrottled from its

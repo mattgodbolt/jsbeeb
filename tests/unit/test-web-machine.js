@@ -11,7 +11,7 @@ const settings = (overrides = {}) => ({
     hasMusic5000: false,
     hasTeletextAdaptor: false,
     hasEconet: false,
-    extraRoms: [],
+    fittedRoms: [],
     ...overrides,
 });
 
@@ -23,14 +23,20 @@ describe("buildEmulationConfig", () => {
             keyLayout: "physical",
             cpuMultiplier: 1,
             extraRoms: [],
+            bankRoms: [],
             userPort: { read: () => 0xff, write: () => {} },
             printer: {},
             ...overrides,
         });
 
-    it("lets the fittings' ROMs claim banks before the URL's", () => {
-        const built = build({ settings: settings({ extraRoms: ["fitted.rom"] }), extraRoms: ["user.rom"] });
-        expect(built.extraRoms).toEqual(["fitted.rom", "user.rom"]);
+    it("hands over the fittings' ROMs apart from the URL's, those for a named bank among them", () => {
+        const bankRoms = [{ bank: 7, rom: "banked.rom" }];
+        const built = build({
+            settings: settings({ fittedRoms: ["fitted.rom"] }),
+            extraRoms: ["user.rom"],
+            bankRoms,
+        });
+        expect(built).toMatchObject({ fittedRoms: ["fitted.rom"], bankRoms, extraRoms: ["user.rom"] });
     });
 
     it("fits a tube only when a co-processor was asked for", () => {

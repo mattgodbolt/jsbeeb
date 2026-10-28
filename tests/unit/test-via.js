@@ -25,10 +25,14 @@ const Pb6 = 0x40;
 const Timer1Int = 0x40;
 const Timer2Int = 0x20;
 const Ca2Int = 0x01;
+const PcrCa2FallingEdge = 0x00;
+const PcrCa2RisingEdge = 0x04;
+const PcrCa2OutputLow = 0x0c;
 const Ca1Int = 0x02;
 const Cb1Int = 0x10;
 const UserViaIrq = 0x02;
 const TicksPerMicrosecond = 2;
+const ScanPassTicks = 16 * TicksPerMicrosecond;
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -66,7 +70,8 @@ describe("Via snapshotState / restoreState", () => {
     const PcrCa1Cb1RisingCa2HighCb2PulseOnWrite = 0xbf;
     const IerSetTimers = 0xe0;
     const LatchSetBit6 = 0x0e,
-        LatchSetBit3 = 0x0b;
+        LatchSetBit3 = 0x0b,
+        LatchClearBit3 = 0x03;
 
     let scheduler, cpu;
 
@@ -147,28 +152,180 @@ describe("Via snapshotState / restoreState", () => {
             expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
         });
 
-        it.each([
-            ["rising", 0x04],
-            ["falling", 0x00],
-        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+        function makeScanningVia(pcr) {
             const via = makeSystemVia();
             via.write(DDRB, 0x0f);
             via.write(ORB, LatchSetBit3);
             via.write(PCR, pcr);
+            return via;
+        }
+
+        const ca2Flag = (via) => via.read(IFR) & Ca2Int;
+
+        it.each([
+            ["rising", PcrCa2RisingEdge],
+            ["falling", PcrCa2FallingEdge],
+        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+            const via = makeScanningVia(pcr);
             via.keyDownRaw(BBC.A);
-            expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
+            expect(ca2Flag(via)).toBe(Ca2Int);
         });
 
-        it("raises the keyboard interrupt again when a port A write clears it while a key is held", () => {
+        it("raises no keyboard interrupt while CA2 is an output", () => {
+            const via = makeScanningVia(PcrCa2OutputLow);
+            via.keyDownRaw(BBC.A);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("raises the keyboard interrupt when autoscan starts with a key held", () => {
             const via = makeSystemVia();
+            via.write(DDRA, 0x7f);
             via.write(DDRB, 0x0f);
+            via.write(PCR, PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(ORA, BBC.A[0]);
+            via.write(IFR, Ca2Int);
             via.write(ORB, LatchSetBit3);
-            via.write(PCR, 0x04);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        });
+
+        function expectFlagAfter(via, ticks) {
+            scheduler.polltime(ticks - 1);
+            expect(ca2Flag(via)).toBe(0);
+            scheduler.polltime(1);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        }
+
+        // The counter is on column epoch / 2 (mod 16); A is in column 1, D in column 2 and P in column 7.
+        it.each([
+            ["an IFR write", (via) => via.write(IFR, Ca2Int)],
+            ["a port A write", (via) => via.write(ORA, 0)],
+            ["a port A read", (via) => via.read(ORA)],
+        ])("raises the keyboard interrupt again at the scan's next edge after %s clears it", (_, clear) => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            clear(via);
+            expectFlagAfter(via, 2);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, "comes back round to column 1", 10, 24],
+            ["rising", PcrCa2RisingEdge, "comes back round to column 1 from mid-column", 11, 23],
+            ["falling", PcrCa2FallingEdge, "leaves column 1", 2, 2],
+            ["falling", PcrCa2FallingEdge, "comes back round and leaves column 1", 10, 26],
+        ])("with CA2 on the %s edge, sets the flag when the counter %s", (_, pcr, __, startTicks, ticks) => {
+            scheduler.polltime(startTicks);
+            const via = makeScanningVia(pcr);
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
-            expect(via.read(IFR) & Ca2Int).toBe(0);
-            via.write(ORA, 0);
-            expect(via.read(IFR) & Ca2Int).toBe(Ca2Int);
+            expectFlagAfter(via, ticks);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, "reaches the first of the two columns again", 32],
+            ["falling", PcrCa2FallingEdge, "leaves the second of the two columns", 4],
+        ])(
+            "with keys held in neighbouring columns and CA2 on the %s edge, sets the flag when the counter %s",
+            (_, pcr, __, ticks) => {
+                scheduler.polltime(2);
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                via.keyDownRaw(BBC.D);
+                via.write(IFR, Ca2Int);
+                expectFlagAfter(via, ticks);
+            },
+        );
+
+        it("ignores a key the matrix has outside the keyboard's columns", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.keyDownRaw([14, 1]);
+            via.write(IFR, Ca2Int);
+            expectFlagAfter(via, 24);
+        });
+
+        it.each([
+            ["rising", PcrCa2RisingEdge, 4],
+            ["falling", PcrCa2FallingEdge, 6],
+        ])(
+            "with CA2 on the %s edge, brings the return forward when a key ahead of the counter goes down",
+            (_, pcr, ticks) => {
+                scheduler.polltime(10);
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                via.write(IFR, Ca2Int);
+                via.keyDownRaw(BBC.P);
+                expectFlagAfter(via, ticks);
+            },
+        );
+
+        it("puts the scan's return back when the key ahead of the counter goes up", () => {
+            scheduler.polltime(10);
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.keyDownRaw(BBC.P);
+            via.write(IFR, Ca2Int);
+            via.keyUpRaw(BBC.P);
+            expectFlagAfter(via, 24);
+        });
+
+        it.each([
+            ["the key is released", (via) => via.keyUpRaw(BBC.A)],
+            ["autoscan stops", (via) => via.write(ORB, LatchClearBit3)],
+        ])("gives CA2 no edge when %s", (_, stop) => {
+            const via = makeScanningVia(PcrCa2FallingEdge);
+            const levels = [];
+            via.ca2changecallback = (level) => levels.push(level);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            stop(via);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+            expect(levels).toEqual([]);
+        });
+
+        it("reports no CA2 level changes while the scan raises its interrupt", () => {
+            const via = makeScanningVia(PcrCa2FallingEdge);
+            const levels = [];
+            via.ca2changecallback = (level) => levels.push(level);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+            expect(levels).toEqual([]);
+        });
+
+        it("raises the keyboard interrupt when a snapshot is restored with a key held that it lacked", () => {
+            const snapshot = makeScanningVia(PcrCa2RisingEdge).snapshotState();
+            const via = makeSystemVia();
+            via.keyDownRaw(BBC.A);
+            via.restoreState(snapshot);
+            expect(ca2Flag(via)).toBe(Ca2Int);
+        });
+
+        it("restores a snapshot without the scan's return as having none pending", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            const { keyScanTaskOffset, ...olderSnapshot } = via.snapshotState();
+            expect(keyScanTaskOffset).toBe(2);
+            via.restoreState(olderSnapshot);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via)).toBe(0);
+        });
+
+        it("carries the scan's return to a held key through a snapshot", () => {
+            const via = makeScanningVia(PcrCa2RisingEdge);
+            via.keyDownRaw(BBC.A);
+            via.write(IFR, Ca2Int);
+            const snapshot = via.snapshotState();
+            const via2 = makeSystemVia();
+            via2.restoreKeyboard(via.keyboardState());
+            via2.restoreState(snapshot);
+            expect(ca2Flag(via2)).toBe(0);
+            scheduler.polltime(ScanPassTicks);
+            expect(ca2Flag(via2)).toBe(Ca2Int);
         });
 
         it("leaves the held keys alone when restoring a snapshot", () => {
@@ -639,6 +796,19 @@ describe("Via peek", () => {
         expect(cpu.interrupt).toBeTruthy();
         via.read(T1CL);
         expect(via.peek(IFR) & Timer1Int).toBe(0);
+    });
+
+    it("gives the timers as the 16-bit values a program reads, caught up", () => {
+        via.write(T1CL, 0x1e);
+        via.write(T1CH, 0x4e);
+        via.write(T2CL, 0x34);
+        via.write(T2CH, 0x12);
+        runMicroseconds(100);
+        const timers = via.peekTimers();
+        expect(timers.t1l).toBe(0x4e1e);
+        expect(timers.t2l).toBe(0x1234);
+        expect(timers.t1c).toBe(via.read(T1CL) | (via.read(T1CH) << 8));
+        expect(timers.t2c).toBe(via.read(T2CL) | (via.read(T2CH) << 8));
     });
 
     it("leaves the port interrupts raised when peeking the ports", () => {

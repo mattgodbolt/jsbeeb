@@ -1957,6 +1957,8 @@ describe("joinLink", () => {
         const params = {
             model: "Master",
             disc: "elite.ssd",
+            rom: ["a.rom"],
+            "rom.7": ["github:o/r/x.rom"],
             cpuMultiplier: 2,
             server: "old-room",
             client: "old-room",

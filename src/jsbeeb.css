@@ -594,6 +594,25 @@ div.modal-body > div:not(:first-child) {
   color: #60f060;
 }
 
+#memory .region:not(.changed) {
+  background-color: rgba(240, 208, 128, 0.3);
+}
+
+/* A changed byte keeps the changed colour, so its region shows as an underline instead of the tint. */
+#memory .region.changed {
+  box-shadow: inset 0 -2px #f0d080;
+}
+
+#memory .region-start {
+  box-shadow: inset 2px 0 #f0d080;
+}
+
+#memory .region-start.changed {
+  box-shadow:
+    inset 2px 0 #f0d080,
+    inset 0 -2px #f0d080;
+}
+
 .instr_mem_ref,
 .instr_instr_ref {
   cursor: pointer;
@@ -748,6 +767,102 @@ small {
   pointer-events: none;
 }
 
+#watch-panel {
+  position: fixed;
+  top: 80px;
+  left: 8px;
+  width: min(300px, 80vw);
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid #555;
+  border-radius: 4px;
+  z-index: 10;
+  padding: 8px;
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#watch-close {
+  margin-left: auto;
+}
+
+#watch-panel table {
+  width: 100%;
+  margin-top: 6px;
+}
+
+#watch-panel td {
+  padding: 1px 4px;
+}
+
+.watch-name {
+  color: #f0d080;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-value {
+  color: #80d0d0;
+  text-align: right;
+}
+
+#watch-panel .watch-format {
+  width: 8ch;
+  text-align: left;
+  font-family: inherit;
+}
+
+#watch-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+  background: #222222;
+  border: 1px solid #555555;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#watch-menu[hidden] {
+  display: none;
+}
+
+#watch-menu .txt-btn {
+  color: #cccccc;
+  text-align: left;
+  font-family: inherit;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+.watch-formats td {
+  padding-bottom: 4px;
+  text-align: right;
+}
+
+.watch-formats .txt-btn {
+  font-family: inherit;
+}
+
+#watch-panel .txt-btn {
+  color: #cccccc;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+.watch-remove {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.watch-empty {
+  margin-top: 6px;
+  color: #aaaaaa;
+}
+
 #disc-panel {
   position: fixed;
   top: 80px;
@@ -763,6 +878,7 @@ small {
 }
 
 .disc-header,
+.watch-header,
 .session-pane-header {
   display: flex;
   align-items: baseline;
@@ -782,6 +898,7 @@ small {
 }
 
 .disc-header button,
+.watch-header button,
 .session-pane-header button {
   cursor: pointer;
 }

@@ -121,15 +121,17 @@ speak(settings.speechOutput);
 settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
-const keyMappingWarnings = processInputParams(parsedQuery, {
+const bankRoms = [];
+const familyWarnings = processInputParams(parsedQuery, {
     machineKeys: model.keys,
     hostKeyCodes,
     userKeymap,
     gamepad,
+    bankRoms,
 });
-if (keyMappingWarnings.length) {
-    toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
-        title: "Mappings in the URL",
+if (familyWarnings.length) {
+    toast(`${familyWarnings.join(" ")} The key names and ROM banks are listed in the README.`, {
+        title: "Parameters in the URL",
     });
 }
 if (driveTrackWarnings.length) {
@@ -191,6 +193,7 @@ const machine = new Machine({
     keyLayout,
     cpuMultiplier,
     extraRoms,
+    bankRoms,
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,

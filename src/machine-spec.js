@@ -20,6 +20,8 @@ const SpecDefaults = {
     tube: null,
     hasMusic5000: false,
     hasTeletextAdaptor: false,
+    fittedRoms: [],
+    bankRoms: [],
     extraRoms: [],
     userPort: NullUserPort,
     printerPort: null,
@@ -39,6 +41,8 @@ export function machineSpec(overrides = {}) {
     return Object.freeze({
         ...SpecDefaults,
         ...given,
+        fittedRoms: Object.freeze([...(given.fittedRoms ?? SpecDefaults.fittedRoms)]),
+        bankRoms: Object.freeze([...(given.bankRoms ?? SpecDefaults.bankRoms)]),
         extraRoms: Object.freeze([...(given.extraRoms ?? SpecDefaults.extraRoms)]),
         debugFlags: Object.freeze({ ...SpecDefaults.debugFlags, ...given.debugFlags }),
     });
