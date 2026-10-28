@@ -340,6 +340,71 @@ describe("Debugger", () => {
             expect(pc()).toBe("2002");
         });
 
+        it("counts its limit in instructions, not cycles", () => {
+            // Four times round 256 * 256 DEX/BNE: over half a million instructions, and well over a million cycles.
+            load(0x2000, [0xa0, 0x00, 0xa2, 0x00, 0xca, 0xd0, 0xfd, 0x88, 0xd0, 0xf8, 0xc6, 0x70, 0xd0, 0xf2, 0xea]);
+            cpu.writemem(0x70, 4);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$200E");
+            keyPress("c");
+            expect(pc()).toBe("200e");
+            expect(toasts()).toEqual([]);
+        });
+
+        it("steps over a loop that makes a call", () => {
+            // LDX #3; JSR $3000; DEX; BNE $2002; NOP, with an RTS at $3000
+            load(0x2000, [0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea]);
+            load(0x3000, [0x60]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2006");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("2008");
+            expect(cpu.x).toBe(0);
+        });
+
+        it("steps over a recursive call to where it returns at the same depth", () => {
+            // $3000: DEC $70; BEQ $3007; JSR $3000; RTS
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0xc6, 0x70, 0xf0, 0x03, 0x20, 0x00, 0x30, 0x60]);
+            cpu.writemem(0x70, 3);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3004");
+            keyPress("c");
+            const depth = cpu.s;
+            keyPress("m");
+            expect(pc()).toBe("3007");
+            expect(cpu.s).toBe(depth);
+        });
+
+        it("steps over a BRK into its handler", () => {
+            const vector = cpu.peekmem(0xfffe) | (cpu.peekmem(0xffff) << 8);
+            load(0x2000, [0x00]);
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(pc()).toBe(hexword(vector));
+        });
+
+        it("runs right round to a breakpoint on the current instruction", () => {
+            load(0x2000, countdown);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("t");
+            keyPress("c");
+            expect(pc()).toBe("2002");
+            expect(cpu.x).toBe(2);
+        });
+
+        it("steps out through a return that has a breakpoint", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x60]);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("t");
+            keyPress("o");
+            expect(pc()).toBe("2003");
+        });
+
         it("steps out of an interrupt handler through its RTI", () => {
             // Push a return to $200A and the flags as an interrupt would, then enter the handler:
             // LDX #2; DEX; BNE $3002; RTI
@@ -349,6 +414,16 @@ describe("Debugger", () => {
             goTo("goto-dis-addr-form", "$3002");
             keyPress("c");
             keyPress("o");
+            expect(pc()).toBe("200a");
+        });
+
+        it("steps over an RTI to where it returns", () => {
+            load(0x2000, [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea]);
+            load(0x3000, [0x40]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3000");
+            keyPress("c");
+            keyPress("m");
             expect(pc()).toBe("200a");
         });
     });

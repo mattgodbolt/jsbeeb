@@ -10,8 +10,9 @@ const noop = () => {};
 
 const numToShow = 16;
 const MaxStepInstructions = 1 << 20;
-const UnconditionalJump = /^(JMP|RTS|RTI|BRA|BRK)\b/;
-const ConditionalBranch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS)|BB[RS][0-7])\b/;
+const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
+const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
+const Call = /^JSR\b/;
 const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
 
 function labelHtml(addr) {
@@ -592,8 +593,11 @@ export class Debugger {
         for (; ran < MaxStepInstructions; ran++) {
             // Each execute(1) then runs exactly one instruction. TODO(#1062) this drops the residual cycles.
             cpu.targetCycles = cpu.currentCycles;
-            // A breakpoint on the first instruction stops it before it runs, and is stepped off.
-            if (!cpu.execute(1) && ran > 0) break;
+            if (!cpu.execute(1)) {
+                // A breakpoint on the first instruction stops it before it runs, and is stepped off.
+                if (ran > 0 || !cpu.debugInstruction.stopped) break;
+                continue;
+            }
             if (done()) break;
         }
         if (ran === MaxStepInstructions) {
@@ -611,9 +615,10 @@ export class Debugger {
     stepOver() {
         this.updatePrevMem();
         const { pc, s } = this.cpu;
-        const [text, next, target] = this.disassemble(pc);
+        const [text, end, target] = this.disassemble(pc);
+        const next = end & 0xffff;
         if (UnconditionalJump.test(text)) return this.step();
-        if (ConditionalBranch.test(text)) {
+        if (Branch.test(text)) {
             if (target <= pc) {
                 return this.stepUntil(
                     () => this.cpu.s >= s && (this.cpu.pc < target || this.cpu.pc > pc),
@@ -625,7 +630,7 @@ export class Debugger {
                 `reaching $${hexword(next)} or $${hexword(target)}`,
             );
         }
-        if (/^JSR/.test(text)) {
+        if (Call.test(text)) {
             return this.stepUntil(() => this.cpu.pc === next && this.cpu.s >= s, `returning to $${hexword(next)}`);
         }
         this.stepUntil(() => this.cpu.pc === next, `reaching $${hexword(next)}`);
