@@ -402,7 +402,7 @@ export class FloatingPanel extends EventTarget {
             rect: null,
         };
         target.setPointerCapture(e.pointerId);
-        // Also keeps the focus where it was: the keyboard belongs to the machine.
+        // Besides stopping a text selection, keeps the focus where it was: the keyboard belongs to the machine.
         e.preventDefault();
     }
 }

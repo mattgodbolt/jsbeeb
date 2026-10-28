@@ -235,9 +235,9 @@ export class DiscVisualiser {
     }
 
     _start() {
-        this._resizeObserver.observe(this.surfaceCanvas);
-        // A zoom changes the device pixel ratio without resizing the canvas.
+        // Catches a zoom, which changes the device pixel ratio but not the canvas's size.
         window.addEventListener("resize", this._onResize);
+        this._resizeObserver.observe(this.surfaceCanvas);
         this._resize();
         this._tick();
     }
