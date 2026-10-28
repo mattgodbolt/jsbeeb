@@ -156,13 +156,19 @@ describe("SysViaPanel", () => {
             expect(meanings("IC32")).toContain("screen 10K");
         });
 
-        it("names the Master's real-time clock lines where a B has speech", () => {
+        it("names the Master's real-time clock lines where a B has speech, each in a slot that fits either", () => {
+            const chipWidths = () =>
+                ["IC32", "PB"].map((name) =>
+                    [...registerRow(name).querySelectorAll(".decoded-bit")].map((chip) => chip.style.width),
+                );
+            const onB = chipWidths();
             via = makeVia(true);
             via.write(DDRB, PortBLatchLines | PortBRtcLines);
             via.write(ORB, 0x40 | 1 | LatchSet);
             panel.update();
             expect(meanings("IC32").slice(1, 3)).toEqual(["+RTC read", "-RTC data"]);
             expect(meanings("PB")).toEqual(["latch B1 = 1", "-fire 1", "-fire 2", "+RTC enable", "-RTC address"]);
+            expect(chipWidths()).toEqual(onB);
         });
 
         it("spells out port B's lines and the PCR's roles with their wiring", () => {
