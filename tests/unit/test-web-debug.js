@@ -198,17 +198,15 @@ describe("Debugger", () => {
                     .querySelector(".disassembly");
             const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
 
-            it("names the register an operand writes, reads, or both, still following it to the memory view", () => {
+            it("notes the register an operand writes, reads, or both, still following it to the memory view", () => {
                 program([0x8d, 0x40, 0xfe, 0xad, 0x40, 0xfe, 0xee, 0x80, 0xfe, 0x2c, 0x4d, 0xfe, 0xad, 0x00, 0x30]);
                 dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("STA SysVIA.ORB");
-                expect(codeAt(0x2002).querySelector(".instr_mem_ref").title).toBe("System VIA ORB: $fe40");
-                expect(codeAt(0x2005).textContent).toBe("LDA SysVIA.IRB");
-                expect(codeAt(0x2008).textContent).toBe("INC FDC.STATUS/FDC.COMMAND");
-                expect(codeAt(0x2008).querySelector(".instr_mem_ref").title).toBe(
-                    "8271 disc controller STATUS / 8271 disc controller COMMAND: $fe80",
-                );
-                expect(codeAt(0x200b).textContent).toBe("BIT SysVIA.IFR");
+                expect(codeAt(0x2002).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+                expect(codeAt(0x2002).querySelector(".note").title).toBe("System VIA ORB: $fe40");
+                expect(codeAt(0x2005).textContent).toBe("LDA $fe40 ; SysVIA.IRB");
+                expect(codeAt(0x2008).textContent).toBe("INC $fe80 ; FDC.STATUS/COMMAND");
+                expect(codeAt(0x2008).querySelector(".note").title).toBe("8271 disc controller STATUS/COMMAND: $fe80");
+                expect(codeAt(0x200b).textContent).toBe("BIT $fe4d ; SysVIA.IFR");
                 expect(codeAt(0x200e).textContent).toBe("LDA $3000");
                 codeAt(0x2002)
                     .querySelector(".instr_mem_ref")
@@ -223,21 +221,21 @@ describe("Debugger", () => {
                 ["LDX", 0xae, "SysVIA.IRB"],
                 ["CMP", 0xcd, "SysVIA.IRB"],
                 ["*NOP", 0x0c, "SysVIA.IRB"],
-                ["ASL", 0x0e, "SysVIA.IRB/SysVIA.ORB"],
-                ["ROR", 0x6e, "SysVIA.IRB/SysVIA.ORB"],
-                ["*SLO", 0x0f, "SysVIA.IRB/SysVIA.ORB"],
-                ["*DCP", 0xcf, "SysVIA.IRB/SysVIA.ORB"],
-                ["*ISB", 0xef, "SysVIA.IRB/SysVIA.ORB"],
+                ["ASL", 0x0e, "SysVIA.IRB/ORB"],
+                ["ROR", 0x6e, "SysVIA.IRB/ORB"],
+                ["*SLO", 0x0f, "SysVIA.IRB/ORB"],
+                ["*DCP", 0xcf, "SysVIA.IRB/ORB"],
+                ["*ISB", 0xef, "SysVIA.IRB/ORB"],
             ])("takes %s's operand as the register it accesses", (mnemonic, opcode, name) => {
                 program([opcode, 0x40, 0xfe]);
                 dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} ${name}`);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
             });
 
             it.each([
                 ["STZ", 0x9c, "SysVIA.ORB"],
-                ["TSB", 0x0c, "SysVIA.IRB/SysVIA.ORB"],
-                ["TRB", 0x1c, "SysVIA.IRB/SysVIA.ORB"],
+                ["TSB", 0x0c, "SysVIA.IRB/ORB"],
+                ["TRB", 0x1c, "SysVIA.IRB/ORB"],
             ])("takes the 65C12's %s's operand as the register it accesses", async (mnemonic, opcode, name) => {
                 cpu = fake6502(TEST_65C12, { video });
                 await cpu.initialise();
@@ -245,7 +243,7 @@ describe("Debugger", () => {
                 cpu.pc = 0x2000;
                 program([opcode, 0x40, 0xfe]);
                 dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} ${name}`);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
             });
 
             it("names the registers of what is fitted", () => {
@@ -253,7 +251,7 @@ describe("Debugger", () => {
                 dbgr.setCpu(cpu);
                 program([0x8d, 0x22, 0xfe]);
                 dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("STA VideoULA.NULA_CONTROL");
+                expect(codeAt(0x2002).textContent).toBe("STA $fe22 ; VideoULA.NULA_CONTROL");
             });
 
             it("leaves a jump into SHEILA as an address", () => {
@@ -272,8 +270,8 @@ describe("Debugger", () => {
                 cpu.pc = 0x2000;
                 program([0x8d, 0x34, 0xfe, 0x8d, 0x28, 0xfe, 0xad, 0x80, 0xfe]);
                 dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("STA Paging.ACCCON");
-                expect(codeAt(0x2005).textContent).toBe("STA FDC.COMMAND");
+                expect(codeAt(0x2002).textContent).toBe("STA $fe34 ; Paging.ACCCON");
+                expect(codeAt(0x2005).textContent).toBe("STA $fe28 ; FDC.COMMAND");
                 expect(codeAt(0x2008).textContent).toBe("LDA $fe80");
             });
 
@@ -670,17 +668,20 @@ describe("Debugger", () => {
             dbgr.setCpu(cpu);
         });
 
-        it("names operands once the sets that match have arrived, and says where the names came from", async () => {
+        it("notes a system set's names beside the address once the sets have arrived, and credits them", async () => {
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR $3000");
             expect(credited()).toBe(false);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
-            expect(code(0x2005).textContent).toBe("STA SysVIA.ORB");
-            expect(code(0x2008).textContent).toMatch(/^LDA \(os_text_ptr\),Y ; \$[0-9a-f]{4} \+ Y$/);
-            expect(code(0x200a).textContent).toMatch(/^JMP \(wrchv\) ; \$/);
-            expect(code(0x200d).textContent).toBe("LDA os_text_ptr");
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+            expect(code(0x2005).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+            expect(code(0x2005).querySelector(".note").title).toBe(
+                "System VIA ORB: $fe40\nsystem_via_register_b: $fe40, from Test MOS",
+            );
+            expect(code(0x2008).textContent).toMatch(/^LDA \(\$f2\),Y ; \$[0-9a-f]{4} \+ Y, os_text_ptr$/);
+            expect(code(0x200a).textContent).toMatch(/^JMP \(\$020e\) ; \$[0-9a-f]{4}, wrchv$/);
+            expect(code(0x200d).textContent).toBe("LDA $f2 ; os_text_ptr");
             expect(code(0x2000).textContent).toBe("LDA #$41");
-            expect(code(0x2002).querySelector(".instr_instr_ref").title).toBe("oswrch: $3000, from Test MOS");
+            expect(code(0x2002).querySelector(".note").title).toBe("oswrch: $3000, from Test MOS");
             expect(credited()).toBe(true);
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
@@ -701,28 +702,27 @@ describe("Debugger", () => {
             [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(0x5000 + i, byte));
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(credited()).toBe(true));
-            expect(code(0x2005).textContent).toBe("STA SysVIA.ORB");
             dbgr.updateDisassembly(0x5000);
-            expect(code(0x5000).textContent).toBe("STA SysVIA.ORB");
+            expect(code(0x5000).textContent).toBe("STA $fe40 ; SysVIA.ORB");
             expect(credited()).toBe(false);
         });
 
         it("names an address in the address column, and still follows a named operand", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
             expect(addrOf(rowAt(0x2002))).toBe("2002");
             code(0x2002)
                 .querySelector(".instr_instr_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
             expect(addrOf(currentRow())).toBe("3000 oswrch");
             expect(currentRow().querySelector(".dis_addr .symbol").title).toBe("oswrch: $3000, from Test MOS");
-            expect(code(0x3004).textContent).toBe("BNE oswrch");
+            expect(code(0x3004).textContent).toBe("BNE $3000 ; oswrch");
         });
 
         it("goes to a name typed in either box, over reading it as hex", async () => {
             withMos((mos) => (mos.regions.rom.symbols.fade = "0x3004"));
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
             const box = document.querySelector("#goto-dis-addr-form .goto-addr");
             box.focus();
             goTo("goto-dis-addr-form", " oswrch ");
@@ -745,7 +745,7 @@ describe("Debugger", () => {
 
         it("still follows a named zero-page operand to the memory view", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA os_text_ptr"));
+            await vi.waitFor(() => expect(code(0x200d).textContent).toBe("LDA $f2 ; os_text_ptr"));
             code(0x200d)
                 .querySelector(".instr_mem_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -874,7 +874,7 @@ describe("Debugger", () => {
 
         it("watches a disassembly operand, or an instruction's address, by its name from a right-click", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
             rightClick(code(0x2002).querySelector(".instr_instr_ref"));
             pickFromMenu("Watch dec");
             rightClick(rowAt(0x2002).querySelector(".dis_addr"));
@@ -1000,12 +1000,15 @@ describe("Debugger", () => {
                 expect(press.defaultPrevented).toBe(true);
             });
 
-            it("keeps a named operand following its address, saying where it's defined", async () => {
+            it("keeps a noted operand following its address, saying where the name is defined", async () => {
                 dbgr.debug(cpu.pc);
-                await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
-                const operand = code(0x2002).querySelector(".instr_instr_ref");
-                expect(operand.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
-                operand.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+                await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
+                expect(code(0x2002).querySelector(".note").title).toBe(
+                    `oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`,
+                );
+                code(0x2002)
+                    .querySelector(".instr_instr_ref")
+                    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
                 expect(addrOf(currentRow())).toBe("3000 oswrch");
             });
 
@@ -1029,7 +1032,7 @@ describe("Debugger", () => {
 
         it("checks the anchors again at each stop", async () => {
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
             dbgr.hide();
             cpu.writemem(OswrchAt + 3, 0xea);
             dbgr.debug(cpu.pc);
@@ -1055,7 +1058,7 @@ describe("Debugger", () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(load).toHaveBeenCalledTimes(1);
             dbgr.debug(cpu.pc);
-            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR $3000 ; oswrch"));
         });
     });
 

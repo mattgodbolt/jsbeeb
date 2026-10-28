@@ -24,10 +24,15 @@ function operandAccesses(instruction) {
 function sheilaNamed(blocks, address, accesses) {
     const found = accesses.map((access) => sheilaRegister(blocks, address, access)).filter(Boolean);
     if (!found.length) return undefined;
-    const unique = (texts) => [...new Set(texts)];
+    const at = `: $${hexword(address)}`;
+    const [first] = found;
+    if (found.every(({ block }) => block === first.block)) {
+        const names = [...new Set(found.map(({ name }) => name))].join("/");
+        return { name: `${first.block.device}.${names}`, title: `${first.block.title} ${names}${at}` };
+    }
     return {
-        name: unique(found.map(({ block, name }) => `${block.device}.${name}`)).join("/"),
-        title: `${unique(found.map(({ block, name }) => `${block.title} ${name}`)).join(" / ")}: $${hexword(address)}`,
+        name: found.map(({ block, name }) => `${block.device}.${name}`).join("/"),
+        title: `${found.map(({ block, name }) => `${block.title} ${name}`).join(" / ")}${at}`,
     };
 }
 
@@ -35,17 +40,15 @@ function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }
 
-function showName(node, { name, set }, addr) {
+function nameTitle({ name, set }, addr) {
     const url = nameUrl(set, name, addr);
-    node.classList.add("named");
-    node.textContent = name;
-    node.title = `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
+    return `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
 }
 
-function showRegister(node, { name, title }) {
+function showName(node, named, addr) {
     node.classList.add("named");
-    node.textContent = name;
-    node.title = title;
+    node.textContent = named.name;
+    node.title = nameTitle(named, addr);
 }
 
 function nameNode(named, addr) {
@@ -279,11 +282,7 @@ export class Debugger {
             const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
             const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
             if (operand) {
-                offerWatch(
-                    e,
-                    Number(operand.dataset.ref),
-                    operand.classList.contains("named") ? operand.textContent : undefined,
-                );
+                offerWatch(e, Number(operand.dataset.ref), operand.dataset.name);
             } else if (e.target.closest(".dis_addr")) {
                 offerWatch(e, at, this._names.address(at, this.cpu.pc)?.name);
             }
@@ -568,20 +567,37 @@ export class Debugger {
             const disNode = elem.querySelector(".disassembly");
             disNode.innerHTML = result[0];
             const accesses = operandAccesses(result[0]);
+            const notes = [];
             for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
                 const register = ref.classList.contains("instr_mem_ref")
                     ? sheilaNamed(this._sheila, target, accesses)
                     : undefined;
-                // A program's own name for a register says what it is for; a MOS's only says which it is.
-                if (operand && !(register && operand.set.system)) {
-                    showName(ref, operand, target);
+                // The machine's names are known by their address, so they sit beside it; a program's replace it.
+                const machine = operand?.set.system ? operand : undefined;
+                const inline = machine ? undefined : operand;
+                if (inline) {
+                    showName(ref, inline, target);
                     if (register) ref.title += `\n${register.title}`;
-                    shown.add(operand.set);
-                } else if (register) {
-                    showRegister(ref, register);
+                    shown.add(inline.set);
+                    ref.dataset.name = inline.name;
+                } else if (register || machine) {
+                    const { name } = register ?? machine;
+                    notes.push({ name, titles: [register?.title, machine && nameTitle(machine, target)] });
+                    if (!register) shown.add(machine.set);
+                    ref.dataset.name = name;
                 }
+            }
+            if (notes.length) {
+                const comment = document.createElement("span");
+                comment.className = "note";
+                comment.textContent = `${disNode.textContent.includes(";") ? "," : " ;"} ${notes.map(({ name }) => name).join(", ")}`;
+                comment.title = notes
+                    .flatMap(({ titles }) => titles)
+                    .filter(Boolean)
+                    .join("\n");
+                disNode.append(comment);
             }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
                 ref.addEventListener("click", (e) => this.memClick(e));
