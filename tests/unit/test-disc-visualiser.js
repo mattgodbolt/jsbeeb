@@ -5,6 +5,7 @@ import { DiscVisualiser } from "../../src/web/disc-visualiser.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
+import { Gap } from "../../src/web/panel-layout.js";
 import { domFromIndexHtml, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
@@ -37,6 +38,17 @@ describe("DiscVisualiser", () => {
         const header = document.querySelector(".disc-header");
         header.setPointerCapture = () => {};
         header.style.cursor = "move";
+        panel().getBoundingClientRect = () => {
+            const { left, top } = panel().style;
+            return { left: parseFloat(left) || 0, top: parseFloat(top) || 0, width: 300, height: 300 };
+        };
+        vi.stubGlobal(
+            "ResizeObserver",
+            class {
+                observe() {}
+                disconnect() {}
+            },
+        );
 
         rafCallbacks = new Map();
         let nextHandle = 1;
@@ -93,17 +105,19 @@ describe("DiscVisualiser", () => {
             expect(rafCallbacks.size).toBe(0);
         });
 
-        it("can be dragged around by its header, clamped to the window", () => {
-            make();
+        it("can be dragged around by its header, kept inside the window", () => {
+            make().open();
             const header = document.querySelector(".disc-header");
-            header.dispatchEvent(new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
-            header.dispatchEvent(new MouseEvent("pointermove", { clientX: 30, clientY: 25 }));
-            expect(panel().style.left).toBe("20px");
-            expect(panel().style.top).toBe("15px");
-            expect(panel().style.right).toBe("auto");
-            header.dispatchEvent(new MouseEvent("pointermove", { clientX: 2, clientY: 2 }));
-            expect(panel().style.left).toBe("0px");
-            expect(panel().style.top).toBe("0px");
+            const at = (x, y) => ({ pointerId: 1, button: 0, clientX: x, clientY: y, bubbles: true });
+            const left = parseFloat(panel().style.left);
+            const top = parseFloat(panel().style.top);
+            header.dispatchEvent(new PointerEvent("pointerdown", at(500, 100)));
+            header.dispatchEvent(new PointerEvent("pointermove", at(400, 115)));
+            expect(panel().style.left).toBe(`${left - 100}px`);
+            expect(panel().style.top).toBe(`${top + 15}px`);
+            header.dispatchEvent(new PointerEvent("pointermove", at(-1000, -1000)));
+            expect(panel().style.left).toBe(`${Gap}px`);
+            expect(panel().style.top).toBe(`${Gap}px`);
         });
 
         it("opens on a named drive", () => {

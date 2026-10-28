@@ -1,6 +1,7 @@
 import { hexword } from "../hex.js";
 import { formatWatch, WatchFormats } from "../watches.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { StartEdge } from "./panel-layout.js";
 
 /**
  * A floating list of addresses and their values, read once a frame while it is open and not at all
@@ -46,6 +47,11 @@ export class WatchPanel {
             panel: this.panel,
             header: this.panel.querySelector(".watch-header"),
             closeButton: document.getElementById("watch-close"),
+            id: "watches",
+            place: { x: StartEdge, y: StartEdge },
+            minSize: { w: 200, h: 80 },
+            reopens: true,
+            arrangement: panelArrangement,
         });
         this.floating.addEventListener("open", () => this._tick());
         this.floating.addEventListener("close", () => {

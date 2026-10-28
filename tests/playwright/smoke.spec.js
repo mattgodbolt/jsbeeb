@@ -12,6 +12,7 @@
 
 import { readFileSync } from "node:fs";
 
+import { Gap } from "../../src/web/panel-layout.js";
 import { expect, test } from "./fixtures.js";
 
 const OneRowWidth = 4000;
@@ -318,6 +319,40 @@ test("settings hold the emulator while open, a restart is asked about from insid
     await beeb.open();
     await beeb.expectScreenText(">");
     await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
+});
+
+test("a panel dragged to the right edge stays on it as the window grows, returns unchanged after a shrink, and reopens there", async ({
+    beeb,
+    page,
+}) => {
+    const box = async () => {
+        const { x, y, width, height } = await page.locator("#watch-panel").boundingBox();
+        return { x, y, width, height };
+    };
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#watch-open");
+    const header = page.locator(".watch-header .disc-title");
+    const grab = await header.boundingBox();
+    await page.mouse.move(grab.x + 5, grab.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(1270, 360, { steps: 10 });
+    await page.mouse.up();
+    const onEdge = await box();
+    expect(onEdge.x + onEdge.width).toBe(1280 - Gap);
+
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await expect.poll(async () => (await box()).x + onEdge.width).toBe(1920 - Gap);
+    await page.setViewportSize({ width: 700, height: 500 });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(box).toEqual(onEdge);
+
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#watch-panel")).toBeVisible();
+    expect(await box()).toEqual(onEdge);
 });
 
 test("every display mode on the bar can be picked", async ({ beeb, page }) => {

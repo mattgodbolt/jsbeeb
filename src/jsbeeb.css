@@ -355,11 +355,7 @@ span.accesskey {
 
 #session-pane {
   position: fixed;
-  left: 8px;
-  bottom: 72px;
   width: min(460px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid #555;
   border-radius: 4px;
@@ -769,11 +765,7 @@ small {
 
 #watch-panel {
   position: fixed;
-  top: 80px;
-  left: 8px;
   width: min(300px, 80vw);
-  max-height: calc(100vh - 104px);
-  overflow-y: auto;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid #555;
   border-radius: 4px;
@@ -865,11 +857,7 @@ small {
 
 #disc-panel {
   position: fixed;
-  top: 80px;
-  right: 8px;
   width: min(420px, 46vw);
-  max-height: calc(100vh - 104px);
-  overflow-y: auto;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid #555;
   border-radius: 4px;
@@ -877,9 +865,88 @@ small {
   padding: 8px;
 }
 
+#session-pane,
+#disc-panel,
+#watch-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Inside the panels' padding, so they take nothing from the content or a scroll bar. */
+.panel-resize {
+  position: absolute;
+  z-index: 1;
+  touch-action: none;
+}
+
+.panel-resize-top,
+.panel-resize-bottom {
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.panel-resize-left,
+.panel-resize-right {
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.panel-resize-top-left,
+.panel-resize-top-right,
+.panel-resize-bottom-left,
+.panel-resize-bottom-right {
+  width: 12px;
+  height: 12px;
+}
+
+.panel-resize-top,
+.panel-resize-top-left,
+.panel-resize-top-right {
+  top: 0;
+}
+
+.panel-resize-bottom,
+.panel-resize-bottom-left,
+.panel-resize-bottom-right {
+  bottom: 0;
+}
+
+.panel-resize-left,
+.panel-resize-top-left,
+.panel-resize-bottom-left {
+  left: 0;
+}
+
+.panel-resize-right,
+.panel-resize-top-right,
+.panel-resize-bottom-right {
+  right: 0;
+}
+
+.panel-resize-top-left,
+.panel-resize-bottom-right {
+  cursor: nwse-resize;
+}
+
+.panel-resize-top-right,
+.panel-resize-bottom-left {
+  cursor: nesw-resize;
+}
+
 .disc-header,
 .watch-header,
 .session-pane-header {
+  flex-shrink: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -1052,11 +1119,7 @@ div.smoothie-chart-tooltip {
   --olive-lo: #4f4e2c;
   --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.09 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
   position: fixed;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
   width: min(860px, 96vw);
-  max-height: calc(100vh - 88px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1070,6 +1133,7 @@ div.smoothie-chart-tooltip {
 }
 
 .media-header {
+  flex-shrink: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -2526,6 +2590,10 @@ div.smoothie-chart-tooltip {
 
   .media-header {
     cursor: default;
+  }
+
+  #media-panel .panel-resize {
+    display: none;
   }
 
   .media-deck {

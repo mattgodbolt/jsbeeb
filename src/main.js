@@ -41,6 +41,7 @@ import { DefaultStationId } from "./econet.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
+import { panelArrangement } from "./web/floating-panel.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { processDriveTrackParams } from "./url-params.js";
@@ -315,6 +316,7 @@ const layout = new Layout({
     embed: !!parsedQuery.embed,
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
+panelArrangement.reopen();
 
 // Everything a setting can reach now exists.
 settings.on("audioOutput", (output) => audioHandler.setAudioOutput(output));
