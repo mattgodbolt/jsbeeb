@@ -134,10 +134,11 @@ describe("SessionPanel", () => {
     it("sets whether a key press takes control for everyone, without keeping the focus", () => {
         const { pane } = page();
         const setTakeOnKey = vi.fn();
-        new SessionPanel(session({ setTakeOnKey }));
+        new SessionPanel(session({ setTakeOnKey })).open();
         const option = pane.querySelector(".session-take-on-key");
         expect(option.disabled).toBe(false);
         option.focus();
+        expect(document.activeElement).toBe(option);
         option.click();
         expect(setTakeOnKey).toHaveBeenCalledWith(true);
         expect(document.activeElement).not.toBe(option);

@@ -212,6 +212,7 @@ describe("MediaWindow", () => {
         const bayFolded = () => bay(1).classList.contains("folded");
         const fromOpenWindow = (act) => () => {
             made.open();
+            document.activeElement.blur();
             act();
         };
         it.each([

@@ -17,6 +17,12 @@ const pasteEvent = (text) => {
     return event;
 };
 
+/** A panel from index.html, shown, since an element inside a hidden one cannot take focus. */
+const showFromIndexHtml = (id) => {
+    domFromIndexHtml(id);
+    document.getElementById(id).hidden = false;
+};
+
 /** An EmulationLoop's run mode and the calls that change it, and nothing else. */
 function stubLoop() {
     const loop = { mode: RunMode.running, isRunning: () => loop.mode === RunMode.running };
@@ -154,8 +160,7 @@ describe("KeyboardSetup", () => {
 
     describe("where keys go", () => {
         it("reach the machine from the page at large, but not from the media window", () => {
-            domFromIndexHtml("media-panel");
-            document.getElementById("media-panel").hidden = false;
+            showFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.A));
             expect(processor.sysvia.keyDown).toHaveBeenCalledTimes(1);
             document.getElementById("media-close").focus();
@@ -164,8 +169,7 @@ describe("KeyboardSetup", () => {
         });
 
         it("reach the page from the watch panel's add box, and the machine from the rest of the panel", () => {
-            domFromIndexHtml("watch-panel");
-            document.getElementById("watch-panel").hidden = false;
+            showFromIndexHtml("watch-panel");
             document.getElementById("watch-add").focus();
             document.dispatchEvent(keyEvent("keydown", keyCodes.A));
             expect(processor.sysvia.keyDown).not.toHaveBeenCalled();
@@ -175,7 +179,7 @@ describe("KeyboardSetup", () => {
         });
 
         it("aims the media window from inside it, where the search box has focus", () => {
-            domFromIndexHtml("media-panel");
+            showFromIndexHtml("media-panel");
             document.getElementById("media-search").focus();
 
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
@@ -239,7 +243,7 @@ describe("KeyboardSetup", () => {
         });
 
         it("keeps a held shortcut's repeats out of the media window it just opened", () => {
-            domFromIndexHtml("media-panel");
+            showFromIndexHtml("media-panel");
             document.getElementById("media-search").focus();
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
 
@@ -250,7 +254,7 @@ describe("KeyboardSetup", () => {
         });
 
         it("lets go of an accessibility switch held while focus moved into the window", () => {
-            domFromIndexHtml("media-panel");
+            showFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.K1, { alt: true }));
             expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
 
@@ -261,7 +265,7 @@ describe("KeyboardSetup", () => {
         });
 
         it("releases a key that was held while Alt-Shift-M moved focus into the window", () => {
-            domFromIndexHtml("media-panel");
+            showFromIndexHtml("media-panel");
             document.dispatchEvent(keyEvent("keydown", keyCodes.SHIFT_LEFT, { shift: true }));
             document.dispatchEvent(keyEvent("keydown", keyCodes.M, { alt: true, shift: true }));
             document.getElementById("media-search").focus();
