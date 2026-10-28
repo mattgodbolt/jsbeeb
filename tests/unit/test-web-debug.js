@@ -448,6 +448,20 @@ describe("Debugger", () => {
             expect(cpu.onFastPath).toBe(true);
         });
 
+        it("ends a step over whose return is the reset entry when a reset comes first", () => {
+            load(0xfffc, [0x00, 0x40]);
+            load(0x3ffd, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x4c, 0x00, 0x30]);
+            cpu.pc = 0x3ffd;
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(loop.running).toBe(true);
+            cpu.reset(false);
+            loop.tick(MachineSecond);
+            expect(loop.running).toBe(true);
+            expect(cpu.onFastPath).toBe(true);
+        });
+
         it("steps out past the returns of the calls it makes", () => {
             load(0x2000, [0x20, 0x00, 0x30]);
             load(0x3000, [0x20, 0x00, 0x31, 0x60]);
