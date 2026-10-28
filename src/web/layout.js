@@ -125,7 +125,9 @@ export class Layout {
     /** What the LED panel needs below the monitor: its own height, which its layout decides. */
     ledPanelRoom() {
         const panel = document.getElementById("leds");
-        return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
+        const keyboardRoom =
+            parseFloat(document.documentElement.style.getPropertyValue("--touch-keyboard-height")) || 0;
+        return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap) + keyboardRoom;
     }
 
     resize() {

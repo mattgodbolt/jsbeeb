@@ -1,0 +1,146 @@
+#touch-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1030;
+  padding: 2px 4px calc(4px + env(safe-area-inset-bottom));
+  background: linear-gradient(#d8cfb8, #bfb497);
+  border-top: 2px solid #8d836b;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  --key-height: 44px;
+}
+
+#touch-keyboard[hidden],
+#touch-keyboard-toggle[hidden] {
+  display: none;
+}
+
+/* A landscape phone has so little height that every pixel of key is a pixel off the picture. */
+@media (max-height: 500px) {
+  #touch-keyboard {
+    --key-height: 24px;
+    opacity: 0.62;
+  }
+
+  body.touch-keyboard-open #leds {
+    display: none;
+  }
+}
+
+#touch-keyboard .tk-bar {
+  display: flex;
+  justify-content: flex-end;
+  height: 18px;
+}
+
+#touch-keyboard .tk-bar button {
+  border: 0;
+  background: none;
+  color: #5b533f;
+  font-size: 11px;
+  padding: 0 6px;
+  touch-action: manipulation;
+}
+
+#touch-keyboard .tk-layer {
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#touch-keyboard[data-layer="letters"] .tk-layer[data-name="letters"],
+#touch-keyboard[data-layer="symbols"] .tk-layer[data-name="symbols"] {
+  display: flex;
+}
+
+#touch-keyboard .tk-row {
+  display: flex;
+  gap: 3px;
+}
+
+#touch-keyboard .tk-row > div {
+  flex-basis: 0;
+  min-width: 0;
+}
+
+#touch-keyboard .tk-key {
+  position: relative;
+  height: var(--key-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(#3b3733, #25221f);
+  color: #f1ece0;
+  border-radius: 5px;
+  border-bottom: 3px solid #0e0d0c;
+  font:
+    600 16px/1 system-ui,
+    sans-serif;
+  box-sizing: border-box;
+}
+
+#touch-keyboard .tk-key.small {
+  font-size: 11px;
+}
+
+#touch-keyboard .tk-key.fkey {
+  background: linear-gradient(#d23a2c, #a52519);
+  border-bottom-color: #5e130c;
+}
+
+#touch-keyboard .tk-key.layer {
+  background: linear-gradient(#e6dcc3, #c9bd9d);
+  color: #2a2620;
+  border-bottom-color: #7a7058;
+}
+
+#touch-keyboard .tk-key.arrow {
+  font-size: 13px;
+}
+
+#touch-keyboard .tk-key span {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+#touch-keyboard.shifted .tk-key span {
+  opacity: 1;
+  color: #ffd76a;
+}
+
+#touch-keyboard .tk-key.held {
+  background: #e8a317;
+  color: #111;
+  border-bottom-width: 1px;
+  margin-top: 2px;
+  height: calc(var(--key-height) - 2px);
+}
+
+#touch-keyboard-toggle {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1030;
+  width: 48px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #8d836b;
+  background: #d8cfb8;
+  color: #25221f;
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* The lights bar sits just above the keyboard rather than behind it. */
+body.touch-keyboard-open #leds {
+  bottom: var(--touch-keyboard-height, 0);
+}

@@ -25,6 +25,7 @@ import { EmulationLoop } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { TouchKeyboard } from "./web/touch-keyboard.js";
 import { labelPageShortcuts } from "./web/shortcuts.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
@@ -316,6 +317,16 @@ const layout = new Layout({
     display,
     embed: !!parsedQuery.embed,
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
+});
+
+new TouchKeyboard({
+    processor,
+    keyboard,
+    layout,
+    onAnyKeyDown: () => {
+        audioHandler.tryResume();
+        inputs.ensureMicrophoneRunning();
+    },
 });
 panelArrangement.reopen();
 

@@ -1,0 +1,290 @@
+import "./touch-keyboard.css";
+import { BBC } from "../keymap.js";
+
+const StorageKey = "touchKeyboardOpen";
+const NarrowScreenQuery = "(max-width: 700px)";
+const TouchQuery = "(pointer: coarse)";
+const ForceParameter = "touchkeys";
+// The OS scans the keyboard every 10 ms and misses a press shorter than two scans, which a quick tap can be.
+const MinHoldMs = 40;
+const VibrateMs = 8;
+const LandscapeQuery = "(max-height: 500px)";
+const HeightVariable = "--touch-keyboard-height";
+const OpenClass = "touch-keyboard-open";
+const HeldClass = "held";
+const ShiftedClass = "shifted";
+
+// Safari has no vibrate, which eslint-plugin-compat objects to; the optional call is the guard.
+// eslint-disable-next-line compat/compat
+const buzz = () => navigator.vibrate?.(VibrateMs);
+
+/**
+ * A key on the glass. `key` names a position in the keymap's BBC table, so the press reaches the matrix
+ * whatever layout the host is using; `reset` is BREAK, which is not in the matrix. `w` is the flex weight.
+ */
+const k = (label, key, w = 1, extra = {}) => ({ label, key, w, ...extra });
+const letter = (c) => k(c, c);
+const fn = (n) => k(`f${n}`, `F${n}`, 1, { cls: "fkey" });
+const gap = (w) => ({ spacer: true, w });
+
+const ArrowKeys = [
+    k("◀", "LEFT", 0.9, { cls: "arrow" }),
+    k("▼", "DOWN", 0.9, { cls: "arrow" }),
+    k("▲", "UP", 0.9, { cls: "arrow" }),
+    k("▶", "RIGHT", 0.9, { cls: "arrow" }),
+];
+
+/** The bottom row is the same on every layer, so a game never has to leave its layer for space or the cursors. */
+const BottomRow = (layerLabel) => [
+    k(layerLabel, null, 1.6, { cls: "layer" }),
+    k("ESC", "ESCAPE", 1.2, { cls: "small" }),
+    k("CTRL", "CTRL", 1.2, { cls: "small" }),
+    k("SPACE", "SPACE", 3.6),
+    ...ArrowKeys,
+];
+
+const Digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((d) => k(d, `K${d}`));
+
+/** The two layers, as rows of keys. The first row of each is what is swapped for the other. */
+export const Layers = {
+    letters: [
+        Digits,
+        [..."QWERTYUIOP"].map(letter),
+        [...[..."ASDFGHJKL"].map(letter), k("RETURN", "RETURN", 1.8, { cls: "small wide" })],
+        [
+            k("SHIFT", "SHIFT", 1.6, { cls: "small" }),
+            ...[..."ZXCVBNM"].map(letter),
+            k("DEL", "DELETE", 1.6, { cls: "small" }),
+        ],
+        BottomRow("@:;"),
+    ],
+    symbols: [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fn),
+        [
+            k("@", "AT"),
+            k(":", "COLON_STAR", 1, { sub: "*" }),
+            k(";", "SEMICOLON_PLUS", 1, { sub: "+" }),
+            k("-", "MINUS", 1, { sub: "=" }),
+            k("^", "HAT_TILDE", 1, { sub: "~" }),
+            k("\\", "PIPE_BACKSLASH", 1, { sub: "|" }),
+            k("[", "LEFT_SQUARE_BRACKET", 1, { sub: "{" }),
+            k("]", "RIGHT_SQUARE_BRACKET", 1, { sub: "}" }),
+            k("£", "UNDERSCORE_POUND", 1, { sub: "_" }),
+            k("/", "SLASH", 1, { sub: "?" }),
+        ],
+        [
+            k(",", "COMMA", 1, { sub: "<" }),
+            k(".", "PERIOD", 1, { sub: ">" }),
+            k("TAB", "TAB", 1.2, { cls: "small" }),
+            k("COPY", "COPY", 1.4, { cls: "small" }),
+            k("BREAK", null, 1.6, { cls: "fkey small", reset: true }),
+            gap(0.4),
+            k("RETURN", "RETURN", 1.8, { cls: "small wide" }),
+        ],
+        [
+            k("SHIFT", "SHIFT", 1.6, { cls: "small" }),
+            k("CAPS", "CAPSLOCK", 1.4, { cls: "small" }),
+            k("SH LK", "SHIFTLOCK", 1.4, { cls: "small" }),
+            gap(3),
+            k("DEL", "DELETE", 1.6, { cls: "small" }),
+        ],
+        BottomRow("ABC"),
+    ],
+};
+
+/** Every matrix position a layer can press, for checking the layers against the keymap. */
+export const keyNames = () =>
+    new Set(
+        Object.values(Layers)
+            .flat(2)
+            .map((key) => key.key)
+            .filter(Boolean),
+    );
+
+export const matrixPosition = (name) => BBC[name];
+
+/**
+ * Whether to offer the keyboard: any touch screen or narrow window, or ?touchkeys to try it at a desk.
+ */
+export const wantsTouchKeyboard = (search, matches) =>
+    new URLSearchParams(search).has(ForceParameter) || matches(TouchQuery) || matches(NarrowScreenQuery);
+
+/**
+ * An on-screen BBC keyboard that presses keys in the machine's matrix directly (the same place the physical
+ * keyboard's presses end up), so held keys and SHIFT/CTRL chords work with as many fingers as the screen reports.
+ */
+export class TouchKeyboard {
+    constructor({ processor, keyboard, layout, onAnyKeyDown }) {
+        this.onAnyKeyDown = onAnyKeyDown;
+        this.processor = processor;
+        this.keyboard = keyboard;
+        this.layout = layout;
+        this.layer = "letters";
+        this.held = new Map();
+        this.shiftHolds = 0;
+        if (!wantsTouchKeyboard(window.location.search, (query) => window.matchMedia(query).matches)) return;
+
+        this.root = this.build();
+        document.body.append(this.root);
+        this.toggle = this.buildToggle();
+        document.body.append(this.toggle);
+        window.addEventListener("pointerup", (evt) => this.release(evt));
+        window.addEventListener("pointercancel", (evt) => this.release(evt));
+        window.addEventListener("blur", () => this.releaseAll());
+        new ResizeObserver(() => this.publishHeight()).observe(this.root);
+        window.addEventListener("resize", () => this.publishHeight());
+        this.setOpen(this.storedOpen());
+    }
+
+    storedOpen() {
+        try {
+            return window.localStorage.getItem(StorageKey) !== "false";
+        } catch {
+            return true;
+        }
+    }
+
+    build() {
+        const root = document.createElement("div");
+        root.id = "touch-keyboard";
+        root.dataset.layer = this.layer;
+        const bar = document.createElement("div");
+        bar.className = "tk-bar";
+        const hide = document.createElement("button");
+        hide.type = "button";
+        hide.tabIndex = -1;
+        hide.textContent = "⌄ hide";
+        hide.addEventListener("click", () => this.setOpen(false));
+        bar.append(hide);
+        root.append(bar);
+        for (const [name, rows] of Object.entries(Layers)) {
+            const layer = document.createElement("div");
+            layer.className = "tk-layer";
+            layer.dataset.name = name;
+            for (const row of rows) {
+                const rowEl = document.createElement("div");
+                rowEl.className = "tk-row";
+                for (const def of row) rowEl.append(this.buildKey(def));
+                layer.append(rowEl);
+            }
+            root.append(layer);
+        }
+        root.addEventListener("pointerdown", (evt) => this.press(evt));
+        for (const type of ["contextmenu", "dblclick", "selectstart", "mousedown"]) {
+            root.addEventListener(type, (evt) => evt.preventDefault(), { passive: false });
+        }
+        return root;
+    }
+
+    buildKey(def) {
+        const el = document.createElement("div");
+        el.style.flexGrow = def.w;
+        if (def.spacer) return el;
+        el.className = `tk-key ${def.cls ?? ""}`;
+        el.textContent = def.label;
+        if (def.sub) {
+            const sub = document.createElement("span");
+            sub.textContent = def.sub;
+            el.append(sub);
+        }
+        el.dataset.key = def.key ?? "";
+        if (def.reset) el.dataset.reset = "1";
+        if (def.cls?.includes("layer")) el.dataset.layerKey = "1";
+        el.def = def;
+        return el;
+    }
+
+    buildToggle() {
+        const toggle = document.createElement("button");
+        toggle.id = "touch-keyboard-toggle";
+        toggle.type = "button";
+        toggle.tabIndex = -1;
+        toggle.textContent = "⌨";
+        toggle.setAttribute("aria-label", "Show the on-screen keyboard");
+        toggle.addEventListener("click", () => this.setOpen(true));
+        return toggle;
+    }
+
+    setOpen(open) {
+        this.open = open;
+        this.root.hidden = !open;
+        this.toggle.hidden = open;
+        document.body.classList.toggle(OpenClass, open);
+        try {
+            window.localStorage.setItem(StorageKey, String(open));
+        } catch {
+            // Remembering is a convenience.
+        }
+        if (!open) this.releaseAll();
+        this.publishHeight();
+    }
+
+    publishHeight() {
+        // A landscape phone cannot spare the height, so there the keys float translucently over the picture.
+        const height = this.open && !window.matchMedia(LandscapeQuery).matches ? this.root.offsetHeight : 0;
+        document.documentElement.style.setProperty(HeightVariable, `${height}px`);
+        this.layout?.resize();
+    }
+
+    setLayer(name) {
+        this.layer = name;
+        this.root.dataset.layer = name;
+    }
+
+    press(evt) {
+        const el = evt.target.closest(".tk-key");
+        if (!el) return;
+        evt.preventDefault();
+        if (el.dataset.layerKey) {
+            this.setLayer(this.layer === "letters" ? "symbols" : "letters");
+            buzz();
+            return;
+        }
+        if (!el.def || this.held.has(evt.pointerId)) return;
+        this.onAnyKeyDown();
+        el.pressedAt = performance.now();
+        this.held.set(evt.pointerId, el);
+        el.classList.add(HeldClass);
+        this.send(el.def, true);
+        this.showShift();
+        buzz();
+    }
+
+    release(evt) {
+        const el = this.held.get(evt.pointerId);
+        if (!el) return;
+        this.held.delete(evt.pointerId);
+        el.classList.remove(HeldClass);
+        const remaining = MinHoldMs - (performance.now() - el.pressedAt);
+        if (remaining > 0) setTimeout(() => this.send(el.def, false), remaining);
+        else this.send(el.def, false);
+        this.showShift();
+    }
+
+    releaseAll() {
+        for (const [id, el] of this.held) {
+            el.classList.remove(HeldClass);
+            this.send(el.def, false);
+            this.held.delete(id);
+        }
+        this.showShift();
+    }
+
+    /** Labels show the shifted symbol while any SHIFT key is held. */
+    showShift() {
+        const shifted = [...this.held.values()].some((el) => el.def.key === "SHIFT");
+        this.root.classList.toggle(ShiftedClass, shifted);
+    }
+
+    send(def, down) {
+        const { input } = this.keyboard;
+        if (def.reset) {
+            input.setReset(down);
+            return;
+        }
+        const position = this.processor.model.keys[def.key];
+        if (input.keyRaw) input.keyRaw(position, down);
+        else if (down) this.processor.keyboardInterface.keyDownRaw(position);
+        else this.processor.keyboardInterface.keyUpRaw(position);
+    }
+}
