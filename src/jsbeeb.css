@@ -1100,7 +1100,7 @@ small {
   color: #ccc;
   font-family: consolas, monospace;
   font-size: 11px;
-  /* Rewritten every frame, so the height must not depend on the content, even an empty line's. */
+  /* Rewritten every frame, so the height must not depend on the content. */
   height: 16px;
   line-height: 16px;
   flex-shrink: 0;
