@@ -1036,10 +1036,6 @@ small {
   flex-direction: column;
 }
 
-#disc-panel .panel-body > * {
-  flex-shrink: 0;
-}
-
 /* Square at the panel's width, and given less height the disc shrinks to fit it rather than the body scrolling. */
 #disc-panel .disc-stack {
   position: relative;
