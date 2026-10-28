@@ -45,6 +45,7 @@ const AdlcControl1 = 0xfea0;
 const AdlcControl2 = 0xfea1;
 const AdlcTxFifo = 0xfea2;
 const AdlcStatus1 = 0xfea0;
+const AdcStart = 0xfec0;
 const AdlcIrqFlag = 0x80;
 const RxTxInterruptsEnabled = 0x06;
 const RxTxReset = 0xc0;
@@ -61,6 +62,10 @@ function raiseAdlcIrq(cpu) {
 function clearAdlcIrq(cpu) {
     cpu.writeDevice(AdlcControl1, RxTxReset);
     cpu.polltime(1);
+}
+
+function addressesFrom(start, end) {
+    return Array.from({ length: end - start }, (_, i) => start + i);
 }
 
 const ProgramStart = 0x2000;
@@ -334,6 +339,31 @@ describe("Cpu6502 econet NMI line", () => {
         expect(takesNmi(cpu)).toBe(true);
     });
 
+    it("disables the line from every INTOFF mirror, by read or write, and enables it from every INTON mirror", () => {
+        raiseAdlcIrq(cpu);
+        takesNmi(cpu);
+        const intoff = addressesFrom(StationIdRegister, NmiEnableRegister);
+        const inton = addressesFrom(NmiEnableRegister, RomSelect);
+        const lineAfter = (before, access) => {
+            cpu.readDevice(before);
+            access();
+            return cpu.nmi;
+        };
+
+        expect(intoff.filter((addr) => lineAfter(NmiEnableRegister, () => cpu.readDevice(addr)))).toEqual([]);
+        expect(intoff.filter((addr) => lineAfter(NmiEnableRegister, () => cpu.writeDevice(addr, 0)))).toEqual([]);
+        expect(inton.filter((addr) => !lineAfter(StationIdRegister, () => cpu.readDevice(addr)))).toEqual([]);
+    });
+
+    it("reads the ADLC's status registers at every mirror", () => {
+        raiseAdlcIrq(cpu);
+        const statusMirrors = addressesFrom(AdlcStatus1, AdcStart).filter((addr) => (addr & 3) < 2);
+
+        expect(statusMirrors.map((addr) => cpu.readDevice(addr))).toEqual(
+            statusMirrors.map((addr) => cpu.readDevice(AdlcStatus1 + (addr & 3))),
+        );
+    });
+
     it("does not touch the disc controller's line", () => {
         cpu.setNmi(NmiSource.fdc, true);
         takesNmi(cpu);
@@ -343,6 +373,26 @@ describe("Cpu6502 econet NMI line", () => {
 
         cpu.readDevice(StationIdRegister);
         expect(cpu.nmi).toBe(true);
+    });
+});
+
+describe("Cpu6502 econet NMI line on a Master", () => {
+    const MasterStationIdRegister = 0xfe38;
+    const MasterNmiEnableRegister = 0xfe3c;
+    const ModelBOnlyMirrors = [...addressesFrom(0xfe1c, 0xfe20), ...addressesFrom(0xfe24, 0xfe30)];
+
+    it("leaves the line alone at the B's INTOFF and INTON mirrors", async () => {
+        const cpu = fake6502(findModel("Master"), { econet: true });
+        await cpu.initialise();
+        raiseAdlcIrq(cpu);
+
+        cpu.readDevice(MasterNmiEnableRegister);
+        for (const addr of ModelBOnlyMirrors) cpu.readDevice(addr);
+        expect(cpu.nmi).toBe(true);
+
+        cpu.readDevice(MasterStationIdRegister);
+        for (const addr of ModelBOnlyMirrors) cpu.readDevice(addr);
+        expect(cpu.nmi).toBe(false);
     });
 });
 
@@ -586,10 +636,12 @@ describe("peeking at the hardware", () => {
         expect(cpu.peekmem(SysViaIer)).toBe(cpu.readmem(SysViaIer));
     });
 
-    it("shows the Econet station ID", () => {
+    it("shows the Econet station ID at each of its mirrors", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { econet: true });
-        expect(cpu.peekmem(EconetStationId)).toBe(cpu.econet.stationId);
-        expect(cpu.readmem(EconetStationId)).toBe(cpu.econet.stationId);
+        for (const addr of addressesFrom(EconetStationId, EconetStationId + 8)) {
+            expect(cpu.peekmem(addr)).toBe(cpu.econet.stationId);
+            expect(cpu.readmem(addr)).toBe(cpu.econet.stationId);
+        }
     });
 
     it("shows the CRTC's readable registers", () => {
@@ -766,6 +818,27 @@ describe("Cpu6502 paged memory", () => {
         await cpu.initialise();
         return cpu;
     }
+
+    it("pages a bank from every ROMSEL mirror on a B", async () => {
+        const cpu = await initialised("B-DFS1.2");
+        const romselMirrors = addressesFrom(RomSelectRegister, SysViaOrb);
+
+        expect(
+            romselMirrors.map((addr) => {
+                cpu.writemem(addr, addr & 0xf);
+                return cpu.pagedBank;
+            }),
+        ).toEqual(romselMirrors.map((addr) => addr & 0xf));
+    });
+
+    it("ignores the B's ROMSEL mirrors at &FE38-&FE3F on a Master", async () => {
+        const cpu = await initialised("Master");
+        cpu.writemem(RomSelectRegister, 1);
+
+        for (const addr of addressesFrom(RomSelectRegister + 8, SysViaOrb)) cpu.writemem(addr, 2);
+
+        expect(cpu.pagedBank).toBe(1);
+    });
 
     it("ignores a write to the OS", async () => {
         const cpu = await initialised("B-DFS1.2");
