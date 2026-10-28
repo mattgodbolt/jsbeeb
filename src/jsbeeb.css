@@ -620,7 +620,7 @@ div.modal-body > div:not(:first-child) {
 }
 
 #disassembly .note {
-  color: #999;
+  opacity: 0.65;
 }
 
 .instr_mem_ref:hover,

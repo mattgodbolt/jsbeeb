@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sheilaBlocks, sheilaRegister } from "../../src/sheila.js";
+import { sheilaBlocks, sheilaName, sheilaRegister } from "../../src/sheila.js";
 import { allModels, findModel } from "../../src/models.js";
 
 const NoFittings = { hasTube: false, hasEconet: false, hasVideoNula: false };
@@ -85,6 +85,18 @@ describe("SHEILA register names", () => {
         expect(named(blocksOf("Master"), 0xfee5, "read")).toBeUndefined();
         expect(named(blocksOf("Master", { hasTube: true }), 0xfee5, "read")).toBe("Tube.R3");
         expect(named(blocksOf("B-DFS1.2", { hasTube: true }), 0xfee0, "write")).toBe("Tube.CONTROL");
+    });
+
+    it("names a read-modify-write's chip once, or each chip where reads and writes part", () => {
+        const b = blocksOf("B-DFS1.2", { hasEconet: true });
+        expect(sheilaName(b, 0xfe80, ["read", "write"])).toEqual({
+            name: "FDC.STATUS/COMMAND",
+            title: "8271 disc controller STATUS/COMMAND: $fe80",
+        });
+        expect(sheilaName(b, 0xfe4d, ["read", "write"]).name).toBe("SysVIA.IFR");
+        expect(sheilaName(b, 0xfe20, ["read", "write"]).name).toBe("Econet.INTON/VideoULA.CONTROL");
+        expect(sheilaName(b, 0xfe30, ["read", "write"]).name).toBe("Paging.ROMSEL");
+        expect(sheilaName(b, 0xfe30, ["read"])).toBeUndefined();
     });
 
     it("has nothing for an Atom", () => {

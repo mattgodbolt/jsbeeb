@@ -2,7 +2,7 @@ import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
-import { sheilaBlocks, sheilaRegister } from "../sheila.js";
+import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
 
@@ -18,22 +18,6 @@ function operandAccesses(instruction) {
     if (Writes.test(instruction)) return ["write"];
     if (ReadModifyWrites.test(instruction)) return ["read", "write"];
     return ["read"];
-}
-
-/** The SHEILA register an operand reads or writes, or both of them for a read-modify-write that differs. */
-function sheilaNamed(blocks, address, accesses) {
-    const found = accesses.map((access) => sheilaRegister(blocks, address, access)).filter(Boolean);
-    if (!found.length) return undefined;
-    const at = `: $${hexword(address)}`;
-    const [first] = found;
-    if (found.every(({ block }) => block === first.block)) {
-        const names = [...new Set(found.map(({ name }) => name))].join("/");
-        return { name: `${first.block.device}.${names}`, title: `${first.block.title} ${names}${at}` };
-    }
-    return {
-        name: found.map(({ block, name }) => `${block.device}.${name}`).join("/"),
-        title: `${found.map(({ block, name }) => `${block.title} ${name}`).join(" / ")}${at}`,
-    };
 }
 
 function labelHtml(addr) {
@@ -572,7 +556,7 @@ export class Debugger {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
                 const register = ref.classList.contains("instr_mem_ref")
-                    ? sheilaNamed(this._sheila, target, accesses)
+                    ? sheilaName(this._sheila, target, accesses)
                     : undefined;
                 // The machine's names are known by their address, so they sit beside it; a program's replace it.
                 const machine = operand?.set.system ? operand : undefined;
@@ -592,7 +576,7 @@ export class Debugger {
             if (notes.length) {
                 const comment = document.createElement("span");
                 comment.className = "note";
-                comment.textContent = `${disNode.textContent.includes(";") ? "," : " ;"} ${notes.map(({ name }) => name).join(", ")}`;
+                comment.textContent = `${result[0].includes(";") ? "," : " ;"} ${notes.map(({ name }) => name).join(", ")}`;
                 comment.title = notes
                     .flatMap(({ titles }) => titles)
                     .filter(Boolean)

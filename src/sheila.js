@@ -1,3 +1,4 @@
+import { hexword } from "./hex.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 import { NoiseAwareWdFdc } from "./wd-fdc.js";
 
@@ -163,4 +164,28 @@ export function sheilaRegister(blocks, address, access) {
         if (name !== undefined) return { block, name };
     }
     return undefined;
+}
+
+/**
+ * What an instruction accessing `address` the ways `accesses` lists touches, named once per chip: a read-modify-write
+ * of a VIA's ORB is "SysVIA.IRB/ORB".
+ * @param {SheilaBlock[]} blocks
+ * @param {number} address
+ * @param {("read" | "write")[]} accesses
+ * @returns {{name: string, title: string} | undefined}
+ */
+export function sheilaName(blocks, address, accesses) {
+    const byBlock = new Map();
+    for (const access of accesses) {
+        const found = sheilaRegister(blocks, address, access);
+        if (!found) continue;
+        if (!byBlock.has(found.block)) byBlock.set(found.block, new Set());
+        byBlock.get(found.block).add(found.name);
+    }
+    if (!byBlock.size) return undefined;
+    const each = [...byBlock].map(([block, names]) => ({ block, names: [...names].join("/") }));
+    return {
+        name: each.map(({ block, names }) => `${block.device}.${names}`).join("/"),
+        title: `${each.map(({ block, names }) => `${block.title} ${names}`).join(" / ")}: $${hexword(address)}`,
+    };
 }

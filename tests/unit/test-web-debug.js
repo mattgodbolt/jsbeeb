@@ -696,6 +696,10 @@ describe("Debugger", () => {
             expect(code(OswrchAt + 6).querySelector(".instr_mem_ref").title).toBe(
                 "system_via_register_b: $fe40, from Test MOS\nSystem VIA ORB: $fe40",
             );
+            rightClick(code(OswrchAt + 6).querySelector(".instr_mem_ref"));
+            pickFromMenu("Watch hex");
+            expect(watchRows().map(([name]) => name)).toEqual(["system_via_register_b"]);
+            document.getElementById("watch-close").click();
         });
 
         it("doesn't credit a system set whose only name in view gives way to a register's", async () => {
