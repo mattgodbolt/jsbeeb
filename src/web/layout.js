@@ -1,6 +1,7 @@
 import { toast } from "./toast.js";
 import { errorText } from "./reporting.js";
 import { noteFeature } from "./analytics.js";
+import { navbarHeightOf } from "./floating-panel.js";
 
 /** Steps the drawing buffer grows in, as a multiple of the base canvas size. */
 const CanvasScaleStep = 0.25;
@@ -72,16 +73,6 @@ export function fitMonitor(displayConfig, viewport, canvasNative) {
         },
         backing,
     };
-}
-
-/**
- * The height the bar takes from the screen: on a narrow window its menu drops open over the
- * screen rather than above it, so an open menu does not count.
- */
-export function navbarHeightOf(header) {
-    if (!header) return 0;
-    const openMenu = header.querySelector(".navbar-collapse.show");
-    return Math.max(0, header.offsetHeight - (openMenu?.offsetHeight ?? 0));
 }
 
 /** Keeps the monitor and canvas fitted to the window, and wires the page furniture around them. */

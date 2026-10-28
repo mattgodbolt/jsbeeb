@@ -354,17 +354,7 @@ span.accesskey {
 }
 
 #session-pane {
-  position: fixed;
-  left: 8px;
-  bottom: 72px;
   width: min(460px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
   color: #ddd;
   font-size: 13px;
 }
@@ -619,6 +609,10 @@ div.modal-body > div:not(:first-child) {
   color: #66f;
 }
 
+#disassembly .note {
+  opacity: 0.65;
+}
+
 .instr_mem_ref:hover,
 .instr_instr_ref:hover {
   text-decoration: underline;
@@ -768,17 +762,7 @@ small {
 }
 
 #watch-panel {
-  position: fixed;
-  top: 80px;
-  left: 8px;
   width: min(300px, 80vw);
-  max-height: calc(100vh - 104px);
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
   font-family: monospace;
   font-size: 9pt;
 }
@@ -863,18 +847,7 @@ small {
   color: #aaaaaa;
 }
 
-.register-panel {
-  position: fixed;
-  top: 80px;
-  left: 324px;
-  max-width: calc(100vw - 16px);
-  max-height: calc(100vh - 104px);
-  overflow: auto;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
+#sysvia-panel {
   font-family: monospace;
   font-size: 9pt;
 }
@@ -912,6 +885,7 @@ small {
 
 .decoded-hex {
   color: #80d0d0;
+  box-sizing: content-box;
 }
 
 .sysvia-ports .decoded-meaning {
@@ -999,12 +973,14 @@ small {
 }
 
 #disc-panel {
-  position: fixed;
-  top: 80px;
-  right: 8px;
   width: min(420px, 46vw);
-  max-height: calc(100vh - 104px);
-  overflow-y: auto;
+}
+
+.floating-panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: rgba(0, 0, 0, 0.9);
   border: 1px solid #555;
   border-radius: 4px;
@@ -1012,10 +988,78 @@ small {
   padding: 8px;
 }
 
-.disc-header,
-.watch-header,
-.register-panel-header,
-.session-pane-header {
+.panel-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Inside the panels' padding, so they take nothing from the content or a scroll bar. */
+.panel-resize {
+  position: absolute;
+  z-index: 1;
+  touch-action: none;
+}
+
+.panel-resize-top,
+.panel-resize-bottom {
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.panel-resize-left,
+.panel-resize-right {
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.panel-resize-top-left,
+.panel-resize-top-right,
+.panel-resize-bottom-left,
+.panel-resize-bottom-right {
+  width: 12px;
+  height: 12px;
+}
+
+.panel-resize-top,
+.panel-resize-top-left,
+.panel-resize-top-right {
+  top: 0;
+}
+
+.panel-resize-bottom,
+.panel-resize-bottom-left,
+.panel-resize-bottom-right {
+  bottom: 0;
+}
+
+.panel-resize-left,
+.panel-resize-top-left,
+.panel-resize-bottom-left {
+  left: 0;
+}
+
+.panel-resize-right,
+.panel-resize-top-right,
+.panel-resize-bottom-right {
+  right: 0;
+}
+
+.panel-resize-top-left,
+.panel-resize-bottom-right {
+  cursor: nwse-resize;
+}
+
+.panel-resize-top-right,
+.panel-resize-bottom-left {
+  cursor: nesw-resize;
+}
+
+.floating-panel-header {
+  flex-shrink: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -1033,10 +1077,7 @@ small {
   margin-bottom: 8px;
 }
 
-.disc-header button,
-.watch-header button,
-.register-panel-header button,
-.session-pane-header button {
+.floating-panel-header button {
   cursor: pointer;
 }
 
@@ -1097,19 +1138,30 @@ small {
   margin-left: auto;
 }
 
+/* A column, so that the disc can take the body's spare height. */
+#disc-panel .panel-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Square at the panel's width, and smaller in a shorter body rather than the body scrolling. */
 .disc-stack {
   position: relative;
+  flex: 1 1 auto;
+  aspect-ratio: 1;
+  min-height: 120px;
+  container-type: size;
 }
 
 .disc-stack canvas {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
 }
 
 #disc-overlay {
-  position: absolute;
-  inset: 0;
   cursor: crosshair;
   /* Claim wheel and drag gestures, or the page scrolls instead. */
   touch-action: none;
@@ -1157,7 +1209,9 @@ small {
   font-family: consolas, monospace;
   font-size: 11px;
   /* Rewritten every frame, so the height must not depend on the content. */
-  min-height: 14px;
+  height: 16px;
+  line-height: 16px;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1188,32 +1242,10 @@ div.smoothie-chart-tooltip {
   --olive: #6b6a3e;
   --olive-lo: #4f4e2c;
   --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.09 0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
-  position: fixed;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
   width: min(860px, 96vw);
-  max-height: calc(100vh - 88px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
   background: rgba(0, 0, 0, 0.92);
-  border: 1px solid #555;
-  border-radius: 4px;
-  z-index: 10;
-  padding: 8px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.65);
   font-size: 14px;
-}
-
-.media-header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
-  cursor: move;
-  user-select: none;
-  touch-action: none;
 }
 
 #media-summary {
@@ -2654,15 +2686,17 @@ div.smoothie-chart-tooltip {
 @media (max-width: 700px) {
   #media-panel {
     inset: 0;
-    transform: none;
     width: auto;
-    max-height: none;
     border: 0;
     border-radius: 0;
   }
 
   .media-header {
     cursor: default;
+  }
+
+  #media-panel .panel-resize {
+    display: none;
   }
 
   .media-deck {

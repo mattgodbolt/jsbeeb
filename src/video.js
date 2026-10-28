@@ -1327,6 +1327,7 @@ export class FakeVideo {
             write: noop,
             reset: noop,
             disabled: false,
+            hasVideoNula: false,
         };
         this.regs = new Uint8Array(32);
         this.fieldCycles = BbcFieldCycles;

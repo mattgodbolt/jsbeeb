@@ -296,31 +296,33 @@
             Close
           </button>
         </div>
-        <div class="session-link-row">
-          <span class="session-link"></span>
-          <button type="button" class="btn btn-sm btn-light session-copy-link">Copy link</button>
+        <div class="panel-body">
+          <div class="session-link-row">
+            <span class="session-link"></span>
+            <button type="button" class="btn btn-sm btn-light session-copy-link">Copy link</button>
+          </div>
+          <div class="session-control-row">
+            <span class="session-control"></span>
+            <button type="button" class="btn btn-sm btn-light session-take">Take control</button>
+            <label class="session-take-on-key-label">
+              <input type="checkbox" class="form-check-input session-take-on-key" autocomplete="off" />
+              Whoever presses a key takes control
+            </label>
+          </div>
+          <table class="session-people">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Who</th>
+                <th>How it's going</th>
+                <th class="number">Round trip</th>
+                <th class="number">Behind</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <button type="button" class="btn btn-sm btn-outline-light session-report">Save session report</button>
         </div>
-        <div class="session-control-row">
-          <span class="session-control"></span>
-          <button type="button" class="btn btn-sm btn-light session-take">Take control</button>
-          <label class="session-take-on-key-label">
-            <input type="checkbox" class="form-check-input session-take-on-key" autocomplete="off" />
-            Whoever presses a key takes control
-          </label>
-        </div>
-        <table class="session-people">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Who</th>
-              <th>How it's going</th>
-              <th class="number">Round trip</th>
-              <th class="number">Behind</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <button type="button" class="btn btn-sm btn-outline-light session-report">Save session report</button>
       </div>
       <div id="disc-panel" data-feature="disc_surface" hidden>
         <div class="disc-header">
@@ -328,56 +330,60 @@
           <span id="disc-name"></span>
           <button id="disc-close" class="btn btn-sm btn-outline-light">Close</button>
         </div>
-        <div class="disc-controls">
-          <div class="btn-group btn-group-sm" role="group" aria-label="Drive">
-            <button type="button" class="btn btn-outline-light" data-drive="0">Drive 0</button>
-            <button type="button" class="btn btn-outline-light" data-drive="1">Drive 1</button>
+        <div class="panel-body">
+          <div class="disc-controls">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Drive">
+              <button type="button" class="btn btn-outline-light" data-drive="0">Drive 0</button>
+              <button type="button" class="btn btn-outline-light" data-drive="1">Drive 1</button>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Side" id="disc-side-controls" hidden>
+              <button type="button" class="btn btn-outline-light" data-side="0">Side 0</button>
+              <button type="button" class="btn btn-outline-light" data-side="1">Side 1</button>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="View">
+              <button type="button" class="btn btn-outline-light" data-view="density">Pulses</button>
+              <button type="button" class="btn btn-outline-light" data-view="format">Format</button>
+            </div>
           </div>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Side" id="disc-side-controls" hidden>
-            <button type="button" class="btn btn-outline-light" data-side="0">Side 0</button>
-            <button type="button" class="btn btn-outline-light" data-side="1">Side 1</button>
+          <div class="disc-stack">
+            <canvas id="disc-surface"></canvas>
+            <canvas id="disc-overlay"></canvas>
           </div>
-          <div class="btn-group btn-group-sm" role="group" aria-label="View">
-            <button type="button" class="btn btn-outline-light" data-view="density">Pulses</button>
-            <button type="button" class="btn btn-outline-light" data-view="format">Format</button>
-          </div>
+          <div class="disc-legend" id="disc-legend"></div>
+          <div class="disc-status" id="disc-status"></div>
+          <div class="disc-status" id="disc-hover-where"></div>
+          <div class="disc-status" id="disc-hover-what"></div>
         </div>
-        <div class="disc-stack">
-          <canvas id="disc-surface"></canvas>
-          <canvas id="disc-overlay"></canvas>
-        </div>
-        <div class="disc-legend" id="disc-legend"></div>
-        <div class="disc-status" id="disc-status"></div>
-        <div class="disc-status" id="disc-hover-where"></div>
-        <div class="disc-status" id="disc-hover-what"></div>
       </div>
       <div id="watch-panel" data-feature="watches" hidden>
         <div class="watch-header">
           <span class="disc-title">Watches</span>
           <button id="watch-close" class="btn btn-sm btn-outline-light">Close</button>
         </div>
-        <form id="watch-add-form" role="form">
-          <input
-            type="text"
-            id="watch-add"
-            class="form-control form-control-sm"
-            aria-label="Name or address to watch"
-            placeholder="Name or address, then Enter"
-            autocomplete="off"
-          />
-        </form>
-        <table>
-          <tbody class="watch-list"></tbody>
-        </table>
-        <div class="watch-empty">Nothing watched yet.</div>
+        <div class="panel-body">
+          <form id="watch-add-form" role="form">
+            <input
+              type="text"
+              id="watch-add"
+              class="form-control form-control-sm"
+              aria-label="Name or address to watch"
+              placeholder="Name or address, then Enter"
+              autocomplete="off"
+            />
+          </form>
+          <table>
+            <tbody class="watch-list"></tbody>
+          </table>
+          <div class="watch-empty">Nothing watched yet.</div>
+        </div>
       </div>
       <div id="watch-menu" hidden></div>
-      <div id="sysvia-panel" class="register-panel" data-feature="system_via" hidden>
+      <div id="sysvia-panel" data-feature="system_via" hidden>
         <div class="register-panel-header">
           <span class="disc-title">System VIA</span>
           <button type="button" class="btn btn-sm btn-outline-light register-panel-close" tabindex="-1">Close</button>
         </div>
-        <div class="register-panel-body">
+        <div class="panel-body register-panel-body">
           <div class="sysvia-ports"></div>
           <div>
             <div class="decoded-heading">Keyboard</div>
@@ -829,8 +835,8 @@
         </div>
         <div id="debug-symbols"></div>
         <div id="debug-keys">
-          g run &middot; n step &middot; m step over &middot; o step out &middot; t breakpoint &middot; j/k move
-          &middot; b back &middot; u/i memory &plusmn;8 &middot; U/I memory &plusmn;64
+          g run &middot; n step &middot; m step over &middot; o step out &middot; c run to cursor &middot; t breakpoint
+          &middot; j/k move &middot; b back &middot; u/i memory &plusmn;8 &middot; U/I memory &plusmn;64
         </div>
       </div>
       <div id="hardware_debug" class="initially-hidden">
@@ -1109,11 +1115,15 @@
                     </tr>
                     <tr>
                       <td><span class="key">m</span></td>
-                      <td>Step over a subroutine call</td>
+                      <td>Step over a subroutine call, or over a loop from its backward branch</td>
                     </tr>
                     <tr>
                       <td><span class="key">o</span></td>
-                      <td>Run until the current subroutine returns</td>
+                      <td>Run until the current subroutine or interrupt handler returns</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">c</span></td>
+                      <td>Run to the highlighted instruction</td>
                     </tr>
                     <tr>
                       <td><span class="key">t</span></td>
@@ -1128,12 +1138,11 @@
                       <td>Back after clicking a jump target</td>
                     </tr>
                     <tr>
-                      <td><span class="key">u</span> <span class="key">i</span></td>
-                      <td>Memory forward (u), back (i), 8 bytes</td>
-                    </tr>
-                    <tr>
-                      <td><span class="key">U</span> <span class="key">I</span></td>
-                      <td>Memory forward (U), back (I), 64 bytes</td>
+                      <td>
+                        <span class="key">u</span> <span class="key">i</span> <span class="key">U</span>
+                        <span class="key">I</span>
+                      </td>
+                      <td>Memory forward (u, U) or back (i, I), 8 or 64 bytes</td>
                     </tr>
                   </tbody>
                 </table>

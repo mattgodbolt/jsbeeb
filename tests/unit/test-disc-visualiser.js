@@ -22,21 +22,34 @@ const overlayContext = () => ({
 describe("DiscVisualiser", () => {
     let fdc;
     let rafCallbacks;
+    let resizeObserved;
 
     beforeEach(() => {
         domFromIndexHtml("disc-visualiser-open", "disc-panel");
         const surface = document.getElementById("disc-surface");
         const overlay = document.getElementById("disc-overlay");
-        Object.defineProperty(surface, "clientWidth", { value: CanvasSize });
+        Object.defineProperty(surface, "clientWidth", { value: CanvasSize, configurable: true });
         surface.getContext = () => ({
             createImageData: (width, height) => ({ data: new Uint8Array(width * height * 4) }),
             putImageData: vi.fn(),
         });
         overlay.getContext = overlayContext;
         overlay.getBoundingClientRect = () => ({ left: 0, top: 0, width: CanvasSize, height: CanvasSize });
-        const header = document.querySelector(".disc-header");
-        header.setPointerCapture = () => {};
-        header.style.cursor = "move";
+        resizeObserved = null;
+        vi.stubGlobal(
+            "ResizeObserver",
+            class {
+                constructor(callback) {
+                    this.callback = callback;
+                }
+                observe(element) {
+                    resizeObserved = { element, callback: this.callback };
+                }
+                disconnect() {
+                    resizeObserved = null;
+                }
+            },
+        );
 
         rafCallbacks = new Map();
         let nextHandle = 1;
@@ -93,17 +106,18 @@ describe("DiscVisualiser", () => {
             expect(rafCallbacks.size).toBe(0);
         });
 
-        it("can be dragged around by its header, clamped to the window", () => {
-            make();
-            const header = document.querySelector(".disc-header");
-            header.dispatchEvent(new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
-            header.dispatchEvent(new MouseEvent("pointermove", { clientX: 30, clientY: 25 }));
-            expect(panel().style.left).toBe("20px");
-            expect(panel().style.top).toBe("15px");
-            expect(panel().style.right).toBe("auto");
-            header.dispatchEvent(new MouseEvent("pointermove", { clientX: 2, clientY: 2 }));
-            expect(panel().style.left).toBe("0px");
-            expect(panel().style.top).toBe("0px");
+        it("redraws its surface at the size the canvas is resized to, while open", () => {
+            make().open();
+            const surface = document.getElementById("disc-surface");
+            expect(resizeObserved.element).toBe(surface);
+            Object.defineProperty(surface, "clientWidth", { value: 2 * CanvasSize, configurable: true });
+            resizeObserved.callback();
+            expect(surface.width).toBe(2 * CanvasSize);
+            vi.spyOn(window, "devicePixelRatio", "get").mockReturnValue(3);
+            window.dispatchEvent(new Event("resize"));
+            expect(surface.width).toBe(6 * CanvasSize);
+            document.getElementById("disc-close").click();
+            expect(resizeObserved).toBeNull();
         });
 
         it("opens on a named drive", () => {

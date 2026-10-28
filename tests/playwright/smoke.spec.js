@@ -152,7 +152,7 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     expect(await panelWidth()).toBe(creditedWidth);
 });
 
-test("the system VIA panel opens from the More menu, keeps up with the running machine, and leaves it the keyboard", async ({
+test("the system VIA panel opens from the More menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
     beeb,
     page,
 }) => {
@@ -172,6 +172,9 @@ test("the system VIA panel opens from the More menu, keeps up with the running m
     await expect(keyA).toHaveClass(/held/);
     await page.keyboard.up("a");
     await expect(keyA).not.toHaveClass(/held/);
+    await page.reload();
+    await expect(panel).toBeVisible();
+    await expect(timer1).not.toBeEmpty();
 });
 
 test("the system VIA panel keeps its size while the machine runs, keys come and go, and its modes change", async ({
@@ -383,6 +386,131 @@ test("settings hold the emulator while open, a restart is asked about from insid
     await beeb.open();
     await beeb.expectScreenText(">");
     await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
+});
+
+test("a panel dragged to the right edge stays on it as the window grows, returns unchanged after a shrink, and reopens there, and a resize keeps a panel's scroll", async ({
+    beeb,
+    page,
+}) => {
+    const box = async () => {
+        const { x, y, width, height } = await page.locator("#watch-panel").boundingBox();
+        return { x, y, width, height };
+    };
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#watch-open");
+    const header = page.locator(".watch-header .disc-title");
+    const grab = await header.boundingBox();
+    await page.mouse.move(grab.x + 5, grab.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(1270, 360, { steps: 10 });
+    await page.mouse.up();
+    const onEdge = await box();
+    expect(onEdge.x + onEdge.width).toBe(1280);
+
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await expect.poll(async () => (await box()).x + onEdge.width).toBe(1920);
+    await page.setViewportSize({ width: 700, height: 500 });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(box).toEqual(onEdge);
+
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#watch-panel")).toBeVisible();
+    expect(await box()).toEqual(onEdge);
+
+    for (const address of ["&70", "&71", "&72", "&73", "&74", "&75", "&76", "&77"]) {
+        await page.fill("#watch-add", address);
+        await page.press("#watch-add", "Enter");
+    }
+    const handle = await page.locator("#watch-panel .panel-resize-bottom").boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y - 150, { steps: 10 });
+    await page.mouse.up();
+    const watchBody = page.locator("#watch-panel .panel-body");
+    const scrolled = await watchBody.evaluate((body) => (body.scrollTop = body.scrollHeight - body.clientHeight));
+    expect(scrolled).toBeGreaterThan(0);
+    await page.setViewportSize({ width: 1279, height: 720 });
+    await expect.poll(() => watchBody.evaluate((body) => body.scrollTop)).toBe(scrolled);
+});
+
+test("a panel can be dragged into the bottom corner, over the lights, and up to the navbar", async ({ beeb, page }) => {
+    const panel = page.locator("#watch-panel");
+    const dragHeaderTo = async (x, y) => {
+        const grab = await page.locator(".watch-header .disc-title").boundingBox();
+        await page.mouse.move(grab.x + 5, grab.y + 5);
+        await page.mouse.down();
+        await page.mouse.move(x, y, { steps: 10 });
+        await page.mouse.up();
+        return panel.boundingBox();
+    };
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#watch-open");
+    const corner = await dragHeaderTo(1279, 719);
+    expect(corner.x + corner.width).toBe(1280);
+    expect(corner.y + corner.height).toBe(720);
+    const lights = await page.locator("#leds").boundingBox();
+    const overLights = await dragHeaderTo(20, 719);
+    expect(overLights.x).toBe(0);
+    expect(overLights.y + overLights.height).toBeGreaterThan(lights.y);
+    const navbar = await page.locator("#header-bar").boundingBox();
+    const top = await dragHeaderTo(640, 0);
+    expect(top.y).toBe(navbar.y + navbar.height);
+});
+
+test("the disc surface fits its panel without scrolling, at the size it opens at and after a resize", async ({
+    beeb,
+    page,
+}) => {
+    const fit = () =>
+        page.evaluate(() => {
+            const body = document.querySelector("#disc-panel .panel-body");
+            return {
+                overflow: body.scrollHeight - body.clientHeight,
+                disc: document.getElementById("disc-surface").getBoundingClientRect().width,
+                statusLines: [...body.querySelectorAll(".disc-status")].map((line) => line.offsetHeight),
+            };
+        });
+    // Shorter than the panel's natural height, so the disc has to give up height to fit.
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#disc-visualiser-open");
+    const opened = await fit();
+    expect(opened.overflow).toBeLessThanOrEqual(0);
+    const handle = await page.locator("#disc-panel .panel-resize-bottom").boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y - 120, { steps: 10 });
+    await page.mouse.up();
+    const shorter = await fit();
+    expect(shorter.overflow).toBeLessThanOrEqual(0);
+    expect(shorter.disc).toBeLessThan(opened.disc);
+    expect(shorter.statusLines).toEqual(opened.statusLines);
+});
+
+test("the disc surface panel keeps its size as the hover readout comes and goes", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#disc-visualiser-open");
+    const panel = page.locator("#disc-panel");
+    const hoverText = page.locator("#disc-hover-what");
+    const before = await panel.boundingBox();
+    const surface = await page.locator("#disc-overlay").boundingBox();
+    await page.mouse.move(surface.x + surface.width / 2, surface.y + 30);
+    await expect(hoverText).not.toBeEmpty();
+    expect(await panel.boundingBox()).toEqual(before);
+    await page.mouse.move(100, 300);
+    await expect(hoverText).toBeEmpty();
+    expect(await panel.boundingBox()).toEqual(before);
 });
 
 test("every display mode on the bar can be picked", async ({ beeb, page }) => {

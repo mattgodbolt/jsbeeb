@@ -2,23 +2,50 @@ import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
+import { sheilaBlocks, sheilaName } from "../sheila.js";
 import { noteFeature } from "./analytics.js";
 import { SysViaPanel } from "./sysvia-panel.js";
 import { WatchPanel } from "./watch-panel.js";
+import { RunMode } from "./emulation-loop.js";
 
 const noop = () => {};
 
 const numToShow = 16;
+const QuickRunsPerSecond = 50;
+const ResetVector = 0xfffc;
+const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
+const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
+const Call = /^JSR\b/;
+const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
+
+const Writes = /^\*?(?:ST[AXYZ]|SAX|SH[ASXY])\b/;
+const ReadModifyWrites = /^\*?(?:ASL|LSR|ROL|ROR|INC|DEC|TSB|TRB|DCP|ISB|RLA|RRA|SLO|SRE)\b/;
+
+/** @returns {("read" | "write")[]} */
+function operandAccesses(instruction) {
+    if (Writes.test(instruction)) return ["write"];
+    if (ReadModifyWrites.test(instruction)) return ["read", "write"];
+    return ["read"];
+}
+
+// S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
+function notDeeper(s, startS) {
+    return ((s - startS) & 0xff) < 0x80;
+}
 
 function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }
 
-function showName(node, { name, set }, addr) {
+function nameTitle({ name, set }, addr) {
     const url = nameUrl(set, name, addr);
+    return `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
+}
+
+function showName(node, named, addr) {
     node.classList.add("named");
-    node.textContent = name;
-    node.title = `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
+    node.textContent = named.name;
+    node.title = nameTitle(named, addr);
 }
 
 function nameNode(named, addr) {
@@ -171,6 +198,8 @@ export class Debugger {
      */
     constructor({ symbolSets = null } = {}) {
         this.patchInstructions = new Map();
+        this._loop = null;
+        this._runningTo = null;
         this._enabled = false;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
@@ -193,6 +222,7 @@ export class Debugger {
         this.disassPc = 0;
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
+        this._sheila = [];
         this.breakpoints = {};
         this._symbolSets = symbolSets;
         this._names = NoNames;
@@ -239,24 +269,23 @@ export class Debugger {
             if (e.target.closest(".bp_gutter")) this.bpClick(e);
         });
 
-        const offerWatch = (e, address, named) => {
+        const offerWatch = (e, address, name) => {
             e.preventDefault();
-            this.watches.offer({ address, label: named?.name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
+            this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
         };
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            offerWatch(e, address, this._names.address(address, this.cpu.pc));
+            offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
         });
         this.disass.addEventListener("contextmenu", (e) => {
             const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
             const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
             if (operand) {
-                const target = Number(operand.dataset.ref);
-                offerWatch(e, target, this._names.operand(at, target));
+                offerWatch(e, Number(operand.dataset.ref), operand.dataset.name);
             } else if (e.target.closest(".dis_addr")) {
-                offerWatch(e, at, this._names.address(at, this.cpu.pc));
+                offerWatch(e, at, this._names.address(at, this.cpu.pc)?.name);
             }
         });
 
@@ -280,6 +309,12 @@ export class Debugger {
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);
+        this._sheila = sheilaBlocks({
+            model: cpu.model,
+            hasTube: cpu.hasTube,
+            hasEconet: !!cpu.econet,
+            hasVideoNula: cpu.video.ula.hasVideoNula,
+        });
     }
 
     disassemble(addr) {
@@ -448,6 +483,7 @@ export class Debugger {
     }
 
     debug(where) {
+        this.cancelRun();
         this.enable(true);
         this._matchSymbols();
         this.updateDisassembly(where);
@@ -481,7 +517,8 @@ export class Debugger {
     }
 
     enable(e) {
-        if (this._enabled && !e) {
+        // A run handed to the loop keeps the memory it started from, to show what it changed.
+        if (this._enabled && !e && !this._runningTo) {
             this.updatePrevMem();
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
@@ -532,12 +569,27 @@ export class Debugger {
             elem.querySelector(".instr_asc").textContent = dump.asc.join("");
             const disNode = elem.querySelector(".disassembly");
             disNode.innerHTML = result[0];
+            const accesses = operandAccesses(result[0]);
             for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
                 const target = parseInt(ref.dataset.ref, 10);
                 const operand = this._names.operand(address, target);
-                if (operand) {
-                    showName(ref, operand, target);
-                    shown.add(operand.set);
+                const register = ref.classList.contains("instr_mem_ref")
+                    ? sheilaName(this._sheila, target, accesses)
+                    : undefined;
+                // A register's name displaces a MOS's name for it, but not a program's, which says what it is for.
+                const inline = register && operand?.set.system ? undefined : operand;
+                if (inline) {
+                    showName(ref, inline, target);
+                    if (register) ref.title += `\n${register.title}`;
+                    shown.add(inline.set);
+                    ref.dataset.name = inline.name;
+                } else if (register) {
+                    const note = document.createElement("span");
+                    note.className = "note";
+                    note.textContent = ` ; ${register.name}`;
+                    note.title = operand ? `${register.title}\n${nameTitle(operand, target)}` : register.title;
+                    disNode.append(note);
+                    ref.dataset.name = register.name;
                 }
             }
             for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
@@ -577,54 +629,106 @@ export class Debugger {
     }
 
     hide() {
+        // Only running carries a run on; a pause or a frame step ends it, as entering the debugger does.
+        if (this._loop?.mode !== RunMode.running) this.cancelRun();
         this.enable(false);
     }
 
-    stepUntil(f) {
-        this.cpu.targetCycles = this.cpu.currentCycles; // TODO(#1062) this prevents the cpu from running any residual cycles. look into a better solution
-        for (let i = 0; i < 65536; i++) {
-            this.cpu.execute(1);
-            if (f()) break;
+    /** The loop that runs the machine for the steps that need running. */
+    attachLoop(loop) {
+        this._loop = loop;
+    }
+
+    /** Runs one instruction, stepping off a breakpoint on it; false when a watch stopped the machine in it. */
+    executeOne() {
+        const cpu = this.cpu;
+        // TODO(#1062) this drops the residual cycles.
+        cpu.targetCycles = cpu.currentCycles;
+        if (cpu.execute(1)) return true;
+        if (!cpu.debugInstruction.stopped) return false;
+        cpu.targetCycles = cpu.currentCycles;
+        return cpu.execute(1);
+    }
+
+    resetEntry() {
+        return this.cpu.peekmem(ResetVector) | (this.cpu.peekmem(ResetVector + 1) << 8);
+    }
+
+    /**
+     * Runs the machine until `stopsHere()`, asked before each instruction after the first, says to stop at it, or
+     * anything else stops the machine. The first instruction always runs, so a run can come round to where it
+     * starts. A reset ends the run without stopping, unless `stopsAtReset` and `stopsHere()` holds at the entry.
+     * A run that ends within a fiftieth of a second ends here, so the debugger never leaves the screen; a longer
+     * one goes on in the loop, with the machine shown running, and lasts through holds such as a dialog or a
+     * hidden tab.
+     */
+    runTo(stopsHere, stopsAtReset) {
+        this.updatePrevMem();
+        const cpu = this.cpu;
+        if (!this.executeOne()) return this.debug(cpu.pc);
+        const resetEntry = this.resetEntry();
+        this._runningTo = cpu.debugInstruction.add((pc) => {
+            if (pc !== resetEntry) return stopsHere();
+            if (stopsAtReset && stopsHere()) return true;
+            this.cancelRun();
+            return false;
+        });
+        // In a shared session the rest of the run goes through the loop's lockstep; only the first instruction
+        // stepped above runs outside it, as `n` does.
+        if (this._loop.lockstep) return this._loop.go();
+        cpu.targetCycles = cpu.currentCycles;
+        let ranOn;
+        try {
+            ranOn = cpu.execute(this._loop.clocksPerSecond / QuickRunsPerSecond);
+        } catch (e) {
+            this.debug(cpu.pc);
+            throw e;
         }
-        this.debug(this.cpu.pc);
+        if (!ranOn) return this.debug(cpu.pc);
+        this._loop.go();
+    }
+
+    /** Forgets a run to a stop, as when the machine's state is replaced under it. */
+    cancelRun() {
+        this._runningTo?.remove();
+        this._runningTo = null;
     }
 
     step() {
         this.updatePrevMem();
-        const curpc = this.cpu.pc;
-        this.stepUntil(() => this.cpu.pc !== curpc);
-    }
-
-    isUnconditionalJump(addr) {
-        const result = this.disassemble(addr);
-        return !!result[0].match(/^(JMP|RTS|BRA)/);
+        this.executeOne();
+        this.debug(this.cpu.pc);
     }
 
     stepOver() {
-        this.updatePrevMem();
-        if (this.isUnconditionalJump(this.cpu.pc)) {
-            return this.step();
+        const { pc, s } = this.cpu;
+        const [text, end, target] = this.disassemble(pc);
+        const next = end & 0xffff;
+        const entry = this.resetEntry();
+        if (UnconditionalJump.test(text)) return this.step();
+        if (Branch.test(text) && target <= pc) {
+            return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
         }
-        const nextPc = this.nextInstruction(this.cpu.pc);
-        this.stepUntil(() => this.cpu.pc === nextPc);
-    }
-
-    isReturn(addr) {
-        const result = this.disassemble(addr);
-        return result[0] === "RTS";
+        if (Branch.test(text)) {
+            return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, next === entry || target === entry);
+        }
+        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), next === entry);
+        this.runTo(() => this.cpu.pc === next, next === entry);
     }
 
     stepOut() {
-        this.updatePrevMem();
         const s = this.cpu.s;
-        this.stepUntil(() => {
-            if (this.cpu.s >= s && this.isReturn(this.cpu.pc)) {
-                const nextInstr = this.nextInstruction(this.cpu.pc);
-                this.step();
-                return this.cpu.pc !== nextInstr;
-            }
+        let returning = ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+        this.runTo(() => {
+            if (returning) return true;
+            returning = notDeeper(this.cpu.s, s) && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
             return false;
-        });
+        }, false);
+    }
+
+    runToCursor() {
+        const target = this.disassPc;
+        this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
     }
 
     nextInstruction(address) {
@@ -703,6 +807,9 @@ export class Debugger {
                 break;
             case "o":
                 this.stepOut();
+                break;
+            case "c":
+                this.runToCursor();
                 break;
         }
         return true;

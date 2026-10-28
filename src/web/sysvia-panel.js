@@ -2,11 +2,13 @@ import { hexword } from "../hex.js";
 import { BBC } from "../keymap.js";
 import { HwScrollSubtract } from "../video.js";
 import { DecodedRegisters, namedBits } from "./decoded-registers.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { Centred, StartEdge } from "./panel-layout.js";
 
 // The keypad's columns, 10 to 12, are scanned on a B as well, and the host's keypad reaches them.
 const MatrixColumns = 13;
 const MatrixRows = 8;
+const MinPanelSize = { w: 240, h: 120 };
 const StatusForms = ["Autoscan: column 15, no keys", "Port A: column 15, row 7"];
 const IerReadsSet = 0x80;
 const ScreenEnd = 0x8000;
@@ -383,6 +385,11 @@ export class SysViaPanel {
             panel: this.panel,
             header: this.panel.querySelector(".register-panel-header"),
             closeButton: this.panel.querySelector(".register-panel-close"),
+            id: "sysvia",
+            place: { x: Centred, y: StartEdge },
+            minSize: MinPanelSize,
+            reopens: true,
+            arrangement: panelArrangement,
         });
         this.floating.addEventListener("open", () => this._tick());
         this.floating.addEventListener("close", () => {

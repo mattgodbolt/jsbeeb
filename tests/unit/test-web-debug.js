@@ -2,8 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Debugger } from "../../src/web/debug.js";
+import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { findModel } from "../../src/models.js";
+import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -208,6 +209,99 @@ describe("Debugger", () => {
             keyPress("t");
             expect(currentRow().querySelector(".bp_gutter").classList.contains("active")).toBe(true);
         });
+
+        describe("SHEILA registers", () => {
+            const codeAt = (address) =>
+                disRows()
+                    .find((row) => Number(row.dataset.addr) === address)
+                    .querySelector(".disassembly");
+            const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
+
+            it("notes the register an operand writes, reads, or both, still following it to the memory view", () => {
+                program([0x8d, 0x40, 0xfe, 0xad, 0x40, 0xfe, 0xee, 0x80, 0xfe, 0x2c, 0x4d, 0xfe, 0xad, 0x00, 0x30]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+                expect(codeAt(0x2002).querySelector(".note").title).toBe("System VIA ORB: $fe40");
+                expect(codeAt(0x2005).textContent).toBe("LDA $fe40 ; SysVIA.IRB");
+                expect(codeAt(0x2008).textContent).toBe("INC $fe80 ; FDC.STATUS/COMMAND");
+                expect(codeAt(0x200b).textContent).toBe("BIT $fe4d ; SysVIA.IFR");
+                expect(codeAt(0x200e).textContent).toBe("LDA $3000");
+                codeAt(0x2002)
+                    .querySelector(".instr_mem_ref")
+                    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+                expect(addrOf(memHighlight())).toBe("fe40");
+            });
+
+            it.each([
+                ["STX", 0x8e, "SysVIA.ORB"],
+                ["STY", 0x8c, "SysVIA.ORB"],
+                ["*SAX", 0x8f, "SysVIA.ORB"],
+                ["LDX", 0xae, "SysVIA.IRB"],
+                ["CMP", 0xcd, "SysVIA.IRB"],
+                ["*NOP", 0x0c, "SysVIA.IRB"],
+                ["ASL", 0x0e, "SysVIA.IRB/ORB"],
+                ["ROR", 0x6e, "SysVIA.IRB/ORB"],
+                ["*SLO", 0x0f, "SysVIA.IRB/ORB"],
+                ["*DCP", 0xcf, "SysVIA.IRB/ORB"],
+                ["*ISB", 0xef, "SysVIA.IRB/ORB"],
+            ])("takes %s's operand as the register it accesses", (mnemonic, opcode, name) => {
+                program([opcode, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
+            });
+
+            it.each([
+                ["STZ", 0x9c, "SysVIA.ORB"],
+                ["TSB", 0x0c, "SysVIA.IRB/ORB"],
+                ["TRB", 0x1c, "SysVIA.IRB/ORB"],
+            ])("takes the 65C12's %s's operand as the register it accesses", async (mnemonic, opcode, name) => {
+                cpu = fake6502(TEST_65C12, { video });
+                await cpu.initialise();
+                dbgr.setCpu(cpu);
+                cpu.pc = 0x2000;
+                program([opcode, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
+            });
+
+            it("names the registers of what is fitted", () => {
+                video.ula.hasVideoNula = true;
+                dbgr.setCpu(cpu);
+                program([0x8d, 0x22, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA $fe22 ; VideoULA.NULA_CONTROL");
+            });
+
+            it("leaves a jump into SHEILA as an address", () => {
+                program([0x20, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("JSR $fe40");
+            });
+
+            it("names the registers the model has where it has them", async () => {
+                const master = findModel("Master");
+                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(master)), master, { os: [] }), {
+                    video,
+                });
+                await cpu.initialise();
+                dbgr.setCpu(cpu);
+                cpu.pc = 0x2000;
+                program([0x8d, 0x34, 0xfe, 0x8d, 0x28, 0xfe, 0xad, 0x80, 0xfe]);
+                dbgr.debug(cpu.pc);
+                expect(codeAt(0x2002).textContent).toBe("STA $fe34 ; Paging.ACCCON");
+                expect(codeAt(0x2005).textContent).toBe("STA $fe28 ; FDC.COMMAND");
+                expect(codeAt(0x2008).textContent).toBe("LDA $fe80");
+            });
+
+            it("watches a register by its name from a right-click", () => {
+                program([0x8d, 0x40, 0xfe]);
+                dbgr.debug(cpu.pc);
+                rightClick(codeAt(0x2002).querySelector(".instr_mem_ref"));
+                pickFromMenu("Watch hex");
+                expect(watchRows().map(([name]) => name)).toEqual(["SysVIA.ORB"]);
+                document.getElementById("watch-close").click();
+            });
+        });
     });
 
     describe("the memory window", () => {
@@ -282,6 +376,346 @@ describe("Debugger", () => {
             document.querySelector("#goto-dis-addr-form .goto-addr").focus();
             expect(keyPress("j")).toBe(false);
             expect(addrOf(currentRow())).toBe("2000");
+        });
+    });
+
+    describe("stepping", () => {
+        const load = (address, bytes) => bytes.forEach((byte, i) => cpu.writemem(address + i, byte));
+        const pc = () => document.getElementById("cpu6502_pc").textContent;
+        // LDX #3; DEX; BNE $2002; LDA #$41
+        const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
+        const MachineSecond = 2000000;
+        let loop;
+
+        /** Runs and stops as the emulation loop does, a tick at a time. */
+        class StandInLoop {
+            mode = RunMode.debugging;
+            running = false;
+            lockstep = null;
+            clocksPerSecond = MachineSecond;
+            go() {
+                this.mode = RunMode.running;
+                dbgr.hide();
+                this.running = true;
+            }
+            pause() {
+                this.mode = RunMode.paused;
+                dbgr.hide();
+                this.running = false;
+            }
+            tick(cycles) {
+                if (cpu.execute(cycles)) return;
+                this.mode = RunMode.debugging;
+                this.running = false;
+                dbgr.debug(cpu.pc);
+            }
+        }
+
+        beforeEach(() => {
+            loop = new StandInLoop();
+            dbgr.attachLoop(loop);
+        });
+
+        it("steps one instruction on n even when it goes nowhere", () => {
+            load(0x2000, [0x4c, 0x00, 0x20]);
+            dbgr.debug(cpu.pc);
+            const before = cpu.currentCycles;
+            keyPress("n");
+            expect(pc()).toBe("2000");
+            expect(cpu.currentCycles - before).toBe(3);
+        });
+
+        it("steps over a loop that leaves backwards", () => {
+            // NOP; LDX #3; DEX; BEQ $2000; BNE $2003
+            load(0x2000, [0xea, 0xa2, 0x03, 0xca, 0xf0, 0xfa, 0xd0, 0xfb]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2006");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("2000");
+            expect(loop.running).toBe(false);
+        });
+
+        it("steps over a loop that makes a call with the stack about to wrap", () => {
+            // LDX #1; TXS; LDX #3; JSR $3000; DEX; BNE $2005; NOP, with an RTS at $3000
+            load(0x2000, [0xa2, 0x01, 0x9a, 0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea]);
+            load(0x3000, [0x60]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2009");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("200b");
+            expect(cpu.x).toBe(0);
+        });
+
+        it("steps over onto the reset entry", () => {
+            const entry = dbgr.resetEntry();
+            load(entry - 1, [0xea]);
+            cpu.pc = entry - 1;
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(pc()).toBe(hexword(entry));
+        });
+
+        it("leaves a step over a call into the reset entry to the reset", () => {
+            const entry = dbgr.resetEntry();
+            load(0x2100, [0x20, entry & 0xff, entry >> 8, 0xea]);
+            cpu.pc = 0x2100;
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(cpu.onFastPath).toBe(true);
+        });
+
+        it("ends a step over whose return is the reset entry when a reset comes first", () => {
+            load(0xfffc, [0x00, 0x40]);
+            load(0x3ffd, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x4c, 0x00, 0x30]);
+            cpu.pc = 0x3ffd;
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(loop.running).toBe(true);
+            cpu.reset(false);
+            loop.tick(MachineSecond);
+            expect(loop.running).toBe(true);
+            expect(cpu.onFastPath).toBe(true);
+        });
+
+        it("steps out past the returns of the calls it makes", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x20, 0x00, 0x31, 0x60]);
+            load(0x3100, [0x60]);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("o");
+            expect(pc()).toBe("2003");
+        });
+
+        it("steps over a 65C12 loop closed by BRA to wherever it leaves by", async () => {
+            cpu = fake6502(TEST_65C12, { video });
+            await cpu.initialise();
+            cpu.pc = 0x2000;
+            dbgr.setCpu(cpu);
+            // LDX #3; DEX; BEQ $2008; BRA $2002; NOP; NOP
+            load(0x2000, [0xa2, 0x03, 0xca, 0xf0, 0x03, 0x80, 0xfb, 0xea, 0xea]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2005");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("2008");
+        });
+
+        it("stops a run at a write watch on its first instruction", () => {
+            // STA $70; NOP; NOP
+            load(0x2000, [0x85, 0x70, 0xea, 0xea]);
+            cpu.debugWrite.add((address) => address === 0x70);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2003");
+            keyPress("c");
+            expect(pc()).toBe("2002");
+        });
+
+        it("steps over a forward branch to where it went", () => {
+            // LDA #0; BEQ $2006; NOP; NOP; NOP
+            load(0x2000, [0xa9, 0x00, 0xf0, 0x02, 0xea, 0xea, 0xea]);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("m");
+            expect(pc()).toBe("2006");
+        });
+
+        it("stops a step over at a breakpoint inside the call, and steps out from it", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0xea, 0x60]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3000");
+            keyPress("t");
+            keyPress("m");
+            expect(pc()).toBe("3000");
+            keyPress("o");
+            expect(pc()).toBe("2003");
+        });
+
+        describe("past a fiftieth of a second", () => {
+            // Four times round 256 * 256 DEX/BNE, then NOP at $200E: about 1.3 million cycles.
+            const long = [0xa0, 0x00, 0xa2, 0x00, 0xca, 0xd0, 0xfd, 0x88, 0xd0, 0xf8, 0xc6, 0x70, 0xd0, 0xf2, 0xea];
+
+            beforeEach(() => {
+                load(0x2000, long);
+                cpu.writemem(0x70, 4);
+                dbgr.debug(cpu.pc);
+                goTo("goto-dis-addr-form", "$200E");
+            });
+
+            it("runs the machine to the cursor, stopping there however long it takes", () => {
+                keyPress("c");
+                expect(loop.running).toBe(true);
+                loop.tick(MachineSecond);
+                expect(loop.running).toBe(false);
+                expect(pc()).toBe("200e");
+            });
+
+            it("steps over a call that runs for longer, stopping where it returns", () => {
+                load(0x200e, [0x60]);
+                load(0x3000, [0x20, 0x00, 0x20, 0xea]);
+                cpu.pc = 0x3000;
+                dbgr.debug(cpu.pc);
+                keyPress("m");
+                expect(loop.running).toBe(true);
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("3003");
+            });
+
+            it("shows what the whole run changed in memory, from its very start", () => {
+                // LDA #$41; STA $60; JMP $2000
+                load(0x2100, [0xa9, 0x41, 0x85, 0x60, 0x4c, 0x00, 0x20]);
+                cpu.pc = 0x2100;
+                dbgr.debug(cpu.pc);
+                goTo("goto-dis-addr-form", "$200E");
+                keyPress("c");
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("200e");
+                expect(memByte(0x60).classList.contains("changed")).toBe(true);
+            });
+
+            it("waits with no limit for a cursor the machine does not reach", () => {
+                goTo("goto-dis-addr-form", "$3000");
+                keyPress("c");
+                for (let i = 0; i < 10; i++) loop.tick(MachineSecond);
+                expect(loop.running).toBe(true);
+            });
+
+            it("hands all but the first instruction to the loop in a shared session", () => {
+                loop.lockstep = {};
+                keyPress("c");
+                expect(cpu.pc).toBe(0x2002);
+                expect(loop.running).toBe(true);
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("200e");
+            });
+
+            it("stops at a cursor on the reset entry when the machine is reset", () => {
+                const entry = dbgr.resetEntry();
+                goTo("goto-dis-addr-form", `$${hexword(entry)}`);
+                keyPress("c");
+                cpu.reset(false);
+                loop.tick(MachineSecond);
+                expect(cpu.pc).toBe(entry);
+                expect(loop.running).toBe(false);
+            });
+
+            describe("forgets where it was going", () => {
+                // Runs on to the cursor at $200E once nothing stops it there.
+                const reachesCursor = () => {
+                    cpu.targetCycles = cpu.currentCycles;
+                    return cpu.execute(MachineSecond);
+                };
+
+                it("when the machine is paused", () => {
+                    keyPress("c");
+                    loop.pause();
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the quick run throws", () => {
+                    const failure = cpu.debugInstruction.add((at) => {
+                        if (at === 0x2002) throw new Error("emulation failed");
+                        return false;
+                    });
+                    expect(() => keyPress("c")).toThrow("emulation failed");
+                    expect(pc()).toBe("2002");
+                    failure.remove();
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the debugger is entered some other way", () => {
+                    keyPress("c");
+                    dbgr.debug(cpu.pc);
+                    expect(reachesCursor()).toBe(true);
+                });
+
+                it("when the machine is reset", () => {
+                    keyPress("c");
+                    cpu.reset(false);
+                    cpu.execute(100);
+                    expect(cpu.onFastPath).toBe(true);
+                });
+            });
+        });
+
+        it("steps over a loop that makes a call", () => {
+            // LDX #3; JSR $3000; DEX; BNE $2002; NOP, with an RTS at $3000
+            load(0x2000, [0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea]);
+            load(0x3000, [0x60]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2006");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("2008");
+            expect(cpu.x).toBe(0);
+        });
+
+        it("steps over a recursive call to where it returns at the same depth", () => {
+            // $3000: DEC $70; BEQ $3007; JSR $3000; RTS
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0xc6, 0x70, 0xf0, 0x03, 0x20, 0x00, 0x30, 0x60]);
+            cpu.writemem(0x70, 3);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3004");
+            keyPress("c");
+            const depth = cpu.s;
+            keyPress("m");
+            expect(pc()).toBe("3007");
+            expect(cpu.s).toBe(depth);
+        });
+
+        it("steps over a BRK into its handler", () => {
+            const vector = cpu.peekmem(0xfffe) | (cpu.peekmem(0xffff) << 8);
+            load(0x2000, [0x00]);
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(pc()).toBe(hexword(vector));
+        });
+
+        it("runs right round to a breakpoint on the current instruction", () => {
+            load(0x2000, countdown);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("t");
+            keyPress("c");
+            expect(pc()).toBe("2002");
+            expect(cpu.x).toBe(2);
+        });
+
+        it("steps out through a return that has a breakpoint", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x60]);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("t");
+            keyPress("o");
+            expect(pc()).toBe("2003");
+        });
+
+        it("steps out of an interrupt handler through its RTI", () => {
+            // Push a return to $200A and the flags as an interrupt would, then enter the handler:
+            // LDX #2; DEX; BNE $3002; RTI
+            load(0x2000, [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea]);
+            load(0x3000, [0xa2, 0x02, 0xca, 0xd0, 0xfd, 0x40]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3002");
+            keyPress("c");
+            keyPress("o");
+            expect(pc()).toBe("200a");
+        });
+
+        it("steps over an RTI to where it returns", () => {
+            load(0x2000, [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea]);
+            load(0x3000, [0x40]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3000");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("200a");
         });
     });
 
@@ -600,12 +1034,15 @@ describe("Debugger", () => {
             dbgr.setCpu(cpu);
         });
 
-        it("names operands once the sets that match have arrived, and says where the names came from", async () => {
+        it("names operands once the sets that match have arrived, noting a register by its own name", async () => {
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR $3000");
             expect(credited()).toBe(false);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
-            expect(code(0x2005).textContent).toBe("STA system_via_register_b");
+            expect(code(0x2005).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+            expect(code(0x2005).querySelector(".note").title).toBe(
+                "System VIA ORB: $fe40\nsystem_via_register_b: $fe40, from Test MOS",
+            );
             expect(code(0x2008).textContent).toMatch(/^LDA \(os_text_ptr\),Y ; \$[0-9a-f]{4} \+ Y$/);
             expect(code(0x200a).textContent).toMatch(/^JMP \(wrchv\) ; \$/);
             expect(code(0x200d).textContent).toBe("LDA os_text_ptr");
@@ -615,6 +1052,29 @@ describe("Debugger", () => {
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
+        });
+
+        it("keeps a program's own name for a SHEILA register, over the register's", async () => {
+            withMos((mos) => (mos.system = false));
+            [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(OswrchAt + 6 + i, byte));
+            dbgr.debug(OswrchAt);
+            await vi.waitFor(() => expect(code(OswrchAt + 6).textContent).toBe("STA system_via_register_b"));
+            expect(code(OswrchAt + 6).querySelector(".instr_mem_ref").title).toBe(
+                "system_via_register_b: $fe40, from Test MOS\nSystem VIA ORB: $fe40",
+            );
+            rightClick(code(OswrchAt + 6).querySelector(".instr_mem_ref"));
+            pickFromMenu("Watch hex");
+            expect(watchRows().map(([name]) => name)).toEqual(["system_via_register_b"]);
+            document.getElementById("watch-close").click();
+        });
+
+        it("doesn't credit a system set whose only name in view gives way to a register's", async () => {
+            [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(0x5000 + i, byte));
+            dbgr.debug(cpu.pc);
+            await vi.waitFor(() => expect(credited()).toBe(true));
+            dbgr.updateDisassembly(0x5000);
+            expect(code(0x5000).textContent).toBe("STA $fe40 ; SysVIA.ORB");
+            expect(credited()).toBe(false);
         });
 
         it("names an address in the address column, and still follows a named operand", async () => {

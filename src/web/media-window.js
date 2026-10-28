@@ -1,6 +1,7 @@
 import { dfsCatalogue } from "../disc.js";
 import { replaceOrAddExtension } from "../archive.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { Centred, EndEdge } from "./panel-layout.js";
 import { tracksLabel, tracksPerStepOf } from "./drives.js";
 import {
     Sources,
@@ -14,6 +15,8 @@ import { errorText, reportLoadFailure } from "./reporting.js";
 import { guessDiscTypeFromName } from "../fdc.js";
 import { toast } from "./toast.js";
 import { noteFeature } from "./analytics.js";
+
+const MinPanelSize = { w: 420, h: 240 };
 
 const CounterDigits = 3;
 const CounterDivisions = 10 ** CounterDigits;
@@ -102,6 +105,11 @@ export class MediaWindow {
             panel: this.panel,
             header: this.panel.querySelector(".media-header"),
             closeButton: document.getElementById("media-close"),
+            id: "media",
+            place: { x: Centred, y: EndEdge },
+            minSize: MinPanelSize,
+            reopens: false,
+            arrangement: panelArrangement,
         });
         this.summary = document.getElementById("media-summary");
         this.bays = [0, 1].map((driveIndex) => this.buildBay(driveIndex));

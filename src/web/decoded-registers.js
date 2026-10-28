@@ -55,6 +55,8 @@ export class DecodedRegisters {
                 name.title = register.title;
                 const hex = row.insertCell();
                 hex.className = "decoded-hex";
+                // Sized before the first value arrives, so the panel is measured at the size it keeps.
+                hex.style.width = `${register.bits / 4}ch`;
                 const meaning = row.insertCell();
                 meaning.className = "decoded-meaning";
                 row.prepend(name);
