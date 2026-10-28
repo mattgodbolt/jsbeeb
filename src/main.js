@@ -394,8 +394,7 @@ const startPromise = machine.start({ media, autoBoot, ...plan.media });
             });
             if (!started) return;
         }
-        // Its way in is the More menu, which the desktop app has removed by now, and a guest's link would name a
-        // file on this computer.
+        // A shared session's way in is the More menu, which the desktop app has removed by now.
         if (isDesktopApp()) return;
         const sessionContext = {
             processor,
