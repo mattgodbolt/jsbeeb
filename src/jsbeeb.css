@@ -1100,8 +1100,9 @@ small {
   color: #ccc;
   font-family: consolas, monospace;
   font-size: 11px;
-  /* Rewritten every frame, so the height must not depend on the content. */
-  min-height: 14px;
+  /* Rewritten every frame, so the height must not depend on the content, even an empty line's. */
+  height: 16px;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

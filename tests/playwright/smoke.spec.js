@@ -426,6 +426,23 @@ test("the disc surface fits its panel without scrolling, at the size it opens at
     expect(shorter.disc).toBeLessThan(opened.disc);
 });
 
+test("the disc surface panel keeps its size as the hover readout comes and goes", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.click("#navbarMore");
+    await page.click("#disc-visualiser-open");
+    const panel = page.locator("#disc-panel");
+    const hoverText = page.locator("#disc-hover-what");
+    const before = await panel.boundingBox();
+    const surface = await page.locator("#disc-overlay").boundingBox();
+    await page.mouse.move(surface.x + surface.width / 2, surface.y + 30);
+    await expect(hoverText).not.toBeEmpty();
+    expect(await panel.boundingBox()).toEqual(before);
+    await page.mouse.move(100, 300);
+    await expect(hoverText).toBeEmpty();
+    expect(await panel.boundingBox()).toEqual(before);
+});
+
 test("every display mode on the bar can be picked", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
