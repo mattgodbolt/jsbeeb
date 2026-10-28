@@ -669,14 +669,15 @@ export class Debugger {
             this.cancelRun();
             return false;
         });
-        // In a shared session the machine must only run through the loop's lockstep.
+        // In a shared session the rest of the run goes through the loop's lockstep; only the first instruction
+        // stepped above runs outside it, as `n` does.
         if (this._loop.lockstep) return this._loop.go();
         cpu.targetCycles = cpu.currentCycles;
         let ranOn;
         try {
             ranOn = cpu.execute(this._loop.clocksPerSecond / QuickRunsPerSecond);
         } catch (e) {
-            this.cancelRun();
+            this.debug(cpu.pc);
             throw e;
         }
         if (!ranOn) return this.debug(cpu.pc);
@@ -699,13 +700,14 @@ export class Debugger {
         const { pc, s } = this.cpu;
         const [text, end, target] = this.disassemble(pc);
         const next = end & 0xffff;
+        const atReset = next === this.resetEntry() || target === this.resetEntry();
         if (UnconditionalJump.test(text)) return this.step();
         if (Branch.test(text) && target <= pc) {
-            return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
+            return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), atReset);
         }
-        if (Branch.test(text)) return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, false);
-        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), false);
-        this.runTo(() => this.cpu.pc === next, false);
+        if (Branch.test(text)) return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, atReset);
+        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), atReset);
+        this.runTo(() => this.cpu.pc === next, atReset);
     }
 
     stepOut() {

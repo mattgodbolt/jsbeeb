@@ -424,14 +424,6 @@ describe("EmulationLoop", () => {
             expect(loop.isRunning()).toBe(true);
         });
 
-        it("leaves the debugger's run to a stop to carry on after it", () => {
-            const loop = started();
-            deps.dbgr.hide.mockClear();
-            loop.hold("the test")();
-            expect(deps.dbgr.hide).not.toHaveBeenCalled();
-            expect(deps.dbgr.cancelRun).not.toHaveBeenCalled();
-        });
-
         it("counts letting go twice as once", () => {
             const loop = started();
             const first = loop.hold("the test");

@@ -370,7 +370,7 @@ describe("Debugger", () => {
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
-        class StandInLoop {
+        class StandInLoop extends EventTarget {
             mode = RunMode.debugging;
             running = false;
             lockstep = null;
@@ -379,6 +379,14 @@ describe("Debugger", () => {
                 this.mode = RunMode.running;
                 dbgr.hide();
                 this.running = true;
+            }
+            hold() {
+                this.running = false;
+                this.dispatchEvent(new Event("running"));
+                return () => {
+                    this.running = true;
+                    this.dispatchEvent(new Event("running"));
+                };
             }
             pause() {
                 this.mode = RunMode.paused;
@@ -534,7 +542,23 @@ describe("Debugger", () => {
                 expect(loop.running).toBe(true);
             });
 
-            it("hands the whole run to the loop in a shared session", () => {
+            it("keeps going through a hold, such as a dialog, and stops once the machine runs again", () => {
+                keyPress("c");
+                loop.hold()();
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("200e");
+            });
+
+            it("steps over onto the reset entry", () => {
+                const entry = dbgr.resetEntry();
+                load(entry - 1, [0xea]);
+                cpu.pc = entry - 1;
+                dbgr.debug(cpu.pc);
+                keyPress("m");
+                expect(pc()).toBe(hexword(entry));
+            });
+
+            it("hands all but the first instruction to the loop in a shared session", () => {
                 loop.lockstep = {};
                 keyPress("c");
                 expect(cpu.pc).toBe(0x2002);
