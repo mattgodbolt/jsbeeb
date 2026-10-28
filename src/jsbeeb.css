@@ -1013,13 +1013,13 @@ small {
   margin-left: auto;
 }
 
-/* The disc takes the body's spare height: square at the panel's width, and smaller in a shorter body rather than
-   the body scrolling. */
+/* A column, so that the disc can take the body's spare height. */
 #disc-panel .panel-body {
   display: flex;
   flex-direction: column;
 }
 
+/* Square at the panel's width, and smaller in a shorter body rather than the body scrolling. */
 .disc-stack {
   position: relative;
   flex: 1 1 auto;
