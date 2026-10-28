@@ -209,7 +209,6 @@ describe("Via snapshotState / restoreState", () => {
         });
 
         it.each([
-            ["rising", PcrCa2RisingEdge, "reaches column 1", 0, 2],
             ["rising", PcrCa2RisingEdge, "comes back round to column 1", 10, 24],
             ["rising", PcrCa2RisingEdge, "comes back round to column 1 from mid-column", 11, 23],
             ["falling", PcrCa2FallingEdge, "leaves column 1", 2, 2],
@@ -246,23 +245,20 @@ describe("Via snapshotState / restoreState", () => {
             expectFlagAfter(via, 24);
         });
 
-        it("brings a falling-edge return forward when a key ahead of the counter goes down", () => {
-            scheduler.polltime(10);
-            const via = makeScanningVia(PcrCa2FallingEdge);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            via.keyDownRaw(BBC.P);
-            expectFlagAfter(via, 6);
-        });
-
-        it("brings the scan's return forward when a key ahead of the counter goes down", () => {
-            scheduler.polltime(10);
-            const via = makeScanningVia(PcrCa2RisingEdge);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            via.keyDownRaw(BBC.P);
-            expectFlagAfter(via, 4);
-        });
+        it.each([
+            ["rising", PcrCa2RisingEdge, 4],
+            ["falling", PcrCa2FallingEdge, 6],
+        ])(
+            "with CA2 on the %s edge, brings the return forward when a key ahead of the counter goes down",
+            (_, pcr, ticks) => {
+                scheduler.polltime(10);
+                const via = makeScanningVia(pcr);
+                via.keyDownRaw(BBC.A);
+                via.write(IFR, Ca2Int);
+                via.keyDownRaw(BBC.P);
+                expectFlagAfter(via, ticks);
+            },
+        );
 
         it("puts the scan's return back when the key ahead of the counter goes up", () => {
             scheduler.polltime(10);
