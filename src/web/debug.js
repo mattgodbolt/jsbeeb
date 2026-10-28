@@ -362,7 +362,7 @@ export class Debugger {
         symbolSets?.addEventListener("loaded", () => {
             // The index arriving is what lets the sets matching memory be fetched.
             if (this.watches.floating.isOpen) this._namesNow();
-            if (!this._inDebugger && !this.panelsShown()) return;
+            if (!this._inDebugger && !this._ownPanelsShown()) return;
             this._matchSymbols();
             this._showOpenPanels();
         });
@@ -663,7 +663,7 @@ export class Debugger {
             hasEconet: !!cpu.econet,
             hasVideoNula: cpu.video.ula.hasVideoNula,
         });
-        if (this.panelsShown()) this._showOpenPanels();
+        if (this._ownPanelsShown()) this._showOpenPanels();
     }
     disassemble(addr) {
         return this.cpu.disassembler.disassemble(addr);

@@ -1714,8 +1714,11 @@ describe("Debugger", () => {
             expect(credited()).toBe(true);
         });
 
-        it("fetches nothing for the decoded system VIA open on its own", async () => {
+        it("fetches nothing for the decoded system VIA open on its own, even reopened before the machine starts", async () => {
             dbgr.sysViaPanel.floating.open();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(load).not.toHaveBeenCalled();
+            dbgr.setCpu(cpu);
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(load).not.toHaveBeenCalled();
         });
