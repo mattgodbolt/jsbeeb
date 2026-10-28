@@ -16,8 +16,8 @@ const TypingTargets = [
     `input:not(${NotTypedIntoInputs.map((type) => `[type="${type}"]`).join(", ")})`,
 ].join(", ");
 const typingIntoField = () => !!document.activeElement?.matches(TypingTargets);
-// Where keys are for the page, not the machine: the paste box and the media window's controls.
-const KeyboardSinks = `#${PasteBoxId}, #media-panel`;
+// Where keys are for the page, not the machine: the paste box, the media window's controls and the watch add box.
+const KeyboardSinks = `#${PasteBoxId}, #media-panel, #watch-add`;
 // The media window's own shortcuts have to answer from inside it, or it cannot be re-aimed from
 // the keyboard at all. The paste box keeps every key, because on a Mac Alt is Option and types
 // an accented character rather than nothing.

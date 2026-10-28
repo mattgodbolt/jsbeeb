@@ -1,4 +1,4 @@
-import { unzipDiscImage } from "./archive.js";
+import { unzipDiscImage, unzipRomImage } from "./archive.js";
 import { stringToUint8Array } from "./binary.js";
 import { failingFor, loadData, LoadFailures } from "./loader.js";
 
@@ -52,22 +52,25 @@ function gitHubRawUrl({ owner, repo, ref, path }) {
     return [GitHubRawBase, ...[owner, repo, ref, ...path.split("/")].map(encodeURIComponent)].join("/");
 }
 
-// Where a bare name is looked for, and which registered source serves the archive.
+// Where a bare name is looked for, which registered source serves the archive, and which files a zip is opened for.
 const Kinds = {
-    disc: { folder: "discs", sth: "sth" },
-    tape: { folder: "tapes", sth: "tapeSth" },
+    disc: { folder: "discs", sth: "sth", unzip: unzipDiscImage },
+    tape: { folder: "tapes", sth: "tapeSth", unzip: unzipDiscImage },
+    rom: { folder: "roms", unzip: unzipRomImage },
 };
 
-const unzipped = (data) => failingFor(LoadFailures.badImage, () => unzipDiscImage(data));
+const unzipped = (kind, data) => failingFor(LoadFailures.badImage, () => Kinds[kind].unzip(data));
 
-/** The image itself when `name` is a zip, else the bytes as given, either way as `{ name, data, ignored }`. */
+const openAs = (kind, name, data) => (/\.zip/i.test(name) ? unzipped(kind, data) : { name, data, ignored: [] });
+
+/** The disc or tape itself when `name` is a zip, else the bytes as given, either way as `{ name, data, ignored }`. */
 export function openIfZip(name, data) {
-    return /\.zip/i.test(name) ? unzipped(data) : { name, data, ignored: [] };
+    return openAs("disc", name, data);
 }
 
 /**
  * Turns any image reference the URL can name into bytes, `{ name, data, ignored }`,
- * for a disc or a tape: the archives through the sources registered for them,
+ * for a disc, a tape or a sideways ROM: the archives through the sources registered for them,
  * `data:` and `b64data:` inline, `http:`, `https:` and `file:` by URL, `github:`
  * by the URL of its raw file, and a bare name from the built-in folder. Zips
  * are opened once, here. Nothing in it needs a page, so a headless machine can
@@ -91,6 +94,7 @@ export class MediaResolver {
         const route = routeOf(ref);
         switch (route) {
             case "sth":
+                if (!sth) throw new Error(`Stairway to Hell has no ${kind} images, so "${ref}" cannot be loaded`);
                 return this.source(sth)(image);
             case "hfe":
             case "bitshifters":
@@ -100,21 +104,21 @@ export class MediaResolver {
             case "inline":
                 return { name: "disk.ssd", data: stringToUint8Array(atob(image)), ignored: [] };
             case "zipped-inline":
-                return unzipped(stringToUint8Array(atob(image)));
+                return unzipped(kind, stringToUint8Array(atob(image)));
             case "url":
                 // The URL may end in query parameters, which would upset the extension check.
-                return openIfZip(new URL(ref).pathname.split("/").pop(), await this.load(ref));
+                return openAs(kind, new URL(ref).pathname.split("/").pop(), await this.load(ref));
             case "github":
-                return this.resolveGitHub(image);
+                return this.resolveGitHub(kind, image);
             default:
-                return openIfZip(image, await this.load(`${folder}/${image}`));
+                return openAs(kind, image, await this.load(`${folder}/${image}`));
         }
     }
 
-    async resolveGitHub(location) {
+    async resolveGitHub(kind, location) {
         const parsed = parseGitHubLocation(location);
         const ref = parsed.ref === GitHubLatestReleaseRef ? await this.latestReleaseTag(parsed) : parsed.ref;
-        return openIfZip(parsed.path.split("/").pop(), await this.load(gitHubRawUrl({ ...parsed, ref })));
+        return openAs(kind, parsed.path.split("/").pop(), await this.load(gitHubRawUrl({ ...parsed, ref })));
     }
 
     /** The tag of a repo's latest release, asked once per repo per resolver; on any failure, the default branch. */
