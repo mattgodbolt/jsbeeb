@@ -1103,6 +1103,7 @@ small {
   /* Rewritten every frame, so the height must not depend on the content, even an empty line's. */
   height: 16px;
   line-height: 16px;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -406,6 +406,7 @@ test("the disc surface fits its panel without scrolling, at the size it opens at
             return {
                 overflow: body.scrollHeight - body.clientHeight,
                 disc: document.getElementById("disc-surface").getBoundingClientRect().width,
+                statusLines: [...body.querySelectorAll(".disc-status")].map((line) => line.offsetHeight),
             };
         });
     // Shorter than the panel's natural height, so the disc has to give up height to fit.
@@ -424,6 +425,7 @@ test("the disc surface fits its panel without scrolling, at the size it opens at
     const shorter = await fit();
     expect(shorter.overflow).toBeLessThanOrEqual(0);
     expect(shorter.disc).toBeLessThan(opened.disc);
+    expect(shorter.statusLines).toEqual(opened.statusLines);
 });
 
 test("the disc surface panel keeps its size as the hover readout comes and goes", async ({ beeb, page }) => {
