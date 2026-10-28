@@ -7,7 +7,7 @@ import { findModel } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
-import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 describe("Debugger", () => {
     let cpu;
@@ -264,6 +264,92 @@ describe("Debugger", () => {
             document.querySelector("#goto-dis-addr-form .goto-addr").focus();
             expect(keyPress("j")).toBe(false);
             expect(addrOf(currentRow())).toBe("2000");
+        });
+    });
+
+    describe("stepping", () => {
+        const load = (address, bytes) => bytes.forEach((byte, i) => cpu.writemem(address + i, byte));
+        const pc = () => document.getElementById("cpu6502_pc").textContent;
+        // LDX #3; DEX; BNE $2002; LDA #$41
+        const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
+
+        it("runs to the instruction under the cursor on c", () => {
+            load(0x2000, countdown);
+            dbgr.debug(cpu.pc);
+            for (let i = 0; i < 3; i++) keyPress("j");
+            keyPress("c");
+            expect(pc()).toBe("2005");
+            expect(cpu.x).toBe(0);
+        });
+
+        it("steps over a backward branch until the loop falls through", () => {
+            load(0x2000, countdown);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("n");
+            keyPress("m");
+            expect(pc()).toBe("2005");
+            expect(cpu.x).toBe(0);
+        });
+
+        it("steps over a loop to wherever it leaves by", () => {
+            // LDX #3; DEX; BEQ $2008; BNE $2002; ...; NOP
+            load(0x2000, [0xa2, 0x03, 0xca, 0xf0, 0x03, 0xd0, 0xfb, 0xea, 0xea]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$2005");
+            keyPress("c");
+            keyPress("m");
+            expect(pc()).toBe("2008");
+        });
+
+        it("steps over a forward branch to where it went", () => {
+            // LDA #0; BEQ $2006; NOP; NOP; NOP
+            load(0x2000, [0xa9, 0x00, 0xf0, 0x02, 0xea, 0xea, 0xea]);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            keyPress("m");
+            expect(pc()).toBe("2006");
+        });
+
+        it("says so when it gives up on a call that never comes back", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0x4c, 0x00, 0x30]);
+            dbgr.debug(cpu.pc);
+            keyPress("m");
+            expect(pc()).toBe("3000");
+            expect(toasts()).toEqual([expect.stringContaining("instructions without returning to $2003")]);
+        });
+
+        it("stops a step over at a breakpoint inside the call, and steps out from it", () => {
+            load(0x2000, [0x20, 0x00, 0x30]);
+            load(0x3000, [0xea, 0x60]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3000");
+            keyPress("t");
+            keyPress("m");
+            expect(pc()).toBe("3000");
+            keyPress("o");
+            expect(pc()).toBe("2003");
+            expect(toasts()).toEqual([]);
+        });
+
+        it("steps off a breakpoint on the current instruction", () => {
+            dbgr.debug(cpu.pc);
+            keyPress("t");
+            keyPress("n");
+            expect(pc()).toBe("2002");
+        });
+
+        it("steps out of an interrupt handler through its RTI", () => {
+            // Push a return to $200A and the flags as an interrupt would, then enter the handler:
+            // LDX #2; DEX; BNE $3002; RTI
+            load(0x2000, [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea]);
+            load(0x3000, [0xa2, 0x02, 0xca, 0xd0, 0xfd, 0x40]);
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "$3002");
+            keyPress("c");
+            keyPress("o");
+            expect(pc()).toBe("200a");
         });
     });
 

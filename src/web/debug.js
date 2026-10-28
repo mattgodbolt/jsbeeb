@@ -4,10 +4,15 @@ import { NoNames } from "../symbol-names.js";
 import { isHttps, nameUrl } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
+import { toast } from "./toast.js";
 
 const noop = () => {};
 
 const numToShow = 16;
+const MaxStepInstructions = 1 << 20;
+const UnconditionalJump = /^(JMP|RTS|RTI|BRA|BRK)\b/;
+const ConditionalBranch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS)|BB[RS][0-7])\b/;
+const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
 
 function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
@@ -577,51 +582,71 @@ export class Debugger {
         this.enable(false);
     }
 
-    stepUntil(f) {
-        this.cpu.targetCycles = this.cpu.currentCycles; // TODO(#1062) this prevents the cpu from running any residual cycles. look into a better solution
-        for (let i = 0; i < 65536; i++) {
-            this.cpu.execute(1);
-            if (f()) break;
+    /**
+     * Runs one instruction at a time until `done()` holds after one, a breakpoint stops the machine, or
+     * MaxStepInstructions have run; `goal` finishes the sentence that says the last happened.
+     */
+    stepUntil(done, goal) {
+        const cpu = this.cpu;
+        let ran = 0;
+        for (; ran < MaxStepInstructions; ran++) {
+            // Each execute(1) then runs exactly one instruction. TODO(#1062) this drops the residual cycles.
+            cpu.targetCycles = cpu.currentCycles;
+            // A breakpoint on the first instruction stops it before it runs, and is stepped off.
+            if (!cpu.execute(1) && ran > 0) break;
+            if (done()) break;
         }
-        this.debug(this.cpu.pc);
+        if (ran === MaxStepInstructions) {
+            toast(`Stopped after ${MaxStepInstructions} instructions without ${goal}.`, { title: "Debugger" });
+        }
+        this.debug(cpu.pc);
     }
 
     step() {
         this.updatePrevMem();
         const curpc = this.cpu.pc;
-        this.stepUntil(() => this.cpu.pc !== curpc);
-    }
-
-    isUnconditionalJump(addr) {
-        const result = this.disassemble(addr);
-        return !!result[0].match(/^(JMP|RTS|BRA)/);
+        this.stepUntil(() => this.cpu.pc !== curpc, `leaving $${hexword(curpc)}`);
     }
 
     stepOver() {
         this.updatePrevMem();
-        if (this.isUnconditionalJump(this.cpu.pc)) {
-            return this.step();
+        const { pc, s } = this.cpu;
+        const [text, next, target] = this.disassemble(pc);
+        if (UnconditionalJump.test(text)) return this.step();
+        if (ConditionalBranch.test(text)) {
+            if (target <= pc) {
+                return this.stepUntil(
+                    () => this.cpu.s >= s && (this.cpu.pc < target || this.cpu.pc > pc),
+                    `leaving the loop at $${hexword(target)}-$${hexword(pc)}`,
+                );
+            }
+            return this.stepUntil(
+                () => this.cpu.pc === next || this.cpu.pc === target,
+                `reaching $${hexword(next)} or $${hexword(target)}`,
+            );
         }
-        const nextPc = this.nextInstruction(this.cpu.pc);
-        this.stepUntil(() => this.cpu.pc === nextPc);
-    }
-
-    isReturn(addr) {
-        const result = this.disassemble(addr);
-        return result[0] === "RTS";
+        if (/^JSR/.test(text)) {
+            return this.stepUntil(() => this.cpu.pc === next && this.cpu.s >= s, `returning to $${hexword(next)}`);
+        }
+        this.stepUntil(() => this.cpu.pc === next, `reaching $${hexword(next)}`);
     }
 
     stepOut() {
         this.updatePrevMem();
         const s = this.cpu.s;
+        const returnsHere = () => this.cpu.s >= s && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+        let returning = returnsHere();
         this.stepUntil(() => {
-            if (this.cpu.s >= s && this.isReturn(this.cpu.pc)) {
-                const nextInstr = this.nextInstruction(this.cpu.pc);
-                this.step();
-                return this.cpu.pc !== nextInstr;
-            }
+            if (returning) return true;
+            returning = returnsHere();
             return false;
-        });
+        }, "reaching an RTS or RTI at this stack depth");
+    }
+
+    runToCursor() {
+        this.updatePrevMem();
+        const target = this.disassPc;
+        this.stepUntil(() => this.cpu.pc === target, `reaching $${hexword(target)}`);
     }
 
     nextInstruction(address) {
@@ -700,6 +725,9 @@ export class Debugger {
                 break;
             case "o":
                 this.stepOut();
+                break;
+            case "c":
+                this.runToCursor();
                 break;
         }
         return true;

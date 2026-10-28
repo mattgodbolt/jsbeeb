@@ -813,8 +813,8 @@
         </div>
         <div id="debug-symbols"></div>
         <div id="debug-keys">
-          g run &middot; n step &middot; m step over &middot; o step out &middot; t breakpoint &middot; j/k move
-          &middot; b back &middot; u/i memory &plusmn;8 &middot; U/I memory &plusmn;64
+          g run &middot; n step &middot; m step over &middot; o step out &middot; c run to cursor &middot; t breakpoint
+          &middot; j/k move &middot; b back &middot; u/i memory &plusmn;8 &middot; U/I memory &plusmn;64
         </div>
       </div>
       <div id="hardware_debug" class="initially-hidden">
@@ -1083,11 +1083,15 @@
                     </tr>
                     <tr>
                       <td><span class="key">m</span></td>
-                      <td>Step over a subroutine call</td>
+                      <td>Step over a subroutine call, or over a loop from its backward branch</td>
                     </tr>
                     <tr>
                       <td><span class="key">o</span></td>
-                      <td>Run until the current subroutine returns</td>
+                      <td>Run until the current subroutine or interrupt handler returns</td>
+                    </tr>
+                    <tr>
+                      <td><span class="key">c</span></td>
+                      <td>Run to the highlighted instruction</td>
                     </tr>
                     <tr>
                       <td><span class="key">t</span></td>
