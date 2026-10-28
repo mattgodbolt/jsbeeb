@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.12.0...v2.12.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* start the desktop app's emulator without the More menu's shared session item ([#1564](https://github.com/mattgodbolt/jsbeeb/issues/1564)) ([6555a71](https://github.com/mattgodbolt/jsbeeb/commit/6555a71be81ecb7ca57e08a20ce624e9ec8364af))
+
 ## [2.12.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.11.1...v2.12.0) (2026-10-28)
 
 
