@@ -370,7 +370,9 @@ describe("Debugger", () => {
         /** Runs and stops as the emulation loop does, a tick at a time. */
         class StandInLoop extends EventTarget {
             running = false;
+            clocksPerSecond = 2000000;
             go() {
+                dbgr.hide();
                 this.running = true;
                 this.dispatchEvent(new Event("running"));
             }
@@ -485,6 +487,18 @@ describe("Debugger", () => {
                 expect(loop.running).toBe(true);
                 loop.tick(MachineSecond);
                 expect(pc()).toBe("3003");
+            });
+
+            it("shows what the whole run changed in memory, from its first frame on", () => {
+                // LDA #$41; STA $60; JMP $2000
+                load(0x2100, [0xa9, 0x41, 0x85, 0x60, 0x4c, 0x00, 0x20]);
+                cpu.pc = 0x2100;
+                dbgr.debug(cpu.pc);
+                goTo("goto-dis-addr-form", "$200E");
+                keyPress("c");
+                loop.tick(MachineSecond);
+                expect(pc()).toBe("200e");
+                expect(memByte(0x60).classList.contains("changed")).toBe(true);
             });
 
             it("waits with no limit for a cursor the machine does not reach", () => {

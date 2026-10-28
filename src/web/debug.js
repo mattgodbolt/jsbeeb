@@ -9,7 +9,7 @@ import { WatchPanel } from "./watch-panel.js";
 const noop = () => {};
 
 const numToShow = 16;
-const FramesPerSecond = 50;
+const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
 const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
 const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
@@ -508,7 +508,8 @@ export class Debugger {
     }
 
     enable(e) {
-        if (this._enabled && !e) {
+        // A run handed to the loop keeps the memory it started from, to show what it changed.
+        if (this._enabled && !e && !this._runningTo) {
             this.updatePrevMem();
         }
         if (e && !this._enabled) noteFeature(document.getElementById("debug"), "open");
@@ -644,8 +645,8 @@ export class Debugger {
     /**
      * Runs the machine until `stopsHere()`, asked before each instruction, says to stop at it, or anything else
      * stops the machine. Its answer at the first instruction is not taken, so a run can come round to where it
-     * starts. A run that ends within a frame ends here, so the debugger never leaves the screen; a longer one
-     * goes on in the loop, with the machine shown running.
+     * starts. A run that ends within a fiftieth of a second ends here, so the debugger never leaves the screen;
+     * a longer one goes on in the loop, with the machine shown running.
      */
     runTo(stopsHere) {
         this.updatePrevMem();
@@ -660,7 +661,7 @@ export class Debugger {
             return false;
         });
         cpu.targetCycles = cpu.currentCycles;
-        if (!cpu.execute(cpu.model.cyclesPerSecond / FramesPerSecond)) return this.debug(cpu.pc);
+        if (!cpu.execute(this._loop.clocksPerSecond / QuickRunsPerSecond)) return this.debug(cpu.pc);
         this._loop.go();
     }
 
