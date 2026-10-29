@@ -1,8 +1,9 @@
-import { toggle } from "./dom-utils.js";
+import { downloadBlob, toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
+import { toast } from "./toast.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel } from "./floating-panel.js";
@@ -23,6 +24,7 @@ const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
 const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
 const Call = /^JSR\b/;
 const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
+const HexByte = /^[0-9a-f]{1,2}$/i;
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
@@ -65,6 +67,7 @@ class MemoryView {
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
+        this._first = 0;
         this._prevSnapshot = new Uint8Array(65536);
         this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
         this._setBytesPerRow(FewestBytesPerRow);
@@ -116,6 +119,7 @@ class MemoryView {
         const targetRow = this._addr & -perRow;
         let addr = targetRow - perRow * this._rows.anchor;
         if (addr < 0) addr = 0;
+        this._first = addr;
         const { names, pc } = this._naming();
         const shown = new Set();
         for (const row of this._rows.rows) {
@@ -174,6 +178,51 @@ class MemoryView {
     /** Moves it on by `rows` of its current width, back for a negative number. */
     step(rows) {
         this.update(this._addr + rows * this._bytesPerRow);
+    }
+
+    /** The first and last addresses it shows, the last no further than $ffff. */
+    shown() {
+        return {
+            from: this._first,
+            to: Math.min(0xffff, this._first + this._rows.rows.length * this._bytesPerRow - 1),
+        };
+    }
+
+    _byteAt(address) {
+        return this._widget.querySelector(`.mem_bytes [data-addr="${address}"]`);
+    }
+
+    /**
+     * Puts a field over the byte at `address`, bringing it into view if need be. Tab hands `write` its new value and
+     * moves on to the next byte (Shift-Tab, the one before); Enter hands it over and leaves, and Escape just leaves.
+     * A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
+     */
+    edit(address, write) {
+        if (!this._byteAt(address)) this.update(address);
+        const byte = this._byteAt(address);
+        const field = document.createElement("input");
+        field.className = "mem-edit panel-field";
+        field.maxLength = 2;
+        field.autocomplete = "off";
+        field.spellcheck = false;
+        field.setAttribute("aria-label", `New value for $${hexword(address)}`);
+        const was = byte.textContent;
+        field.value = was;
+        byte.replaceChildren(field);
+        field.addEventListener("blur", () => this.update(), { once: true });
+        field.addEventListener("input", () => field.classList.remove("is-invalid"));
+        field.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" && e.key !== "Tab") return;
+            e.preventDefault();
+            const value = HexByte.test(field.value) ? parseInt(field.value, 16) : undefined;
+            field.classList.toggle("is-invalid", value === undefined);
+            if (value === undefined) return;
+            field.blur();
+            if (value !== parseInt(was, 16)) write(address, value);
+            if (e.key === "Tab") this.edit((address + (e.shiftKey ? -1 : 1)) & 0xffff, write);
+        });
+        field.focus();
+        field.select();
     }
 }
 
@@ -399,6 +448,54 @@ export class Debugger {
             if (!byte) return;
             const address = Number(byte.dataset.addr);
             this._offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
+        });
+        document.getElementById("memory").addEventListener("click", (e) => {
+            if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
+            this._memoryView.edit(Number(e.target.dataset.addr), (address, value) => this._writeByte(address, value));
+        });
+        this._bindSaveForm(resolve);
+    }
+
+    /** Writes as the CPU would, so that a ROM byte keeps its value and a register's device sees the write. */
+    _writeByte(address, value) {
+        this.cpu.writemem(address, value);
+        const reads = this.cpu.peekmem(address);
+        if (reads !== value && !this.cpu.isDevice(address)) {
+            toast(`$${hexword(address)} is ROM: the write leaves it $${hexbyte(reads)}, as on the machine.`, {
+                title: "Memory",
+            });
+        }
+        this._arrangement.drawAllNow();
+    }
+
+    _bindSaveForm(resolve) {
+        const form = document.getElementById("memory-save-form");
+        const [from, to] = [form.elements.namedItem("from"), form.elements.namedItem("to")];
+        const close = () => {
+            if (form.contains(document.activeElement)) document.activeElement.blur();
+            form.hidden = true;
+        };
+        document.getElementById("memory-save-open").addEventListener("click", () => {
+            if (!form.hidden) return close();
+            const shown = this._memoryView.shown();
+            from.value = `$${hexword(shown.from)}`;
+            to.value = `$${hexword(shown.to)}`;
+            for (const field of [from, to]) field.classList.remove("is-invalid");
+            form.hidden = false;
+        });
+        form.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") close();
+        });
+        form.addEventListener("input", (e) => e.target.classList.remove("is-invalid"));
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const [start, end] = [from, to].map((field) => resolve(field.value.trim()));
+            from.classList.toggle("is-invalid", start === undefined);
+            to.classList.toggle("is-invalid", end === undefined || end < start);
+            if (start === undefined || end === undefined || end < start) return;
+            const bytes = Uint8Array.from({ length: end - start + 1 }, (_, i) => this._peek(start + i));
+            downloadBlob(new Blob([bytes]), `memory-${hexword(start)}-${hexword(end)}.bin`);
+            close();
         });
     }
 
