@@ -34,8 +34,6 @@ const clampAfterglow = (ms) => Math.min(MaxPersistenceMs, Math.max(0, ms));
 
 export const DisplaySection = "display";
 
-export const RequiredProperties = ["type"];
-
 const Peripherals = { label: "Additional peripherals", hint: "(some combinations may cause compatibility issues)" };
 
 /**
@@ -347,7 +345,7 @@ export const Parameters = {
         names: ["LEFT", "RIGHT", "UP", "DOWN", "FIRE"],
         type: ParamTypes.STRING,
         localToPage: true,
-        apply: (control, bbcKey, { gamepad }) => gamepad.remap(control, bbcKey),
+        apply: (control, machineKey, { gamepad }) => gamepad.remap(control, machineKey),
     },
     romBank: {
         prefix: "ROM.",

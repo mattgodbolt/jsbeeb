@@ -107,6 +107,7 @@ describe("Debugger", () => {
     const disRows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
     const currentRow = () => document.querySelector("#disassembly .highlight");
     const memHighlight = () => document.querySelector("#memory .highlight");
+    const memTarget = () => document.querySelector("#memory .mem_bytes .target");
     /** A key as the page hands it on while the machine is stopped. */
     const keyPress = (char) => keys.press(char);
     const addrOf = (row) => row.querySelector(".dis_addr").textContent;
@@ -144,14 +145,34 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
-        it("keeps a paused disassembly where it was put when a resize changes how many rows it shows", () => {
+        it("centres the disassembly on what it moves to at any height, and keeps a stopped one's row through a resize", () => {
             const rowHeight = 16;
+            const highlightRow = () => disRows().indexOf(currentRow());
+            const resizeTo = (rows) => resize(document.getElementById("disassembly"), rows * rowHeight);
             dbgr.showPanels();
             goTo("goto-dis-addr-form", "c000");
             vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, rowHeight));
-            resize(document.getElementById("disassembly"), 20 * rowHeight);
-            expect(disRows()).toHaveLength(20);
-            expect(addrOf(currentRow())).toBe("c000");
+            resizeTo(40);
+            expect(disRows()).toHaveLength(40);
+            expect([addrOf(currentRow()), highlightRow()]).toEqual(["c000", 8]);
+
+            dbgr.debug(cpu.pc);
+            expect(highlightRow()).toBe(20);
+            resizeTo(16);
+            expect(highlightRow()).toBe(8);
+            resizeTo(40);
+            keyPress("j");
+            expect(highlightRow()).toBe(20);
+            resizeTo(50);
+            keyPress("t");
+            expect(highlightRow()).toBe(20);
+            dbgr.panels.disassembly.close();
+            dbgr.panels.disassembly.open();
+            expect(highlightRow()).toBe(20);
+
+            stoppedLoop.go();
+            resizeTo(30);
+            expect([addrOf(currentRow()), highlightRow()]).toEqual([hexword(cpu.pc), 15]);
         });
 
         const DebugPanels = [
@@ -466,14 +487,15 @@ describe("Debugger", () => {
     });
 
     describe("the memory window", () => {
-        it("shows the bytes and text around the address the form asks for", () => {
+        it("shows the bytes and text around the address the form asks for, marked in its aligned row", () => {
             cpu.writemem(0x1234, 0x48);
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$1234");
             const row = memHighlight();
-            expect(row.querySelector(".dis_addr").textContent).toBe("1234");
-            expect(row.querySelector(".mem_bytes span").textContent).toBe("48");
-            expect(row.querySelector(".mem_asc span").textContent).toBe("H");
+            expect(row.querySelector(".dis_addr").textContent).toBe("1230");
+            const marked = [...row.querySelectorAll(".target")];
+            expect(marked.map((span) => span.textContent)).toEqual(["48", "H"]);
+            expect(row.querySelector(".mem_bytes").textContent).toMatch(/^[0-9a-f]{2}( [0-9a-f]{2}){7}$/);
         });
 
         it("leaves the memory view alone when the text is neither a name nor an address", () => {
@@ -481,13 +503,13 @@ describe("Debugger", () => {
             goTo("goto-mem-addr-form", "$1234");
             goTo("goto-mem-addr-form", "monster_x");
             const box = document.querySelector("#goto-mem-addr-form .goto-addr");
-            expect(addrOf(memHighlight())).toBe("1234");
+            expect(addrOf(memHighlight())).toBe("1230");
             expect(box.classList.contains("is-invalid")).toBe(true);
         });
 
         it("marks bytes changed since the last debugger visit, forgetting them on leaving", () => {
             const gotoMem = (value) => goTo("goto-mem-addr-form", value);
-            const changed = () => memHighlight().querySelector(".mem_bytes span").classList.contains("changed");
+            const changed = () => memTarget().classList.contains("changed");
             dbgr.debug(cpu.pc);
             dbgr.hide();
             dbgr.debug(cpu.pc);
@@ -516,7 +538,7 @@ describe("Debugger", () => {
             expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$FE41");
-            expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe(hexbyte(cpu.peekmem(SysViaOra)));
+            expect(memTarget().textContent).toBe(hexbyte(cpu.peekmem(SysViaOra)));
             expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
         });
 
@@ -529,6 +551,9 @@ describe("Debugger", () => {
             expect(addrOf(memHighlight())).toBe("1010");
             keyPress("I");
             expect(addrOf(memHighlight())).toBe("0fd0");
+            goTo("goto-mem-addr-form", "$0004");
+            keyPress("i");
+            expect(memTarget().dataset.addr).toBe(`${0xfffc}`);
         });
     });
 
@@ -1275,7 +1300,7 @@ describe("Debugger", () => {
             goTo("goto-dis-addr-form", "oswrch");
             expect(box.classList.contains("is-invalid")).toBe(false);
             goTo("goto-mem-addr-form", "os_text_ptr");
-            expect(addrOf(memHighlight())).toBe("00f2");
+            expect(memTarget().dataset.addr).toBe(`${0xf2}`);
         });
 
         it("still follows a named zero-page operand to the memory view", async () => {
@@ -1284,7 +1309,7 @@ describe("Debugger", () => {
             code(0x200d)
                 .querySelector(".instr_mem_ref")
                 .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            expect(addrOf(memHighlight())).toBe("00f2");
+            expect(memTarget().dataset.addr).toBe(`${0xf2}`);
         });
 
         it.each([

@@ -10,7 +10,7 @@ const AddressSpace = 0x10000;
 const FirstRetryDelayMs = 5000;
 const MaxRetryDelayMs = 5 * 60 * 1000;
 export const RelativeJsonPath = /^(?:[\w-]+\/)*[\w-][\w.-]*\.json$/;
-export const NameLinkPlaceholders = ["name", "addr", "place"];
+const NameLinkPlaceholders = ["name", "addr", "place"];
 const Placeholder = /\{([^{}]*)\}/g;
 const SiteOfTemplate = /^https:\/\/[^/{}]+\//;
 

@@ -125,6 +125,11 @@ body {
   height: var(--row-height);
 }
 
+/* Its width is the panel's, or an eight-byte row's, and never its rows', which debug.js fits to it. */
+#memory {
+  min-width: 38ch;
+}
+
 #memory > div > span {
   vertical-align: top;
 }
@@ -576,10 +581,6 @@ h6.dbg {
   white-space: nowrap;
 }
 
-.hidden-unless-db-enabled {
-  display: none;
-}
-
 .key.function {
   background-color: #9c402b;
 }
@@ -601,7 +602,6 @@ div.modal-body > div:not(:first-child) {
 
 .dis_addr {
   display: inline-block;
-  width: 12ch;
   color: #d0d0d0;
   white-space: nowrap;
   overflow: hidden;
@@ -621,23 +621,34 @@ div.modal-body > div:not(:first-child) {
   color: #60f060;
 }
 
+#disassembly .dis_addr {
+  width: clamp(12ch, 12ch + (100% - var(--natural-width)) / 2, 32ch);
+}
+
 #memory .dis_addr {
   width: 5ch;
 }
 
 .mem_bytes {
   display: inline-block;
-  width: 25ch;
+  width: calc(var(--bytes) * 3ch);
   color: #80d0d0;
 }
 
 .mem_asc {
   display: inline-block;
-  width: 8ch;
+  width: calc(var(--bytes) * 1ch);
+  margin-left: 1ch;
   color: #60f060;
 }
 
+#memory .target {
+  outline: 1px solid #aaaaaa;
+}
+
 #memory > div {
+  width: 0;
+  min-width: 100%;
   white-space: nowrap;
 }
 

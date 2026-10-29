@@ -2,8 +2,8 @@ import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 import * as opcodes from "./6502.opcodes.js";
 import { AtomCpu6502, Cpu6502, NumRomBanks } from "./6502.js";
-import { BBC, stringToBBCKeys } from "./keymap.js";
-import { ATOM, stringToATOMKeys } from "./keymap-atom.js";
+import { BBC, BbcGamepadKeys, stringToBBCKeys } from "./keymap.js";
+import { ATOM, AtomGamepadKeys, stringToATOMKeys } from "./keymap-atom.js";
 
 const CpuModel = Object.freeze({
     MOS6502: 0,
@@ -50,6 +50,7 @@ class Model {
         // The one place the two machine families part: everything else asks the model.
         this.Cpu = this.isAtom ? AtomCpu6502 : Cpu6502;
         this.keys = this.isAtom ? ATOM : BBC;
+        this.gamepadKeys = this.isAtom ? AtomGamepadKeys : BbcGamepadKeys;
         this.stringToKeys = this.isAtom ? stringToATOMKeys : stringToBBCKeys;
         // The OS write-character vector, watched to capture what the machine prints.
         this.wrchvAddress = this.isAtom ? 0x0208 : 0x020e;
@@ -418,7 +419,7 @@ export const basicOnly = new Model({
  * modules.
  */
 export const TubeModel = findModel("Tube65C02");
-export const TurboTubeModel = findModel("Tube65C102");
+const TurboTubeModel = findModel("Tube65C102");
 
 /** @returns {Model} the second processor sold for this machine: the Turbo board for a Master. */
 export function tubeModelFor(model) {

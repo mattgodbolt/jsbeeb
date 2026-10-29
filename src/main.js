@@ -108,7 +108,6 @@ const dbgr = new Debugger({
 });
 document.getElementById("debug-keys-help").append(...debuggerHelpRows());
 
-const gamepad = new GamePad();
 if (!window.isSecureContext)
     toast("Gamepads only work over https, so any joystick plugged in here is not seen.", {
         title: "Gamepads",
@@ -122,6 +121,7 @@ const accessibilitySwitches = new AccessibilitySwitches();
 const settings = new Settings({ urlState });
 const { keyLayout, displayMode, audioOutput, speakerAmount } = settings;
 const { model, hasVideoNula } = settings;
+const gamepad = new GamePad(model);
 const takenFromHost = takenFromHostValues(settings, parsedQuery);
 const config = new Config(settings);
 

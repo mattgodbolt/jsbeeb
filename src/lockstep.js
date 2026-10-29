@@ -64,7 +64,7 @@ export function stateHash(cpu) {
     return (hash >>> 0).toString(16);
 }
 
-export function applyInput(cpu, input) {
+function applyInput(cpu, input) {
     switch (input.kind) {
         case "key":
             cpu.sysvia.setMapped(input.mapping, input.down ? 1 : 0);

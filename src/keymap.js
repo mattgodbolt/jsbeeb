@@ -110,6 +110,19 @@ export const BBC = {
     NUMPADENTER: [12, 3],
 };
 
+/**
+ * The key each gamepad button presses until the URL remaps it, by its index in the browser's standard mapping: A (0),
+ * Start (9) and the D-pad's up, down, left and right (12 to 15). The D-pad presses the "Snapper" keys.
+ */
+export const BbcGamepadKeys = {
+    0: BBC.RETURN,
+    9: BBC.SPACE,
+    12: BBC.COLON_STAR,
+    13: BBC.SLASH,
+    14: BBC.Z,
+    15: BBC.X,
+};
+
 const IsLetter = /^[A-Za-z]$/;
 
 /** BBC keys that print the same thing either way, so holding one must not disturb shift. */
@@ -362,7 +375,7 @@ export const keyCodes = {
  * Other names a `KEY.` parameter may use for a host key: one that covers both sides of a pair,
  * or a second name for a key that is printed differently on different keyboards.
  */
-export const keyCodeAliases = {
+const keyCodeAliases = {
     SHIFT: [keyCodes.SHIFT_LEFT, keyCodes.SHIFT_RIGHT],
     CTRL: [keyCodes.CTRL_LEFT, keyCodes.CTRL_RIGHT],
     ALT: [keyCodes.ALT_LEFT, keyCodes.ALT_RIGHT],

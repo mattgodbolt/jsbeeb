@@ -27,6 +27,7 @@ const LightsBarViewports = [
 const Oswrch = 0xffee;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
+const Osbyte157Entry = 0xffa7;
 const OsScreenMode = 0x355;
 // A field's rows are cleared at the flyback after the next field's, so the MODE 7 field the mode changed in is gone
 // only after the frame count has gone up three times.
@@ -151,6 +152,37 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     await goTo(Unnamed);
     await expect(credit).toHaveCSS("visibility", "hidden");
     expect(await panelWidth()).toBe(creditedWidth);
+});
+
+test("a wider disassembly panel shows more of each name, in one column", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    const box = page.locator("#goto-dis-addr-form .goto-addr");
+    await box.fill(`$${Osbyte157Entry.toString(16)}`);
+    await box.press("Enter");
+    const name = page.locator("#disassembly .highlight .dis_addr .named");
+    await expect(name).toHaveText("osbyte157EntryPoint");
+    const shown = () => name.evaluate((node) => node.clientWidth / node.scrollWidth);
+    const columnLefts = () =>
+        page
+            .locator("#disassembly .instr_bytes")
+            .evaluateAll((nodes) => new Set(nodes.map((node) => node.getBoundingClientRect().left)).size);
+    expect(await shown()).toBeLessThan(1);
+    const [label, bytes] = await Promise.all(
+        [".dis_addr", ".instr_bytes"].map((column) =>
+            page.locator(`#disassembly .highlight ${column}`).evaluate((node) => node.getBoundingClientRect().width),
+        ),
+    );
+    expect(label / bytes).toBeCloseTo(12 / 9);
+
+    const handle = await page.locator("#disassembly-panel .panel-resize-left").boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 - 200, handle.y + handle.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(shown).toBe(1);
+    expect(await columnLefts()).toBe(1);
 });
 
 test("the no-audio-worklet warning fits a phone and a desktop, closes without taking the keyboard, and is back on reload", async ({
@@ -332,6 +364,12 @@ test("the disassembly and memory views fill their panels' height as they are res
     await beeb.expectScreenText(">");
     for (const [index, view] of views.entries())
         await expect.poll(async () => (await rowsOf(view)).count).toBe(counts[index]);
+    await expect
+        .poll(async () => {
+            const { highlightRow, count } = await rowsOf("#disassembly");
+            return highlightRow - Math.floor(count / 2);
+        })
+        .toBe(0);
 
     await page.setViewportSize({ width: 1920, height: 400 });
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBeLessThan(counts[0]);
@@ -372,6 +410,75 @@ test("a step part way through a move or resize leaves the panel where the drag h
     const resized = await stepPartWayThroughDrag(".panel-resize-bottom", 0, 100);
     expect(resized.dragged.height).toBeGreaterThan(opened.height + 50);
     expect(resized.afterStep).toEqual(resized.dragged);
+});
+
+test("the memory view shows 8, 16 or 32 bytes a row as its panel is widened, its rows aligned, and steps a row at a time", async ({
+    beeb,
+    page,
+}) => {
+    const memoryRows = () =>
+        page.locator("#memory").evaluate((container) => {
+            const rows = [...container.children];
+            const highlight = rows.find((row) => row.classList.contains("highlight"));
+            return {
+                bytes: rows[0].querySelectorAll(".mem_bytes span").length,
+                rows: rows.map((row) => parseInt(row.querySelector(".addr").textContent, 16)),
+                highlight: parseInt(highlight.querySelector(".addr").textContent, 16),
+                highlightRow: rows.indexOf(highlight),
+                target: container.querySelector(".mem_bytes .target").dataset.addr,
+                fits: rows.every((row) => row.scrollWidth <= row.clientWidth),
+            };
+        });
+    const panel = page.locator("#memory-panel");
+    const widen = async (dx) => {
+        const handle = await page.locator("#memory-panel .panel-resize-right").boundingBox();
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(handle.x + handle.width / 2 + dx, handle.y + handle.height / 2, { steps: 10 });
+        await page.mouse.up();
+    };
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    await expect(panel).toBeVisible();
+    await page.fill("#goto-mem-addr-form .goto-addr", "1234");
+    await page.press("#goto-mem-addr-form .goto-addr", "Enter");
+    const opened = await memoryRows();
+    expect(opened).toMatchObject({ bytes: 8, highlight: 0x1230, target: `${0x1234}`, fits: true });
+
+    for (const bytes of [16, 32]) {
+        const width = (await panel.boundingBox()).width;
+        const rowWidth = await page
+            .locator("#memory .mem_bytes")
+            .first()
+            .evaluate((el) => el.offsetWidth);
+        await widen(Math.ceil((rowWidth * 4) / 3) + 4);
+        await expect.poll(async () => (await memoryRows()).bytes).toBe(bytes);
+        const shown = await memoryRows();
+        expect(shown).toMatchObject({
+            highlight: 0x1234 & -bytes,
+            highlightRow: opened.highlightRow,
+            target: `${0x1234}`,
+            fits: true,
+        });
+        expect(
+            shown.rows.every((addr, i) => addr % bytes === 0 && (i === 0 || addr - shown.rows[i - 1] === bytes)),
+        ).toBe(true);
+        expect((await panel.boundingBox()).width).toBeGreaterThan(width);
+    }
+    const settled = (await panel.boundingBox()).width;
+    await page.keyboard.press("u");
+    expect(await memoryRows()).toMatchObject({ highlight: 0x1240, target: `${0x1254}` });
+    expect((await panel.boundingBox()).width).toBe(settled);
+
+    const rowWidth = await page
+        .locator("#memory .mem_bytes")
+        .first()
+        .evaluate((el) => el.offsetWidth);
+    await widen(-Math.ceil((rowWidth * 2) / 3));
+    await expect.poll(async () => (await memoryRows()).bytes).toBe(16);
+    expect(await memoryRows()).toMatchObject({ highlight: 0x1250, target: `${0x1254}`, fits: true });
 });
 
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({

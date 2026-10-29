@@ -13,7 +13,7 @@ export const volumeTable = new Float32Array(16);
     volumeTable[15] = 0;
 })();
 
-export const DefaultAcia = {
+const DefaultAcia = {
     sr: 0x02,
     cr: 0x00,
     dr: 0x00,
@@ -29,7 +29,7 @@ export const DefaultAcia = {
     runRs423TaskOffset: null,
 };
 
-export const DefaultAdc = { status: 0x40, low: 0x00, high: 0x00, taskOffset: null };
+const DefaultAdc = { status: 0x40, low: 0x00, high: 0x00, taskOffset: null };
 
 /**
  * Build jsbeeb video state from parsed CRTC, ULA, and palette data.
