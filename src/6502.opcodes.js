@@ -1035,13 +1035,16 @@ const CallEffects = [
     { call: /cpu\.p\.asByte\(/, reads: Flags, writes: [] },
 ];
 const Assignment = /cpu\.(?:p\.)?([axysnvdizc])\s*=(?!=)/g;
-const Mention = /cpu\.(?:p\.)?([axysnvdizc])\b(?!\s*\()/g;
+const CompoundAssignment = /cpu\.(?:p\.)?([axysnvdizc])\s*(?:[-+*|&^]|<<|>>>?)=/g;
+const Mention = /cpu\.(?:p\.)?([axysnvdizc])\b/g;
 
 /** The registers and flags the emulation code for an operation in `mode` reads and writes. */
 function registerEffects({ op, preop, read, write }, mode) {
     const code = [preop ?? [], op].flat().join("\n");
     const reads = new Set([...code.replace(Assignment, "").matchAll(Mention)].map(([, name]) => name));
-    const writes = new Set([...code.matchAll(Assignment)].map(([, name]) => name));
+    const writes = new Set(
+        [...code.matchAll(Assignment), ...code.matchAll(CompoundAssignment)].map(([, name]) => name),
+    );
     for (const effect of CallEffects.filter(({ call }) => call.test(code))) {
         effect.reads.forEach((name) => reads.add(name));
         effect.writes.forEach((name) => writes.add(name));
@@ -1062,7 +1065,7 @@ const UnknownOpcode = {
     length: 1,
     accesses: [],
     registers: { reads: [], writes: [] },
-    idempotent: true,
+    idempotent: false,
     flow: "next",
 };
 

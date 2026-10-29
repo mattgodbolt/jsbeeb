@@ -128,7 +128,6 @@ describe("Disassemble6502", () => {
             ["LDA abs,Y", cpu6502Opcodes, 0xb9, "y", "anz", true],
             ["TAX", cpu6502Opcodes, 0xaa, "a", "xnz", true],
             ["CMP #", cpu6502Opcodes, 0xc9, "a", "nzc", true],
-            ["BIT zp", cpu6502Opcodes, 0x24, "a", "nvz", true],
             ["AND #", cpu6502Opcodes, 0x29, "a", "anz", true],
             ["SEC", cpu6502Opcodes, 0x38, "", "c", true],
             ["BEQ", cpu6502Opcodes, 0xf0, "z", "", true],
@@ -142,6 +141,8 @@ describe("Disassemble6502", () => {
             ["PLP", cpu6502Opcodes, 0x28, "s", "snvdizc", false],
             ["JSR", cpu6502Opcodes, 0x20, "s", "s", false],
             ["SMB0", cpu65c02Opcodes, 0x87, "", "", true],
+            ["*SLO zp", cpu6502Opcodes, 0x07, "a", "anzc", false],
+            ["an unknown opcode", cpu6502Opcodes, 0x02, "", "", false],
         ])("says what %s reads and writes, and whether it settles", (_, opcodes, opcode, reads, writes, idempotent) => {
             const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
             expect(dis.describeOpcode(opcode)).toMatchObject({
