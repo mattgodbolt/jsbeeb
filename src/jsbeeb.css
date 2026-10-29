@@ -1049,6 +1049,27 @@ small {
   color: #cccccc;
 }
 
+.videoula-ula-palette .videoula-palette-entries {
+  width: 7ch;
+  color: #888888;
+}
+
+.videoula-palette-entry.unused,
+.videoula-palette-view.unused {
+  visibility: hidden;
+}
+
+.videoula-palette.dimmed {
+  opacity: 0.4;
+}
+
+.videoula-palette-view {
+  color: #aaaaff;
+  font-family: inherit;
+  font-size: inherit;
+  margin-left: 1ch;
+}
+
 .videoula-control .decoded-meaning {
   width: 38ch;
 }

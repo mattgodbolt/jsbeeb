@@ -13,6 +13,8 @@ const NulaControl = 0xfe22;
 const NulaPalette = 0xfe23;
 const Mode2Control = 0xf4;
 const Mode7Control = 0x4b;
+const Mode0Control = 0x9c;
+const Mode1Control = 0xd8;
 const FramebufferPixels = 1024 * 768;
 
 function makePanel(hasVideoNula) {
@@ -34,6 +36,18 @@ const swatches = (className) =>
         label: entry.querySelector(".videoula-palette-label").textContent,
     }));
 const meanings = (name) => decodedMeanings("videoula-panel", name);
+const paletteCells = () => [
+    ...document.querySelectorAll("#videoula-panel .videoula-ula-palette .videoula-palette-entry"),
+];
+/** Each slot of the ULA palette as "index label entries", or null where the mode has no such colour. */
+const logicalSlots = () =>
+    paletteCells().map((cell) =>
+        cell.classList.contains("unused")
+            ? null
+            : [".videoula-palette-index", ".videoula-palette-label", ".videoula-palette-entries"]
+                  .map((part) => cell.querySelector(part).textContent)
+                  .join(" "),
+    );
 
 describe("VideoUlaPanel", () => {
     afterEach(teardownDom);
@@ -47,7 +61,7 @@ describe("VideoUlaPanel", () => {
         makePanel(false);
         expect(meanings("CTRL")).toHaveLength(7);
         expect(swatches("videoula-ula-palette")[0].label).toBe("white");
-        expect(document.querySelector("#videoula-panel .videoula-ula-heading").textContent).toBe("Palette");
+        expect(document.querySelector("#videoula-panel .videoula-ula-heading").textContent).toBe("Palette: 16 colours");
     });
 
     it("decodes the control register: cursor, clock rate, characters per line, teletext and flash", () => {
@@ -89,6 +103,43 @@ describe("VideoUlaPanel", () => {
         expect(document.querySelector("#videoula-panel .videoula-nula-palette")).toBeNull();
     });
 
+    it("groups the palette by the mode's colours, marks one whose entries disagree, and shows the entries on request", () => {
+        const { write } = makePanel(false);
+        const Mode1Colours = [0, 1, 3, 7];
+        write(Control, Mode1Control);
+        for (let entry = 0; entry < 16; ++entry) {
+            const logical = (((entry >>> 3) & 1) << 1) | ((entry >>> 1) & 1);
+            write(Palette, (entry << 4) | (Mode1Colours[logical] ^ 7));
+        }
+        const heading = document.querySelector("#videoula-panel .videoula-ula-heading");
+        expect(heading.textContent).toBe("Palette: 4 colours");
+        expect(logicalSlots()).toEqual([
+            "0 black 0,1,4,5",
+            "1 red 2,3,6,7",
+            "2 yellow 8,9,c,d",
+            "3 white a,b,e,f",
+            ...Array(12).fill(null),
+        ]);
+        const BlueInEntry6 = 0x60 | (4 ^ 7);
+        write(Palette, BlueInEntry6);
+        expect(logicalSlots()[1]).toBe("1 mixed 2,3,6,7");
+        expect(paletteCells()[1].title).toContain("Entry 6: colour 4, blue");
+
+        const view = document.querySelector("#videoula-panel .videoula-palette-view");
+        view.click();
+        expect(heading.textContent).toBe("Palette: 16 entries");
+        expect(view.textContent).toBe("colours");
+        expect(logicalSlots()[6]).toBe("6 blue ");
+        view.click();
+        write(Control, Mode0Control);
+        expect(logicalSlots().slice(0, 3)).toEqual(["0 mixed 0-7", "1 mixed 8-f", null]);
+
+        write(Control, Mode7Control);
+        expect(heading.textContent).toBe("Palette: unused by teletext");
+        expect(document.querySelector("#videoula-panel .videoula-ula-palette").classList).toContain("dimmed");
+        expect(logicalSlots()[6]).toBe("6 blue ");
+    });
+
     it("shows NuLA's palette, palette mode and flash flags, and when a program switches it off", () => {
         const { write } = makePanel(true);
         const EntryDrawingNulaColour9 = 0x2e;
@@ -105,7 +156,7 @@ describe("VideoUlaPanel", () => {
         write(NulaControl, 0x8f);
         expect(swatches("videoula-ula-palette")[2].label).toBe("NuLA 9/e");
         const ulaHeading = document.querySelector("#videoula-panel .videoula-ula-heading");
-        expect(ulaHeading.textContent).toBe("Palette");
+        expect(ulaHeading.textContent).toBe("Palette: 16 colours");
         write(NulaControl, 0x11);
         expect(meanings("R1")).toEqual(["+direct"]);
         expect(ulaHeading.textContent).toBe("Palette: bypassed");
