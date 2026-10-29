@@ -394,6 +394,8 @@ test.describe("on a phone", () => {
         await beeb.expectHeld();
         await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^A$/ }).tap();
         expect(await page.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(false);
+        await page.locator("#touch-keyboard .tk-key", { hasText: /^more$/ }).tap();
+        await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
     });
 
     test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {
