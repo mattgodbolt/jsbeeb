@@ -343,7 +343,7 @@ export class Debugger {
             runToCursor: this._actions.runToCursor,
             redraw: () =>
                 this._redraw(() =>
-                    this.updateDisassembly(this._loop?.isRunning() ? this.cpu.pc : this._disassembly.cursor),
+                    this._loop?.isRunning() ? this._disassembly.update(this.cpu.pc) : this._disassembly.redraw(),
                 ),
         });
         this._bindToolbar();

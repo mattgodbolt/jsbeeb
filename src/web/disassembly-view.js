@@ -88,7 +88,7 @@ export class DisassemblyView {
         this._cpu = null;
         this._sheila = [];
         this._cursor = 0;
-        this._cursorRow = 0;
+        this._cursorRow = Math.floor(InitialRows / 2);
         this._backStack = [];
         this._breakpoints = new Map();
         this._widget = floating.panel.querySelector("#disassembly");
@@ -128,7 +128,7 @@ export class DisassemblyView {
                 runToCursor,
                 toggleBreakpoint: () => {
                     this._toggleBreakpoint(this._cursor);
-                    this.update(this._cursor);
+                    this.redraw();
                 },
                 down: () => this.update(this._nextInstruction(this._cursor)),
                 up: () => this.update(this._prevInstruction(this._cursor)),

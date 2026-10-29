@@ -157,9 +157,13 @@ describe("Debugger", () => {
 
             dbgr.debug(cpu.pc);
             expect(highlightRow()).toBe(20);
+            resizeTo(16);
+            expect(highlightRow()).toBe(8);
+            resizeTo(40);
             keyPress("j");
             expect(highlightRow()).toBe(20);
             resizeTo(50);
+            keyPress("t");
             expect(highlightRow()).toBe(20);
             dbgr.panels.disassembly.close();
             dbgr.panels.disassembly.open();
