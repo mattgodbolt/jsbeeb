@@ -565,6 +565,27 @@ a.symbol:hover {
   background-color: #5a5040;
 }
 
+.help-tabs {
+  margin-left: 2rem;
+  border-bottom: 0;
+}
+
+/* Bootstrap's lg breakpoint, below which Help goes fullscreen and its tabs get a row of their own. */
+@media (max-width: 991.98px) {
+  .help-header {
+    flex-wrap: wrap;
+  }
+
+  .help-tabs {
+    order: 1;
+    flex: 0 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0.5rem 0 0;
+    white-space: nowrap;
+  }
+}
+
 .help td:first-child,
 .help th:first-child {
   white-space: nowrap;
@@ -963,6 +984,25 @@ small {
 
 .crtc-screen .decoded-meaning {
   width: 50ch;
+}
+
+.soundchip-registers .decoded-meaning {
+  width: 52ch;
+}
+
+.soundchip-mutes {
+  margin-top: 6px;
+  padding-left: 4px;
+  color: #aaaaaa;
+}
+
+.soundchip-mutes .decoded-bit {
+  margin-left: 6px;
+  font: inherit;
+}
+
+.soundchip-mutes .decoded-bit:not(.lit) {
+  background: transparent;
 }
 
 .decoded-value,

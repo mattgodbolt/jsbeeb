@@ -631,6 +631,23 @@ test("the CRTC panel follows a change of mode, its content fitting the size it o
     expect(await sizesSampled(page)).toEqual([expect.stringMatching(/fits: true$/)]);
 });
 
+test("the sound chip panel opens from the Debug menu, names a tone's note, and fits its content", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    const A440Writes = [0x8c, 0x11, 0x90];
+    await page.evaluate((writes) => writes.forEach((value) => window.processor.soundChip.poke(value)), A440Writes);
+    await beeb.togglePanel("soundchip");
+    const panel = page.locator("#soundchip-panel");
+    await expect(panel).toContainText("A4 +1c");
+    const fits = await panel
+        .locator(".panel-body")
+        .evaluate((body) => body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight);
+    expect(fits).toBe(true);
+});
+
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
     page,
@@ -851,13 +868,12 @@ test.describe("on a phone", () => {
     });
 });
 
-test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({
+test("each of help's tabs fits a desktop or tablet window whole and a phone's width, and opens on the debugging tab while paused or debugging", async ({
     beeb,
     page,
 }) => {
-    const helpLayout = async ({ width, height }) => {
-        await page.setViewportSize({ width, height });
-        return page.evaluate(() => {
+    const helpLayout = () =>
+        page.evaluate(() => {
             const modal = document.getElementById("help");
             const body = modal.querySelector(".modal-body");
             const close = modal.querySelector(".btn-close").getBoundingClientRect();
@@ -868,30 +884,53 @@ test("help fits a desktop browser window whole, and on a phone or tablet scrolls
                 scrollsSideways: body.scrollWidth > body.clientWidth || modal.scrollWidth > modal.clientWidth,
             };
         });
+    const tabs = page.locator("#help [data-bs-toggle='tab']");
+    const layoutOfEachTab = async (size) => {
+        await page.setViewportSize(size);
+        const layouts = {};
+        for (const tab of await tabs.all()) {
+            await tab.click();
+            await expect(page.locator(`${await tab.getAttribute("data-bs-target")}.show`)).toBeVisible();
+            layouts[(await tab.textContent()).trim()] = await helpLayout();
+        }
+        return layouts;
     };
-    const desktop = { width: 1920, height: 940 };
-    await page.setViewportSize(desktop);
+    const fitsWhole = { closeOnScreen: true, modalScrolls: false, bodyScrolls: false, scrollsSideways: false };
+    const openHelp = async () => {
+        await beeb.armModalShown("help");
+        await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
+        await beeb.expectModalShown();
+    };
+
+    await page.setViewportSize({ width: 1920, height: 940 });
     await beeb.open();
     await beeb.expectScreenText(">");
-    await beeb.armModalShown("help");
-    await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
-    await beeb.expectModalShown();
-    expect(await helpLayout(desktop)).toEqual({
-        closeOnScreen: true,
-        modalScrolls: false,
-        bodyScrolls: false,
-        scrollsSideways: false,
-    });
-    for (const narrow of [
-        { width: 390, height: 844 },
-        { width: 768, height: 1024 },
-    ]) {
-        expect(await helpLayout(narrow), `at ${narrow.width}x${narrow.height}`).toEqual({
-            closeOnScreen: true,
-            modalScrolls: false,
-            bodyScrolls: true,
-            scrollsSideways: false,
-        });
+    await openHelp();
+    const tabNames = (await tabs.allTextContents()).map((name) => name.trim());
+    const everyTab = (layout) => Object.fromEntries(tabNames.map((name) => [name, layout]));
+    expect(await layoutOfEachTab({ width: 1920, height: 940 })).toEqual(everyTab(fitsWhole));
+    expect(await layoutOfEachTab({ width: 768, height: 1024 })).toEqual(everyTab(fitsWhole));
+
+    const onPhone = await layoutOfEachTab({ width: 390, height: 844 });
+    expect(onPhone.Keyboard.bodyScrolls).toBe(true);
+    for (const layout of Object.values(onPhone)) {
+        expect({ ...layout, bodyScrolls: false }).toEqual(fitsWhole);
+    }
+    expect(await page.locator("#help .help-tabs").evaluate((row) => row.scrollWidth > row.clientWidth)).toBe(true);
+
+    await page.setViewportSize({ width: 1920, height: 940 });
+    await tabs.first().click();
+    for (const stop of ["Alt+P", "Alt+S"]) {
+        await page.keyboard.press("Escape");
+        await beeb.expectRunningPast(await beeb.cycles());
+        await page.keyboard.press(stop);
+        await openHelp();
+        await expect(page.locator("#help-debugging.show"), stop).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.locator("#help")).toBeHidden();
+        await page.keyboard.press(stop);
+        await openHelp();
+        await expect(page.locator("#help-start.show"), `after ${stop} again`).toBeVisible();
     }
 });
 

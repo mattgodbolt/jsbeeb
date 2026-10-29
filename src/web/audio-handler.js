@@ -41,6 +41,7 @@ export class AudioHandler {
         this.stats = {};
         this.eventCounts = { stall: 0, skip: 0, leadMinMs: Infinity };
         this._chipEvents = [];
+        this._channelMutes = null;
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {
                 console.error("Unable to initialise audio stats", error);
@@ -162,6 +163,7 @@ export class AudioHandler {
         });
         this._jsAudioNode.connect(this.audioContext.destination);
         if (!this.soundChip.enabled) this._setEnabled(false);
+        if (this._channelMutes) this.setChannelMutes(this._channelMutes);
         this._jsAudioNode.port.onmessage = (event) => {
             const now = Date.now();
             if (event.data.event) {
@@ -190,6 +192,12 @@ export class AudioHandler {
 
     _setEnabled(enabled) {
         this._jsAudioNode?.port.postMessage({ command: "setEnabled", enabled });
+    }
+
+    /** Leaves the chip's channels muted out of what is heard, by channel: tones 0 to 2, then noise. */
+    setChannelMutes(muted) {
+        this._channelMutes = muted;
+        this._jsAudioNode?.port.postMessage({ command: "setChannelMutes", muted });
     }
 
     setAudioOutput(audioOutput) {
