@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { UserVia } from "../../src/via.js";
 import { UserViaPanel } from "../../src/web/uservia-panel.js";
-import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { findModel } from "../../src/models.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
@@ -58,12 +58,12 @@ describe("UserViaPanel", () => {
     });
 
     it("opens and closes from the peripherals panel's user VIA section, as one of the debugger's panels", () => {
-        const opener = document.querySelector('#uservia [data-opens="uservia"]');
+        const opener = document.querySelector('#uservia [data-opens="uservia-panel"]');
         opener.click();
         expect(panel.floating.isOpen).toBe(false);
         opener.click();
         expect(panel.floating.isOpen).toBe(true);
-        expect(arrangement.group("debug")).toEqual([panel.floating]);
+        expect(arrangement.group(DebugGroup)).toEqual([panel.floating]);
         expect(arrangement.listed().map(({ title }) => title)).toEqual(["User VIA"]);
     });
 

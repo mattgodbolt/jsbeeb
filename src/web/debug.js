@@ -5,7 +5,7 @@ import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
@@ -247,9 +247,6 @@ const OwnPanels = [
         show: (dbgr) => dbgr.updatePeripherals(),
     },
 ];
-/** The arrangement's group of the panels Alt-D and Alt-S show and hide: the debugger's own, and the decoded devices. */
-const DebugGroup = "debug";
-
 /** Of the panels `ids`, those that were open when the debugger's were last seen. */
 function rememberedPanels(ids) {
     try {

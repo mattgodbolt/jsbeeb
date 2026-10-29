@@ -1,5 +1,5 @@
 import { hexbyte, hexword } from "../hex.js";
-import { FloatingPanel, panelShell } from "./floating-panel.js";
+import { DebugGroup, FloatingPanel, panelShell } from "./floating-panel.js";
 
 /**
  * @typedef {object} Meaning one piece of what a register's value means
@@ -117,6 +117,8 @@ export function namedBits(names) {
 /**
  * A debug panel showing one of the machine's devices decoded, in a shell of its own: one of the debugger's panels,
  * drawn as it opens and then once a frame while open, when the machine has moved on. Its body is a row of columns.
+ * The owner fills it before it can be opened, as the layout measures it on opening; what it shows never changes its
+ * size.
  * @param {object} options
  * @param {string} options.id
  * @param {string} options.title
@@ -135,7 +137,7 @@ export function decodedPanel({ id, title, feature, place, minSize, arrangement, 
         panel,
         id,
         title,
-        group: "debug",
+        group: DebugGroup,
         place,
         minSize,
         reopens: true,

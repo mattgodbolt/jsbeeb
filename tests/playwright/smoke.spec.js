@@ -377,7 +377,7 @@ test("the user VIA panel opens from the peripherals panel, names the printer and
     await beeb.open();
     await beeb.expectScreenText(">");
     await beeb.togglePanel("peripherals");
-    await page.click('#peripherals-panel [data-opens="uservia"]');
+    await page.click('#peripherals-panel [data-opens="uservia-panel"]');
     const panel = page.locator("#uservia-panel");
     await expect(panel).toBeVisible();
     await expect(panel).toContainText("CA2 printer strobe");
@@ -386,7 +386,7 @@ test("the user VIA panel opens from the peripherals panel, names the printer and
         .locator(".panel-body")
         .evaluate((body) => body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight);
     expect(fits).toBe(true);
-    await page.click('#peripherals-panel [data-opens="uservia"]');
+    await page.click('#peripherals-panel [data-opens="uservia-panel"]');
     await expect(panel).toBeHidden();
 });
 

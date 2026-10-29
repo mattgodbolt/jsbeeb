@@ -5,7 +5,7 @@ import { BBC } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
-import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { findModel } from "../../src/models.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
@@ -97,12 +97,12 @@ describe("SysViaPanel", () => {
         });
 
         it("is one of the debugger's panels, listed by its title", () => {
-            expect(arrangement.group("debug")).toEqual([panel.floating]);
+            expect(arrangement.group(DebugGroup)).toEqual([panel.floating]);
             expect(arrangement.listed().map(({ title }) => title)).toEqual(["System VIA"]);
         });
 
         it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open and the machine moves on", () => {
-            const opener = () => document.querySelector('#sysvia [data-opens="sysvia"]');
+            const opener = () => document.querySelector('#sysvia [data-opens="sysvia-panel"]');
             opener().click();
             expect(isOpen()).toBe(true);
             expect(hex("IC32")).toBe("00");

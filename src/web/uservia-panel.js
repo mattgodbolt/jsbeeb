@@ -76,7 +76,6 @@ export class UserViaPanel {
             new DecodedRegisters(body.querySelector(".uservia-ports"), [Sections.ports, TimersSection]),
             new DecodedRegisters(body.querySelector(".uservia-control"), [Sections.control]),
         ];
-        // Filled before it can be opened, as the layout measures it on opening and what it shows never changes its size.
         this.update();
     }
 

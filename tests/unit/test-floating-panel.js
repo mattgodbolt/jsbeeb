@@ -483,7 +483,7 @@ describe("FloatingPanel", () => {
             const { floating } = shelled("uservia", "debug");
             document.body.insertAdjacentHTML(
                 "beforeend",
-                `<a href="#" data-opens="uservia"><span class="inner">open</span></a><a href="#" class="other">no</a>`,
+                `<a href="#" data-opens="uservia-panel"><span class="inner">open</span></a><a href="#" class="other">no</a>`,
             );
             const click = (selector) => {
                 const event = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -537,6 +537,20 @@ describe("FloatingPanel", () => {
             cycles = 0;
             runFrame();
             expect(draw).toHaveBeenCalledTimes(4);
+        });
+
+        it("draws again at the next frame when a draw asks to, with work left over, though the machine stands still", () => {
+            const floating = watches();
+            let workLeft = 2;
+            const draw = vi.fn(() => {
+                if (--workLeft > 0) refresh.drawSoon();
+            });
+            const refresh = arrangement.refreshing(() => floating.isOpen, draw);
+            floating.open();
+            refresh.drawNow();
+            runFrame();
+            runFrame();
+            expect(draw).toHaveBeenCalledTimes(2);
         });
 
         it("takes what its owner drew itself as up to date", () => {

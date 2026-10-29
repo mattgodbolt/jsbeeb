@@ -284,7 +284,6 @@ export class SysViaPanel {
             new DecodedRegisters(part("sysvia-latch"), [Ic32Section, TimersSection]),
         ];
         this._matrix = new KeyMatrix(part("key-matrix"), part("key-matrix-status"));
-        // Filled before it can be opened, as the layout measures it on opening and what it shows never changes its size.
         this.update();
     }
 

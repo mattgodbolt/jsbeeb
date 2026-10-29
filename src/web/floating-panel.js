@@ -17,6 +17,8 @@ import {
 
 const StorageKey = "panelLayout";
 const BaseZIndex = 10;
+/** The group of the panels Alt-D and Alt-S show and hide: the debugger's own, and the decoded devices. */
+export const DebugGroup = "debug";
 const ResizeEdges = ["top", "right", "bottom", "left", "top-left", "top-right", "bottom-left", "bottom-right"];
 const GeometryStyles = ["left", "top", "width", "height", "maxHeight"];
 
@@ -119,8 +121,9 @@ class PanelRefresh {
     }
 
     drawNow() {
-        this._draw();
+        // Recorded first, so that a draw asking to draw again, with work left over, is kept to it.
         this.drawn();
+        this._draw();
     }
 
     /** Records that what is shown is up to date with the machine as it is now, for an owner that drew it itself. */
@@ -147,7 +150,7 @@ class PanelRefresh {
  *
  * It also redraws the panels that keep up with the machine (see `refreshing`), from one loop of
  * animation frames that runs only while one of them is shown, and opens and closes the panel that
- * a clicked `[data-opens="<id>"]` element names.
+ * a clicked `[data-opens="<element id>"]` element names.
  */
 export class PanelArrangement extends EventTarget {
     /** @param {function(): Storage} storage */
@@ -184,8 +187,8 @@ export class PanelArrangement extends EventTarget {
     _openFrom(e) {
         const opener = e.target.closest?.("[data-opens]");
         if (!opener) return;
-        // One left by an earlier page, in tests, is no longer in the document.
-        const floating = this._panels.find((other) => other.id === opener.dataset.opens && other.panel.isConnected);
+        const element = document.getElementById(opener.dataset.opens);
+        const floating = this._panels.find((other) => other.panel === element);
         if (!floating) return;
         e.preventDefault();
         floating.toggle();

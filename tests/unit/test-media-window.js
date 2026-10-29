@@ -545,6 +545,14 @@ describe("MediaWindow", () => {
             expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("b.ssd");
         });
 
+        it("has the disc surface drawn again for a disc put in, which a paused machine would not prompt, but not for a tape", () => {
+            make();
+            putTapeIn({ name: "chuckie.uef", position: 0 });
+            expect(deps.visualiser.redraw).not.toHaveBeenCalled();
+            putDiscIn(1, ssd("b.ssd"));
+            expect(deps.visualiser.redraw).toHaveBeenCalledTimes(1);
+        });
+
         it("opens with the list whichever way it is opened, and the list folds and unfolds on request", () => {
             putDiscIn(0, ssd());
             const window = make();
