@@ -72,18 +72,6 @@ body {
   font-size: 11px;
 }
 
-#peripherals-panel th,
-#peripherals-panel td {
-  padding: 0 2px 0 0;
-  line-height: 1.25;
-}
-
-.debug-panel h6.dbg {
-  margin: 4px 0 2px;
-  font-size: inherit;
-  font-weight: bold;
-}
-
 #toolbar-panel .panel-header {
   flex-wrap: wrap;
   gap: 4px;
@@ -217,18 +205,6 @@ a.symbol {
 
 a.symbol:hover {
   text-decoration: underline;
-}
-
-h6.dbg {
-  text-align: center;
-}
-
-.via_regs,
-.crtc_regs,
-.crtc_state {
-  display: inline-block;
-  vertical-align: top;
-  margin-right: 1ch;
 }
 
 /* Bootstrap's warning icon would hide most of a box this narrow. */
@@ -743,9 +719,6 @@ div.modal-body > div:not(:first-child) {
   border: 1px solid #444;
 }
 
-.value {
-  color: #eee;
-}
 .changed {
   background-color: #772222;
 }
@@ -1003,6 +976,14 @@ small {
 }
 
 .uservia-control .decoded-meaning {
+  width: 50ch;
+}
+
+.crtc-timing .decoded-meaning {
+  width: 40ch;
+}
+
+.crtc-screen .decoded-meaning {
   width: 50ch;
 }
 
