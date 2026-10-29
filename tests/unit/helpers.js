@@ -22,6 +22,17 @@ export function domFromIndexHtml(...ids) {
     }
 }
 
+/** jsdom has no ResizeObserver, and lays nothing out for one to report. */
+export function stubResizeObserver() {
+    vi.stubGlobal(
+        "ResizeObserver",
+        class {
+            observe() {}
+            disconnect() {}
+        },
+    );
+}
+
 /** Enough of an FDC for the page's side of putting a disc in and taking it out. */
 export function fakeFdc() {
     const drives = [

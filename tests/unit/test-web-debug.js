@@ -12,7 +12,7 @@ import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, sentEvents, stubResizeObserver, teardownDom } from "./helpers.js";
 
 const PanelElements = [
     "toolbar-panel",
@@ -83,6 +83,7 @@ describe("Debugger", () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
         window.localStorage.clear();
         domFromIndexHtml(...PanelElements);
+        stubResizeObserver();
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });

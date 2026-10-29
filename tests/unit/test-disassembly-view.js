@@ -10,7 +10,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, parseAddr } from "../../src/hex.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, stubResizeObserver, teardownDom } from "./helpers.js";
 
 describe("DisassemblyView", () => {
     let cpu;
@@ -39,6 +39,7 @@ describe("DisassemblyView", () => {
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
         domFromIndexHtml("disassembly-panel");
+        stubResizeObserver();
         const arrangement = new PanelArrangement(() => window.localStorage);
         keys = new PanelKeys(arrangement);
         const panel = document.getElementById("disassembly-panel");

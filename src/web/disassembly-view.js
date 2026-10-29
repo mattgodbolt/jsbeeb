@@ -1,10 +1,10 @@
 import { hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
 import { sheilaBlocks, sheilaName } from "../sheila.js";
-import { bindGotoForm, cloneTemplate, externalLink, labelHtml } from "./debug-dom.js";
+import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { keyLine } from "./panel-keys.js";
 
-const RowsShown = 16;
+const InitialRows = 16;
 const WheelPixelsPerInstruction = 30;
 
 const Writes = /^\*?(?:ST[AXYZ]|SAX|SH[ASXY])\b/;
@@ -90,7 +90,9 @@ export class DisassemblyView {
         this._backStack = [];
         this._breakpoints = new Map();
         this._widget = floating.panel.querySelector("#disassembly");
-        for (let i = 0; i < RowsShown; i++) cloneTemplate(this._widget);
+        this._rows = new FittedRows(this._widget, InitialRows, () => {
+            if (this._cpu) this.update(this._cursor);
+        });
 
         bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, (address) => this.update(address));
 
@@ -158,15 +160,13 @@ export class DisassemblyView {
     /** Shows the instructions around `address`, highlighting it. */
     update(address) {
         this._cursor = address;
-        const rows = Array.from(this._widget.children).filter(
-            (el) => el.style.display !== "none" && !el.classList.contains("template"),
-        );
+        const { rows, anchor } = this._rows;
         const shown = new Set();
-        for (let i = 0; i < RowsShown / 2; ++i) {
-            address = this._showRow(rows[i + RowsShown / 2], address, shown);
+        for (let i = anchor; i < rows.length; ++i) {
+            address = this._showRow(rows[i], address, shown);
         }
         address = this._cursor;
-        for (let i = RowsShown / 2 - 1; i >= 0; --i) {
+        for (let i = anchor - 1; i >= 0; --i) {
             address = this._prevInstruction(address);
             this._showRow(rows[i], address, shown);
         }

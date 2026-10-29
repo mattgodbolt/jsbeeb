@@ -10,12 +10,12 @@ import { FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
-import { bindGotoForm, cloneTemplate, externalLink, labelHtml } from "./debug-dom.js";
+import { bindGotoForm, cloneTemplate, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 
 const noop = () => {};
 
-const numToShow = 16;
+const InitialMemoryRows = 16;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
 const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
@@ -64,12 +64,10 @@ class MemoryView {
         this._showing = showing;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
-        this._rows = [];
-
-        for (let i = 0; i < numToShow; i++) {
-            this._rows.push(cloneTemplate(this._widget));
-        }
-        this._widget.querySelector(".template").remove();
+        this._drawn = false;
+        this._rows = new FittedRows(widget, InitialMemoryRows, () => {
+            if (this._drawn) this.update();
+        });
 
         widget.addEventListener("wheel", (evt) => {
             const deltaY = evt.deltaY;
@@ -82,11 +80,12 @@ class MemoryView {
 
     update(maybeNewAddr) {
         if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
-        let addr = this._addr - 8 * Math.floor(this._rows.length / 2);
+        this._drawn = true;
+        let addr = this._addr - 8 * this._rows.anchor;
         if (addr < 0) addr = 0;
         const { names, pc } = this._naming();
         const shown = new Set();
-        for (const row of this._rows) {
+        for (const row of this._rows.rows) {
             row.querySelector(".dis_addr").innerHTML = labelHtml(addr);
             row.classList.toggle("highlight", addr === this._addr);
             const dump = this.dump(addr, addr + 8);
