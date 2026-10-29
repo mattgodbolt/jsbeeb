@@ -351,6 +351,16 @@ describe("Debugger", () => {
                 expect(read).not.toHaveBeenCalled();
             });
 
+            it("draw nothing while the machine stands still, so a click lands on what it went down on", () => {
+                const operand = () => disRows()[8].querySelector(".disassembly").firstChild;
+                const before = operand();
+                const peek = vi.spyOn(cpu, "peekmem");
+                frames.run();
+                frames.run();
+                expect(peek).not.toHaveBeenCalled();
+                expect(operand()).toBe(before);
+            });
+
             it("read nothing once closed", () => {
                 stoppedLoop.go();
                 dbgr.hidePanels();

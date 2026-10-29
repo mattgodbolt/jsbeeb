@@ -98,21 +98,23 @@ describe("decoded panels", () => {
             expect(panel.floating.isOpen).toBe(false);
         });
 
-        it("gives the timers in cycles as a program would read them now, without clearing the flag", () => {
+        it("gives the timers in cycles once a frame as a program would read them, without clearing the flag", () => {
+            panel.floating.open();
             via.write(T1CL, 0x10);
             via.write(T1CH, 0x27);
             via.write(T2CL, 0xe8);
             via.write(T2CH, 0x03);
             scheduler.polltime(100 * TicksPerMicrosecond);
-            panel.update();
+            frames.run();
             expect(decodedRow(`${id}-panel`, "T1L").querySelector(".decoded-hex").textContent).toBe("2710");
             expect(meanings("T1L")).toEqual(["10000 cycles"]);
             expect(meanings("T1C")).toEqual(["9901 cycles"]);
             expect(meanings("T2C")).toEqual(["901 cycles"]);
             scheduler.polltime(1000 * TicksPerMicrosecond);
-            panel.update();
+            frames.run();
             expect(meanings("IFR")).toContain("+T2");
-            panel.update();
+            scheduler.polltime(1);
+            frames.run();
             expect(meanings("IFR")).toContain("+T2");
         });
     });
