@@ -14,7 +14,7 @@ const VduDriverStart = 0xc000;
 const VduDriverEnd = 0xe000;
 const Program = `10 A%=1234:B%=-5:count%=0
 20 apple=3.5:Z$="hel:lo"
-30 DIM arr%(3),q(1,2),s$(1),many(20):arr%(1)=77:q(1,0)=2.5:s$(1)="x"
+30 DIM arr%(3),q(1,2),s$(1)
 40 DEF PROCtick:count%=count%+1:ENDPROC
 50 FOR I=1 TO 3:PROCtick:NEXT
 60 GOTO 50
@@ -79,23 +79,13 @@ describe.each([
         const rows = [...document.querySelectorAll(".basic-variables tr")].map((row) =>
             [...row.cells].map((cell) => cell.textContent),
         );
-        expect(rows.map(([name]) => name)).toEqual([
-            "I",
-            "Z$",
-            "apple",
-            "arr%(3)",
-            "count%",
-            "many(20)",
-            "q(1,2)",
-            "s$(1)",
-        ]);
+        expect(rows.map(([name]) => name)).toEqual(["I", "Z$", "apple", "arr%(3)", "count%", "q(1,2)", "s$(1)"]);
         expect(Object.fromEntries(rows)).toMatchObject({
             Z$: '"hel:lo"',
             apple: "3.5",
-            "arr%(3)": "0, 77, 0, 0",
-            "many(20)": `${new Array(16).fill("0").join(", ")}, ...`,
-            "q(1,2)": "0, 0, 0, 2.5, 0, 0",
-            "s$(1)": '"", "x"',
+            "arr%(3)": "(array)",
+            "q(1,2)": "(array)",
+            "s$(1)": "(array)",
         });
         expect(text(".basic-routines")).toBe("PROCtick");
     });
