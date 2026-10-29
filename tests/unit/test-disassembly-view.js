@@ -44,10 +44,9 @@ describe("DisassemblyView", () => {
         const panel = document.getElementById("disassembly-panel");
         const floating = new FloatingPanel({
             panel,
-            header: panel.querySelector(".debug-panel-header"),
-            closeButton: panel.querySelector(".panel-close"),
             id: "disassembly",
             title: "Disassembly",
+            group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: { w: 100, h: 50 },
             reopens: false,

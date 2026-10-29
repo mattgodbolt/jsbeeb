@@ -357,6 +357,8 @@ test("the system VIA panel's content fits the size it opened at, and keeps its s
         const seen = [];
         for (const [register, value, text] of writes) {
             window.processor.sysvia.write(register, value);
+            // The panel redraws once the machine has moved on, which a cycle or two may not, past an instruction.
+            window.processor.execute(16);
             await frame();
             await frame();
             if (panel.textContent.includes(text)) seen.push(text);
@@ -366,6 +368,26 @@ test("the system VIA panel's content fits the size it opened at, and keeps its s
     }, SysViaModeWrites);
     expect(shown).toEqual(SysViaModeWrites.map(([, , text]) => text));
     expect(await page.evaluate(() => [...window.e2eSizes])).toEqual([expect.stringMatching(/fits: true$/)]);
+});
+
+test("the user VIA panel opens from the peripherals panel, names the printer and user port lines, and fits its content", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.togglePanel("peripherals");
+    await page.click('#peripherals-panel [data-opens="uservia-panel"]');
+    const panel = page.locator("#uservia-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("CA2 printer strobe");
+    await expect(panel).toContainText("CB1 user port");
+    const fits = await panel
+        .locator(".panel-body")
+        .evaluate((body) => body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight);
+    expect(fits).toBe(true);
+    await page.click('#peripherals-panel [data-opens="uservia-panel"]');
+    await expect(panel).toBeHidden();
 });
 
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
@@ -652,7 +674,7 @@ test("a panel dragged to the right edge stays on it as the window grows, returns
     await beeb.open();
     await beeb.expectScreenText(">");
     await beeb.togglePanel("watches");
-    const header = page.locator(".watch-header .disc-title");
+    const header = page.locator("#watch-panel .panel-title");
     const grab = await header.boundingBox();
     await page.mouse.move(grab.x + 5, grab.y + 5);
     await page.mouse.down();
@@ -691,7 +713,7 @@ test("a panel dragged to the right edge stays on it as the window grows, returns
 test("a panel can be dragged into the bottom corner, over the lights, and up to the navbar", async ({ beeb, page }) => {
     const panel = page.locator("#watch-panel");
     const dragHeaderTo = async (x, y) => {
-        const grab = await page.locator(".watch-header .disc-title").boundingBox();
+        const grab = await page.locator("#watch-panel .panel-title").boundingBox();
         await page.mouse.move(grab.x + 5, grab.y + 5);
         await page.mouse.down();
         await page.mouse.move(x, y, { steps: 10 });

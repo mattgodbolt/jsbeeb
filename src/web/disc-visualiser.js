@@ -1,5 +1,5 @@
 import { IbmDiscFormat } from "../disc-format.js";
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 import {
     DensityPalette,
@@ -83,8 +83,9 @@ export class DiscVisualiser {
     /**
      * @param {object} options
      * @param {object} options.fdc
+     * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      */
-    constructor({ fdc }) {
+    constructor({ fdc, arrangement }) {
         this._fdc = fdc;
         this.panel = document.getElementById("disc-panel");
         this.surfaceCanvas = document.getElementById("disc-surface");
@@ -114,7 +115,6 @@ export class DiscVisualiser {
         this._hover = null;
         this._pan = null;
         this._surfaceStale = false;
-        this._frameHandle = null;
 
         this._onTrackWrite = (isSideUpper, trackNum) => {
             if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
@@ -123,22 +123,25 @@ export class DiscVisualiser {
         this._resizeObserver = new ResizeObserver(this._onResize);
         this.floating = new FloatingPanel({
             panel: this.panel,
-            header: this.panel.querySelector(".disc-header"),
-            closeButton: document.getElementById("disc-close"),
             id: "disc",
             title: "Disc surface",
+            group: null,
             place: () => ({ x: EndEdge, y: StartEdge }),
             minSize: MinPanelSize,
             reopens: true,
-            arrangement: panelArrangement,
+            arrangement,
         });
+        this._refresh = arrangement.refreshing(
+            () => this.isOpen,
+            () => this.update(),
+        );
         this.floating.addEventListener("open", () => this._start());
         this.floating.addEventListener("close", () => this._stop());
         this._bindChoice("[data-drive]", (button) => this._select(Number(button.dataset.drive), this._isSideUpper));
         this._bindChoice("[data-side]", (button) => this._select(this._driveIndex, button.dataset.side === "1"));
         this._bindChoice("[data-view]", (button) => this._setView(button.dataset.view));
-        this.overlayCanvas.addEventListener("mousemove", (e) => (this._hover = this._canvasPoint(e)));
-        this.overlayCanvas.addEventListener("mouseleave", () => (this._hover = null));
+        this.overlayCanvas.addEventListener("mousemove", (e) => this._hoverAt(this._canvasPoint(e)));
+        this.overlayCanvas.addEventListener("mouseleave", () => this._hoverAt(null));
         this._bindZoomAndPan();
         this._buildLegend();
     }
@@ -175,10 +178,20 @@ export class DiscVisualiser {
         for (const ending of ["pointerup", "pointercancel"])
             canvas.addEventListener(ending, (e) => {
                 if (this._pan?.pointerId !== e.pointerId) return;
-                if (this._pan.moved) this._surfaceStale = true;
+                if (this._pan.moved) this._viewMoved();
                 this._pan = null;
             });
         canvas.addEventListener("dblclick", () => this._setViewport(1, 0, 0));
+    }
+
+    _hoverAt(point) {
+        this._hover = point;
+        this._refresh.drawSoon();
+    }
+
+    _viewMoved() {
+        this._surfaceStale = true;
+        this._refresh.drawSoon();
     }
 
     /** @returns {{x: number, y: number}} the event's position in canvas pixels */
@@ -196,7 +209,7 @@ export class DiscVisualiser {
             was.originX !== this._geometry.originX ||
             was.originY !== this._geometry.originY
         )
-            this._surfaceStale = true;
+            this._viewMoved();
     }
 
     _bindChoice(selector, onClick) {
@@ -223,6 +236,11 @@ export class DiscVisualiser {
         this.floating.close();
     }
 
+    /** Draws again at the next frame, for a disc put in or taken out while the machine stands still. */
+    redraw() {
+        this._refresh.drawSoon();
+    }
+
     /** Opens the panel showing the given drive's lower side. */
     openOn(driveIndex) {
         this._select(driveIndex, false);
@@ -235,23 +253,16 @@ export class DiscVisualiser {
         window.addEventListener("resize", this._onResize);
         this._resizeObserver.observe(this.surfaceCanvas);
         this._resize();
-        this._tick();
+        this._refresh.drawNow();
     }
 
     _stop() {
-        if (this._frameHandle !== null) cancelAnimationFrame(this._frameHandle);
-        this._frameHandle = null;
         this._cancelScan();
         this._detach();
         this._hover = null;
         this._needsFullRepaint = true;
         this._resizeObserver.disconnect();
         window.removeEventListener("resize", this._onResize);
-    }
-
-    _tick() {
-        this.update();
-        this._frameHandle = requestAnimationFrame(() => this._tick());
     }
 
     /** Cheap enough to call every frame. */
@@ -265,6 +276,8 @@ export class DiscVisualiser {
         else if (this._staleTracks.size && !this._scanning) this._repaintStaleTracks();
         this._drawOverlay();
         this._updateStatus();
+        // The machine may stand still while a scan or stale tracks are left to paint.
+        if (this._scanning || this._staleTracks.size) this._refresh.drawSoon();
     }
 
     get _drive() {
@@ -321,6 +334,7 @@ export class DiscVisualiser {
         this._imageData = this.surfaceCanvas.getContext("2d").createImageData(size, size);
         this._pixels = new Uint32Array(this._imageData.data.buffer);
         this._needsFullRepaint = true;
+        this._refresh.drawSoon();
     }
 
     /** @returns {{codes: Uint8Array, sectorNumbers: Int16Array|null, errors: object[]|null}|null} */

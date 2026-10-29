@@ -2,10 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sessionPage } from "../../src/web/session-page.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml, toasts } from "./helpers.js";
 
 describe("sessionPage", () => {
     const link = () => `${window.location.origin}/?client=room`;
+    const pageWithPanels = () => sessionPage(undefined, new PanelArrangement(() => window.localStorage));
     const session = {
         name: "matt",
         room: "room",
@@ -32,7 +34,7 @@ describe("sessionPage", () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
         window.history.replaceState(null, "", "/?server=room&model=Master#frag");
-        sessionPage().panel(session).open();
+        pageWithPanels().panel(session).open();
         expect(document.querySelector("#session-pane .session-link").textContent).toBe(link());
         expect(document.querySelector("#session-pane .session-you").textContent).toBe("You are matt");
         click(".session-copy-link");
@@ -42,7 +44,7 @@ describe("sessionPage", () => {
     });
 
     it("gives the link in full where there is no clipboard to copy it to", async () => {
-        sessionPage().panel(session);
+        pageWithPanels().panel(session);
         click(".session-copy-link");
         await settle();
         expect(toasts().at(-1)).toContain(`Copying needs https. Guests join at ${link()}`);
@@ -53,7 +55,7 @@ describe("sessionPage", () => {
             throw new Error("not allowed");
         });
         Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-        sessionPage().panel(session);
+        pageWithPanels().panel(session);
         click(".session-copy-link");
         await settle();
         expect(toasts().at(-1)).toContain(`Couldn't copy the link (not allowed). Guests join at ${link()}`);
@@ -64,7 +66,7 @@ describe("sessionPage", () => {
         URL.revokeObjectURL = vi.fn();
         try {
             vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-            sessionPage().panel(session);
+            pageWithPanels().panel(session);
             click(".session-report");
             const report = JSON.parse(await URL.createObjectURL.mock.calls[0][0].text());
             expect(report).toMatchObject({ role: "host", room: "room" });
@@ -87,7 +89,7 @@ describe("sessionPage", () => {
     it("hears the page going until told to stop", () => {
         const listener = vi.fn();
         const listening = new AbortController();
-        sessionPage().onPageHide(listener, listening.signal);
+        pageWithPanels().onPageHide(listener, listening.signal);
         window.dispatchEvent(new Event("pagehide"));
         listening.abort();
         window.dispatchEvent(new Event("pagehide"));

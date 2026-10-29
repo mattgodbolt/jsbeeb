@@ -63,7 +63,7 @@ body {
   font-family: monospace;
 }
 
-.debug-panel .floating-panel-header {
+.debug-panel .panel-header {
   align-items: center;
 }
 
@@ -84,23 +84,19 @@ body {
   font-weight: bold;
 }
 
-#toolbar-panel .floating-panel-header {
+#toolbar-panel .panel-header {
   flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 0;
 }
 
 #toolbar-panel,
-#toolbar-panel .disc-title {
+#toolbar-panel .panel-title {
   font-family: var(--bs-body-font-family);
 }
 
 #toolbar-panel .btn {
   padding: 0 5px;
-}
-
-.debug-panel-header .panel-close {
-  margin-left: auto;
 }
 
 /* A width of its own (set in debug.js), not its rows', so that it keeps it as the names in view come and go. */
@@ -823,10 +819,6 @@ small {
   font-size: 9pt;
 }
 
-#watch-close {
-  margin-left: auto;
-}
-
 #watch-panel table {
   width: 100%;
   margin-top: 6px;
@@ -903,16 +895,12 @@ small {
   color: #aaaaaa;
 }
 
-#sysvia-panel {
+.decoded-panel {
   font-family: monospace;
   font-size: 9pt;
 }
 
-.awaiting-machine {
-  visibility: hidden;
-}
-
-.register-panel-body {
+.decoded-columns {
   display: grid;
   grid-template-columns: max-content max-content;
   align-items: start;
@@ -949,6 +937,14 @@ small {
 
 .sysvia-latch .decoded-meaning {
   width: 37ch;
+}
+
+.uservia-ports .decoded-meaning {
+  width: 40ch;
+}
+
+.uservia-control .decoded-meaning {
+  width: 50ch;
 }
 
 .decoded-value,
@@ -1021,7 +1017,7 @@ small {
   white-space: nowrap;
 }
 
-#peripherals-panel .sysvia-open {
+.txt-btn[data-opens] {
   color: #aaaaff;
   font-family: inherit;
   font-size: inherit;
@@ -1113,7 +1109,7 @@ small {
   cursor: nesw-resize;
 }
 
-.floating-panel-header {
+.panel-header {
   flex-shrink: 0;
   display: flex;
   align-items: baseline;
@@ -1132,15 +1128,20 @@ small {
   margin-bottom: 8px;
 }
 
-.floating-panel-header button {
+.panel-header button {
   cursor: pointer;
 }
 
-.disc-title {
+.panel-title {
   color: #ccc;
   font-size: 12px;
   font-weight: bold;
   flex: none;
+}
+
+.panel-close {
+  flex: none;
+  margin-left: auto;
 }
 
 #header-bar .navbar-brand img {
@@ -1186,11 +1187,6 @@ small {
   color: #888;
   font-family: consolas, monospace;
   font-size: 11px;
-}
-
-#disc-close {
-  flex: none;
-  margin-left: auto;
 }
 
 /* A column, so that the disc can take the body's spare height. */

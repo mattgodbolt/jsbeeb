@@ -2,7 +2,7 @@
 // everyone is doing can be seen at a glance, and the pane it opens: the link to join, each peer's
 // numbers as they come, and the session's report to save.
 
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 
 const MinPaneSize = { w: 300, h: 120 };
@@ -89,9 +89,10 @@ export class SessionPanel {
      * @param {function(): void} session.requestControl asks for this page to order the session's inputs
      * @param {function(boolean): void} [session.setTakeOnKey] sets whether a key press takes control, for everyone;
      * without it, the option only shows what the host has set
+     * @param {import("./floating-panel.js").PanelArrangement} session.arrangement what places the pane
      */
     constructor(
-        { name, link, saveReport, copyLink, requestControl, setTakeOnKey },
+        { name, link, saveReport, copyLink, requestControl, setTakeOnKey, arrangement },
         root = document.getElementById("session-panel"),
         pane = document.getElementById("session-pane"),
     ) {
@@ -101,14 +102,13 @@ export class SessionPanel {
         root.hidden = false;
         this.floating = new FloatingPanel({
             panel: pane,
-            header: pane.querySelector(".session-pane-header"),
-            closeButton: pane.querySelector(".session-pane-close"),
             id: "session",
             title: null,
+            group: null,
             place: () => ({ x: StartEdge, y: EndEdge }),
             minSize: MinPaneSize,
             reopens: false,
-            arrangement: panelArrangement,
+            arrangement,
         });
         const readout = root.querySelector(".slot-readout");
         readout.addEventListener("click", () => this.floating.toggle());

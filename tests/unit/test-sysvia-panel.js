@@ -6,6 +6,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { findModel } from "../../src/models.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const ORB = 0x0,
@@ -38,6 +39,7 @@ describe("SysViaPanel", () => {
     let cpu;
     let via;
     let panel;
+    let arrangement;
     let frames;
 
     const makeVia = (isMaster) =>
@@ -50,15 +52,17 @@ describe("SysViaPanel", () => {
         });
 
     beforeEach(() => {
-        domFromIndexHtml("sysvia-panel", "peripherals-panel");
+        domFromIndexHtml("peripherals-panel");
         frames = [];
         vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
         vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => frames.splice(0));
         scheduler = new Scheduler();
         cpu = { interrupt: 0 };
+        arrangement = new PanelArrangement(() => window.localStorage);
+        arrangement.followMachine(() => scheduler.epoch);
         via = makeVia(false);
         via.write(DDRB, PortBLatchLines);
-        panel = new SysViaPanel({ via: () => via, arrangement: new PanelArrangement(() => window.localStorage) });
+        panel = new SysViaPanel({ cpu: { sysvia: via }, arrangement });
     });
 
     afterEach(() => {
@@ -87,13 +91,20 @@ describe("SysViaPanel", () => {
     const matrixStatus = () => document.querySelector(".key-matrix-status").textContent;
 
     describe("opening", () => {
-        it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open", () => {
-            const opener = () => document.querySelector("#sysvia .sysvia-open");
+        it("is made for a BBC or a Master, not for an Atom, whose CPU carries a system VIA it never wires up", () => {
+            const fits = (name) => SysViaPanel.fits({ model: findModel(name) });
+            expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
+        });
+
+        it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open and the machine moves on", () => {
+            const opener = () => document.querySelector('#sysvia [data-opens="sysvia-panel"]');
             opener().click();
             expect(isOpen()).toBe(true);
             expect(hex("IC32")).toBe("00");
             setLatch(LatchCapsLock, true);
+            nextFrame();
             expect(hex("IC32")).toBe("00");
+            scheduler.polltime(1);
             nextFrame();
             expect(hex("IC32")).toBe("40");
             opener().click();
@@ -109,17 +120,9 @@ describe("SysViaPanel", () => {
             }
         });
 
-        it("is laid out unseen before the debugger has a machine, and shows the machine once there is one", () => {
-            const machine = via;
-            via = undefined;
-            const awaiting = () =>
-                document.querySelector("#sysvia-panel .panel-body").classList.contains("awaiting-machine");
-            panel.floating.open();
-            expect(awaiting()).toBe(true);
+        it("is filled before it opens, so that it is laid out at the size it will be", () => {
+            expect(isOpen()).toBe(false);
             expect(meanings("IFR")).toHaveLength(8);
-            via = machine;
-            nextFrame();
-            expect(awaiting()).toBe(false);
         });
     });
 
@@ -161,7 +164,9 @@ describe("SysViaPanel", () => {
                     [...registerRow(name).querySelectorAll(".decoded-bit")].map((chip) => chip.style.width),
                 );
             const onB = chipWidths();
+            panel.floating.panel.remove();
             via = makeVia(true);
+            panel = new SysViaPanel({ cpu: { sysvia: via }, arrangement });
             via.write(DDRB, PortBLatchLines | PortBRtcLines);
             via.write(ORB, 0x40 | 1 | LatchSet);
             panel.update();

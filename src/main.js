@@ -44,7 +44,10 @@ import { DefaultStationId } from "./econet.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
-import { panelArrangement } from "./web/floating-panel.js";
+import { PanelArrangement } from "./web/floating-panel.js";
+import { SysViaPanel } from "./web/sysvia-panel.js";
+import { UserViaPanel } from "./web/uservia-panel.js";
+import { cycleCount } from "./lockstep.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { processDriveTrackParams } from "./url-params.js";
@@ -96,6 +99,7 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 // The pieces that exist before the machine: settings, screen, sound.
 // ------------------------------------------------------------------------
 
+const panelArrangement = new PanelArrangement(() => window.localStorage);
 const panelKeys = new PanelKeys(panelArrangement);
 const dbgr = new Debugger({
     symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }),
@@ -213,6 +217,7 @@ const machine = new Machine({
     dbgr,
 });
 const processor = machine.processor;
+panelArrangement.followMachine(() => cycleCount(processor));
 
 const loop = new EmulationLoop({
     processor,
@@ -309,7 +314,7 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 const rewindUI = new RewindUI({ processor, video, loop });
 rewindUI.updateButtonState();
 
-const discVisualiser = new DiscVisualiser({ fdc: processor.fdc });
+const discVisualiser = new DiscVisualiser({ fdc: processor.fdc, arrangement: panelArrangement });
 const mediaWindow = new MediaWindow({
     media,
     drives,
@@ -320,6 +325,7 @@ const mediaWindow = new MediaWindow({
     autoboot: () => autoBoot.boot(),
     driveSource: googleDriveSource,
     machineSwitch,
+    arrangement: panelArrangement,
 });
 
 const layout = new Layout({
@@ -330,6 +336,8 @@ const layout = new Layout({
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
 dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
+for (const DevicePanel of [SysViaPanel, UserViaPanel])
+    if (DevicePanel.fits(processor)) new DevicePanel({ cpu: processor, arrangement: panelArrangement });
 new DebugMenu({ arrangement: panelArrangement, dbgr });
 
 if (!parsedQuery.embed && !model.isAtom) {
@@ -436,7 +444,7 @@ const startPromise = machine.start({ media, autoBoot, ...plan.media });
             version,
             transport: webRtcTransport(createRendezvousClient()),
             codec: gzipCodec,
-            page: sessionPage(urlState),
+            page: sessionPage(urlState, panelArrangement),
         };
         new SessionDialog({
             session: startSessionFromUrl(parsedQuery, sessionContext),
