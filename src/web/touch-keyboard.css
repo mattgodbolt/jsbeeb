@@ -65,6 +65,17 @@
   gap: 3px;
 }
 
+#touch-keyboard .tk-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: var(--key-height);
+  gap: 3px;
+}
+
+#touch-keyboard .tk-grid > .tk-key {
+  height: auto;
+}
+
 #touch-keyboard .tk-row > div {
   flex-basis: 0;
   min-width: 0;
@@ -105,25 +116,38 @@
   font-size: 13px;
 }
 
-#touch-keyboard .tk-key span {
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  font-size: 10px;
-  opacity: 0.6;
+#touch-keyboard .tk-key {
+  flex-direction: column;
+  gap: 1px;
 }
 
-#touch-keyboard.shifted .tk-key span {
+#touch-keyboard .tk-shifted {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.65;
+}
+
+#touch-keyboard.shifted .tk-shifted {
   opacity: 1;
   color: #ffd76a;
+}
+
+#touch-keyboard .tk-key.tiny {
+  font-size: 8.5px;
+  letter-spacing: -0.2px;
+}
+
+#touch-keyboard .tk-label {
+  white-space: pre;
+  text-align: center;
+  line-height: 1;
 }
 
 #touch-keyboard .tk-key.held {
   background: #e8a317;
   color: #111;
   border-bottom-width: 1px;
-  margin-top: 2px;
-  height: calc(var(--key-height) - 2px);
+  transform: translateY(2px);
 }
 
 #touch-keyboard-toggle {
@@ -190,4 +214,29 @@ body.touch-keyboard-open #leds {
 #touch-keyboard .tk-key[data-reset].held::after {
   width: 100%;
   transition: width 350ms linear;
+}
+
+#touch-keyboard .tk-key[data-reset].short::after {
+  width: 100%;
+  background: #ffd76a;
+  animation: tk-short-flash 300ms ease-out;
+}
+
+@keyframes tk-short-flash {
+  from {
+    opacity: 1;
+    height: 100%;
+  }
+  to {
+    opacity: 0;
+    height: 100%;
+  }
+}
+
+/* Last, to win over the column layout above: 24px keys have no room to stack the two legends. */
+@media (max-height: 500px) {
+  #touch-keyboard .tk-key {
+    flex-direction: row;
+    gap: 3px;
+  }
 }
