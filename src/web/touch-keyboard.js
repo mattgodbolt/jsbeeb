@@ -21,37 +21,10 @@ const ShiftedClass = "shifted";
 // eslint-disable-next-line compat/compat
 const buzz = () => navigator.vibrate?.(VibrateMs);
 
-const SvgNs = "http://www.w3.org/2000/svg";
-/**
- * Legends Open Gorton cannot set, drawn as the BBC's keycaps print them. The cursor keys' arrow points left, with a
- * solid head over half its length. The function keys' f is a plain f leaning 10 degrees, standing on the
- * baseline; its path is 700 units tall, which the CSS sets 0.85em high.
- */
-const Glyphs = {
-    arrow: { viewBox: "0 0 20 10", path: "M0 5 L11 0 V4.1 H20 V5.9 H11 V10 Z" },
-    f: {
-        viewBox: "200 0 310 700",
-        path: "M490 110 C470 25 372 20 360 110 L262 665 M232 270 H432",
-    },
-};
-
-const drawGlyph = (name, turn) => {
-    const { viewBox, path } = Glyphs[name];
-    const svg = document.createElementNS(SvgNs, "svg");
-    svg.setAttribute("viewBox", viewBox);
-    svg.setAttribute("class", `tk-glyph-${name}`);
-    if (turn) svg.style.transform = `rotate(${turn}deg)`;
-    const pathEl = document.createElementNS(SvgNs, "path");
-    pathEl.setAttribute("d", path);
-    svg.append(pathEl);
-    return svg;
-};
-
 /**
  * A key on the glass. `key` names a position in the model's key table, or BREAK; `sub` is the shifted legend the
- * keycap prints above; `glyph` names a drawn legend in place of the text one, turned `turn` degrees clockwise; `digit`
- * follows the legend, small and on its baseline; `w` is the columns the key spans (flex weight outside the grid) and
- * `rows` the rows.
+ * keycap prints above; `digit` follows the legend, small and on its baseline; `w` is the columns the key spans (flex
+ * weight outside the grid) and `rows` the rows.
  */
 const k = (label, key, ...extra) => Object.assign({ label, key, w: 1 }, ...extra);
 const letters = (row) => [...row].map((c) => k(c, c));
@@ -64,15 +37,15 @@ const BottomRow = (layerLabel, layer) => [
     k("CTRL", "CTRL", { w: 1.2 }, small),
     k("SPACE", "SPACE", { w: 3.6 }),
     ...[
-        ["←", "LEFT", 0],
-        ["↓", "DOWN", 270],
-        ["↑", "UP", 90],
-        ["→", "RIGHT", 180],
-    ].map(([label, key, turn]) => k(label, key, { w: 0.9, cls: "cursor", glyph: "arrow", turn })),
+        ["←", "LEFT"],
+        ["↓", "DOWN"],
+        ["↑", "UP"],
+        ["→", "RIGHT"],
+    ].map(([label, key]) => k(label, key, { w: 0.9, cls: "cursor" })),
 ];
 
 export const FunctionRow = [
-    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => k("f", `F${n}`, { cls: "fkey", glyph: "f", digit: `${n}` })),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => k("f", `F${n}`, { cls: "fkey", digit: `${n}` })),
     gap(0.5),
     k("BREAK", BreakKey, { w: 1.6 }, small),
 ];
@@ -303,8 +276,7 @@ export class TouchKeyboard {
             el.append(sub);
         }
         const label = document.createElement("span");
-        if (def.glyph) label.append(drawGlyph(def.glyph, def.turn));
-        else label.textContent = def.label;
+        label.textContent = def.label;
         if (def.digit) {
             const digit = document.createElement("span");
             digit.className = "tk-digit";

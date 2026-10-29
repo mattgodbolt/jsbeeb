@@ -99,24 +99,6 @@ body.touch-keyboard-open #leds {
   font-size: 8.5px;
 }
 
-#touch-keyboard .tk-glyph-arrow {
-  display: block;
-  width: 1.1em;
-  height: 0.55em;
-  fill: currentColor;
-}
-
-#touch-keyboard .tk-glyph-f {
-  width: 0.376em;
-  height: 0.85em;
-  vertical-align: baseline;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 71;
-  stroke-linecap: round;
-  overflow: visible;
-}
-
 #touch-keyboard .tk-digit {
   font-size: 0.66em;
   margin-left: 0.04em;
