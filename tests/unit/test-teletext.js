@@ -86,76 +86,143 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         teletext.setDEW(false);
     }
 
-    describe("conceal", () => {
-        it("blanks graphics until a colour code reveals them", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, Conceal, SolidBlock, WhiteGraphics, SolidBlock]);
+    // Indices into teletext.colour; a cell showing more than one colour is null.
+    const plain = (background) => background << 5;
+    const solid = (foreground) => (foreground << 2) | 3;
+    const Blank = plain(Black);
+    const Mixed = null;
 
-            expect(backgroundOnly(cells[1])).toBe(false);
-            expect(backgroundOnly(cells[3])).toBe(true);
-            expect(backgroundOnly(cells[5])).toBe(false);
-        });
+    const uniformColour = (cell) => (cell.every((pixel) => pixel === cell[0]) ? cell[0] : null);
 
-        it("stays concealed when the background changes afterwards", () => {
-            const cells = renderCells([BlueGraphics, NewBackground, Conceal, BlackBackground, SolidBlock, SolidBlock]);
+    function expectCells(cells, expected) {
+        const indices = Object.keys(expected);
+        expect(Object.fromEntries(indices.map((i) => [i, uniformColour(cells[i])]))).toEqual(
+            Object.fromEntries(indices.map((i) => [i, expected[i] === Mixed ? null : teletext.colour[expected[i]]])),
+        );
+    }
 
-            expect(backgroundOnly(cells[4])).toBe(true);
-            expect(backgroundOnly(cells[5])).toBe(true);
-        });
+    // Codes 0, 16 and 27 are reserved, 10 and 11 drive a boxing output the BBC has nothing wired to,
+    // and 14 and 15 select an alternate character set the chip does not carry. Pages rely on this:
+    // the Ceefax engineering page reveals its concealed text by rewriting code 24 as code 16.
+    const unimplementedCodes = [
+        ["alpha black (0)", 0x00],
+        ["end box (10)", 0x0a],
+        ["start box (11)", 0x0b],
+        ["shift out (14)", 0x0e],
+        ["shift in (15)", 0x0f],
+        ["graphics black (16)", 0x10],
+        ["escape (27)", 0x1b],
+    ];
 
-        it("conceals the cell holding the conceal code, and the one holding the revealing code", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, HoldGraphics, Conceal, WhiteGraphics, SolidBlock]);
-
-            expect(backgroundOnly(cells[2])).toBe(false);
-            expect(backgroundOnly(cells[3])).toBe(true);
-            expect(backgroundOnly(cells[4])).toBe(true);
-            expect(backgroundOnly(cells[5])).toBe(false);
-        });
-
-        it("does not survive into the next row", () => {
-            const concealed = renderCells([WhiteGraphics, Conceal, SolidBlock]);
-            expect(backgroundOnly(concealed[2])).toBe(true);
-
-            endScanline();
-
-            const revealed = renderCells([WhiteGraphics, SolidBlock]);
-            expect(backgroundOnly(revealed[1])).toBe(false);
-        });
-
-        it("leaves the foreground colour alone", () => {
-            const cells = renderCells([BlueGraphics, Conceal, SolidBlock, NewBackground, WhiteGraphics, Space]);
-
-            expect(backgroundOnly(cells[2])).toBe(true);
-            expect(backgroundOnly(cells[5], Blue)).toBe(true);
-        });
-
-        it("round-trips through a snapshot", () => {
-            renderCells([WhiteGraphics, Conceal, SolidBlock]);
-            const state = teletext.snapshotState();
-
-            const restored = new Teletext();
-            restored.restoreState(state);
-
-            expect(restored.snapshotState()).toEqual(state);
-            expect(state.conceal).toBe(true);
-        });
+    // Each starts in flash's hidden phase, so that a flashing cell shows as blank.
+    it.each([
+        [
+            "conceal blanks graphics until a colour code reveals them",
+            [WhiteGraphics, SolidBlock, Conceal, SolidBlock, WhiteGraphics, SolidBlock],
+            { 1: solid(White), 3: Blank, 5: solid(White) },
+        ],
+        [
+            "conceal stays when the background changes afterwards",
+            [BlueGraphics, NewBackground, Conceal, BlackBackground, SolidBlock, SolidBlock],
+            { 4: Blank, 5: Blank },
+        ],
+        [
+            "conceal blanks the cell holding its code, and the one holding the revealing code",
+            [WhiteGraphics, SolidBlock, HoldGraphics, Conceal, WhiteGraphics, SolidBlock],
+            { 2: solid(White), 3: Blank, 4: Blank, 5: solid(White) },
+        ],
+        [
+            "conceal leaves the foreground colour alone",
+            [BlueGraphics, Conceal, SolidBlock, NewBackground, WhiteGraphics, Space],
+            { 2: Blank, 5: plain(Blue) },
+        ],
+        [
+            "a colour takes effect from the cell after its code",
+            [WhiteGraphics, SolidBlock, HoldGraphics, RedGraphics, SolidBlock],
+            { 1: solid(White), 3: solid(White), 4: solid(Red) },
+        ],
+        [
+            "a new background takes effect from the cell holding its code",
+            [RedAlpha, NewBackground, Space, BlackBackground, Space],
+            { 1: plain(Red), 2: plain(Red), 3: plain(Black) },
+        ],
+        [
+            "code 26 separates the blocks after it",
+            [WhiteGraphics, SolidBlock, SeparatedGraphics, SolidBlock],
+            { 1: solid(White), 3: Mixed },
+        ],
+        [
+            "hold shows the last block through a following control code until released",
+            [WhiteGraphics, SolidBlock, HoldGraphics, Steady, ReleaseGraphics, Steady],
+            { 3: solid(White), 4: solid(White), 5: Blank },
+        ],
+        // The spec holds "the most recent mosaics character with bit 6 = 1 in its code", so an
+        // alphanumeric seen in graphics mode leaves the previous mosaic held.
+        [
+            "hold passes over an alphanumeric character",
+            [WhiteGraphics, SolidBlock, LetterA, HoldGraphics, Flash],
+            { 3: solid(White), 4: solid(White) },
+        ],
+        [
+            "flash takes effect from the cell after its code",
+            [WhiteGraphics, SolidBlock, HoldGraphics, Flash, SolidBlock],
+            { 3: solid(White), 4: Blank },
+        ],
+        [
+            "steady takes effect from the cell holding its code",
+            [WhiteGraphics, Flash, SolidBlock, HoldGraphics, Steady, SolidBlock],
+            { 2: Blank, 4: solid(White), 5: solid(White) },
+        ],
+        [
+            "a change of size drops the held character",
+            [WhiteGraphics, SolidBlock, HoldGraphics, DoubleHeight, Flash],
+            { 3: Blank, 4: Blank },
+        ],
+        [
+            "only the low seven bits count, as the SAA5050 has no eighth data pin",
+            [0x80 | WhiteGraphics, 0x80 | SolidBlock],
+            { 1: solid(White) },
+        ],
+        ...unimplementedCodes.map(([name, code]) => [
+            `${name} is not implemented, and leaves every attribute alone`,
+            [WhiteGraphics, SolidBlock, code, SolidBlock],
+            { 1: solid(White), 2: Blank, 3: solid(White) },
+        ]),
+    ])("%s", (_, bytes, expected) => {
+        endFrame();
+        expectCells(renderCells(bytes), expected);
     });
 
-    describe("colour", () => {
-        it("takes effect from the cell after the code", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, HoldGraphics, RedGraphics, SolidBlock]);
+    it.each([
+        ["conceal", [WhiteGraphics, Conceal, SolidBlock], [LetterA], { 0: Mixed }],
+        ["hold", [WhiteGraphics, SolidBlock, HoldGraphics], [WhiteGraphics, SolidBlock, Flash], { 2: Blank }],
+        ["graphics", [WhiteGraphics, Mosaic], [Mosaic, HoldGraphics], { 1: Blank }],
+        ["the foreground colour", [RedAlpha, NewBackground, Space], [NewBackground, Space], { 1: plain(White) }],
+        ["the background colour", [RedAlpha, NewBackground, Space], [Space], { 0: plain(Black) }],
+    ])("does not carry %s over into the next row", (_, previousRow, bytes, expected) => {
+        renderCells(previousRow);
+        endScanline();
+        expectCells(renderCells(bytes), expected);
+    });
 
-            expect(solidOnly(cells[1], White)).toBe(true);
-            expect(solidOnly(cells[3], White)).toBe(true);
-            expect(solidOnly(cells[4], Red)).toBe(true);
-        });
+    it("returns to alphanumerics at the start of a row", () => {
+        const graphics = renderCells([WhiteGraphics, Mosaic]);
+        endScanline();
 
-        it("takes a new background from the cell holding the code", () => {
-            const cells = renderCells([RedAlpha, NewBackground, Space, BlackBackground, Space]);
+        const alpha = renderCells([Mosaic]);
 
-            expect(backgroundOnly(cells[1], Red)).toBe(true);
-            expect(backgroundOnly(cells[2], Red)).toBe(true);
-            expect(backgroundOnly(cells[3], Black)).toBe(true);
-        });
+        expect([...alpha[0]]).not.toEqual([...graphics[1]]);
+    });
+
+    it("round-trips conceal through a snapshot", () => {
+        renderCells([WhiteGraphics, Conceal, SolidBlock]);
+        const state = teletext.snapshotState();
+
+        const restored = new Teletext();
+        restored.restoreState(state);
+
+        expect(restored.snapshotState()).toEqual(state);
+        expect(state.conceal).toBe(true);
     });
 
     describe("clocking without painting", () => {
@@ -169,69 +236,6 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             const cellAt = paintCells(bytes, (index) => index === bytes.length - 1);
 
             expect(solidOnly(cellAt(bytes.length - 1), Red)).toBe(true);
-        });
-    });
-
-    describe("graphics", () => {
-        it("separates the blocks once code 26 is seen", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, SeparatedGraphics, SolidBlock]);
-
-            expect(solidOnly(cells[1], White)).toBe(true);
-            expect(solidOnly(cells[3], White)).toBe(false);
-            expect(backgroundOnly(cells[3])).toBe(false);
-        });
-
-        it("holds the last block through a following control code", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, HoldGraphics, Flash, ReleaseGraphics, Flash]);
-
-            expect(solidOnly(cells[3], White)).toBe(true);
-            expect(backgroundOnly(cells[5])).toBe(true);
-        });
-
-        // The spec holds "the most recent mosaics character with bit 6 = 1 in its code", so an
-        // alphanumeric seen in graphics mode leaves the previous mosaic held.
-        it("does not hold an alphanumeric character", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, LetterA, HoldGraphics, Flash]);
-
-            expect(solidOnly(cells[3], White)).toBe(true);
-            expect(solidOnly(cells[4], White)).toBe(true);
-        });
-
-        it("holds nothing over from the previous row", () => {
-            renderCells([WhiteGraphics, SolidBlock, HoldGraphics], Steady);
-            endScanline();
-
-            const cells = renderCells([WhiteGraphics, Flash]);
-
-            expect(backgroundOnly(cells[0])).toBe(true);
-            expect(backgroundOnly(cells[1])).toBe(true);
-        });
-    });
-
-    describe("flash", () => {
-        it("starts flashing from the cell after the code", () => {
-            endFrame();
-            const cells = renderCells([WhiteGraphics, SolidBlock, HoldGraphics, Flash, SolidBlock]);
-
-            expect(solidOnly(cells[3], White)).toBe(true);
-            expect(backgroundOnly(cells[4])).toBe(true);
-        });
-
-        it("stops flashing at the cell holding the steady code", () => {
-            endFrame();
-            const cells = renderCells([WhiteGraphics, Flash, SolidBlock, HoldGraphics, Steady, SolidBlock]);
-
-            expect(backgroundOnly(cells[2])).toBe(true);
-            expect(solidOnly(cells[4], White)).toBe(true);
-            expect(solidOnly(cells[5], White)).toBe(true);
-        });
-
-        it("shows flashing text during the visible phase", () => {
-            for (let frame = 0; frame < 16; ++frame) endFrame();
-
-            const cells = renderCells([WhiteGraphics, Flash, SolidBlock]);
-
-            expect(solidOnly(cells[2], White)).toBe(true);
         });
     });
 
@@ -252,48 +256,6 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
             expect(bottom.every((cells) => backgroundOnly(cells[1]))).toBe(true);
         });
-
-        it("drops the held character when the size changes", () => {
-            const cells = renderCells([WhiteGraphics, SolidBlock, HoldGraphics, DoubleHeight, Flash]);
-
-            expect(backgroundOnly(cells[3])).toBe(true);
-            expect(backgroundOnly(cells[4])).toBe(true);
-        });
-    });
-
-    describe("start of row", () => {
-        it("returns to white", () => {
-            renderCells([RedAlpha, NewBackground, Space]);
-            endScanline();
-
-            const cells = renderCells([NewBackground, Space]);
-
-            expect(backgroundOnly(cells[1], White)).toBe(true);
-        });
-
-        it("returns to a black background", () => {
-            renderCells([RedAlpha, NewBackground, Space]);
-            endScanline();
-
-            const cells = renderCells([Space]);
-
-            expect(backgroundOnly(cells[0], Black)).toBe(true);
-        });
-
-        it("returns to alphanumerics", () => {
-            const graphics = renderCells([WhiteGraphics, Mosaic]);
-            endScanline();
-
-            const alpha = renderCells([Mosaic]);
-
-            expect([...alpha[0]]).not.toEqual([...graphics[1]]);
-        });
-    });
-
-    it("sees only the low seven bits, as the SAA5050 has no eighth data pin", () => {
-        const cells = renderCells([0x80 | WhiteGraphics, 0x80 | SolidBlock]);
-
-        expect(solidOnly(cells[1], White)).toBe(true);
     });
 
     it("shows a byte three cells after it is fetched", () => {
@@ -311,28 +273,6 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
         expect(Array.from(buffer.subarray(0, PixelsPerCell / 2))).toEqual(Array(PixelsPerCell / 2).fill(0x0badf00d));
         expect(Array.from(buffer.subarray(PixelsPerCell / 2))).toEqual(Array.from(whole.subarray(PixelsPerCell / 2)));
-    });
-
-    // Codes 0, 16 and 27 are reserved, 10 and 11 drive a boxing output the BBC has nothing wired to,
-    // and 14 and 15 select an alternate character set the chip does not carry. Pages rely on this:
-    // the Ceefax engineering page reveals its concealed text by rewriting code 24 as code 16.
-    describe.each([
-        ["alpha black (0)", 0x00],
-        ["end box (10)", 0x0a],
-        ["start box (11)", 0x0b],
-        ["shift out (14)", 0x0e],
-        ["shift in (15)", 0x0f],
-        ["graphics black (16)", 0x10],
-        ["escape (27)", 0x1b],
-    ])("%s", (_name, code) => {
-        it("is not implemented, and leaves every attribute alone", () => {
-            endFrame();
-            const cells = renderCells([WhiteGraphics, SolidBlock, code, SolidBlock]);
-
-            expect(solidOnly(cells[1], White)).toBe(true);
-            expect(backgroundOnly(cells[2])).toBe(true);
-            expect(solidOnly(cells[3], White)).toBe(true);
-        });
     });
 
     describe("scanlines", () => {

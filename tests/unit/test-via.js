@@ -163,18 +163,13 @@ describe("Via snapshotState / restoreState", () => {
         const ca2Flag = (via) => via.read(IFR) & Ca2Int;
 
         it.each([
-            ["rising", PcrCa2RisingEdge],
-            ["falling", PcrCa2FallingEdge],
-        ])("raises the keyboard interrupt on a key down while scanning, with CA2 on the %s edge", (_, pcr) => {
+            ["sets", "on the rising edge", PcrCa2RisingEdge, Ca2Int],
+            ["sets", "on the falling edge", PcrCa2FallingEdge, Ca2Int],
+            ["leaves clear", "an output", PcrCa2OutputLow, 0],
+        ])("%s the keyboard flag on a key down while scanning, with CA2 %s", (_, __, pcr, flag) => {
             const via = makeScanningVia(pcr);
             via.keyDownRaw(BBC.A);
-            expect(ca2Flag(via)).toBe(Ca2Int);
-        });
-
-        it("raises no keyboard interrupt while CA2 is an output", () => {
-            const via = makeScanningVia(PcrCa2OutputLow);
-            via.keyDownRaw(BBC.A);
-            expect(ca2Flag(via)).toBe(0);
+            expect(ca2Flag(via)).toBe(flag);
         });
 
         it("raises the keyboard interrupt when autoscan starts with a key held", () => {
@@ -208,91 +203,62 @@ describe("Via snapshotState / restoreState", () => {
             expectFlagAfter(via, 2);
         });
 
-        it.each([
-            ["rising", PcrCa2RisingEdge, "comes back round to column 1", 10, 24],
-            ["rising", PcrCa2RisingEdge, "comes back round to column 1 from mid-column", 11, 23],
-            ["falling", PcrCa2FallingEdge, "leaves column 1", 2, 2],
-            ["falling", PcrCa2FallingEdge, "comes back round and leaves column 1", 10, 26],
-        ])("with CA2 on the %s edge, sets the flag when the counter %s", (_, pcr, __, startTicks, ticks) => {
-            scheduler.polltime(startTicks);
-            const via = makeScanningVia(pcr);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            expectFlagAfter(via, ticks);
-        });
+        const leaveKeys = () => {};
+        const pressP = (via) => via.keyDownRaw(BBC.P);
+        const releaseP = (via) => via.keyUpRaw(BBC.P);
+        const OutsideKeyboardColumns = [14, 1];
+        const Ca2Edge = { rising: PcrCa2RisingEdge, falling: PcrCa2FallingEdge };
 
         it.each([
-            ["rising", PcrCa2RisingEdge, "reaches the first of the two columns again", 32],
-            ["falling", PcrCa2FallingEdge, "leaves the second of the two columns", 4],
+            ["rising", "comes back round to column 1", 10, [BBC.A], leaveKeys, 24],
+            ["rising", "comes back round to column 1 from mid-column", 11, [BBC.A], leaveKeys, 23],
+            ["falling", "leaves column 1", 2, [BBC.A], leaveKeys, 2],
+            ["falling", "comes back round and leaves column 1", 10, [BBC.A], leaveKeys, 26],
+            ["rising", "reaches the first of two held columns again", 2, [BBC.A, BBC.D], leaveKeys, 32],
+            ["falling", "leaves the second of two held columns", 2, [BBC.A, BBC.D], leaveKeys, 4],
+            [
+                "rising",
+                "comes back round to column 1, past a key outside the keyboard's columns",
+                10,
+                [BBC.A, OutsideKeyboardColumns],
+                leaveKeys,
+                24,
+            ],
+            ["rising", "reaches a key that went down ahead of it", 10, [BBC.A], pressP, 4],
+            ["falling", "leaves a key that went down ahead of it", 10, [BBC.A], pressP, 6],
+            [
+                "rising",
+                "comes back round to column 1 once the key ahead of it goes up",
+                10,
+                [BBC.A, BBC.P],
+                releaseP,
+                24,
+            ],
         ])(
-            "with keys held in neighbouring columns and CA2 on the %s edge, sets the flag when the counter %s",
-            (_, pcr, __, ticks) => {
-                scheduler.polltime(2);
-                const via = makeScanningVia(pcr);
-                via.keyDownRaw(BBC.A);
-                via.keyDownRaw(BBC.D);
+            "with CA2 on the %s edge, sets the flag when the counter %s",
+            (edge, _, startTicks, held, afterClear, ticks) => {
+                scheduler.polltime(startTicks);
+                const via = makeScanningVia(Ca2Edge[edge]);
+                for (const key of held) via.keyDownRaw(key);
                 via.write(IFR, Ca2Int);
+                afterClear(via);
                 expectFlagAfter(via, ticks);
             },
         );
 
-        it("ignores a key the matrix has outside the keyboard's columns", () => {
-            scheduler.polltime(10);
-            const via = makeScanningVia(PcrCa2RisingEdge);
-            via.keyDownRaw(BBC.A);
-            via.keyDownRaw([14, 1]);
-            via.write(IFR, Ca2Int);
-            expectFlagAfter(via, 24);
-        });
-
         it.each([
-            ["rising", PcrCa2RisingEdge, 4],
-            ["falling", PcrCa2FallingEdge, 6],
-        ])(
-            "with CA2 on the %s edge, brings the return forward when a key ahead of the counter goes down",
-            (_, pcr, ticks) => {
-                scheduler.polltime(10);
-                const via = makeScanningVia(pcr);
-                via.keyDownRaw(BBC.A);
-                via.write(IFR, Ca2Int);
-                via.keyDownRaw(BBC.P);
-                expectFlagAfter(via, ticks);
-            },
-        );
-
-        it("puts the scan's return back when the key ahead of the counter goes up", () => {
-            scheduler.polltime(10);
-            const via = makeScanningVia(PcrCa2RisingEdge);
-            via.keyDownRaw(BBC.A);
-            via.keyDownRaw(BBC.P);
-            via.write(IFR, Ca2Int);
-            via.keyUpRaw(BBC.P);
-            expectFlagAfter(via, 24);
-        });
-
-        it.each([
-            ["the key is released", (via) => via.keyUpRaw(BBC.A)],
-            ["autoscan stops", (via) => via.write(ORB, LatchClearBit3)],
-        ])("gives CA2 no edge when %s", (_, stop) => {
+            ["the key stays down", leaveKeys, Ca2Int],
+            ["the key is released", (via) => via.keyUpRaw(BBC.A), 0],
+            ["autoscan stops", (via) => via.write(ORB, LatchClearBit3), 0],
+        ])("gives CA2 no edge over a scan pass when %s", (_, then, flag) => {
             const via = makeScanningVia(PcrCa2FallingEdge);
             const levels = [];
             via.ca2changecallback = (level) => levels.push(level);
             via.keyDownRaw(BBC.A);
             via.write(IFR, Ca2Int);
-            stop(via);
+            then(via);
             scheduler.polltime(ScanPassTicks);
-            expect(ca2Flag(via)).toBe(0);
-            expect(levels).toEqual([]);
-        });
-
-        it("reports no CA2 level changes while the scan raises its interrupt", () => {
-            const via = makeScanningVia(PcrCa2FallingEdge);
-            const levels = [];
-            via.ca2changecallback = (level) => levels.push(level);
-            via.keyDownRaw(BBC.A);
-            via.write(IFR, Ca2Int);
-            scheduler.polltime(ScanPassTicks);
-            expect(ca2Flag(via)).toBe(Ca2Int);
+            expect(ca2Flag(via)).toBe(flag);
             expect(levels).toEqual([]);
         });
 
