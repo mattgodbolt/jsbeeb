@@ -382,6 +382,17 @@ describe("FloatingPanel", () => {
             expect(arrangement.frontmost([])).toBe(null);
         });
 
+        it("says when a panel opens or closes, or is taken out of the list", () => {
+            const floating = watches();
+            const changes = vi.fn();
+            arrangement.addEventListener("change", changes);
+            floating.open();
+            floating.close();
+            arrangement.unlist(floating);
+            expect(changes).toHaveBeenCalledTimes(3);
+            expect(arrangement.listed()).toEqual([]);
+        });
+
         it("lists the panels with a title, in the registry's order", () => {
             media();
             disc();

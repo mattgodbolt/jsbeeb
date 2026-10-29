@@ -169,8 +169,16 @@ test("Alt-S opens the debugger's panels beside the screen, g leaves them open an
     await beeb.expectHeld();
     const screen = await page.locator("#screen").boundingBox();
     const boxes = await boxesOf(page, DebugPanels);
-    expect(boxes.filter((box) => overlap(box, screen))).toEqual([]);
+    // The right-hand gutter is narrower than a disassembly line, so only the left-hand column clears the screen.
+    expect(
+        (await boxesOf(page, ["#memory-panel", "#peripherals-panel"])).filter((box) => overlap(box, screen)),
+    ).toEqual([]);
     expect(boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => overlap(a, b)))).toEqual([]);
+    const current = page.locator("#disassembly .current");
+    expect(await current.evaluate((row) => row.scrollWidth <= row.clientWidth)).toBe(true);
+    const peripherals = page.locator("#peripherals-panel .panel-body");
+    expect(await peripherals.evaluate((body) => (body.scrollTop = body.scrollHeight))).toBeGreaterThan(0);
+    await expect(page.locator("#crtc .crtc_regs tr:not(.template)").last()).toBeInViewport();
 
     const cycles = page.locator("#cpu6502_cycles");
     const stoppedAt = await cycles.textContent();
@@ -185,6 +193,19 @@ test("Alt-S opens the debugger's panels beside the screen, g leaves them open an
     await page.keyboard.press("Alt+S");
     for (const panel of DebugPanels) await expect(page.locator(panel)).toBeHidden();
     await beeb.expectRunningPast(held);
+});
+
+test("on a window wide enough, the debugger's panels default to the gutters each side of the screen", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 3440, height: 1440 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeVisible();
+    const screen = await page.locator("#screen").boundingBox();
+    expect((await boxesOf(page, DebugPanels)).filter((box) => overlap(box, screen))).toEqual([]);
 });
 
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({

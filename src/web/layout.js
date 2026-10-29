@@ -128,11 +128,14 @@ export class Layout {
         return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
     }
 
-    /** Where the monitor goes across the window as it is now, worked out afresh rather than read from the page. */
+    /**
+     * Where the screen goes across the window as it is now, worked out afresh rather than read from the page: the
+     * picture of the BBC's screen, inside the monitor's bezel.
+     */
     screenBounds() {
-        const { width } = this._fit().monitor;
-        const left = (window.innerWidth - width) / 2;
-        return { left, right: left + width };
+        const { monitor, canvas } = this._fit();
+        const left = (window.innerWidth - monitor.width) / 2 + canvas.left;
+        return { left, right: left + canvas.width };
     }
 
     _fit() {

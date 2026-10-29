@@ -103,11 +103,12 @@ function keptInside(rect, area, edges, min) {
 /**
  * Places, stacks and remembers every floating panel. What the user arranged is saved in one
  * localStorage entry (see panel-layout.js); window resizes lay the panels out again from it
- * without writing to it.
+ * without writing to it. Raises "change" when a panel opens or closes, or leaves the list.
  */
-export class PanelArrangement {
+export class PanelArrangement extends EventTarget {
     /** @param {function(): Storage} storage */
     constructor(storage) {
+        super();
         this._storage = storage;
         /** @type {FloatingPanel[]} lowest first */
         this._stack = [];
@@ -161,6 +162,12 @@ export class PanelArrangement {
         return this._stack.findLast((floating) => floatings.includes(floating)) ?? null;
     }
 
+    /** Takes `floating` out of menus of panels, as for a machine that lacks what it shows. */
+    unlist(floating) {
+        floating.title = null;
+        this.dispatchEvent(new Event("change"));
+    }
+
     /** The panels that offer themselves in a menu, in the order of PanelIds. */
     listed() {
         return this._stack
@@ -176,6 +183,7 @@ export class PanelArrangement {
     onOpen(floating) {
         const layout = opened(this._read(), floating.id);
         this._save(layout);
+        this.dispatchEvent(new Event("change"));
         this.raise(floating);
         floating.clearGeometry();
         if (!floating.movable) return;
@@ -194,6 +202,7 @@ export class PanelArrangement {
 
     onClose(floating) {
         this._save(closed(this._read(), floating.id));
+        this.dispatchEvent(new Event("change"));
     }
 
     /** Lays every open panel out again for the window as it is now. */

@@ -72,6 +72,12 @@ body {
   font-size: 11px;
 }
 
+#peripherals-panel th,
+#peripherals-panel td {
+  padding: 0 2px 0 0;
+  line-height: 1.25;
+}
+
 .debug-panel h6.dbg {
   margin: 4px 0 2px;
   font-size: inherit;
@@ -99,7 +105,7 @@ body {
 
 /* A width of its own, not its rows', so that it keeps it as the names in view come and go. */
 #disassembly-panel {
-  width: 360px;
+  width: 400px;
 }
 
 .goto-form {
@@ -124,6 +130,13 @@ body {
 .panel-keys {
   width: 0;
   min-width: 100%;
+}
+
+/* One line however many sets it credits, so that the panels below a disassembly keep their place as it changes. */
+.debug-symbols {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .debug-symbols a {
@@ -163,6 +176,12 @@ body {
 
 .dis_addr .named {
   max-width: calc(100% - 5ch);
+}
+
+/* Inline, so that a row too long for its panel loses the end of the name rather than the whole of it. */
+.disassembly .named {
+  display: inline;
+  max-width: none;
 }
 
 a.symbol {
@@ -560,7 +579,7 @@ div.modal-body > div:not(:first-child) {
 
 .dis_addr {
   display: inline-block;
-  width: 8em;
+  width: 12ch;
   color: #d0d0d0;
   white-space: nowrap;
   overflow: hidden;

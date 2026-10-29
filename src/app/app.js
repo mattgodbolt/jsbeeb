@@ -14,6 +14,8 @@ ipcMain.on("set-title", (event, title) => {
     if (win) win.setTitle(title);
 });
 
+ipcMain.on("set-panels", (event, panels) => setMenu(panels));
+
 ipcMain.on("save-settings", (event, settings) => {
     const current = store.get("settings", {});
     store.set("settings", { ...current, ...settings });
@@ -134,7 +136,37 @@ function sendAction(actionId) {
     };
 }
 
-const template = [
+/** The Debug menu: into and out of the debugger, and every panel the page lists, ticked while open. */
+function debugMenu(panels) {
+    return {
+        label: "Debug",
+        submenu: [
+            // Not registered off a Mac, so the keys reach the page, which answers them; on a Mac the menu takes them
+            // and does the same.
+            {
+                label: "Enter or Leave the Debugger",
+                accelerator: "Alt+S",
+                registerAccelerator: false,
+                click: sendAction("toggle-debugger"),
+            },
+            {
+                label: "Show or Hide the Debug Panels",
+                accelerator: "Alt+D",
+                registerAccelerator: false,
+                click: sendAction("toggle-debug-panels"),
+            },
+            { type: "separator" },
+            ...panels.map(({ id, title, open }) => ({
+                label: title,
+                type: "checkbox",
+                checked: open,
+                click: (_, browserWindow) => browserWindow.webContents.send("toggle-panel", { id }),
+            })),
+        ],
+    };
+}
+
+const template = (panels) => [
     // { role: 'appMenu' }
     ...(isMac
         ? [
@@ -257,6 +289,7 @@ const template = [
             },
         ],
     },
+    debugMenu(panels),
     {
         role: "help",
         submenu: [
@@ -279,5 +312,8 @@ const template = [
     },
 ];
 
-const menu = Menu.buildFromTemplate(template);
-Menu.setApplicationMenu(menu);
+function setMenu(panels) {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template(panels)));
+}
+
+setMenu([]);

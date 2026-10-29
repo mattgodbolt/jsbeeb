@@ -448,6 +448,7 @@ electron({
     drives,
     modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
+    panels: panelArrangement,
     actions: {
         "soft-reset": () => page.softReset(),
         "hard-reset": () => page.hardReset(),
@@ -456,6 +457,8 @@ electron({
         rewind: () => rewindUI.open(),
         pause: () => loop.stop(true),
         resume: () => loop.go(),
+        "toggle-debugger": () => dbgr.toggleDebugger(),
+        "toggle-debug-panels": () => dbgr.togglePanels(),
     },
 });
 

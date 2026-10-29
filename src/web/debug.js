@@ -259,8 +259,12 @@ const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
 const PeripheralsWindowWidth = 1600;
 const MinPanelWidth = 220;
-/** The narrowest gutter the panels go in by default; narrower, the disassembly loses its operands. */
-const MinColumnWidth = 280;
+/**
+ * In px, the narrowest each side's gutter can be for its panels to go in it by default: the left's for memory's
+ * rows, the right's for a disassembly line with a named operand. Narrower, they go at their own widths, against
+ * the window's edge.
+ */
+const ColumnWidthNeeded = { left: 280, right: 400 };
 const StackBytesShown = 8;
 const RunningNameMatchMs = 1000;
 const MinSizes = {
@@ -484,7 +488,7 @@ export class Debugger {
         const screen = this._screenBounds();
         if (!screen) return null;
         const room = Math.floor((side === "left" ? screen.left : window.innerWidth - screen.right) - Gap);
-        return room >= MinColumnWidth ? room : null;
+        return room >= ColumnWidthNeeded[side] ? room : null;
     }
 
     _bindToolbar() {
@@ -516,7 +520,7 @@ export class Debugger {
                 stepOver: () => this.stepOver(),
                 stepOut: () => this.stepOut(),
             },
-            isLive: () => toolbar.isOpen && this._loop.mode === RunMode.debugging,
+            isLive: () => this._loop.mode === RunMode.debugging,
             panel: toolbar,
         });
         keys.register({
@@ -652,7 +656,7 @@ export class Debugger {
         this.cpu = cpu;
         if (cpu.model.isAtom) {
             this.sysViaPanel.floating.close();
-            this.sysViaPanel.floating.title = null;
+            this._arrangement.unlist(this.sysViaPanel.floating);
         }
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
@@ -877,6 +881,7 @@ export class Debugger {
                 return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
             }),
         );
+        credit.line.title = credit.line.textContent;
     }
 
     _namesNow() {

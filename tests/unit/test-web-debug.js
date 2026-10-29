@@ -232,20 +232,20 @@ describe("Debugger", () => {
         describe("in their default places", () => {
             const gutters = (left, right) => dbgr.placeBesideScreen(() => ({ left, right: window.innerWidth - right }));
 
-            it("take the width of a gutter wide enough for a column, and their natural width beside a narrower one", () => {
-                gutters(300, 250);
+            it("take the width of a gutter wide enough for a column, and their natural width beside a narrower one, the disassembly's side needing more", () => {
+                gutters(300, 400);
                 expect(dbgr.panels.memory.place().w).toBe(300 - Gap);
                 expect(dbgr.panels.disassembly.place().w).toBe(null);
-                gutters(250, 300);
+                gutters(250, 420);
                 expect(dbgr.panels.memory.place().w).toBe(null);
-                expect(dbgr.panels.disassembly.place().w).toBe(300 - Gap);
+                expect(dbgr.panels.disassembly.place().w).toBe(420 - Gap);
             });
 
             it("are worked out afresh for the window as it is each time they are laid out", () => {
-                dbgr.placeBesideScreen(() => ({ left: 300, right: 724 }));
-                expect(dbgr.panels.registers.place().w).toBe(300 - Gap);
+                dbgr.placeBesideScreen(() => ({ left: 300, right: 424 }));
+                expect(dbgr.panels.registers.place().w).toBe(1024 - 424 - Gap);
                 vi.spyOn(window, "innerWidth", "get").mockReturnValue(1200);
-                expect(dbgr.panels.registers.place().w).toBe(1200 - 724 - Gap);
+                expect(dbgr.panels.registers.place().w).toBe(1200 - 424 - Gap);
             });
 
             it("stack under one another down each side", () => {
@@ -680,13 +680,13 @@ describe("Debugger", () => {
             expect(addrOf(currentRow())).toBe("2002");
         });
 
-        it("keeps a panel's keys to it while it is open", () => {
+        it("keeps a panel's keys to it while it is open, but the run and step keys to the debugger, toolbar or not", () => {
             dbgr.debug(cpu.pc);
             dbgr.panels.memory.close();
             expect(keyPress("u")).toBe(false);
             dbgr.panels.toolbar.close();
-            expect(keyPress("n")).toBe(false);
-            expect(document.getElementById("cpu6502_pc").textContent).toBe("2000");
+            expect(keyPress("n")).toBe(true);
+            expect(document.getElementById("cpu6502_pc").textContent).toBe("2002");
         });
     });
 
