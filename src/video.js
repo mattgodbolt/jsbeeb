@@ -767,9 +767,10 @@ export class Video {
     }
 
     /**
-     * The address of the screen memory byte drawn at a point of the picture, or null off it or in the border. It runs a copy
-     * of this chip on from where it is, so the answer follows the CRTC, the IC32 wrap, the ULA and teletext's
-     * pipeline exactly as drawing does; a split the program makes part way down the picture is not replayed.
+     * The address of the screen memory byte drawn at a point of the picture, or null off it or in the border. It
+     * runs a copy of this chip on from where it is, so the answer follows the CRTC, the IC32 wrap, the ULA and
+     * teletext's pipeline exactly as drawing does; a split the program makes part way down the picture is not
+     * replayed.
      * @param {number} x across the painted picture, 0 to 1
      * @param {number} y down it, 0 to 1
      * @returns {number | null}

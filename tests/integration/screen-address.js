@@ -1,26 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
 import { FakeVideo, Video } from "../../src/video.js";
+import { FbHeight, FbWidth, FrameCapturingVideo } from "../helpers/frame-capturing-video.js";
 
-const FbWidth = 1024;
-const FbHeight = 625;
 // Three fields: both of an interlaced picture, whatever field the run starts in.
 const PictureCycles = 120000;
+const ScreenEnd = 0x8000;
 const ScreenBase = [0x3000, 0x3000, 0x3000, 0x4000, 0x5800, 0x5800, 0x6000, 0x7c00];
 const SamplesPerMode = 9;
 const Teletext = 7;
 const TeletextBlank = 0x20;
 const TeletextW = 0x57;
 // White on black in every bitmap mode: in MODE 2 both pixels are colour 7, not flashing 15.
-const LitByte = (mode) => (mode === 2 ? 0x3f : 0xff);
-
-class FrameCapturingVideo extends Video {
-    constructor(isMaster) {
-        super(isMaster, FbWidth * FbHeight, () => {});
-        this.frame = this.fb32.slice();
-        this.paint_ext = () => (this.frame = this.fb32.slice());
-    }
-}
+const litByte = (mode) => (mode === 2 ? 0x3f : 0xff);
 
 /** The bounding box of the pixels that differ between two frames, or null if none do. */
 function changedBox(before, after) {
@@ -46,14 +38,14 @@ function addressAtPixel(video, x, y) {
 
 /** A machine in `mode`, scrolled so its picture starts part way through its memory and wraps. */
 async function scrolledMachine(model, mode) {
-    const video = new FrameCapturingVideo(model.startsWith("Master"));
+    const video = new FrameCapturingVideo({ isMaster: model.startsWith("Master"), isAtom: false });
     const machine = new TestMachine(model, { video });
     await machine.initialise();
     await machine.runUntilInput();
     await machine.type(`MODE ${mode}:VDU 23,1,0;0;0;0;:FOR I=1 TO 37:PRINT:NEXT`);
     await machine.runUntilInput();
     const blank = mode === Teletext ? TeletextBlank : 0;
-    for (let address = ScreenBase[mode]; address < 0x8000; ++address) machine.writebyte(address, blank);
+    for (let address = ScreenBase[mode]; address < ScreenEnd; ++address) machine.writebyte(address, blank);
     await machine.runFor(PictureCycles);
     return { machine, video, blank };
 }
@@ -71,16 +63,16 @@ describe("the address of the byte drawn at a point of the screen", () => {
         ["Master", 7],
     ])("is the byte that lights it, on a %s in MODE %i", async (model, mode) => {
         const { machine, video, blank } = await scrolledMachine(model, mode);
-        const lit = mode === Teletext ? TeletextW : LitByte(mode);
+        const lit = mode === Teletext ? TeletextW : litByte(mode);
         const base = ScreenBase[mode];
-        const step = Math.floor((0x8000 - base) / SamplesPerMode);
+        const step = Math.floor((ScreenEnd - base) / SamplesPerMode);
         const found = [];
         const drawn = [];
-        for (let address = base; address < 0x8000; address += step) {
-            const before = video.frame;
+        for (let address = base; address < ScreenEnd; address += step) {
+            const before = video.frame.fb32;
             machine.writebyte(address, lit);
             await machine.runFor(PictureCycles);
-            const box = changedBox(before, video.frame);
+            const box = changedBox(before, video.frame.fb32);
             machine.writebyte(address, blank);
             await machine.runFor(PictureCycles);
             // MODE 3, 6 and 7 leave some of their memory off the picture.
