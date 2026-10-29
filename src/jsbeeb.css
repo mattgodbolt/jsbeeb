@@ -917,7 +917,8 @@ small {
   font-family: inherit;
 }
 
-#watch-panel .txt-btn {
+#watch-panel .txt-btn,
+#fdc-panel .txt-btn {
   color: #cccccc;
   text-decoration-color: rgba(255, 255, 255, 0.45);
 }
@@ -982,6 +983,28 @@ small {
 
 .uservia-control .decoded-meaning {
   width: 50ch;
+}
+
+.fdc-registers .decoded-meaning {
+  width: 62ch;
+}
+
+.fdc-drive .decoded-meaning {
+  width: 52ch;
+}
+
+.fdc-log-area {
+  grid-column: 1 / -1;
+}
+
+.fdc-log {
+  height: 192px;
+  line-height: 16px;
+  overflow: auto;
+  padding: 2px 4px;
+  background: #1a1a1a;
+  color: #cccccc;
+  white-space: pre;
 }
 
 .decoded-value,

@@ -15,7 +15,7 @@ import { hexbyte } from "./hex.js";
  * @readonly
  * @enum {Number}
  */
-const Command = Object.freeze({
+export const Command = Object.freeze({
     restore: 0x00,
     seek: 0x10,
     stepInNoUpdate: 0x40,
@@ -75,7 +75,7 @@ const Wd1772HeadSettleMs = 15;
  * @readonly
  * @enum {Number}
  */
-const Control = Object.freeze({
+export const Control = Object.freeze({
     reset: 0x20,
     density: 0x08,
     side: 0x04,
@@ -89,7 +89,7 @@ const Control = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const Status = Object.freeze({
+export const Status = Object.freeze({
     motorOn: 0x80,
     writeProtected: 0x40,
     typeISpinUpDone: 0x20,
@@ -113,7 +113,7 @@ const TypeIPolledStatus = Status.typeITrack0 | Status.typeIIndex | Status.writeP
  * @readonly
  * @enum {Number}
  */
-const State = Object.freeze({
+export const State = Object.freeze({
     null: 0,
     idle: 1,
     timerWait: 2,
@@ -136,13 +136,15 @@ const State = Object.freeze({
     done: 19,
 });
 
+const stateName = (state) => Object.keys(State).find((name) => State[name] === state);
+
 /**
  * Timer state.
  *
  * @readonly
  * @enum {Number}
  */
-const TimerState = Object.freeze({
+export const TimerState = Object.freeze({
     none: 1,
     settle: 2,
     seek: 3,
@@ -226,8 +228,10 @@ export class WdFdc {
         this._onDiscCrc = 0;
         this._lastMfmBit = false;
 
-        this._logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
-        this._logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
+        this.logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
+        this.logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
+        /** @type {((line: string) => void) | null} where log lines go besides the console */
+        this.onLog = null;
 
         for (const drive of this._drives) {
             drive.setPulsesCallback((pulses, count) => {
@@ -284,11 +288,13 @@ export class WdFdc {
     }
 
     _log(message) {
-        console.log(`WD1770: ${message}`);
+        const line = `WD1770: ${message}`;
+        console.log(line);
+        this.onLog?.(line);
     }
 
     _logCommand(message) {
-        if (this._logCommands) this._log(message);
+        if (this.logCommands) this._log(message);
     }
 
     _opusRemapAddr(addr) {
@@ -510,9 +516,9 @@ export class WdFdc {
      * @param {State|Number} state
      */
     _setState(state) {
-        if (this._logStateChanges && state !== this._state) {
+        if (this.logStateChanges && state !== this._state) {
             this._log(
-                `State ${this._state} -> ${state} @ tr ${this._trackRegister} ` +
+                `State ${stateName(this._state)} -> ${stateName(state)} @ tr ${this._trackRegister} ` +
                     `sr ${this._sectorRegister} dr ${this._dataRegister} ` +
                     `cr ${hexbyte(this._controlRegister)} ` +
                     `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
@@ -1483,6 +1489,29 @@ export class WdFdc {
 
     get drives() {
         return this._drives;
+    }
+
+    /** The registers the debugger shows, read without disturbing anything. */
+    inspect() {
+        const control = this._controlRegister;
+        return {
+            chip: this._is1772 ? "WD1772" : "WD1770",
+            command: this._command,
+            commandType: this._commandType,
+            isVerify: this._isCommandVerify,
+            isMulti: this._isCommandMulti,
+            isSettle: this._isCommandSettle,
+            isDeleted: this._isCommandDeleted,
+            stepRateMs: this._commandStepRateMs,
+            status: this._statusRegister,
+            track: this._trackRegister,
+            sector: this._sectorRegister,
+            data: this._dataRegister,
+            control,
+            state: this._state,
+            timerState: this._timerState,
+            selectedDrive: control & Control.drive0 ? 0 : control & Control.drive1 ? 1 : null,
+        };
     }
 }
 

@@ -180,5 +180,16 @@ describe("DiscVisualiser", () => {
             frames.run();
             expect(status()).not.toContain("x");
         });
+
+        it("opens zoomed in on the head, wherever it is", () => {
+            fdc.drives[0].track = 20;
+            fdc.drives[0].positionFraction = 0.25;
+            make().zoomToHead(0);
+            const overlay = document.getElementById("disc-overlay");
+            overlay.dispatchEvent(new MouseEvent("mousemove", { clientX: CanvasSize / 2, clientY: CanvasSize / 2 }));
+            frames.run();
+            expect(status()).toContain("6.0x");
+            expect(document.getElementById("disc-hover-where").textContent).toMatch(/^Track 20\b/);
+        });
     });
 });
