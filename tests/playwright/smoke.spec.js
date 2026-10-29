@@ -152,6 +152,46 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     expect(await panelWidth()).toBe(creditedWidth);
 });
 
+test("the no-audio-worklet warning fits a phone and a desktop, closes without taking the keyboard, and stays closed on reload", async ({
+    beeb,
+    page,
+}) => {
+    await page.addInitScript(() => delete BaseAudioContext.prototype.audioWorklet);
+    const warning = page.locator("#audio-warning");
+    const close = warning.locator(".btn-close");
+    await beeb.open();
+    await expect(warning).toContainText("No audio worklet API");
+    for (const viewport of [
+        { width: 390, height: 844 },
+        { width: 1400, height: 900 },
+    ]) {
+        await page.setViewportSize(viewport);
+        const layout = await page.evaluate(() => {
+            const box = document.querySelector("#audio-warning .btn-close").getBoundingClientRect();
+            return {
+                closeOnScreen: box.left >= 0 && box.right <= innerWidth && box.top >= 0,
+                scrollsSideways: document.documentElement.scrollWidth > innerWidth,
+            };
+        });
+        expect(layout, `at ${viewport.width}x${viewport.height}`).toEqual({
+            closeOnScreen: true,
+            scrollsSideways: false,
+        });
+    }
+    await page.evaluate(() => {
+        window.focusedInWarning = false;
+        document.addEventListener("focusin", (event) => {
+            if (event.target.closest("#audio-warning")) window.focusedInWarning = true;
+        });
+    });
+    await close.click();
+    await expect(warning).toBeHidden();
+    expect(await page.evaluate(() => window.focusedInWarning)).toBe(false);
+    await page.reload();
+    await beeb.expectScreenText(">");
+    await expect(warning).toBeHidden();
+});
+
 test("the system VIA panel opens from the More menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
     beeb,
     page,

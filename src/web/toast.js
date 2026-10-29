@@ -18,7 +18,7 @@ function toastContainer() {
 
 // Storage can be unreachable or full, and a notice that nothing needs doing about is not worth
 // failing over: forget the answer and say the thing again.
-function remembered(key) {
+export function remembered(key) {
     try {
         return !!window.localStorage.getItem(key);
     } catch (e) {
@@ -27,7 +27,7 @@ function remembered(key) {
     }
 }
 
-function remember(key, wanted) {
+export function remember(key, wanted) {
     try {
         if (wanted) window.localStorage.setItem(key, "yes");
         else window.localStorage.removeItem(key);

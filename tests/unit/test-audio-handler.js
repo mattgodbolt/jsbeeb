@@ -109,6 +109,22 @@ describe("AudioHandler", () => {
 
             expect(warningShown()).toBe(true);
         });
+
+        it("closes without taking the keyboard, and stays closed on the next visit", () => {
+            makeHandler();
+            const close = warning().querySelector(".btn-close");
+
+            const mousedown = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
+            close.dispatchEvent(mousedown);
+            close.click();
+
+            expect(mousedown.defaultPrevented).toBe(true);
+            expect(warningShown()).toBe(false);
+            document.body.innerHTML = "";
+            domFromIndexHtml("audio-warning");
+            makeHandler();
+            expect(warningShown()).toBe(false);
+        });
     });
 
     describe("with an audio worklet API", () => {
@@ -129,6 +145,7 @@ describe("AudioHandler", () => {
 
             expect(warningShown()).toBe(true);
             expect(warning().textContent).toContain(SuspendedText);
+            expect(warning().querySelector(".btn-close")).toBe(null);
         });
 
         it("ships the chip's writes with the emulator's position on flush", async () => {

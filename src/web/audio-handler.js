@@ -5,7 +5,7 @@ import { Music5000, FakeMusic5000 } from "../music5000.js";
 import { DefaultTargetLatencyMs } from "../audio-latency.js";
 import { createAudioContext } from "./audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "./dom-utils.js";
-import { toast } from "./toast.js";
+import { remember, remembered, toast } from "./toast.js";
 
 import rendererUrl from "./audio-renderer.js?worker&url";
 import music5000WorkletUrl from "../music5000-worklet.js?worker&url";
@@ -16,6 +16,8 @@ const StallSpikeHeight = 20;
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
 const UnfocusedLatencyMs = 200;
+
+const NoWorkletDismissedKey = "dismissedNoAudioWorklet";
 
 export class AudioHandler {
     constructor({
@@ -73,13 +75,7 @@ export class AudioHandler {
                 this.audioContext = null;
                 this.noAudio = true;
                 console.log("Unable to initialise audio: no audio worklet API");
-                const localhost = new URL(window.location);
-                localhost.hostname = "localhost";
-                this.warningNode.innerHTML = `No audio worklet API was found - there will be no audio.
-                    If you are running a local jsbeeb, you must either use a host of
-                    <a href="${localhost}">localhost</a>,
-                    or serve the content over <em>https</em>.`;
-                toggle(this.warningNode, true);
+                if (!remembered(NoWorkletDismissedKey)) this._warnNoWorklet();
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
@@ -94,6 +90,25 @@ export class AudioHandler {
         this.audioContextM5000 = null;
         this._music5000workletnode = null;
         this.music5000 = hasMusic5000 ? this._createMusic5000() : new FakeMusic5000();
+    }
+
+    // Nothing can bring the sound back, so this one can be closed, and stays closed on later visits.
+    _warnNoWorklet() {
+        const localhost = new URL(window.location);
+        localhost.hostname = "localhost";
+        this.warningNode.classList.add("alert-dismissible");
+        this.warningNode.innerHTML = `No audio worklet API was found - there will be no audio.
+            If you are running a local jsbeeb, you must either use a host of
+            <a href="${localhost}">localhost</a>,
+            or serve the content over <em>https</em>.
+            <button type="button" class="btn-close" aria-label="Close"></button>`;
+        const close = this.warningNode.querySelector(".btn-close");
+        close.addEventListener("mousedown", (event) => event.preventDefault());
+        close.addEventListener("click", () => {
+            toggle(this.warningNode, false);
+            remember(NoWorkletDismissedKey, true);
+        });
+        toggle(this.warningNode, true);
     }
 
     // The Music 5000 gets its own context, running at the board's own sample rate.
