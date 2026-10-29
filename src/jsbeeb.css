@@ -134,6 +134,32 @@ body {
   vertical-align: top;
 }
 
+#memory-save-form:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+#memory-save-form .panel-field {
+  flex: 1 1 8em;
+  min-width: 4em;
+}
+
+#memory .mem-edit {
+  width: 2ch;
+  padding: 0;
+  border: none;
+  font: inherit;
+  color: inherit;
+  background-color: #444;
+  outline: 1px solid #80d0d0;
+}
+
+#memory .mem-edit.is-invalid {
+  outline-color: #f06060;
+}
+
 .goto-form {
   flex: 0 1 8em;
   min-width: 4em;
