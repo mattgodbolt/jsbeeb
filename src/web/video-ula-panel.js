@@ -78,6 +78,11 @@ const NulaSection = {
     ],
 };
 
+const UlaPaletteHeading = { text: "Palette", title: "" };
+const BypassedPaletteHeading = {
+    text: "Palette: bypassed",
+    title: "NuLA's direct palette mode gives pixels NuLA's colours by their own number, not through this palette",
+};
 const NulaOnHeading = { text: "NuLA palette", title: "" };
 const NulaOffHeading = {
     text: "NuLA palette: switched off",
@@ -88,7 +93,7 @@ const NulaColumn = `
     <div>
         <div class="nula-registers"></div>
         <div class="decoded-heading nula-palette-heading"></div>
-        <div class="palette nula-palette"></div>
+        <div class="videoula-palette nula-palette"></div>
     </div>`;
 
 /** Sixteen colours as swatches, each labelled with what it is, redrawn only when something changes. */
@@ -98,14 +103,14 @@ class Swatches {
         this._cells = [];
         for (let entry = 0; entry < PaletteEntries; ++entry) {
             const cell = document.createElement("div");
-            cell.className = "palette-entry";
+            cell.className = "videoula-palette-entry";
             const index = document.createElement("span");
-            index.className = "palette-index";
+            index.className = "videoula-palette-index";
             index.textContent = entry.toString(16);
             const swatch = document.createElement("span");
-            swatch.className = "palette-swatch";
+            swatch.className = "videoula-palette-swatch";
             const label = document.createElement("span");
-            label.className = "palette-label";
+            label.className = "videoula-palette-label";
             cell.append(index, swatch, label);
             container.append(cell);
             this._cells.push({ cell, swatch, label, shown: "" });
@@ -126,14 +131,25 @@ class Swatches {
     }
 }
 
-function ulaPaletteEntries(video) {
+function ulaPaletteEntries(video, hasNula) {
     return [...video.actualPal].map((entry, index) => {
         const colour = physicalColour(entry);
+        const flashes = entry & PaletteFlashBit && video.ula.flash[colour];
+        const swatch = cssColour(video.ulaPal[index]);
+        if (hasNula) {
+            // NuLA's colours 8 to 15 need not duplicate 0 to 7, so an entry is named by the NuLA colour it draws.
+            const steady = (entry ^ PhysicalColourMask).toString(16);
+            const other = entry.toString(16);
+            return {
+                colour: swatch,
+                label: flashes ? `NuLA ${steady}/${other}` : `NuLA ${steady}`,
+                title: `Entry ${index}: NuLA's colour ${steady}${flashes ? `, flashing with ${other}` : ""}`,
+            };
+        }
         const steady = ColourNames[colour];
         const other = ColourNames[colour ^ PhysicalColourMask];
-        const flashes = entry & PaletteFlashBit && video.ula.flash[colour];
         return {
-            colour: cssColour(video.ulaPal[index]),
+            colour: swatch,
             label: flashes ? `${steady}/${other}` : steady,
             title: `Entry ${index}: colour ${colour}, ${steady}${flashes ? `, flashing with ${other}` : ""}`,
         };
@@ -150,6 +166,12 @@ function nulaPaletteEntries(ula) {
             title: `NuLA's colour ${index}: red ${rgb[0]}, green ${rgb[1]}, blue ${rgb[2]}${flashes ? ", flashing" : ""}`,
         };
     });
+}
+
+function showHeading(node, { text, title }) {
+    if (node.textContent === text) return;
+    node.textContent = text;
+    node.title = title;
 }
 
 /**
@@ -183,13 +205,14 @@ export class VideoUlaPanel {
         body.innerHTML = `
             <div>
                 <div class="videoula-control"></div>
-                <div class="decoded-heading">Palette</div>
-                <div class="palette ula-palette"></div>
+                <div class="decoded-heading ula-palette-heading"></div>
+                <div class="videoula-palette ula-palette"></div>
             </div>
             ${this._hasNula ? NulaColumn : ""}`;
         const part = (className) => body.querySelector(`.${className}`);
         this._control = new DecodedRegisters(part("videoula-control"), [ControlSection]);
         this._ulaPalette = new Swatches(part("ula-palette"));
+        this._ulaHeading = part("ula-palette-heading");
         if (this._hasNula) {
             this._nulaRegisters = new DecodedRegisters(part("nula-registers"), [NulaSection]);
             this._nulaPalette = new Swatches(part("nula-palette"));
@@ -201,14 +224,11 @@ export class VideoUlaPanel {
     update() {
         const video = this._video;
         this._control.update({ ctrl: video.ulactrl });
-        this._ulaPalette.update(ulaPaletteEntries(video));
+        this._ulaPalette.update(ulaPaletteEntries(video, this._hasNula));
+        showHeading(this._ulaHeading, video.ula.paletteMode ? BypassedPaletteHeading : UlaPaletteHeading);
         if (!this._hasNula) return;
         this._nulaRegisters.update(video.ula);
         this._nulaPalette.update(nulaPaletteEntries(video.ula));
-        const heading = video.ula.disabled ? NulaOffHeading : NulaOnHeading;
-        if (this._nulaHeading.textContent !== heading.text) {
-            this._nulaHeading.textContent = heading.text;
-            this._nulaHeading.title = heading.title;
-        }
+        showHeading(this._nulaHeading, video.ula.disabled ? NulaOffHeading : NulaOnHeading);
     }
 }

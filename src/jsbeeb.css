@@ -1014,7 +1014,7 @@ small {
   background: #80d0d0;
 }
 
-.palette {
+.videoula-palette {
   display: grid;
   grid-template-rows: repeat(8, auto);
   grid-auto-flow: column;
@@ -1022,29 +1022,29 @@ small {
   column-gap: 12px;
 }
 
-.palette-entry {
+.videoula-palette-entry {
   display: flex;
   align-items: center;
   gap: 4px;
   line-height: 20px;
 }
 
-.palette-index {
+.videoula-palette-index {
   color: #f0d080;
 }
 
-.palette-swatch {
+.videoula-palette-swatch {
   width: 2ch;
   height: 14px;
   border: 1px solid #666666;
 }
 
-.ula-palette .palette-label {
+.ula-palette .videoula-palette-label {
   width: 13ch;
   color: #cccccc;
 }
 
-.nula-palette .palette-label {
+.nula-palette .videoula-palette-label {
   width: 9ch;
   color: #cccccc;
 }
