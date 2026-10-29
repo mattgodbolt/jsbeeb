@@ -1,5 +1,6 @@
 import { decodedPanel, DecodedRegisters, lit, namedBits, register, spelt } from "./decoded-registers.js";
 import { Centred, StartEdge } from "./panel-layout.js";
+import { Video } from "../video.js";
 
 const MinPanelSize = { w: 240, h: 120 };
 const PaletteEntries = 16;
@@ -270,9 +271,9 @@ function showHeading(node, { text, title }) {
  * VideoNuLA fitted, NuLA's own palette and the registers that say how it is used.
  */
 export class VideoUlaPanel {
-    /** Whether the machine has a video ULA to show: the Atom's picture comes from a 6847 instead. */
+    /** Whether the machine has a video ULA to show: the Atom's picture comes from a 6847, and `?fakeVideo` has none. */
     static fits(cpu) {
-        return !cpu.model.isAtom;
+        return !cpu.model.isAtom && cpu.video instanceof Video;
     }
 
     /**

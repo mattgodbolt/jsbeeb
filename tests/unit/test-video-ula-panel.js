@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { findModel } from "../../src/models.js";
-import { Video } from "../../src/video.js";
+import { FakeVideo, Video } from "../../src/video.js";
 import { VideoUlaPanel } from "../../src/web/video-ula-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { decodedMeanings, decodedRow, teardownDom } from "./helpers.js";
@@ -54,9 +54,16 @@ const logicalSlots = () =>
 describe("VideoUlaPanel", () => {
     afterEach(teardownDom);
 
-    it("is made for a BBC or a Master, not for an Atom, which has no video ULA", () => {
-        const fits = (name) => VideoUlaPanel.fits({ model: findModel(name) });
-        expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
+    it("is made for a BBC or a Master, not for an Atom or `?fakeVideo`, which have no video ULA", () => {
+        const video = new Video(false, FramebufferPixels, () => {}, { hasVideoNula: false });
+        const fits = (name, fake) =>
+            VideoUlaPanel.fits({ model: findModel(name), video: fake ? new FakeVideo() : video });
+        expect([fits("B-DFS1.2", false), fits("Master", false), fits("Atom", false), fits("B-DFS1.2", true)]).toEqual([
+            true,
+            true,
+            false,
+            false,
+        ]);
     });
 
     it("is filled before it opens, so that it is laid out at its size", () => {
