@@ -153,7 +153,8 @@ export class Breakpoints {
         if (label !== undefined && typeof label !== "string") throw new Error(`Breakpoint label ${label} is not text`);
         if (owner !== undefined && typeof owner !== "string") throw new Error(`Breakpoint owner ${owner} is not text`);
         hitCount ??= 1;
-        if (!Number.isInteger(hitCount) || hitCount < 1) throw new Error(`Hit count ${hitCount} is not 1 or more`);
+        if (!Number.isInteger(hitCount) || hitCount < 1)
+            throw new Error(`Hit count ${hitCount} is not a whole number from 1`);
         action ??= "stop";
         if (!Actions.includes(action)) throw new Error(`Breakpoint action ${action} is not stop or log`);
         return {
