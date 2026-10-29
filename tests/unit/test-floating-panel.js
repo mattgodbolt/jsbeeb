@@ -481,17 +481,14 @@ describe("FloatingPanel", () => {
                 expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + 40 + Gap);
             });
 
-        it("are left at the size a resize in progress has them", () => {
+        it("lay out nothing at the end of a move that nothing asked to keep them attached during", () => {
             const top = above();
             const under = below();
             top.open();
             under.open();
-            const start = rectOf(top);
-            const corner = { x: start.x + start.w, y: start.y + start.h };
-            pointer(handle(top, "bottom-right"), "pointerdown", corner.x, corner.y, {});
-            pointer(handle(top, "bottom-right"), "pointermove", corner.x + 50, corner.y + 30, {});
-            arrangement.keepAttached();
-            expect(rectOf(top)).toMatchObject({ w: start.w + 50, h: start.h + 30 });
+            const relayout = vi.spyOn(arrangement, "relayout");
+            drag(header(top), { x: 20, y: 70 }, { x: 320, y: 270 });
+            expect(relayout).not.toHaveBeenCalled();
         });
 
         it("are measured rounded up, so content laid out at a fraction of a pixel never wraps", () => {
