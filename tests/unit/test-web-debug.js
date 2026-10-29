@@ -1379,10 +1379,12 @@ describe("Debugger", () => {
                 expect(addrOf(currentRow())).toBe("8000 toolkit_entry");
             });
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            rightClick(currentRow().querySelector(".dis_addr"));
+            pickFromMenu("Watch hex");
             goTo("goto-mem-addr-form", "toolkit_entry`4");
             rightClick(memByte(0x8000));
             pickFromMenu("Watch hex");
-            expect(watchRows().map(([name]) => name)).toEqual(["$8000"]);
+            expect(watchRows().map(([name]) => name)).toEqual(["$8000", "$8000"]);
         });
 
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {
