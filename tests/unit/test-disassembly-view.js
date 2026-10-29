@@ -147,11 +147,14 @@ describe("DisassemblyView", () => {
         expect(addrOf(currentRow())).toBe("2002");
     });
 
-    it("wraps past $ffff to $0000 below an instruction near the top of memory", () => {
+    it("reads an instruction straddling $ffff on from $0000, and wraps the rows below it there", () => {
+        cpu.writemem(0x0000, 0x5a);
         view.update(0xfffe);
-        const addresses = rows().map((row) => Number(row.dataset.addr));
-        expect(Math.max(...addresses)).toBeLessThan(0x10000);
-        expect(addresses.at(-1)).toBeLessThan(0x100);
+        const row = currentRow();
+        const [opcode, operand] = [0xfffe, 0xffff].map((at) => hexbyte(cpu.peekmem(at)));
+        expect(row.querySelector(".instr_bytes").textContent).toBe(`${opcode} ${operand} 5a`);
+        expect(row.querySelector(".disassembly").textContent).toContain(`$5a${operand}`);
+        expect(Number(row.nextElementSibling.dataset.addr)).toBe(0x0001);
     });
 
     it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {
