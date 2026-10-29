@@ -93,12 +93,13 @@ export class WatchPanel {
         for (const watch of this._watches) this._unregister(watch);
         this._cpu = cpu;
         for (const watch of this._watches) this._register(watch);
-        // A watch's breakpoint removed elsewhere, such as from the console, stops the watch breaking.
+        // A watch's breakpoint removed, disabled or made to log elsewhere, such as from the console, stops the watch
+        // breaking.
         cpu.breakpoints.onChange(() => {
-            const ids = new Set(cpu.breakpoints.list().map(({ id }) => id));
+            const stops = new Map(cpu.breakpoints.list().map((bp) => [bp.id, bp.enabled && bp.action === "stop"]));
             for (const watch of this._watches) {
-                if (watch.breakpoints.every((id) => ids.has(id))) continue;
-                watch.breakpoints = watch.breakpoints.filter((id) => ids.has(id));
+                if (watch.breakpoints.every((id) => stops.get(id))) continue;
+                watch.breakpoints = watch.breakpoints.filter((id) => stops.has(id));
                 watch.disarm();
             }
         });
@@ -134,16 +135,21 @@ export class WatchPanel {
                   ];
         const accepts = (address, byte) => {
             const stat = cpu.memStat[cpu.memStatOffset + (address >>> 8)];
-            return stat !== RomStat && writeStops(this._peek, watch, address, byte, stat === RamStat, cpu);
+            const toRam = stat === RamStat;
+            return stat !== RomStat && writeStops(this._peek, watch, address, byte, toRam, cpu, cpu.getPrevPc(0));
         };
         const onHit = () => {
             const target = cpu.targetCycles;
             if (this._fired?.target !== target) this._fired = { watches: [], target };
             if (!this._fired.watches.includes(watch)) this._fired.watches.push(watch);
         };
+        // A name, not the address a watch with none is labelled by, and only where the watch starts.
+        const named = watch.label !== `$${hexword(watch.address)}`;
         for (const [start, end] of ranges) {
-            const spec = { kind: "write", start, end, accepts, onHit, owner: "watch", label: watch.label };
-            watch.breakpoints.push(cpu.breakpoints.add(spec));
+            const label = named && start === watch.address ? watch.label : undefined;
+            watch.breakpoints.push(
+                cpu.breakpoints.add({ kind: "write", start, end, accepts, onHit, owner: "watch", label }),
+            );
         }
     }
 

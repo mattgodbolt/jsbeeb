@@ -10,6 +10,7 @@ describe("watches", () => {
     memory[1] = 0x03;
     const peek = (address) => memory[address];
     const format = (name) => WatchFormats.find((f) => f.name === name);
+    const NoCpu = {};
 
     it.each([
         ["dec", 0x70, "52"],
@@ -45,10 +46,13 @@ describe("watches", () => {
         ["< A", 8, true, "<A"],
         ["= ?&70 + 1", 0x35, true, "=?&70 + 1"],
         ["= $41 OR $42", 0x43, true, "=$41 OR $42"],
+        ["= $41 OR $42", 0x41, false, "=$41 OR $42"],
+        ["< old", 4, true, "<old"],
+        ["= PC", 0x2002, true, "=PC"],
     ])("holds a condition %s for %i: %s, shown as %s", (text, value, holds, shown) => {
-        const cpu = { a: 9, pc: 0, peekmem: peek };
+        const cpu = { a: 9, peekmem: peek };
         expect(parseCondition(text)).toMatchObject({ text: shown });
-        expect(parseCondition(text).holds(value, cpu)).toBe(holds);
+        expect(parseCondition(text).holds(value, 5, cpu, 0x2002)).toBe(holds);
     });
 
     it.each(["= $", "= 5x", "", "=== 5", "=> 5", "is 5"])("refuses the condition %j", (text) => {
@@ -67,11 +71,11 @@ describe("watches", () => {
         ["a device write tested against the byte written", "hex16", "= $00", 0x71, 0x00, false, true],
     ])("decides whether %s stops a %s watch", (_, name, text, at, byte, toRam, stops) => {
         const watch = { address: 0x70, format: format(name), condition: text && parseCondition(text) };
-        expect(writeStops(peek, watch, at, byte, toRam)).toBe(stops);
+        expect(writeStops(peek, watch, at, byte, toRam, NoCpu, 0)).toBe(stops);
     });
 
     it("sees a write wrapping past the top of memory into a watch", () => {
         const watch = { address: 0xffff, format: format("hex16"), condition: null };
-        expect(writeStops(peek, watch, 0x0000, 0x09, true)).toBe(true);
+        expect(writeStops(peek, watch, 0x0000, 0x09, true, NoCpu, 0)).toBe(true);
     });
 });

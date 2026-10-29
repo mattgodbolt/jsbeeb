@@ -41,13 +41,15 @@ const NumberLiteral = /^(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+))$/i;
 /**
  * @typedef {object} WatchCondition
  * @property {string} text
- * @property {(value: number, cpu: object) => boolean} holds - whether it holds for the watch's value, with the CPU
- * for any register or memory the condition reads
+ * @property {(value: number, old: number, cpu: object, pc: number) => boolean} holds - whether it holds for the
+ * watch's value after a write and `old` before it, made by the instruction at `pc`
  */
 
 /**
  * A break's condition: a comparison and what the watch's value is compared with, such as `= 5`, `!= $20` or
- * `> ?&70`, in the language of src/conditions.js. A bare value, such as `5`, means `= 5`, and `==` is `=`.
+ * `> ?&70`, in the language of src/conditions.js: everything after the comparison is what the value is compared
+ * with. There `value` is the watch's value after the write and `old` its value before. A bare value, such as `5`,
+ * means `= 5`, and `==` is `=`.
  * @param {string} text
  * @returns {WatchCondition | undefined}
  */
@@ -64,7 +66,7 @@ export function parseCondition(text) {
     }
     const [, hex, dec] = NumberLiteral.exec(operand) ?? [];
     const shown = hex !== undefined ? `$${hex.toLowerCase()}` : (dec ?? operand);
-    return { text: `${op}${shown}`, holds: (value, cpu) => test(cpu, cpu?.pc, value, value) !== 0 };
+    return { text: `${op}${shown}`, holds: (value, old, cpu, pc) => test(cpu, pc, value, old) !== 0 };
 }
 
 /**
@@ -77,12 +79,14 @@ export function parseCondition(text) {
  * @param {number} byte
  * @param {boolean} toRam
  * @param {object} cpu - for a condition reading registers or memory
+ * @param {number} pc - the instruction writing
  */
-export function writeStops(peek, watch, address, byte, toRam, cpu) {
+export function writeStops(peek, watch, address, byte, toRam, cpu, pc) {
     const { format, condition } = watch;
     if (((address - watch.address) & 0xffff) >= format.bytes) return false;
-    if (!toRam) return !condition || condition.holds(byte, cpu);
+    if (!toRam) return !condition || condition.holds(byte, byte, cpu, pc);
     const after = watchValue((at) => (at === address ? byte : peek(at)), watch.address, format);
-    if (after === watchValue(peek, watch.address, format)) return false;
-    return !condition || condition.holds(after, cpu);
+    const before = watchValue(peek, watch.address, format);
+    if (after === before) return false;
+    return !condition || condition.holds(after, before, cpu, pc);
 }
