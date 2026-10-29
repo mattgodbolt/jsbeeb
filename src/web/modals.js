@@ -12,6 +12,7 @@ export class Modals {
         this.errorModal = new bootstrap.Modal(this.errorDialog);
         this.aysEl = document.getElementById("are-you-sure");
         this.aysModal = new bootstrap.Modal(this.aysEl);
+        this.dropUnaskedQuestion = null;
 
         // Bootstrap raises a modal's hidden event only once its backdrop has faded, and that late event clears
         // body.modal-open (and, here, the modal's hold) whatever has opened since; so a show waits for it.
@@ -87,13 +88,21 @@ export class Modals {
             };
             // Asked from the show, not now, so a previous opening's late hidden cannot answer this question.
             const ask = () => {
+                this.dropUnaskedQuestion = null;
                 this.aysEl.querySelector(".context").textContent = message;
                 this.aysEl.querySelector(".ays-no").textContent = noText;
                 yesButton.textContent = yesText;
                 yesButton.addEventListener("click", onYes, { once: true });
                 this.aysEl.addEventListener("hidden.bs.modal", onHidden, { once: true });
             };
+            const unask = () => {
+                this.aysEl.removeEventListener("show.bs.modal", ask);
+                resolve(false);
+            };
             this.aysEl.addEventListener("show.bs.modal", ask, { once: true });
+            // A question still held back while a modal closes gives way to this one.
+            this.dropUnaskedQuestion?.();
+            this.dropUnaskedQuestion = unask;
             // Bootstrap raises no show at all while the dialog is up or in its own fade; that question goes unasked.
             let raised = false;
             const onRaised = (event) => (raised ||= event.target === this.aysEl);
@@ -101,8 +110,8 @@ export class Modals {
             this.aysModal.show();
             window.removeEventListener("show.bs.modal", onRaised, { capture: true });
             if (!raised) {
-                this.aysEl.removeEventListener("show.bs.modal", ask);
-                resolve(false);
+                this.dropUnaskedQuestion = null;
+                unask();
             }
         });
     }

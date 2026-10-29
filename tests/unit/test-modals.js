@@ -69,15 +69,20 @@ describe("Modals", () => {
         ])(
             "shows %s raised while a modal is closing once it has closed, whole and held",
             async (_, next, raiseWhileClosing) => {
+                const holding = [];
+                loop.hold.mockImplementation(() => {
+                    holding.push("hold");
+                    return () => holding.push("let go");
+                });
                 modals.show("info");
                 await vi.runAllTimersAsync();
+                window.addEventListener("hidden.bs.modal", () => holding.push("hidden handled"), { once: true });
                 await raiseWhileClosing(next);
                 await vi.runAllTimersAsync();
                 expect([...document.querySelectorAll(".modal.show")]).toEqual([document.getElementById(next)]);
                 expect(document.querySelectorAll(".modal-backdrop")).toHaveLength(1);
                 expect(document.body.classList.contains("modal-open")).toBe(true);
-                expect(resumes()[0]).toHaveBeenCalledTimes(1);
-                expect(resumes()[1]).not.toHaveBeenCalled();
+                expect(holding).toEqual(["hold", "let go", "hold", "hidden handled"]);
             },
         );
 
@@ -149,17 +154,20 @@ describe("Modals", () => {
             await expect(answer).resolves.toBe(false);
         });
 
-        it("leaves a question asked while the last one's backdrop is still fading for its own answer", async () => {
+        it("asks the last question raised while the dialog's backdrop is still fading, answering the others no", async () => {
             const first = modals.confirm("Restart now?", "Restart", "Later");
             await vi.runAllTimersAsync();
             modals.hide("are-you-sure");
             await vi.advanceTimersToNextTimerAsync();
             const second = modals.confirm("Switch machine?", "Switch", "Stay");
+            const third = modals.confirm("Save anyway?", "Save anyway", "Cancel");
             await vi.runAllTimersAsync();
             await expect(first).resolves.toBe(false);
+            await expect(second).resolves.toBe(false);
+            expect(dialog().querySelector(".context").textContent).toBe("Save anyway?");
             dialog().querySelector(".ays-yes").click();
             await vi.runAllTimersAsync();
-            await expect(second).resolves.toBe(true);
+            await expect(third).resolves.toBe(true);
         });
 
         it("answers no at once to a question asked while another is up, leaving that one on screen", async () => {
