@@ -25,12 +25,19 @@ export function cloneTemplate(container) {
     return clone;
 }
 
-/** In px, a shortfall from whole rows that layout rounding can leave, and that still counts as fitting. */
-const RowRoundingSlack = 0.5;
+/** In px, a shortfall that layout rounding can leave, and that still counts as fitting. */
+const RoundingSlack = 0.5;
 
 /** How many rows of `rowHeight` fit in `height`, at least one. */
 export function rowsThatFit(height, rowHeight) {
-    return Math.max(1, Math.floor((height + RowRoundingSlack) / rowHeight));
+    return Math.max(1, Math.floor((height + RoundingSlack) / rowHeight));
+}
+
+/** The most columns, a power of two and at least `fewest`, of `columnWidth` each that fit beside `fixed` in `width`. */
+export function powerOfTwoColumnsThatFit(width, fixed, columnWidth, fewest) {
+    let count = fewest;
+    while (fixed + 2 * count * columnWidth <= width + RoundingSlack) count *= 2;
+    return count;
 }
 
 /**

@@ -35,11 +35,13 @@ export function stubResizeObserver() {
                 this.callback = callback;
             }
             observe(element) {
-                observers.set(element, this.callback);
+                observers.set(element, [...(observers.get(element) ?? []), this.callback]);
             }
         },
     );
-    return (element, height) => observers.get(element)([{ contentRect: { height } }]);
+    return (element, height) => {
+        for (const callback of observers.get(element)) callback([{ contentRect: { height } }]);
+    };
 }
 
 /** Enough of an FDC for the page's side of putting a disc in and taking it out. */

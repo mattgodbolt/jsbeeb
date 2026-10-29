@@ -343,6 +343,60 @@ test("the disassembly and memory views fill their panels' height as they are res
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
 });
 
+test("the memory view shows 8, 16 or 32 bytes a row as its panel is widened, its rows aligned, and steps a row at a time", async ({
+    beeb,
+    page,
+}) => {
+    const memoryRows = () =>
+        page.locator("#memory").evaluate((container) => {
+            const rows = [...container.children];
+            const highlight = rows.find((row) => row.classList.contains("highlight"));
+            return {
+                bytes: rows[0].querySelectorAll(".mem_bytes span").length,
+                rows: rows.map((row) => parseInt(row.querySelector(".addr").textContent, 16)),
+                highlight: parseInt(highlight.querySelector(".addr").textContent, 16),
+                target: container.querySelector(".mem_bytes .target").dataset.addr,
+                fits: rows.every((row) => row.scrollWidth <= row.clientWidth),
+            };
+        });
+    const panel = page.locator("#memory-panel");
+    const widen = async (dx) => {
+        const handle = await page.locator("#memory-panel .panel-resize-right").boundingBox();
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(handle.x + handle.width / 2 + dx, handle.y + handle.height / 2, { steps: 10 });
+        await page.mouse.up();
+    };
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    await expect(panel).toBeVisible();
+    await page.fill("#goto-mem-addr-form .goto-addr", "1234");
+    await page.press("#goto-mem-addr-form .goto-addr", "Enter");
+    expect(await memoryRows()).toMatchObject({ bytes: 8, highlight: 0x1230, target: `${0x1234}`, fits: true });
+
+    for (const bytes of [16, 32]) {
+        const width = (await panel.boundingBox()).width;
+        const rowWidth = await page
+            .locator("#memory .mem_bytes")
+            .first()
+            .evaluate((el) => el.offsetWidth);
+        await widen(Math.ceil((rowWidth * 4) / 3) + 4);
+        await expect.poll(async () => (await memoryRows()).bytes).toBe(bytes);
+        const shown = await memoryRows();
+        expect(shown).toMatchObject({ highlight: 0x1234 & -bytes, target: `${0x1234}`, fits: true });
+        expect(
+            shown.rows.every((addr, i) => addr % bytes === 0 && (i === 0 || addr - shown.rows[i - 1] === bytes)),
+        ).toBe(true);
+        expect((await panel.boundingBox()).width).toBeGreaterThan(width);
+    }
+    const settled = (await panel.boundingBox()).width;
+    await page.keyboard.press("u");
+    expect(await memoryRows()).toMatchObject({ highlight: 0x1240, target: `${0x1254}` });
+    expect((await panel.boundingBox()).width).toBe(settled);
+});
+
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
     beeb,
     page,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { rowsThatFit } from "../../src/web/debug-dom.js";
+import { powerOfTwoColumnsThatFit, rowsThatFit } from "../../src/web/debug-dom.js";
 
 describe("rowsThatFit", () => {
     it("counts whole rows, rounding down", () => {
@@ -14,5 +14,17 @@ describe("rowsThatFit", () => {
 
     it("keeps one row however little room there is", () => {
         expect(rowsThatFit(3, 16)).toBe(1);
+    });
+});
+
+describe("powerOfTwoColumnsThatFit", () => {
+    it.each([
+        [10, 8],
+        [16 * 4 + 20 - 1, 8],
+        [16 * 4 + 20 - 1 / 60, 16],
+        [32 * 4 + 20, 32],
+        [64 * 4 + 20 - 1, 32],
+    ])("fits %d px with 20 px fixed and 4 px a column as %d columns", (width, columns) => {
+        expect(powerOfTwoColumnsThatFit(width, 20, 4, 8)).toBe(columns);
     });
 });
