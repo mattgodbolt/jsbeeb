@@ -110,7 +110,7 @@ describe("AudioHandler", () => {
             expect(warningShown()).toBe(true);
         });
 
-        it("closes without taking the keyboard, and stays closed on the next visit", () => {
+        it("closes without taking the keyboard, and is back on the next visit", () => {
             makeHandler();
             const close = warning().querySelector(".btn-close");
 
@@ -123,7 +123,7 @@ describe("AudioHandler", () => {
             document.body.innerHTML = "";
             domFromIndexHtml("audio-warning");
             makeHandler();
-            expect(warningShown()).toBe(false);
+            expect(warningShown()).toBe(true);
         });
     });
 

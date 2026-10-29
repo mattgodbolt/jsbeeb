@@ -5,7 +5,7 @@ import { Music5000, FakeMusic5000 } from "../music5000.js";
 import { DefaultTargetLatencyMs } from "../audio-latency.js";
 import { createAudioContext } from "./audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "./dom-utils.js";
-import { remember, remembered, toast } from "./toast.js";
+import { toast } from "./toast.js";
 
 import rendererUrl from "./audio-renderer.js?worker&url";
 import music5000WorkletUrl from "../music5000-worklet.js?worker&url";
@@ -16,8 +16,6 @@ const StallSpikeHeight = 20;
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
 const UnfocusedLatencyMs = 200;
-
-const NoWorkletQuietKey = "quietNoAudioWorklet";
 
 export class AudioHandler {
     constructor({
@@ -75,7 +73,7 @@ export class AudioHandler {
                 this.audioContext = null;
                 this.noAudio = true;
                 console.log("Unable to initialise audio: no audio worklet API");
-                if (!remembered(NoWorkletQuietKey)) this._warnNoWorklet();
+                this._warnNoWorklet();
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
@@ -104,10 +102,7 @@ export class AudioHandler {
             <button type="button" class="btn-close" aria-label="Close"></button>`;
         const close = this.warningNode.querySelector(".btn-close");
         close.addEventListener("mousedown", (event) => event.preventDefault());
-        close.addEventListener("click", () => {
-            toggle(this.warningNode, false);
-            remember(NoWorkletQuietKey, true);
-        });
+        close.addEventListener("click", () => toggle(this.warningNode, false));
         toggle(this.warningNode, true);
     }
 

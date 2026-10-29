@@ -152,7 +152,7 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     expect(await panelWidth()).toBe(creditedWidth);
 });
 
-test("the no-audio-worklet warning fits a phone and a desktop, closes without taking the keyboard, and stays closed on reload", async ({
+test("the no-audio-worklet warning fits a phone and a desktop, closes without taking the keyboard, and is back on reload", async ({
     beeb,
     page,
 }) => {
@@ -188,8 +188,8 @@ test("the no-audio-worklet warning fits a phone and a desktop, closes without ta
     await expect(warning).toBeHidden();
     expect(await page.evaluate(() => window.focusedInWarning)).toBe(false);
     await page.reload();
-    await beeb.expectScreenText(">");
-    await expect(warning).toBeHidden();
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText("No audio worklet API");
 });
 
 test("the system VIA panel opens from the More menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
