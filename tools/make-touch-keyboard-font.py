@@ -28,8 +28,9 @@ SlashAngle = 45
 SlashReach = 1.25
 
 # The function keys' f: a plain f leaning 10 degrees, standing on the baseline, 850 units tall with a stroke of 86
-# (a little heavier than Gorton's 71, as on the caps). Drawn in a 310 by 700 box, y down, baseline at 700.
-FScale = 850 / 700
+# (a little heavier than Gorton's 71, as on the caps). Drawn in a box FBoxHeight high, y down, baseline at its foot.
+FBoxHeight = 700
+FScale = 850 / FBoxHeight
 FStrokeWidth = 86
 FAdvance = 376
 FHook = ((490, 110), (470, 25), (372, 20), (360, 110))
@@ -39,9 +40,11 @@ FBoxLeft = 200
 HookSegments = 12
 
 # The cursor keys' arrow: a solid head over half its length and a thin shaft, 1100 units long and 550 across,
-# centred on the capitals' middle. Drawn pointing left in a 20 by 10 box, y down.
-ArrowScale = 55
+# centred on the capitals' middle. Drawn pointing left in an ArrowBox, y down.
+ArrowBox = (20, 10)
 ArrowLength = 1100
+ArrowScale = ArrowLength / ArrowBox[0]
+ArrowWidth = round(ArrowBox[1] * ArrowScale)
 ArrowMiddle = 350
 ArrowOutline = ((0, 5), (11, 0), (11, 4.1), (20, 4.1), (20, 5.9), (11, 5.9), (11, 10))
 Arrows = {0x2190: (-1, 0), 0x2191: (0, 1), 0x2192: (1, 0), 0x2193: (0, -1)}
@@ -120,7 +123,7 @@ def slash_zero(font):
 
 def add_f(font):
     def to_font(x, y):
-        return (x - FBoxLeft) * FScale, (700 - y) * FScale
+        return (x - FBoxLeft) * FScale, (FBoxHeight - y) * FScale
 
     pen = T2CharStringPen(FAdvance, font.getGlyphSet())
     half_width = FStrokeWidth / 2
@@ -142,13 +145,13 @@ def add_f(font):
 def add_arrows(font):
     for codepoint, (tx, ty) in Arrows.items():
         horizontal = tx != 0
-        advance = ArrowLength if horizontal else ArrowLength // 2
+        advance = ArrowLength if horizontal else ArrowWidth
         cx, cy = advance / 2, ArrowMiddle
         nx, ny = -ty, tx
         outline = [
             (
-                cx + tx * (ArrowLength / 2 - a * ArrowScale) + nx * (5 - b) * ArrowScale,
-                cy + ty * (ArrowLength / 2 - a * ArrowScale) + ny * (5 - b) * ArrowScale,
+                cx + tx * (ArrowLength / 2 - a * ArrowScale) + nx * (ArrowBox[1] / 2 - b) * ArrowScale,
+                cy + ty * (ArrowLength / 2 - a * ArrowScale) + ny * (ArrowBox[1] / 2 - b) * ArrowScale,
             )
             for a, b in ArrowOutline
         ]
