@@ -16,6 +16,9 @@ const DcRestoreCornerHz = 1 / (2 * Math.PI * 10e3 * 4.7e-6);
 // stream through a long execute() rather than all arriving at its end.
 const EventProgressCycles = 4000;
 
+// The tone counters are 10 bits wide and wrap, so a period of 0 counts this many steps.
+export const ToneCounterSteps = 1024;
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -64,6 +67,8 @@ export class SoundChip {
         this.counter = new Float32Array(4);
         this.outputBit = [false, false, false, false];
         this.volume = new Float32Array(4);
+        /** By channel, tones 0 to 2 then noise: a muted one is not run, so it is silent and resumes where it stopped. */
+        this.channelMuted = [false, false, false, false];
         this.generators = [
             this.toneChannel.bind(this),
             this.toneChannel.bind(this),
@@ -159,8 +164,12 @@ export class SoundChip {
         }
     }
 
+    tonePeriod(channel) {
+        return this.registers[channel] === 0 ? ToneCounterSteps : this.registers[channel];
+    }
+
     toneChannel(channel, out, offset, length) {
-        const reg = this.registers[channel] === 0 ? 1024 : this.registers[channel];
+        const reg = this.tonePeriod(channel);
         const vol = this.volume[channel];
         for (let i = 0; i < length; ++i) {
             this._doChannelStep(channel, reg);
@@ -194,7 +203,7 @@ export class SoundChip {
             case 2:
                 return 0x40;
             case 3:
-                return this.registers[channel - 1];
+                return this.tonePeriod(2);
         }
     }
 
@@ -229,7 +238,7 @@ export class SoundChip {
         }
         if (this.enabled) {
             for (let i = 0; i < this.generators.length; ++i) {
-                this.generators[i](i, out, offset, length);
+                if (!this.channelMuted[i]) this.generators[i](i, out, offset, length);
             }
         }
         const alpha = this.dcAlpha;
@@ -243,6 +252,15 @@ export class SoundChip {
         }
         this.dcPrevIn = prevIn;
         this.dcPrevOut = prevOut;
+    }
+
+    /** The channel's attenuation as the chip was last told it, 0 (loudest) to 15 (silent). */
+    attenuation(channel) {
+        const volume = this.volume[channel];
+        let nearest = 0;
+        for (let i = 1; i < volumeTable.length; ++i)
+            if (Math.abs(volumeTable[i] - volume) < Math.abs(volumeTable[nearest] - volume)) nearest = i;
+        return nearest;
     }
 
     catchUp() {
@@ -601,25 +619,10 @@ export class InstrumentedSoundChip extends SoundChip {
         return {
             tone: [this.registers[0], this.registers[1], this.registers[2]],
             noise: this.registers[3],
-            volume: [
-                this._attenuationFromVolume(0),
-                this._attenuationFromVolume(1),
-                this._attenuationFromVolume(2),
-                this._attenuationFromVolume(3),
-            ],
+            volume: [this.attenuation(0), this.attenuation(1), this.attenuation(2), this.attenuation(3)],
             lfsr: this.lfsr,
             latchedRegister: this.latchedRegister,
         };
-    }
-
-    /** Convert internal float volume back to 0-15 attenuation. */
-    _attenuationFromVolume(channel) {
-        const v = this.volume[channel];
-        // volumeTable[15] = 0 (silent), volumeTable[0] = loudest
-        for (let i = 0; i < 16; i++) {
-            if (Math.abs(volumeTable[i] - v) < 0.001) return i;
-        }
-        return 15; // silent
     }
 }
 

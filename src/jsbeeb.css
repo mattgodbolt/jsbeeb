@@ -58,6 +58,10 @@ body {
   height: 600px;
 }
 
+#cub-monitor.finds-bytes {
+  cursor: crosshair;
+}
+
 .debug-panel {
   font-size: 8pt;
   font-family: monospace;
@@ -986,6 +990,25 @@ small {
   width: 50ch;
 }
 
+.soundchip-registers .decoded-meaning {
+  width: 52ch;
+}
+
+.soundchip-mutes {
+  margin-top: 6px;
+  padding-left: 4px;
+  color: #aaaaaa;
+}
+
+.soundchip-mutes .decoded-bit {
+  margin-left: 6px;
+  font: inherit;
+}
+
+.soundchip-mutes .decoded-bit:not(.lit) {
+  background: transparent;
+}
+
 .decoded-value,
 .decoded-bit {
   display: inline-block;
@@ -1014,6 +1037,68 @@ small {
   border-color: #80d0d0;
   color: #000000;
   background: #80d0d0;
+}
+
+.videoula-palette {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 12px;
+}
+
+.videoula-palette-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 20px;
+  height: 20px;
+}
+
+.videoula-palette-index {
+  width: 1ch;
+  color: #f0d080;
+}
+
+.videoula-palette-swatch {
+  width: 2ch;
+  height: 14px;
+  border: 1px solid #666666;
+}
+
+.videoula-ula-palette .videoula-palette-label {
+  width: 13ch;
+  color: #cccccc;
+}
+
+.videoula-nula-palette .videoula-palette-label {
+  width: 9ch;
+  color: #cccccc;
+}
+
+.videoula-ula-palette .videoula-palette-entries {
+  width: 7ch;
+  color: #888888;
+}
+
+.videoula-palette-entry.unused,
+.videoula-palette-view.unused {
+  visibility: hidden;
+}
+
+.videoula-palette.dimmed {
+  opacity: 0.4;
+}
+
+.txt-btn.videoula-palette-view {
+  color: #aaaaff;
+  font-family: inherit;
+  font-size: inherit;
+  margin-left: 1ch;
+}
+
+.videoula-control .decoded-meaning {
+  width: 38ch;
 }
 
 .key-matrix table {

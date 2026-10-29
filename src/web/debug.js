@@ -301,9 +301,11 @@ export class Debugger {
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
+     * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
      */
-    constructor({ symbolSets, keys, arrangement }) {
+    constructor({ symbolSets, keys, arrangement, monitor }) {
         this._arrangement = arrangement;
+        this._monitor = monitor;
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
@@ -676,6 +678,7 @@ export class Debugger {
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
+            this._monitor.classList.add("finds-bytes");
             if (!this._touchKeyboardShown()) this.showPanels();
         }
         this._arrangement.keepAttached();
@@ -724,6 +727,21 @@ export class Debugger {
         return this._inDebugger;
     }
 
+    /**
+     * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
+     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
+     * the click is the machine's.
+     */
+    showScreenByteAt(x, y) {
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
+        const address = this.cpu.video.addressShownAt(x, y);
+        if (address !== null) {
+            this._memoryView.update(address);
+            this.panels.memory.open();
+        }
+        return true;
+    }
+
     updatePrevMem() {
         this._memoryView.snapshot();
     }
@@ -737,6 +755,7 @@ export class Debugger {
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
         this._inDebugger = false;
+        this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;
         if (this._debugPanels().some((floating) => floating.panel.contains(focused))) focused.blur();
