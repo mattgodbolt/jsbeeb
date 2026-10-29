@@ -321,8 +321,10 @@ const layout = new Layout({
 
 new TouchKeyboard({
     processor,
+    model,
     keyboard,
     layout,
+    loop,
     onAnyKeyDown: () => {
         audioHandler.tryResume();
         inputs.ensureMicrophoneRunning();

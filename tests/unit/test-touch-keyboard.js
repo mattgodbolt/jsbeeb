@@ -19,6 +19,13 @@ describe("touch keyboard", () => {
         expect(bottom("letters").slice(1)).toEqual(bottom("symbols").slice(1));
     });
 
+    it("keeps BREAK out of the letters layer, and apart from the function keys on the symbols layer", () => {
+        expect(Layers.letters.flat().some((key) => key.reset)).toBe(false);
+        const row = Layers.symbols[0];
+        const index = row.findIndex((key) => key.reset);
+        expect(row[index - 1].spacer).toBe(true);
+    });
+
     describe("wantsTouchKeyboard", () => {
         const never = () => false;
         it("is on for a touch screen or a narrow window, or when forced", () => {

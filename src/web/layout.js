@@ -127,7 +127,9 @@ export class Layout {
         const panel = document.getElementById("leds");
         const keyboardRoom =
             parseFloat(document.documentElement.style.getPropertyValue("--touch-keyboard-height")) || 0;
-        return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap) + keyboardRoom;
+        // The touch keyboard hides the bar and carries its lights itself.
+        if (document.body.classList.contains("touch-keyboard-open")) return keyboardRoom;
+        return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
     }
 
     resize() {

@@ -7,6 +7,8 @@ const TouchQuery = "(pointer: coarse)";
 const ForceParameter = "touchkeys";
 // The OS scans the keyboard every 10 ms and misses a press shorter than two scans, which a quick tap can be.
 const MinHoldMs = 40;
+// BREAK resets the machine, which a stray thumb on a phone would do all too easily, so it takes a deliberate hold.
+const BreakHoldMs = 350;
 const VibrateMs = 8;
 const LandscapeQuery = "(max-height: 500px)";
 const HeightVariable = "--touch-keyboard-height";
@@ -59,7 +61,11 @@ export const Layers = {
         BottomRow("@:;"),
     ],
     symbols: [
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fn),
+        [
+            ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fn),
+            gap(0.5),
+            k("BREAK", null, 1.6, { cls: "fkey small", reset: true }),
+        ],
         [
             k("@", "AT"),
             k(":", "COLON_STAR", 1, { sub: "*" }),
@@ -77,14 +83,13 @@ export const Layers = {
             k(".", "PERIOD", 1, { sub: ">" }),
             k("TAB", "TAB", 1.2, { cls: "small" }),
             k("COPY", "COPY", 1.4, { cls: "small" }),
-            k("BREAK", null, 1.6, { cls: "fkey small", reset: true }),
-            gap(0.4),
+            gap(1.6),
             k("RETURN", "RETURN", 1.8, { cls: "small wide" }),
         ],
         [
             k("SHIFT", "SHIFT", 1.6, { cls: "small" }),
-            k("CAPS", "CAPSLOCK", 1.4, { cls: "small" }),
-            k("SH LK", "SHIFTLOCK", 1.4, { cls: "small" }),
+            k("CAPS", "CAPSLOCK", 1.4, { cls: "small", led: "caps" }),
+            k("SH LK", "SHIFTLOCK", 1.4, { cls: "small", led: "shift" }),
             gap(3),
             k("DEL", "DELETE", 1.6, { cls: "small" }),
         ],
@@ -114,7 +119,8 @@ export const wantsTouchKeyboard = (search, matches) =>
  * keyboard's presses end up), so held keys and SHIFT/CTRL chords work with as many fingers as the screen reports.
  */
 export class TouchKeyboard {
-    constructor({ processor, keyboard, layout, onAnyKeyDown }) {
+    constructor({ processor, model, keyboard, layout, loop, onAnyKeyDown }) {
+        this.model = model;
         this.onAnyKeyDown = onAnyKeyDown;
         this.processor = processor;
         this.keyboard = keyboard;
@@ -131,6 +137,7 @@ export class TouchKeyboard {
         window.addEventListener("pointerup", (evt) => this.release(evt));
         window.addEventListener("pointercancel", (evt) => this.release(evt));
         window.addEventListener("blur", () => this.releaseAll());
+        loop.addEventListener("tick", () => this.syncLeds());
         new ResizeObserver(() => this.publishHeight()).observe(this.root);
         window.addEventListener("resize", () => this.publishHeight());
         this.setOpen(this.storedOpen());
@@ -150,6 +157,7 @@ export class TouchKeyboard {
         root.dataset.layer = this.layer;
         const bar = document.createElement("div");
         bar.className = "tk-bar";
+        bar.append(this.buildLeds());
         const hide = document.createElement("button");
         hide.type = "button";
         hide.tabIndex = -1;
@@ -176,6 +184,46 @@ export class TouchKeyboard {
         return root;
     }
 
+    /** The Model B's three red lights, at the left end of the keyboard: cassette motor, caps lock, shift lock. */
+    buildLeds() {
+        const leds = document.createElement("div");
+        leds.className = "tk-leds";
+        const lights = [
+            ["motor", "tape"],
+            ["disc", "disc"],
+            ...(this.model.isAtom
+                ? []
+                : [
+                      ["caps", "caps"],
+                      ["shift", "shift"],
+                  ]),
+        ];
+        for (const [name, label] of lights) {
+            const light = document.createElement("span");
+            light.textContent = label;
+            const led = document.createElement("i");
+            led.dataset.led = name;
+            light.prepend(led);
+            leds.append(light);
+        }
+        return leds;
+    }
+
+    /** Follows the same machine state as the lights bar's lamps, which FrontPanel drives from the same fields. */
+    syncLeds() {
+        if (!this.open) return;
+        const { processor } = this;
+        const state = {
+            motor: processor.tapeInterface.motorOn,
+            disc: !this.model.isAtom && (processor.fdc.motorOn[0] || processor.fdc.motorOn[1]),
+            caps: !this.model.isAtom && processor.sysvia.capsLockLight,
+            shift: !this.model.isAtom && processor.sysvia.shiftLockLight,
+        };
+        for (const led of this.root.querySelectorAll("[data-led]")) {
+            led.classList.toggle("on", !!state[led.dataset.led]);
+        }
+    }
+
     buildKey(def) {
         const el = document.createElement("div");
         el.style.flexGrow = def.w;
@@ -186,6 +234,11 @@ export class TouchKeyboard {
             const sub = document.createElement("span");
             sub.textContent = def.sub;
             el.append(sub);
+        }
+        if (def.led) {
+            const led = document.createElement("i");
+            led.dataset.led = def.led;
+            el.prepend(led);
         }
         el.dataset.key = def.key ?? "";
         if (def.reset) el.dataset.reset = "1";
@@ -245,7 +298,13 @@ export class TouchKeyboard {
         el.pressedAt = performance.now();
         this.held.set(evt.pointerId, el);
         el.classList.add(HeldClass);
-        this.send(el.def, true);
+        if (el.def.reset) {
+            el.breakTimer = setTimeout(() => {
+                el.breakTimer = null;
+                this.send(el.def, true);
+                buzz();
+            }, BreakHoldMs);
+        } else this.send(el.def, true);
         this.showShift();
         buzz();
     }
@@ -255,19 +314,30 @@ export class TouchKeyboard {
         if (!el) return;
         this.held.delete(evt.pointerId);
         el.classList.remove(HeldClass);
-        const remaining = MinHoldMs - (performance.now() - el.pressedAt);
-        if (remaining > 0) setTimeout(() => this.send(el.def, false), remaining);
-        else this.send(el.def, false);
+        this.letGo(el);
         this.showShift();
     }
 
     releaseAll() {
         for (const [id, el] of this.held) {
             el.classList.remove(HeldClass);
-            this.send(el.def, false);
+            this.letGo(el);
             this.held.delete(id);
         }
         this.showShift();
+    }
+
+    letGo(el) {
+        if (el.def.reset) {
+            // A tap that ends before the hold time never started the reset, so there is nothing to undo.
+            if (el.breakTimer) clearTimeout(el.breakTimer);
+            else this.send(el.def, false);
+            el.breakTimer = null;
+            return;
+        }
+        const remaining = MinHoldMs - (performance.now() - el.pressedAt);
+        if (remaining > 0) setTimeout(() => this.send(el.def, false), remaining);
+        else this.send(el.def, false);
     }
 
     /** Labels show the shifted symbol while any SHIFT key is held. */
