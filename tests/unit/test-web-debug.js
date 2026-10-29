@@ -445,18 +445,38 @@ describe("Debugger", () => {
                     expect(visible("sysvia-panel")).toBe(true);
                 });
 
-                it("names a polled address that is no device's, and offers no panel a machine lacks", () => {
-                    stopIn([0x58, 0x78, 0xcd, 0x40, 0x02, 0xf0, 0xf9]);
-                    expect(loopLine().textContent).toBe("In a loop at $3000-$3005 polling $0240");
-                    stopIn(SysViaFlagWait);
-                    expect(loopLine().querySelector("button")).toBeNull();
+                it.each([
+                    [
+                        "an address that is no device's",
+                        [0x58, 0x78, 0xcd, 0x40, 0x02, 0xf0, 0xf9],
+                        "$3000-$3005 polling $0240",
+                    ],
+                    [
+                        "two addresses",
+                        [0xa5, 0xa2, 0x10, 0x04, 0xa5, 0xff, 0x10, 0xf8],
+                        "$3000-$3006 polling $00a2 and $00ff",
+                    ],
+                    ["a loop of one instruction that reads nothing", [0x4c, 0x00, 0x30], "$3000 that reads nothing"],
+                ])("names %s", (_, code, text) => {
+                    stopIn(code);
+                    expect(loopLine().textContent).toBe(`In a loop at ${text}`);
                 });
 
-                it("says nothing once the machine runs on, or stopped anywhere else", () => {
+                it("says nothing once the machine runs on, or stopped outside a loop", () => {
                     stopIn(SysViaFlagWait);
                     stoppedLoop.go();
                     expect(loopLine().hidden).toBe(true);
-                    stopIn([0xa9, 0x41]);
+                    cpu.pc = 0x2000;
+                    dbgr.debug(cpu.pc);
+                    expect(loopLine().hidden).toBe(true);
+                });
+
+                it("follows the machine moved while stopped, as by the rewind scrubber", () => {
+                    const frames = fakeAnimationFrames();
+                    stopIn(SysViaFlagWait);
+                    cpu.pc = 0x2000;
+                    cpu.currentCycles += 100;
+                    frames.run();
                     expect(loopLine().hidden).toBe(true);
                 });
             });

@@ -27,17 +27,19 @@ export class TightLoopNote {
     constructor(line, arrangement) {
         this._line = line;
         this._arrangement = arrangement;
+        this._cpu = null;
         this._sheila = [];
     }
 
     /** @param {import("../6502.js").Cpu6502} cpu */
     setCpu(cpu) {
+        this._cpu = cpu;
         this._sheila = machineSheilaBlocks(cpu);
     }
 
-    /** Shows the tight loop `cpu` is stopped in, if it is in one. */
-    show(cpu) {
-        const loop = tightLoopAt(cpu.disassembler.opcodes, (address) => cpu.peekmem(address), cpu.pc);
+    /** Shows the tight loop the machine is stopped in, if it is in one. */
+    show() {
+        const loop = tightLoopAt(this._cpu.disassembler, this._cpu.pc);
         if (!loop) return this.clear();
         const reads = loop.reads.map((address) => this._polled(address));
         const panels = new Map(reads.flatMap(({ panel, block }) => (panel ? [[panel, block]] : [])));

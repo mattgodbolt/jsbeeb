@@ -574,6 +574,8 @@ export class Debugger {
         // Names are matched to what is in memory now; while it runs, not every frame, as matching peeks at it.
         if (!this._loop?.isRunning() || now - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
         for (const own of OwnPanels) if (this.panels[own.id].isOpen) own.show(this, this._disassemblyAt());
+        // A state put in under a stopped machine, as the rewind scrubber does, moves it without a stop.
+        if (this._inDebugger && !this._loop?.isRunning()) this._loopNote.show();
         // Not while it runs, when the names in view, and so the credit's height, can change every frame.
         if (!this._loop?.isRunning()) this._arrangement.keepAttached();
     }
@@ -787,7 +789,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
-        this._loopNote.show(this.cpu);
+        this._loopNote.show();
         this._refresh.drawn();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
