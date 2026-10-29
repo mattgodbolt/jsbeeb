@@ -334,6 +334,8 @@ test("the disassembly and memory views fill their panels' height as they are res
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBeLessThan(counts[0]);
     for (const [index, view] of views.entries())
         expect(await rowsOf(view)).toMatchObject({ fits: true, full: true, creditHeight: initial[index].creditHeight });
+    const shrunk = await rowsOf("#disassembly");
+    expect(shrunk.highlightRow).toBe(Math.floor(shrunk.count / 2));
     await page.setViewportSize({ width: 1920, height: 1080 });
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
 });
