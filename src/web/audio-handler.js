@@ -17,7 +17,7 @@ const StallSpikeHeight = 20;
 // the picture, deep enough to ride out the browser starving the tab.
 const UnfocusedLatencyMs = 200;
 
-const NoWorkletDismissedKey = "dismissedNoAudioWorklet";
+const NoWorkletQuietKey = "quietNoAudioWorklet";
 
 export class AudioHandler {
     constructor({
@@ -75,7 +75,7 @@ export class AudioHandler {
                 this.audioContext = null;
                 this.noAudio = true;
                 console.log("Unable to initialise audio: no audio worklet API");
-                if (!remembered(NoWorkletDismissedKey)) this._warnNoWorklet();
+                if (!remembered(NoWorkletQuietKey)) this._warnNoWorklet();
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
@@ -92,7 +92,7 @@ export class AudioHandler {
         this.music5000 = hasMusic5000 ? this._createMusic5000() : new FakeMusic5000();
     }
 
-    // Nothing can bring the sound back, so this one can be closed, and stays closed on later visits.
+    // Unlike the element's other warnings, nothing on the page can clear this one.
     _warnNoWorklet() {
         const localhost = new URL(window.location);
         localhost.hostname = "localhost";
@@ -106,7 +106,7 @@ export class AudioHandler {
         close.addEventListener("mousedown", (event) => event.preventDefault());
         close.addEventListener("click", () => {
             toggle(this.warningNode, false);
-            remember(NoWorkletDismissedKey, true);
+            remember(NoWorkletQuietKey, true);
         });
         toggle(this.warningNode, true);
     }
