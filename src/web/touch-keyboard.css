@@ -124,6 +124,9 @@ body.touch-keyboard-open #leds {
 }
 
 #touch-keyboard .tk-key.layer {
+  font:
+    600 16px/1 system-ui,
+    sans-serif;
   background: linear-gradient(#e6dcc3, #c9bd9d);
   color: #2a2620;
   border-bottom-color: #7a7058;

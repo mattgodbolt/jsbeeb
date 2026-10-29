@@ -13,6 +13,7 @@ import math
 import sys
 from pathlib import Path
 
+from fontTools.pens.boundsPen import BoundsPen
 from fontTools.pens.recordingPen import RecordingPen
 from fontTools.pens.t2CharStringPen import T2CharStringPen
 from fontTools.subset import Options, Subsetter
@@ -20,12 +21,18 @@ from fontTools.ttLib import TTFont
 
 Output = Path(__file__).resolve().parent.parent / "public" / "fonts" / "open-gorton" / "OpenGorton-Regular.woff2"
 KeptCodepoints = [c for c in range(0x20, 0x7F) if not ord("a") <= c <= ord("z")]
-# Matches the font's own stroke: the stem of its I is 71 units wide.
-StrokeWidth = 71
+
+
+def bounds(glyph_set, name):
+    pen = BoundsPen(glyph_set)
+    glyph_set[name].draw(pen)
+    return pen.bounds
 
 
 def slash_zero(font):
     glyph_set = font.getGlyphSet()
+    stem_xmin, _, stem_xmax, _ = bounds(glyph_set, "I")
+    stroke_width = stem_xmax - stem_xmin
     zero = glyph_set["zero"]
     recording = RecordingPen()
     zero.draw(recording)
@@ -33,12 +40,12 @@ def slash_zero(font):
     recording.replay(pen)
 
     # Each end sits on the middle of the ring's stroke, so its square end is hidden in the ring.
-    xmin, ymin, xmax, ymax = 35, -1, 592, 702
+    xmin, ymin, xmax, ymax = bounds(glyph_set, "zero")
     cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
-    rx, ry = (xmax - xmin - StrokeWidth) / 2, (ymax - ymin - StrokeWidth) / 2
+    rx, ry = (xmax - xmin - stroke_width) / 2, (ymax - ymin - stroke_width) / 2
     dx, dy = rx / math.sqrt(2), ry / math.sqrt(2)
     length = math.hypot(dx, dy)
-    nx, ny = -dy / length * StrokeWidth / 2, dx / length * StrokeWidth / 2
+    nx, ny = -dy / length * stroke_width / 2, dx / length * stroke_width / 2
     # Anticlockwise like the ring's outside, so the slash fills where it crosses the ring rather than cutting it.
     corners = [
         (cx - dx - nx, cy - dy - ny),

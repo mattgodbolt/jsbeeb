@@ -558,6 +558,22 @@ test.describe("on a phone", () => {
         await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
     });
 
+    test("the on-screen keyboard's legends load Open Gorton, and the function keys read f with a subscript number", async ({
+        beeb,
+        page,
+    }) => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        const gortonStatus = () =>
+            page.evaluate(
+                () => [...document.fonts].find((face) => face.family.replaceAll('"', "") === "Open Gorton")?.status,
+            );
+        await expect.poll(gortonStatus).toBe("loaded");
+        const functionKeys = page.locator("#touch-keyboard .tk-key.italic");
+        await expect(functionKeys).toHaveText([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `f${n}`));
+        await expect(functionKeys.locator("sub")).toHaveText([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(String));
+    });
+
     test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {
         await beeb.open("?embed");
         await beeb.expectScreenText(">");
