@@ -226,15 +226,16 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 - X-axis: Left = 65535, Right = 0
 - Y-axis: Up = 65535, Down = 0
 
-A gamepad presses BBC keys, and which key each control presses can be changed from the URL in the same way as
-[remapping the keyboard](#remapping-keys):
+A gamepad presses the emulated machine's keys, and which key each control presses can be changed from the URL in the
+same way as [remapping the keyboard](#remapping-keys):
 
 ```
-GP.<gamepad control>=<BBC key>
+GP.<gamepad control>=<key>
 ```
 
 By default the D-pad presses the "Snapper" keys (`Z`, `X`, `:`, `/`), the `A` button presses `RETURN` and `Start`
-presses `SPACE`. To play Superior's Space Invaders on a pad, where `COPY` fires:
+presses `SPACE`. On the Atom the D-pad presses the AtoMMC's joystick keys (`3`, `G`, `Q`, `=`), `A` presses the right
+arrow and `Start` presses `SPACE`. To play Superior's Space Invaders on a pad, where `COPY` fires:
 
 [`https://bbc.xania.org/?disc1=sth:Superior/SpaceInvaders-Superior.zip&autoboot&GP.FIRE=COPY`](https://bbc.xania.org/?disc1=sth:Superior/SpaceInvaders-Superior.zip&autoboot&GP.FIRE=COPY)
 
@@ -248,10 +249,9 @@ The gamepad control names are:
 - `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT`: individual buttons, by their Xbox 360 names
 - `FIRE1` `FIRE2`: clicking the left and right sticks
 
-The BBC key names are the same as for the keyboard. As with `KEY.`, the whole parameter is case-insensitive, so
-`gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both press `1`. Unlike
-`KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping can't currently be
-changed.
+The key names are the same as for the keyboard, the Atom's own on the Atom. As with `KEY.`, the whole parameter is
+case-insensitive, so `gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both
+press `1`. The D-pad's default mapping can't currently be changed.
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.
@@ -372,7 +372,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `tape=github:OWNER/REPO/PATH` - loads a tape from a public GitHub repo, as `disc1=github:` does a disc
 - `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See
   [Remapping Keys](#remapping-keys).
-- `GP.X=Y` - makes gamepad control `X` press BBC key `Y`, e.g. `GP.FIRE=COPY`. See
+- `GP.X=Y` - makes gamepad control `X` press key `Y`, e.g. `GP.FIRE=COPY`. See
   [Joystick Support](#joystick-support).
 - `patch=P` - applies a memory patch `P`. See below.
 - `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed

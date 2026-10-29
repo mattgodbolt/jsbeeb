@@ -403,22 +403,15 @@ export function getKeyMapAtom(keyLayout) {
     return keys2;
 }
 
-export function remapGamepad(gamepad) {
-    //mmcdefaults
-
-    // 3-key pressed    left
-    // G-key pressed    right
-    // Q-key pressed    up
-    // =-key pressed    down
-    // rightarrow-key pressed   fire
-
-    gamepad.gamepadMapping[14] = ATOM.K3;
-    gamepad.gamepadMapping[15] = ATOM.G;
-    gamepad.gamepadMapping[13] = ATOM.MINUS_EQUALS;
-    gamepad.gamepadMapping[12] = ATOM.Q;
-
-    // button 0 = right arrow key (fire in many Atom games)
-    gamepad.gamepadMapping[0] = ATOM.RIGHT;
-    // "start" (often <Space> to start game)
-    gamepad.gamepadMapping[9] = ATOM.SPACE;
-}
+/**
+ * The Atom's counterpart of `BbcGamepadKeys`: the AtoMMC's joystick keys, all in the matrix's column 0 (Q, =, 3 and G
+ * for the D-pad, the right arrow for A), with SPACE on Start.
+ */
+export const AtomGamepadKeys = {
+    0: ATOM.RIGHT,
+    9: ATOM.SPACE,
+    12: ATOM.Q,
+    13: ATOM.MINUS_EQUALS,
+    14: ATOM.K3,
+    15: ATOM.G,
+};

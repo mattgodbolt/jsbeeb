@@ -27,7 +27,7 @@ describe("EmulationLoop", () => {
                 pc: 0x1234,
                 tapeInterface: { motorOn: false },
                 fdc: { motorOn: [false, false] },
-                sysvia: {},
+                keyboardInterface: {},
             },
             display: {
                 video: { polltime: vi.fn() },
@@ -92,7 +92,7 @@ describe("EmulationLoop", () => {
         vi.advanceTimersByTime(TickMs);
         expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         expect(deps.audioHandler.flushChipEvents).toHaveBeenCalled();
-        expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.sysvia);
+        expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.keyboardInterface);
         expect(deps.display.takePaintMs).toHaveBeenCalled();
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
     });

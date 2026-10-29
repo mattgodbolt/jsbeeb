@@ -1,162 +1,137 @@
-import { BBC } from "../keymap.js";
-
 function isFirefox() {
     // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
     return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
 }
 
 export class GamePad {
-    constructor() {
+    /**
+     * @param {object} model - the emulated machine, whose keys the controls press
+     */
+    constructor(model) {
         this.gamepad0 = null;
-
-        //this.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
-        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
-
-        this.gamepadMapping = [];
-
-        // default: "snapper" keys
-        this.gamepadMapping[14] = BBC.Z;
-        this.gamepadMapping[15] = BBC.X;
-        this.gamepadMapping[13] = BBC.SLASH;
-        this.gamepadMapping[12] = BBC.COLON_STAR;
-
-        // often <Return> = "Fire"
-        this.gamepadMapping[0] = BBC.RETURN;
-        // "start" (often <Space> to start game)
-        this.gamepadMapping[9] = BBC.SPACE;
+        this.keys = model.keys;
+        this.gamepadMapping = Object.assign([], model.gamepadKeys);
 
         // Gamepad joysticks
         this.gamepadAxisMapping = [[], [], [], []];
     }
 
-    /*
-         this.gamepadAxisMapping[0][-1] = BBC.Z;          // left
-         this.gamepadAxisMapping[0][1] = BBC.X;          // right
-         this.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
-         this.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
-         this.gamepadAxisMapping[2][-1] = BBC.Z;          // left
-         this.gamepadAxisMapping[2][1] = BBC.X;          // right
-         this.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
-         this.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
-         */
     /**
-     * Maps a gamepad button or stick direction to a BBC key.
+     * Maps a gamepad button or stick direction to a key on the emulated machine.
      * @param {string} gamepadKey - the gamepad control, eg `FIRE2`
-     * @param {string} bbcKey - the BBC key to press, eg `RETURN`
+     * @param {string} machineKey - the key to press, eg `RETURN`
      * @returns {?string} a description of the problem, or null if the mapping was applied
      */
-    remap(gamepadKey, bbcKey) {
+    remap(gamepadKey, machineKey) {
         // convert "1" into "K1"
-        if (bbcKey.length === 1 && bbcKey >= "0" && bbcKey <= "9") {
-            bbcKey = "K" + bbcKey;
+        if (machineKey.length === 1 && machineKey >= "0" && machineKey <= "9") {
+            machineKey = "K" + machineKey;
         }
 
-        const mappedBbcKey = BBC[bbcKey];
-        if (!mappedBbcKey) {
-            return `unknown BBC key "${bbcKey}".`;
+        const mappedKey = this.keys[machineKey];
+        if (!mappedKey) {
+            return `"${machineKey}" is not a key on the emulated machine.`;
         }
 
         switch (gamepadKey) {
             case "LEFT":
-                this.gamepadMapping[3] = mappedBbcKey;
-                this.gamepadAxisMapping[0][-1] = mappedBbcKey;
-                this.gamepadAxisMapping[2][-1] = mappedBbcKey;
+                this.gamepadMapping[3] = mappedKey;
+                this.gamepadAxisMapping[0][-1] = mappedKey;
+                this.gamepadAxisMapping[2][-1] = mappedKey;
                 break;
             case "RIGHT":
-                this.gamepadMapping[1] = mappedBbcKey;
-                this.gamepadAxisMapping[0][1] = mappedBbcKey;
-                this.gamepadAxisMapping[2][1] = mappedBbcKey;
+                this.gamepadMapping[1] = mappedKey;
+                this.gamepadAxisMapping[0][1] = mappedKey;
+                this.gamepadAxisMapping[2][1] = mappedKey;
                 break;
             case "UP":
-                this.gamepadMapping[0] = mappedBbcKey;
-                this.gamepadAxisMapping[1][-1] = mappedBbcKey;
-                this.gamepadAxisMapping[3][-1] = mappedBbcKey;
+                this.gamepadMapping[0] = mappedKey;
+                this.gamepadAxisMapping[1][-1] = mappedKey;
+                this.gamepadAxisMapping[3][-1] = mappedKey;
                 break;
             case "DOWN":
-                this.gamepadMapping[2] = mappedBbcKey;
-                this.gamepadAxisMapping[1][1] = mappedBbcKey;
-                this.gamepadAxisMapping[3][1] = mappedBbcKey;
+                this.gamepadMapping[2] = mappedKey;
+                this.gamepadAxisMapping[1][1] = mappedKey;
+                this.gamepadAxisMapping[3][1] = mappedKey;
                 break;
             case "FIRE":
                 for (let i = 0; i < 16; i++) {
-                    this.gamepadMapping[i] = mappedBbcKey;
+                    this.gamepadMapping[i] = mappedKey;
                 }
                 break;
 
             // XBox 360 Controller names
             case "UP2":
-                this.gamepadAxisMapping[3][-1] = mappedBbcKey;
+                this.gamepadAxisMapping[3][-1] = mappedKey;
                 break;
             case "UP1":
-                this.gamepadAxisMapping[1][-1] = mappedBbcKey;
+                this.gamepadAxisMapping[1][-1] = mappedKey;
                 break;
             case "UP3":
-                this.gamepadMapping[0] = mappedBbcKey;
+                this.gamepadMapping[0] = mappedKey;
                 break;
             case "DOWN2":
-                this.gamepadAxisMapping[3][1] = mappedBbcKey;
+                this.gamepadAxisMapping[3][1] = mappedKey;
                 break;
             case "DOWN1":
-                this.gamepadAxisMapping[1][1] = mappedBbcKey;
+                this.gamepadAxisMapping[1][1] = mappedKey;
                 break;
             case "DOWN3":
-                this.gamepadMapping[2] = mappedBbcKey;
+                this.gamepadMapping[2] = mappedKey;
                 break;
             case "LEFT2":
-                this.gamepadAxisMapping[2][-1] = mappedBbcKey;
+                this.gamepadAxisMapping[2][-1] = mappedKey;
                 break;
             case "LEFT1":
-                this.gamepadAxisMapping[0][-1] = mappedBbcKey;
+                this.gamepadAxisMapping[0][-1] = mappedKey;
                 break;
             case "LEFT3":
-                this.gamepadMapping[3] = mappedBbcKey;
+                this.gamepadMapping[3] = mappedKey;
                 break;
             case "RIGHT2":
-                this.gamepadAxisMapping[2][1] = mappedBbcKey;
+                this.gamepadAxisMapping[2][1] = mappedKey;
                 break;
             case "RIGHT1":
-                this.gamepadAxisMapping[0][1] = mappedBbcKey;
+                this.gamepadAxisMapping[0][1] = mappedKey;
                 break;
             case "RIGHT3":
-                this.gamepadMapping[1] = mappedBbcKey;
+                this.gamepadMapping[1] = mappedKey;
                 break;
             case "FIRE2":
-                this.gamepadMapping[11] = mappedBbcKey;
+                this.gamepadMapping[11] = mappedKey;
                 break;
             case "FIRE1":
-                this.gamepadMapping[10] = mappedBbcKey;
+                this.gamepadMapping[10] = mappedKey;
                 break;
             case "A":
-                this.gamepadMapping[0] = mappedBbcKey;
+                this.gamepadMapping[0] = mappedKey;
                 break;
             case "B":
-                this.gamepadMapping[1] = mappedBbcKey;
+                this.gamepadMapping[1] = mappedKey;
                 break;
             case "X":
-                this.gamepadMapping[2] = mappedBbcKey;
+                this.gamepadMapping[2] = mappedKey;
                 break;
             case "Y":
-                this.gamepadMapping[3] = mappedBbcKey;
+                this.gamepadMapping[3] = mappedKey;
                 break;
             case "START":
-                this.gamepadMapping[9] = mappedBbcKey;
+                this.gamepadMapping[9] = mappedKey;
                 break;
             case "BACK":
-                this.gamepadMapping[8] = mappedBbcKey;
+                this.gamepadMapping[8] = mappedKey;
                 break;
             case "RB":
-                this.gamepadMapping[5] = mappedBbcKey;
+                this.gamepadMapping[5] = mappedKey;
                 break;
             case "RT":
-                this.gamepadMapping[7] = mappedBbcKey;
+                this.gamepadMapping[7] = mappedKey;
                 break;
             case "LB":
-                this.gamepadMapping[4] = mappedBbcKey;
+                this.gamepadMapping[4] = mappedKey;
                 break;
             case "LT":
-                this.gamepadMapping[6] = mappedBbcKey;
+                this.gamepadMapping[6] = mappedKey;
                 break;
             default:
                 return `unknown gamepad control "${gamepadKey}".`;
@@ -165,7 +140,7 @@ export class GamePad {
         return null;
     }
 
-    update(sysvia) {
+    update(keyboard) {
         // init gamepad
         // gamepad not necessarily available until a button press
         // so need to check gamepads[0] continuously
@@ -238,12 +213,12 @@ export class GamePad {
                     // 1 to -1
                     const oldKey = this.gamepadAxisMapping[i][this.gamepadAxes[i]];
                     if (oldKey) {
-                        sysvia.keyUpRaw(oldKey);
+                        keyboard.keyUpRaw(oldKey);
                     }
 
                     const newKey = this.gamepadAxisMapping[i][axis];
                     if (newKey) {
-                        sysvia.keyDownRaw(newKey);
+                        keyboard.keyDownRaw(newKey);
                     }
                 }
 
@@ -260,9 +235,9 @@ export class GamePad {
 
                         if (this.gamepadMapping[i]) {
                             if (button.pressed) {
-                                sysvia.keyDownRaw(this.gamepadMapping[i]);
+                                keyboard.keyDownRaw(this.gamepadMapping[i]);
                             } else {
-                                sysvia.keyUpRaw(this.gamepadMapping[i]);
+                                keyboard.keyUpRaw(this.gamepadMapping[i]);
                             }
                         }
                     }
