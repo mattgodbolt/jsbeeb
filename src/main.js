@@ -3,7 +3,8 @@ import { version } from "../package.json";
 import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
-import { Debugger, debuggerHelpRows } from "./web/debug.js";
+import { Debugger } from "./web/debug.js";
+import { fillHelp, openHelpOnTheTabForNow } from "./web/help.js";
 import { DebugMenu } from "./web/debug-menu.js";
 import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
@@ -23,7 +24,7 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { persistenceSettings } from "./web/canvas.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop } from "./web/emulation-loop.js";
+import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
@@ -46,8 +47,10 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { PanelArrangement } from "./web/floating-panel.js";
 import { SysViaPanel } from "./web/sysvia-panel.js";
+import { CrtcPanel } from "./web/crtc-panel.js";
 import { UserViaPanel } from "./web/uservia-panel.js";
 import { PagingPanel } from "./web/paging-panel.js";
+import { SoundChipPanel } from "./web/soundchip-panel.js";
 import { cycleCount } from "./lockstep.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
@@ -78,6 +81,7 @@ const benchmarkPage = parsedQuery.benchmark ? new BenchmarkPage(parsedQuery.benc
 if (benchmarkPage) silenceAnalytics();
 configureAnalytics();
 installIcons();
+fillHelp();
 labelPageShortcuts();
 const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
@@ -107,7 +111,6 @@ const dbgr = new Debugger({
     keys: panelKeys,
     arrangement: panelArrangement,
 });
-document.getElementById("debug-keys-help").append(...debuggerHelpRows());
 
 if (!window.isSecureContext)
     toast("Gamepads only work over https, so any joystick plugged in here is not seen.", {
@@ -258,6 +261,7 @@ const { keyboard } = new KeyboardSetup({
 });
 
 const modals = new Modals({ loop });
+openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
 const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals), urlState });
 const media = new MediaLoader({
@@ -338,8 +342,9 @@ const layout = new Layout({
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
 dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
-for (const DevicePanel of [SysViaPanel, UserViaPanel])
-    if (DevicePanel.fits(processor)) new DevicePanel({ cpu: processor, arrangement: panelArrangement });
+for (const DevicePanel of [SysViaPanel, UserViaPanel, CrtcPanel, SoundChipPanel])
+    if (DevicePanel.fits(processor))
+        new DevicePanel({ cpu: processor, arrangement: panelArrangement, audio: audioHandler });
 if (PagingPanel.fits(processor))
     new PagingPanel({ cpu: processor, arrangement: panelArrangement, showBank: (bank) => dbgr.showBank(bank) });
 new DebugMenu({ arrangement: panelArrangement, dbgr });

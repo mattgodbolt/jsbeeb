@@ -198,6 +198,15 @@ describe("AudioHandler", () => {
             });
         });
 
+        it("tells a worklet built after a channel is muted which channels are muted", async () => {
+            const Muted = [false, true, false, true];
+            makeHandler().setChannelMutes(Muted);
+            expect((await worklet("sound-chip-processor")).port.posted).toContainEqual({
+                command: "setChannelMutes",
+                muted: Muted,
+            });
+        });
+
         it("hands the output filter settings to the worklet", async () => {
             makeHandler({ audioOutput: "board", audioFilterFreq: 1234, audioFilterQ: 0.5 });
 
