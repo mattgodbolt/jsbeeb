@@ -64,7 +64,7 @@ export class SoundChip {
         this.counter = new Float32Array(4);
         this.outputBit = [false, false, false, false];
         this.volume = new Float32Array(4);
-        /** By generator: a muted one is left out of the output, though the chip's state is unchanged. */
+        /** By generator: a muted one is not run, so it is silent and resumes where it stopped. */
         this.channelMuted = [false, false, false, false];
         this.generators = [
             this.toneChannel.bind(this),

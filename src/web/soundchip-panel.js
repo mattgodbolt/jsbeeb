@@ -5,12 +5,13 @@ import { EndEdge, StartEdge } from "./panel-layout.js";
 const MinPanelSize = { w: 240, h: 120 };
 const ToneChannels = 3;
 const NoiseChannel = 3;
-/** The 4 MHz clock over the 32 that a tone's period counts in. */
-const ToneClockHz = 4_000_000 / 32;
+const ChipClockHz = 4_000_000;
+const ToneClockHz = ChipClockHz / 32;
 const ZeroPeriod = 1024;
 const NoiseDividers = [512, 1024, 2048];
-const NoiseClockHz = 4_000_000;
+const NoiseRateMask = 3;
 const NoiseFollowsTone2 = 3;
+const Tone2 = 2;
 const NoiseWhiteBit = 4;
 const PeriodicNoiseShifts = 15;
 const Silent = 15;
@@ -50,8 +51,8 @@ function noteName(hz) {
 const hzText = (hz) => `${hz.toFixed(1)} Hz`;
 
 function noiseShiftHz(control, periods) {
-    const rate = control & 3;
-    return rate === NoiseFollowsTone2 ? toneHz(periods[2]) : NoiseClockHz / NoiseDividers[rate];
+    const rate = control & NoiseRateMask;
+    return rate === NoiseFollowsTone2 ? toneHz(periods[Tone2]) : ChipClockHz / NoiseDividers[rate];
 }
 
 function decodeVolume(attenuation) {
@@ -77,7 +78,7 @@ function decodeNoise(control, { periods }) {
             NoiseModes,
         ),
         spelt(
-            NoiseRates[control & 3],
+            NoiseRates[control & NoiseRateMask],
             "Bits 0 and 1: the shift rate, the 4 MHz clock divided down or tone 2's frequency",
             NoiseRates,
         ),
@@ -123,7 +124,7 @@ const Sections = [
 function soundState(chip) {
     return {
         periods: chip.registers,
-        attenuations: [0, 1, 2, NoiseChannel].map((channel) => chip.attenuation(channel)),
+        attenuations: ChannelNames.map((_, channel) => chip.attenuation(channel)),
         latched: chip.latchedRegister >>> 4,
     };
 }
@@ -180,7 +181,7 @@ export class SoundChipPanel {
             button.className = "decoded-bit";
             button.setAttribute("aria-pressed", "false");
             button.textContent = name;
-            button.title = `Mute ${name} in what is heard; the chip itself plays on`;
+            button.title = `Mute ${name} in what is heard; the emulated chip is unchanged`;
             button.addEventListener("click", () =>
                 this._setMuted(this._muted.map((muted, other) => (other === channel ? !muted : muted))),
             );

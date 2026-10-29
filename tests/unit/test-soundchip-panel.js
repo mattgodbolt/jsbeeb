@@ -70,6 +70,8 @@ describe("SoundChipPanel", () => {
         expect(meanings("R6")).toEqual(["white", "/512", "7812.5 Hz"]);
         poke(...toneWrites(2, TwoOctavesBelowA440ByPeriodicNoise), NoiseControl | NoiseFollowsTone2);
         expect(meanings("R6")).toEqual(["periodic", "tone 2", "109.6 Hz", "A2 -6c"]);
+        poke(...toneWrites(2, 0));
+        expect(meanings("R6")).toEqual(["periodic", "tone 2", "8.1 Hz", "inaudible"]);
     });
 
     it("names the latched register, which a write without its top bit set goes to", () => {
@@ -91,6 +93,7 @@ describe("SoundChipPanel", () => {
 
     it("mutes a channel in what is heard from its toggle, and lifts every mute as it closes", () => {
         panel.floating.open();
+        expect(muteButton("tone 1").tabIndex).toBe(-1);
         muteButton("tone 1").click();
         muteButton("noise").click();
         expect(mutes.at(-1)).toEqual([false, true, false, true]);
