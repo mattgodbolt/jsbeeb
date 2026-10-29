@@ -47,6 +47,7 @@ import { MediaWindow } from "./web/media-window.js";
 import { PanelArrangement } from "./web/floating-panel.js";
 import { SysViaPanel } from "./web/sysvia-panel.js";
 import { UserViaPanel } from "./web/uservia-panel.js";
+import { VideoUlaPanel } from "./web/video-ula-panel.js";
 import { cycleCount } from "./lockstep.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
@@ -337,7 +338,7 @@ const layout = new Layout({
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
 dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
-for (const DevicePanel of [SysViaPanel, UserViaPanel])
+for (const DevicePanel of [SysViaPanel, UserViaPanel, VideoUlaPanel])
     if (DevicePanel.fits(processor)) new DevicePanel({ cpu: processor, arrangement: panelArrangement });
 new DebugMenu({ arrangement: panelArrangement, dbgr });
 

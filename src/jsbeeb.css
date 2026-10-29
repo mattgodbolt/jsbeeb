@@ -1014,6 +1014,45 @@ small {
   background: #80d0d0;
 }
 
+.palette {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 12px;
+}
+
+.palette-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 20px;
+}
+
+.palette-index {
+  color: #f0d080;
+}
+
+.palette-swatch {
+  width: 2ch;
+  height: 14px;
+  border: 1px solid #666666;
+}
+
+.ula-palette .palette-label {
+  width: 13ch;
+  color: #cccccc;
+}
+
+.nula-palette .palette-label {
+  width: 9ch;
+  color: #cccccc;
+}
+
+.videoula-control .decoded-meaning {
+  width: 38ch;
+}
+
 .key-matrix table {
   border-collapse: collapse;
 }
