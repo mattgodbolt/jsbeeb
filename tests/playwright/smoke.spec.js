@@ -343,10 +343,7 @@ test("the disassembly and memory views fill their panels' height as they are res
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
 });
 
-test("a step part way through a drag leaves the panel being dragged where the pointer has it", async ({
-    beeb,
-    page,
-}) => {
+test("a step part way through a move or resize leaves the panel where the drag has it", async ({ beeb, page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await beeb.open();
     await beeb.expectScreenText(">");
