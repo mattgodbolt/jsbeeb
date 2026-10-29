@@ -5,6 +5,7 @@ import {
     Cpu65c02 as cpu65c02Opcodes,
     Cpu65c12 as cpu65c12Opcodes,
 } from "../../src/6502.opcodes.js";
+import { fake6502, fake65C02 } from "../../src/fake6502.js";
 
 describe("Disassemble6502", () => {
     const mem = new Uint8Array(0x10000);
@@ -120,33 +121,35 @@ describe("Disassemble6502", () => {
         ])("describes %s from the emulation's own tables", (_, opcodes, bytes, expected) => {
             mem.set(bytes, 0x2000);
             const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
-            const { registers: _registers, idempotent: _idempotent, ...instruction } = dis.instructionAt(0x2000);
-            expect(instruction).toEqual(expected);
+            expect(dis.instructionAt(0x2000)).toEqual(expected);
         });
 
         it.each([
-            ["LDA abs,Y", cpu6502Opcodes, 0xb9, "y", "anz", true],
-            ["TAX", cpu6502Opcodes, 0xaa, "a", "xnz", true],
-            ["CMP #", cpu6502Opcodes, 0xc9, "a", "nzc", true],
-            ["AND #", cpu6502Opcodes, 0x29, "a", "anz", true],
-            ["SEC", cpu6502Opcodes, 0x38, "", "c", true],
-            ["BEQ", cpu6502Opcodes, 0xf0, "z", "", true],
-            ["STA zp,X", cpu6502Opcodes, 0x95, "ax", "", true],
-            ["EOR #", cpu6502Opcodes, 0x49, "a", "anz", false],
-            ["INX", cpu6502Opcodes, 0xe8, "x", "xnz", false],
-            ["ADC #", cpu6502Opcodes, 0x69, "adc", "anvzc", false],
-            ["ROL A", cpu6502Opcodes, 0x2a, "ac", "anzc", false],
-            ["INC zp", cpu6502Opcodes, 0xe6, "", "nz", false],
-            ["PHA", cpu6502Opcodes, 0x48, "as", "s", false],
-            ["PLP", cpu6502Opcodes, 0x28, "s", "snvdizc", false],
-            ["JSR", cpu6502Opcodes, 0x20, "s", "s", false],
-            ["SMB0", cpu65c02Opcodes, 0x87, "", "", true],
-            ["*SLO zp", cpu6502Opcodes, 0x07, "a", "anzc", false],
-            ["an unknown opcode", cpu6502Opcodes, 0x02, "", "", false],
-        ])("says what %s reads and writes, and whether it settles", (_, opcodes, opcode, reads, writes, idempotent) => {
-            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
-            expect(dis.describeOpcode(opcode)).toMatchObject({
-                registers: { reads: [...reads], writes: [...writes] },
+            ["LDA abs,Y", fake6502, 0xb9, "y", "anz", true],
+            ["TAX", fake6502, 0xaa, "a", "xnz", true],
+            ["CMP #", fake6502, 0xc9, "a", "nzc", true],
+            ["AND #", fake6502, 0x29, "a", "anz", true],
+            ["SEC", fake6502, 0x38, "", "c", true],
+            ["BEQ", fake6502, 0xf0, "z", "", true],
+            ["STA zp,X", fake6502, 0x95, "ax", "", true],
+            ["EOR #", fake6502, 0x49, "a", "anz", false],
+            ["INX", fake6502, 0xe8, "x", "xnz", false],
+            ["ADC #", fake6502, 0x69, "adc", "anvzc", false],
+            ["ROL A", fake6502, 0x2a, "ac", "anzc", false],
+            ["INC zp", fake6502, 0xe6, "", "nz", false],
+            ["PHA", fake6502, 0x48, "as", "s", false],
+            ["PLP", fake6502, 0x28, "s", "snvdizc", false],
+            ["JSR", fake6502, 0x20, "s", "s", false],
+            ["SMB0", fake65C02, 0x87, "", "", true],
+            ["*SLO zp", fake6502, 0x07, "a", "anzc", false],
+            ["*LAX (zp,X), whose load moves its own pointer", fake6502, 0xa3, "ax", "axnz", false],
+            ["TSB zp", fake65C02, 0x04, "a", "z", false],
+            ["BRK, which clears D only on CMOS", fake65C02, 0x00, "snvdizc", "sdi", false],
+            ["an unknown opcode", fake6502, 0x02, "", "", false],
+        ])("measures what %s reads and writes, and whether it settles", (_, cpu, opcode, reads, writes, idempotent) => {
+            expect(cpu().disassembler.effects(opcode)).toEqual({
+                reads: [...reads],
+                writes: [...writes],
                 idempotent,
             });
         });

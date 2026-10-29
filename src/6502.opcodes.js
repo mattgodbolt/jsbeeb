@@ -267,9 +267,9 @@ function getOp(op, arg) {
         case "EOR":
             return { op: ["cpu.a = cpu.p.setzn(cpu.a ^ REG);"], read: true };
         case "AND":
-            return { op: ["cpu.a = cpu.p.setzn(cpu.a & REG);"], read: true, idempotent: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a & REG);"], read: true };
         case "ORA":
-            return { op: ["cpu.a = cpu.p.setzn(cpu.a | REG);"], read: true, idempotent: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a | REG);"], read: true };
         case "CMP":
             return {
                 op: ["cpu.p.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"],
@@ -406,13 +406,11 @@ function getOp(op, arg) {
             return {
                 op: ["const magic = 0xff;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
-                idempotent: true,
             };
         case "LXA": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
                 op: ["const magic = 0xee;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
-                idempotent: true,
             };
         case "SRE":
             return {
@@ -430,13 +428,11 @@ function getOp(op, arg) {
             return {
                 op: ["cpu.a = cpu.p.setzn(cpu.a & REG); cpu.p.c = cpu.p.n;"],
                 read: true,
-                idempotent: true,
             };
         case "ANE":
             return {
                 op: ["cpu.a = cpu.p.setzn((cpu.a | 0xee) & REG & cpu.x);"],
                 read: true,
-                idempotent: true,
             };
         case "ARR":
             return { op: "cpu.arr(REG);", read: true };
@@ -450,7 +446,6 @@ function getOp(op, arg) {
             return {
                 op: ["cpu.a = cpu.x = cpu.s = cpu.p.setzn(cpu.s & REG);"],
                 read: true,
-                idempotent: true,
             };
         case "RRA":
             return {
@@ -493,7 +488,6 @@ function getOp(op, arg) {
                 op: [`REG = REG & (${~(1 << (op[3] - "0"))});`],
                 read: true,
                 write: true,
-                idempotent: true,
             };
         case "SMB0":
         case "SMB1":
@@ -507,7 +501,6 @@ function getOp(op, arg) {
                 op: [`REG = REG | ${1 << (op[3] - "0")};`],
                 read: true,
                 write: true,
-                idempotent: true,
             };
         case "BBR0":
         case "BBR1":
@@ -1023,51 +1016,102 @@ function instructionLength(mode) {
     return mode.includes("abs") || mode === "zp,branch" ? 3 : 2;
 }
 
-const RegistersAndFlags = ["a", "x", "y", "s", "n", "v", "d", "i", "z", "c"];
-const Flags = RegistersAndFlags.slice(4);
-// What the CPU methods the generated code calls read and write, which the calling code cannot show.
-const CallEffects = [
-    { call: /cpu\.(?:adc|sbc|arr)\(/, reads: ["a", "d", "c"], writes: ["a", "n", "v", "z", "c"] },
-    { call: /cpu\.(?:push|pull)\(/, reads: ["s"], writes: ["s"] },
-    { call: /cpu\.brk\(/, reads: ["s", ...Flags], writes: ["s", "d", "i"] },
-    { call: /cpu\.p\.setzn\(/, reads: [], writes: ["n", "z"] },
-    { call: /cpu\.p\.setFromByte\(/, reads: [], writes: Flags },
-    { call: /cpu\.p\.asByte\(/, reads: Flags, writes: [] },
+const Registers = ["a", "x", "y", "s"];
+const FlagBits = { n: 0x80, v: 0x40, d: 0x08, i: 0x04, z: 0x02, c: 0x01 };
+const Flags = Object.keys(FlagBits);
+const ProbePc = 0x2000;
+// Whether an instruction settles can hang on the values it meets (TSB settles at once only if A's bits were already
+// set), so it runs from states unlike in every register, flag and memory byte, one of them with memory clear but
+// for its operands.
+const ProbeStates = [
+    { a: 0x5a, x: 0x3c, y: 0xc3, s: 0xe0, flags: 0x00, fill: (address) => (address * 7 + 0x35) & 0xff },
+    { a: 0xa5, x: 0xc3, y: 0x3c, s: 0x1f, flags: 0xff, fill: (address) => (address * 13 + 0x9a) & 0xff },
+    { a: 0x81, x: 0x7e, y: 0x18, s: 0x80, flags: 0x5a, fill: (address) => (address >> 8 === ProbePc >> 8 ? 0x70 : 0) },
 ];
-const Assignment = /cpu\.(?:p\.)?([axysnvdizc])\s*=(?!=)/g;
-const CompoundAssignment = /cpu\.(?:p\.)?([axysnvdizc])\s*(?:[-+*|&^]|<<|>>>?)=/g;
-const Mention = /cpu\.(?:p\.)?([axysnvdizc])\b/g;
+const UnknownEffects = { reads: [], writes: [], idempotent: false };
 
-/** The registers and flags the emulation code for an operation in `mode` reads and writes. */
-function registerEffects({ op, preop, read, write }, mode) {
-    const code = [preop ?? [], op].flat().join("\n");
-    const reads = new Set([...code.replace(Assignment, "").matchAll(Mention)].map(([, name]) => name));
-    const writes = new Set(
-        [...code.matchAll(Assignment), ...code.matchAll(CompoundAssignment)].map(([, name]) => name),
-    );
-    for (const effect of CallEffects.filter(({ call }) => call.test(code))) {
-        effect.reads.forEach((name) => reads.add(name));
-        effect.writes.forEach((name) => writes.add(name));
-    }
-    const index = mode.match(/([xy])\)?$/);
-    if (index) reads.add(index[1]);
-    if (mode === "A" && read) reads.add("a");
-    if (mode === "A" && write) writes.add("a");
-    return {
-        reads: RegistersAndFlags.filter((name) => reads.has(name)),
-        writes: RegistersAndFlags.filter((name) => writes.has(name)),
+/**
+ * Runs `instruction` once from `state` on a stand-in for `cpu`: the real CPU's methods (adc, push, brk...) over
+ * registers, flags and memory of its own, noting each register or flag read before the instruction writes it, and
+ * each one written.
+ */
+function runRecorded(cpu, instruction, state) {
+    const reads = new Set();
+    const writes = new Set();
+    const memory = new Map(state.memory);
+    const registers = { ...state };
+    const read = (name) => {
+        if (!writes.has(name)) reads.add(name);
     };
+    const register = (name, store) => ({
+        get: () => (read(name), registers[name]),
+        set: (value) => {
+            writes.add(name);
+            registers[name] = store(value);
+        },
+    });
+    const flags = {
+        setzn(value) {
+            this.n = value & 0x80;
+            this.z = !(value & 0xff);
+            return value & 0xff;
+        },
+        asByte: () => Flags.reduce((byte, flag) => (flags[flag] ? byte | FlagBits[flag] : byte), 0x30),
+        setFromByte(byte) {
+            for (const flag of Flags) this[flag] = byte & FlagBits[flag];
+        },
+    };
+    for (const flag of Flags) {
+        Object.defineProperty(flags, flag, register(flag, Boolean));
+        registers[flag] = !!(state.flags & FlagBits[flag]);
+    }
+    const readmem = (address) => memory.get(address & 0xffff) ?? state.fill(address & 0xffff);
+    const writemem = (address, value) => memory.set(address & 0xffff, value & 0xff);
+    const noop = () => {};
+    const stand = Object.create(cpu, {
+        ...Object.fromEntries(Registers.map((name) => [name, register(name, (value) => value & 0xff)])),
+        pc: { value: ProbePc, writable: true },
+        p: { value: flags },
+        readmem: { value: readmem },
+        readmemZpStack: { value: readmem },
+        writemem: { value: writemem },
+        writememZpStack: { value: writemem },
+        polltime: { value: noop },
+        polltimeAddr: { value: noop },
+        checkInt: { value: noop },
+        branch: { value: noop },
+        takeInt: { value: false, writable: true },
+    });
+    instruction(stand);
+    const flagsByte = Flags.reduce((byte, flag) => (registers[flag] ? byte | FlagBits[flag] : byte), 0);
+    const { a, x, y, s, fill } = registers;
+    return { reads, writes, state: { a, x, y, s, flags: flagsByte, fill, memory } };
 }
 
-const UnknownOpcode = {
-    mnemonic: "???",
-    mode: "implied",
-    length: 1,
-    accesses: [],
-    registers: { reads: [], writes: [] },
-    idempotent: false,
-    flow: "next",
-};
+function sameState(first, second) {
+    const sameMemory = [...second.memory].every(
+        ([address, value]) => (first.memory.get(address) ?? first.fill(address)) === value,
+    );
+    return ["a", "x", "y", "s", "flags"].every((name) => first[name] === second[name]) && sameMemory;
+}
+
+/** What `instruction` reads and writes of the registers and flags, and whether running it twice is running it once. */
+function measureEffects(cpu, instruction) {
+    const reads = new Set();
+    const writes = new Set();
+    let idempotent = true;
+    for (const state of ProbeStates) {
+        const once = runRecorded(cpu, instruction, { ...state, memory: [] });
+        const twice = runRecorded(cpu, instruction, once.state);
+        once.reads.forEach((name) => reads.add(name));
+        once.writes.forEach((name) => writes.add(name));
+        idempotent &&= sameState(once.state, twice.state);
+    }
+    const inOrder = (names) => [...Registers, ...Flags].filter((name) => names.has(name));
+    return { reads: inOrder(reads), writes: inOrder(writes), idempotent };
+}
+
+const UnknownOpcode = { mnemonic: "???", mode: "implied", length: 1, accesses: [], flow: "next" };
 
 /**
  * @typedef {"next" | "branch" | "jump" | "call" | "return" | "interrupt"} Flow
@@ -1076,9 +1120,6 @@ const UnknownOpcode = {
  * @property {string} mode the addressing mode, as the opcode tables spell it, or "implied"
  * @property {number} length in bytes, with its operand
  * @property {("read" | "write")[]} accesses what it does to the memory its operand addresses
- * @property {{reads: string[], writes: string[]}} registers of "a", "x", "y", "s" and the flags "n", "v", "d", "i",
- * "z", "c", including an index register a mode adds
- * @property {boolean} idempotent whether running it again at once, with memory as it left it, changes nothing more
  * @property {Flow} flow
  */
 
@@ -1087,20 +1128,13 @@ function describeOpcodes(opcodes) {
     const descriptions = [];
     for (const [opcode, text] of Object.entries(opcodes)) {
         const [mnemonic, mode = "implied"] = text.split(" ");
-        const op = getOp(mnemonic, mode === "implied" ? undefined : mode);
-        const { read, write, flow } = op;
+        const { read, write, flow } = getOp(mnemonic, mode === "implied" ? undefined : mode);
         const memory = !ModesWithoutMemoryOperand.has(mode);
-        const registers = registerEffects(op, mode);
-        const accesses = [...(memory && read ? ["read"] : []), ...(memory && write ? ["write"] : [])];
-        // Without a mark from getOp, only an instruction that reads none of what it writes is known to settle.
-        const feedsItself = registers.writes.some((name) => registers.reads.includes(name)) || accesses.length === 2;
         descriptions[Number(opcode)] = {
             mnemonic,
             mode,
             length: instructionLength(mode),
-            accesses,
-            registers,
-            idempotent: op.idempotent ?? !feedsItself,
+            accesses: [...(memory && read ? ["read"] : []), ...(memory && write ? ["write"] : [])],
             flow: flow ?? (mode.endsWith("branch") ? "branch" : "next"),
         };
     }
@@ -1108,11 +1142,25 @@ function describeOpcodes(opcodes) {
 }
 
 class Disassemble6502 {
-    constructor(cpu, opcodes, undocumented) {
+    constructor(cpu, opcodes, undocumented, compile) {
         this.cpu = cpu;
         this.opcodes = opcodes;
         this.undocumented = undocumented;
         this.descriptions = describeOpcodes(opcodes);
+        this.compile = compile;
+        this.measured = [];
+    }
+
+    /**
+     * What the opcode's emulation reads and writes of "a", "x", "y", "s" and the flags "n", "v", "d", "i", "z", "c"
+     * (a register only counts as read if it is read before being written), and whether running it again at once,
+     * with memory as it left it, changes nothing more. Measured by running it, on first asking.
+     * @returns {{reads: string[], writes: string[], idempotent: boolean}}
+     */
+    effects(opcode) {
+        if (!(opcode in this.opcodes)) return UnknownEffects;
+        this.measured[opcode] ??= measureEffects(this.cpu, this.compile(this.opcodes[opcode]));
+        return this.measured[opcode];
     }
 
     /** @returns {OpcodeDescription} */
@@ -1594,7 +1642,12 @@ ${indent}`)
     Runner.prototype.run = generate6502JumpTable();
 
     return {
-        disassembler: new Disassemble6502(cpu, opcodes, undocumented),
+        disassembler: new Disassemble6502(
+            cpu,
+            opcodes,
+            undocumented,
+            (text) => new Function("cpu", [getInstruction(text, true)].flat().join("\n")),
+        ),
         runInstruction: new Runner(),
         opcodes: opcodes,
         getInstruction: getInstruction,
