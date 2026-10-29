@@ -6,7 +6,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { decodedMeanings, decodedRow, domFromIndexHtml, teardownDom, ViaRegister } from "./helpers.js";
+import { decodedMeanings, decodedRow, teardownDom, ViaRegister } from "./helpers.js";
 
 const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, ACR, PCR, IER } = ViaRegister;
 const PortBLatchLines = 0x0f;
@@ -40,7 +40,6 @@ describe("SysViaPanel", () => {
         });
 
     beforeEach(() => {
-        domFromIndexHtml("peripherals-panel");
         scheduler = new Scheduler();
         cpu = { interrupt: 0 };
         arrangement = new PanelArrangement(() => window.localStorage);
