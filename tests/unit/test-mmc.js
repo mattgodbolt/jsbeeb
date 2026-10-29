@@ -62,6 +62,13 @@ describe("ZIP round-trip", () => {
     });
 });
 
+const CmdReg = 0xb400;
+
+function command(mmc, cmd) {
+    mmc.write(CmdReg, cmd);
+    return mmc.read(CmdReg);
+}
+
 describe("AtomMMC2", () => {
     function makeMockCpu() {
         return {
@@ -102,10 +109,30 @@ describe("AtomMMC2", () => {
         expect(retrieved.length).toBe(1);
         expect(retrieved[0].path).toBe("/README");
     });
+
+    const pad = (...pressed) => ({
+        gamepadButtons: Array.from({ length: 16 }, (_, button) => pressed.includes(button)),
+    });
+
+    it.each([
+        ["no pad", null, 0xff],
+        ["a pad not yet seen", {}, 0xff],
+        ["nothing pressed", pad(), 0xff],
+        ["up", pad(12), 0xf7],
+        ["down", pad(13), 0xfb],
+        ["left", pad(14), 0xfd],
+        ["right", pad(15), 0xfe],
+        ["fire", pad(0), 0xef],
+        ["up and fire", pad(12, 0), 0xe7],
+    ])("reads the joystick port, active low, with %s", (_, gamepad, expected) => {
+        const CmdReadPort = 0xa2;
+        const mmc = new AtomMMC2(makeMockCpu());
+        mmc.attachGamepad(gamepad);
+        expect(command(mmc, CmdReadPort)).toBe(expected);
+    });
 });
 
 describe("AtomMMC2 file handles", () => {
-    const CmdReg = 0xb400;
     const LatchReg = 0xb401;
     const ReadDataReg = 0xb402;
     const WriteDataReg = 0xb403;
@@ -134,11 +161,6 @@ describe("AtomMMC2 file handles", () => {
         const mmc = new AtomMMC2({});
         mmc.SetMMCData(files);
         return mmc;
-    }
-
-    function command(mmc, cmd) {
-        mmc.write(CmdReg, cmd);
-        return mmc.read(CmdReg);
     }
 
     function sendBytes(mmc, bytes) {

@@ -235,7 +235,8 @@ GP.<gamepad control>=<key>
 
 By default the D-pad presses the "Snapper" keys (`Z`, `X`, `:`, `/`), the `A` button presses `RETURN` and `Start`
 presses `SPACE`. On the Atom the D-pad presses `Q`, `=`, `3` and `G` (up, down, left, right), `A` presses the right
-arrow and `Start` presses `SPACE`. To play Superior's Space Invaders on a pad, where `COPY` fires:
+arrow and `Start` presses `SPACE`; the D-pad and `A` also work the AtoMMC's joystick port, whichever of the two a
+game reads. To play Superior's Space Invaders on a pad, where `COPY` fires:
 
 [`https://bbc.xania.org/?disc1=sth:Superior/SpaceInvaders-Superior.zip&autoboot&GP.FIRE=COPY`](https://bbc.xania.org/?disc1=sth:Superior/SpaceInvaders-Superior.zip&autoboot&GP.FIRE=COPY)
 

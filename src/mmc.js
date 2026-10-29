@@ -80,6 +80,9 @@ const MMC_MCU_BUSY = 0x01;
 const MMC_MCU_READ = 0x02;
 const MMC_MCU_WROTE = 0x04;
 
+// The PIC's weak pull-ups hold an unpressed joystick line high.
+const JOYSTICK_IDLE = 0xff;
+
 const VSN_MAJ = 2;
 const VSN_MIN = 10;
 const FA_OPEN_EXISTING = 0;
@@ -873,7 +876,6 @@ export class AtomMMC2 {
         this.foldersSeen = [];
         this.dfn = 0;
         this.TRISB = 0;
-        this.PORTB = 0;
         this.LATB = 0;
 
         this.WFN = new WFN(this, cpu);
@@ -1018,18 +1020,14 @@ export class AtomMMC2 {
                         this.TRISB = this.byteValueLatch;
                         this.WriteDataPort(STATUS_OK);
                     } else if (received === CMD_READ_PORT) {
-                        let JOYSTICK = 0xff;
-                        const joyst = true;
-                        if (joyst && this.gamepad && this.gamepad.gamepadButtons !== undefined) {
-                            if (this.gamepad.gamepadButtons[15]) JOYSTICK ^= 1;
-                            if (this.gamepad.gamepadButtons[14]) JOYSTICK ^= 2;
-                            if (this.gamepad.gamepadButtons[13]) JOYSTICK ^= 4;
-                            if (this.gamepad.gamepadButtons[12]) JOYSTICK ^= 8;
-                            if (this.gamepad.gamepadButtons[0]) JOYSTICK ^= 0x10;
-                            this.WriteDataPort(JOYSTICK);
-                        } else {
-                            this.WriteDataPort(this.PORTB);
-                        }
+                        const buttons = this.gamepad?.gamepadButtons ?? [];
+                        let joystick = JOYSTICK_IDLE;
+                        if (buttons[15]) joystick ^= 1;
+                        if (buttons[14]) joystick ^= 2;
+                        if (buttons[13]) joystick ^= 4;
+                        if (buttons[12]) joystick ^= 8;
+                        if (buttons[0]) joystick ^= 0x10;
+                        this.WriteDataPort(joystick);
                     } else if (received === CMD_WRITE_PORT) {
                         this.LATB = this.byteValueLatch;
                         this.WriteDataPort(STATUS_OK);

@@ -98,6 +98,14 @@ describe("Machine", () => {
         expect(deps.printer.attach).toHaveBeenCalledWith(fakeProcessor.uservia);
     });
 
+    it("hands an Atom's AtoMMC the gamepad, so the pad works its joystick port", () => {
+        deps.model = { ...deps.model, isAtom: true };
+        deps.gamepad = {};
+        fakeProcessor.atommc = { attachGamepad: vi.fn() };
+        make();
+        expect(fakeProcessor.atommc.attachGamepad).toHaveBeenCalledWith(deps.gamepad);
+    });
+
     it("hides the filestore menu on a machine without Econet", () => {
         const machine = make();
         expect(machine.econet).toBeNull();
