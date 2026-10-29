@@ -24,9 +24,9 @@ const text = (selector) => document.querySelector(`#basic-panel ${selector}`).te
 const running = () => [text(".basic-line-number"), text(".basic-running")];
 
 describe.each([
-    { model: "B-DFS1.2", page: "&1900", otherRom: { number: 14, title: "DFS,NET" } },
-    { model: "Master", page: "&0E00", otherRom: { number: 9, title: "DFS" } },
-])("the BASIC panel on a running $model", ({ model, page, otherRom }) => {
+    { model: "B-DFS1.2", page: "&1900", basicStatementStart: 0x8bad, otherRom: { number: 14, title: "DFS,NET" } },
+    { model: "Master", page: "&0E00", basicStatementStart: 0x9015, otherRom: { number: 9, title: "DFS" } },
+])("the BASIC panel on a running $model", ({ model, page, basicStatementStart, otherRom }) => {
     let machine;
     let panel;
     let keys;
@@ -125,6 +125,15 @@ describe.each([
         expect(running()).toEqual(["60", " GOTO 50"]);
     });
 
+    it("keeps a run to the BASIC it started in when the OS notes another language", async () => {
+        await runToLine("60");
+        expect(keys.press("s")).toBe(true);
+        machine.writebyte(LanguageRomNumber, otherRom.number);
+        panel.update();
+        await finishRun();
+        expect(machine.processor.pc).toBe(basicStatementStart);
+    });
+
     it("marks a line the program does not have, and runs nothing", () => {
         const input = document.querySelector("#basic-panel .goto-addr");
         input.value = "45";
@@ -141,6 +150,7 @@ describe.each([
         );
         expect(document.querySelector(".basic-present").hidden).toBe(true);
         expect(document.querySelector("#basic-panel .basic-step").hidden).toBe(true);
+        expect(document.querySelector("#basic-panel .goto-form").hidden).toBe(true);
         expect(keys.press("s")).toBe(false);
     });
 });

@@ -155,8 +155,7 @@ export class BasicPanel {
     }
 
     /** Whether BASIC is about to start a statement of its program, and not of a command typed at its prompt. */
-    _atProgramStatement() {
-        const { basic, bank } = this._language;
+    _atProgramStatement({ basic, bank }) {
         const cpu = this._cpu;
         if (cpu.pc !== basic.statementStart || cpu.pagedBank !== bank) return false;
         const { page, top, reading } = readPointers(this._peek);
@@ -168,9 +167,15 @@ export class BasicPanel {
         return findLine(this._peek, readPointers(this._peek).page, Number(text)) ?? undefined;
     }
 
+    /** BASIC as it is when a run starts, which the run keeps to should another language take over. */
+    _runningBasic() {
+        return this._basic() ? { ...this._language } : null;
+    }
+
     stepStatement() {
-        if (!this._basic()) return;
-        this._runUntil(() => this._atProgramStatement());
+        const running = this._runningBasic();
+        if (!running) return;
+        this._runUntil(() => this._atProgramStatement(running));
     }
 
     /**
@@ -179,12 +184,13 @@ export class BasicPanel {
      * be edited while it runs.
      */
     runToLine(number) {
+        const running = this._runningBasic();
         const peek = this._peek;
         const lineNow = () => findLine(peek, readPointers(peek).page, number);
         const isIn = (line, address) => line !== null && holds(line, address);
         let wasInLine = isIn(lineNow(), readPointers(peek).reading);
         this._runUntil(() => {
-            if (!this._atProgramStatement()) return false;
+            if (!this._atProgramStatement(running)) return false;
             const line = lineNow();
             const { reading } = readPointers(peek);
             const cameFromElsewhere = !wasInLine;

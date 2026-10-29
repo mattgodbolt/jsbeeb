@@ -1024,10 +1024,6 @@ small {
   min-height: 0;
 }
 
-.basic-present[hidden] {
-  display: none;
-}
-
 .basic-absent {
   color: #aaaaaa;
 }
