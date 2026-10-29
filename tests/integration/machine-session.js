@@ -216,7 +216,7 @@ describe("MachineSession watching execution", () => {
 
     it("keeps the first hits a log breakpoint logs between drains, counting the rest", async () => {
         const id = session.addBreakpoint("execute", 0x0000, { end: 0xffff, action: "log" });
-        await session.runFor(CyclesPerInterlacedFrame);
+        await session.runFor(3 * CyclesPerInterlacedFrame);
         session.removeBreakpoint(id);
 
         const { hits, dropped } = session.drainBreakpointLog();
