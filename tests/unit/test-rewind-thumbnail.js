@@ -171,7 +171,9 @@ describe("executeUntilFrame", () => {
         const StoreThenLoop = [0x8d, 0x00, 0x30, 0x4c, 0x00, 0x20];
         processor.ramRomOs.set(StoreThenLoop, 0x2000);
         processor.pc = 0x2000;
-        const breakpoint = processor.debugInstruction.add(() => true);
+        // Turned off by a flag, not remove(), which would rebuild the look tables and hide a preview that failed to.
+        let breaking = true;
+        processor.debugInstruction.add(() => breaking);
         processor.debugWrite.add(() => true);
         const startFrame = video.frameCount;
 
@@ -179,7 +181,7 @@ describe("executeUntilFrame", () => {
 
         expect(video.frameCount).toBe(startFrame + 2);
         expect(processor.execute(1000)).toBe(false);
-        breakpoint.remove();
+        breaking = false;
         expect(processor.execute(1000)).toBe(false);
     });
 });
