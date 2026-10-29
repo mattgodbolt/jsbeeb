@@ -29,17 +29,19 @@ describe("watches", () => {
     });
 
     it.each([
-        ["= 5", 5, true],
-        ["= 5", 6, false],
-        ["!= $20", 0x20, false],
-        ["> &7f", 0x80, true],
-        ["<= 0x10", 0x10, true],
-        ["<10", 9, true],
-        ["65", 65, true],
-        ["$41", 64, false],
-        ["== 5", 5, true],
-        [">= 300", 299, false],
-    ])("holds a condition %s for %i: %s", (text, value, holds) => {
+        ["= 5", 5, true, "=5"],
+        ["= 5", 6, false, "=5"],
+        ["!= $20", 0x20, false, "!=$20"],
+        ["> &7f", 0x80, true, ">$7f"],
+        ["<= 0x10", 0x10, true, "<=$10"],
+        ["<10", 9, true, "<10"],
+        ["65", 65, true, "=65"],
+        ["$41", 64, false, "=$41"],
+        ["$41", 66, false, "=$41"],
+        ["== 5", 5, true, "=5"],
+        [">= 300", 299, false, ">=300"],
+    ])("holds a condition %s for %i: %s, shown as %s", (text, value, holds, shown) => {
+        expect(parseCondition(text)).toMatchObject({ text: shown });
         expect(parseCondition(text).holds(value)).toBe(holds);
     });
 
