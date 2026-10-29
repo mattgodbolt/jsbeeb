@@ -14,7 +14,15 @@ import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
-import { domFromIndexHtml, fakeAnimationFrames, sentEvents, stubResizeObserver, teardownDom } from "./helpers.js";
+import {
+    captureDownloads,
+    domFromIndexHtml,
+    fakeAnimationFrames,
+    sentEvents,
+    stubResizeObserver,
+    teardownDom,
+    toasts,
+} from "./helpers.js";
 
 const PanelElements = [
     "toolbar-panel",
@@ -508,6 +516,21 @@ describe("Debugger", () => {
     });
 
     describe("the memory window", () => {
+        const SysViaOra = 0xfe41;
+        const SysViaIfr = 0xfe4d;
+        const Ca1Flag = 0x02;
+
+        /** A BBC B, as the test CPU has no I/O, without the ROMs jsdom cannot fetch; its system VIA has CA1 flagged. */
+        const useModelB = async () => {
+            const beeb = findModel("B-DFS1.2");
+            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+            await cpu.initialise();
+            dbgr.setCpu(cpu);
+            stoppedLoop.cpu = cpu;
+            cpu.sysvia.setVBlankInt(true);
+            cpu.sysvia.setVBlankInt(false);
+        };
+
         it("shows the bytes and text around the address the form asks for, marked in its aligned row", () => {
             cpu.writemem(0x1234, 0x48);
             dbgr.debug(cpu.pc);
@@ -546,20 +569,148 @@ describe("Debugger", () => {
         });
 
         it("shows a hardware register without the side effects of reading it", async () => {
-            const SysViaOra = 0xfe41;
-            const SysViaIfr = 0xfe4d;
-            const Ca1Flag = 0x02;
-            // The test CPU has no I/O, so a BBC B, without the ROMs jsdom cannot fetch.
-            const beeb = findModel("B-DFS1.2");
-            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
-            await cpu.initialise();
-            dbgr.setCpu(cpu);
-            cpu.sysvia.setVBlankInt(true);
-            cpu.sysvia.setVBlankInt(false);
+            await useModelB();
             expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$FE41");
             expect(memTarget().textContent).toBe(hexbyte(cpu.peekmem(SysViaOra)));
+            expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
+        });
+
+        describe("edited in place", () => {
+            const editField = () => document.querySelector("#memory .mem-edit");
+            const type = (text, key, shiftKey) => {
+                editField().value = text;
+                editField().dispatchEvent(
+                    new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }),
+                );
+            };
+
+            beforeEach(() => {
+                cpu.writemem(0x1234, 0x48);
+                cpu.writemem(0x1235, 0x49);
+                dbgr.debug(cpu.pc);
+                goTo("goto-mem-addr-form", "$1234");
+            });
+
+            it("writes a byte on Tab or Shift-Tab, moving on, and on Enter, handing focus back", () => {
+                dbgr.watches.floating.open();
+                addWatch("$1234");
+                memByte(0x1234).click();
+                expect(document.activeElement).toBe(editField());
+                expect(editField().value).toBe("48");
+                type("a9", "Tab", false);
+                expect(cpu.peekmem(0x1234)).toBe(0xa9);
+                expect(memByte(0x1234).textContent).toBe("a9");
+                expect(editField().parentElement).toBe(memByte(0x1235));
+                type("7", "Tab", true);
+                expect(cpu.peekmem(0x1235)).toBe(0x07);
+                expect(editField().parentElement).toBe(memByte(0x1234));
+                type("1", "Enter", false);
+                expect(cpu.peekmem(0x1234)).toBe(0x01);
+                expect(watchRows()).toEqual([["$1234", "1", "dec", "\u00d7"]]);
+                expect(editField()).toBeNull();
+                expect(document.activeElement).toBe(document.body);
+            });
+
+            it("writes nothing on Escape, or for text that is not a byte", () => {
+                memByte(0x1234).click();
+                type("x1", "Enter", false);
+                expect(editField().classList.contains("is-invalid")).toBe(true);
+                type("12", "Escape", false);
+                expect(editField()).toBeNull();
+                expect(visible("memory-panel")).toBe(true);
+                expect(cpu.peekmem(0x1234)).toBe(0x48);
+            });
+
+            it("is given up unwritten when the view redraws under it", () => {
+                memByte(0x1234).click();
+                editField().value = "99";
+                document
+                    .getElementById("memory")
+                    .dispatchEvent(new WheelEvent("wheel", { deltaY: 20, cancelable: true }));
+                expect([editField(), document.activeElement, cpu.peekmem(0x1234)]).toEqual([null, document.body, 0x48]);
+            });
+
+            it("is offered only while stopped, and given up when the machine runs", () => {
+                memByte(0x1234).click();
+                stoppedLoop.go();
+                expect(editField()).toBeNull();
+                expect(document.activeElement).toBe(document.body);
+                memByte(0x1234).click();
+                expect(editField()).toBeNull();
+            });
+
+            it("writes as the CPU does, and only what was changed: ROM keeps its byte, saying so, and a device sees the write", async () => {
+                const OsRom = 0xc000;
+                await useModelB();
+                dbgr.debug(cpu.pc);
+                goTo("goto-mem-addr-form", "$FE41");
+                memByte(SysViaOra).click();
+                type(editField().value, "Tab", false);
+                expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
+                type("", "Escape", false);
+                goTo("goto-mem-addr-form", "$FE4D");
+                memByte(SysViaIfr).click();
+                type("7f", "Enter", false);
+                expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(0);
+                goTo("goto-mem-addr-form", "$C000");
+                memByte(OsRom).click();
+                type("ea", "Enter", false);
+                expect(cpu.peekmem(OsRom)).toBe(0);
+                expect(toasts()).toEqual([expect.stringContaining("$c000 is ROM")]);
+            });
+        });
+
+        it("saves the range asked for, offering the rows shown, as the bytes there", async () => {
+            const downloads = captureDownloads();
+            for (let i = 0; i < 4; ++i) cpu.writemem(0x1230 + i, 0x10 + i);
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$1234");
+            document.getElementById("memory-save-open").click();
+            const form = document.getElementById("memory-save-form");
+            const [from, to] = ["from", "to"].map((name) => form.elements.namedItem(name));
+            const rows = document.querySelectorAll("#memory > div");
+            const first = parseInt(addrOf(rows[0]), 16);
+            expect([from.value, to.value]).toEqual([`$${hexword(first)}`, `$${hexword(first + rows.length * 8 - 1)}`]);
+            to.value = "$1230";
+            from.value = "$1233";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(to.classList.contains("is-invalid")).toBe(true);
+            from.value = "$1230";
+            to.value = "$1233";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(form.hidden).toBe(true);
+            const [saved] = downloads();
+            expect(saved.name).toBe("memory-1230-1233.bin");
+            expect([...new Uint8Array(await saved.blob.arrayBuffer())]).toEqual([0x10, 0x11, 0x12, 0x13]);
+        });
+
+        it("closes the range on Escape or Save, handing focus back", () => {
+            const form = document.getElementById("memory-save-form");
+            const open = document.getElementById("memory-save-open");
+            const from = form.elements.namedItem("from");
+            dbgr.debug(cpu.pc);
+            open.click();
+            from.focus();
+            from.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+            expect([form.hidden, visible("memory-panel"), document.activeElement]).toEqual([true, true, document.body]);
+            open.click();
+            from.focus();
+            open.click();
+            expect([form.hidden, document.activeElement]).toEqual([true, document.body]);
+        });
+
+        it("saves registers without the side effects of reading them", async () => {
+            const downloads = captureDownloads();
+            await useModelB();
+            dbgr.debug(cpu.pc);
+            document.getElementById("memory-save-open").click();
+            const form = document.getElementById("memory-save-form");
+            form.elements.namedItem("from").value = "$FE40";
+            form.elements.namedItem("to").value = "$FE4F";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(downloads().map(({ name }) => name)).toEqual(["memory-fe40-fe4f.bin"]);
             expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
         });
 

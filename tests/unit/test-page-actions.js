@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PageActions } from "../../src/web/page-actions.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { captureDownloads, domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("PageActions", () => {
     let deps;
@@ -69,16 +69,13 @@ describe("PageActions", () => {
             expect(anchorClick).not.toHaveBeenCalled();
         });
 
-        it("saves the filestore's disc image", () => {
-            vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:scsi"), revokeObjectURL: vi.fn() });
-            const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
-                this.dataset.clicked = `${this.download} from ${this.href}`;
-            });
+        it("saves the filestore's disc image", async () => {
+            const downloads = captureDownloads();
             deps.processor.filestore = { scsi: new Uint8Array([1, 2, 3]) };
             make();
             click("download-filestore-link");
-            expect(anchorClick).toHaveBeenCalledTimes(1);
-            expect(anchorClick.mock.contexts[0].dataset.clicked).toBe("scsi.dat from blob:scsi");
+            expect(downloads().map(({ name }) => name)).toEqual(["scsi.dat"]);
+            expect([...new Uint8Array(await downloads()[0].blob.arrayBuffer())]).toEqual([1, 2, 3]);
         });
     });
 
