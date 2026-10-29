@@ -99,7 +99,7 @@ Ranked by how much they would bite.
 1. **Inputs arrive on host time.** The keyboard writes straight into the system VIA when the browser event
    fires (`Keyboard._press`), as does BREAK, and the Mac caps lock "tap" is released by a `setTimeout`
    (`Keyboard.handleMacCapsLock`). Gamepad keys are polled at the start of each tick (`EmulationLoop.advance`
-   into `src/web/gamepads.js:168`). All of it lands at whatever cycle the current tick happens to have reached.
+   into `GamePad.update`). All of it lands at whatever cycle the current tick happens to have reached.
    In v0, keys, pastes, BREAK and the caps lock tap go through the session instead (`Keyboard.setInput`), which
    stamps each with a cycle, and gamepad keys are not polled while a session runs.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes

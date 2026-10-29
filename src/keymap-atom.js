@@ -404,8 +404,8 @@ export function getKeyMapAtom(keyLayout) {
 }
 
 /**
- * The Atom's counterpart of `BbcGamepadKeys`: the AtoMMC's joystick keys, all in the matrix's column 0 (Q, =, 3 and G
- * for the D-pad, the right arrow for A), with SPACE on Start.
+ * The Atom's counterpart of `BbcGamepadKeys`: the keys in the matrix's column 0 (Q, =, 3 and G for the
+ * D-pad, the right arrow for A), with SPACE on Start.
  */
 export const AtomGamepadKeys = {
     0: ATOM.RIGHT,
