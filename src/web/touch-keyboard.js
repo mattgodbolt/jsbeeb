@@ -47,6 +47,13 @@ const BottomRow = (layerLabel) => [
 
 const Digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((d) => k(d, `K${d}`));
 
+/** Along the top on every layer, as the red keys are on the real machine, with BREAK apart at the right. */
+export const FunctionRow = [
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fn),
+    gap(0.5),
+    k("BREAK", null, 1.6, { cls: "fkey small", reset: true }),
+];
+
 /** The two layers, as rows of keys. The first row of each is what is swapped for the other. */
 export const Layers = {
     letters: [
@@ -61,11 +68,7 @@ export const Layers = {
         BottomRow("@:;"),
     ],
     symbols: [
-        [
-            ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fn),
-            gap(0.5),
-            k("BREAK", null, 1.6, { cls: "fkey small", reset: true }),
-        ],
+        Digits,
         [
             k("@", "AT"),
             k(":", "COLON_STAR", 1, { sub: "*" }),
@@ -100,8 +103,8 @@ export const Layers = {
 /** Every matrix position a layer can press, for checking the layers against the keymap. */
 export const keyNames = () =>
     new Set(
-        Object.values(Layers)
-            .flat(2)
+        [FunctionRow, ...Object.values(Layers).flat()]
+            .flat()
             .map((key) => key.key)
             .filter(Boolean),
     );
@@ -165,16 +168,15 @@ export class TouchKeyboard {
         hide.addEventListener("click", () => this.setOpen(false));
         bar.append(hide);
         root.append(bar);
+        const fixed = document.createElement("div");
+        fixed.className = "tk-fixed";
+        fixed.append(this.buildRow(FunctionRow));
+        root.append(fixed);
         for (const [name, rows] of Object.entries(Layers)) {
             const layer = document.createElement("div");
             layer.className = "tk-layer";
             layer.dataset.name = name;
-            for (const row of rows) {
-                const rowEl = document.createElement("div");
-                rowEl.className = "tk-row";
-                for (const def of row) rowEl.append(this.buildKey(def));
-                layer.append(rowEl);
-            }
+            for (const row of rows) layer.append(this.buildRow(row));
             root.append(layer);
         }
         root.append(this.buildLeds());
@@ -232,6 +234,13 @@ export class TouchKeyboard {
         for (const led of this.root.querySelectorAll("[data-led]")) {
             led.classList.toggle("on", !!state[led.dataset.led]);
         }
+    }
+
+    buildRow(row) {
+        const rowEl = document.createElement("div");
+        rowEl.className = "tk-row";
+        for (const def of row) rowEl.append(this.buildKey(def));
+        return rowEl;
     }
 
     buildKey(def) {

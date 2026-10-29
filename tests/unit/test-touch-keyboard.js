@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Layers, keyNames, matrixPosition, wantsTouchKeyboard } from "../../src/web/touch-keyboard.js";
+import { FunctionRow, Layers, keyNames, matrixPosition, wantsTouchKeyboard } from "../../src/web/touch-keyboard.js";
 
 describe("touch keyboard", () => {
     it("only presses keys the BBC matrix has", () => {
@@ -19,11 +19,21 @@ describe("touch keyboard", () => {
         expect(bottom("letters").slice(1)).toEqual(bottom("symbols").slice(1));
     });
 
-    it("keeps BREAK out of the letters layer, and apart from the function keys on the symbols layer", () => {
-        expect(Layers.letters.flat().some((key) => key.reset)).toBe(false);
-        const row = Layers.symbols[0];
-        const index = row.findIndex((key) => key.reset);
-        expect(row[index - 1].spacer).toBe(true);
+    it("has BREAK only in the function row, set apart from f9", () => {
+        expect(
+            Object.values(Layers)
+                .flat(2)
+                .some((key) => key.reset),
+        ).toBe(false);
+        const index = FunctionRow.findIndex((key) => key.reset);
+        expect(FunctionRow[index - 1].spacer).toBe(true);
+        expect(FunctionRow.slice(0, index - 1).map((key) => key.key)).toEqual(
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `F${n}`),
+        );
+    });
+
+    it("gives both layers the same number of rows, so the keyboard does not change height", () => {
+        expect(Layers.symbols.length).toBe(Layers.letters.length);
     });
 
     describe("wantsTouchKeyboard", () => {
