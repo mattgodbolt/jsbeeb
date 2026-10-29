@@ -62,6 +62,8 @@ const CMD_GET_PORT_DDR = 0xa0;
 const CMD_SET_PORT_DDR = 0xa1;
 const CMD_READ_PORT = 0xa2;
 const CMD_WRITE_PORT = 0xa3;
+// The PIC's weak pull-ups hold an unpressed line high.
+const JOYSTICK_IDLE = 0xff;
 const CMD_GET_FW_VER = 0xe0;
 const CMD_GET_BL_VER = 0xe1;
 const CMD_GET_CFG_BYTE = 0xf0;
@@ -873,7 +875,6 @@ export class AtomMMC2 {
         this.foldersSeen = [];
         this.dfn = 0;
         this.TRISB = 0;
-        this.PORTB = 0;
         this.LATB = 0;
 
         this.WFN = new WFN(this, cpu);
@@ -1018,18 +1019,14 @@ export class AtomMMC2 {
                         this.TRISB = this.byteValueLatch;
                         this.WriteDataPort(STATUS_OK);
                     } else if (received === CMD_READ_PORT) {
-                        let JOYSTICK = 0xff;
-                        const joyst = true;
-                        if (joyst && this.gamepad && this.gamepad.gamepadButtons !== undefined) {
-                            if (this.gamepad.gamepadButtons[15]) JOYSTICK ^= 1;
-                            if (this.gamepad.gamepadButtons[14]) JOYSTICK ^= 2;
-                            if (this.gamepad.gamepadButtons[13]) JOYSTICK ^= 4;
-                            if (this.gamepad.gamepadButtons[12]) JOYSTICK ^= 8;
-                            if (this.gamepad.gamepadButtons[0]) JOYSTICK ^= 0x10;
-                            this.WriteDataPort(JOYSTICK);
-                        } else {
-                            this.WriteDataPort(this.PORTB);
-                        }
+                        const buttons = this.gamepad?.gamepadButtons ?? [];
+                        let joystick = JOYSTICK_IDLE;
+                        if (buttons[15]) joystick ^= 1;
+                        if (buttons[14]) joystick ^= 2;
+                        if (buttons[13]) joystick ^= 4;
+                        if (buttons[12]) joystick ^= 8;
+                        if (buttons[0]) joystick ^= 0x10;
+                        this.WriteDataPort(joystick);
                     } else if (received === CMD_WRITE_PORT) {
                         this.LATB = this.byteValueLatch;
                         this.WriteDataPort(STATUS_OK);

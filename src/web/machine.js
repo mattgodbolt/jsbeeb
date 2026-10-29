@@ -114,7 +114,7 @@ export class Machine {
         });
 
         printer.attach(this.processor.uservia);
-        // The same pad presses the Atom's keys too; a game reads either the keys or this port.
+        // The same pad presses the Atom's keys too.
         if (model.isAtom) this.processor.atommc.attachGamepad(gamepad);
         this.processor.teletextAdaptor?.addEventListener("notice", showNotice);
         this.processor.acia.addEventListener("notice", showNotice);

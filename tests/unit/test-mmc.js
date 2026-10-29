@@ -102,6 +102,29 @@ describe("AtomMMC2", () => {
         expect(retrieved.length).toBe(1);
         expect(retrieved[0].path).toBe("/README");
     });
+
+    const pad = (...pressed) => ({
+        gamepadButtons: Array.from({ length: 16 }, (_, button) => pressed.includes(button)),
+    });
+
+    it.each([
+        ["no pad", null, 0xff],
+        ["a pad not yet seen", {}, 0xff],
+        ["nothing pressed", pad(), 0xff],
+        ["up", pad(12), 0xf7],
+        ["down", pad(13), 0xfb],
+        ["left", pad(14), 0xfd],
+        ["right", pad(15), 0xfe],
+        ["fire", pad(0), 0xef],
+        ["up and fire", pad(12, 0), 0xe7],
+    ])("reads the joystick port, active low, with %s", (_, gamepad, expected) => {
+        const CmdReg = 0xb400;
+        const CmdReadPort = 0xa2;
+        const mmc = new AtomMMC2(makeMockCpu());
+        mmc.attachGamepad(gamepad);
+        mmc.write(CmdReg, CmdReadPort);
+        expect(mmc.read(CmdReg)).toBe(expected);
+    });
 });
 
 describe("AtomMMC2 file handles", () => {

@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Machine, buildEmulationConfig } from "../../src/web/machine.js";
-import { AtomMMC2 } from "../../src/mmc.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const settings = (overrides = {}) => ({
@@ -99,24 +98,12 @@ describe("Machine", () => {
         expect(deps.printer.attach).toHaveBeenCalledWith(fakeProcessor.uservia);
     });
 
-    it.each([
-        ["up", 12, 0x08],
-        ["down", 13, 0x04],
-        ["left", 14, 0x02],
-        ["right", 15, 0x01],
-        ["fire", 0, 0x10],
-    ])("on an Atom, the gamepad's %s pulls its line of the AtoMMC joystick port low", (_, button, bit) => {
-        const CmdReg = 0xb400;
-        const CmdReadPort = 0xa2;
-        const gamepadButtons = new Array(16).fill(false);
-        gamepadButtons[button] = true;
+    it("hands an Atom's AtoMMC the gamepad, so the pad works its joystick port", () => {
         deps.model = { ...deps.model, isAtom: true };
-        deps.gamepad = { gamepadButtons };
-        fakeProcessor.atommc = new AtomMMC2({});
-        const mmc = make().processor.atommc;
-
-        mmc.write(CmdReg, CmdReadPort);
-        expect(mmc.read(CmdReg)).toBe(0xff ^ bit);
+        deps.gamepad = {};
+        fakeProcessor.atommc = { attachGamepad: vi.fn() };
+        make();
+        expect(fakeProcessor.atommc.attachGamepad).toHaveBeenCalledWith(deps.gamepad);
     });
 
     it("hides the filestore menu on a machine without Econet", () => {
