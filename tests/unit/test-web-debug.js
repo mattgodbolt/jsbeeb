@@ -1135,6 +1135,18 @@ describe("Debugger", () => {
                 expect(cpu.onFastPath).toBe(true);
             });
 
+            it("shows no watch as fired at a stop of another kind after one fired in a run outside the loop", () => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                dbgr.hide();
+                expect(cpu.execute(MachineSecond / 100)).toBe(false);
+                pickBreak(0, "off");
+                cpu.debugInstruction.add((pc) => pc === 0x2014);
+                stoppedLoop.tick(MachineSecond / 100);
+                expect(cpu.pc).toBe(0x2014);
+                expect(fired()).toEqual([]);
+            });
+
             it("stops only when a write makes it match a condition, refusing one it cannot read", () => {
                 addWatch("$70");
                 expect(breakWhen(0, "is 16").classList.contains("is-invalid")).toBe(true);

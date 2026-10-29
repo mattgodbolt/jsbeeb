@@ -30,7 +30,7 @@ export class WatchPanel {
         this._watches = [];
         this._cpu = null;
         this._writeHook = null;
-        /** @type {Watch | null} */
+        /** @type {{watches: Watch[], target: number} | null} */
         this._fired = null;
         /** @type {{opener: HTMLElement | null, popup: HTMLElement} | null} */
         this._openPopup = null;
@@ -111,10 +111,13 @@ export class WatchPanel {
         this._watchWrites();
     }
 
-    /** Highlights the watch that stopped the machine, opening the panel to show it, or none if none did. */
+    /** Highlights the watches that stopped the machine, opening the panel to show them, or none if none did. */
     showWhichFired() {
-        for (const watch of this._watches) watch.row.classList.toggle("watch-fired", watch === this._fired);
-        if (this._fired) this.floating.open();
+        const cpu = this._cpu;
+        // Only the stop the CPU is still in: a run outside the loop, such as a rewind preview, can fire one and go on.
+        const fired = cpu?.halted && this._fired?.target === cpu.targetCycles ? this._fired.watches : [];
+        for (const watch of this._watches) watch.row.classList.toggle("watch-fired", fired.includes(watch));
+        if (fired.length > 0) this.floating.open();
         this._fired = null;
     }
 
@@ -131,11 +134,12 @@ export class WatchPanel {
                 const stat = cpu.memStat[cpu.memStatOffset + (address >>> 8)];
                 if (stat === RomStat) return false;
                 const toRam = stat === RamStat;
-                const fired = this._watches.find(
+                const fired = this._watches.filter(
                     (watch) => watch.breaks && writeStops(this._peek, watch, address, byte, toRam),
                 );
-                if (fired) this._fired = fired;
-                return fired !== undefined;
+                if (fired.length === 0) return false;
+                this._fired = { watches: fired, target: cpu.targetCycles };
+                return true;
             });
         } else if (!breaking && this._writeHook) {
             this._writeHook.remove();
