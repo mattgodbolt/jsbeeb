@@ -716,7 +716,6 @@ describe("Debugger", () => {
                 keyPress("N");
                 steps.push(pc());
             }
-            // Some presses leave the program counter where it was, and one passes the instruction's start and runs it.
             expect(steps).toContain("2002");
             expect(steps.some((at) => at !== "2002")).toBe(true);
         });
