@@ -66,7 +66,7 @@ describe("DisassemblyView", () => {
             showMemory,
             offerWatch,
             runToCursor,
-            redraw: () => {},
+            refit: () => {},
         });
         video = new FakeVideo();
         await useCpu(null);

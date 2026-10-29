@@ -341,7 +341,7 @@ export class Debugger {
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
-            redraw: () =>
+            refit: () =>
                 this._redraw(() =>
                     this._loop?.isRunning() ? this._disassembly.update(this.cpu.pc) : this._disassembly.redraw(),
                 ),
