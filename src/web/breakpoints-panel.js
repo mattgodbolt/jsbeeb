@@ -306,9 +306,10 @@ export class BreakpointsPanel {
                 }
                 input.blur();
             });
-            // Moving the field into a redrawn row blurs it too; that is not leaving it.
+            // Moving the field into a redrawn row, or the window losing focus (say to the browser's console), blurs it
+            // without leaving it.
             input.addEventListener("blur", () => {
-                if (this._rendering) return;
+                if (this._rendering || !document.hasFocus()) return;
                 if (this._editing?.input === input) this._editing = null;
                 this._render();
             });
@@ -330,13 +331,27 @@ export class BreakpointsPanel {
         if (saved?.version !== StoreVersion || !Array.isArray(saved.breakpoints)) return;
         for (const spec of saved.breakpoints) {
             try {
-                this._breakpoints.add(Object.fromEntries(SavedFields.map((field) => [field, spec?.[field]])));
+                this._breakpoints.add(this._specOf(spec));
             } catch (error) {
-                // Kept for a machine with a socket for its bank; anything else wrong with it is dropped.
-                if (spec?.bank !== undefined) this._unrestored.push(spec);
+                if (this._fitsAnotherBank(spec)) this._unrestored.push(spec);
                 console.warn(`Could not put back a saved breakpoint: ${error.message}`);
             }
         }
+    }
+
+    /** Whether `spec` is a breakpoint but for its bank, which another model may have a socket for. */
+    _fitsAnotherBank(spec) {
+        if (spec?.bank === undefined) return false;
+        try {
+            this._breakpoints.check({ ...this._specOf(spec), bank: undefined });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    _specOf(saved) {
+        return Object.fromEntries(SavedFields.map((field) => [field, saved?.[field]]));
     }
 
     _save() {
@@ -344,7 +359,7 @@ export class BreakpointsPanel {
         const breakpoints = this._breakpoints
             .list()
             .filter(({ owner }) => owner === "user")
-            .map((breakpoint) => Object.fromEntries(SavedFields.map((field) => [field, breakpoint[field]])));
+            .map((breakpoint) => this._specOf(breakpoint));
         try {
             this._storage().setItem(
                 StorageKey,

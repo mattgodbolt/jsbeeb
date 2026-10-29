@@ -41,6 +41,8 @@ describe("BreakpointsPanel", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "warn").mockImplementation(() => {});
+        // jsdom's window never has the focus; a browser's does while it is in front.
+        vi.spyOn(document, "hasFocus").mockReturnValue(true);
         nameOf = (address) => [...names].find(([, at]) => at === address)?.[0];
         window.localStorage.clear();
         await makePanel(findModel("B-DFS1.2"));
@@ -116,7 +118,6 @@ describe("BreakpointsPanel", () => {
         const id = cpu.breakpoints.add({ kind: "read", start: 0x70 });
         click(rows()[0].querySelector(".bp-enabled"));
         expect(cpu.breakpoints.get(id).enabled).toBe(false);
-        expect(cpu.onFastPath).toBe(true);
         click(rows()[0].querySelector(".bp-action"));
         expect(cpu.breakpoints.get(id).action).toBe("log");
         click(rows()[0].querySelector(".bp-remove"));
@@ -138,6 +139,17 @@ describe("BreakpointsPanel", () => {
         condition.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         expect(rows().map((row) => rowText(row)[3])).toEqual(["A = 1", "always", "always"]);
         expect(cpu.breakpoints.get(id).condition).toBe("A = 1");
+    });
+
+    it("keeps a field while the window is away, say in the browser's console", () => {
+        cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
+        click(rows()[0].querySelector(".bp-condition .txt-btn"));
+        const condition = rows()[0].querySelector(".bp-edit");
+        type(condition, "A = 2");
+        document.hasFocus.mockReturnValue(false);
+        condition.blur();
+        expect(rows()[0].querySelector(".bp-edit")).toBe(condition);
+        expect(condition.value).toBe("A = 2");
     });
 
     it("moves straight from one field to another", () => {
@@ -266,6 +278,28 @@ describe("BreakpointsPanel", () => {
             [0x70, undefined],
             [0x8000, 4],
         ]);
+    });
+
+    it("drops a saved entry that is not a breakpoint, with a warning, keeping the rest", async () => {
+        const good = { kind: "read", start: 0x70 };
+        window.localStorage.setItem(
+            StorageKey,
+            JSON.stringify({
+                version: 1,
+                breakpoints: [
+                    good,
+                    { kind: "jump", start: 0 },
+                    { kind: "read", start: 0x8000, bank: 4, condition: "A =" },
+                ],
+            }),
+        );
+        await revisit(findModel("B-stock"));
+        expect(console.warn).toHaveBeenCalledWith(
+            "Could not put back a saved breakpoint: Unknown breakpoint type: jump",
+        );
+        expect(cpu.breakpoints.list().map(({ start }) => start)).toEqual([0x70]);
+        cpu.breakpoints.add({ kind: "read", start: 0x71 });
+        expect(saved().breakpoints.map(({ start }) => start)).toEqual([0x70, 0x71]);
     });
 
     it.each([

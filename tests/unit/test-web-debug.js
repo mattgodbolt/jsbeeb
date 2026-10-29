@@ -132,6 +132,18 @@ describe("Debugger", () => {
         expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: address, label })]);
     });
 
+    it("shows a breakpoint's address from the Breakpoints panel, in the disassembly or the memory view", () => {
+        dbgr.debug(cpu.pc);
+        dbgr.breakpoints.floating.open();
+        cpu.breakpoints.add({ kind: "execute", start: 0x3000 });
+        cpu.breakpoints.add({ kind: "write", start: 0x1900 });
+        const where = () => [...document.querySelectorAll("#breakpoints-panel .bp-where")];
+        where()[0].click();
+        expect(addrOf(currentRow())).toBe("3000");
+        where()[1].click();
+        expect(memTarget().dataset.addr).toBe(`${0x1900}`);
+    });
+
     it("logs each hit of a log breakpoint to the console", () => {
         cpu.breakpoints.add({ kind: "execute", start: 0x2000, action: "log" });
         cpu.execute(1);

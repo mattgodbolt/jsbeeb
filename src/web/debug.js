@@ -479,8 +479,8 @@ export class Debugger {
             },
             storage: breakpointStorage,
         });
-        // As for the watches, so a name typed while the machine runs can resolve.
-        this.breakpoints.floating.addEventListener("open", () => this._namesNow());
+        // So a name typed while the machine runs can resolve, and the panel names its breakpoints' addresses.
+        this.breakpoints.floating.addEventListener("open", () => this._matchSymbols());
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -576,6 +576,7 @@ export class Debugger {
     }
 
     _renameShown() {
+        if (this.cpu && this.breakpoints.floating.isOpen) this._matchSymbols();
         if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
         this._matchSymbols();
         this._refresh.drawNow();
