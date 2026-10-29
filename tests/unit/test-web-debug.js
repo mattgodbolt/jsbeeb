@@ -15,13 +15,13 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
 import {
+    captureDownloads,
     domFromIndexHtml,
     fakeAnimationFrames,
     sentEvents,
     stubResizeObserver,
     teardownDom,
     toasts,
-    captureDownloads,
 } from "./helpers.js";
 
 const PanelElements = [
@@ -495,6 +495,7 @@ describe("Debugger", () => {
     });
 
     describe("the memory window", () => {
+        const SysViaOra = 0xfe41;
         const SysViaIfr = 0xfe4d;
         const Ca1Flag = 0x02;
 
@@ -547,7 +548,6 @@ describe("Debugger", () => {
         });
 
         it("shows a hardware register without the side effects of reading it", async () => {
-            const SysViaOra = 0xfe41;
             await useModelB();
             expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
             dbgr.debug(cpu.pc);
@@ -611,10 +611,15 @@ describe("Debugger", () => {
                 expect(editField()).toBeNull();
             });
 
-            it("writes as the CPU does: ROM keeps its byte, saying so, and a register's device sees the write", async () => {
+            it("writes as the CPU does, and only what was changed: ROM keeps its byte, saying so, and a device sees the write", async () => {
                 const OsRom = 0xc000;
                 await useModelB();
                 dbgr.debug(cpu.pc);
+                goTo("goto-mem-addr-form", "$FE41");
+                memByte(SysViaOra).click();
+                type(editField().value, "Tab", false);
+                expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
+                type("", "Escape", false);
                 goTo("goto-mem-addr-form", "$FE4D");
                 memByte(SysViaIfr).click();
                 type("7f", "Enter", false);
@@ -649,6 +654,21 @@ describe("Debugger", () => {
             const [saved] = downloads();
             expect(saved.name).toBe("memory-1230-1233.bin");
             expect([...new Uint8Array(await saved.blob.arrayBuffer())]).toEqual([0x10, 0x11, 0x12, 0x13]);
+        });
+
+        it("closes the range on Escape or Save, handing focus back", () => {
+            const form = document.getElementById("memory-save-form");
+            const open = document.getElementById("memory-save-open");
+            const from = form.elements.namedItem("from");
+            dbgr.debug(cpu.pc);
+            open.click();
+            from.focus();
+            from.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+            expect([form.hidden, visible("memory-panel"), document.activeElement]).toEqual([true, true, document.body]);
+            open.click();
+            from.focus();
+            open.click();
+            expect([form.hidden, document.activeElement]).toEqual([true, document.body]);
         });
 
         it("saves registers without the side effects of reading them", async () => {

@@ -202,6 +202,7 @@ class MemoryView {
     /**
      * Puts a field over the byte at `address`, bringing it into view if need be. Tab hands `write` its new value and
      * moves on to the next byte (Shift-Tab, the one before); Enter hands it over and leaves, and Escape just leaves.
+     * A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
      */
     edit(address, write) {
         if (!this._byteAt(address)) this.update(address);
@@ -212,7 +213,8 @@ class MemoryView {
         field.autocomplete = "off";
         field.spellcheck = false;
         field.setAttribute("aria-label", `New value for $${hexword(address)}`);
-        field.value = byte.textContent;
+        const was = byte.textContent;
+        field.value = was;
         byte.replaceChildren(field);
         field.addEventListener("blur", () => this.update(), { once: true });
         field.addEventListener("input", () => field.classList.remove("is-invalid"));
@@ -223,7 +225,7 @@ class MemoryView {
             field.classList.toggle("is-invalid", value === undefined);
             if (value === undefined) return;
             field.blur();
-            write(address, value);
+            if (field.value !== was) write(address, value);
             if (e.key === "Tab") this.edit((address + (e.shiftKey ? -1 : 1)) & 0xffff, write);
         });
         field.focus();
@@ -479,8 +481,8 @@ export class Debugger {
         const form = document.getElementById("memory-save-form");
         const [from, to] = [form.elements.namedItem("from"), form.elements.namedItem("to")];
         const close = () => {
-            form.hidden = true;
             if (form.contains(document.activeElement)) document.activeElement.blur();
+            form.hidden = true;
         };
         document.getElementById("memory-save-open").addEventListener("click", () => {
             if (!form.hidden) return close();
