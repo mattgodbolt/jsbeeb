@@ -1627,6 +1627,7 @@ describe("Debugger", () => {
                 ["removed", (id) => cpu.breakpoints.remove(id)],
                 ["disabled", (id) => cpu.breakpoints.update(id, { enabled: false })],
                 ["made to log", (id) => cpu.breakpoints.update(id, { action: "log" })],
+                ["moved", (id) => cpu.breakpoints.update(id, { start: 0x80 })],
             ])("stops breaking when its breakpoint is %s elsewhere", (_, change) => {
                 addWatch("$70");
                 pickBreak(0, "on change");
@@ -1665,6 +1666,13 @@ describe("Debugger", () => {
                 expect(watchRows()[0][3]).toBe("brk>=$10");
                 run();
                 expect(cpu.pc).toBe(0x200c);
+            });
+
+            it("tests a condition naming PC against the instruction that writes", () => {
+                addWatch("$70");
+                breakWhen(0, "= PC - $2000");
+                run();
+                expect(cpu.pc).toBe(0x2008);
             });
 
             it("gives the keyboard back when its choices close with the condition box still focused", () => {

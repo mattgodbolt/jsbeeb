@@ -66,6 +66,8 @@ describe("watches", () => {
         ["a write past its bytes", "hex16", null, 0x72, 0x00, true, false],
         ["a write making the condition hold", "hex16", "= $1200", 0x70, 0x00, true, true],
         ["a write leaving the condition false", "hex16", "= $1200", 0x70, 0x01, true, false],
+        ["a write one more than the whole value before", "hex16", "= old + 1", 0x70, 0x35, true, true],
+        ["a write two more than the whole value before", "hex16", "= old + 1", 0x70, 0x36, true, false],
         ["a device write of the same byte", "hex", null, 0x70, 0x34, false, true],
         ["a device write failing the condition", "hex", "= $05", 0x70, 0x06, false, false],
         ["a device write tested against the byte written", "hex16", "= $00", 0x71, 0x00, false, true],

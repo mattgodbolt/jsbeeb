@@ -19,7 +19,7 @@ const Accesses = ["execute", "read", "write"];
  * @property {number} [end] - the last address it covers; `start` if not given
  * @property {number} [bank] - only while this sideways bank is paged in where it is hit
  * @property {string} [condition]
- * @property {(address: number, value: number) => boolean} [accepts] - a test of its own, after the condition, for an
+ * @property {(address: number, value: number, pc: number) => boolean} [accepts] - a test of its own, after the condition, for an
  * owner whose rule a condition cannot say, such as a watch's
  * @property {number} [hitCount] - acts on this hit and every one after; 1 if not given
  * @property {boolean} [enabled] - true if not given
@@ -215,7 +215,7 @@ export class Breakpoints {
             if (address < entry.start || address > entry.end) continue;
             if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) continue;
             if (entry.test && !entry.test(cpu, pc, value, old)) continue;
-            if (entry.accepts && !entry.accepts(address, value)) continue;
+            if (entry.accepts && !entry.accepts(address, value, pc)) continue;
             if (++entry.hits < entry.hitCount) continue;
             const hit = {
                 id: entry.id,
