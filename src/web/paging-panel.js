@@ -81,40 +81,36 @@ export class PagingPanel {
             draw: () => this.update(),
         });
         this.floating = floating;
-        body.innerHTML = `<div class="paging-registers"></div><div class="paging-sockets"></div>`;
+        body.innerHTML = `
+            <div>
+                <div class="paging-registers"></div>
+                <div class="decoded-heading">Sockets</div>
+                <div class="socket-grid"></div>
+            </div>`;
         this._registers = new DecodedRegisters(body.querySelector(".paging-registers"), sections(isMaster));
-        this._sockets = this._socketTable(body.querySelector(".paging-sockets"), showBank);
+        this._sockets = this._socketGrid(body.querySelector(".socket-grid"), showBank);
         this.update();
     }
 
-    _socketTable(container, showBank) {
-        const table = document.createElement("table");
-        table.className = "decoded-registers socket-table";
-        const heading = table.createTBody().insertRow();
-        heading.className = "decoded-heading";
-        const headingCell = document.createElement("th");
-        headingCell.colSpan = 3;
-        headingCell.textContent = "Sockets";
-        heading.append(headingCell);
-        const body = table.createTBody();
+    _socketGrid(container, showBank) {
         const sockets = sidewaysBanks(this._cpu.model)
             .reverse()
             .map((bank) => {
-                const row = body.insertRow();
-                row.className = "socket";
-                row.title = `Show bank ${bankName(bank)} from &8000`;
-                const name = document.createElement("th");
+                const socket = document.createElement("div");
+                socket.className = "socket";
+                socket.title = `Show bank ${bankName(bank)} from &8000`;
+                const [name, kind, contents] = ["socket-bank", "socket-kind", "socket-contents"].map((className) => {
+                    const part = document.createElement("span");
+                    part.className = className;
+                    return part;
+                });
                 name.textContent = bankName(bank);
-                const kind = row.insertCell();
-                kind.className = "socket-kind";
                 kind.textContent = this._cpu.model.swram[bank] ? "RAM" : "ROM";
-                const contents = row.insertCell();
-                contents.className = "socket-contents";
-                row.prepend(name);
-                row.addEventListener("click", () => showBank(bank));
-                return { bank, row, contents };
+                socket.append(name, kind, contents);
+                socket.addEventListener("click", () => showBank(bank));
+                return { bank, socket, contents };
             });
-        container.append(table);
+        container.append(...sockets.map(({ socket }) => socket));
         return sockets;
     }
 
@@ -123,13 +119,13 @@ export class PagingPanel {
         /** @type {PagingState} */
         const state = { romsel: cpu.romsel, acccon: cpu.acccon, bank: cpu.pagedBank };
         this._registers.update(state);
-        for (const { bank, row, contents } of this._sockets) {
+        for (const { bank, socket, contents } of this._sockets) {
             const text = describeBank(cpu, bank);
             if (contents.textContent !== text) {
                 contents.textContent = text;
                 contents.title = text;
             }
-            row.classList.toggle("paged", bank === state.bank);
+            socket.classList.toggle("paged", bank === state.bank);
         }
     }
 }

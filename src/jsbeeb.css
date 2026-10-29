@@ -989,27 +989,47 @@ small {
   width: 32ch;
 }
 
-.socket-table .socket {
+/* Down the columns from the highest bank, as the video ULA's palette is laid out. */
+.socket-grid {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 2ch;
+}
+
+.socket {
+  display: grid;
+  grid-template-columns: max-content max-content 20ch;
+  gap: 0 1ch;
+  padding: 0 4px;
+  line-height: 20px;
   cursor: pointer;
 }
 
-.socket-table .socket:hover td {
+.socket:hover {
   text-decoration: underline;
 }
 
-.socket-table .socket.paged td {
+.socket.paged {
   color: #000000;
   background: #80d0d0;
+}
+
+.socket-bank {
+  color: #f0d080;
 }
 
 .socket-kind {
   color: #aaaaaa;
 }
 
-/* As wide as the longest title it is likely to show, so that loading a ROM never resizes the panel. */
+.socket.paged span {
+  color: inherit;
+}
+
+/* Its fixed width keeps a loaded ROM from resizing the panel. */
 .socket-contents {
-  width: 24ch;
-  max-width: 24ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

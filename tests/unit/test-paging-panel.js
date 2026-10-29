@@ -24,7 +24,7 @@ describe("PagingPanel", () => {
     const meanings = (name) => decodedMeanings("paging-panel", name);
     const sockets = () =>
         [...document.querySelectorAll("#paging-panel .socket")].map((row) => [
-            ...[...row.cells].map((cell) => cell.textContent),
+            ...[...row.children].map((part) => part.textContent),
             row.classList.contains("paged"),
         ]);
 
