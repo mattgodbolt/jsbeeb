@@ -229,7 +229,7 @@ export class WatchPanel {
         const conditionBox = document.createElement("input");
         conditionBox.type = "text";
         conditionBox.className = "form-control form-control-sm panel-field watch-condition";
-        conditionBox.placeholder = "or when, e.g. > $20";
+        conditionBox.placeholder = "e.g. 42, > $20";
         conditionBox.setAttribute("aria-label", `Stop the machine when ${label} becomes`);
         conditionBox.autocomplete = "off";
         conditionBox.addEventListener("input", () => conditionBox.classList.remove("is-invalid"));

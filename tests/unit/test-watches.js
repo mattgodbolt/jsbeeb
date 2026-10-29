@@ -35,12 +35,15 @@ describe("watches", () => {
         ["> &7f", 0x80, true],
         ["<= 0x10", 0x10, true],
         ["<10", 9, true],
+        ["65", 65, true],
+        ["$41", 64, false],
+        ["== 5", 5, true],
         [">= 300", 299, false],
     ])("holds a condition %s for %i: %s", (text, value, holds) => {
         expect(parseCondition(text).holds(value)).toBe(holds);
     });
 
-    it.each(["5", "== 5", "= $", "= 5x", "> -1"])("refuses the condition %s", (text) => {
+    it.each(["= $", "= 5x", "> -1", "=== 5", "=> 5"])("refuses the condition %s", (text) => {
         expect(parseCondition(text)).toBeUndefined();
     });
 

@@ -41,7 +41,7 @@ const Comparisons = {
     ">": (a, b) => a > b,
     ">=": (a, b) => a >= b,
 };
-const ConditionPattern = /^(!=|<=|>=|=|<|>)\s*(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+))$/i;
+const ConditionPattern = /^(!=|<=|>=|==|=|<|>)?\s*(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+))$/i;
 
 /**
  * @typedef {object} WatchCondition
@@ -50,14 +50,16 @@ const ConditionPattern = /^(!=|<=|>=|=|<|>)\s*(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+)
  */
 
 /**
- * A break's condition, such as `= 5`, `!= $20` or `> &7f`: decimal unless marked hex by `$`, `&` or `0x`.
+ * A break's condition, such as `= 5`, `!= $20` or `> &7f`: decimal unless marked hex by `$`, `&` or `0x`. A bare
+ * value, such as `5`, means `= 5`, and `==` is `=`.
  * @param {string} text
  * @returns {WatchCondition | undefined}
  */
 export function parseCondition(text) {
     const match = ConditionPattern.exec(text.trim());
     if (!match) return undefined;
-    const [, op, hex, dec] = match;
+    const [, typed, hex, dec] = match;
+    const op = typed === undefined || typed === "==" ? "=" : typed;
     const operand = hex === undefined ? parseInt(dec, 10) : parseInt(hex, 16);
     const compare = Comparisons[op];
     return {
