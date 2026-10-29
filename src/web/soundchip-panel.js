@@ -3,7 +3,6 @@ import { decodedPanel, DecodedRegisters, register, spelt } from "./decoded-regis
 import { EndEdge, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 120 };
-const ToneChannels = 3;
 const NoiseChannel = 3;
 const ChipClockHz = 4_000_000;
 const ToneClockHz = ChipClockHz / 32;
@@ -113,7 +112,7 @@ function channelSection(channel) {
 }
 
 const Sections = [
-    ...[...Array(ToneChannels + 1).keys()].map(channelSection),
+    ...ChannelNames.map((_, channel) => channelSection(channel)),
     {
         heading: "Latch",
         registers: [register("Latched", "The latched register", 8, ({ latched }) => latched, decodeLatch)],
