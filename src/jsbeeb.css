@@ -163,6 +163,7 @@ body {
   font-family: monospace;
 }
 
+.debug-labels,
 .debug-symbols,
 .panel-keys {
   flex: none;
@@ -171,10 +172,52 @@ body {
 }
 
 /* Fitted to the panel's width instead of setting it. */
+.debug-labels,
 .debug-symbols,
 .panel-keys {
   width: 0;
   min-width: 100%;
+}
+
+.label-file {
+  white-space: nowrap;
+}
+
+.label-bank {
+  margin-left: 2px;
+  padding: 0 4px;
+  border: 1px solid #555555;
+  border-radius: 3px;
+  background: #222222;
+  color: #dddddd;
+  font-size: inherit;
+}
+
+.label-banks.show {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  min-width: 0;
+  font-size: 12px;
+}
+
+.label-banks .dropdown-item {
+  padding: 2px 10px;
+  text-align: center;
+}
+
+.label-banks .dropdown-item:first-child {
+  grid-column: 1 / -1;
+}
+
+.label-forget {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: #aaaaaa;
+}
+
+.label-forget:hover {
+  color: #ffffff;
 }
 
 /* One line however many sets it credits, so that the panels attached below keep their place as it changes. */

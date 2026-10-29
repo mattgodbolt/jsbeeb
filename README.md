@@ -409,6 +409,13 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   error saying what is there. The ROMs `rom` loads go in the banks left over. The stock BBC B (`model=B-stock`) has
   only four ROM sockets, banks 12 to 15, so it takes only those, and of them only the two AUX sockets, 14 and 15, that
   BASIC and the DFS leave empty.
+- `labels=X` - loads the label file at URL or path `X` (which must allow cross-site requests) so the debugger shows
+  its names for addresses, ahead of the built-in symbol sets: BeebAsm's `-d` or `-dd` output (with `-labels`), VICE's
+  (`al C:1900 .start`, as VICE's `save_labels` and cc65's `-Ln` write them) or b-em's `name=$1900`. May be given
+  more than once. `labels.N=X` ties the file's names for &8000 to &BFFF to sideways bank `N`, named as for `rom.N`,
+  so they show only while that bank is paged in. A label file dropped on any debug panel (the debugger's own, the decoded peripheral panels or the watch panel) loads the same way, for
+  that page only; the line under the disassembly lists the files loaded, with the bank each is for and a button to
+  forget it.
 - `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in
   `public/benchmarks/workloads.json`, on the model it names there (e.g. `benchmark=elite`, or
   `benchmark=master-shadow&model=Master`) instead of starting as usual. It runs the workload unthrottled from its

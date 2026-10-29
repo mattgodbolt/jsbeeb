@@ -204,6 +204,8 @@ describe("parameterFor", () => {
         ["rom", Parameters.rom, undefined],
         ["rom.7", Parameters.romBank, "7"],
         ["ROM.f", Parameters.romBank, "F"],
+        ["labels", Parameters.labelFiles, "labels"],
+        ["labels.f", Parameters.labelFiles, "F"],
     ])("finds %s", (name, parameter, member) => {
         expect(parameterFor(name)).toEqual(member === undefined ? { parameter } : { parameter, member });
     });
@@ -328,6 +330,25 @@ describe("the rom. family", () => {
                 "rom.10=e.rom: bank 10 already has d.rom, so e.rom is not loaded.",
             ],
         });
+    });
+});
+
+describe("the labels family", () => {
+    it("takes labels for any bank, labels.N for bank N, and says when N isn't a bank", () => {
+        const labelFiles = [];
+        const params = parseQueryString(
+            "labels=https://example.com/Game.txt&labels.f=rom.txt&LABELS.7=a.txt&labels.7=b.txt&labels.G=c.txt",
+            urlParamType,
+        );
+        expect(processInputParams(params, { labelFiles })).toEqual([
+            'labels.G=c.txt: "G" is not a ROM bank, which is 0 to 15, or A to F in hex.',
+        ]);
+        expect(labelFiles).toEqual([
+            { url: "https://example.com/Game.txt", bank: null },
+            { url: "rom.txt", bank: 15 },
+            { url: "a.txt", bank: 7 },
+            { url: "b.txt", bank: 7 },
+        ]);
     });
 });
 
