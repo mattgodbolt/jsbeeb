@@ -296,7 +296,7 @@ export class Debugger {
             peek,
             () => ({ names: this._names, pc: this.cpu.pc }),
             (sets) => this._credit(this._credits.memory, sets),
-            () => this._redraw("memory"),
+            () => this._redraw(() => this._memoryView.update()),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
@@ -341,7 +341,7 @@ export class Debugger {
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
-            redraw: () => this._redraw("disassembly"),
+            redraw: () => this._redraw(() => this._disassembly.update(this._disassembly.cursor)),
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -505,11 +505,11 @@ export class Debugger {
     }
 
     /**
-     * Redraws one of its own panels, for a resize that changed how many rows it shows. Not through the refresh, whose
+     * Has a view redraw where it is, for a resize that changed how many rows it shows. Not through the refresh, whose
      * draw lays the panels out again, which part way through a drag would undo it.
      */
-    _redraw(id) {
-        if (this.cpu) OwnPanels.find((own) => own.id === id).show(this, this._disassemblyAt());
+    _redraw(redraw) {
+        if (this.cpu) redraw();
     }
 
     _showOpenPanels() {

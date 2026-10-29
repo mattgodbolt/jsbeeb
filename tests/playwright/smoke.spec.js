@@ -275,6 +275,7 @@ test("the disassembly and memory views fill their panels' height as they are res
                 fits: last.bottom - box.bottom < 1,
                 full: box.bottom - last.bottom < last.height,
                 creditHeight: container.parentElement.querySelector(".debug-symbols").offsetHeight,
+                drawn: rows.every((row) => row.matches("[data-addr]") || row.querySelector("[data-addr]") !== null),
             };
         });
     const dragBottom = async (view, dy) => {
@@ -306,6 +307,7 @@ test("the disassembly and memory views fill their panels' height as they are res
             highlightTop: opened.highlightTop,
             fits: true,
             full: true,
+            drawn: true,
         });
         expect((await panel.boundingBox()).height).toBe(openedHeight + 200);
     }
