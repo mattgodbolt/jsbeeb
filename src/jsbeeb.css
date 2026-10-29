@@ -984,6 +984,25 @@ small {
   width: 50ch;
 }
 
+.soundchip-registers .decoded-meaning {
+  width: 52ch;
+}
+
+.soundchip-mutes {
+  margin-top: 6px;
+  padding-left: 4px;
+  color: #aaaaaa;
+}
+
+.soundchip-mutes .decoded-bit {
+  margin-left: 6px;
+  font: inherit;
+}
+
+.soundchip-mutes .decoded-bit:not(.lit) {
+  background: transparent;
+}
+
 .decoded-value,
 .decoded-bit {
   display: inline-block;

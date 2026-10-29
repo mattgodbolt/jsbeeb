@@ -64,6 +64,8 @@ export class SoundChip {
         this.counter = new Float32Array(4);
         this.outputBit = [false, false, false, false];
         this.volume = new Float32Array(4);
+        /** By generator: a muted one is left out of the output, though the chip's state is unchanged. */
+        this.channelMuted = [false, false, false, false];
         this.generators = [
             this.toneChannel.bind(this),
             this.toneChannel.bind(this),
@@ -229,7 +231,7 @@ export class SoundChip {
         }
         if (this.enabled) {
             for (let i = 0; i < this.generators.length; ++i) {
-                this.generators[i](i, out, offset, length);
+                if (!this.channelMuted[i]) this.generators[i](i, out, offset, length);
             }
         }
         const alpha = this.dcAlpha;
@@ -243,6 +245,15 @@ export class SoundChip {
         }
         this.dcPrevIn = prevIn;
         this.dcPrevOut = prevOut;
+    }
+
+    /** The channel's attenuation as the chip was last told it, 0 (loudest) to 15 (silent). */
+    attenuation(channel) {
+        const volume = this.volume[channel];
+        let nearest = 0;
+        for (let i = 1; i < volumeTable.length; ++i)
+            if (Math.abs(volumeTable[i] - volume) < Math.abs(volumeTable[nearest] - volume)) nearest = i;
+        return nearest;
     }
 
     catchUp() {
@@ -601,25 +612,10 @@ export class InstrumentedSoundChip extends SoundChip {
         return {
             tone: [this.registers[0], this.registers[1], this.registers[2]],
             noise: this.registers[3],
-            volume: [
-                this._attenuationFromVolume(0),
-                this._attenuationFromVolume(1),
-                this._attenuationFromVolume(2),
-                this._attenuationFromVolume(3),
-            ],
+            volume: [this.attenuation(0), this.attenuation(1), this.attenuation(2), this.attenuation(3)],
             lfsr: this.lfsr,
             latchedRegister: this.latchedRegister,
         };
-    }
-
-    /** Convert internal float volume back to 0-15 attenuation. */
-    _attenuationFromVolume(channel) {
-        const v = this.volume[channel];
-        // volumeTable[15] = 0 (silent), volumeTable[0] = loudest
-        for (let i = 0; i < 16; i++) {
-            if (Math.abs(volumeTable[i] - v) < 0.001) return i;
-        }
-        return 15; // silent
     }
 }
 

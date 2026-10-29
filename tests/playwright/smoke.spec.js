@@ -617,6 +617,23 @@ test("the user VIA panel opens from the peripherals panel, names the printer and
     await expect(panel).toBeHidden();
 });
 
+test("the sound chip panel opens from the Debug menu, names a tone's note, and fits its content", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    const A440Writes = [0x8c, 0x11, 0x90];
+    await page.evaluate((writes) => writes.forEach((value) => window.processor.soundChip.poke(value)), A440Writes);
+    await beeb.togglePanel("soundchip");
+    const panel = page.locator("#soundchip-panel");
+    await expect(panel).toContainText("A4 +1c");
+    const fits = await panel
+        .locator(".panel-body")
+        .evaluate((body) => body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight);
+    expect(fits).toBe(true);
+});
+
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
     page,

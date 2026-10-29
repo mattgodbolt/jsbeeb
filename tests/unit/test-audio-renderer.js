@@ -303,6 +303,16 @@ describe("SoundChipProcessor rendering", () => {
         expect(() => proc.onMessage({ upTo: 0, events: [] })).toThrow(/Unknown sound command/);
     });
 
+    it("should leave a muted channel out of what is heard, and play it again once unmuted", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        const producer = startedWithTone(proc);
+        const heard = () => goertzelAmplitude(simulate(proc, producer, 0.1).output, ToneHz, OutputRate);
+        proc.onMessage({ command: "setChannelMutes", muted: [true, false, false, false] });
+        expect(heard()).toBeLessThan(0.01);
+        proc.onMessage({ command: "setChannelMutes", muted: [false, false, false, false] });
+        expect(heard()).toBeGreaterThan(0.1);
+    });
+
     it("should go silent when muted as the producer stops", () => {
         const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
