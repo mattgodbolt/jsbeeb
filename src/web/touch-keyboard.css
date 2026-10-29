@@ -107,8 +107,8 @@ body.touch-keyboard-open #leds {
 }
 
 #touch-keyboard .tk-glyph-f {
-  width: 0.3em;
-  height: 0.7em;
+  width: 0.376em;
+  height: 0.85em;
   vertical-align: baseline;
   fill: none;
   stroke: currentColor;
@@ -118,8 +118,9 @@ body.touch-keyboard-open #leds {
 }
 
 #touch-keyboard .tk-digit {
-  font-size: 0.52em;
-  margin-left: 0.05em;
+  font-size: 0.66em;
+  margin-left: 0.04em;
+  -webkit-text-stroke: 0.04em currentColor;
 }
 
 #touch-keyboard .tk-key.vertical {
