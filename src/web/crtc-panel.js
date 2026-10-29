@@ -83,7 +83,10 @@ function decodeSyncWidths(r3) {
     ];
 }
 
-const linesPerRow = ({ regs }) => ((regs[8] & 3) === InterlaceSyncAndVideo ? (regs[9] >>> 1) + 1 : regs[9] + 1);
+const interlacedVideo = ({ regs }) => (regs[8] & 3) === InterlaceSyncAndVideo;
+const linesPerRow = (state) => (interlacedVideo(state) ? (state.regs[9] >>> 1) + 1 : state.regs[9] + 1);
+/** Interlaced sync and video, R9 is two less than the row's scanlines across both fields (the 6845's datasheet). */
+const rowLines = (state) => (interlacedVideo(state) ? state.regs[9] + 2 : state.regs[9] + 1);
 
 function decodeVerticalTotal(r4, state) {
     const lines = (r4 + 1) * linesPerRow(state) + state.regs[5];
@@ -97,13 +100,13 @@ function decodeVerticalTotal(r4, state) {
 }
 
 function decodeScanlinesPerRow(r9, state) {
-    const perField = linesPerRow(state);
-    const text = perField === r9 + 1 ? `${r9 + 1} lines` : `${r9 + 1} lines, ${perField} a field`;
+    const lines = rowLines(state);
+    if (!interlacedVideo(state)) return [counted(`${lines} lines`, "R9 + 1 scanlines a row", "33 lines, 16 a field")];
     return [
         counted(
-            text,
-            "R9 + 1 scanlines a row; interlaced sync and video shows alternate ones in each field",
-            "32 lines, 16 a field",
+            `${lines} lines, ${linesPerRow(state)} a field`,
+            "R9 + 2 scanlines a row, interlaced sync and video showing alternate ones in each field",
+            "33 lines, 16 a field",
         ),
     ];
 }
@@ -138,9 +141,15 @@ function decodeCharacter(c0, { regs, inHSync, dispEnabled }) {
     ];
 }
 
-function decodeScanline(c9, { regs, evenField }) {
+function decodeScanline(c9, state) {
+    const { regs, evenField, rowAddress } = state;
     return [
-        counted(`line ${c9} of ${regs[9] + 1}`, "Scanlines into the row, counting to R9", "line 31 of 32"),
+        counted(
+            `line ${rowAddress} of ${rowLines(state)}`,
+            "Scanlines into the row, as the row address the video sees: C9, with the field's parity in bit 0 " +
+                "when interlaced sync and video",
+            "line 31 of 33",
+        ),
         lit(
             "odd field",
             "Interlaced, and the odd field, whose scanlines sit between the even field's",
@@ -227,19 +236,6 @@ const Sections = {
             register("C0", "The character counter", 8, (s) => s.horizCounter, decodeCharacter),
             register("C9", "The scanline counter", 8, (s) => s.scanlineCounter, decodeScanline),
             register("C4", "The row counter", 8, (s) => s.vertCounter, decodeRow),
-            register(
-                "C5",
-                "The vertical adjust counter",
-                8,
-                (s) => s.vertAdjustCounter,
-                (c5, { regs }) => [
-                    counted(
-                        `line ${c5} of ${regs[5]}`,
-                        "Scanlines into R5's adjust, while C4 shows it",
-                        "line 31 of 31",
-                    ),
-                ],
-            ),
             register("MA", "The memory address", 16, (s) => s.addr, decodeAddress),
         ],
     },
@@ -274,7 +270,6 @@ function crtcState(video) {
         horizCounter: video.horizCounter,
         scanlineCounter: video.scanlineCounter,
         vertCounter: video.vertCounter,
-        vertAdjustCounter: video.vertAdjustCounter,
         addr: video.addr,
         lineStartAddr: video.lineStartAddr,
         rowAddress: video.externalRowAddress(),

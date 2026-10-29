@@ -12,6 +12,7 @@ const MaValues = 0x4000;
 const ScanlineClocks = 128;
 const ScanlineCount = 312;
 const FrameClocks = ScanlineClocks * ScanlineCount;
+const Mode7LineClocks = 64;
 const SteadyCursor = 0x07;
 const HiddenCursor = 0x27;
 
@@ -73,7 +74,7 @@ describe("CrtcPanel", () => {
         panel.update();
         expect(meanings("R4")).toEqual(["31 rows, 312 lines"]);
         expect(meanings("R8")).toEqual(["interlace sync and video", "display delay 1", "cursor delay 2"]);
-        expect(meanings("R9")).toEqual(["19 lines, 10 a field"]);
+        expect(meanings("R9")).toEqual(["20 lines, 10 a field"]);
         expect(meanings("R12/13")).toEqual(["at &7c00", "-wrapped"]);
     });
 
@@ -104,21 +105,30 @@ describe("CrtcPanel", () => {
         while (!at(0, 2, 1)) video.polltime(1);
         panel.update();
         expect(meanings("C0")).toEqual(["char 0 of 128", "+displayed", "-hsync"]);
-        expect(meanings("C9")).toEqual(["line 2 of 8", expect.stringMatching(/odd field$/)]);
+        expect(meanings("C9")[0]).toBe("line 2 of 8");
         expect(meanings("C4")).toEqual(["row 1 of 39", "+displayed", "-vsync", "-adjust", "-dummy"]);
         expect(meanings("MA")).toEqual(["reads &3282", "row &3280"]);
     });
 
-    it("adds the dummy scanline to the even field only, and lights the odd field only while interlaced", () => {
+    it("counts MODE 7's rows in both fields' scanlines, adding the dummy scanline to the even field only, and lights the odd field only while interlaced", () => {
         program(video, Mode7);
         const inDummy = new Set();
         const fields = new Set();
-        for (let line = 0; line < 4 * ScanlineCount; ++line) {
-            video.polltime(ScanlineClocks);
+        const lines = new Set();
+        for (let line = 0; line < 8 * ScanlineCount; ++line) {
+            video.polltime(Mode7LineClocks);
             panel.update();
-            (video.inDummyRaster ? inDummy : fields).add(meanings("C9")[1]);
+            const [scanline, field] = meanings("C9");
+            (video.inDummyRaster ? inDummy : fields).add(field);
+            if (meanings("C4")[1] === "+displayed") lines.add(`${scanline} ${field}`);
         }
         expect([[...inDummy], [...fields].sort()]).toEqual([["-odd field"], ["+odd field", "-odd field"]]);
+        expect([...lines]).toEqual(expect.arrayContaining(["line 0 of 20 -odd field", "line 19 of 20 +odd field"]));
+        const parityMismatches = [...lines].filter((seen) => {
+            const [, line, odd] = seen.match(/^line (\d+) of 20 ([+-])odd field$/);
+            return Number(line) % 2 !== (odd === "+" ? 1 : 0);
+        });
+        expect(parityMismatches).toEqual([]);
         program(video, [...Mode7.slice(0, 8), 0x90]);
         const odd = new Set();
         for (let field = 0; field < 4; ++field) {
