@@ -1,9 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { checkSamePage, isOffsite, parseOptions, serve, throughput } from "../../../tools/browser-ab.js";
+import { checkSamePage, isOffsite, parseOptions, throughput } from "../../../tools/browser-ab.js";
 
 const Projects = [
     { name: "chrome", use: { channel: "chrome" } },
@@ -108,36 +105,5 @@ describe("isOffsite", () => {
         ["https://bbc.xania.org/", true],
     ])("%s is offsite: %s", (url, offsite) => {
         expect(isOffsite(new URL(url))).toBe(offsite);
-    });
-});
-
-describe("serve", () => {
-    let dir;
-    let server;
-    beforeEach(async () => {
-        dir = mkdtempSync(path.join(os.tmpdir(), "test-browser-ab-"));
-        mkdirSync(path.join(dir, "site", "benchmarks"), { recursive: true });
-        writeFileSync(path.join(dir, "site", "index.html"), "<p>page</p>");
-        writeFileSync(path.join(dir, "site", "benchmarks", "elite.json.gz"), "gz");
-        writeFileSync(path.join(dir, "secret.txt"), "outside");
-        server = await serve(path.join(dir, "site"));
-    });
-    afterEach(() => {
-        server.close();
-        rmSync(dir, { recursive: true, force: true });
-    });
-
-    it("serves the folder's index and files with their types", async () => {
-        const index = await fetch(server.url);
-        expect(index.headers.get("content-type")).toBe("text/html");
-        expect(await index.text()).toBe("<p>page</p>");
-        const snapshot = await fetch(`${server.url}benchmarks/elite.json.gz`);
-        expect(snapshot.headers.get("content-type")).toBe("application/gzip");
-        expect(snapshot.headers.get("content-encoding")).toBeNull();
-    });
-
-    it("serves nothing outside the folder", async () => {
-        expect((await fetch(`${server.url}%2e%2e%2fsecret.txt`)).status).toBe(403);
-        expect((await fetch(`${server.url}missing.js`)).status).toBe(404);
     });
 });

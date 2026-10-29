@@ -96,8 +96,9 @@ npm run benchmark:browser-ab -- <A> <B> [workload ...] [options]
 The same comparison in a browser, driving the page's `?benchmark=<workload>` mode. A and B are git refs, paths to
 checkouts (taken as for the Node runner) or paths to pages already built (a `dist` folder). Each checkout, a ref's
 worktree included, is built with its own `vite` into a folder of its own in `--work-dir`, without analytics, and
-removed afterwards; a built page is used as it is. Both sides are then served from the same in-process server on
-two loopback ports, with the same headers, so the only difference between them is the build. Nothing else is
+removed afterwards; a built page is used as it is. Both sides are then served by the runner's own Vite `preview()`,
+without either side's config, on two loopback ports with the same headers and no caching, so the only difference
+between them is the build. Nothing else is
 fetched: requests off the loopback address are refused. `npm run benchmark:browser-ab -- --help` lists the
 options.
 

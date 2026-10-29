@@ -2,14 +2,14 @@
 // Compares the emulator's speed in a browser between two builds, alternating fresh pages of each side's
 // `?benchmark=<workload>` until the ratio's confidence interval resolves. See usage() and docs/benchmarking.md.
 import { execFileSync } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { chromium, firefox, webkit } from "@playwright/test";
+import { preview } from "vite";
 
 import playwrightConfig from "../playwright.config.js";
 import {
@@ -40,22 +40,6 @@ const DiagnosticSides = { a: ["a"], b: ["b"], both: ["a", "b"] };
 const LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
 // For a page that never finishes, as one does when Chrome cannot reach the GPU that --gl hardware asks for.
 const SampleTimeoutMs = 5 * 60 * 1000;
-const ContentTypes = {
-    ".css": "text/css",
-    ".gz": "application/gzip",
-    ".html": "text/html",
-    ".ico": "image/x-icon",
-    ".jpg": "image/jpeg",
-    ".js": "text/javascript",
-    ".json": "application/json",
-    ".map": "application/json",
-    ".mp3": "audio/mpeg",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".txt": "text/plain",
-    ".wav": "audio/wav",
-    ".wasm": "application/wasm",
-};
 
 const Defaults = {
     project: "chrome",
@@ -205,39 +189,20 @@ function prepareSide(spec, { workDir, worktrees, dists }) {
     return { ...side, dist: build(side, workDir, dists) };
 }
 
-/** Serves `dir` on a port of its own on the loopback address, the same way for either side. */
-export function serve(dir) {
-    const root = path.resolve(dir);
-    const server = createServer((request, response) => {
-        let file;
-        try {
-            file = path.join(root, decodeURIComponent(new URL(request.url, "http://localhost").pathname));
-        } catch {
-            response.writeHead(400).end();
-            return;
-        }
-        if (file !== root && !file.startsWith(root + path.sep)) {
-            response.writeHead(403).end();
-            return;
-        }
-        if (existsSync(file) && statSync(file).isDirectory()) file = path.join(file, "index.html");
-        if (!existsSync(file)) {
-            response.writeHead(404).end();
-            return;
-        }
-        const contentType = ContentTypes[path.extname(file).toLowerCase()] ?? "application/octet-stream";
-        response.writeHead(200, { "Content-Type": contentType, "Cache-Control": "no-store" });
-        createReadStream(file)
-            .on("error", () => response.destroy())
-            .pipe(response);
+/**
+ * Serves `dir` on a port of its own on the loopback address, the same way for either side: the runner's Vite with
+ * no project config, so neither side's plugins or headers apply.
+ */
+async function serve(dir) {
+    const server = await preview({
+        configFile: false,
+        appType: "mpa",
+        logLevel: "warn",
+        build: { outDir: dir },
+        preview: { host: "127.0.0.1", port: 0, strictPort: true, headers: { "Cache-Control": "no-store" } },
     });
-    return new Promise((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, "127.0.0.1", () => {
-            const { address, port } = server.address();
-            resolve({ url: `http://${address}:${port}/`, close: () => server.close() });
-        });
-    });
+    const { address, port } = server.httpServer.address();
+    return { url: `http://${address}:${port}/`, close: () => server.close() };
 }
 
 /** Whether a request for `url` would leave the machine; nothing a workload runs comes from elsewhere. */
@@ -424,9 +389,11 @@ async function main() {
         for (const dist of dists) rmSync(dist, { recursive: true, force: true });
         dists.length = 0;
     };
+    // Vite's preview servers exit the process on SIGTERM as soon as they have closed, so nothing here awaits before
+    // the clean-up.
     const interrupted = async () => {
-        await browsers.closeAll().catch(() => {});
         cleanUp();
+        await browsers.closeAll().catch(() => {});
         process.exit(1);
     };
     process.once("SIGINT", interrupted);
