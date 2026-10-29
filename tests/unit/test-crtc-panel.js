@@ -12,7 +12,7 @@ const MaValues = 0x4000;
 const ScanlineClocks = 128;
 const ScanlineCount = 312;
 const FrameClocks = ScanlineClocks * ScanlineCount;
-const Mode7LineClocks = 64;
+const Mode7LineClocksAt2Mhz = 64;
 const SteadyCursor = 0x07;
 const HiddenCursor = 0x27;
 
@@ -116,7 +116,7 @@ describe("CrtcPanel", () => {
         const fields = new Set();
         const lines = new Set();
         for (let line = 0; line < 8 * ScanlineCount; ++line) {
-            video.polltime(Mode7LineClocks);
+            video.polltime(Mode7LineClocksAt2Mhz);
             panel.update();
             const [scanline, field] = meanings("C9");
             (video.inDummyRaster ? inDummy : fields).add(field);

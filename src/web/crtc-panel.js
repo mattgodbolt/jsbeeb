@@ -146,8 +146,8 @@ function decodeScanline(c9, state) {
     return [
         counted(
             `line ${rowAddress} of ${rowLines(state)}`,
-            "Scanlines into the row, as the row address the video sees: C9, with the field's parity in bit 0 " +
-                "when interlaced sync and video",
+            "Scanlines into the row, as the row address on the RA pins: C9, and under interlaced sync and video, " +
+                "the frame count's bit 0, which moves on to the next field's at R6",
             "line 31 of 33",
         ),
         lit(
