@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { SoundChip, AtomSoundChip, InstrumentedSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
+import {
+    SoundChip,
+    AtomSoundChip,
+    InstrumentedSoundChip,
+    SoundBufferSamples,
+    ToneCounterSteps,
+} from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { goertzelAmplitude } from "./helpers.js";
@@ -119,7 +125,7 @@ describe("SoundChip DC restoration", () => {
 
 describe("SoundChip tone period 0", () => {
     // A square wave lasts four samples per unit of period; periodic noise repeats every 15 of tone 2's waves.
-    const SamplesPerWave = 4 * 1024;
+    const SamplesPerWave = 4 * ToneCounterSteps;
 
     function risingEdgeSpacings(chip, samples) {
         const out = new Float32Array(samples);
@@ -132,7 +138,7 @@ describe("SoundChip tone period 0", () => {
     it.each([
         ["tone 2", [0xd0, 0xff], SamplesPerWave],
         ["periodic noise following tone 2", [0xdf, 0xe3, 0xf0], 15 * SamplesPerWave],
-    ])("should count 1024 for %s", (_, pokes, spacing) => {
+    ])("should count a period of 0 as the full counter for %s", (_, pokes, spacing) => {
         const { chip } = makeSoundChip();
         for (const value of [0xc0, 0x00, ...pokes]) chip.poke(value);
         expect(risingEdgeSpacings(chip, 5 * spacing)).toEqual(new Set([spacing]));
