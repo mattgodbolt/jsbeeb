@@ -147,6 +147,13 @@ describe("DisassemblyView", () => {
         expect(addrOf(currentRow())).toBe("2002");
     });
 
+    it("wraps past $ffff to $0000 below an instruction near the top of memory", () => {
+        view.update(0xfffe);
+        const addresses = rows().map((row) => Number(row.dataset.addr));
+        expect(Math.max(...addresses)).toBeLessThan(0x10000);
+        expect(addresses.at(-1)).toBeLessThan(0x100);
+    });
+
     it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {
         view.update(cpu.pc);
         const gutter = () => currentRow().querySelector(".bp_gutter");
