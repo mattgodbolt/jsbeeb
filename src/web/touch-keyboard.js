@@ -312,16 +312,22 @@ export class TouchKeyboard {
     press(evt) {
         if (evt.target.closest("button")) return;
         const el = evt.target.closest(".tk-key") ?? this.nearestKey(evt.clientX, evt.clientY);
-        if (!el || !this.loop.running || this.presses.held.has(evt.pointerId)) return;
+        if (!el || this.presses.held.has(evt.pointerId)) return;
         evt.preventDefault();
-        buzz();
         const { def } = el;
-        if (def.layer) {
-            this.showLayer(def.layer);
-            return;
-        }
+        if (def.layer) this.showLayer(def.layer);
+        else if (this.loop.running) this.presses.press(evt.pointerId, def.key, this.machineMs());
+        else return;
+        buzz();
         this.onAnyKeyDown();
-        this.presses.press(evt.pointerId, def.key, this.machineMs());
+        this.showHeld();
+    }
+
+    /** A touch's pointerdown does not count as a user gesture for starting audio, but its pointerup does. */
+    release(evt) {
+        if (!this.presses.held.has(evt.pointerId)) return;
+        this.onAnyKeyDown();
+        this.presses.release(evt.pointerId);
         this.showHeld();
     }
 
@@ -342,11 +348,6 @@ export class TouchKeyboard {
             }
         }
         return nearest;
-    }
-
-    release(evt) {
-        this.presses.release(evt.pointerId);
-        this.showHeld();
     }
 
     releaseAll() {

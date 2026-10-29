@@ -357,6 +357,8 @@ test.describe("on a phone", () => {
         await beeb.open();
         await expect(keyboard).toBeVisible();
         await expect(lights).toBeHidden();
+        const monitor = await page.locator("#cub-monitor").boundingBox();
+        expect(monitor.y + monitor.height).toBeLessThanOrEqual((await keyboard.boundingBox()).y);
 
         await turn(915, 412);
         await expect(keyboard).toBeHidden();
@@ -366,6 +368,7 @@ test.describe("on a phone", () => {
         await expect(keyboard).toBeVisible();
 
         await page.locator("#touch-keyboard .tk-hide").tap();
+        await expect(lights).toBeVisible();
         await turn(915, 412);
         await expect(toggle).toBeHidden();
         await turn(412, 915);
@@ -382,6 +385,15 @@ test.describe("on a phone", () => {
         const q = await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^Q$/ }).boundingBox();
         await page.touchscreen.tap(q.x + q.width + 1, q.y + q.height / 2);
         await beeb.expectScreenText(">Q");
+    });
+
+    test("the on-screen keyboard presses nothing while the machine is stopped", async ({ beeb, page }) => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        await page.evaluate(() => document.getElementById("debug-pause").click());
+        await beeb.expectHeld();
+        await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^A$/ }).tap();
+        expect(await page.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(false);
     });
 
     test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {
