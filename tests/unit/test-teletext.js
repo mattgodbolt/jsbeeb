@@ -57,14 +57,20 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         return bytes.map((_, index) => cellAt(index + PipelineDelay));
     }
 
-    function backgroundOnly(cell, backgroundIndex = 0) {
-        const background = teletext.colour[(backgroundIndex & 7) << 5];
-        return cell.every((pixel) => pixel === background);
-    }
+    // Indices into teletext.colour; pixels showing more than one colour are Mixed.
+    const plain = (background) => background << 5;
+    const solid = (foreground) => (foreground << 2) | 3;
+    const Blank = plain(Black);
+    const Mixed = null;
 
-    function solidOnly(cell, foregroundIndex, backgroundIndex = 0) {
-        const solid = teletext.colour[((backgroundIndex & 7) << 5) | ((foregroundIndex & 7) << 2) | 3];
-        return cell.every((pixel) => pixel === solid);
+    const paletteColour = (index) => (index === Mixed ? null : teletext.colour[index]);
+    const shownColour = (pixels) => (pixels.every((pixel) => pixel === pixels[0]) ? pixels[0] : null);
+
+    function expectCells(cells, expected) {
+        const indices = Object.keys(expected);
+        expect(Object.fromEntries(indices.map((i) => [i, shownColour(cells[i])]))).toEqual(
+            Object.fromEntries(indices.map((i) => [i, paletteColour(expected[i])])),
+        );
     }
 
     function endScanline() {
@@ -84,21 +90,6 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
     function endFrame() {
         teletext.setDEW(true);
         teletext.setDEW(false);
-    }
-
-    // Indices into teletext.colour; a cell showing more than one colour is null.
-    const plain = (background) => background << 5;
-    const solid = (foreground) => (foreground << 2) | 3;
-    const Blank = plain(Black);
-    const Mixed = null;
-
-    const uniformColour = (cell) => (cell.every((pixel) => pixel === cell[0]) ? cell[0] : null);
-
-    function expectCells(cells, expected) {
-        const indices = Object.keys(expected);
-        expect(Object.fromEntries(indices.map((i) => [i, uniformColour(cells[i])]))).toEqual(
-            Object.fromEntries(indices.map((i) => [i, expected[i] === Mixed ? null : teletext.colour[expected[i]]])),
-        );
     }
 
     // Codes 0, 16 and 27 are reserved, 10 and 11 drive a boxing output the BBC has nothing wired to,
@@ -238,7 +229,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             const bytes = [RedGraphics, SolidBlock, Space, Space, Space];
             const cellAt = paintCells(bytes, (index) => index === bytes.length - 1);
 
-            expect(solidOnly(cellAt(bytes.length - 1), Red)).toBe(true);
+            expect(shownColour(cellAt(bytes.length - 1))).toBe(paletteColour(solid(Red)));
         });
     });
 
@@ -249,7 +240,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
             const halfOf = (row) => row.map((cells) => [...cells[1]]);
             expect(halfOf(bottom)).not.toEqual(halfOf(top));
-            expect(bottom.every((cells) => backgroundOnly(cells[1]))).toBe(false);
+            expect(bottom.every((cells) => shownColour(cells[1]) === paletteColour(Blank))).toBe(false);
         });
 
         it("blanks a normal height character on the row carrying the bottom half", () => {
@@ -257,7 +248,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
             const bottom = renderCharacterRow([WhiteGraphics, SolidBlock]);
 
-            expect(bottom.every((cells) => backgroundOnly(cells[1]))).toBe(true);
+            expect(bottom.every((cells) => shownColour(cells[1]) === paletteColour(Blank))).toBe(true);
         });
     });
 
@@ -265,8 +256,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         const bytes = [WhiteGraphics, SolidBlock, Space, Space, Space];
         const cellAt = paintCells(bytes, () => true);
 
-        expect(backgroundOnly(cellAt(3))).toBe(true);
-        expect(solidOnly(cellAt(4), White)).toBe(true);
+        expectCells([cellAt(3), cellAt(4)], [Blank, solid(White)]);
     });
 
     it("can paint the second half of a cell on its own", () => {
@@ -312,7 +302,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
         let blanked = 0;
         for (let frame = 0; frame < 64; ++frame) {
-            if (backgroundOnly(renderCells([WhiteGraphics, Flash, SolidBlock])[2])) ++blanked;
+            if (shownColour(renderCells([WhiteGraphics, Flash, SolidBlock])[2]) === paletteColour(Blank)) ++blanked;
             endFrame();
         }
 
@@ -331,7 +321,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         for (const byte of [WhiteGraphics, ...Array(PipelineDelay + 1).fill(SolidBlock)]) teletext.logClocked(byte);
         teletext.showLatest(row * RowPixels + RowPixels - Spill, doubled, false);
         teletext.catchUp();
-        expect(solidOnly(drain.fb32.subarray(0, Spill), White)).toBe(true);
+        expect(shownColour(drain.fb32.subarray(0, Spill))).toBe(paletteColour(solid(White)));
         expect(drain.fb32.subarray(Spill).every((pixel) => pixel === 0)).toBe(true);
 
         const blackDrain = new VideoDrain(RowPixels, drainKind);
@@ -405,9 +395,9 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         }
 
         it.each([
-            ["blanks the next row", DoubleHeight, true],
-            ["leaves the next row alone", Space, false],
-        ])("given a double height code still in the pipeline at a row's last line, %s", (_, code, blanked) => {
+            ["blanks the next row", DoubleHeight, Blank],
+            ["leaves the next row alone", Space, solid(White)],
+        ])("given a double height code still in the pipeline at a row's last line, %s", (_, code, nextRowCell) => {
             const LinesPerRow = 10;
             const line = [Space, Space, Space, Space, Space];
             for (let i = 0; i < LinesPerRow - 2; ++i) logLine(line);
@@ -417,7 +407,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
             const cells = renderCells([WhiteGraphics, SolidBlock]);
 
-            expect(backgroundOnly(cells[1])).toBe(blanked);
+            expectCells(cells, { 1: nextRowCell });
         });
 
         it("counts a double height code that was only fed once a clocked byte runs it", () => {
@@ -430,7 +420,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
             const cells = renderCells([WhiteGraphics, SolidBlock]);
 
-            expect(backgroundOnly(cells[1])).toBe(true);
+            expectCells(cells, { 1: Blank });
         });
 
         it("forgets what it logged when a snapshot is restored", () => {
