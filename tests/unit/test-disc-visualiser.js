@@ -185,11 +185,12 @@ describe("DiscVisualiser", () => {
             fdc.drives[0].track = 20;
             fdc.drives[0].positionFraction = 0.25;
             make().zoomToHead(0);
+            pumpUntilScanned();
             const overlay = document.getElementById("disc-overlay");
             overlay.dispatchEvent(new MouseEvent("mousemove", { clientX: CanvasSize / 2, clientY: CanvasSize / 2 }));
             frames.run();
             expect(status()).toContain("6.0x");
-            expect(document.getElementById("disc-hover-where").textContent).toMatch(/^Track 20\b/);
+            expect(document.getElementById("disc-hover-where").textContent).toMatch(/^Track 20 · .* · (49|50)\.\d ms$/);
         });
     });
 });

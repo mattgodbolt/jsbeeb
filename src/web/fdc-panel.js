@@ -189,8 +189,16 @@ const IntelSections = {
 
 const WdCommandNames = spellingsOf(WdCommand);
 
-function wdCommandMeaning(value, { commandType, isVerify, isMulti, isSettle, isDeleted, stepRateMs }) {
-    if (!commandType) return [];
+/** The type of the command itself: a force interrupt with the controller idle leaves its last command in place. */
+function wdCommandType(command) {
+    if (command < WdCommand.readSector) return 1;
+    if (command < WdCommand.readAddress) return 2;
+    return 3;
+}
+
+function wdCommandMeaning(value, { commandType: typeInForce, isVerify, isMulti, isSettle, isDeleted, stepRateMs }) {
+    if (!typeInForce) return [];
+    const commandType = wdCommandType(value);
     const meanings = [spelt(spellName(WdCommand, value), `A type ${commandType} command`, WdCommandNames)];
     if (commandType === 1)
         meanings.push(
@@ -205,9 +213,9 @@ function wdCommandMeaning(value, { commandType, isVerify, isMulti, isSettle, isD
 
 const WdTypeIStatus = [
     [Status.motorOn, "motor", "The motor is on"],
-    [Status.writeProtected, "protected", "The disc is write protected"],
+    [Status.writeProtected, "WP", "The disc is write protected"],
     [Status.typeISpinUpDone, "spun up", "The motor has spun up"],
-    [Status.recordNotFound, "seek error", "The verify found no ID with the track number"],
+    [Status.recordNotFound, "seek err", "Seek error: the verify found no ID with the track number"],
     [Status.crcError, "CRC", "A CRC error in an ID"],
     [Status.typeITrack0, "track 0", "The head is over track 0"],
     [Status.typeIIndex, "index", "The index pulse"],
@@ -215,7 +223,7 @@ const WdTypeIStatus = [
 ];
 const WdTypeIIStatus = [
     [Status.motorOn, "motor", "The motor is on"],
-    [Status.writeProtected, "protected", "A write was refused: the disc is write protected"],
+    [Status.writeProtected, "WP", "A write was refused: the disc is write protected"],
     [Status.typeIIorIIIDeletedMark, "deleted", "The sector read had a deleted data mark"],
     [Status.recordNotFound, "not found", "The sector was not found"],
     [Status.crcError, "CRC", "A CRC error"],
@@ -329,7 +337,6 @@ export class FdcPanel {
      */
     constructor({ cpu, arrangement, visualiser }) {
         this._fdc = cpu.fdc;
-        this._lastDrive = 0;
         const { floating, body } = decodedPanel({
             id: "fdc",
             title: "Disc controller",
@@ -359,14 +366,24 @@ export class FdcPanel {
                 <div class="fdc-log"></div>
             </div>`;
         const part = (className) => body.querySelector(`.${className}`);
-        const sections = this._fdc.inspect().chip === "8271" ? IntelSections : WdSections;
+        const { chip } = this._fdc.inspect();
+        const sections = chip === "8271" ? IntelSections : WdSections;
+        const [commandSection, ...otherSections] = sections.command;
         this._registers = [
-            new DecodedRegisters(part("fdc-registers"), sections.command),
+            new DecodedRegisters(part("fdc-registers"), [
+                { ...commandSection, heading: `${chip} command` },
+                ...otherSections,
+            ]),
             new DecodedRegisters(part("fdc-drive"), [...sections.drive, HeadSection]),
         ];
-        part("fdc-zoom").addEventListener("click", () => visualiser.zoomToHead(this._lastDrive));
+        part("fdc-zoom").addEventListener("click", () => visualiser.zoomToHead(this._fdc.inspect().lastSelectedDrive));
 
         this._log = part("fdc-log");
+        this._followingLog = true;
+        this._log.addEventListener("scroll", () => {
+            const log = this._log;
+            this._followingLog = log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
+        });
         this._commandsButton = part("fdc-log-commands");
         this._statesButton = part("fdc-log-states");
         this._fdc.onLog = (line) => this._appendLog(line);
@@ -392,26 +409,24 @@ export class FdcPanel {
     }
 
     _appendLog(text) {
-        const log = this._log;
-        const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
         const line = document.createElement("div");
         line.textContent = text;
-        log.append(line);
-        if (log.childElementCount > MaxLogLines) log.firstElementChild.remove();
-        if (atBottom) log.scrollTop = log.scrollHeight;
+        this._log.append(line);
+        if (this._log.childElementCount > MaxLogLines) this._log.firstElementChild.remove();
     }
 
     update() {
         const state = this._fdc.inspect();
-        if (state.selectedDrive !== null) this._lastDrive = state.selectedDrive;
-        const drive = this._fdc.drives[this._lastDrive];
+        const drive = this._fdc.drives[state.lastSelectedDrive];
         state.head = {
-            drive: this._lastDrive,
+            drive: state.lastSelectedDrive,
             selected: state.selectedDrive !== null,
             side: drive.isSideUpper ? 1 : 0,
             track: drive.track,
             spinning: drive.spinning,
         };
         for (const registers of this._registers) registers.update(state);
+        // Scrolled here, once a frame, rather than as each line comes, which would lay the page out for every one.
+        if (this._followingLog) this._log.scrollTop = this._log.scrollHeight;
     }
 }

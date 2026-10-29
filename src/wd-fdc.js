@@ -199,6 +199,7 @@ export class WdFdc {
 
         /** @type {BaseDiscDrive|null} */
         this._currentDrive = null;
+        this._lastSelectedDrive = this._drives[0];
         this._isIndexPulse = false;
         this._isInterruptOnIndexPulse = false;
         this._isWriteTrackCrcSecondByte = false;
@@ -643,6 +644,7 @@ export class WdFdc {
         const drive = val & (Control.drive0 | Control.drive1) ? this._drives[val & Control.drive0 ? 0 : 1] : null;
         if (this._currentDrive !== drive) this._currentDrive?.notifySeekEnd();
         this._currentDrive = drive;
+        if (drive) this._lastSelectedDrive = drive;
         this._currentDrive?.selectSide(this._isSide(val));
 
         // Set up single or double density
@@ -1455,6 +1457,7 @@ export class WdFdc {
         this._currentDrive = null;
         if (this._controlRegister & Control.drive0 || this._controlRegister & Control.drive1) {
             this._currentDrive = this._drives[this._controlRegister & Control.drive0 ? 0 : 1];
+            this._lastSelectedDrive = this._currentDrive;
         }
         // A snapshot from before the drives shared the motor line has only the selected one turning.
         if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
@@ -1511,6 +1514,7 @@ export class WdFdc {
             state: this._state,
             timerState: this._timerState,
             selectedDrive: control & Control.drive0 ? 0 : control & Control.drive1 ? 1 : null,
+            lastSelectedDrive: this._drives.indexOf(this._lastSelectedDrive),
         };
     }
 }

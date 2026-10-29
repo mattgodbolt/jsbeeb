@@ -314,6 +314,7 @@ export class IntelFdc {
         this._readyTimeoutTicks = (ReadyTimeoutCounts * cpu.peripheralCyclesPerSecond) / ReadyClockHz;
         /** @type {BaseDiscDrive} */
         this._currentDrive = null;
+        this._lastSelectedDrive = this._drives[0];
         this._scheduler = scheduler;
         this._ready = false;
         this._readyPulses = 0;
@@ -1262,6 +1263,7 @@ export class IntelFdc {
         let drive = null;
         if (selectBits === DriveOut.select_0) drive = this._drives[0];
         else if (selectBits === DriveOut.select_1) drive = this._drives[1];
+        if (drive) this._lastSelectedDrive = drive;
 
         // LOAD HEAD gates each drive select (a 7438, IC79 on the Model B), so with it low no drive is selected
         this._currentDrive = driveOut & DriveOut.loadHead ? drive : null;
@@ -1809,6 +1811,7 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
         else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
         if (!(this._driveOut & DriveOut.loadHead)) this._currentDrive = null;
+        if (this._currentDrive) this._lastSelectedDrive = this._currentDrive;
 
         // Restore timer
         this._timerTask.cancel();
@@ -1865,6 +1868,7 @@ export class IntelFdc {
             driveOut: this._driveOut,
             trackRegisters: [regs[Registers.trackDrive_0], regs[Registers.trackDrive_1]],
             selectedDrive: selectBits === DriveOut.select_0 ? 0 : selectBits === DriveOut.select_1 ? 1 : null,
+            lastSelectedDrive: this._drives.indexOf(this._lastSelectedDrive),
         };
     }
 }

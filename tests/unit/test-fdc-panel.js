@@ -15,6 +15,8 @@ const IntelParamAddr = 1;
 const IntelSelect0 = 0x40;
 const IntelReadData = (0x04 << 2) | IntelSelect0 | 3;
 const IntelSeek = (0x0a << 2) | IntelSelect0 | 1;
+const IntelUnwiredAddr = 3;
+const MaxLogLines = 500;
 const OneSectorOf256 = 0x21;
 
 const WdControlAddr = 0;
@@ -24,6 +26,9 @@ const WdResetOff = 0x20;
 const WdDrive1 = 0x02;
 const WdSideUpper = 0x04;
 const WdSeekVerify12ms = 0x10 | 0x04 | 0x01;
+const WdReadSector = 0x80;
+const WdForceInterrupt = 0xd0;
+const PastAbortCycles = 1000;
 
 describe("FdcPanel", () => {
     let scheduler;
@@ -40,10 +45,10 @@ describe("FdcPanel", () => {
         await teardownDom();
     });
 
-    function panelFor(Fdc, ...extra) {
+    function panelFor(Fdc, debugFlags) {
         const cpu = fake6502();
         const drives = [0, 1].map((id) => new DiscDrive(id, scheduler, cpu.peripheralCyclesPerSecond));
-        const fdc = new Fdc(cpu, scheduler, drives, {}, ...extra);
+        const fdc = new Fdc(cpu, scheduler, drives, debugFlags, WdFdcVariant.wd1770);
         const panel = new FdcPanel({
             cpu: { fdc },
             arrangement: new PanelArrangement(() => window.localStorage),
@@ -57,7 +62,7 @@ describe("FdcPanel", () => {
     const logLines = () => [...part("fdc-log").children].map((line) => line.textContent);
 
     it("shows the 8271's command by name, its parameters by what they mean, and that it waits for the rest", () => {
-        const { fdc, panel } = panelFor(IntelFdc);
+        const { fdc, panel } = panelFor(IntelFdc, {});
         fdc.write(IntelCommandAddr, IntelReadData);
         fdc.write(IntelParamAddr, 5);
         fdc.write(IntelParamAddr, 2);
@@ -74,8 +79,8 @@ describe("FdcPanel", () => {
         expect(meanings("HEAD")).toEqual(["drive 0 side 0 track 0", "+selected", "-spinning"]);
     });
 
-    it("shows the 1770's registers, with the status bits named for the kind of command", () => {
-        const { fdc, panel } = panelFor(WdFdc, WdFdcVariant.wd1770);
+    it("shows the 1770's registers, with the status bits named for the kind of command in force", () => {
+        const { fdc, panel } = panelFor(WdFdc, {});
         fdc.write(WdControlAddr, WdResetOff | WdDrive1 | WdSideUpper);
         fdc.write(WdTrackAddr, 7);
         fdc.write(WdCommandAddr, WdSeekVerify12ms);
@@ -85,10 +90,22 @@ describe("FdcPanel", () => {
         expect(meanings("CTL")).toEqual(["-reset", "MFM", "+side 1", "+sel 1", "-sel 0"]);
         expect(meanings("STA")).toContain("-track 0");
         expect(meanings("HEAD")).toEqual(["drive 1 side 1 track 0", "+selected", "+spinning"]);
+        expect(document.querySelector("#fdc-panel .decoded-heading").textContent).toBe("WD1770 command");
+        fdc.write(WdCommandAddr, WdForceInterrupt);
+        scheduler.polltime(PastAbortCycles);
+        fdc.write(WdCommandAddr, WdReadSector);
+        panel.update();
+        expect(meanings("STA")).toEqual(expect.arrayContaining(["+busy", "-lost", "-DRQ"]));
+        fdc.write(WdCommandAddr, WdForceInterrupt);
+        scheduler.polltime(PastAbortCycles);
+        fdc.write(WdCommandAddr, WdForceInterrupt);
+        panel.update();
+        expect(meanings("CMD")).toEqual(["read sector", "-multi", "-settle"]);
+        expect(meanings("STA")).toContain("-track 0");
     });
 
     it("logs the controller's commands in the panel while asked, and its state changes too when ticked", () => {
-        const { fdc } = panelFor(IntelFdc);
+        const { fdc } = panelFor(IntelFdc, {});
         const commands = part("fdc-log-commands");
         const states = part("fdc-log-states");
         expect(commands.textContent).toBe("start");
@@ -110,10 +127,30 @@ describe("FdcPanel", () => {
         expect(logLines().filter((line) => /command 29 sel/.test(line))).toEqual([]);
     });
 
-    it("shows the head on the disc of the drive last selected", () => {
-        const { fdc, panel } = panelFor(WdFdc, WdFdcVariant.wd1770);
+    it("logs state changes by name", () => {
+        const { fdc } = panelFor(WdFdc, {});
+        part("fdc-log-states").click();
         fdc.write(WdControlAddr, WdResetOff | WdDrive1);
-        panel.update();
+        fdc.write(WdCommandAddr, WdReadSector);
+        expect(logLines()).toContainEqual(expect.stringMatching(/^WD1770: State idle -> spinUpWait /));
+    });
+
+    it("keeps the last lines of the log, among them the warnings the controller logs unasked", () => {
+        const { fdc } = panelFor(IntelFdc, {});
+        for (let value = 0; value <= MaxLogLines; ++value) fdc.write(IntelUnwiredAddr, value & 0xff);
+        expect(logLines()).toHaveLength(MaxLogLines);
+        expect(logLines()[0]).toBe("8271: Not supported: 0003=01");
+    });
+
+    it("shows the log as on when the page's flags turned it on", () => {
+        panelFor(IntelFdc, { logFdcCommands: true, logFdcStateChanges: true });
+        expect(part("fdc-log-commands").textContent).toBe("stop");
+        expect(part("fdc-log-states").getAttribute("aria-checked")).toBe("true");
+    });
+
+    it("shows the head on the disc of the drive last selected, even if it came and went while the panel was not drawn", () => {
+        const { fdc, panel } = panelFor(WdFdc, {});
+        fdc.write(WdControlAddr, WdResetOff | WdDrive1);
         fdc.write(WdControlAddr, WdResetOff);
         panel.update();
         expect(meanings("HEAD")).toContain("-selected");

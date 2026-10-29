@@ -42,6 +42,35 @@ const SysViaModeWrites = [
     [0xb, 0x60, "T2 counts PB6 pulses"],
     [0x0, 0x03, "keys: port A"],
 ];
+// [address, value, what the panel then says, if anything] for each disc controller: commands of each kind and shape of
+// parameters, with resets or force interrupts between them, so that every set of names a row can show is shown.
+const FdcModeWrites = {
+    "B-DFS1.2": [
+        [0, 0x53, null],
+        [1, 5, "waiting for parameters"],
+        [1, 2, null],
+        [1, 0x21, "1 × 256 bytes"],
+        [2, 1, null],
+        [2, 0, null],
+        [0, 0x63, null],
+        [1, 1, null],
+        [1, 0x10, "gap 3: 16"],
+        [2, 1, null],
+        [2, 0, null],
+        [0, 0x7a, null],
+        [1, 0x23, null],
+        [1, 0x48, "value &48"],
+    ],
+    Master: [
+        [0x24, 0x15, "MFM"],
+        [0x28, 0x15, "seek"],
+        [0x28, 0xd0, null],
+        [0x28, 0xb5, "deleted"],
+        [0x28, 0xd0, null],
+        [0x28, 0xc4, "read address"],
+        [0x28, 0xd0, null],
+    ],
+};
 const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.meta.url), "utf8");
 // The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
 const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
@@ -616,6 +645,48 @@ test("the user VIA panel opens from the peripherals panel, names the printer and
     await page.click('#peripherals-panel [data-opens="uservia-panel"]');
     await expect(panel).toBeHidden();
 });
+
+for (const [model, writes] of Object.entries(FdcModeWrites)) {
+    test(`the disc controller panel on the ${model} opens from the Debug menu, fits its content, and keeps its size as commands of every kind come and go and the log fills`, async ({
+        beeb,
+        page,
+    }) => {
+        await beeb.open(`?model=${model}`);
+        await beeb.expectScreenText(">");
+        await beeb.togglePanel("fdc");
+        await page.click("#fdc-panel .fdc-log-commands");
+        await page.evaluate(() => {
+            const body = document.querySelector("#fdc-panel .panel-body");
+            window.e2eSizes = new Set();
+            window.e2eSampling = true;
+            const sample = () => {
+                const fits = body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight;
+                window.e2eSizes.add(`${body.scrollWidth}x${body.scrollHeight}, fits: ${fits}`);
+                if (window.e2eSampling) requestAnimationFrame(sample);
+            };
+            sample();
+        });
+        await page.click("#debug-pause");
+        const shown = await page.evaluate(async (writes) => {
+            const panel = document.getElementById("fdc-panel");
+            const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+            const seen = [];
+            for (const [address, value, text] of writes) {
+                window.processor.fdc.write(address, value);
+                // Long enough for an aborted 1770 command to drop busy, and for the panel to see the machine move on.
+                window.processor.execute(2000);
+                await frame();
+                await frame();
+                if (text && panel.textContent.includes(text)) seen.push(text);
+            }
+            window.e2eSampling = false;
+            return seen;
+        }, writes);
+        expect(shown).toEqual(writes.map(([, , text]) => text).filter((text) => text));
+        await expect(page.locator("#fdc-panel .fdc-log")).not.toBeEmpty();
+        expect(await page.evaluate(() => [...window.e2eSizes])).toEqual([expect.stringMatching(/fits: true$/)]);
+    });
+}
 
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
