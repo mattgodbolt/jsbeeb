@@ -5,7 +5,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { UserVia } from "../../src/via.js";
 import { UserViaPanel } from "../../src/web/uservia-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { decodedMeanings, decodedRow, domFromIndexHtml, teardownDom, ViaRegister } from "./helpers.js";
+import { decodedMeanings, decodedRow, teardownDom, ViaRegister } from "./helpers.js";
 
 const { ORB, ORA, DDRB, DDRA, PCR } = ViaRegister;
 const PcrCa2PulseOutput = 0x0a;
@@ -17,7 +17,6 @@ describe("UserViaPanel", () => {
     let userPortInputs;
 
     beforeEach(() => {
-        domFromIndexHtml("peripherals-panel");
         scheduler = new Scheduler();
         userPortInputs = 0xff;
         via = new UserVia({ interrupt: 0 }, scheduler, false, { read: () => userPortInputs, write: () => {} });
