@@ -91,9 +91,9 @@ const NulaOffHeading = {
 
 const NulaColumn = `
     <div>
-        <div class="nula-registers"></div>
-        <div class="decoded-heading nula-palette-heading"></div>
-        <div class="videoula-palette nula-palette"></div>
+        <div class="videoula-nula-registers"></div>
+        <div class="decoded-heading videoula-nula-heading"></div>
+        <div class="videoula-palette videoula-nula-palette"></div>
     </div>`;
 
 /** Sixteen colours as swatches, each labelled with what it is, redrawn only when something changes. */
@@ -205,18 +205,18 @@ export class VideoUlaPanel {
         body.innerHTML = `
             <div>
                 <div class="videoula-control"></div>
-                <div class="decoded-heading ula-palette-heading"></div>
-                <div class="videoula-palette ula-palette"></div>
+                <div class="decoded-heading videoula-ula-heading"></div>
+                <div class="videoula-palette videoula-ula-palette"></div>
             </div>
             ${this._hasNula ? NulaColumn : ""}`;
         const part = (className) => body.querySelector(`.${className}`);
         this._control = new DecodedRegisters(part("videoula-control"), [ControlSection]);
-        this._ulaPalette = new Swatches(part("ula-palette"));
-        this._ulaHeading = part("ula-palette-heading");
+        this._ulaPalette = new Swatches(part("videoula-ula-palette"));
+        this._ulaHeading = part("videoula-ula-heading");
         if (this._hasNula) {
-            this._nulaRegisters = new DecodedRegisters(part("nula-registers"), [NulaSection]);
-            this._nulaPalette = new Swatches(part("nula-palette"));
-            this._nulaHeading = part("nula-palette-heading");
+            this._nulaRegisters = new DecodedRegisters(part("videoula-nula-registers"), [NulaSection]);
+            this._nulaPalette = new Swatches(part("videoula-nula-palette"));
+            this._nulaHeading = part("videoula-nula-heading");
         }
         this.update();
     }

@@ -46,8 +46,8 @@ describe("VideoUlaPanel", () => {
     it("is filled before it opens, so that it is laid out at its size", () => {
         makePanel(false);
         expect(meanings("CTRL")).toHaveLength(7);
-        expect(swatches("ula-palette")[0].label).toBe("white");
-        expect(document.querySelector("#videoula-panel .ula-palette-heading").textContent).toBe("Palette");
+        expect(swatches("videoula-ula-palette")[0].label).toBe("white");
+        expect(document.querySelector("#videoula-panel .videoula-ula-heading").textContent).toBe("Palette");
     });
 
     it("decodes the control register: cursor, clock rate, characters per line, teletext and flash", () => {
@@ -82,11 +82,11 @@ describe("VideoUlaPanel", () => {
         const BlueFlashing = (0x4 ^ 7) | 8;
         write(Palette, 0x00 | RedSteady);
         write(Palette, 0x30 | BlueFlashing);
-        expect(swatches("ula-palette")[0]).toEqual({ colour: "rgb(255, 0, 0)", label: "red" });
-        expect(swatches("ula-palette")[3]).toEqual({ colour: "rgb(0, 0, 255)", label: "blue/yellow" });
+        expect(swatches("videoula-ula-palette")[0]).toEqual({ colour: "rgb(255, 0, 0)", label: "red" });
+        expect(swatches("videoula-ula-palette")[3]).toEqual({ colour: "rgb(0, 0, 255)", label: "blue/yellow" });
         write(Control, 1);
-        expect(swatches("ula-palette")[3]).toEqual({ colour: "rgb(255, 255, 0)", label: "blue/yellow" });
-        expect(document.querySelector("#videoula-panel .nula-palette")).toBeNull();
+        expect(swatches("videoula-ula-palette")[3]).toEqual({ colour: "rgb(255, 255, 0)", label: "blue/yellow" });
+        expect(document.querySelector("#videoula-panel .videoula-nula-palette")).toBeNull();
     });
 
     it("shows NuLA's palette, palette mode and flash flags, and when a program switches it off", () => {
@@ -97,19 +97,19 @@ describe("VideoUlaPanel", () => {
         write(NulaPalette, 0x80);
         write(NulaControl, 0x95);
         const orange = { colour: "rgb(255, 136, 0)", label: "f80" };
-        expect(swatches("nula-palette")[9]).toEqual(orange);
-        expect(swatches("ula-palette")[2]).toEqual({ colour: orange.colour, label: "NuLA 9" });
-        expect(swatches("nula-palette")[8].label).toBe("000 flash");
+        expect(swatches("videoula-nula-palette")[9]).toEqual(orange);
+        expect(swatches("videoula-ula-palette")[2]).toEqual({ colour: orange.colour, label: "NuLA 9" });
+        expect(swatches("videoula-nula-palette")[8].label).toBe("000 flash");
         expect(meanings("R8")).toEqual(["+8", "-9", "+a", "+b"]);
         expect(meanings("R9")).toEqual(["-c", "+d", "-e", "+f"]);
         write(NulaControl, 0x8f);
-        expect(swatches("ula-palette")[2].label).toBe("NuLA 9/e");
-        const ulaHeading = document.querySelector("#videoula-panel .ula-palette-heading");
+        expect(swatches("videoula-ula-palette")[2].label).toBe("NuLA 9/e");
+        const ulaHeading = document.querySelector("#videoula-panel .videoula-ula-heading");
         expect(ulaHeading.textContent).toBe("Palette");
         write(NulaControl, 0x11);
         expect(meanings("R1")).toEqual(["+direct"]);
         expect(ulaHeading.textContent).toBe("Palette: bypassed");
-        const heading = document.querySelector("#videoula-panel .nula-palette-heading");
+        const heading = document.querySelector("#videoula-panel .videoula-nula-heading");
         expect(heading.textContent).toBe("NuLA palette");
         write(NulaControl, 0x50);
         expect(heading.textContent).toBe("NuLA palette: switched off");

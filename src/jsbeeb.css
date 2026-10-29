@@ -1039,12 +1039,12 @@ small {
   border: 1px solid #666666;
 }
 
-.ula-palette .videoula-palette-label {
+.videoula-ula-palette .videoula-palette-label {
   width: 13ch;
   color: #cccccc;
 }
 
-.nula-palette .videoula-palette-label {
+.videoula-nula-palette .videoula-palette-label {
   width: 9ch;
   color: #cccccc;
 }
