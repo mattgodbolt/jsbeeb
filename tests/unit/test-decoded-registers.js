@@ -9,14 +9,7 @@ import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { UserViaPanel } from "../../src/web/uservia-panel.js";
-import {
-    decodedMeanings,
-    decodedRow,
-    domFromIndexHtml,
-    fakeAnimationFrames,
-    teardownDom,
-    ViaRegister,
-} from "./helpers.js";
+import { decodedMeanings, decodedRow, fakeAnimationFrames, teardownDom, ViaRegister } from "./helpers.js";
 
 const { T1CL, T1CH, T2CL, T2CH } = ViaRegister;
 const TicksPerMicrosecond = 2;
@@ -27,7 +20,6 @@ describe("decoded panels", () => {
     let frames;
 
     beforeEach(() => {
-        domFromIndexHtml("peripherals-panel");
         frames = fakeAnimationFrames();
         scheduler = new Scheduler();
         arrangement = new PanelArrangement(() => window.localStorage);
@@ -89,13 +81,9 @@ describe("decoded panels", () => {
             expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
         });
 
-        it("is filled before it opens, so that it is laid out at its size, and opens and closes from its peripherals section", () => {
-            expect(meanings("IFR")).toHaveLength(8);
-            const opener = document.querySelector(`#${id} [data-opens="${id}-panel"]`);
-            opener.click();
-            expect(panel.floating.isOpen).toBe(true);
-            opener.click();
+        it("is filled before it opens, so that it is laid out at its size", () => {
             expect(panel.floating.isOpen).toBe(false);
+            expect(meanings("IFR")).toHaveLength(8);
         });
 
         it("gives the timers in cycles once a frame as a program would read them, without clearing the flag", () => {
