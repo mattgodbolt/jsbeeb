@@ -191,31 +191,38 @@ describe("Video6847 snapshot", () => {
         for (let i = 0; i < cycles; i++) video.polltime(1);
     }
 
-    function restoreInto(original) {
-        const restored = makeAtomVideo();
+    function restoreInto(original, restored) {
         restored.video.restoreState(original.video.snapshotState());
         restored.video.fb32.set(original.video.fb32);
         original.vblanks.length = 0;
+        restored.vblanks.length = 0;
         return restored;
+    }
+
+    function countDifferingPixels(a, b) {
+        let count = 0;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) count++;
+        return count;
     }
 
     function expectSameFrom(original, restored) {
         expect(restored.video.video6847.snapshotState()).toEqual(original.video.video6847.snapshotState());
         expect(restored.vblanks).toEqual(original.vblanks);
         // Counted rather than compared whole, so a failure does not diff a megabyte.
-        const fb = original.video.fb32;
-        expect(restored.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
+        expect(countDifferingPixels(restored.video.fb32, original.video.fb32)).toBe(0);
     }
 
     it("carries on exactly as the original does from any cycle of a row mid-picture", () => {
         const rowStart = Math.floor(CpuCyclesPerField + CpuCyclesPerLine * MidPictureLine);
         const rowCycles = Math.ceil(CpuCyclesPerLine * LinesPerRow);
+        // Reused, so each restore also has to overwrite whatever the last one ran into.
+        const restored = makeAtomVideo();
         for (let at = rowStart; at < rowStart + rowCycles; at++) {
             const original = makeAtomVideo();
             runCpuCycles(original.video, at);
             original.video.video6847.cpuAddrAccess(SnowAddr);
 
-            const restored = restoreInto(original);
+            restoreInto(original, restored);
             expect(restored.video.video6847).toMatchObject({ cpuAddr: SnowAddr, lastmode: LinesPerRowMode });
 
             for (const { video } of [original, restored]) runCpuCycles(video, 2 * rowCycles);
@@ -229,7 +236,7 @@ describe("Video6847 snapshot", () => {
         const original = makeAtomVideo();
         original.video.polltime(Math.floor(CpuCyclesPerField + CpuCyclesPerLine * FieldSyncLine));
 
-        const restored = restoreInto(original);
+        const restored = restoreInto(original, makeAtomVideo());
         expect(restored.video.video6847.inVSync).toBe(true);
 
         for (const { video } of [original, restored]) video.polltime(Math.floor(CpuCyclesPerField * 0.5));
