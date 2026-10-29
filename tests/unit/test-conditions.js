@@ -51,7 +51,8 @@ describe("compileCondition", () => {
         ["A < X", false],
         ["A > X", true],
         ["A <= 13", true],
-        ["A AND 8 = 8", true],
+        ["(A AND 8) = 8", true],
+        ["(A AND 2) = 2", false],
         ["X = 1 AND ?&71", true],
         ["(A = 13) = -1", true],
     ])("%s holds: %s", (text, expected) => {

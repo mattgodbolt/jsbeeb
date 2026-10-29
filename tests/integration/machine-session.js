@@ -179,7 +179,7 @@ describe("MachineSession watching execution", () => {
         await stopAtProgramStart();
         const logged = session.addBreakpoint("execute", ProgramPcs[1], { end: ProgramPcs[3], action: "log" });
         const stopping = session.addBreakpoint("execute", ProgramPcs[0], { condition: "A = 1", hitCount: 2 });
-        session.updateBreakpoint(stopping, { enabled: false });
+        session.updateBreakpoint(stopping, { enabled: false, type: "read", address: 0, kind: "read", start: 0 });
 
         await session.runFor(CyclesPerInterlacedFrame);
 
@@ -190,8 +190,28 @@ describe("MachineSession watching execution", () => {
         expect(session.drainBreakpointLog()).toEqual({ hits: [], dropped: 0 });
         expect(session.listBreakpoints()).toEqual([
             expect.objectContaining({ id: logged, type: "execute", address: ProgramPcs[1], end: ProgramPcs[3] }),
-            expect.objectContaining({ id: stopping, condition: "A = 1", hitCount: 2, enabled: false, hits: 0 }),
+            expect.objectContaining({
+                id: stopping,
+                type: "execute",
+                address: ProgramPcs[0],
+                condition: "A = 1",
+                hitCount: 2,
+                enabled: false,
+                hits: 0,
+            }),
         ]);
+    });
+
+    it("reports the byte a read-modify-write stores, after the 6502's dummy write of the old one", async () => {
+        const Counter = 0x1900;
+        const IncrementCounter = [0xee, Counter & 0xff, Counter >> 8, 0x60]; // INC &1900, RTS
+        session.writeMemory(Counter, [0x41]);
+        await stopAtProgramStart(IncrementCounter);
+        const id = session.addBreakpoint("write", Counter);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
     });
 
     it("keeps running whatever the watcher returns", async () => {

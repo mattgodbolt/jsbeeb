@@ -31,9 +31,10 @@ import { setNodeBasePath } from "./loader.js";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
-// Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
 const MaxLoggedHits = 10000;
 const BreakpointUpdateFields = ["bank", "end", "condition", "hitCount", "action", "enabled"];
+
+// Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
 const AccconShadowBit = 4;
 
 // Where the MOS keeps its read and write offsets into the keyboard buffer (buffer 0), which is empty when they
@@ -463,15 +464,15 @@ export class MachineSession {
     }
 
     /**
-     * Add a persistent breakpoint, one of the processor's `breakpoints`, which stays until removed and stops the
-     * run it fires in. Returns the breakpoint id.
+     * Add a persistent breakpoint, one of the processor's `breakpoints`, which stays until removed and, unless it
+     * logs, stops the run it fires in. Returns the breakpoint id.
      * @param {"execute"|"read"|"write"|"access"} type - access is a read or a write
      * @param {number} address
      * @param {Object} [opts]
      * @param {number} [opts.bank] only break while this sideways bank is paged in where it is hit (on a Master,
      *     not while ANDY is paged over &8000 to &8FFF)
      * @param {number} [opts.end] the last address it covers, for a range from `address`
-     * @param {string} [opts.condition] as the wiki's Debugger page describes, e.g. "A = &0D AND ?&70 <> 0"
+     * @param {string} [opts.condition] as src/conditions.js describes, e.g. "A = &0D AND ?&70 <> 0"
      * @param {number} [opts.hitCount] act on this hit and every one after
      * @param {"stop"|"log"} [opts.action] log records each hit for drainBreakpointLog() and runs on
      * @param {boolean} [opts.enabled]
@@ -489,9 +490,8 @@ export class MachineSession {
             enabled,
             owner: "session",
             onHit: (hit) => {
-                if (hit.action !== "log") {
-                    if (!this._breakpointHits.get(id)) this._breakpointHits.set(id, hit);
-                } else if (this._breakpointLog.length < MaxLoggedHits) this._breakpointLog.push(hit);
+                if (hit.action !== "log") this._breakpointHits.set(id, hit);
+                else if (this._breakpointLog.length < MaxLoggedHits) this._breakpointLog.push(hit);
                 else this._breakpointLogDropped++;
             },
         });
@@ -592,7 +592,8 @@ export class MachineSession {
     }
 
     /**
-     * Reset all hit flags (call before starting a new run).
+     * Reset all hit flags (call before starting a new run). Hit counts carry on, so a breakpoint with a hitCount
+     * stays armed once reached.
      */
     resetBreakpointHits() {
         for (const id of this._breakpointHits.keys()) this._breakpointHits.set(id, null);

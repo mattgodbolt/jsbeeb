@@ -161,6 +161,16 @@ describe("Breakpoints", () => {
         expect(breakpoints.list()).toEqual([]);
     });
 
+    it("is not called once another hook in the same dispatch removes the last breakpoint", () => {
+        let id;
+        cpu.debugInstruction.add(() => {
+            if (breakpoints.list().length) breakpoints.remove(id);
+        });
+        id = breakpoints.add({ kind: "execute", start: Store });
+        expect(run()).toBe(true);
+        expect(hits).toEqual([]);
+    });
+
     it("refuses to change or remove a breakpoint that is not there", () => {
         expect(() => breakpoints.remove(7)).toThrow("No breakpoint with id 7");
         expect(() => breakpoints.update(7, {})).toThrow("No breakpoint with id 7");

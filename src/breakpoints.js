@@ -66,8 +66,9 @@ export class Breakpoints {
      * @returns {number}
      */
     add(spec) {
+        const checked = this._checked(spec);
         const id = this._nextId++;
-        this._entries.set(id, { id, hits: 0, ...this._checked(spec) });
+        this._entries.set(id, { id, hits: 0, ...checked });
         this._changed();
         return id;
     }
@@ -197,7 +198,7 @@ export class Breakpoints {
     }
 
     _check(access, address, value) {
-        // A handler earlier in the same dispatch can remove the last breakpoint after this one was detached.
+        // A handler earlier in the same dispatch can remove the last breakpoint, detaching this one before it is called.
         const watching = this._watching[access];
         if (!watching?.covered[address]) return false;
         const { entries } = watching;

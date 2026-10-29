@@ -2,7 +2,8 @@
  * Breakpoint conditions. Names: the registers A X Y S PC P, the flags C Z I D V N (1 or 0), `value` and `old`.
  * `?addr` reads a byte without side effects. Numbers: &FF, $FF, 0xFF or decimal. Operators, loosest first:
  * `|| &&`, then BBC BASIC's bitwise `OR EOR AND` (C's `| ^ &`), `= == <> !=`, `< <= > >=`, `+ -`, and the unary
- * `! NOT - ?`. As in BBC BASIC, true is -1, so a comparison ANDed with a value keeps the value.
+ * `! NOT - ?`. As in BBC BASIC, true is -1, so a comparison ANDed with a value keeps the value; unlike it, NOT is
+ * logical, the same as `!`.
  */
 
 const AddressMask = 0xffff;
@@ -28,7 +29,7 @@ const Variables = new Map([
     ["OLD", (cpu, pc, value, old) => old],
 ]);
 
-// Loosest first. BBC BASIC's AND, OR and EOR are bitwise, as there; && and || are C's logical ones.
+// Loosest first.
 const BinaryLevels = [
     new Map([["||", (a, b) => truth(a || b)]]),
     new Map([["&&", (a, b) => truth(a && b)]]),
