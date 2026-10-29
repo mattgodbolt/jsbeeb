@@ -93,15 +93,16 @@ export class WatchPanel {
         for (const watch of this._watches) this._unregister(watch);
         this._cpu = cpu;
         for (const watch of this._watches) this._register(watch);
-        // A watch's breakpoint changed elsewhere, such as from the console, so that it no longer stops on the
-        // watch's bytes stops the watch breaking.
+        // When a watch's breakpoint is changed elsewhere, such as from the console, so that it is no longer a stopping
+        // write breakpoint over the watch's bytes, the watch stops breaking.
         cpu.breakpoints.onChange(() => {
             const now = new Map(cpu.breakpoints.list().map((bp) => [bp.id, bp]));
             for (const watch of this._watches) {
                 const intact = watch.breakpoints.every((id, i) => {
                     const bp = now.get(id);
                     const [start, end] = watch.ranges[i];
-                    return bp?.enabled && bp.action === "stop" && bp.start === start && bp.end === end;
+                    const covers = bp?.kind === "write" && bp.start === start && bp.end === end;
+                    return covers && bp.enabled && bp.action === "stop";
                 });
                 if (intact) continue;
                 watch.breakpoints = watch.breakpoints.filter((id) => now.has(id));

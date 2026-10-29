@@ -1628,6 +1628,7 @@ describe("Debugger", () => {
                 ["disabled", (id) => cpu.breakpoints.update(id, { enabled: false })],
                 ["made to log", (id) => cpu.breakpoints.update(id, { action: "log" })],
                 ["moved", (id) => cpu.breakpoints.update(id, { start: 0x80 })],
+                ["made a read", (id) => cpu.breakpoints.update(id, { kind: "read" })],
             ])("stops breaking when its breakpoint is %s elsewhere", (_, change) => {
                 addWatch("$70");
                 pickBreak(0, "on change");

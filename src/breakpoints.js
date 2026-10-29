@@ -19,8 +19,8 @@ const Accesses = ["execute", "read", "write"];
  * @property {number} [end] - the last address it covers; `start` if not given
  * @property {number} [bank] - only while this sideways bank is paged in where it is hit
  * @property {string} [condition]
- * @property {(address: number, value: number, pc: number) => boolean} [accepts] - a test of its own, after the condition, for an
- * owner whose rule a condition cannot say, such as a watch's
+ * @property {(address: number, value: number, pc: number) => boolean} [accepts] - a test of its own, after the
+ * condition, for an owner whose rule a condition cannot say, such as a watch's
  * @property {number} [hitCount] - acts on this hit and every one after; 1 if not given
  * @property {boolean} [enabled] - true if not given
  * @property {"stop" | "log"} [action] - stop if not given
@@ -202,7 +202,7 @@ export class Breakpoints {
     }
 
     _check(access, address, value) {
-        // A handler earlier in the same dispatch can remove the last breakpoint, detaching this one before it is called.
+        // A handler earlier in the same dispatch can remove the last breakpoint, detaching this one before its call.
         const watching = this._watching[access];
         if (!watching?.covered[address]) return false;
         const { entries } = watching;
