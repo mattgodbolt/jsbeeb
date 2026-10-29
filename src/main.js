@@ -215,6 +215,7 @@ const machine = new Machine({
     video,
     audioHandler,
     dbgr,
+    gamepad,
 });
 const processor = machine.processor;
 panelArrangement.followMachine(() => cycleCount(processor));
