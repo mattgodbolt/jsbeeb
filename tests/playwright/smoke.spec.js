@@ -837,7 +837,7 @@ test.describe("on a phone", () => {
     });
 });
 
-test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({
+test("each of help's tabs fits a desktop or tablet window whole, and on a phone scrolls under its own header", async ({
     beeb,
     page,
 }) => {
@@ -862,20 +862,25 @@ test("help fits a desktop browser window whole, and on a phone or tablet scrolls
     await beeb.armModalShown("help");
     await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
     await beeb.expectModalShown();
-    expect(await helpLayout(desktop)).toEqual({
-        closeOnScreen: true,
-        modalScrolls: false,
-        bodyScrolls: false,
-        scrollsSideways: false,
-    });
-    for (const narrow of [
-        { width: 390, height: 844 },
-        { width: 768, height: 1024 },
+    for (const tab of await page.locator("#help [data-bs-toggle='tab']").all()) {
+        await tab.click();
+        await expect(page.locator(`${await tab.getAttribute("data-bs-target")}.show`)).toBeVisible();
+        expect(await helpLayout(desktop), await tab.textContent()).toEqual({
+            closeOnScreen: true,
+            modalScrolls: false,
+            bodyScrolls: false,
+            scrollsSideways: false,
+        });
+    }
+    await page.locator("#help [data-bs-target='#help-keyboard']").click();
+    for (const [narrow, bodyScrolls] of [
+        [{ width: 390, height: 844 }, true],
+        [{ width: 768, height: 1024 }, false],
     ]) {
         expect(await helpLayout(narrow), `at ${narrow.width}x${narrow.height}`).toEqual({
             closeOnScreen: true,
             modalScrolls: false,
-            bodyScrolls: true,
+            bodyScrolls,
             scrollsSideways: false,
         });
     }

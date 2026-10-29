@@ -50,18 +50,21 @@ export function keyLine(table) {
 
 /** Help's rows for `tables`: each documented combo, its keys as key caps, and what they do. */
 export function helpRows(tables) {
-    return tables.flatMap(documented).map(({ combo, description }) => {
-        const row = document.createElement("tr");
-        const keys = document.createElement("td");
-        combo.split(" ").forEach((key, index) => {
-            const cap = document.createElement("span");
-            cap.className = "key";
-            cap.textContent = key;
-            keys.append(...(index ? [" ", cap] : [cap]));
-        });
-        const what = document.createElement("td");
-        what.textContent = description;
-        row.append(keys, what);
-        return row;
+    return tables.flatMap(documented).map(({ combo, description }) => helpRow(combo.split(" "), description));
+}
+
+/** A row of Help: `keys` as key caps, and what they do. */
+export function helpRow(keys, description) {
+    const row = document.createElement("tr");
+    const caps = document.createElement("td");
+    keys.forEach((key, index) => {
+        const cap = document.createElement("span");
+        cap.className = "key";
+        cap.textContent = key;
+        caps.append(...(index ? [" ", cap] : [cap]));
     });
+    const what = document.createElement("td");
+    what.textContent = description;
+    row.append(caps, what);
+    return row;
 }
