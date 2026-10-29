@@ -1002,7 +1002,7 @@ export class Debugger {
         return this._namesFor(this._peek, this.cpu?.pagedBank);
     }
 
-    /** The sideways bank `view` shows at &8000: its own, or the one paged. */
+    /** The sideways bank whose labels apply in `view`: the bank it shows, or else the one paged. */
     _bankShownBy(view) {
         return viewedBank(view) ?? this.cpu?.pagedBank;
     }
