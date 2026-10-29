@@ -1093,6 +1093,11 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
+    /** Whether `addr` is a device's, rather than memory, as the machine is paged now. */
+    isDevice(addr) {
+        return this.memStat[this.memStatOffset + ((addr & 0xffff) >>> 8)] === 0;
+    }
+
     /**
      * What readDevice would return, without its side effects. Devices with no way to read them without side
      * effects show UnpeekableDevice instead, and VIA ports show their pins as last driven (see Via.peek).

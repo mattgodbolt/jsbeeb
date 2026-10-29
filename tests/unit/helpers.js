@@ -95,6 +95,15 @@ export function sentEvents() {
             .map(([, , params]) => params);
 }
 
+/** Catches the files the page saves through `downloadBlob`, returning a list of them so far, each its name and blob. */
+export function captureDownloads() {
+    const blobs = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => `blob:${blobs.push(blob)}`);
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clicks = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    return () => clicks.mock.contexts.map((anchor, i) => ({ name: anchor.download, blob: blobs[i] }));
+}
+
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 

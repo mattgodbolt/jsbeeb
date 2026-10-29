@@ -126,6 +126,32 @@ body {
   vertical-align: top;
 }
 
+#memory-save-form:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+#memory-save-form .panel-field {
+  flex: 1 1 8em;
+  min-width: 4em;
+}
+
+#memory .mem-edit {
+  width: 2ch;
+  padding: 0;
+  border: none;
+  font: inherit;
+  color: inherit;
+  background-color: #444;
+  outline: 1px solid #80d0d0;
+}
+
+#memory .mem-edit.is-invalid {
+  outline-color: #f06060;
+}
+
 .goto-form {
   flex: 0 1 8em;
   min-width: 4em;
@@ -212,7 +238,8 @@ a.symbol:hover {
 }
 
 /* Bootstrap's warning icon would hide most of a box this narrow. */
-.goto-addr.is-invalid {
+.goto-addr.is-invalid,
+#memory-save-form .is-invalid {
   padding-right: 0.5rem;
   background-image: none;
 }
@@ -909,13 +936,35 @@ small {
   text-decoration-color: rgba(255, 255, 255, 0.45);
 }
 
-.watch-formats td {
+.watch-formats td,
+.watch-breaks td {
   padding-bottom: 4px;
   text-align: right;
 }
 
-.watch-formats .txt-btn {
+.watch-formats .txt-btn,
+.watch-breaks .txt-btn {
   font-family: inherit;
+}
+
+.watch-breaks form {
+  display: inline-block;
+  width: 20ch;
+  margin-left: 4px;
+}
+
+#watch-panel .txt-btn.watch-break {
+  font-family: inherit;
+  white-space: nowrap;
+  color: #777777;
+}
+
+#watch-panel .txt-btn.watch-break.armed {
+  color: #ff6060;
+}
+
+#watch-panel .watch-fired td {
+  background: rgba(255, 96, 96, 0.25);
 }
 
 #watch-panel .txt-btn {

@@ -1,15 +1,21 @@
 import { hexword } from "../hex.js";
-import { formatWatch, WatchFormats } from "../watches.js";
+import { formatWatch, parseCondition, WatchFormats, writeStops } from "../watches.js";
 import { FloatingPanel } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
 import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
 
 const MinPanelSize = { w: 200, h: 80 };
+const RowCells = 5;
+// As the CPU's memStat marks a page: a write to ROM changes nothing, and one to neither reaches a device.
+const RamStat = 1;
+const RomStat = 2;
+const DeviceNote = "A device register stops it on every write to it, never on a change the device makes itself.";
 
 /**
  * A floating list of addresses and their values, read once a frame while it is open and the machine runs, and not
  * at all while it is closed. Watches are added by name or address, or from a menu offered at an address (`offer`),
- * and the add box gives the keyboard back to the machine on Escape or once a watch is added.
+ * and the add box gives the keyboard back to the machine on Escape or once a watch is added. A watch can stop the
+ * machine on a write that changes it; the CPU takes its slower path only while one does.
  */
 export class WatchPanel {
     /**
@@ -21,8 +27,12 @@ export class WatchPanel {
     constructor({ peek, resolve, arrangement }) {
         this._peek = peek;
         this._resolve = resolve;
-        /** @type {{address: number, format: import("../watches.js").WatchFormat, value: HTMLElement}[]} */
+        /** @type {Watch[]} */
         this._watches = [];
+        this._cpu = null;
+        this._writeHook = null;
+        /** @type {{watches: Watch[], target: number} | null} */
+        this._fired = null;
         /** @type {{opener: HTMLElement | null, popup: HTMLElement} | null} */
         this._openPopup = null;
         this.panel = document.getElementById("watch-panel");
@@ -77,6 +87,50 @@ export class WatchPanel {
         });
     }
 
+    /** Watches `cpu`'s writes for the watches that stop the machine, and no longer the last one's. */
+    setCpu(cpu) {
+        this._writeHook?.remove();
+        this._writeHook = null;
+        this._cpu = cpu;
+        this._watchWrites();
+    }
+
+    /** Highlights the watches that stopped the machine, opening the panel to show them, or none if none did. */
+    showWhichFired() {
+        const cpu = this._cpu;
+        // Only the stop the CPU is still in: a run outside the loop, such as a rewind preview, can fire one and go on.
+        const fired = cpu?.halted && this._fired?.target === cpu.targetCycles ? this._fired.watches : [];
+        for (const watch of this._watches) watch.row.classList.toggle("watch-fired", fired.includes(watch));
+        if (fired.length > 0) this.floating.open();
+        this._fired = null;
+    }
+
+    clearFired() {
+        this._fired = null;
+        this.showWhichFired();
+    }
+
+    _watchWrites() {
+        const breaking = this._watches.some((watch) => watch.breaks);
+        if (breaking && !this._writeHook && this._cpu) {
+            const cpu = this._cpu;
+            this._writeHook = cpu.debugWrite.add((address, byte) => {
+                const stat = cpu.memStat[cpu.memStatOffset + (address >>> 8)];
+                if (stat === RomStat) return false;
+                const toRam = stat === RamStat;
+                const fired = this._watches.filter(
+                    (watch) => watch.breaks && writeStops(this._peek, watch, address, byte, toRam),
+                );
+                if (fired.length === 0) return false;
+                this._fired = { watches: fired, target: cpu.targetCycles };
+                return true;
+            });
+        } else if (!breaking && this._writeHook) {
+            this._writeHook.remove();
+            this._writeHook = null;
+        }
+    }
+
     update() {
         for (const watch of this._watches) {
             const text = formatWatch(this._peek, watch.address, watch.format);
@@ -112,25 +166,17 @@ export class WatchPanel {
         const name = cell("watch-name", label);
         name.title = `${label}: $${hexword(address)}`;
         const value = cell("watch-value", "");
-        const watch = { address, format: initialFormat, value };
+        /** @type {Watch} */
+        const watch = { address, format: initialFormat, value, row, breaks: false, condition: null };
 
         const picker = textButton("watch-format dropdown-toggle", "", "");
-        picker.setAttribute("aria-expanded", "false");
-        const choices = document.createElement("tr");
-        choices.className = "watch-formats";
-        choices.hidden = true;
-        const choiceCell = document.createElement("td");
-        choiceCell.colSpan = 4;
-        choices.append(choiceCell);
+        const [choices, choiceCell] = this._popupRow(picker, "watch-formats");
         const show = (format) => {
             watch.format = format;
             picker.textContent = format.name;
             picker.title = `Shown as ${format.description}`;
         };
         show(watch.format);
-        picker.addEventListener("click", () =>
-            this._showPopup(choices.hidden ? { opener: picker, popup: choices } : null),
-        );
         for (const format of WatchFormats) {
             const choice = textButton("watch-format-choice", format.name, format.description);
             choice.addEventListener("click", () => {
@@ -142,25 +188,80 @@ export class WatchPanel {
         }
         cell("", "").append(picker);
 
+        const breaker = textButton("watch-break dropdown-toggle", "", "");
+        const [breaks, breakCell] = this._popupRow(breaker, "watch-breaks");
+        const arm = (on, condition) => {
+            watch.breaks = on;
+            watch.condition = condition;
+            breaker.textContent = `brk${condition?.text ?? ""}`;
+            breaker.classList.toggle("armed", on);
+            const when = condition ? `on a write that makes it ${condition.text}` : "on a write that changes it";
+            breaker.title = `${on ? "Stops the machine" : "Stop the machine"} ${when}. ${DeviceNote}`;
+            this._watchWrites();
+        };
+        arm(false, null);
+        const choose = (on, condition) => {
+            arm(on, condition);
+            this._showPopup(null);
+        };
+        const off = textButton("watch-break-choice", "off", "Never stop the machine for it");
+        off.addEventListener("click", () => choose(false, null));
+        const onChange = textButton("watch-break-choice", "on change", "Stop the machine on a write that changes it");
+        onChange.addEventListener("click", () => choose(true, null));
+        const conditionForm = document.createElement("form");
+        const conditionBox = document.createElement("input");
+        conditionBox.type = "text";
+        conditionBox.className = "form-control form-control-sm panel-field watch-condition";
+        conditionBox.placeholder = "e.g. 42, > $20";
+        conditionBox.setAttribute("aria-label", `Stop the machine when ${label} becomes`);
+        conditionBox.autocomplete = "off";
+        conditionBox.addEventListener("input", () => conditionBox.classList.remove("is-invalid"));
+        conditionForm.append(conditionBox);
+        conditionForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const condition = parseCondition(conditionBox.value);
+            conditionBox.classList.toggle("is-invalid", condition === undefined);
+            if (!condition) return;
+            choose(true, condition);
+        });
+        breakCell.append(off, onChange, conditionForm);
+        cell("", "").append(breaker);
+
         const remove = textButton("watch-remove", "×", `Stop watching ${label}`);
         remove.setAttribute("aria-label", remove.title);
         remove.addEventListener("click", () => {
             this._watches.splice(this._watches.indexOf(watch), 1);
             row.remove();
             choices.remove();
+            breaks.remove();
             this._empty.hidden = this._watches.length > 0;
+            this._watchWrites();
         });
         cell("", "").append(remove);
-        this._list.append(row, choices);
+        this._list.append(row, choices, breaks);
         this._watches.push(watch);
         this._empty.hidden = true;
         this.update();
+    }
+
+    /** A hidden row of choices under a watch, which `opener` shows and hides; returns it and its one cell. */
+    _popupRow(opener, className) {
+        opener.setAttribute("aria-expanded", "false");
+        const popup = document.createElement("tr");
+        popup.className = className;
+        popup.hidden = true;
+        const cell = document.createElement("td");
+        cell.colSpan = RowCells;
+        popup.append(cell);
+        opener.addEventListener("click", () => this._showPopup(popup.hidden ? { opener, popup } : null));
+        return [popup, cell];
     }
 
     /** Opens `open`'s popup, closing any other, or closes them all for null. */
     _showPopup(open) {
         const was = this._openPopup;
         if (was && was.popup !== open?.popup) {
+            if (was.popup.contains(document.activeElement)) document.activeElement.blur();
             was.popup.hidden = true;
             was.opener?.setAttribute("aria-expanded", "false");
         }
@@ -170,3 +271,13 @@ export class WatchPanel {
         open.opener?.setAttribute("aria-expanded", "true");
     }
 }
+
+/**
+ * @typedef {object} Watch
+ * @property {number} address
+ * @property {import("../watches.js").WatchFormat} format
+ * @property {HTMLElement} value
+ * @property {HTMLElement} row
+ * @property {boolean} breaks - whether a write changing it stops the machine
+ * @property {import("../watches.js").WatchCondition | null} condition - what the new value must be to stop it
+ */
