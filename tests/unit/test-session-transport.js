@@ -328,7 +328,7 @@ describe("webRtcTransport, as a guest joins", () => {
     });
 
     describe("its offer", () => {
-        function joinWhileGathering({ foundBeforeLooking = false } = {}) {
+        function joinWhileGathering(foundBeforeLooking) {
             vi.stubGlobal(
                 "RTCPeerConnection",
                 class extends GatheringPeer {
@@ -337,43 +337,34 @@ describe("webRtcTransport, as a guest joins", () => {
                     }
                 },
             );
-            const rendezvous = fakeRendezvous();
+            const posted = [];
+            const rendezvous = fakeRendezvous({ postOffer: async (...args) => posted.push([Date.now(), ...args]) });
             const started = webRtcTransport(rendezvous).join("room", "g1", recorder());
-            return { started, postOffer: rendezvous.postOffer };
+            return { started, posted };
         }
 
-        it("waits for a first candidate however long it takes, then as long again for more", async () => {
-            const { postOffer } = joinWhileGathering();
+        it.each([
+            ["waits for a first candidate however long it takes, then as long again for more", false, "gathering", 3],
+            ["counts from a candidate already found when it starts waiting", true, "gathering", 1],
+            ["goes as soon as gathering is complete", false, "complete", 2],
+        ])("%s", async (_, foundBeforeLooking, gatheringState, postedAtGatheringTimeouts) => {
+            const start = Date.now();
+            const { posted } = joinWhileGathering(foundBeforeLooking);
             await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
-            expect(postOffer).not.toHaveBeenCalled();
-            peers[0].find();
-            await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs - 1);
-            expect(postOffer).not.toHaveBeenCalled();
-            await vi.advanceTimersByTimeAsync(1);
-            expect(postOffer).toHaveBeenCalledWith("room", "g1", expect.stringContaining(Candidate));
-        });
-
-        it("counts from a candidate already found when it starts waiting", async () => {
-            const { postOffer } = joinWhileGathering({ foundBeforeLooking: true });
-            await vi.advanceTimersByTimeAsync(IceGatheringTimeoutMs);
-            expect(postOffer).toHaveBeenCalledWith("room", "g1", expect.stringContaining(Candidate));
-        });
-
-        it("goes as soon as gathering is complete", async () => {
-            const { postOffer } = joinWhileGathering();
-            peers[0].find();
-            peers[0].iceGatheringState = "complete";
+            peers[0].find({ announced: !foundBeforeLooking });
+            peers[0].iceGatheringState = gatheringState;
             peers[0].emit("icegatheringstatechange");
-            await settle();
-            expect(postOffer).toHaveBeenCalledWith("room", "g1", expect.stringContaining(Candidate));
+            await vi.advanceTimersByTimeAsync(2 * IceGatheringTimeoutMs);
+            const at = start + postedAtGatheringTimeouts * IceGatheringTimeoutMs;
+            expect(posted).toEqual([[at, "room", "g1", expect.stringContaining(Candidate)]]);
         });
 
         it("gives up when no candidate comes, since nothing could connect", async () => {
-            const { started, postOffer } = joinWhileGathering();
+            const { started, posted } = joinWhileGathering(false);
             const failed = expect(started).rejects.toThrow("found no address to connect from");
             await vi.advanceTimersByTimeAsync(ConnectTimeoutMs);
             await failed;
-            expect(postOffer).not.toHaveBeenCalled();
+            expect(posted).toEqual([]);
             expect(peers[0].closed).toBe(true);
         });
     });
