@@ -332,6 +332,8 @@ test("the disassembly and memory views fill their panels' height as they are res
     await beeb.expectScreenText(">");
     for (const [index, view] of views.entries())
         await expect.poll(async () => (await rowsOf(view)).count).toBe(counts[index]);
+    const running = await rowsOf("#disassembly");
+    expect(running.highlightRow).toBe(Math.floor(running.count / 2));
 
     await page.setViewportSize({ width: 1920, height: 400 });
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBeLessThan(counts[0]);

@@ -88,6 +88,7 @@ export class DisassemblyView {
         this._cpu = null;
         this._sheila = [];
         this._cursor = 0;
+        this._cursorRow = 0;
         this._backStack = [];
         this._breakpoints = new Map();
         this._widget = floating.panel.querySelector("#disassembly");
@@ -156,16 +157,30 @@ export class DisassemblyView {
         return this._cursor;
     }
 
-    /** Shows the instructions around `address`, highlighting it. */
+    /** Shows the instructions around `address`, highlighting it in the middle row. */
     update(address) {
+        this._draw(address, this._middleRow());
+    }
+
+    /** Shows the highlighted instruction again in the row it is in, or the middle row if that row has gone. */
+    redraw() {
+        this._draw(this._cursor, this._cursorRow < this._rows.rows.length ? this._cursorRow : this._middleRow());
+    }
+
+    _middleRow() {
+        return Math.floor(this._rows.rows.length / 2);
+    }
+
+    _draw(address, cursorRow) {
         this._cursor = address;
-        const { rows, anchor } = this._rows;
+        this._cursorRow = cursorRow;
+        const { rows } = this._rows;
         const shown = new Set();
-        for (let i = anchor; i < rows.length; ++i) {
+        for (let i = cursorRow; i < rows.length; ++i) {
             address = this._showRow(rows[i], address, shown);
         }
         address = this._cursor;
-        for (let i = anchor - 1; i >= 0; --i) {
+        for (let i = cursorRow - 1; i >= 0; --i) {
             address = this._prevInstruction(address);
             this._showRow(rows[i], address, shown);
         }

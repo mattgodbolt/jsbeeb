@@ -341,7 +341,10 @@ export class Debugger {
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
-            redraw: () => this._redraw(() => this._disassembly.update(this._disassembly.cursor)),
+            redraw: () =>
+                this._redraw(() =>
+                    this.updateDisassembly(this._loop?.isRunning() ? this.cpu.pc : this._disassembly.cursor),
+                ),
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -505,7 +508,7 @@ export class Debugger {
     }
 
     /**
-     * Has a view redraw where it is, for a resize that changed how many rows it shows. Not through the refresh, whose
+     * Has a view redraw, for a resize that changed how many rows it shows. Not through the refresh, whose
      * draw lays the panels out again, which part way through a drag would undo it.
      */
     _redraw(redraw) {
@@ -527,8 +530,13 @@ export class Debugger {
         return this._loop?.isRunning() || !this._inDebugger ? this.cpu.pc : this._disassembly.cursor;
     }
 
+    /**
+     * Shows the disassembly around `address`, centred on it, unless the machine is stopped and it is the instruction
+     * already highlighted, which stays in its row.
+     */
     updateDisassembly(address) {
-        this._disassembly.update(address);
+        if (address === this._disassembly.cursor && !this._loop?.isRunning()) this._disassembly.redraw();
+        else this._disassembly.update(address);
     }
 
     updateMemory() {
