@@ -27,6 +27,7 @@ export const PanelIds = [
     "sysvia",
     "uservia",
     "crtc",
+    "soundchip",
     "basic",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
