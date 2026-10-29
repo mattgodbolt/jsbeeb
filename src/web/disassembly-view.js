@@ -87,7 +87,6 @@ export class DisassemblyView {
         this._cpu = null;
         this._sheila = [];
         this._cursor = 0;
-        /** Where each followed jump left the cursor, for `b`. */
         this._backStack = [];
         this._breakpoints = new Map();
         this._widget = floating.panel.querySelector("#disassembly");
