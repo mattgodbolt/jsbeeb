@@ -409,6 +409,13 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   error saying what is there. The ROMs `rom` loads go in the banks left over. The stock BBC B (`model=B-stock`) has
   only four ROM sockets, banks 12 to 15, so it takes only those, and of them only the two AUX sockets, 14 and 15, that
   BASIC and the DFS leave empty.
+- `labels=X` - loads the label file at URL or path `X` (which must allow cross-site requests) so the debugger shows
+  its names for addresses, ahead of the built-in symbol sets: BeebAsm's `-d` or `-dd` output (with `-labels`), VICE's
+  (`al C:1900 .start`, as VICE's `save_labels` and cc65's `-Ln` write them) or b-em's `name=$1900`. May be given
+  more than once. `labels.N=X` ties the file's names for &8000 to &BFFF to sideways bank `N`, named as for `rom.N`,
+  so they show only while that bank is paged in. A label file dropped on any debug panel (the debugger's own, the decoded peripheral panels or the watch panel) loads the same way, for
+  that page only; the line under the disassembly lists the files loaded, with the bank each is for and a button to
+  forget it.
 - `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in
   `public/benchmarks/workloads.json`, on the model it names there (e.g. `benchmark=elite`, or
   `benchmark=master-shadow&model=Master`) instead of starting as usual. It runs the workload unthrottled from its
@@ -419,7 +426,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
   refused alongside it, as they change what is measured, and so is a machine fitted otherwise than the workload's
   `fittings` there say (a co-processor, Music 5000, teletext adaptor, Econet or VideoNuLA).
-- (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
+- (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller from the start; the
+  Disc controller panel (Debug menu) turns it on and off and shows it.
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
