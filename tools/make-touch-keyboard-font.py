@@ -68,7 +68,6 @@ def main(source):
     # Keeps the source's own date, so the same source always builds the same file.
     font = TTFont(source, recalcTimestamp=False)
     options = Options()
-    options.flavor = "woff2"
     options.layout_features = []
     options.desubroutinize = True
     subsetter = Subsetter(options)
@@ -76,7 +75,6 @@ def main(source):
     subsetter.subset(font)
     slash_zero(font)
     font.flavor = "woff2"
-    Output.parent.mkdir(parents=True, exist_ok=True)
     font.save(Output)
     print(f"Wrote {Output} ({Output.stat().st_size} bytes)")
 
