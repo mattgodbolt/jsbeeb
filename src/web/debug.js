@@ -16,6 +16,11 @@ import { Dropdown } from "bootstrap";
 
 const noop = () => {};
 
+const LabelDrop = {
+    dropWhat: "Drop a label file",
+    dropInto: "BeebAsm, VICE or b-em labels name addresses in the debugger",
+};
+
 const InitialMemoryRows = 16;
 const FewestBytesPerRow = 8;
 const MemoryPageRows = 8;
@@ -381,6 +386,7 @@ export class Debugger {
         });
         this._bindToolbar();
         this._bindKeys(keys);
+        this._bindLabelDrops();
 
         bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
             this._memoryView.update(address),
@@ -481,14 +487,6 @@ export class Debugger {
             reopens: true,
             arrangement: this._arrangement,
         });
-        panel.dataset.dropWhat = "Drop a label file";
-        panel.dataset.dropInto = "BeebAsm, VICE or b-em labels name addresses in the debugger";
-        panel.addEventListener("drop", (e) => {
-            const file = e.dataTransfer?.files[0];
-            if (!file) return;
-            e.preventDefault();
-            this._dropLabels(file);
-        });
         floating.addEventListener("open", () => {
             if (!this.cpu) return;
             this._matchSymbols();
@@ -568,6 +566,27 @@ export class Debugger {
     /** Every panel Alt-S and Alt-D show and hide, the debugger's own first. */
     _debugPanels() {
         return this._arrangement.panelsIn(DebugGroup);
+    }
+
+    /**
+     * Has every debug panel and the watch panel take a dropped label file. Other modules make debug panels,
+     * before or after this, so each is marked for the media window's drop zone as a file comes over the page.
+     */
+    _bindLabelDrops() {
+        const takers = () => [...this._debugPanels(), this.watches.floating].map(({ panel }) => panel);
+        document.addEventListener(
+            "dragenter",
+            () => {
+                for (const panel of takers()) Object.assign(panel.dataset, LabelDrop);
+            },
+            true,
+        );
+        document.addEventListener("drop", (e) => {
+            const file = e.dataTransfer?.files[0];
+            if (!file || !takers().some((panel) => panel.contains(e.target))) return;
+            e.preventDefault();
+            this._dropLabels(file);
+        });
     }
 
     panelsShown() {

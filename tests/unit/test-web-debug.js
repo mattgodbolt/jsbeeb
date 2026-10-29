@@ -1593,12 +1593,12 @@ describe("Debugger", () => {
         const rowAt = (address) => disRows().find((row) => Number(row.dataset.addr) === address);
         const code = (address) => rowAt(address).querySelector(".disassembly");
         const labelsLine = () => document.querySelector("#disassembly-panel .debug-labels");
-        const drop = (panelId, name, text) => {
+        const drop = (target, name, text) => {
             const event = new Event("drop", { bubbles: true, cancelable: true });
             Object.defineProperty(event, "dataTransfer", {
                 value: { types: ["Files"], files: [new File([text], name)] },
             });
-            document.getElementById(panelId).dispatchEvent(event);
+            target.dispatchEvent(event);
             return event;
         };
 
@@ -1609,7 +1609,11 @@ describe("Debugger", () => {
         });
 
         it("names the disassembly from a file dropped on any debugger panel, crediting and listing it", async () => {
-            const event = drop("memory-panel", "game.txt", "al C:2000 .start\nal C:8003 .service\n");
+            const event = drop(
+                document.getElementById("memory-panel"),
+                "game.txt",
+                "al C:2000 .start\nal C:8003 .service\n",
+            );
             expect(event.defaultPrevented).toBe(true);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
             expect(addrOf(rowAt(0x2000))).toBe("2000 start");
@@ -1620,8 +1624,22 @@ describe("Debugger", () => {
             expect(addrOf(currentRow())).toBe("8003 service");
         });
 
+        it("takes a drop on any debug panel, one made later or the watch panel, marking each for the drop zone", async () => {
+            const sysvia = new SysViaPanel({ cpu, arrangement }).floating.panel;
+            const watches = document.getElementById("watch-panel");
+            document.body.dispatchEvent(new Event("dragenter", { bubbles: true }));
+            expect([sysvia, watches].map((panel) => panel.dataset.dropWhat)).toEqual([
+                "Drop a label file",
+                "Drop a label file",
+            ]);
+            drop(sysvia, "game.txt", "service=8003");
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
+            drop(watches, "more.txt", "start=2000");
+            await vi.waitFor(() => expect(addrOf(rowAt(0x2000))).toBe("2000 start"));
+        });
+
         it("ties a file to a bank from its menu, and forgets it from its button", async () => {
-            drop("disassembly-panel", "rom.txt", "service=8003");
+            drop(document.getElementById("disassembly-panel"), "rom.txt", "service=8003");
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
             const bankChoice = (text) =>
                 [...labelsLine().querySelectorAll(".dropdown-item")].find((item) => item.textContent === text);
@@ -1641,7 +1659,7 @@ describe("Debugger", () => {
         });
 
         it("says why a dropped file isn't labels, and names nothing from it", async () => {
-            drop("disassembly-panel", "game.ssd", "\u0000\u0001binary");
+            drop(document.getElementById("disassembly-panel"), "game.ssd", "\u0000\u0001binary");
             await vi.waitFor(() =>
                 expect(document.querySelector(".toast")?.textContent).toContain(
                     "game.ssd isn't a label file jsbeeb reads",
