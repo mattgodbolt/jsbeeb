@@ -185,7 +185,7 @@ export class PanelArrangement extends EventTarget {
     }
 
     _openFrom(e) {
-        const opener = e.target.closest?.("[data-opens]");
+        const opener = e.target.closest("[data-opens]");
         if (!opener) return;
         const element = document.getElementById(opener.dataset.opens);
         const floating = this._panels.find((other) => other.panel === element);

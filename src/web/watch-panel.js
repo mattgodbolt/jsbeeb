@@ -6,9 +6,9 @@ import { StartEdge } from "./panel-layout.js";
 const MinPanelSize = { w: 200, h: 80 };
 
 /**
- * A floating list of addresses and their values, read once a frame while it is open and the machine
- * runs, and not at all while it is closed. Watches are added by name or address, or from a menu offered at an address
- * (`offer`), and the add box gives the keyboard back to the machine on Escape or once a watch is added.
+ * A floating list of addresses and their values, read once a frame while it is open and the machine runs, and not
+ * at all while it is closed. Watches are added by name or address, or from a menu offered at an address (`offer`),
+ * and the add box gives the keyboard back to the machine on Escape or once a watch is added.
  */
 export class WatchPanel {
     /**

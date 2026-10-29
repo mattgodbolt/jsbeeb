@@ -324,6 +324,21 @@ describe("FloatingPanel", () => {
             expect(rectOf(reloaded[0])).toEqual(left);
         });
 
+        it("reopens the panels it has where they were, passing over one saved open that this page never made, as a device panel on an Atom", () => {
+            const device = make("sysvia", { x: EndEdge, y: EndEdge }, true);
+            const first = watches();
+            device.open();
+            first.open();
+            drag(header(first), { x: 20, y: 70 }, { x: 420, y: 370 });
+            const left = rectOf(first);
+
+            load();
+            const reloaded = watches();
+            arrangement.reopen();
+            expect(reloaded.isOpen).toBe(true);
+            expect(rectOf(reloaded)).toEqual(left);
+        });
+
         it("carries on with the defaults when storage cannot be used", () => {
             const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
             storage = {
