@@ -572,6 +572,10 @@ describe("Debugger", () => {
             expect(visible("memory-panel")).toBe(true);
             expect(memTarget().dataset.addr).toBe(`${0x3456}`);
 
+            dbgr.keepOffTouchKeyboard(() => true);
+            expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(false);
+            dbgr.keepOffTouchKeyboard(() => false);
+
             stoppedLoop.go();
             expect(findsBytes()).toBe(false);
             expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(false);

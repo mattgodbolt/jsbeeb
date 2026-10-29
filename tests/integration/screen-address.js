@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
-import { Video } from "../../src/video.js";
+import { FakeVideo, Video } from "../../src/video.js";
 
 const FbWidth = 1024;
 const FbHeight = 625;
@@ -97,9 +97,19 @@ describe("the address of the byte drawn at a point of the screen", () => {
         expect(found).toEqual(drawn.flatMap((address) => [address, address, address]));
     });
 
-    it("is nothing in the border", async () => {
+    it("is nothing in the border, off the picture, or on a machine without a CRTC", async () => {
         const { video } = await scrolledMachine("B-DFS1.2", 0);
-        expect(video.addressShownAt(0, 0)).toBeNull();
-        expect(video.addressShownAt(0.999, 0.999)).toBeNull();
+        for (const [x, y] of [
+            [0, 0],
+            [0.999, 0.999],
+            [-0.01, 0.5],
+            [0.5, 1],
+        ])
+            expect(video.addressShownAt(x, y)).toBeNull();
+        expect(video.addressShownAt(0.5, 0.5)).not.toBeNull();
+
+        const atom = new Video(false, FbWidth * FbHeight, () => {}, { isAtom: true });
+        expect(atom.addressShownAt(0.5, 0.5)).toBeNull();
+        expect(new FakeVideo().addressShownAt(0.5, 0.5)).toBeNull();
     });
 });

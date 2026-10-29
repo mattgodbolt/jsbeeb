@@ -14,6 +14,11 @@ const AdcChannelCount = 4;
 export class AnalogueInputs {
     /**
      * @param {object} options
+     * @param {object} options.processor - the machine whose ADC and touchscreen the inputs feed
+     * @param {HTMLCanvasElement} options.screenCanvas - the screen, which mouse positions are measured across
+     * @param {() => Gamepad[]} options.getGamepads
+     * @param {import("./settings.js").Settings} options.settings
+     * @param {object} options.audioHandler - woken by any mouse event on the monitor
      * @param {(x: number, y: number) => boolean} options.takeScreenClick - offered each left click on the screen,
      *     at 0 to 1 across and down it, before the machine; true when it took the click
      */

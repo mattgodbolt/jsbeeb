@@ -44,6 +44,7 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 // The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
 export const LineCountPeriod = 2500;
 
+// Three vsyncs finish the field under way and paint both of an interlaced picture's after it.
 const TracedVSyncs = 3;
 const TraceStepClocks = 1024;
 // The TV flies back after 384 lines with or without a vsync, and a line is at most 256 1MHz characters of two clocks.
@@ -766,7 +767,7 @@ export class Video {
     }
 
     /**
-     * The address of the screen memory byte drawn at a point of the picture, or null for the border. It runs a copy
+     * The address of the screen memory byte drawn at a point of the picture, or null off it or in the border. It runs a copy
      * of this chip on from where it is, so the answer follows the CRTC, the IC32 wrap, the ULA and teletext's
      * pipeline exactly as drawing does; a split the program makes part way down the picture is not replayed.
      * @param {number} x across the painted picture, 0 to 1
@@ -774,7 +775,7 @@ export class Video {
      * @returns {number | null}
      */
     addressShownAt(x, y) {
-        if (this.video6847) return null;
+        if (this.video6847 || !(x >= 0 && x < 1 && y >= 0 && y < 1)) return null;
         const pixelX = Math.floor(this.leftBorder + x * (1024 - this.leftBorder - this.rightBorder));
         const pixelY = Math.floor(this.topBorder + y * (625 - this.topBorder - this.bottomBorder));
         const tracer = new Video(this.isMaster, this.fb32.length, noop, { hasVideoNula: this.ula.hasVideoNula });
@@ -802,7 +803,6 @@ export class Video {
             if (vsync) fieldsTraced++;
         };
         tracer.reset({ videoRead }, { setVBlankInt: countField }, false);
-        // Three vsyncs finish the field under way and paint both of an interlaced picture's after it.
         for (let clocks = 0; fieldsTraced < TracedVSyncs && clocks < MostTracedClocks; clocks += TraceStepClocks)
             tracer.polltime(TraceStepClocks);
         return found;

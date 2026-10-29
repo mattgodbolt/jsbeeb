@@ -841,10 +841,11 @@ export class Debugger {
 
     /**
      * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
-     * screen, 0 to 1 across and down it, and takes the click; otherwise the click is the machine's.
+     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
+     * the click is the machine's.
      */
     showScreenByteAt(x, y) {
-        if (!this._inDebugger || this._loop.isRunning()) return false;
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
         const address = this.cpu.video.addressShownAt(x, y);
         if (address !== null) {
             this._memoryView.update(address);
