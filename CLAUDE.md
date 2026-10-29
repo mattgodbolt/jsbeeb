@@ -110,6 +110,9 @@ nobody asked.
   - Mock as little as possible: Try and rephrase code not to require it.
   - Try not to rely on internal state: don't manipulate objects' inner state in tests
   - Use idiomatic vitest assertions (expect/toBe/toEqual) instead of node assert
+  - A fix gets one test of the general rule it restores, or a table of cases, not one test per scenario
+  - Use the shared helpers in `tests/helpers/`, `tests/unit/helpers.js` and `tests/integration/helpers.js` before
+    writing scaffolding; a helper a second test file needs moves there rather than being copied
 
 ## Project-Specific Knowledge
 
@@ -128,17 +131,16 @@ nobody asked.
   - Use async/await for asynchronous code instead of callbacks or promises
   - Minimise special case handling - prefer explicit over implicit behaviour
   - Consider adding tests first before implementing features
+  - A new view of something replaces the old view of the same thing in the same PR, unless the maintainer says to
+    keep both
+  - Performance work is worth its code; everything else should earn its lines
 - **When simplifying existing code**
   - Prefer helper functions for repetitive operations (like the `appendParam` function)
   - Remove unnecessary type checking where types are expected to be correct
   - Replace complex conditionals with more readable alternatives when possible
   - Ensure simplifications don't break existing behavior or assumptions
   - Try and modernise the code to use ES6+ features where possible
-
-- Prefer helper functions for repetitive operations (like the `appendParam` function)
-- Remove unnecessary type checking where types are expected to be correct
-- Replace complex conditionals with more readable alternatives when possible
-- Ensure simplifications don't break existing behavior or assumptions
+  - A refactor that moves code into a module should not grow the total much; if it does, the PR body says why
 
 - **Constants and Magic Numbers**:
   - Local un-exported properties should be used for shared constants

@@ -78,7 +78,11 @@ skipped question is not.
     nothing produces; a test that reaches nothing another test does not, naming that other test
     and having read it (anywhere in the suite). Tests added by earlier rounds of this review count
     too, since they can overlap the change's own tests. Note whether the lines the diff adds to
-    `src/` are mostly the behaviour or mostly scaffolding around it.
+    `src/` are mostly the behaviour or mostly scaffolding around it. Hold the diff to the growth
+    rules in CLAUDE.md's General Principles, test philosophy and "When simplifying existing code":
+    a fix with one test per scenario, scaffolding a shared helper already provides, a helper copied
+    into a second test file, an old view left beside its replacement, and a refactor that grows the
+    total without the PR body saying why.
 
 ## The report
 
