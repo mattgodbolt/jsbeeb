@@ -2,8 +2,7 @@ import { compileCondition } from "./conditions.js";
 import { hexbyte, hexword } from "./hex.js";
 import { requireBank } from "./paging.js";
 
-export const BreakpointKinds = Object.freeze(["execute", "read", "write", "access"]);
-export const BreakpointActions = Object.freeze(["stop", "log"]);
+const Actions = ["stop", "log"];
 const AddressSpace = 0x10000;
 const AccessesOfKind = new Map([
     ["execute", ["execute"]],
@@ -143,11 +142,17 @@ export class Breakpoints {
         requireAddress("end", end);
         if (end < start) throw new Error(`Breakpoint end $${hexword(end)} is before its start $${hexword(start)}`);
         requireBank(bank, this._cpu.model);
+        if (condition !== undefined && typeof condition !== "string")
+            throw new Error(`Breakpoint condition ${condition} is not text`);
         condition = condition?.trim() || undefined;
+        if (enabled !== undefined && typeof enabled !== "boolean")
+            throw new Error(`Breakpoint enabled ${enabled} is not true or false`);
+        if (label !== undefined && typeof label !== "string") throw new Error(`Breakpoint label ${label} is not text`);
+        if (owner !== undefined && typeof owner !== "string") throw new Error(`Breakpoint owner ${owner} is not text`);
         hitCount ??= 1;
         if (!Number.isInteger(hitCount) || hitCount < 1) throw new Error(`Hit count ${hitCount} is not 1 or more`);
         action ??= "stop";
-        if (!BreakpointActions.includes(action)) throw new Error(`Breakpoint action ${action} is not stop or log`);
+        if (!Actions.includes(action)) throw new Error(`Breakpoint action ${action} is not stop or log`);
         return {
             kind,
             start,
@@ -192,23 +197,26 @@ export class Breakpoints {
     }
 
     _check(access, address, value) {
-        const { entries, covered } = this._watching[access];
-        if (!covered[address]) return false;
+        // A handler earlier in the same dispatch can remove the last breakpoint after this one was detached.
+        const watching = this._watching[access];
+        if (!watching?.covered[address]) return false;
+        const { entries } = watching;
         const cpu = this._cpu;
         // An instruction a stop halted before runs on resuming; no execute breakpoint stops it a second time.
         if (access === "execute" && cpu.resumingFromStop) return false;
         const old = access === "write" ? cpu.peekmem(address) : value;
+        const pc = access === "execute" ? address : cpu.getPrevPc(0);
         let stop = false;
         for (const entry of entries) {
             if (address < entry.start || address > entry.end) continue;
             if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) continue;
-            if (entry.test && !entry.test(cpu, value, old)) continue;
+            if (entry.test && !entry.test(cpu, pc, value, old)) continue;
             if (++entry.hits < entry.hitCount) continue;
             const hit = {
                 id: entry.id,
                 access,
                 address,
-                pc: access === "execute" ? address : cpu.getPrevPc(0),
+                pc,
                 action: entry.action,
                 hits: entry.hits,
             };

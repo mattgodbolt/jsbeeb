@@ -45,7 +45,7 @@ describe("TestMachine", () => {
             const machine = new TestMachine(model);
             machine.processor.romSelect(romsel);
 
-            expect(machine.processor.isBankPagedAt(bank, address)).toBe(paged);
+            expect(machine.isBankPagedAt(bank, address)).toBe(paged);
         });
     }
 });

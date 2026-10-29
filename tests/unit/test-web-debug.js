@@ -121,6 +121,12 @@ describe("Debugger", () => {
         return teardownDom();
     });
 
+    it("logs each hit of a log breakpoint to the console", () => {
+        cpu.breakpoints.add({ kind: "execute", start: 0x2000, action: "log" });
+        cpu.execute(1);
+        expect(console.log).toHaveBeenCalledWith("Breakpoint 1: execute $2000 at pc $2000, hit 1");
+    });
+
     const visible = (id) => !document.getElementById(id).hidden;
     const disRows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
     const currentRow = () => document.querySelector("#disassembly .highlight");

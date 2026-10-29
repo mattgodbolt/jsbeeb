@@ -32,6 +32,8 @@ const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
 // Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
+const MaxLoggedHits = 10000;
+const BreakpointUpdateFields = ["bank", "end", "condition", "hitCount", "action", "enabled"];
 const AccconShadowBit = 4;
 
 // Where the MOS keeps its read and write offsets into the keyboard buffer (buffer 0), which is empty when they
@@ -129,6 +131,7 @@ export class MachineSession {
         /** The hit that stopped the machine for each of this session's breakpoints, or null. */
         this._breakpointHits = new Map();
         this._breakpointLog = [];
+        this._breakpointLogDropped = 0;
     }
 
     /** Load ROMs and hardware; call once before anything else */
@@ -486,8 +489,10 @@ export class MachineSession {
             enabled,
             owner: "session",
             onHit: (hit) => {
-                if (hit.action === "log") this._breakpointLog.push(hit);
-                else if (!this._breakpointHits.get(id)) this._breakpointHits.set(id, hit);
+                if (hit.action !== "log") {
+                    if (!this._breakpointHits.get(id)) this._breakpointHits.set(id, hit);
+                } else if (this._breakpointLog.length < MaxLoggedHits) this._breakpointLog.push(hit);
+                else this._breakpointLogDropped++;
             },
         });
         this._breakpointHits.set(id, null);
@@ -502,7 +507,8 @@ export class MachineSession {
      */
     updateBreakpoint(id, changes) {
         this._requireOwnBreakpoint(id);
-        this._breakpoints.update(id, changes);
+        const fields = BreakpointUpdateFields.filter((field) => field in changes);
+        this._breakpoints.update(id, Object.fromEntries(fields.map((field) => [field, changes[field]])));
     }
 
     /** This session's breakpoints, with how often each has been hit. */
@@ -513,11 +519,16 @@ export class MachineSession {
         });
     }
 
-    /** The hits of `log` breakpoints since the last call, oldest first. */
+    /**
+     * The hits of `log` breakpoints since the last call, oldest first, and how many more there were past the
+     * first MaxLoggedHits, which are not kept.
+     * @returns {{hits: object[], dropped: number}}
+     */
     drainBreakpointLog() {
-        const log = this._breakpointLog;
+        const drained = { hits: this._breakpointLog, dropped: this._breakpointLogDropped };
         this._breakpointLog = [];
-        return log;
+        this._breakpointLogDropped = 0;
+        return drained;
     }
 
     get _breakpoints() {

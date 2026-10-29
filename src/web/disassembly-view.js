@@ -263,10 +263,21 @@ export class DisassemblyView {
             .filter(({ kind, start, end }) => kind === "execute" && start <= address && address <= end);
     }
 
-    /** Removes the breakpoints on just `address`, or with none there, sets one. */
+    /**
+     * Removes the plain breakpoints on just `address`, or with none there, sets one. One with a condition, a bank, a
+     * hit count or logging is left for the Breakpoints panel or the console to change.
+     */
     _toggleBreakpoint(address) {
         const { breakpoints } = this._cpu;
-        const onAddress = this._executeBreakpoints(address).filter(({ start, end }) => start === end);
+        const onAddress = this._executeBreakpoints(address).filter(
+            (bp) =>
+                bp.start === bp.end &&
+                bp.owner === "user" &&
+                bp.bank === undefined &&
+                bp.condition === undefined &&
+                bp.hitCount === 1 &&
+                bp.action === "stop",
+        );
         if (!onAddress.length) breakpoints.add({ kind: "execute", start: address });
         for (const { id } of onAddress) breakpoints.remove(id);
     }

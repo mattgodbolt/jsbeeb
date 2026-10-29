@@ -16,7 +16,7 @@ describe("compileCondition", () => {
         p: { asByte: () => 0b1000_0011 },
         peekmem: (address) => memory.get(address) ?? 0,
     };
-    const holds = (text) => compileCondition(text)(cpu, 0x41, 0x40) !== 0;
+    const holds = (text) => compileCondition(text)(cpu, cpu.pc, 0x41, 0x40) !== 0;
 
     it.each([
         ["A == 13", true],
@@ -51,6 +51,9 @@ describe("compileCondition", () => {
         ["A < X", false],
         ["A > X", true],
         ["A <= 13", true],
+        ["A AND 8 = 8", true],
+        ["X = 1 AND ?&71", true],
+        ["(A = 13) = -1", true],
     ])("%s holds: %s", (text, expected) => {
         expect(holds(text)).toBe(expected);
     });

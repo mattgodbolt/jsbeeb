@@ -79,6 +79,21 @@ describe("Breakpoints", () => {
         expect(cpu.x).toBe(Loaded);
     });
 
+    it("gives a condition the address of the instruction making the access, as the hit does", () => {
+        breakpoints.add({ kind: "write", start: Data, condition: "PC = &2002" });
+        expect(run()).toBe(false);
+        expect(hits).toEqual([expect.objectContaining({ pc: Store })]);
+    });
+
+    it("stops on a write to an I/O register", () => {
+        const UserViaDdrb = 0xfe62;
+        cpu.writemem(Store + 1, UserViaDdrb & 0xff);
+        cpu.writemem(Store + 2, UserViaDdrb >> 8);
+        breakpoints.add({ kind: "write", start: UserViaDdrb });
+        expect(run()).toBe(false);
+        expect(hits).toEqual([expect.objectContaining({ address: UserViaDdrb, value: Loaded, pc: Store })]);
+    });
+
     it("stops on a write that changes the byte, with value != old", () => {
         breakpoints.add({ kind: "write", start: Data, condition: "value != old" });
         expect(run()).toBe(false);
@@ -139,6 +154,8 @@ describe("Breakpoints", () => {
         [{ kind: "read", start: 0, hitCount: 0 }, "Hit count 0 is not 1 or more"],
         [{ kind: "read", start: 0, action: "pause" }, "Breakpoint action pause is not stop or log"],
         [{ kind: "read", start: 0, condition: "A =" }, 'Bad condition "A =": expected a value at column 4'],
+        [{ kind: "read", start: 0, condition: 5 }, "Breakpoint condition 5 is not text"],
+        [{ kind: "read", start: 0, enabled: "false" }, "Breakpoint enabled false is not true or false"],
     ])("refuses %j", (spec, message) => {
         expect(() => breakpoints.add(spec)).toThrow(message);
         expect(breakpoints.list()).toEqual([]);

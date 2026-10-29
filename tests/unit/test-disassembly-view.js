@@ -171,10 +171,23 @@ describe("DisassemblyView", () => {
         expect(gutter().classList.contains("active")).toBe(false);
     });
 
-    it("toggles a breakpoint at the cursor with the t key", () => {
+    it("toggles a breakpoint at the cursor with the t key, in the CPU's breakpoints", () => {
         view.update(cpu.pc);
         keys.press("t");
         expect(currentRow().querySelector(".bp_gutter").classList.contains("active")).toBe(true);
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ kind: "execute", start: cpu.pc })]);
+    });
+
+    it("shows breakpoints set elsewhere as they change, hollow while disabled, and leaves a conditional one", () => {
+        view.update(cpu.pc);
+        const gutter = () => currentRow().querySelector(".bp_gutter");
+        const id = cpu.breakpoints.add({ kind: "execute", start: cpu.pc, condition: "A = 1" });
+        expect(gutter().classList.contains("active")).toBe(true);
+        cpu.breakpoints.update(id, { enabled: false });
+        expect([...gutter().classList]).toEqual(["bp_gutter", "disabled"]);
+        click(gutter());
+        click(gutter());
+        expect(cpu.breakpoints.list().map((bp) => bp.id)).toEqual([id]);
     });
 
     describe("SHEILA registers", () => {

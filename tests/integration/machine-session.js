@@ -184,10 +184,10 @@ describe("MachineSession watching execution", () => {
         await session.runFor(CyclesPerInterlacedFrame);
 
         expect(session.hitBreakpoint()).toBeNull();
-        expect(session.drainBreakpointLog().map(({ id, address }) => [id, address])).toEqual(
+        expect(session.drainBreakpointLog().hits.map(({ id, address }) => [id, address])).toEqual(
             ProgramPcs.slice(1).map((address) => [logged, address]),
         );
-        expect(session.drainBreakpointLog()).toEqual([]);
+        expect(session.drainBreakpointLog()).toEqual({ hits: [], dropped: 0 });
         expect(session.listBreakpoints()).toEqual([
             expect.objectContaining({ id: logged, type: "execute", address: ProgramPcs[1], end: ProgramPcs[3] }),
             expect.objectContaining({ id: stopping, condition: "A = 1", hitCount: 2, enabled: false, hits: 0 }),

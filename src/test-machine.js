@@ -177,6 +177,11 @@ export class TestMachine {
         return this.processor.pagedBank;
     }
 
+    /** Whether sideways `bank` is paged in at `address`; see the CPU's isBankPagedAt. */
+    isBankPagedAt(bank, address) {
+        return this.processor.isBankPagedAt(bank, address);
+    }
+
     /**
      * Run until the PC reaches `targetAddr`, with sideways `bank` paged in if
      * one is given, or throw after `secs` of emulated time.
@@ -192,14 +197,20 @@ export class TestMachine {
      * `onHit` first with the byte read or written. An execute breakpoint
      * never fires for the instruction the CPU resumes at after a stop.
      * Returns a handle whose `remove()` ends the watch.
-     * @param {"execute"|"read"|"write"} type
+     * @param {"execute"|"read"|"write"|"access"} type
      * @param {number} address
      * @param {{bank: (number|undefined)}} opts
      * @param {function(number=): void} onHit
      */
     addBreakpoint(type, address, { bank }, onHit) {
         const { breakpoints } = this.processor;
-        const id = breakpoints.add({ kind: type, start: address, bank, onHit: ({ value }) => onHit(value) });
+        const id = breakpoints.add({
+            kind: type,
+            start: address,
+            bank,
+            owner: "TestMachine",
+            onHit: ({ value }) => onHit(value),
+        });
         return { remove: () => breakpoints.remove(id) };
     }
 
