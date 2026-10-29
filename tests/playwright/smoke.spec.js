@@ -254,7 +254,7 @@ test("the no-audio-worklet warning fits a phone and a desktop, closes without ta
     await expect(warning).toContainText("No audio worklet API");
 });
 
-const DebugPanels = ["#toolbar-panel", "#disassembly-panel", "#registers-panel", "#memory-panel", "#peripherals-panel"];
+const DebugPanels = ["#toolbar-panel", "#disassembly-panel", "#registers-panel", "#memory-panel"];
 const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
@@ -277,15 +277,10 @@ test("Alt-S opens the debugger's panels beside the screen, g leaves them open an
     const screen = await page.locator("#screen").boundingBox();
     const boxes = await boxesOf(page, DebugPanels);
     // The right-hand gutter is narrower than a disassembly line, so only the left-hand column clears the screen.
-    expect(
-        (await boxesOf(page, ["#memory-panel", "#peripherals-panel"])).filter((box) => overlap(box, screen)),
-    ).toEqual([]);
+    expect(overlap(await page.locator("#memory-panel").boundingBox(), screen)).toBe(false);
     expect(boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => overlap(a, b)))).toEqual([]);
     const current = page.locator("#disassembly .current");
     expect(await current.evaluate((row) => row.scrollWidth <= row.clientWidth)).toBe(true);
-    const peripherals = page.locator("#peripherals-panel .panel-body");
-    await peripherals.evaluate((body) => body.scrollTo(0, body.scrollHeight));
-    await expect(page.locator("#crtc .crtc_regs tr:not(.template)").last()).toBeInViewport();
 
     const cycles = page.locator("#cpu6502_cycles");
     const stoppedAt = await cycles.textContent();
@@ -517,15 +512,13 @@ test("Alt-D shows and hides the debugger's panels with the machine left running,
     await page.setViewportSize({ width: 1280, height: 720 });
     await beeb.open();
     await beeb.expectScreenText(">");
-    const narrowSet = DebugPanels.slice(0, 4);
     await page.keyboard.press("Alt+D");
-    for (const panel of narrowSet) await expect(page.locator(panel)).toBeVisible();
-    await expect(page.locator("#peripherals-panel")).toBeHidden();
-    const boxes = await boxesOf(page, narrowSet);
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeVisible();
+    const boxes = await boxesOf(page, DebugPanels);
     expect(boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => overlap(a, b)))).toEqual([]);
     await beeb.expectRunningPast(await beeb.cycles());
     await page.keyboard.press("Alt+D");
-    for (const panel of narrowSet) await expect(page.locator(panel)).toBeHidden();
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeHidden();
 
     await beeb.togglePanel("memory");
     await expect(page.locator("#memory-panel")).toBeVisible();
@@ -586,15 +579,10 @@ test("the system VIA panel opens from the Debug menu, keeps up with the running 
     await expect(timer1).not.toBeEmpty();
 });
 
-test("the system VIA panel's content fits the size it opened at, and keeps its size as the machine runs, keys come and go, and its modes change", async ({
-    beeb,
-    page,
-}) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await beeb.togglePanel("sysvia");
-    await page.evaluate(() => {
-        const body = document.querySelector("#sysvia-panel .panel-body");
+/** Each size a panel's body is seen at, a frame at a time, and whether its content fits it, until sizesSampled. */
+function sampleSizes(page, panel) {
+    return page.evaluate((panel) => {
+        const body = document.querySelector(`${panel} .panel-body`);
         window.e2eSizes = new Set();
         window.e2eSampling = true;
         const sample = () => {
@@ -603,7 +591,23 @@ test("the system VIA panel's content fits the size it opened at, and keeps its s
             if (window.e2eSampling) requestAnimationFrame(sample);
         };
         sample();
+    }, panel);
+}
+
+const sizesSampled = (page) =>
+    page.evaluate(() => {
+        window.e2eSampling = false;
+        return [...window.e2eSizes];
     });
+
+test("the system VIA panel's content fits the size it opened at, and keeps its size as the machine runs, keys come and go, and its modes change", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.togglePanel("sysvia");
+    await sampleSizes(page, "#sysvia-panel");
     await beeb.pressKey("a");
     await beeb.pressKey("Enter");
     await page.click("#debug-pause");
@@ -619,21 +623,16 @@ test("the system VIA panel's content fits the size it opened at, and keeps its s
             await frame();
             if (panel.textContent.includes(text)) seen.push(text);
         }
-        window.e2eSampling = false;
         return seen;
     }, SysViaModeWrites);
     expect(shown).toEqual(SysViaModeWrites.map(([, , text]) => text));
-    expect(await page.evaluate(() => [...window.e2eSizes])).toEqual([expect.stringMatching(/fits: true$/)]);
+    expect(await sizesSampled(page)).toEqual([expect.stringMatching(/fits: true$/)]);
 });
 
-test("the user VIA panel opens from the peripherals panel, names the printer and user port lines, and fits its content", async ({
-    beeb,
-    page,
-}) => {
+test("the user VIA panel names the printer and user port lines, and fits its content", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await beeb.togglePanel("peripherals");
-    await page.click('#peripherals-panel [data-opens="uservia-panel"]');
+    await beeb.togglePanel("uservia");
     const panel = page.locator("#uservia-panel");
     await expect(panel).toBeVisible();
     await expect(panel).toContainText("CA2 printer strobe");
@@ -642,8 +641,40 @@ test("the user VIA panel opens from the peripherals panel, names the printer and
         .locator(".panel-body")
         .evaluate((body) => body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight);
     expect(fits).toBe(true);
-    await page.click('#peripherals-panel [data-opens="uservia-panel"]');
-    await expect(panel).toBeHidden();
+});
+
+test("the CRTC panel follows a change of mode, its content fitting the size it opened at throughout", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.togglePanel("crtc");
+    const panel = page.locator("#crtc-panel");
+    await expect(panel).toContainText("interlace sync and video");
+    await expect(panel).toContainText("at &7c00");
+    await sampleSizes(page, "#crtc-panel");
+    for (const key of ["m", "o", "d", "e", "Space", "0", "Enter"]) await beeb.pressKey(key);
+    await expect(panel).toContainText("80 chars shown");
+    await expect(panel).toContainText("at &3000");
+    expect(await sizesSampled(page)).toEqual([expect.stringMatching(/fits: true$/)]);
+});
+
+test("the sound chip panel opens from the Debug menu, names a tone's note, and fits its content", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    const A440Writes = [0x8c, 0x11, 0x90];
+    await page.evaluate((writes) => writes.forEach((value) => window.processor.soundChip.poke(value)), A440Writes);
+    await beeb.togglePanel("soundchip");
+    const panel = page.locator("#soundchip-panel");
+    await expect(panel).toContainText("A4 +1c");
+    const fits = await panel
+        .locator(".panel-body")
+        .evaluate((body) => body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight);
+    expect(fits).toBe(true);
 });
 
 for (const [model, writes] of Object.entries(FdcModeWrites)) {
@@ -940,13 +971,12 @@ test.describe("on a phone", () => {
     });
 });
 
-test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({
+test("each of help's tabs fits a desktop or tablet window whole and a phone's width, and opens on the debugging tab while paused or debugging", async ({
     beeb,
     page,
 }) => {
-    const helpLayout = async ({ width, height }) => {
-        await page.setViewportSize({ width, height });
-        return page.evaluate(() => {
+    const helpLayout = () =>
+        page.evaluate(() => {
             const modal = document.getElementById("help");
             const body = modal.querySelector(".modal-body");
             const close = modal.querySelector(".btn-close").getBoundingClientRect();
@@ -957,30 +987,53 @@ test("help fits a desktop browser window whole, and on a phone or tablet scrolls
                 scrollsSideways: body.scrollWidth > body.clientWidth || modal.scrollWidth > modal.clientWidth,
             };
         });
+    const tabs = page.locator("#help [data-bs-toggle='tab']");
+    const layoutOfEachTab = async (size) => {
+        await page.setViewportSize(size);
+        const layouts = {};
+        for (const tab of await tabs.all()) {
+            await tab.click();
+            await expect(page.locator(`${await tab.getAttribute("data-bs-target")}.show`)).toBeVisible();
+            layouts[(await tab.textContent()).trim()] = await helpLayout();
+        }
+        return layouts;
     };
-    const desktop = { width: 1920, height: 940 };
-    await page.setViewportSize(desktop);
+    const fitsWhole = { closeOnScreen: true, modalScrolls: false, bodyScrolls: false, scrollsSideways: false };
+    const openHelp = async () => {
+        await beeb.armModalShown("help");
+        await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
+        await beeb.expectModalShown();
+    };
+
+    await page.setViewportSize({ width: 1920, height: 940 });
     await beeb.open();
     await beeb.expectScreenText(">");
-    await beeb.armModalShown("help");
-    await page.evaluate(() => document.querySelector('a[data-bs-target="#help"]').click());
-    await beeb.expectModalShown();
-    expect(await helpLayout(desktop)).toEqual({
-        closeOnScreen: true,
-        modalScrolls: false,
-        bodyScrolls: false,
-        scrollsSideways: false,
-    });
-    for (const narrow of [
-        { width: 390, height: 844 },
-        { width: 768, height: 1024 },
-    ]) {
-        expect(await helpLayout(narrow), `at ${narrow.width}x${narrow.height}`).toEqual({
-            closeOnScreen: true,
-            modalScrolls: false,
-            bodyScrolls: true,
-            scrollsSideways: false,
-        });
+    await openHelp();
+    const tabNames = (await tabs.allTextContents()).map((name) => name.trim());
+    const everyTab = (layout) => Object.fromEntries(tabNames.map((name) => [name, layout]));
+    expect(await layoutOfEachTab({ width: 1920, height: 940 })).toEqual(everyTab(fitsWhole));
+    expect(await layoutOfEachTab({ width: 768, height: 1024 })).toEqual(everyTab(fitsWhole));
+
+    const onPhone = await layoutOfEachTab({ width: 390, height: 844 });
+    expect(onPhone.Keyboard.bodyScrolls).toBe(true);
+    for (const layout of Object.values(onPhone)) {
+        expect({ ...layout, bodyScrolls: false }).toEqual(fitsWhole);
+    }
+    expect(await page.locator("#help .help-tabs").evaluate((row) => row.scrollWidth > row.clientWidth)).toBe(true);
+
+    await page.setViewportSize({ width: 1920, height: 940 });
+    await tabs.first().click();
+    for (const stop of ["Alt+P", "Alt+S"]) {
+        await page.keyboard.press("Escape");
+        await beeb.expectRunningPast(await beeb.cycles());
+        await page.keyboard.press(stop);
+        await openHelp();
+        await expect(page.locator("#help-debugging.show"), stop).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.locator("#help")).toBeHidden();
+        await page.keyboard.press(stop);
+        await openHelp();
+        await expect(page.locator("#help-start.show"), `after ${stop} again`).toBeVisible();
     }
 });
 

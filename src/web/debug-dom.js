@@ -15,16 +15,6 @@ export function externalLink(url, text) {
     return link;
 }
 
-// Clone a template row, unhide it, append to parent, and remove the template class.
-export function cloneTemplate(container) {
-    const template = container.querySelector(".template");
-    const clone = template.cloneNode(true);
-    clone.classList.remove("template");
-    clone.style.display = "";
-    container.appendChild(clone);
-    return clone;
-}
-
 /** In px, a shortfall that layout rounding can leave, and that still counts as fitting. */
 const RoundingSlack = 0.5;
 

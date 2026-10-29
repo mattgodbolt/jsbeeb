@@ -24,9 +24,10 @@ export const PanelIds = [
     "disassembly",
     "memory",
     "registers",
-    "peripherals",
     "sysvia",
     "uservia",
+    "crtc",
+    "soundchip",
     "fdc",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
