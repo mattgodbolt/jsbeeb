@@ -119,9 +119,35 @@ describe("Disassemble6502", () => {
             ],
         ])("describes %s from the emulation's own tables", (_, opcodes, bytes, expected) => {
             mem.set(bytes, 0x2000);
-            expect(opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler.instructionAt(0x2000)).toEqual(
-                expected,
-            );
+            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            const { registers: _registers, idempotent: _idempotent, ...instruction } = dis.instructionAt(0x2000);
+            expect(instruction).toEqual(expected);
+        });
+
+        it.each([
+            ["LDA abs,Y", cpu6502Opcodes, 0xb9, "y", "anz", true],
+            ["TAX", cpu6502Opcodes, 0xaa, "a", "xnz", true],
+            ["CMP #", cpu6502Opcodes, 0xc9, "a", "nzc", true],
+            ["BIT zp", cpu6502Opcodes, 0x24, "a", "nvz", true],
+            ["AND #", cpu6502Opcodes, 0x29, "a", "anz", true],
+            ["SEC", cpu6502Opcodes, 0x38, "", "c", true],
+            ["BEQ", cpu6502Opcodes, 0xf0, "z", "", true],
+            ["STA zp,X", cpu6502Opcodes, 0x95, "ax", "", true],
+            ["EOR #", cpu6502Opcodes, 0x49, "a", "anz", false],
+            ["INX", cpu6502Opcodes, 0xe8, "x", "xnz", false],
+            ["ADC #", cpu6502Opcodes, 0x69, "adc", "anvzc", false],
+            ["ROL A", cpu6502Opcodes, 0x2a, "ac", "anzc", false],
+            ["INC zp", cpu6502Opcodes, 0xe6, "", "nz", false],
+            ["PHA", cpu6502Opcodes, 0x48, "as", "s", false],
+            ["PLP", cpu6502Opcodes, 0x28, "s", "snvdizc", false],
+            ["JSR", cpu6502Opcodes, 0x20, "s", "s", false],
+            ["SMB0", cpu65c02Opcodes, 0x87, "", "", true],
+        ])("says what %s reads and writes, and whether it settles", (_, opcodes, opcode, reads, writes, idempotent) => {
+            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            expect(dis.describeOpcode(opcode)).toMatchObject({
+                registers: { reads: [...reads], writes: [...writes] },
+                idempotent,
+            });
         });
     });
 

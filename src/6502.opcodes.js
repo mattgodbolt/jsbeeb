@@ -267,9 +267,9 @@ function getOp(op, arg) {
         case "EOR":
             return { op: ["cpu.a = cpu.p.setzn(cpu.a ^ REG);"], read: true };
         case "AND":
-            return { op: ["cpu.a = cpu.p.setzn(cpu.a & REG);"], read: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a & REG);"], read: true, idempotent: true };
         case "ORA":
-            return { op: ["cpu.a = cpu.p.setzn(cpu.a | REG);"], read: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a | REG);"], read: true, idempotent: true };
         case "CMP":
             return {
                 op: ["cpu.p.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"],
@@ -406,11 +406,13 @@ function getOp(op, arg) {
             return {
                 op: ["const magic = 0xff;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
+                idempotent: true,
             };
         case "LXA": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
                 op: ["const magic = 0xee;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
+                idempotent: true,
             };
         case "SRE":
             return {
@@ -428,11 +430,13 @@ function getOp(op, arg) {
             return {
                 op: ["cpu.a = cpu.p.setzn(cpu.a & REG); cpu.p.c = cpu.p.n;"],
                 read: true,
+                idempotent: true,
             };
         case "ANE":
             return {
                 op: ["cpu.a = cpu.p.setzn((cpu.a | 0xee) & REG & cpu.x);"],
                 read: true,
+                idempotent: true,
             };
         case "ARR":
             return { op: "cpu.arr(REG);", read: true };
@@ -446,6 +450,7 @@ function getOp(op, arg) {
             return {
                 op: ["cpu.a = cpu.x = cpu.s = cpu.p.setzn(cpu.s & REG);"],
                 read: true,
+                idempotent: true,
             };
         case "RRA":
             return {
@@ -488,6 +493,7 @@ function getOp(op, arg) {
                 op: [`REG = REG & (${~(1 << (op[3] - "0"))});`],
                 read: true,
                 write: true,
+                idempotent: true,
             };
         case "SMB0":
         case "SMB1":
@@ -501,6 +507,7 @@ function getOp(op, arg) {
                 op: [`REG = REG | ${1 << (op[3] - "0")};`],
                 read: true,
                 write: true,
+                idempotent: true,
             };
         case "BBR0":
         case "BBR1":
@@ -1016,7 +1023,48 @@ function instructionLength(mode) {
     return mode.includes("abs") || mode === "zp,branch" ? 3 : 2;
 }
 
-const UnknownOpcode = { mnemonic: "???", mode: "implied", length: 1, accesses: [], flow: "next" };
+const RegistersAndFlags = ["a", "x", "y", "s", "n", "v", "d", "i", "z", "c"];
+const Flags = RegistersAndFlags.slice(4);
+// What the CPU methods the generated code calls read and write, which the calling code cannot show.
+const CallEffects = [
+    { call: /cpu\.(?:adc|sbc|arr)\(/, reads: ["a", "d", "c"], writes: ["a", "n", "v", "z", "c"] },
+    { call: /cpu\.(?:push|pull)\(/, reads: ["s"], writes: ["s"] },
+    { call: /cpu\.brk\(/, reads: ["s", ...Flags], writes: ["s", "d", "i"] },
+    { call: /cpu\.p\.setzn\(/, reads: [], writes: ["n", "z"] },
+    { call: /cpu\.p\.setFromByte\(/, reads: [], writes: Flags },
+    { call: /cpu\.p\.asByte\(/, reads: Flags, writes: [] },
+];
+const Assignment = /cpu\.(?:p\.)?([axysnvdizc])\s*=(?!=)/g;
+const Mention = /cpu\.(?:p\.)?([axysnvdizc])\b(?!\s*\()/g;
+
+/** The registers and flags the emulation code for an operation in `mode` reads and writes. */
+function registerEffects({ op, preop, read, write }, mode) {
+    const code = [preop ?? [], op].flat().join("\n");
+    const reads = new Set([...code.replace(Assignment, "").matchAll(Mention)].map(([, name]) => name));
+    const writes = new Set([...code.matchAll(Assignment)].map(([, name]) => name));
+    for (const effect of CallEffects.filter(({ call }) => call.test(code))) {
+        effect.reads.forEach((name) => reads.add(name));
+        effect.writes.forEach((name) => writes.add(name));
+    }
+    const index = mode.match(/([xy])\)?$/);
+    if (index) reads.add(index[1]);
+    if (mode === "A" && read) reads.add("a");
+    if (mode === "A" && write) writes.add("a");
+    return {
+        reads: RegistersAndFlags.filter((name) => reads.has(name)),
+        writes: RegistersAndFlags.filter((name) => writes.has(name)),
+    };
+}
+
+const UnknownOpcode = {
+    mnemonic: "???",
+    mode: "implied",
+    length: 1,
+    accesses: [],
+    registers: { reads: [], writes: [] },
+    idempotent: true,
+    flow: "next",
+};
 
 /**
  * @typedef {"next" | "branch" | "jump" | "call" | "return" | "interrupt"} Flow
@@ -1025,6 +1073,9 @@ const UnknownOpcode = { mnemonic: "???", mode: "implied", length: 1, accesses: [
  * @property {string} mode the addressing mode, as the opcode tables spell it, or "implied"
  * @property {number} length in bytes, with its operand
  * @property {("read" | "write")[]} accesses what it does to the memory its operand addresses
+ * @property {{reads: string[], writes: string[]}} registers of "a", "x", "y", "s" and the flags "n", "v", "d", "i",
+ * "z", "c", including an index register a mode adds
+ * @property {boolean} idempotent whether running it again at once, with memory as it left it, changes nothing more
  * @property {Flow} flow
  */
 
@@ -1033,13 +1084,20 @@ function describeOpcodes(opcodes) {
     const descriptions = [];
     for (const [opcode, text] of Object.entries(opcodes)) {
         const [mnemonic, mode = "implied"] = text.split(" ");
-        const { read, write, flow } = getOp(mnemonic, mode === "implied" ? undefined : mode);
+        const op = getOp(mnemonic, mode === "implied" ? undefined : mode);
+        const { read, write, flow } = op;
         const memory = !ModesWithoutMemoryOperand.has(mode);
+        const registers = registerEffects(op, mode);
+        const accesses = [...(memory && read ? ["read"] : []), ...(memory && write ? ["write"] : [])];
+        // Without a mark from getOp, only an instruction that reads none of what it writes is known to settle.
+        const feedsItself = registers.writes.some((name) => registers.reads.includes(name)) || accesses.length === 2;
         descriptions[Number(opcode)] = {
             mnemonic,
             mode,
             length: instructionLength(mode),
-            accesses: [...(memory && read ? ["read"] : []), ...(memory && write ? ["write"] : [])],
+            accesses,
+            registers,
+            idempotent: op.idempotent ?? !feedsItself,
             flow: flow ?? (mode.endsWith("branch") ? "branch" : "next"),
         };
     }
