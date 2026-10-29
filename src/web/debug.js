@@ -455,7 +455,7 @@ export class Debugger {
 
     /** Every panel Alt-S and Alt-D show and hide, the debugger's own first. */
     _debugPanels() {
-        return this._arrangement.group(DebugGroup);
+        return this._arrangement.panelsIn(DebugGroup);
     }
 
     panelsShown() {

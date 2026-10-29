@@ -180,7 +180,7 @@ export class PanelArrangement extends EventTarget {
     }
 
     /** The panels shown and hidden together as `group`, in the order they were made. */
-    group(group) {
+    panelsIn(group) {
         return this._panels.filter((floating) => floating.group === group);
     }
 

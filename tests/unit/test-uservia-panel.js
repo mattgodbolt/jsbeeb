@@ -63,7 +63,7 @@ describe("UserViaPanel", () => {
         expect(panel.floating.isOpen).toBe(false);
         opener.click();
         expect(panel.floating.isOpen).toBe(true);
-        expect(arrangement.group(DebugGroup)).toEqual([panel.floating]);
+        expect(arrangement.panelsIn(DebugGroup)).toEqual([panel.floating]);
         expect(arrangement.listed().map(({ title }) => title)).toEqual(["User VIA"]);
     });
 

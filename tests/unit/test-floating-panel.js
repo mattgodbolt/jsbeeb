@@ -491,7 +491,7 @@ describe("FloatingPanel", () => {
             const sysvia = shelled("sysvia", "debug").floating;
             shelled("watches", null);
             const uservia = shelled("uservia", "debug").floating;
-            expect(arrangement.group("debug")).toEqual([sysvia, uservia]);
+            expect(arrangement.panelsIn("debug")).toEqual([sysvia, uservia]);
         });
 
         it("opens and closes from any element that names it, leaving the rest of the page's clicks alone", () => {
