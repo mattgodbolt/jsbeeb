@@ -744,8 +744,7 @@ export class Debugger {
         for (let at = top; at <= 0xff && at > cpu.s && stack.length < StackBytesShown; at++)
             stack.push(hexbyte(cpu.peekmem(0x100 + at)));
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
-        const cycles = cycleCount(cpu);
-        this.updateElem(document.getElementById("cpu6502_cycles"), String(cycles));
+        this.updateElem(document.getElementById("cpu6502_cycles"), String(cycleCount(cpu)));
         const stopwatch = this._stopwatchFrom === null ? "" : String(cpu.scheduler.epoch - this._stopwatchFrom);
         this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
         const beam = cpu.video.beamPosition();
