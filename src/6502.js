@@ -1082,6 +1082,8 @@ export class Cpu6502 extends Base6502 {
     }
 
     peekmem(addr) {
+        // Callers read on past $ffff (an instruction's operand, a dump's end) where the 6502 wraps to $0000.
+        addr &= 0xffff;
         const statOffset = this.memStatOffset + (addr >>> 8);
         if (this.memStat[statOffset]) {
             const offset = this.memLook[statOffset];
