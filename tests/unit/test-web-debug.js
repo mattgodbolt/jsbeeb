@@ -1135,6 +1135,15 @@ describe("Debugger", () => {
                 expect(cpu.onFastPath).toBe(true);
             });
 
+            it("shows every watch one write fires", () => {
+                addWatch("$70");
+                addWatch("$70");
+                pickBreak(0, "on change");
+                pickBreak(1, "on change");
+                run();
+                expect(fired()).toHaveLength(2);
+            });
+
             it("shows no watch as fired at a stop of another kind after one fired in a run outside the loop", () => {
                 addWatch("$70");
                 pickBreak(0, "on change");
