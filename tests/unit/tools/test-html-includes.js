@@ -23,9 +23,21 @@ describe("stitchHtml", () => {
         expect(() => stitchHtml(`${Fixtures}/cycle.html`)).toThrow(/include cycle/);
     });
 
-    it("leaves an include that is not alone on its line", () => {
-        const html = `<p><!-- include: ${Fixtures}/inner.html --></p>`;
-        expect(stitchIncludes(html, "inline.html")).toBe(html);
+    it("expands an include on a line ending in CRLF", () => {
+        const html = `<main>\r\n  <!-- include: ${Fixtures}/inner.html -->\r\n</main>\r\n`;
+        expect(stitchIncludes(html, "inline.html")).toBe("<main>\r\n<p>inner</p>\n</main>\r\n");
+    });
+
+    it.each([
+        ["not alone on its line", `<p><!-- include: ${Fixtures}/inner.html --></p>`],
+        ["without the spaces", `<!--include:${Fixtures}/inner.html-->`],
+        ["in capitals", `<!-- INCLUDE: ${Fixtures}/inner.html -->`],
+    ])("refuses an include %s, naming the file and line", (_how, include) => {
+        expect(() => stitchIncludes(`<main>\n${include}\n</main>`, "inline.html")).toThrow(/^inline\.html:2: /);
+    });
+
+    it("names the partial that holds a malformed include", () => {
+        expect(() => stitchHtml(`${Fixtures}/malformed-outer.html`)).toThrow(`${Fixtures}/malformed.html:1: `);
     });
 });
 

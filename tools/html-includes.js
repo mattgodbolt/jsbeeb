@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const RepoRoot = resolve(import.meta.dirname, "..");
-const IncludeLine = /^[ \t]*<!-- include: (\S+) -->[ \t]*$/gm;
+const IncludeLine = /^[ \t]*<!-- include: (\S+) -->[ \t]*\r?$/gm;
+const ExactInclude = new RegExp(IncludeLine.source);
+const LooksLikeInclude = /<!--\s*include\b/i;
 
 /** The repo-relative path `file` as an absolute one. */
 export const repoPath = (file) => resolve(RepoRoot, file);
@@ -16,7 +18,17 @@ function readPartial(file, includedFrom) {
     }
 }
 
+// A near miss would otherwise stay in the page as a dead comment.
+function checkIncludeLines(html, file) {
+    html.split("\n").forEach((line, index) => {
+        if (LooksLikeInclude.test(line) && !ExactInclude.test(line)) {
+            throw new Error(`${file}:${index + 1}: an include must be "<!-- include: path -->" on a line of its own`);
+        }
+    });
+}
+
 function expandIncludes(html, chain) {
+    checkIncludeLines(html, chain.at(-1));
     return html.replace(IncludeLine, (_line, file) => {
         if (chain.includes(file)) throw new Error(`HTML include cycle: ${[...chain, file].join(" -> ")}`);
         return expandIncludes(readPartial(file, chain.at(-1)).trimEnd(), [...chain, file]);
