@@ -14,6 +14,7 @@ import { signExtend } from "./binary.js";
 import { hexbyte, hexword } from "./hex.js";
 import { loadData } from "./loader.js";
 import { MediaResolver } from "./media-resolver.js";
+import { Breakpoints } from "./breakpoints.js";
 
 async function romImage(name) {
     return (await new MediaResolver().resolve("rom", name)).data;
@@ -27,6 +28,9 @@ const UnpeekableDevice = 0xff;
 export const BaseRamBytes = 64 * 1024;
 export const RomBankBytes = 16 * 1024;
 export const NumRomBanks = 16;
+const RomselAndy = 0x80;
+const AndyStart = 0x8000;
+const AndyEnd = 0x9000;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
@@ -750,6 +754,7 @@ export class Cpu6502 extends Base6502 {
         this.debugInstruction = new DebugHook(this, "_debugInstruction", { remembersStop: true });
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
+        this.breakpoints = new Breakpoints(this);
 
         this.scheduler = new Scheduler();
         this.sysvia = new via.SysVia(this, this.scheduler, {
@@ -806,6 +811,16 @@ export class Cpu6502 extends Base6502 {
     bankPagedBy(romNumber) {
         const { romSockets } = this.model;
         return NumRomBanks - romSockets + (romNumber & (romSockets - 1));
+    }
+
+    /**
+     * Whether sideways `bank` is paged in and, at `address`, not hidden by the Master's ANDY RAM, which ROMSEL bit 7
+     * pages over &8000 to &8FFF.
+     */
+    isBankPagedAt(bank, address) {
+        const andyPaged = this.model.isMaster && (this.romsel & RomselAndy) !== 0;
+        if (andyPaged && address >= AndyStart && address < AndyEnd) return false;
+        return this.pagedBank === bank;
     }
 
     mapPages(start, end, stat, offset) {

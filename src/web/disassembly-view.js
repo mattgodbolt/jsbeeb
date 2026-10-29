@@ -80,7 +80,7 @@ export class DisassemblyView {
         this._cursor = 0;
         this._cursorRow = Math.floor(InitialRows / 2);
         this._backStack = [];
-        this._breakpoints = new Map();
+        this._unwatchBreakpoints = null;
         this._widget = floating.panel.querySelector("#disassembly");
         this._rows = new FittedRows(this._widget, InitialRows, refit);
 
@@ -120,10 +120,7 @@ export class DisassemblyView {
             table: DisassemblyKeys,
             actions: {
                 runToCursor,
-                toggleBreakpoint: () => {
-                    this._toggleBreakpoint(this._cursor);
-                    this.redraw();
-                },
+                toggleBreakpoint: () => this._toggleBreakpoint(this._cursor),
                 down: () => this.update(this._nextInstruction(this._cursor)),
                 up: () => this.update(this._prevInstruction(this._cursor)),
                 back: () => {
@@ -138,6 +135,8 @@ export class DisassemblyView {
 
     setCpu(cpu) {
         this._cpu = cpu;
+        this._unwatchBreakpoints?.();
+        this._unwatchBreakpoints = cpu.breakpoints.onChange(() => this.redraw());
         this._sheila = machineSheilaBlocks(cpu);
     }
 
@@ -226,7 +225,13 @@ export class DisassemblyView {
         for (const ref of disNode.querySelectorAll(".instr_instr_ref")) {
             ref.addEventListener("click", (e) => this._followJump(e));
         }
-        row.querySelector(".bp_gutter").classList.toggle("active", this._breakpoints.has(address));
+        const executes = this._executeBreakpoints(address);
+        const gutter = row.querySelector(".bp_gutter");
+        gutter.classList.toggle(
+            "active",
+            executes.some((bp) => bp.enabled),
+        );
+        gutter.classList.toggle("disabled", executes.length > 0 && !executes.some((bp) => bp.enabled));
         row.dataset.addr = address;
         if (jumpTarget !== undefined) {
             row.dataset.ref = jumpTarget;
@@ -252,23 +257,21 @@ export class DisassemblyView {
         this.update(ref);
     }
 
+    _executeBreakpoints(address) {
+        return this._cpu.breakpoints
+            .list()
+            .filter(({ kind, start, end }) => kind === "execute" && start <= address && address <= end);
+    }
+
+    /** Removes the breakpoints on just `address`, or with none there, sets one. */
     _toggleBreakpoint(address) {
-        if (this._breakpoints.has(address)) {
-            console.log("Removing breakpoint from address " + hexword(address));
-            this._breakpoints.get(address).remove();
-            this._breakpoints.delete(address);
-        } else {
-            console.log("Adding breakpoint to address " + hexword(address));
-            this._breakpoints.set(
-                address,
-                this._cpu.debugInstruction.add((x) => x === address),
-            );
-        }
+        const { breakpoints } = this._cpu;
+        const onAddress = this._executeBreakpoints(address).filter(({ start, end }) => start === end);
+        if (!onAddress.length) breakpoints.add({ kind: "execute", start: address });
+        for (const { id } of onAddress) breakpoints.remove(id);
     }
 
     _gutterClick(e) {
-        const address = parseInt(e.target.closest(".dis_elem").dataset.addr, 10);
-        this._toggleBreakpoint(address);
-        e.target.closest(".bp_gutter").classList.toggle("active", this._breakpoints.has(address));
+        this._toggleBreakpoint(parseInt(e.target.closest(".dis_elem").dataset.addr, 10));
     }
 }

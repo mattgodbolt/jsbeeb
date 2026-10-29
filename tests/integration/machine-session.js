@@ -175,6 +175,25 @@ describe("MachineSession watching execution", () => {
         session.resetBreakpointHits();
     }
 
+    it("logs, lists and changes breakpoints with a range, a condition and a hit count", async () => {
+        await stopAtProgramStart();
+        const logged = session.addBreakpoint("execute", ProgramPcs[1], { end: ProgramPcs[3], action: "log" });
+        const stopping = session.addBreakpoint("execute", ProgramPcs[0], { condition: "A = 1", hitCount: 2 });
+        session.updateBreakpoint(stopping, { enabled: false });
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toBeNull();
+        expect(session.drainBreakpointLog().map(({ id, address }) => [id, address])).toEqual(
+            ProgramPcs.slice(1).map((address) => [logged, address]),
+        );
+        expect(session.drainBreakpointLog()).toEqual([]);
+        expect(session.listBreakpoints()).toEqual([
+            expect.objectContaining({ id: logged, type: "execute", address: ProgramPcs[1], end: ProgramPcs[3] }),
+            expect.objectContaining({ id: stopping, condition: "A = 1", hitCount: 2, enabled: false, hits: 0 }),
+        ]);
+    });
+
     it("keeps running whatever the watcher returns", async () => {
         const remove = session.onExecute(() => true);
 

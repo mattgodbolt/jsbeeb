@@ -126,9 +126,9 @@ export class MachineSession {
         this._pendingOutput = [];
         this._capture = new VduTextCapture((element) => this._pendingOutput.push(element), { isAtom: this._isAtom });
 
-        // Breakpoint management, with persistent hooks that survive across run calls
-        this._breakpoints = new Map(); // id → { hook, type, address, bank, hit, value }
-        this._nextBreakpointId = 1;
+        /** The hit that stopped the machine for each of this session's breakpoints, or null. */
+        this._breakpointHits = new Map();
+        this._breakpointLog = [];
     }
 
     /** Load ROMs and hardware; call once before anything else */
@@ -460,26 +460,72 @@ export class MachineSession {
     }
 
     /**
-     * Add a persistent breakpoint. Returns the breakpoint id.
-     * The hook stays active across run calls until removed.
-     * When the hook fires, cpu.stop() halts the current runFor.
-     * @param {"execute"|"read"|"write"} type
+     * Add a persistent breakpoint, one of the processor's `breakpoints`, which stays until removed and stops the
+     * run it fires in. Returns the breakpoint id.
+     * @param {"execute"|"read"|"write"|"access"} type - access is a read or a write
      * @param {number} address
      * @param {Object} [opts]
-     * @param {number} [opts.bank] only break while this sideways bank is paged in at `address` (on a Master,
+     * @param {number} [opts.bank] only break while this sideways bank is paged in where it is hit (on a Master,
      *     not while ANDY is paged over &8000 to &8FFF)
+     * @param {number} [opts.end] the last address it covers, for a range from `address`
+     * @param {string} [opts.condition] as the wiki's Debugger page describes, e.g. "A = &0D AND ?&70 <> 0"
+     * @param {number} [opts.hitCount] act on this hit and every one after
+     * @param {"stop"|"log"} [opts.action] log records each hit for drainBreakpointLog() and runs on
+     * @param {boolean} [opts.enabled]
      * @returns {number} breakpoint id
      */
-    addBreakpoint(type, address, { bank } = {}) {
-        requireBank(bank, this._machine.model);
-        const id = this._nextBreakpointId++;
-        const bp = { type, address, bank, hit: false, id, value: undefined };
-        bp.hook = this._machine.addBreakpoint(type, address, { bank }, (value) => {
-            bp.hit = true;
-            bp.value = value;
+    addBreakpoint(type, address, { bank, end, condition, hitCount, action, enabled } = {}) {
+        const id = this._breakpoints.add({
+            kind: type,
+            start: address,
+            end,
+            bank,
+            condition,
+            hitCount,
+            action,
+            enabled,
+            owner: "session",
+            onHit: (hit) => {
+                if (hit.action === "log") this._breakpointLog.push(hit);
+                else if (!this._breakpointHits.get(id)) this._breakpointHits.set(id, hit);
+            },
         });
-        this._breakpoints.set(id, bp);
+        this._breakpointHits.set(id, null);
         return id;
+    }
+
+    /**
+     * Change the fields `changes` gives of breakpoint `id`, as addBreakpoint's options name them.
+     * @param {number} id
+     * @param {{bank?: number, end?: number, condition?: string, hitCount?: number, action?: "stop"|"log",
+     *     enabled?: boolean}} changes
+     */
+    updateBreakpoint(id, changes) {
+        this._requireOwnBreakpoint(id);
+        this._breakpoints.update(id, changes);
+    }
+
+    /** This session's breakpoints, with how often each has been hit. */
+    listBreakpoints() {
+        return [...this._breakpointHits.keys()].map((id) => {
+            const { kind, start, end, bank, condition, hitCount, action, enabled, hits } = this._breakpoints.get(id);
+            return { id, type: kind, address: start, end, bank, condition, hitCount, action, enabled, hits };
+        });
+    }
+
+    /** The hits of `log` breakpoints since the last call, oldest first. */
+    drainBreakpointLog() {
+        const log = this._breakpointLog;
+        this._breakpointLog = [];
+        return log;
+    }
+
+    get _breakpoints() {
+        return this._machine.processor.breakpoints;
+    }
+
+    _requireOwnBreakpoint(id) {
+        if (!this._breakpointHits.has(id)) throw new Error(`No breakpoint with id ${id}`);
     }
 
     /**
@@ -505,33 +551,31 @@ export class MachineSession {
      * Remove a breakpoint by id.
      */
     removeBreakpoint(id) {
-        const bp = this._breakpoints.get(id);
-        if (!bp) throw new Error(`No breakpoint with id ${id}`);
-        bp.hook.remove();
-        this._breakpoints.delete(id);
+        this._requireOwnBreakpoint(id);
+        this._breakpoints.remove(id);
+        this._breakpointHits.delete(id);
     }
 
     /**
      * Remove all breakpoints.
      */
     clearBreakpoints() {
-        for (const bp of this._breakpoints.values()) {
-            bp.hook.remove();
-        }
-        this._breakpoints.clear();
+        for (const id of this._breakpointHits.keys()) this._breakpoints.remove(id);
+        this._breakpointHits.clear();
     }
 
     /**
-     * Return the first breakpoint that was hit since the last reset, or null.
+     * Return the first breakpoint that stopped the machine since the last reset, or null: its id, type and the
+     * address hit, its bank if it has one, and the byte read or written.
      */
     hitBreakpoint() {
-        for (const bp of this._breakpoints.values()) {
-            if (bp.hit) {
-                const result = { id: bp.id, type: bp.type, address: bp.address };
-                if (bp.bank !== undefined) result.bank = bp.bank;
-                if (bp.value !== undefined) result.value = bp.value;
-                return result;
-            }
+        for (const [id, hit] of this._breakpointHits) {
+            if (!hit) continue;
+            const { kind, bank } = this._breakpoints.get(id);
+            const result = { id, type: kind, address: hit.address };
+            if (bank !== undefined) result.bank = bank;
+            if (hit.value !== undefined) result.value = hit.value;
+            return result;
         }
         return null;
     }
@@ -540,9 +584,7 @@ export class MachineSession {
      * Reset all hit flags (call before starting a new run).
      */
     resetBreakpointHits() {
-        for (const bp of this._breakpoints.values()) {
-            bp.hit = false;
-        }
+        for (const id of this._breakpointHits.keys()) this._breakpointHits.set(id, null);
     }
 
     /**

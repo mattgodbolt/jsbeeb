@@ -850,6 +850,10 @@ div.modal-body > div:not(:first-child) {
   background-color: #e02020;
 }
 
+.bp_gutter.disabled {
+  box-shadow: inset 0 0 0 1px #e02020;
+}
+
 #error-dialog div.error {
   background-color: #440000;
   margin-top: 5px;
