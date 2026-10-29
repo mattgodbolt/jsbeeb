@@ -112,13 +112,13 @@ body.touch-keyboard-open #leds {
   vertical-align: baseline;
   fill: none;
   stroke: currentColor;
-  stroke-width: 65;
+  stroke-width: 71;
   stroke-linecap: round;
   overflow: visible;
 }
 
 #touch-keyboard .tk-digit {
-  font-size: 0.62em;
+  font-size: 0.52em;
   margin-left: 0.05em;
 }
 

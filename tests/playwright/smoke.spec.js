@@ -558,7 +558,7 @@ test.describe("on a phone", () => {
         await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
     });
 
-    test("the on-screen keyboard's legends load Open Gorton, and the function keys a drawn f and their number", async ({
+    test("the on-screen keyboard's legends load Open Gorton, and the function and cursor keys carry their drawn legends", async ({
         beeb,
         page,
     }) => {
@@ -572,6 +572,7 @@ test.describe("on a phone", () => {
         await expect(page.locator("#touch-keyboard .tk-key:has(.tk-glyph-f) .tk-digit")).toHaveText(
             [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(String),
         );
+        await expect(page.locator("#touch-keyboard .tk-glyph-arrow:visible")).toHaveCount(4);
     });
 
     test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {

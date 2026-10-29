@@ -24,7 +24,8 @@ const buzz = () => navigator.vibrate?.(VibrateMs);
 const SvgNs = "http://www.w3.org/2000/svg";
 /**
  * Legends Open Gorton cannot set, drawn as the BBC's keycaps print them. The cursor keys' arrow points left, with a
- * solid head over half its length; the function keys' f is italic, in thousandths of an em, its tail on the baseline.
+ * solid head over half its length. The function keys' f is italic, with its tail on the baseline; its path is in
+ * thousandths of an em, so the CSS stroke matches Gorton's.
  */
 const Glyphs = {
     arrow: { viewBox: "0 0 20 10", path: "M0 5 L11 0 V4.1 H20 V5.9 H11 V10 Z" },
