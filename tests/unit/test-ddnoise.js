@@ -179,10 +179,24 @@ describe("DdNoise seeks", () => {
     const cutAfter = (steps) => JoinFade + steps * 0.024;
 
     it.each([
-        ["short of a seek the run covers", 30, 0, 11, [fadedBy(cutAfter(11))], cutAfter(11)],
-        ["short, told after the audio clock has passed it", 30, 0.5, 11, [fadedBy(0.5 + JoinFade)], 0.5 + JoinFade],
         [
-            "short, in the first piece of a long seek",
+            "short of a seek the run covers, fading the run out and moving the settle there",
+            30,
+            0,
+            11,
+            [fadedBy(cutAfter(11))],
+            cutAfter(11),
+        ],
+        [
+            "short, told after the audio clock has passed it, fading out from now",
+            30,
+            0.5,
+            11,
+            [fadedBy(0.5 + JoinFade)],
+            0.5 + JoinFade,
+        ],
+        [
+            "short in the first piece of a long seek, dropping the pieces after it",
             79,
             0,
             20,
@@ -190,7 +204,7 @@ describe("DdNoise seeks", () => {
             cutAfter(20),
         ],
         [
-            "short, in a later piece of a long seek",
+            "short in a later piece of a long seek, fading out that piece",
             79,
             0,
             40,
@@ -198,38 +212,50 @@ describe("DdNoise seeks", () => {
             cutAfter(40),
         ],
         [
-            "short of a long seek, told late",
+            "short of a long seek, told late, fading out every sounding piece",
             79,
             1,
             20,
             [fadedBy(1 + JoinFade), fadedBy(1 + JoinFade), outright],
             1 + JoinFade,
         ],
-        ["without moving", 5, 0.05, 0, [fadedBy(0.05 + JoinFade)], 0.05 + JoinFade],
-        ["without moving, while the run still fades in", 5, JoinFade / 2, 0, [outright], JoinFade / 2 + JoinFade],
-        ["where it was told to", 5, 0, 5, [untouched], null],
-        ["short, once every step has sounded", 5, cutAfter(5) + 0.01, 3, [untouched], null],
-    ])(
-        "stops a run when the head stops %s, and moves the settle there",
-        (_, steps, after, stopped, expectStops, settleCut) => {
-            context.currentTime = Start;
-            ddNoise.seekStart(steps, 24);
-            const pieces = ddNoise.playing.slice();
-            context.currentTime = Start + after;
-            ddNoise.seekEnd(stopped);
-            expect(pieces).toHaveLength(expectStops.length);
-            pieces.forEach((piece, i) => expectStops[i](piece));
-            const sound = Sounds.seek24in;
-            const settleOffset = stepOffset(24, RunSteps);
-            const settle = {
-                sound,
-                when: expect.closeTo(Start + settleCut - JoinFade, 9),
-                offset: expect.closeTo(settleOffset, 9),
-                duration: expect.closeTo(sound.duration - settleOffset, 9),
-            };
-            expect(starts(ddNoise).slice(pieces.length)).toEqual(settleCut === null ? [] : [settle]);
-        },
-    );
+        ["without moving, fading the run out", 5, 0.05, 0, [fadedBy(0.05 + JoinFade)], 0.05 + JoinFade],
+        [
+            "without moving while the run still fades in, stopping it outright",
+            5,
+            JoinFade / 2,
+            0,
+            [outright],
+            JoinFade / 2 + JoinFade,
+        ],
+        ["where it was told to, leaving the run alone", 5, 0, 5, [untouched], null],
+        [
+            "short once every step has sounded, leaving the run's own settle ringing",
+            5,
+            cutAfter(5) + 0.01,
+            3,
+            [untouched],
+            null,
+        ],
+    ])("when the head stops %s", (_, steps, after, stopped, expectStops, settleCut) => {
+        context.currentTime = Start;
+        ddNoise.seekStart(steps, 24);
+        const pieces = ddNoise.playing.slice();
+        context.currentTime = Start + after;
+        ddNoise.seekEnd(stopped);
+        expect(pieces).toHaveLength(expectStops.length);
+        pieces.forEach((piece, i) => expectStops[i](piece));
+        const sound = Sounds.seek24in;
+        const settleOffset = stepOffset(24, RunSteps);
+        const settle = {
+            sound,
+            when: expect.closeTo(Start + settleCut - JoinFade, 9),
+            offset: expect.closeTo(settleOffset, 9),
+            duration: expect.closeTo(sound.duration - settleOffset, 9),
+        };
+        expect(ddNoise.playing.slice(0, pieces.length)).toEqual(pieces);
+        expect(starts(ddNoise).slice(pieces.length)).toEqual(settleCut === null ? [] : [settle]);
+    });
 
     it.each([
         ["fades out a run with steps still to sound", 30, 0.05, fadedBy(0.05 + JoinFade)],

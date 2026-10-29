@@ -196,10 +196,13 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
     it.each([
         ["conceal", [WhiteGraphics, Conceal, SolidBlock], [LetterA], { 0: Mixed }],
         ["hold", [WhiteGraphics, SolidBlock, HoldGraphics], [WhiteGraphics, SolidBlock, Flash], { 2: Blank }],
-        ["graphics", [WhiteGraphics, Mosaic], [Mosaic, HoldGraphics], { 1: Blank }],
+        ["graphics hold", [WhiteGraphics, Mosaic], [Mosaic, HoldGraphics], { 1: Blank }],
+        ["flash", [WhiteGraphics, Flash], [WhiteGraphics, SolidBlock], { 1: solid(White) }],
+        ["separated graphics", [WhiteGraphics, SeparatedGraphics], [WhiteGraphics, SolidBlock], { 1: solid(White) }],
         ["the foreground colour", [RedAlpha, NewBackground, Space], [NewBackground, Space], { 1: plain(White) }],
         ["the background colour", [RedAlpha, NewBackground, Space], [Space], { 0: plain(Black) }],
     ])("does not carry %s over into the next row", (_, previousRow, bytes, expected) => {
+        endFrame();
         renderCells(previousRow);
         endScanline();
         expectCells(renderCells(bytes), expected);

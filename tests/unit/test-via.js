@@ -250,7 +250,7 @@ describe("Via snapshotState / restoreState", () => {
             ["the key stays down", leaveKeys, Ca2Int],
             ["the key is released", (via) => via.keyUpRaw(BBC.A), 0],
             ["autoscan stops", (via) => via.write(ORB, LatchClearBit3), 0],
-        ])("gives CA2 no edge over a scan pass when %s", (_, then, flag) => {
+        ])("reports no CA2 level change over a scan pass when %s", (_, then, flag) => {
             const via = makeScanningVia(PcrCa2FallingEdge);
             const levels = [];
             via.ca2changecallback = (level) => levels.push(level);
