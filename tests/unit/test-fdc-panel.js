@@ -30,6 +30,7 @@ const WdDrive1 = 0x02;
 const WdSideUpper = 0x04;
 const WdSeekVerify12ms = 0x10 | 0x04 | 0x01;
 const WdReadSector = 0x80;
+const WdWriteDeletedSector = 0xa1;
 const WdForceInterrupt = 0xd0;
 const PastAbortCycles = 1000;
 
@@ -108,6 +109,14 @@ describe("FdcPanel", () => {
         panel.update();
         expect(meanings("CMD")).toEqual(["read sector", "-multi", "-settle"]);
         expect(meanings("STA")).toContain("-track 0");
+    });
+
+    it("shows whether a 1770 write puts a deleted data mark", () => {
+        const { fdc, panel } = panelFor(WdFdc, {});
+        fdc.write(WdControlAddr, WdResetOff | WdDrive1);
+        fdc.write(WdCommandAddr, WdWriteDeletedSector);
+        panel.update();
+        expect(meanings("CMD")).toEqual(["write sector", "-multi", "-settle", "+deleted"]);
     });
 
     it("logs the controller's commands in the panel while asked, and its state changes too when ticked", () => {
