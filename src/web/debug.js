@@ -203,6 +203,7 @@ export const ToolbarKeys = [
         label: "step out",
         description: "Run until this subroutine or interrupt handler returns",
     },
+    { combo: "v", key: "v", run: "runToVsync", label: "vsync", description: "Run to the start of the next vsync" },
 ];
 
 export const MemoryKeys = [
@@ -227,6 +228,7 @@ const DisassemblyWidth = 400;
  */
 const ColumnWidthNeeded = { left: 280, right: DisassemblyWidth };
 const StackBytesShown = 8;
+const WholeNumber = /^\d+$/;
 const RunningNameMatchMs = 1000;
 const below = (id) => ({ ...StartEdge, attach: { to: id, side: "after" } });
 
@@ -301,12 +303,17 @@ export class Debugger {
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
+     * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
      */
-    constructor({ symbolSets, keys, arrangement }) {
+    constructor({ symbolSets, keys, arrangement, monitor }) {
         this._arrangement = arrangement;
+        this._monitor = monitor;
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
+        // On the scheduler's clock, which a power-on reset leaves running. Null once the state it started in is
+        // replaced, until it is reset.
+        this._stopwatchFrom = 0;
         this._inDebugger = false;
         this._hidingPanels = false;
         this._matchedAt = 0;
@@ -367,6 +374,7 @@ export class Debugger {
             stepOver: () => this._fromDebugger(() => this.stepOver()),
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
+            runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
         this._disassembly = new DisassemblyView({
             floating: this.panels.disassembly,
@@ -394,6 +402,16 @@ export class Debugger {
                 this._memoryView.update(address);
             },
         );
+        bindGotoForm(
+            document.getElementById("run-to-line-form"),
+            (text) => (WholeNumber.test(text) ? Number(text) : undefined),
+            (line) => this._fromDebugger(() => this.runToLine(line)),
+        );
+        document.getElementById("debug-stopwatch-reset").addEventListener("click", () => {
+            if (!this.cpu) return;
+            this._stopwatchFrom = this.cpu.scheduler.epoch;
+            this.updateRegisters();
+        });
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
@@ -653,6 +671,17 @@ export class Debugger {
             stack.push(hexbyte(cpu.peekmem(0x100 + at)));
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
         this.updateElem(document.getElementById("cpu6502_cycles"), String(cycleCount(cpu)));
+        const stopwatch = this._stopwatchFrom === null ? "" : String(cpu.scheduler.epoch - this._stopwatchFrom);
+        this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
+        const beam = cpu.video.beamPosition();
+        this.updateElem(document.getElementById("beam-line"), String(beam.line));
+        this.updateElem(document.getElementById("beam-cycle"), String(beam.frameCycle));
+        document.getElementById("beam-crtc").hidden = !beam.crtc;
+        if (beam.crtc) {
+            this.updateElem(document.getElementById("crtc-row"), String(beam.crtc.row));
+            this.updateElem(document.getElementById("crtc-scanline"), String(beam.crtc.scanline));
+            this.updateElem(document.getElementById("crtc-column"), String(beam.crtc.column));
+        }
         this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
         this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
         this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
@@ -712,6 +741,7 @@ export class Debugger {
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
+            this._monitor.classList.add("finds-bytes");
             if (!this._touchKeyboardShown()) this.showPanels();
         }
         this._arrangement.keepAttached();
@@ -769,6 +799,21 @@ export class Debugger {
         return this._inDebugger;
     }
 
+    /**
+     * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
+     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
+     * the click is the machine's.
+     */
+    showScreenByteAt(x, y) {
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
+        const address = this.cpu.video.addressShownAt(x, y);
+        if (address !== null) {
+            this._memoryView.update(address);
+            this.panels.memory.open();
+        }
+        return true;
+    }
+
     updatePrevMem() {
         this._memoryView.snapshot();
     }
@@ -783,6 +828,7 @@ export class Debugger {
         this.watches.dismissMenu();
         for (const paging of Object.values(this._paging)) paging.dismissMenu();
         this._inDebugger = false;
+        this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;
         if (this._debugPanels().some((floating) => floating.panel.contains(focused))) focused.blur();
@@ -855,6 +901,12 @@ export class Debugger {
         this._runningTo = null;
     }
 
+    /** The machine's state is being replaced, so neither a run to a stop nor the stopwatch's start applies. */
+    replacingState() {
+        this.cancelRun();
+        this._stopwatchFrom = null;
+    }
+
     /**
      * Moves the CPU's cycle target on by one, running each instruction that starts before it. Straight after a
      * breakpoint the target is still at the end of the interrupted time slice, so this runs on to there (#1062).
@@ -900,5 +952,24 @@ export class Debugger {
     runToCursor() {
         const target = this._disassembly.cursor;
         this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
+    }
+
+    /** Runs until `holds()` turns true: at an instruction it holds at, having not held at the one before. */
+    _runUntilTurns(holds) {
+        let held = holds();
+        this.runTo(() => {
+            const had = held;
+            held = holds();
+            return held && !had;
+        }, false);
+    }
+
+    runToVsync() {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().inVSync);
+    }
+
+    /** Runs to the start of TV line `line` of a frame, the next frame's if the beam is on it now. */
+    runToLine(line) {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().line === line);
     }
 }
