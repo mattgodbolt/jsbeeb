@@ -52,18 +52,25 @@ describe("Modals", () => {
             expect(loop.hold).toHaveBeenCalledTimes(1);
         });
 
-        it("reopens a modal shown while its backdrop is still fading once that is done, with a backdrop and a hold", async () => {
-            modals.show("info");
-            await vi.runAllTimersAsync();
-            modals.hide("info");
-            await vi.advanceTimersToNextTimerAsync();
-            modals.show("info");
-            await vi.runAllTimersAsync();
-            expect(document.getElementById("info").classList.contains("show")).toBe(true);
-            expect(document.querySelectorAll(".modal-backdrop")).toHaveLength(1);
-            expect(resumes()[0]).toHaveBeenCalledTimes(1);
-            expect(resumes()[1]).not.toHaveBeenCalled();
-        });
+        it.each([
+            ["the same modal", "info"],
+            ["another modal", "help"],
+        ])(
+            "shows %s raised while a modal's backdrop is still fading once that is done, whole and held",
+            async (_, next) => {
+                modals.show("info");
+                await vi.runAllTimersAsync();
+                modals.hide("info");
+                await vi.advanceTimersToNextTimerAsync();
+                modals.show(next);
+                await vi.runAllTimersAsync();
+                expect([...document.querySelectorAll(".modal.show")]).toEqual([document.getElementById(next)]);
+                expect(document.querySelectorAll(".modal-backdrop")).toHaveLength(1);
+                expect(document.body.classList.contains("modal-open")).toBe(true);
+                expect(resumes()[0]).toHaveBeenCalledTimes(1);
+                expect(resumes()[1]).not.toHaveBeenCalled();
+            },
+        );
 
         it("reports whether any modal is up", () => {
             expect(modals.anyVisible()).toBe(false);
@@ -119,6 +126,19 @@ describe("Modals", () => {
             // A yes from an earlier question must not answer a later one.
             dialog().querySelector(".ays-yes").click();
             await expect(answer).resolves.toBe(false);
+        });
+
+        it("leaves a question asked while the last one's backdrop is still fading for its own answer", async () => {
+            const first = modals.confirm("Restart now?", "Restart", "Later");
+            await vi.runAllTimersAsync();
+            modals.hide("are-you-sure");
+            await vi.advanceTimersToNextTimerAsync();
+            const second = modals.confirm("Switch machine?", "Switch", "Stay");
+            await vi.runAllTimersAsync();
+            await expect(first).resolves.toBe(false);
+            dialog().querySelector(".ays-yes").click();
+            await vi.runAllTimersAsync();
+            await expect(second).resolves.toBe(true);
         });
     });
 

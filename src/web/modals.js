@@ -13,21 +13,30 @@ export class Modals {
         this.aysEl = document.getElementById("are-you-sure");
         this.aysModal = new bootstrap.Modal(this.aysEl);
 
-        // Bootstrap lets a modal show again once its dialog has faded but before its backdrop has, and the late hidden
-        // event then takes the reopened modal's backdrop and its hold on the emulator; so a show in that gap waits.
-        const reopenWhenHidden = new WeakMap();
+        // Bootstrap raises a modal's hidden event only once its backdrop has faded, and that late event clears
+        // body.modal-open (and, here, the modal's hold) whatever has opened since; so a show waits for it.
+        const closing = new Set();
+        const waiting = new Set();
+        const closed = (modal) => {
+            closing.delete(modal);
+            if (closing.size !== 0) return;
+            const shows = [...waiting];
+            waiting.clear();
+            for (const waited of shows) bootstrap.Modal.getOrCreateInstance(waited).show();
+        };
         document.addEventListener(
             "show.bs.modal",
             (event) => {
-                if (!reopenWhenHidden.has(event.target)) return;
+                if (closing.size === 0) return;
                 event.preventDefault();
                 event.stopImmediatePropagation();
-                reopenWhenHidden.set(event.target, true);
+                waiting.add(event.target);
             },
             { capture: true },
         );
+        document.addEventListener("hide.bs.modal", (event) => closing.add(event.target), { capture: true });
         document.addEventListener("hide.bs.modal", (event) => {
-            if (!event.defaultPrevented) reopenWhenHidden.set(event.target, false);
+            if (event.defaultPrevented) closed(event.target);
         });
 
         const holds = new WeakMap();
@@ -36,11 +45,9 @@ export class Modals {
             if (!holds.has(event.target)) holds.set(event.target, loop.hold(`the ${event.target.id} dialog`));
         });
         document.addEventListener("hidden.bs.modal", (event) => {
-            const reopen = reopenWhenHidden.get(event.target);
-            reopenWhenHidden.delete(event.target);
             holds.get(event.target)?.();
             holds.delete(event.target);
-            if (reopen) bootstrap.Modal.getOrCreateInstance(event.target).show();
+            closed(event.target);
         });
     }
 
@@ -76,13 +83,20 @@ export class Modals {
                 confirmed = true;
                 this.aysModal.hide();
             };
-            yesButton.addEventListener("click", onYes, { once: true });
-            // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
+            // Listening from the show, not now, keeps a previous opening's late hidden from answering this question.
             this.aysEl.addEventListener(
-                "hidden.bs.modal",
+                "show.bs.modal",
                 () => {
-                    yesButton.removeEventListener("click", onYes);
-                    resolve(confirmed);
+                    yesButton.addEventListener("click", onYes, { once: true });
+                    // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
+                    this.aysEl.addEventListener(
+                        "hidden.bs.modal",
+                        () => {
+                            yesButton.removeEventListener("click", onYes);
+                            resolve(confirmed);
+                        },
+                        { once: true },
+                    );
                 },
                 { once: true },
             );
