@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderThumbnails } from "../../src/web/rewind-thumbnail.js";
+import { executeUntilFrame, renderThumbnails } from "../../src/web/rewind-thumbnail.js";
+import { fake6502 } from "../../src/fake6502.js";
+import { TEST_6502 } from "../../src/models.js";
+import { Video } from "../../src/video.js";
 
 // Minimal mock canvas for node/jsdom environment
 function createMockCanvas() {
@@ -31,6 +34,7 @@ function createMockProcessor(video) {
     return {
         snapshotState: vi.fn(() => ({ saved: true })),
         restoreState: vi.fn(),
+        withoutDebugHooks: (run) => run(),
         // Simulate: each execute call advances the video frameCount
         execute: vi.fn(() => {
             video.frameCount++;
@@ -151,5 +155,29 @@ describe("renderThumbnails", () => {
         // The original clearPaintBuffer should NOT have been called
         // (it was temporarily replaced with a no-op)
         expect(origClear).not.toHaveBeenCalled();
+    });
+});
+
+describe("executeUntilFrame", () => {
+    it("runs past breakpoints and watches to a whole frame, leaving them stopping real runs", async () => {
+        const video = new Video(false, 1024 * 625, () => {});
+        const processor = fake6502(TEST_6502, { video });
+        await processor.initialise();
+        const ModeSevenCrtc = [63, 40, 51, 0x24, 30, 2, 25, 27, 0x93, 18];
+        ModeSevenCrtc.forEach((value, reg) => {
+            video.crtc.write(0, reg);
+            video.crtc.write(1, value);
+        });
+        const StoreThenLoop = [0x8d, 0x00, 0x30, 0x4c, 0x00, 0x20];
+        processor.ramRomOs.set(StoreThenLoop, 0x2000);
+        processor.pc = 0x2000;
+        processor.debugInstruction.add(() => true);
+        processor.debugWrite.add(() => true);
+        const startFrame = video.frameCount;
+
+        executeUntilFrame(processor, video);
+
+        expect(video.frameCount).toBe(startFrame + 2);
+        expect(processor.execute(1000)).toBe(false);
     });
 });

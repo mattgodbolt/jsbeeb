@@ -44,7 +44,8 @@ function captureThumbnail(fb32) {
 }
 
 /**
- * Execute cycles until a complete top-to-bottom frame is in fb32.
+ * Execute cycles until a complete top-to-bottom frame is in fb32, with the debug hooks detached: a preview is not a
+ * run the user asked to stop, so no breakpoint or watch cuts it short.
  *
  * Snapshots may be mid-frame, so we run through two vsyncs:
  * 1. First vsync completes the partial frame and clears fb32 normally.
@@ -52,6 +53,10 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
+    processor.withoutDebugHooks(() => runThroughTwoVsyncs(processor, video));
+}
+
+function runThroughTwoVsyncs(processor, video) {
     const startFrame = video.frameCount;
 
     // Phase 1: run to first vsync (completes partial frame, clears fb32)
