@@ -49,9 +49,9 @@ const drawGlyph = (name, turn) => {
 
 /**
  * A key on the glass. `key` names a position in the model's key table, or BREAK; `sub` is the shifted legend the
- * keycap prints above; `glyph` names a drawn legend in place of the text one, turned
- * `turn` degrees clockwise; `digit` follows the legend, small and on its baseline; `w` is the columns the key spans
- * (flex weight outside the grid) and `rows` the rows.
+ * keycap prints above; `glyph` names a drawn legend in place of the text one, turned `turn` degrees clockwise; `digit`
+ * follows the legend, small and on its baseline; `w` is the columns the key spans (flex weight outside the grid) and
+ * `rows` the rows.
  */
 const k = (label, key, ...extra) => Object.assign({ label, key, w: 1 }, ...extra);
 const letters = (row) => [...row].map((c) => k(c, c));
