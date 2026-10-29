@@ -19,7 +19,7 @@ describe("stitchHtml", () => {
         );
     });
 
-    it("refuses a file that includes itself, however the path is spelt", () => {
+    it("refuses a file that includes itself", () => {
         expect(() => stitchHtml(`${Fixtures}/cycle.html`)).toThrow(/include cycle/);
     });
 

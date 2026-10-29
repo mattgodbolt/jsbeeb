@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { normalize, resolve } from "node:path";
+import { resolve } from "node:path";
 
 const RepoRoot = resolve(import.meta.dirname, "..");
 const IncludeLine = /^[ \t]*<!-- include: (\S+) -->[ \t]*$/gm;
@@ -17,8 +17,7 @@ function readPartial(file, includedFrom) {
 }
 
 function expandIncludes(html, chain) {
-    return html.replace(IncludeLine, (_line, path) => {
-        const file = normalize(path);
+    return html.replace(IncludeLine, (_line, file) => {
         if (chain.includes(file)) throw new Error(`HTML include cycle: ${[...chain, file].join(" -> ")}`);
         return expandIncludes(readPartial(file, chain.at(-1)).trimEnd(), [...chain, file]);
     });
