@@ -52,6 +52,19 @@ describe("Modals", () => {
             expect(loop.hold).toHaveBeenCalledTimes(1);
         });
 
+        it("reopens a modal shown while its backdrop is still fading once that is done, with a backdrop and a hold", async () => {
+            modals.show("info");
+            await vi.runAllTimersAsync();
+            modals.hide("info");
+            await vi.advanceTimersToNextTimerAsync();
+            modals.show("info");
+            await vi.runAllTimersAsync();
+            expect(document.getElementById("info").classList.contains("show")).toBe(true);
+            expect(document.querySelectorAll(".modal-backdrop")).toHaveLength(1);
+            expect(resumes()[0]).toHaveBeenCalledTimes(1);
+            expect(resumes()[1]).not.toHaveBeenCalled();
+        });
+
         it("reports whether any modal is up", () => {
             expect(modals.anyVisible()).toBe(false);
             raise("help");
