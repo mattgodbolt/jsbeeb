@@ -3,11 +3,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1030;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 2px 4px calc(4px + env(safe-area-inset-bottom));
+  padding: 2px 4px 4px;
   background: linear-gradient(#d8cfb8, #bfb497);
   border-top: 2px solid #8d836b;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
@@ -20,8 +20,7 @@
 }
 
 #touch-keyboard[hidden],
-#touch-keyboard .tk-layer[hidden],
-#touch-keyboard-toggle[hidden] {
+#touch-keyboard .tk-layer[hidden] {
   display: none;
 }
 
@@ -163,7 +162,7 @@ body.touch-keyboard-open #leds {
   position: fixed;
   right: 8px;
   bottom: 8px;
-  z-index: 1030;
+  z-index: 5;
   width: 48px;
   height: 40px;
   border-radius: 8px;

@@ -320,7 +320,18 @@ const layout = new Layout({
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
 
-new TouchKeyboard({ processor, model, keyboard, layout, loop, openMedia: () => mediaWindow.openFor(0), onAnyKeyDown });
+if (!parsedQuery.embed && !model.isAtom) {
+    new TouchKeyboard({
+        processor,
+        model,
+        keyboard,
+        layout,
+        loop,
+        forced: !!parsedQuery.touchkeys,
+        openMedia: () => mediaWindow.openFor(0),
+        onAnyKeyDown,
+    });
+}
 panelArrangement.reopen();
 
 // Everything a setting can reach now exists.

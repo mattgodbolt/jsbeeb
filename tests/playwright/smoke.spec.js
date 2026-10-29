@@ -296,12 +296,14 @@ test("the media window fills a phone's screen without scrolling sideways, and it
             innerWidth: window.innerWidth,
             pageScrollsSideways: document.documentElement.scrollWidth > window.innerWidth,
             panelScrollsSideways: panel.scrollWidth > panel.clientWidth,
+            onTopAtTheBottom: panel.contains(document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 5)),
         };
     });
     expect(fit.rightEdge).toBeLessThanOrEqual(fit.innerWidth);
     expect(fit.width).toBe(fit.innerWidth);
     expect(fit.pageScrollsSideways).toBe(false);
     expect(fit.panelScrollsSideways).toBe(false);
+    expect(fit.onTopAtTheBottom).toBe(true);
 
     // The archives' listing arriving redraws the bays from the drives, undoing a state forced on one before it.
     await expect(page.locator("#media-count")).not.toBeEmpty();
@@ -321,7 +323,7 @@ test("the media window fills a phone's screen without scrolling sideways, and it
 test.describe("on a phone", () => {
     test.use({ viewport: { width: 412, height: 915 }, hasTouch: true });
 
-    test("SHIFT+BREAK on the on-screen keyboard boots the disc, even with SHIFT lifted first", async ({
+    test("SHIFT+BREAK on the on-screen keyboard boots the disc with both thumbs lifted together", async ({
         beeb,
         page,
     }) => {
@@ -344,7 +346,7 @@ test.describe("on a phone", () => {
         await beeb.expectScreenText("automatically loaded");
     });
 
-    test("the on-screen keyboard steps aside in landscape for the lights bar, and comes back as it was left", async ({
+    test("the on-screen keyboard steps aside in landscape for the lights bar, and comes back as it was left, even after a reload", async ({
         beeb,
         page,
     }) => {
@@ -369,6 +371,23 @@ test.describe("on a phone", () => {
         await turn(412, 915);
         await expect(keyboard).toBeHidden();
         await expect(toggle).toBeVisible();
+        await page.reload();
+        await expect(toggle).toBeVisible();
+        await expect(keyboard).toBeHidden();
+    });
+
+    test("a touch in the gap between keys presses the nearer one", async ({ beeb, page }) => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        const q = await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^Q$/ }).boundingBox();
+        await page.touchscreen.tap(q.x + q.width + 1, q.y + q.height / 2);
+        await beeb.expectScreenText(">Q");
+    });
+
+    test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {
+        await beeb.open("?embed");
+        await beeb.expectScreenText(">");
+        await expect(page.locator("#touch-keyboard, #touch-keyboard-toggle")).toHaveCount(0);
     });
 });
 

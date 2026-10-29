@@ -4,7 +4,6 @@ const StorageKey = "touchKeyboardOpen";
 const NarrowScreenQuery = "(max-width: 700px)";
 const TouchQuery = "(pointer: coarse)";
 const LandscapePhoneQuery = "(orientation: landscape) and (max-height: 500px)";
-const ForceParameter = "touchkeys";
 // In the machine's own time, which falls behind the wall clock when the page is busy. The OS scans the keyboard every
 // 10 ms and misses a press shorter than two scans, and reads SHIFT and CTRL some 20 ms after BREAK comes up.
 const MinHoldMs = 40;
@@ -80,7 +79,7 @@ export const Layers = {
             gap(7),
             k("[", "LEFT_SQUARE_BRACKET", { sub: "{" }),
             k("]", "RIGHT_SQUARE_BRACKET", { sub: "}" }),
-            k("£", "UNDERSCORE_POUND", { sub: "_" }),
+            k("_", "UNDERSCORE_POUND", { sub: "£" }),
         ],
         [k("CAPS", "CAPSLOCK", { w: 2 }, small), gap(8), k("RETURN", "RETURN", { w: 2 }, small)],
         [
@@ -101,28 +100,82 @@ const Leds = [
     ["shift lock", (processor) => processor.sysvia.shiftLockLight],
 ];
 
-export const wantsTouchKeyboard = (search, matches) =>
-    new URLSearchParams(search).has(ForceParameter) || matches(TouchQuery) || matches(NarrowScreenQuery);
+export const wantsTouchKeyboard = (forced, matches) => forced || matches(TouchQuery) || matches(NarrowScreenQuery);
+
+/**
+ * The keys held on the glass and when the machine is told they are up, in the machine's milliseconds. `send(key,
+ * down)` presses a key in the matrix, or holds the machine in reset for BREAK.
+ */
+export class KeyPresses {
+    constructor(send) {
+        this.send = send;
+        /** @type {Map<number, {key: string, pressedAt: number}>} by pointer */
+        this.held = new Map();
+        /** @type {Map<string, number>} keys lifted from the glass and not yet sent up, by when they went down */
+        this.releasing = new Map();
+        this.resetting = false;
+        this.breakUpAt = -Infinity;
+    }
+
+    press(pointerId, key, now) {
+        this.held.set(pointerId, { key, pressedAt: now });
+        this.sendKey(key, true);
+    }
+
+    release(pointerId) {
+        const press = this.held.get(pointerId);
+        if (!press) return;
+        this.held.delete(pointerId);
+        this.releasing.set(press.key, press.pressedAt);
+    }
+
+    releaseAll() {
+        for (const pointerId of [...this.held.keys()]) this.release(pointerId);
+    }
+
+    isHeld(key) {
+        return [...this.held.values()].some((press) => press.key === key);
+    }
+
+    /** SHIFT and CTRL stay down until BREAK has been up a while, so SHIFT+BREAK boots whichever thumb lifts first. */
+    sendDueReleases(now) {
+        const isWithin = (since, ms) => now >= since && now - since < ms;
+        for (const [key, pressedAt] of this.releasing) {
+            if (this.isHeld(key)) {
+                this.releasing.delete(key);
+                continue;
+            }
+            if (isWithin(pressedAt, MinHoldMs)) continue;
+            if (BreakModifiers.has(key) && (this.resetting || isWithin(this.breakUpAt, BreakGraceMs))) continue;
+            this.releasing.delete(key);
+            this.sendKey(key, false);
+            if (key === BreakKey) this.breakUpAt = now;
+        }
+    }
+
+    sendKey(key, down) {
+        if (key === BreakKey) this.resetting = down;
+        this.send(key, down);
+    }
+}
 
 /**
  * An on-screen BBC keyboard. Keys go to the machine's matrix by position through the same input as the physical
  * keyboard, so held keys and chords work with as many fingers as the screen reports.
  */
 export class TouchKeyboard {
-    constructor({ processor, model, keyboard, layout, loop, openMedia, onAnyKeyDown }) {
-        if (model.isAtom || !wantsTouchKeyboard(window.location.search, (query) => window.matchMedia(query).matches))
-            return;
+    constructor({ processor, model, keyboard, layout, loop, forced, openMedia, onAnyKeyDown }) {
+        if (!wantsTouchKeyboard(forced, (query) => window.matchMedia(query).matches)) return;
         this.processor = processor;
         this.model = model;
-        this.keyboard = keyboard;
         this.layout = layout;
+        this.loop = loop;
         this.onAnyKeyDown = onAnyKeyDown;
-        /** @type {Map<number, HTMLElement>} the key each pointer is holding */
-        this.held = new Map();
-        /** @type {Map<string, number>} keys lifted from the glass and not yet sent up, by when they went down */
-        this.releasing = new Map();
-        this.resetting = false;
-        this.breakUpAt = -Infinity;
+        this.presses = new KeyPresses((key, down) => {
+            const { input } = keyboard;
+            if (key === BreakKey) input.setReset(down);
+            else input.keyRaw(model.keys[key], down);
+        });
 
         this.root = this.build(openMedia);
         this.toggle = this.buildToggle();
@@ -131,7 +184,7 @@ export class TouchKeyboard {
         window.addEventListener("pointercancel", (evt) => this.release(evt));
         window.addEventListener("blur", () => this.releaseAll());
         loop.addEventListener("tick", () => {
-            this.sendDueReleases();
+            this.presses.sendDueReleases(this.machineMs());
             this.syncLeds();
         });
         this.landscapePhone = window.matchMedia(LandscapePhoneQuery);
@@ -163,7 +216,7 @@ export class TouchKeyboard {
         });
         root.append(...this.layers, this.buildLeds());
         root.addEventListener("pointerdown", (evt) => this.press(evt));
-        for (const type of ["contextmenu", "dblclick", "selectstart", "mousedown"]) {
+        for (const type of ["contextmenu", "selectstart", "mousedown"]) {
             root.addEventListener(type, (evt) => evt.preventDefault());
         }
         return root;
@@ -259,7 +312,7 @@ export class TouchKeyboard {
     press(evt) {
         if (evt.target.closest("button")) return;
         const el = evt.target.closest(".tk-key") ?? this.nearestKey(evt.clientX, evt.clientY);
-        if (!el || this.held.has(evt.pointerId)) return;
+        if (!el || !this.loop.running || this.presses.held.has(evt.pointerId)) return;
         evt.preventDefault();
         buzz();
         const { def } = el;
@@ -268,11 +321,8 @@ export class TouchKeyboard {
             return;
         }
         this.onAnyKeyDown();
-        el.pressedAt = this.machineMs();
-        this.held.set(evt.pointerId, el);
-        el.classList.add(HeldClass);
-        this.send(def.key, true);
-        this.showShift();
+        this.presses.press(evt.pointerId, def.key, this.machineMs());
+        this.showHeld();
     }
 
     /** The key whose face is closest to a touch that landed in a gap, so the gaps are part of the keys. */
@@ -295,59 +345,25 @@ export class TouchKeyboard {
     }
 
     release(evt) {
-        const el = this.held.get(evt.pointerId);
-        if (!el) return;
-        this.held.delete(evt.pointerId);
-        this.letGo(el);
+        this.presses.release(evt.pointerId);
+        this.showHeld();
     }
 
     releaseAll() {
-        const els = [...this.held.values()];
-        this.held.clear();
-        for (const el of els) this.letGo(el);
+        this.presses.releaseAll();
+        this.showHeld();
     }
 
-    letGo(el) {
-        el.classList.remove(HeldClass);
-        this.showShift();
-        this.releasing.set(el.def.key, el.pressedAt);
-    }
-
-    /** SHIFT and CTRL stay down until BREAK has been up a while, so SHIFT+BREAK boots whichever thumb lifts first. */
-    sendDueReleases() {
-        const now = this.machineMs();
-        const isWithin = (since, ms) => now >= since && now - since < ms;
-        for (const [key, pressedAt] of this.releasing) {
-            if (this.isHeld(key)) {
-                this.releasing.delete(key);
-                continue;
-            }
-            if (isWithin(pressedAt, MinHoldMs)) continue;
-            if (BreakModifiers.has(key) && (this.resetting || isWithin(this.breakUpAt, BreakGraceMs))) continue;
-            this.releasing.delete(key);
-            this.send(key, false);
-            if (key === BreakKey) this.breakUpAt = now;
+    /** Lights every key held, and the shifted legends while SHIFT is. */
+    showHeld() {
+        for (const el of this.root.querySelectorAll(".tk-key")) {
+            el.classList.toggle(HeldClass, this.presses.isHeld(el.def.key));
         }
+        this.root.classList.toggle(ShiftedClass, this.presses.isHeld("SHIFT"));
     }
 
     machineMs() {
         const { processor } = this;
         return (processor.cycleSeconds + processor.currentCycles / this.model.cyclesPerSecond) * 1000;
-    }
-
-    isHeld(key) {
-        return [...this.held.values()].some((el) => el.def.key === key);
-    }
-
-    showShift() {
-        this.root.classList.toggle(ShiftedClass, this.isHeld("SHIFT"));
-    }
-
-    send(key, down) {
-        const { input } = this.keyboard;
-        if (key === BreakKey) {
-            this.resetting = down;
-            input.setReset(down);
-        } else input.keyRaw(this.model.keys[key], down);
     }
 }
