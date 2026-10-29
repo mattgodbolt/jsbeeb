@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,29 +14,7 @@ import { describeRef } from "../../src/web/media-catalogue.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { TestMachine } from "../../src/test-machine.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "../unit/helpers.js";
-import { RepoRoot } from "./helpers.js";
-
-// jsdom makes utils.loadData take the browser branch, so back XMLHttpRequest
-// with the files the dev server would serve.
-class FileBackedXhr {
-    open(_method, url) {
-        this._url = url;
-    }
-
-    overrideMimeType() {}
-
-    send() {
-        const served = path.join(RepoRoot, "public", this._url);
-        const file = existsSync(served) ? served : path.join(RepoRoot, this._url);
-        try {
-            this.response = new Uint8Array(readFileSync(file));
-            this.status = 200;
-        } catch {
-            this.status = 404;
-        }
-        this.onload();
-    }
-}
+import { FileBackedXhr, RepoRoot } from "./helpers.js";
 
 describe("the media window against a real machine", () => {
     beforeEach(() => {

@@ -18,6 +18,7 @@ import {
     powerOfTwoColumnsThatFit,
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { BasicKeys } from "./basic-panel.js";
 
 const noop = () => {};
 
@@ -223,7 +224,7 @@ export const MemoryKeys = [
 ];
 
 /** Help's rows for every key the debugger's panels answer. */
-export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys]);
+export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys, BasicKeys]);
 
 const RememberedPanelsKey = "debugPanels";
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
@@ -961,6 +962,11 @@ export class Debugger {
             returning = notDeeper(this.cpu.s, s) && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
             return false;
         }, false);
+    }
+
+    /** Runs the machine, from the debugger, until `stopsHere()` holds before an instruction; see runTo. */
+    runUntil(stopsHere) {
+        this._fromDebugger(() => this.runTo(stopsHere, false));
     }
 
     runToCursor() {

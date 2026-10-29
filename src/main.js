@@ -47,6 +47,7 @@ import { MediaWindow } from "./web/media-window.js";
 import { PanelArrangement } from "./web/floating-panel.js";
 import { SysViaPanel } from "./web/sysvia-panel.js";
 import { UserViaPanel } from "./web/uservia-panel.js";
+import { BasicPanel } from "./web/basic-panel.js";
 import { cycleCount } from "./lockstep.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
@@ -339,6 +340,15 @@ dbgr.placeBesideScreen(() => layout.screenBounds());
 dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
 for (const DevicePanel of [SysViaPanel, UserViaPanel])
     if (DevicePanel.fits(processor)) new DevicePanel({ cpu: processor, arrangement: panelArrangement });
+if (BasicPanel.fits(processor)) {
+    new BasicPanel({
+        cpu: processor,
+        arrangement: panelArrangement,
+        keys: panelKeys,
+        runUntil: (stopsHere) => dbgr.runUntil(stopsHere),
+        inDebugger: () => dbgr.inDebugger(),
+    });
+}
 new DebugMenu({ arrangement: panelArrangement, dbgr });
 
 if (!parsedQuery.embed && !model.isAtom) {

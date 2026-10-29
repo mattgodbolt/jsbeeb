@@ -1008,6 +1008,96 @@ small {
   color: #777777;
 }
 
+/* Its own size, not its variables', so that it keeps it as they come and go; they scroll within it. */
+#basic-panel {
+  width: min(52ch, 90vw);
+  height: min(48em, 80vh);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#basic-panel .panel-body,
+.basic-present {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.basic-present[hidden] {
+  display: none;
+}
+
+.basic-absent {
+  color: #aaaaaa;
+}
+
+.basic-pointers {
+  color: #aaaaaa;
+  white-space: pre;
+}
+
+.basic-routines {
+  margin-top: 6px;
+  color: #f0d080;
+}
+
+.basic-line {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+.basic-line-number {
+  margin-right: 1ch;
+  color: #f0d080;
+}
+
+.basic-running {
+  background: #444444;
+  color: #ffffff;
+}
+
+.basic-idle {
+  color: #aaaaaa;
+}
+
+.basic-residents {
+  display: grid;
+  grid-template-columns: repeat(3, 3ch 12ch);
+  column-gap: 1ch;
+  margin-bottom: 6px;
+}
+
+.basic-name {
+  color: #f0d080;
+}
+
+.basic-value {
+  color: #80d0d0;
+}
+
+.basic-variables {
+  flex: 1 1 auto;
+  min-height: 2em;
+  overflow-y: auto;
+}
+
+.basic-variables table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.basic-variables td {
+  padding: 0 1ch 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basic-variables td.basic-name {
+  width: 16ch;
+}
+
 .decoded-bit.lit {
   border-color: #80d0d0;
   color: #000000;
