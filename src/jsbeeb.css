@@ -1017,10 +1017,10 @@ small {
   white-space: nowrap;
 }
 
-/* Squeezed before the Go to box, its full label in its tooltip. */
+/* The Go to box gives way first; its full label is in its tooltip. */
 .paging-picker {
-  flex: 0 1 auto;
-  min-width: 6ch;
+  flex: none;
+  max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

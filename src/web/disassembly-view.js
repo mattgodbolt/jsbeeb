@@ -105,7 +105,6 @@ export class DisassemblyView {
         this._widget.addEventListener("contextmenu", (e) => {
             const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
             const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
-            // A watch reads memory as paged, so it takes a name only where the view shows that too.
             const named = (address, name) => offerWatch(e, address, this._paging.differs(address) ? undefined : name);
             if (operand) {
                 named(Number(operand.dataset.ref), operand.dataset.name);

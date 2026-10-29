@@ -425,7 +425,6 @@ export class Debugger {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            // A watch reads memory as paged, so it takes a name only where the panel shows that too.
             const named = this._paging.memory.differs(address) ? undefined : this._names.address(address, this.cpu.pc);
             this._offerWatch(e, address, named?.name);
         });

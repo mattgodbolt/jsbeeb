@@ -1360,7 +1360,7 @@ describe("Debugger", () => {
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
         });
 
-        it("resolves a name in the bank a Go to names, and credits the set matched to it", async () => {
+        it("resolves a name in the bank a Go to names, crediting its set, but offers a watch there unnamed", async () => {
             const romRegion = { start: "0x8000", end: "0x8100", anchors: [{ at: "0x8000", bytes: "a94460" }] };
             load.mockImplementation(async (url) => {
                 const json = structuredClone(files.get(url));

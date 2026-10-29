@@ -82,7 +82,10 @@ export class PagingOverride {
         return peekViewed(this._cpu, this._view, address);
     }
 
-    /** Whether it shows something at `address` other than what the CPU would read there now. */
+    /**
+     * Whether it shows something at `address` other than what the CPU would read there now; a watch offered there
+     * takes no name, as watches read memory as paged.
+     */
     differs(address) {
         return viewDiffers(this._cpu, this._view, address);
     }
