@@ -433,7 +433,7 @@ describe("Debugger", () => {
             ]);
         });
 
-        it("show nothing at all when the symbol index arrives before the machine is there", async () => {
+        it("wait for the machine before drawing when the symbol index arrives first", async () => {
             const index = { load: vi.fn(async () => ({ format: 1, sets: [] })) };
             dbgr.hidePanels();
             document.body.innerHTML = "";
@@ -704,6 +704,21 @@ describe("Debugger", () => {
             expect(document.getElementById("cpu6502_a").textContent).toBe("41");
             expect(document.getElementById("cpu6502_pc").textContent).toBe("2002");
             expect(addrOf(currentRow())).toBe("2002");
+        });
+
+        it("moves the CPU's cycle target on by one on N, running an instruction only once it is passed", () => {
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            const pc = () => document.getElementById("cpu6502_pc").textContent;
+            expect(pc()).toBe("2002");
+            const steps = [];
+            for (let i = 0; i < 3; i++) {
+                keyPress("N");
+                steps.push(pc());
+            }
+            // Some presses leave the program counter where it was, and one passes the instruction's start and runs it.
+            expect(steps).toContain("2002");
+            expect(steps.some((at) => at !== "2002")).toBe(true);
         });
 
         it("keeps the run and step keys for the debugger, and the panels' own for whenever it is stopped", () => {

@@ -1089,7 +1089,10 @@ export class Debugger {
         this._runningTo = null;
     }
 
-    /** Runs the machine one clock cycle, which completes an instruction only once enough have added up. */
+    /**
+     * Moves the CPU's cycle target on by one, running each instruction that starts before it. Straight after a
+     * breakpoint the target is still at the end of the interrupted time slice, so this runs on to there (#1062).
+     */
     stepCycle() {
         this.updatePrevMem();
         this.cpu.execute(1);
