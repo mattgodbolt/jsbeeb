@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DiscVisualiser } from "../../src/web/disc-visualiser.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
@@ -69,7 +70,7 @@ describe("DiscVisualiser", () => {
 
     afterEach(teardownDom);
 
-    const make = () => new DiscVisualiser({ fdc });
+    const make = () => new DiscVisualiser({ fdc, arrangement: new PanelArrangement(() => window.localStorage) });
     const panel = () => document.getElementById("disc-panel");
     const status = () => document.getElementById("disc-status").textContent;
     const pumpFrame = () => {

@@ -101,24 +101,145 @@ function keptInside(rect, area, edges, min) {
 }
 
 /**
+ * What a panel that keeps up with the machine shows, redrawn by its PanelArrangement once a frame
+ * while shown, when the machine has moved on since it was drawn or when asked.
+ */
+class PanelRefresh {
+    /**
+     * @param {PanelArrangement} arrangement
+     * @param {function(): boolean} isShown
+     * @param {function(): void} draw
+     */
+    constructor(arrangement, isShown, draw) {
+        this._arrangement = arrangement;
+        this.isShown = isShown;
+        this._draw = draw;
+        this._drawnAt = null;
+        this._wanted = false;
+    }
+
+    drawNow() {
+        this._draw();
+        this.drawn();
+    }
+
+    /** Records that what is shown is up to date with the machine as it is now, for an owner that drew it itself. */
+    drawn() {
+        this._drawnAt = this._arrangement.cycleCount();
+        this._wanted = false;
+    }
+
+    /** Has it drawn at the next frame, for a change the machine's cycle count does not show, such as the pointer's. */
+    drawSoon() {
+        this._wanted = true;
+        if (this.isShown()) this._arrangement.keepRefreshing();
+    }
+
+    isDue(cycles) {
+        return this._wanted || cycles !== this._drawnAt;
+    }
+}
+
+/**
  * Places, stacks and remembers every floating panel. What the user arranged is saved in one
  * localStorage entry (see panel-layout.js); window resizes lay the panels out again from it
- * without writing to it. Raises "change" when a panel opens or closes, or leaves the list.
+ * without writing to it. Raises "change", its detail `{floating}`, when a panel opens or closes.
+ *
+ * It also redraws the panels that keep up with the machine (see `refreshing`), from one loop of
+ * animation frames that runs only while one of them is shown, and opens and closes the panel that
+ * a clicked `[data-opens="<id>"]` element names.
  */
 export class PanelArrangement extends EventTarget {
     /** @param {function(): Storage} storage */
     constructor(storage) {
         super();
         this._storage = storage;
+        /** @type {FloatingPanel[]} in the order they were made */
+        this._panels = [];
         /** @type {FloatingPanel[]} lowest first */
         this._stack = [];
+        /** @type {PanelRefresh[]} */
+        this._refreshes = [];
+        this._cycles = () => null;
+        this._frameHandle = null;
         this._onWindowResize = () => this.relayout();
+        this._onClick = (e) => this._openFrom(e);
     }
 
     /** @param {FloatingPanel} floating */
     register(floating) {
-        if (this._stack.length === 0) window.addEventListener("resize", this._onWindowResize);
+        if (this._panels.length === 0) {
+            window.addEventListener("resize", this._onWindowResize);
+            document.addEventListener("click", this._onClick);
+        }
+        this._panels.push(floating);
         this._stack.push(floating);
+    }
+
+    /** The panels shown and hidden together as `group`, in the order they were made. */
+    group(group) {
+        return this._panels.filter((floating) => floating.group === group);
+    }
+
+    _openFrom(e) {
+        const opener = e.target.closest?.("[data-opens]");
+        if (!opener) return;
+        // One left by an earlier page, in tests, is no longer in the document.
+        const floating = this._panels.find((other) => other.id === opener.dataset.opens && other.panel.isConnected);
+        if (!floating) return;
+        e.preventDefault();
+        floating.toggle();
+    }
+
+    /**
+     * Where the machine's cycle count comes from, by which the panels that keep up with the machine
+     * tell that it has moved on.
+     * @param {function(): number} cycles
+     */
+    followMachine(cycles) {
+        this._cycles = cycles;
+    }
+
+    /** The machine's cycle count, or null before there is a machine to follow. */
+    cycleCount() {
+        return this._cycles();
+    }
+
+    /**
+     * Has `draw` called once a frame while `isShown()`, but only when the machine has moved on since
+     * it last drew or it has been asked to draw again. Left alone while nothing moves, what it shows
+     * stays put, so that a click lands on what was under the pointer when it went down. Its owner
+     * draws it on opening, with `drawNow`.
+     * @param {function(): boolean} isShown
+     * @param {function(): void} draw
+     * @returns {PanelRefresh}
+     */
+    refreshing(isShown, draw) {
+        const refresh = new PanelRefresh(this, isShown, draw);
+        this._refreshes.push(refresh);
+        return refresh;
+    }
+
+    keepRefreshing() {
+        if (this._frameHandle === null) this._frameHandle = requestAnimationFrame(() => this._refreshFrame());
+    }
+
+    _refreshFrame() {
+        this._frameHandle = null;
+        const shown = this._refreshes.filter((refresh) => refresh.isShown());
+        if (shown.length === 0) return;
+        const cycles = this.cycleCount();
+        for (const refresh of shown) if (refresh.isDue(cycles)) refresh.drawNow();
+        this.keepRefreshing();
+    }
+
+    _refreshWhileShown() {
+        if (this._refreshes.some((refresh) => refresh.isShown())) {
+            this.keepRefreshing();
+        } else if (this._frameHandle !== null) {
+            cancelAnimationFrame(this._frameHandle);
+            this._frameHandle = null;
+        }
     }
 
     /** Opens again the panels that were open when the page was last left, of those that reopen. */
@@ -162,12 +283,6 @@ export class PanelArrangement extends EventTarget {
         return this._stack.findLast((floating) => floatings.includes(floating)) ?? null;
     }
 
-    /** Takes `floating` out of menus of panels, as for a machine that lacks what it shows. */
-    unlist(floating) {
-        floating.title = null;
-        this.dispatchEvent(new Event("change"));
-    }
-
     /** The panels that offer themselves in a menu, in the order of PanelIds. */
     listed() {
         return this._stack
@@ -183,7 +298,8 @@ export class PanelArrangement extends EventTarget {
     onOpen(floating) {
         const layout = opened(this._read(), floating.id);
         this._save(layout);
-        this.dispatchEvent(new Event("change"));
+        this.dispatchEvent(new CustomEvent("change", { detail: { floating } }));
+        this._refreshWhileShown();
         this.raise(floating);
         floating.clearGeometry();
         if (!floating.movable) return;
@@ -202,7 +318,8 @@ export class PanelArrangement extends EventTarget {
 
     onClose(floating) {
         this._save(closed(this._read(), floating.id));
-        this.dispatchEvent(new Event("change"));
+        this.dispatchEvent(new CustomEvent("change", { detail: { floating } }));
+        this._refreshWhileShown();
     }
 
     /** Lays every open panel out again for the window as it is now. */
@@ -319,7 +436,38 @@ export class PanelArrangement extends EventTarget {
     }
 }
 
-export const panelArrangement = new PanelArrangement(() => window.localStorage);
+/**
+ * The frame of a panel whose content is built in code, added to the page hidden: a header with its
+ * title and a close button, as FloatingPanel finds them, and an empty body.
+ * @param {object} options
+ * @param {string} options.id the panel's, of panel-layout.js's PanelIds; the element's is `<id>-panel`
+ * @param {string} options.title
+ * @param {string} options.feature what analytics calls it
+ * @returns {{panel: HTMLElement, body: HTMLElement}}
+ */
+export function panelShell({ id, title, feature }) {
+    const panel = document.createElement("div");
+    panel.id = `${id}-panel`;
+    panel.dataset.feature = feature;
+    panel.hidden = true;
+    const header = document.createElement("div");
+    header.className = "panel-header";
+    const heading = document.createElement("span");
+    heading.className = "panel-title";
+    heading.textContent = title;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "btn btn-sm btn-outline-light panel-close";
+    close.title = "Close";
+    close.setAttribute("aria-label", "Close");
+    close.textContent = "×";
+    header.append(heading, close);
+    const body = document.createElement("div");
+    body.className = "panel-body";
+    panel.append(header, body);
+    document.body.append(panel);
+    return { panel, body };
+}
 
 /**
  * A panel that floats over the machine: hidden until opened, dragged by its header, resized from
@@ -327,36 +475,38 @@ export const panelArrangement = new PanelArrangement(() => window.localStorage);
  * links never take focus, and Escape in one of its text fields (class `panel-field`) gives the
  * keyboard back instead of closing it. A PanelArrangement places it and remembers where the user
  * put it. Raises "open" and "close".
+ *
+ * Its element holds its header, the drag handle, as `.panel-header`, with a `.panel-close` button.
  */
 export class FloatingPanel extends EventTarget {
     /**
      * @param {object} options
      * @param {HTMLElement} options.panel
-     * @param {HTMLElement} options.header the drag handle
-     * @param {HTMLElement} options.closeButton
      * @param {string} options.id one of panel-layout.js's PanelIds, under which its place is saved
      * @param {string | null} options.title what a menu of panels calls it, or null to stay out of such menus
+     * @param {string | null} options.group the panels it is shown and hidden with, such as the debugger's
+     * ("debug"), or null
      * @param {function(): {x: object, y: object, w?: number}} options.place where it goes until the user
      * arranges it, asked afresh each time it is laid out
      * @param {{w: number, h: number}} options.minSize
      * @param {boolean} options.reopens whether it opens again on reload if it was open
      * @param {PanelArrangement} options.arrangement
      */
-    constructor({ panel, header, closeButton, id, title, place, minSize, reopens, arrangement }) {
+    constructor({ panel, id, title, group, place, minSize, reopens, arrangement }) {
         super();
         this.panel = panel;
-        this.header = header;
+        this.header = panel.querySelector(".panel-header");
         this.id = id;
         this.title = title;
+        this.group = group;
         this.place = place;
         this.minSize = minSize;
         this.reopens = reopens;
         this.isOpen = false;
         this._arrangement = arrangement;
         panel.classList.add("floating-panel");
-        header.classList.add("floating-panel-header");
         this._gesture = null;
-        closeButton.addEventListener("click", () => this.close());
+        this.header.querySelector(".panel-close").addEventListener("click", () => this.close());
         panel.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
             e.stopPropagation();

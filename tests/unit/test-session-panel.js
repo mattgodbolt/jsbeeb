@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LaggingMs, peerState, SessionPanel, SilentMs } from "../../src/web/session-panel.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml } from "./helpers.js";
 
 describe("peerState", () => {
@@ -36,6 +37,7 @@ describe("SessionPanel", () => {
         saveReport: () => {},
         copyLink: () => {},
         requestControl: () => {},
+        arrangement: new PanelArrangement(() => window.localStorage),
         ...overrides,
     });
 

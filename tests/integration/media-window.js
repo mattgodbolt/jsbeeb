@@ -7,6 +7,7 @@ import { MediaLoader } from "../../src/web/media-loader.js";
 import { SnapshotUI, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { createSnapshot, snapshotToJSON } from "../../src/snapshot.js";
 import { MediaWindow } from "../../src/web/media-window.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { Drives } from "../../src/web/drives.js";
 import { describeRef } from "../../src/web/media-catalogue.js";
@@ -84,7 +85,8 @@ describe("the media window against a real machine", () => {
             processor: machine.processor,
             model: machine.model,
             loop: new EventTarget(),
-            visualiser: { openOn: vi.fn() },
+            visualiser: { openOn: vi.fn(), redraw: vi.fn() },
+            arrangement: new PanelArrangement(() => window.localStorage),
             autoboot: vi.fn(),
             driveSource: { connect: vi.fn(), connected: false, createBlank: vi.fn() },
             machineSwitch: new MachineSwitch({

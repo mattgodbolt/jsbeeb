@@ -1,6 +1,6 @@
 import { dfsCatalogue } from "../disc.js";
 import { replaceOrAddExtension } from "../archive.js";
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { Centred, EndEdge } from "./panel-layout.js";
 import { tracksLabel, tracksPerStepOf } from "./drives.js";
 import {
@@ -89,7 +89,18 @@ function webPage(url) {
 }
 
 export class MediaWindow {
-    constructor({ media, drives, processor, model, loop, visualiser, autoboot, driveSource, machineSwitch }) {
+    constructor({
+        media,
+        drives,
+        processor,
+        model,
+        loop,
+        visualiser,
+        autoboot,
+        driveSource,
+        machineSwitch,
+        arrangement,
+    }) {
         this.media = media;
         this.slots = media.slots;
         this.drives = drives;
@@ -103,14 +114,13 @@ export class MediaWindow {
         this.panel = document.getElementById("media-panel");
         this.floating = new FloatingPanel({
             panel: this.panel,
-            header: this.panel.querySelector(".media-header"),
-            closeButton: document.getElementById("media-close"),
             id: "media",
             title: null,
+            group: null,
             place: () => ({ x: Centred, y: EndEdge }),
             minSize: MinPanelSize,
             reopens: false,
-            arrangement: panelArrangement,
+            arrangement,
         });
         this.summary = document.getElementById("media-summary");
         this.bays = [0, 1].map((driveIndex) => this.buildBay(driveIndex));
@@ -147,6 +157,7 @@ export class MediaWindow {
             } else {
                 if (slot.media && slot.index === FoldableDrive) this.showDrive(true);
                 this.renderDrive(slot.index);
+                this.visualiser.redraw();
             }
             this.renderList();
         });

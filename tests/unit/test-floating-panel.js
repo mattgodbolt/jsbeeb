@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FloatingPanel, navbarHeightOf, PanelArrangement } from "../../src/web/floating-panel.js";
+import { FloatingPanel, navbarHeightOf, PanelArrangement, panelShell } from "../../src/web/floating-panel.js";
 import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
 import { sentEvents, teardownDom } from "./helpers.js";
 
@@ -39,12 +39,12 @@ describe("FloatingPanel", () => {
         document.body.insertAdjacentHTML(
             "beforeend",
             `<div id="${id}" data-feature="${id}" hidden>
-                <div class="header" style="cursor: move"><button class="close">Close</button></div>
+                <div class="panel-header" style="cursor: move"><button class="panel-close">Close</button></div>
                 <input class="inside" />
             </div>`,
         );
         const panel = document.getElementById(id);
-        const header = panel.querySelector(".header");
+        const header = panel.querySelector(".panel-header");
         boxFromStyle(panel, Natural);
         header.getBoundingClientRect = () => {
             const top = panel.getBoundingClientRect().top;
@@ -52,10 +52,9 @@ describe("FloatingPanel", () => {
         };
         const floating = new FloatingPanel({
             panel,
-            header,
-            closeButton: panel.querySelector(".close"),
             id,
             title: reopens ? id : null,
+            group: null,
             place: () => place,
             minSize: { w: 120, h: 60 },
             reopens,
@@ -81,7 +80,7 @@ describe("FloatingPanel", () => {
         pointer(target, "pointermove", to.x, to.y, extra);
         pointer(target, "pointerup", to.x, to.y, {});
     }
-    const header = (floating) => floating.panel.querySelector(".header");
+    const header = (floating) => floating.panel.querySelector(".panel-header");
     const handle = (floating, edges) => floating.panel.querySelector(`.panel-resize-${edges}`);
 
     /** A fresh page, as after a reload. */
@@ -128,7 +127,7 @@ describe("FloatingPanel", () => {
         it("closes from its button and from Escape pressed inside it", () => {
             const floating = watches();
             floating.open();
-            floating.panel.querySelector(".close").click();
+            floating.panel.querySelector(".panel-close").click();
             expect(floating.isOpen).toBe(false);
             floating.open();
             const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
@@ -243,7 +242,7 @@ describe("FloatingPanel", () => {
             const floating = watches();
             floating.open();
             const before = rectOf(floating);
-            drag(floating.panel.querySelector(".close"), { x: 20, y: 70 }, { x: 300, y: 300 });
+            drag(floating.panel.querySelector(".panel-close"), { x: 20, y: 70 }, { x: 300, y: 300 });
             pointer(header(floating), "pointerdown", 20, 70, { button: 2 });
             pointer(header(floating), "pointermove", 300, 300, {});
             expect(rectOf(floating)).toEqual(before);
@@ -348,7 +347,10 @@ describe("FloatingPanel", () => {
             const floating = watches();
             floating.open();
             floating.panel.insertAdjacentHTML("beforeend", `<a href="#" class="link">link</a>`);
-            for (const target of [floating.panel.querySelector(".close"), floating.panel.querySelector(".link")]) {
+            for (const target of [
+                floating.panel.querySelector(".panel-close"),
+                floating.panel.querySelector(".link"),
+            ]) {
                 const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
                 target.dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);
@@ -382,15 +384,13 @@ describe("FloatingPanel", () => {
             expect(arrangement.frontmost([])).toBe(null);
         });
 
-        it("says when a panel opens or closes, or is taken out of the list", () => {
+        it("says which panel opened or closed", () => {
             const floating = watches();
-            const changes = vi.fn();
-            arrangement.addEventListener("change", changes);
+            const changed = [];
+            arrangement.addEventListener("change", (e) => changed.push(e.detail.floating));
             floating.open();
             floating.close();
-            arrangement.unlist(floating);
-            expect(changes).toHaveBeenCalledTimes(3);
-            expect(arrangement.listed()).toEqual([]);
+            expect(changed).toEqual([floating, floating]);
         });
 
         it("lists the panels with a title, in the registry's order", () => {
@@ -442,6 +442,133 @@ describe("FloatingPanel", () => {
             floating.open();
             expect(rectOf(floating).w).toBe(150);
             expect(floating.measure().natural.w).toBe(150);
+        });
+    });
+
+    describe("made from a shell", () => {
+        const shelled = (id, group) => {
+            const { panel, body } = panelShell({ id, title: `The ${id}`, feature: id });
+            const floating = new FloatingPanel({
+                panel,
+                id,
+                title: `The ${id}`,
+                group,
+                place: () => ({ x: StartEdge, y: StartEdge }),
+                minSize: { w: 120, h: 60 },
+                reopens: true,
+                arrangement,
+            });
+            return { floating, body };
+        };
+
+        it("has a header with its title and a button that closes it, and an empty body, hidden until opened", () => {
+            const { floating, body } = shelled("sysvia", "debug");
+            expect(floating.panel.id).toBe("sysvia-panel");
+            expect(floating.panel.hidden).toBe(true);
+            expect(floating.header.querySelector(".panel-title").textContent).toBe("The sysvia");
+            expect(body.childElementCount).toBe(0);
+            floating.open();
+            floating.header.querySelector(".panel-close").click();
+            expect(floating.isOpen).toBe(false);
+        });
+
+        it("is grouped with the panels made in its group, in the order they were made", () => {
+            const sysvia = shelled("sysvia", "debug").floating;
+            shelled("watches", null);
+            const uservia = shelled("uservia", "debug").floating;
+            expect(arrangement.group("debug")).toEqual([sysvia, uservia]);
+        });
+
+        it("opens and closes from any element that names it, leaving the rest of the page's clicks alone", () => {
+            const { floating } = shelled("uservia", "debug");
+            document.body.insertAdjacentHTML(
+                "beforeend",
+                `<a href="#" data-opens="uservia"><span class="inner">open</span></a><a href="#" class="other">no</a>`,
+            );
+            const click = (selector) => {
+                const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+                document.querySelector(selector).dispatchEvent(event);
+                return event.defaultPrevented;
+            };
+            expect(click(".inner")).toBe(true);
+            expect(floating.isOpen).toBe(true);
+            expect(click("[data-opens]")).toBe(true);
+            expect(floating.isOpen).toBe(false);
+            expect(click(".other")).toBe(false);
+        });
+    });
+
+    describe("keeping up with the machine", () => {
+        let frames;
+        let cycles;
+        const runFrame = () => {
+            const pending = [...frames.values()];
+            frames.clear();
+            for (const callback of pending) callback();
+        };
+
+        beforeEach(() => {
+            frames = new Map();
+            let handle = 0;
+            vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+                frames.set(++handle, callback);
+                return handle;
+            });
+            vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+            cycles = 0;
+            arrangement.followMachine(() => cycles);
+        });
+
+        it("draws an open panel once a frame, but only when the machine has moved on or it is asked to", () => {
+            const floating = watches();
+            const draw = vi.fn();
+            const refresh = arrangement.refreshing(() => floating.isOpen, draw);
+            floating.open();
+            refresh.drawNow();
+            runFrame();
+            expect(draw).toHaveBeenCalledTimes(1);
+            cycles += 100;
+            runFrame();
+            runFrame();
+            expect(draw).toHaveBeenCalledTimes(2);
+            refresh.drawSoon();
+            runFrame();
+            expect(draw).toHaveBeenCalledTimes(3);
+            cycles = 0;
+            runFrame();
+            expect(draw).toHaveBeenCalledTimes(4);
+        });
+
+        it("takes what its owner drew itself as up to date", () => {
+            const floating = watches();
+            const draw = vi.fn();
+            const refresh = arrangement.refreshing(() => floating.isOpen, draw);
+            floating.open();
+            cycles += 100;
+            refresh.drawn();
+            runFrame();
+            expect(draw).not.toHaveBeenCalled();
+        });
+
+        it("runs one loop of frames for every panel, and none once nothing it draws is shown", () => {
+            const first = watches();
+            const second = disc();
+            const other = media();
+            const draws = [vi.fn(), vi.fn()];
+            arrangement.refreshing(() => first.isOpen, draws[0]);
+            arrangement.refreshing(() => second.isOpen, draws[1]);
+            other.open();
+            expect(frames.size).toBe(0);
+            first.open();
+            second.open();
+            expect(frames.size).toBe(1);
+            cycles += 1;
+            runFrame();
+            expect(draws.map((draw) => draw.mock.calls.length)).toEqual([1, 1]);
+            first.close();
+            expect(frames.size).toBe(1);
+            second.close();
+            expect(frames.size).toBe(0);
         });
     });
 });

@@ -313,12 +313,10 @@
         <div class="rewind-filmstrip" id="rewind-filmstrip"></div>
       </div>
       <div id="session-pane" hidden role="dialog" aria-labelledby="session-pane-title">
-        <div class="session-pane-header" title="Drag to move">
-          <span class="disc-title" id="session-pane-title">Shared session</span>
+        <div class="panel-header" title="Drag to move">
+          <span class="panel-title" id="session-pane-title">Shared session</span>
           <span class="session-you"></span>
-          <button type="button" class="btn btn-sm btn-outline-light session-pane-close" title="Close (Escape)">
-            Close
-          </button>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" title="Close (Escape)">Close</button>
         </div>
         <div class="panel-body">
           <div class="session-link-row">
@@ -349,10 +347,10 @@
         </div>
       </div>
       <div id="disc-panel" data-feature="disc_surface" hidden>
-        <div class="disc-header">
-          <span class="disc-title">Disc surface</span>
+        <div class="panel-header">
+          <span class="panel-title">Disc surface</span>
           <span id="disc-name"></span>
-          <button id="disc-close" class="btn btn-sm btn-outline-light">Close</button>
+          <button type="button" id="disc-close" class="btn btn-sm btn-outline-light panel-close">Close</button>
         </div>
         <div class="panel-body">
           <div class="disc-controls">
@@ -380,9 +378,9 @@
         </div>
       </div>
       <div id="watch-panel" data-feature="watches" hidden>
-        <div class="watch-header">
-          <span class="disc-title">Watches</span>
-          <button id="watch-close" class="btn btn-sm btn-outline-light">Close</button>
+        <div class="panel-header">
+          <span class="panel-title">Watches</span>
+          <button type="button" id="watch-close" class="btn btn-sm btn-outline-light panel-close">Close</button>
         </div>
         <div class="panel-body">
           <form id="watch-add-form" role="form">
@@ -403,8 +401,8 @@
       </div>
       <div id="watch-menu" hidden></div>
       <div id="toolbar-panel" class="debug-panel" data-feature="debug_toolbar" hidden>
-        <div class="debug-panel-header">
-          <span class="disc-title">Debugger</span>
+        <div class="panel-header">
+          <span class="panel-title">Debugger</span>
           <div class="btn-group btn-group-sm" role="group" aria-label="Run and stop">
             <button
               type="button"
@@ -460,8 +458,8 @@
         </div>
       </div>
       <div id="disassembly-panel" class="debug-panel" data-feature="debug_disassembly" hidden>
-        <div class="debug-panel-header">
-          <span class="disc-title">Disassembly</span>
+        <div class="panel-header">
+          <span class="panel-title">Disassembly</span>
           <form role="form" id="goto-dis-addr-form" class="goto-form">
             <input
               type="text"
@@ -487,8 +485,8 @@
         </div>
       </div>
       <div id="memory-panel" class="debug-panel" data-feature="debug_memory" hidden>
-        <div class="debug-panel-header">
-          <span class="disc-title">Memory</span>
+        <div class="panel-header">
+          <span class="panel-title">Memory</span>
           <form role="form" id="goto-mem-addr-form" class="goto-form">
             <input
               type="text"
@@ -520,8 +518,8 @@
         </div>
       </div>
       <div id="registers-panel" class="debug-panel" data-feature="debug_registers" hidden>
-        <div class="debug-panel-header">
-          <span class="disc-title">Registers</span>
+        <div class="panel-header">
+          <span class="panel-title">Registers</span>
           <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
             &times;
           </button>
@@ -545,8 +543,8 @@
         </div>
       </div>
       <div id="peripherals-panel" class="debug-panel" data-feature="debug_peripherals" hidden>
-        <div class="debug-panel-header">
-          <span class="disc-title">Peripherals</span>
+        <div class="panel-header">
+          <span class="panel-title">Peripherals</span>
           <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
             &times;
           </button>
@@ -557,7 +555,8 @@
               System VIA
               <button
                 type="button"
-                class="txt-btn sysvia-open bbc-only"
+                class="txt-btn bbc-only"
+                data-opens="sysvia"
                 tabindex="-1"
                 title="Open the system VIA decoded"
               >
@@ -574,7 +573,18 @@
             </table>
           </div>
           <div class="via_regs" id="uservia">
-            <h6 class="dbg">User VIA</h6>
+            <h6 class="dbg">
+              User VIA
+              <button
+                type="button"
+                class="txt-btn bbc-only"
+                data-opens="uservia"
+                tabindex="-1"
+                title="Open the user VIA decoded"
+              >
+                decoded
+              </button>
+            </h6>
             <table>
               <tbody>
                 <tr class="template">
@@ -607,23 +617,6 @@
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      </div>
-      <div id="sysvia-panel" data-feature="system_via" hidden>
-        <div class="debug-panel-header">
-          <span class="disc-title">System VIA</span>
-          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
-            &times;
-          </button>
-        </div>
-        <div class="panel-body register-panel-body">
-          <div class="sysvia-ports"></div>
-          <div>
-            <div class="decoded-heading">Keyboard</div>
-            <div class="key-matrix"></div>
-            <div class="key-matrix-status"></div>
-            <div class="sysvia-latch"></div>
           </div>
         </div>
       </div>
@@ -698,10 +691,15 @@
         </div>
       </div>
       <div id="media-panel" data-feature="media_window" hidden role="dialog" aria-labelledby="media-title">
-        <div class="media-header" title="Drag to move">
-          <span class="disc-title" id="media-title">Media</span>
+        <div class="panel-header media-header" title="Drag to move">
+          <span class="panel-title" id="media-title">Media</span>
           <span id="media-summary"></span>
-          <button type="button" id="media-close" class="btn btn-sm btn-outline-light" title="Close (Escape)">
+          <button
+            type="button"
+            id="media-close"
+            class="btn btn-sm btn-outline-light panel-close"
+            title="Close (Escape)"
+          >
             Close
           </button>
         </div>

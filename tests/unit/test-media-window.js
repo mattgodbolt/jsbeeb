@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaWindow, bootDecision, shortName } from "../../src/web/media-window.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { MachineRequirements, describeRef, describeSessionFile } from "../../src/web/media-catalogue.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { MediaSlots } from "../../src/web/media-slots.js";
@@ -102,7 +103,8 @@ describe("MediaWindow", () => {
             processor,
             model,
             loop,
-            visualiser: { openOn: vi.fn() },
+            visualiser: { openOn: vi.fn(), redraw: vi.fn() },
+            arrangement: new PanelArrangement(() => window.localStorage),
             autoboot: vi.fn(),
             driveSource: {
                 connect: vi.fn().mockResolvedValue(true),

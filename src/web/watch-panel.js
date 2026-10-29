@@ -6,8 +6,8 @@ import { StartEdge } from "./panel-layout.js";
 const MinPanelSize = { w: 200, h: 80 };
 
 /**
- * A floating list of addresses and their values, read once a frame while it is open and not at all
- * while it is closed. Watches are added by name or address, or from a menu offered at an address
+ * A floating list of addresses and their values, read once a frame while it is open and the machine
+ * runs, and not at all while it is closed. Watches are added by name or address, or from a menu offered at an address
  * (`offer`), and the add box gives the keyboard back to the machine on Escape or once a watch is added.
  */
 export class WatchPanel {
@@ -22,7 +22,6 @@ export class WatchPanel {
         this._resolve = resolve;
         /** @type {{address: number, format: import("../watches.js").WatchFormat, value: HTMLElement}[]} */
         this._watches = [];
-        this._frameHandle = null;
         /** @type {{opener: HTMLElement | null, popup: HTMLElement} | null} */
         this._openPopup = null;
         this.panel = document.getElementById("watch-panel");
@@ -44,21 +43,20 @@ export class WatchPanel {
 
         this.floating = new FloatingPanel({
             panel: this.panel,
-            header: this.panel.querySelector(".watch-header"),
-            closeButton: document.getElementById("watch-close"),
             id: "watches",
             title: "Watches",
+            group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: MinPanelSize,
             reopens: true,
             arrangement,
         });
-        this.floating.addEventListener("open", () => this._tick());
-        this.floating.addEventListener("close", () => {
-            cancelAnimationFrame(this._frameHandle);
-            this._frameHandle = null;
-            this._showPopup(null);
-        });
+        const refresh = arrangement.refreshing(
+            () => this.floating.isOpen,
+            () => this.update(),
+        );
+        this.floating.addEventListener("open", () => refresh.drawNow());
+        this.floating.addEventListener("close", () => this._showPopup(null));
         // Outside the panel, so its buttons are kept from focus here rather than by the panel.
         this._menu.addEventListener("mousedown", (e) => {
             if (e.target.closest("button")) e.preventDefault();
@@ -100,11 +98,6 @@ export class WatchPanel {
             const text = formatWatch(this._peek, watch.address, watch.format);
             if (watch.value.textContent !== text) watch.value.textContent = text;
         }
-    }
-
-    _tick() {
-        this.update();
-        this._frameHandle = requestAnimationFrame(() => this._tick());
     }
 
     /**
