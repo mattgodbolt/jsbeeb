@@ -190,7 +190,7 @@ function getOp(op, arg) {
         case "NOP":
             return { op: "", read: arg !== undefined };
         case "BRK":
-            return { op: "cpu.brk(false);" };
+            return { op: "cpu.brk(false);", flow: "interrupt" };
         case "CLC":
             return { op: "cpu.p.c = false;" };
         case "SEC":
@@ -333,6 +333,7 @@ function getOp(op, arg) {
             return {
                 op: ["let temp = cpu.pull();", "temp |= cpu.pull() << 8;", "cpu.pc = (temp + 1) & 0xffff;"],
                 extra: 5,
+                flow: "return",
             };
         case "RTI":
             return {
@@ -348,6 +349,7 @@ function getOp(op, arg) {
                     "cpu.pc = temp | (cpu.pull() << 8);",
                 ],
                 extra: 5,
+                flow: "return",
             };
         case "JSR":
             return {
@@ -358,9 +360,10 @@ function getOp(op, arg) {
                     "cpu.pc = addr;",
                 ],
                 extra: 3,
+                flow: "call",
             };
         case "JMP":
-            return { op: "cpu.pc = addr;" };
+            return { op: "cpu.pc = addr;", flow: "jump" };
 
         // 65c12 opcodes
         case "TSB":
@@ -1006,12 +1009,69 @@ const PcInRunScore = 10;
 const CommonInstructions =
     /^(?:RTS|B(?:CC|CS|EQ|NE|MI|PL|VC|VS|RA|IT)|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|ADC|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC)\b/;
 const UncommonInstructions = /,\s*([XY]|X\))$/;
+const ModesWithoutMemoryOperand = new Set(["implied", "A", "imm"]);
+
+function instructionLength(mode) {
+    if (mode === "implied" || mode === "A") return 1;
+    return mode.includes("abs") || mode === "zp,branch" ? 3 : 2;
+}
+const UnknownOpcode = Object.freeze({ mnemonic: "???", mode: "implied", length: 1, accesses: [], flow: "next" });
+
+/**
+ * @typedef {"next" | "branch" | "jump" | "call" | "return" | "interrupt"} Flow
+ * @typedef {object} OpcodeDescription
+ * @property {string} mnemonic
+ * @property {string} mode the addressing mode, as the opcode tables spell it, or "implied"
+ * @property {number} length in bytes, with its operand
+ * @property {("read" | "write")[]} accesses what it does to the memory its operand addresses
+ * @property {Flow} flow
+ */
+
+/** @returns {OpcodeDescription[]} by opcode, from what the emulation itself does with each */
+function describeOpcodes(opcodes) {
+    const descriptions = [];
+    for (const [opcode, text] of Object.entries(opcodes)) {
+        const [mnemonic, mode = "implied"] = text.split(" ");
+        const { read, write, flow } = getOp(mnemonic, mode === "implied" ? undefined : mode);
+        const memory = !ModesWithoutMemoryOperand.has(mode);
+        descriptions[Number(opcode)] = Object.freeze({
+            mnemonic,
+            mode,
+            length: instructionLength(mode),
+            accesses: [...(memory && read ? ["read"] : []), ...(memory && write ? ["write"] : [])],
+            flow: flow ?? (mode.endsWith("branch") ? "branch" : "next"),
+        });
+    }
+    return descriptions;
+}
 
 class Disassemble6502 {
     constructor(cpu, opcodes, undocumented) {
         this.cpu = cpu;
         this.opcodes = opcodes;
         this.undocumented = undocumented;
+        this.descriptions = describeOpcodes(opcodes);
+    }
+
+    /** @returns {OpcodeDescription} */
+    describeOpcode(opcode) {
+        return this.descriptions[opcode] ?? UnknownOpcode;
+    }
+
+    /**
+     * The instruction at `addr`: its opcode's description, the address after it (not wrapped past $ffff), the
+     * memory its direct-mode operand addresses, and where it may go when the code alone says.
+     * @returns {OpcodeDescription & {next: number, address?: number, target?: number}}
+     */
+    instructionAt(addr) {
+        const peek = (offset) => this.cpu.peekmem(addr + offset);
+        const description = this.describeOpcode(peek(0));
+        const { mode, length, flow } = description;
+        const instruction = { ...description, next: addr + length };
+        if (mode === "zp" || mode === "zp,branch") instruction.address = peek(1);
+        if (mode === "abs") instruction[flow === "next" ? "address" : "target"] = peek(1) | (peek(2) << 8);
+        if (flow === "branch") instruction.target = (instruction.next + signExtend(peek(length - 1))) & 0xffff;
+        return instruction;
     }
 
     isDocumented(addr) {
@@ -1025,17 +1085,10 @@ class Disassemble6502 {
         const formatAddr = (addr) => ref("instr_mem_ref", addr, hexword);
         const formatZpAddr = (addr) => ref("instr_mem_ref", addr, hexbyte);
         const formatJumpAddr = (addr) => ref("instr_instr_ref", addr, hexword);
-        const opcodeByte = this.cpu.peekmem(addr);
-        const opcode = this.opcodes[opcodeByte];
-        if (!opcode) {
-            return ["???", addr + 1];
-        }
-        const [mnemonic, ...rest] = opcode.split(" ");
-        const split = [(this.undocumented.has(opcodeByte) ? "*" : "") + mnemonic, ...rest];
-        if (!split[1]) {
-            return [split[0], addr + 1];
-        }
-        let param = split[1] || "";
+        const { mnemonic, mode, flow, next, address, target } = this.instructionAt(addr);
+        const name = (this.undocumented.has(this.cpu.peekmem(addr)) ? "*" : "") + mnemonic;
+        if (mode === "implied") return [name, next];
+        let param = mode;
         let suffix = "";
         let suffix2 = "";
         const index = param.match(/(.*),([xy])$/);
@@ -1046,53 +1099,45 @@ class Disassemble6502 {
         }
         switch (param) {
             case "imm":
-                return [`${split[0]} #$${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
+                return [`${name} #$${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, next];
             case "abs": {
-                const formatter = split[0] === "JMP" || split[0] === "JSR" ? formatJumpAddr : formatAddr;
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
-                return [`${split[0]} ${formatter(destAddr)}${suffix}`, addr + 3, destAddr];
+                const formatter = flow === "next" ? formatAddr : formatJumpAddr;
+                return [`${name} ${formatter(destAddr)}${suffix}`, next, destAddr];
             }
-            case "branch": {
-                const destAddr = (addr + signExtend(this.cpu.peekmem(addr + 1)) + 2) & 0xffff;
-                return [`${split[0]} ${formatJumpAddr(destAddr)}${suffix}`, addr + 2, destAddr];
-            }
+            case "branch":
+                return [`${name} ${formatJumpAddr(target)}${suffix}`, next, target];
             case "zp":
-                return [`${split[0]} ${formatZpAddr(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
-            case "zp,branch": {
-                const destAddr = (addr + signExtend(this.cpu.peekmem(addr + 2)) + 3) & 0xffff;
-                return [
-                    `${split[0]} ${formatZpAddr(this.cpu.peekmem(addr + 1))}, ${formatJumpAddr(destAddr)}`,
-                    addr + 3,
-                    destAddr,
-                ];
-            }
+                return [`${name} ${formatZpAddr(this.cpu.peekmem(addr + 1))}${suffix}`, next];
+            case "zp,branch":
+                return [`${name} ${formatZpAddr(address)}, ${formatJumpAddr(target)}`, next, target];
             case "(,x)":
-                return [`${split[0]} (${formatZpAddr(this.cpu.peekmem(addr + 1))}, X)${suffix}`, addr + 2];
+                return [`${name} (${formatZpAddr(this.cpu.peekmem(addr + 1))}, X)${suffix}`, next];
             case "()": {
                 const zp = this.cpu.peekmem(addr + 1);
                 const destAddr = this.cpu.peekmem(zp) | (this.cpu.peekmem(zp + 1) << 8);
-                return [`${split[0]} (${formatZpAddr(zp)})${suffix} ; $${hexword(destAddr)}${suffix2}`, addr + 2];
+                return [`${name} (${formatZpAddr(zp)})${suffix} ; $${hexword(destAddr)}${suffix2}`, next];
             }
             case "(abs)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
                 return [
-                    `${split[0]} (${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`,
-                    addr + 3,
+                    `${name} (${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`,
+                    next,
                     indDest,
                 ];
             }
             case "(abs,x)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
-                return [`${split[0]} (${formatJumpAddr(destAddr)},x)${suffix}`, addr + 3, indDest];
+                return [`${name} (${formatJumpAddr(destAddr)},x)${suffix}`, next, indDest];
             }
         }
-        return [split.join(" "), addr + 1];
+        return [`${name} ${mode}`, next];
     }
 
     nextInstruction(address) {
-        return this.disassemble(address)[1] & 0xffff;
+        return this.instructionAt(address).next & 0xffff;
     }
 
     /**

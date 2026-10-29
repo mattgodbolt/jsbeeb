@@ -78,6 +78,53 @@ describe("Disassemble6502", () => {
         });
     });
 
+    describe("what an instruction does", () => {
+        const at = (mnemonic, mode, length, accesses, flow, extra) => ({
+            mnemonic,
+            mode,
+            length,
+            accesses,
+            flow,
+            next: 0x2000 + length,
+            ...extra,
+        });
+
+        it.each([
+            ["LDA #", cpu6502Opcodes, [0xa9, 0x41], at("LDA", "imm", 2, [], "next")],
+            ["LDA zp", cpu6502Opcodes, [0xa5, 0x41], at("LDA", "zp", 2, ["read"], "next", { address: 0x41 })],
+            [
+                "STA abs",
+                cpu6502Opcodes,
+                [0x8d, 0x40, 0xfe],
+                at("STA", "abs", 3, ["write"], "next", { address: 0xfe40 }),
+            ],
+            ["INC abs,X", cpu6502Opcodes, [0xfe, 0x40, 0xfe], at("INC", "abs,x", 3, ["read", "write"], "next")],
+            ["ASL A", cpu6502Opcodes, [0x0a], at("ASL", "A", 1, [], "next")],
+            ["*NOP zp,X", cpu6502Opcodes, [0x14, 0x41], at("NOP", "zp,x", 2, ["read"], "next")],
+            ["BNE", cpu6502Opcodes, [0xd0, 0xfe], at("BNE", "branch", 2, [], "branch", { target: 0x2000 })],
+            ["JMP abs", cpu6502Opcodes, [0x4c, 0xee, 0xff], at("JMP", "abs", 3, [], "jump", { target: 0xffee })],
+            ["JMP (abs)", cpu6502Opcodes, [0x6c, 0x0e, 0x02], at("JMP", "(abs)", 3, [], "jump")],
+            ["JSR", cpu6502Opcodes, [0x20, 0xee, 0xff], at("JSR", "abs", 3, [], "call", { target: 0xffee })],
+            ["RTS", cpu6502Opcodes, [0x60], at("RTS", "implied", 1, [], "return")],
+            ["RTI", cpu6502Opcodes, [0x40], at("RTI", "implied", 1, [], "return")],
+            ["BRK", cpu6502Opcodes, [0x00], at("BRK", "implied", 1, [], "interrupt")],
+            ["an unknown opcode", cpu6502Opcodes, [0x02], at("???", "implied", 1, [], "next")],
+            ["BRA", cpu65c12Opcodes, [0x80, 0x10], at("BRA", "branch", 2, [], "branch", { target: 0x2012 })],
+            ["RMB0", cpu65c02Opcodes, [0x07, 0x41], at("RMB0", "zp", 2, ["read", "write"], "next", { address: 0x41 })],
+            [
+                "BBR0",
+                cpu65c02Opcodes,
+                [0x0f, 0x41, 0x10],
+                at("BBR0", "zp,branch", 3, ["read"], "branch", { address: 0x41, target: 0x2013 }),
+            ],
+        ])("describes %s from the emulation's own tables", (_, opcodes, bytes, expected) => {
+            mem.set(bytes, 0x2000);
+            expect(opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler.instructionAt(0x2000)).toEqual(
+                expected,
+            );
+        });
+    });
+
     describe("documented and undocumented opcodes", () => {
         const countDocumented = (dis) => {
             let count = 0;
