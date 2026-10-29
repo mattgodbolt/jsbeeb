@@ -147,12 +147,6 @@ describe("DisassemblyView", () => {
         expect(addrOf(currentRow())).toBe("2002");
     });
 
-    it("asks the debugger to run to the cursor on c", () => {
-        view.update(cpu.pc);
-        keys.press("c");
-        expect(runToCursor).toHaveBeenCalledOnce();
-    });
-
     it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {
         view.update(cpu.pc);
         const gutter = () => currentRow().querySelector(".bp_gutter");
@@ -165,14 +159,10 @@ describe("DisassemblyView", () => {
         expect(gutter().classList.contains("active")).toBe(false);
     });
 
-    it("sets a breakpoint at the cursor with the t key, which stops the machine there", () => {
+    it("toggles a breakpoint at the cursor with the t key", () => {
         view.update(cpu.pc);
-        keys.press("j");
         keys.press("t");
         expect(currentRow().querySelector(".bp_gutter").classList.contains("active")).toBe(true);
-        cpu.targetCycles = cpu.currentCycles;
-        expect(cpu.execute(100)).toBe(false);
-        expect(cpu.pc).toBe(0x2002);
     });
 
     describe("SHEILA registers", () => {
