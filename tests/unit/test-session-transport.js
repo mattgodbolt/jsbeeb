@@ -338,9 +338,7 @@ describe("webRtcTransport, as a guest joins", () => {
                 },
             );
             const posted = [];
-            const rendezvous = fakeRendezvous({
-                postOffer: vi.fn(async (...args) => posted.push([Date.now(), ...args])),
-            });
+            const rendezvous = fakeRendezvous({ postOffer: async (...args) => posted.push([Date.now(), ...args]) });
             const started = webRtcTransport(rendezvous).join("room", "g1", recorder());
             return { started, posted };
         }
