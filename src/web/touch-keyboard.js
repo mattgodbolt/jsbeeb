@@ -88,8 +88,8 @@ export const Layers = {
         ],
         [
             k("SHIFT", "SHIFT", 1.6, { cls: "small" }),
-            k("CAPS", "CAPSLOCK", 1.4, { cls: "small", led: "caps" }),
-            k("SH LK", "SHIFTLOCK", 1.4, { cls: "small", led: "shift" }),
+            k("CAPS", "CAPSLOCK", 1.4, { cls: "small" }),
+            k("SH LK", "SHIFTLOCK", 1.4, { cls: "small" }),
             gap(3),
             k("DEL", "DELETE", 1.6, { cls: "small" }),
         ],
@@ -157,7 +157,7 @@ export class TouchKeyboard {
         root.dataset.layer = this.layer;
         const bar = document.createElement("div");
         bar.className = "tk-bar";
-        bar.append(this.buildLeds());
+        bar.append(this.buildMediaButton());
         const hide = document.createElement("button");
         hide.type = "button";
         hide.tabIndex = -1;
@@ -177,6 +177,7 @@ export class TouchKeyboard {
             }
             root.append(layer);
         }
+        root.append(this.buildLeds());
         root.addEventListener("pointerdown", (evt) => this.press(evt));
         for (const type of ["contextmenu", "dblclick", "selectstart", "mousedown"]) {
             root.addEventListener(type, (evt) => evt.preventDefault(), { passive: false });
@@ -184,35 +185,39 @@ export class TouchKeyboard {
         return root;
     }
 
-    /** The Model B's three red lights, at the left end of the keyboard: cassette motor, caps lock, shift lock. */
+    /** The Model B's three red lights, along the bottom left of its keyboard, each labelled above. */
     buildLeds() {
         const leds = document.createElement("div");
         leds.className = "tk-leds";
         const lights = [
-            ["motor", "tape", "tape"],
-            ["disc", "disc", "0"],
+            ["motor", "cassette motor"],
             ...(this.model.isAtom
                 ? []
                 : [
-                      ["caps", "caps"],
-                      ["shift", "shift"],
+                      ["caps", "caps lock"],
+                      ["shift", "shift lock"],
                   ]),
         ];
-        for (const [name, label, slot] of lights) {
+        for (const [name, label] of lights) {
             const light = document.createElement("span");
-            if (slot !== undefined) {
-                // The hidden lights bar is what opens the media window on a phone, so these labels do it here.
-                light.dataset.slot = slot;
-                const readout = `#leds .slot-readout[data-slot="${slot}"]`;
-                light.addEventListener("click", () => document.querySelector(readout).click());
-            }
             light.textContent = label;
             const led = document.createElement("i");
             led.dataset.led = name;
-            light.prepend(led);
+            light.append(led);
             leds.append(light);
         }
         return leds;
+    }
+
+    /** The hidden lights bar's drive readouts are the way into the media window on a phone. */
+    buildMediaButton() {
+        const media = document.createElement("button");
+        media.type = "button";
+        media.tabIndex = -1;
+        media.className = "tk-media";
+        media.textContent = "media";
+        media.addEventListener("click", () => document.querySelector('#leds .slot-readout[data-slot="0"]').click());
+        return media;
     }
 
     /** Follows the same machine state as the lights bar's lamps, which FrontPanel drives from the same fields. */
@@ -221,7 +226,6 @@ export class TouchKeyboard {
         const { processor } = this;
         const state = {
             motor: processor.tapeInterface.motorOn,
-            disc: !this.model.isAtom && (processor.fdc.motorOn[0] || processor.fdc.motorOn[1]),
             caps: !this.model.isAtom && processor.sysvia.capsLockLight,
             shift: !this.model.isAtom && processor.sysvia.shiftLockLight,
         };
@@ -240,11 +244,6 @@ export class TouchKeyboard {
             const sub = document.createElement("span");
             sub.textContent = def.sub;
             el.append(sub);
-        }
-        if (def.led) {
-            const led = document.createElement("i");
-            led.dataset.led = def.led;
-            el.prepend(led);
         }
         el.dataset.key = def.key ?? "";
         if (def.reset) el.dataset.reset = "1";
