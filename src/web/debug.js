@@ -113,7 +113,6 @@ class MemoryView {
         const [hex, text] = [row.querySelector(".mem_bytes"), row.querySelector(".mem_asc")];
         if (hex.childElementCount === this._bytesPerRow) return;
         const spans = () => Array.from({ length: this._bytesPerRow }, () => document.createElement("span"));
-        // Spaced with text, not margins, so that a copied row keeps its bytes apart.
         hex.replaceChildren(...spans().flatMap((span, i) => (i ? [" ", span] : [span])));
         text.replaceChildren(...spans());
     }

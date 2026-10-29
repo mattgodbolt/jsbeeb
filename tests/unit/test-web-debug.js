@@ -499,6 +499,7 @@ describe("Debugger", () => {
             expect(row.querySelector(".dis_addr").textContent).toBe("1230");
             const marked = [...row.querySelectorAll(".target")];
             expect(marked.map((span) => span.textContent)).toEqual(["48", "H"]);
+            expect(row.querySelector(".mem_bytes").textContent).toMatch(/^[0-9a-f]{2}( [0-9a-f]{2}){7}$/);
         });
 
         it("leaves the memory view alone when the text is neither a name nor an address", () => {
