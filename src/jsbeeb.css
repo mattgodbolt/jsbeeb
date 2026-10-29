@@ -908,13 +908,39 @@ small {
   text-decoration-color: rgba(255, 255, 255, 0.45);
 }
 
-.watch-formats td {
+.watch-formats td,
+.watch-breaks td {
   padding-bottom: 4px;
   text-align: right;
 }
 
-.watch-formats .txt-btn {
+.watch-formats .txt-btn,
+.watch-breaks .txt-btn {
   font-family: inherit;
+}
+
+.watch-breaks form {
+  display: inline-block;
+  width: 18ch;
+  margin-left: 4px;
+}
+
+.watch-condition {
+  font-family: inherit;
+}
+
+#watch-panel .watch-break {
+  font-family: inherit;
+  white-space: nowrap;
+  color: #777777;
+}
+
+#watch-panel .watch-break.armed {
+  color: #ff6060;
+}
+
+#watch-panel .watch-fired td {
+  background: rgba(255, 96, 96, 0.25);
 }
 
 #watch-panel .txt-btn {
