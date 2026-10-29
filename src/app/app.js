@@ -269,7 +269,7 @@ const template = (panels) => [
             { type: "separator" },
             {
                 // No accelerator: Alt-S reaches the page, where it toggles rather than only stopping. Unlike Debug's
-                // item, these two only stop or only resume, and leave the debug panels as they are.
+                // item, Pause never leaves the debugger and Resume never closes its panels.
                 label: "Pause and Show Debugger",
                 click: sendAction("pause"),
             },

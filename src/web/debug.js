@@ -575,7 +575,7 @@ export class Debugger {
 
     /**
      * Opens the panels that were open when the debugger's were last seen, or the defaults if none were. The
-     * toolbar always comes with them, as the run and step keys are its.
+     * toolbar always comes with them, for its buttons.
      */
     showPanels() {
         const remembered = rememberedPanels();
