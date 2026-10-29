@@ -11,6 +11,7 @@ import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
 import { LabelFiles } from "../../src/label-files.js";
+import { Dropdown } from "bootstrap";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
@@ -1681,7 +1682,10 @@ describe("Debugger", () => {
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
             const bankChoice = (text) =>
                 [...labelsLine().querySelectorAll(".dropdown-item")].find((item) => item.textContent === text);
+            const shownToggle = labelsLine().querySelector(".label-bank");
+            Dropdown.getOrCreateInstance(shownToggle);
             bankChoice("4").click();
+            expect(Dropdown.getInstance(shownToggle)).toBeNull();
             expect(labelsLine().querySelector(".label-bank").textContent).toBe("bank 4");
             expect(bankChoice("4").classList.contains("active")).toBe(true);
             expect(code(0x2002).textContent).toBe("JSR $8003");

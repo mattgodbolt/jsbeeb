@@ -19,6 +19,7 @@ import {
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 import { toast } from "./toast.js";
+import { Dropdown } from "bootstrap";
 
 const noop = () => {};
 
@@ -45,8 +46,6 @@ function homeNodes(home) {
     if (!isHttps(home)) return [];
     return [externalLink(home, new URL(home).hostname.replace(/^www\./, "")), ", "];
 }
-
-const bankName = (bank) => (bank === null ? "any bank" : `bank ${bank}`);
 
 function addressFor(names, text, pc) {
     return names.addressOf(text, pc) ?? parseAddr(text);
@@ -426,6 +425,8 @@ export class Debugger {
 
     /** Lists the label files under the disassembly, each with the bank it is for and a button to forget it. */
     _showLabelFiles() {
+        // Bootstrap holds on to each menu's toggle until it is disposed of, open or not.
+        for (const toggle of this._labelsLine.querySelectorAll(".label-bank")) Dropdown.getInstance(toggle)?.dispose();
         const { files } = this._labelFiles;
         this._labelsLine.hidden = files.length === 0;
         this._labelsLine.replaceChildren(
@@ -441,7 +442,7 @@ export class Debugger {
         bank.type = "button";
         bank.className = "label-bank dropdown-toggle";
         bank.dataset.bsToggle = "dropdown";
-        bank.textContent = bankName(file.bank);
+        bank.textContent = file.bank === null ? "any bank" : `bank ${file.bank}`;
         bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
         // Bootstrap focuses the toggle as its menu opens.
         bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
@@ -471,7 +472,7 @@ export class Debugger {
     async _dropLabels(file) {
         try {
             const added = this._labelFiles.add({
-                key: file.name,
+                key: `dropped:${file.name}`,
                 title: file.name,
                 source: "",
                 text: await file.text(),
