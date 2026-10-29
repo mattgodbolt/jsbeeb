@@ -18,6 +18,7 @@ import {
     powerOfTwoColumnsThatFit,
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { TightLoopNote } from "./tight-loop-note.js";
 
 const noop = () => {};
 
@@ -397,6 +398,7 @@ export class Debugger {
                     this._loop?.isRunning() ? this._disassembly.update(this.cpu.pc) : this._disassembly.redraw(),
                 ),
         });
+        this._loopNote = new TightLoopNote(this.panels.toolbar.panel.querySelector(".tight-loop"), arrangement);
         this._bindToolbar();
         this._bindKeys(keys);
 
@@ -606,6 +608,7 @@ export class Debugger {
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
         this._disassembly.setCpu(cpu);
+        this._loopNote.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     disassemble(addr) {
@@ -784,6 +787,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
+        this._loopNote.show(this.cpu);
         this._refresh.drawn();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
@@ -849,6 +853,8 @@ export class Debugger {
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
         this._inDebugger = false;
+        this._loopNote.clear();
+        this._arrangement.keepAttached();
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;
         if (this._debugPanels().some((floating) => floating.panel.contains(focused))) focused.blur();

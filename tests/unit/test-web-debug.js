@@ -424,6 +424,42 @@ describe("Debugger", () => {
                 button("step").dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);
             });
+
+            describe("stopped in a tight loop", () => {
+                const loopLine = () => document.querySelector("#toolbar-panel .tight-loop");
+                const stopIn = (code) => {
+                    code.forEach((byte, i) => cpu.writemem(0x3000 + i, byte));
+                    cpu.pc = 0x3000;
+                    dbgr.debug(cpu.pc);
+                };
+                const SysViaFlagWait = [0xad, 0x4d, 0xfe, 0x29, 0x02, 0xf0, 0xf9];
+
+                it("names the loop and the register it polls, and opens that device's panel", () => {
+                    new SysViaPanel({ cpu, arrangement });
+                    stopIn(SysViaFlagWait);
+                    expect(loopLine().hidden).toBe(false);
+                    expect(loopLine().textContent).toBe(
+                        "In a loop at $3000-$3005 polling SysVIA.IFR ($fe4d) open System VIA",
+                    );
+                    loopLine().querySelector("button").click();
+                    expect(visible("sysvia-panel")).toBe(true);
+                });
+
+                it("names a polled address that is no device's, and offers no panel a machine lacks", () => {
+                    stopIn([0x58, 0x78, 0xcd, 0x40, 0x02, 0xf0, 0xf9]);
+                    expect(loopLine().textContent).toBe("In a loop at $3000-$3005 polling $0240");
+                    stopIn(SysViaFlagWait);
+                    expect(loopLine().querySelector("button")).toBeNull();
+                });
+
+                it("says nothing once the machine runs on, or stopped anywhere else", () => {
+                    stopIn(SysViaFlagWait);
+                    stoppedLoop.go();
+                    expect(loopLine().hidden).toBe(true);
+                    stopIn([0xa9, 0x41]);
+                    expect(loopLine().hidden).toBe(true);
+                });
+            });
         });
 
         it("note the debugger opening each time it is entered, not each time it stops, and each panel as it opens", () => {

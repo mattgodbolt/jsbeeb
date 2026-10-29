@@ -99,6 +99,18 @@ body {
   padding: 0 5px;
 }
 
+/* Fitted to the toolbar's width instead of setting it. */
+#toolbar-panel .tight-loop {
+  width: 0;
+  min-width: 100%;
+  padding-top: 3px;
+  color: #ffd27f;
+}
+
+#toolbar-panel .tight-loop .polled {
+  font-family: monospace;
+}
+
 /* A width of its own (set in debug.js), not its rows', so that it keeps it as the names in view come and go. */
 #disassembly-panel {
   width: var(--natural-width);
@@ -1054,7 +1066,8 @@ small {
   white-space: nowrap;
 }
 
-.txt-btn[data-opens] {
+.txt-btn[data-opens],
+#toolbar-panel .tight-loop .txt-btn {
   color: #aaaaff;
   font-family: inherit;
   font-size: inherit;

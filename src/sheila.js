@@ -151,6 +151,19 @@ export function sheilaBlocks({ model, hasTube, hasEconet, hasVideoNula }) {
 }
 
 /**
+ * The blocks of SHEILA on the machine `cpu` emulates.
+ * @param {import("./6502.js").Cpu6502} cpu
+ */
+export function machineSheilaBlocks(cpu) {
+    return sheilaBlocks({
+        model: cpu.model,
+        hasTube: cpu.hasTube,
+        hasEconet: !!cpu.econet,
+        hasVideoNula: cpu.video.ula.hasVideoNula,
+    });
+}
+
+/**
  * The register `address` reads or writes, by `access`.
  * @param {SheilaBlock[]} blocks
  * @param {number} address
