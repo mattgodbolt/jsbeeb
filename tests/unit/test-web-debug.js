@@ -1910,6 +1910,7 @@ describe("Debugger", () => {
         });
 
         it("fetches no names for breakpoints while the Breakpoints panel is closed", async () => {
+            vi.spyOn(performance, "now").mockReturnValue(1000 * 60);
             dbgr.hidePanels();
             cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
             await new Promise((resolve) => setTimeout(resolve, 0));
