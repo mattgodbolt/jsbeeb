@@ -173,21 +173,3 @@ body.touch-keyboard-open #leds {
   font-size: 24px;
   line-height: 1;
 }
-
-/* A landscape phone has so little height that every pixel of key is a pixel off the picture; 24px keys have no
-   room to stack legends, and wide ones need not. */
-@media (max-height: 500px) {
-  #touch-keyboard {
-    --key-height: 24px;
-    opacity: 0.62;
-  }
-
-  #touch-keyboard .tk-key {
-    flex-direction: row;
-    gap: 3px;
-  }
-
-  #touch-keyboard .tk-key.vertical {
-    writing-mode: horizontal-tb;
-  }
-}

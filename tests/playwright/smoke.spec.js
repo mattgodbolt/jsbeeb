@@ -343,6 +343,33 @@ test.describe("on a phone", () => {
         await touch("touchEnd", []);
         await beeb.expectScreenText("automatically loaded");
     });
+
+    test("the on-screen keyboard steps aside in landscape for the lights bar, and comes back as it was left", async ({
+        beeb,
+        page,
+    }) => {
+        const keyboard = page.locator("#touch-keyboard");
+        const toggle = page.locator("#touch-keyboard-toggle");
+        const lights = page.locator("#leds");
+        const turn = (width, height) => page.setViewportSize({ width, height });
+        await beeb.open();
+        await expect(keyboard).toBeVisible();
+        await expect(lights).toBeHidden();
+
+        await turn(915, 412);
+        await expect(keyboard).toBeHidden();
+        await expect(toggle).toBeHidden();
+        await expect(lights).toBeVisible();
+        await turn(412, 915);
+        await expect(keyboard).toBeVisible();
+
+        await page.locator("#touch-keyboard .tk-hide").tap();
+        await turn(915, 412);
+        await expect(toggle).toBeHidden();
+        await turn(412, 915);
+        await expect(keyboard).toBeHidden();
+        await expect(toggle).toBeVisible();
+    });
 });
 
 test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({

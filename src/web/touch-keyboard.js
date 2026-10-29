@@ -3,7 +3,7 @@ import "./touch-keyboard.css";
 const StorageKey = "touchKeyboardOpen";
 const NarrowScreenQuery = "(max-width: 700px)";
 const TouchQuery = "(pointer: coarse)";
-const LandscapeQuery = "(max-height: 500px)";
+const LandscapePhoneQuery = "(orientation: landscape) and (max-height: 500px)";
 const ForceParameter = "touchkeys";
 // In the machine's own time, which falls behind the wall clock when the page is busy. The OS scans the keyboard every
 // 10 ms and misses a press shorter than two scans, and reads SHIFT and CTRL some 20 ms after BREAK comes up.
@@ -134,7 +134,9 @@ export class TouchKeyboard {
             this.sendDueReleases();
             this.syncLeds();
         });
-        new ResizeObserver(() => this.reserveRoom()).observe(this.root);
+        this.landscapePhone = window.matchMedia(LandscapePhoneQuery);
+        this.landscapePhone.addEventListener("change", () => this.show());
+        new ResizeObserver(() => this.show()).observe(this.root);
         this.showLayer("main");
         this.setOpen(window.localStorage[StorageKey] !== "false");
     }
@@ -192,7 +194,7 @@ export class TouchKeyboard {
     }
 
     syncLeds() {
-        if (!this.open) return;
+        if (this.root.hidden) return;
         for (const { led, lit } of this.leds) led.classList.toggle("on", !!lit(this.processor));
     }
 
@@ -235,18 +237,19 @@ export class TouchKeyboard {
 
     setOpen(open) {
         this.open = open;
-        this.root.hidden = !open;
-        this.toggle.hidden = open;
-        document.body.classList.toggle(OpenClass, open);
         window.localStorage[StorageKey] = String(open);
-        if (!open) this.releaseAll();
-        this.reserveRoom();
+        this.show();
     }
 
-    /** A landscape phone cannot spare the height, so there the keys float translucently over the picture. */
-    reserveRoom() {
-        const floats = window.matchMedia(LandscapeQuery).matches;
-        this.layout.reserveForTouchKeyboard(this.open ? (floats ? 0 : this.root.offsetHeight) : null);
+    /** A landscape phone has no height to spare for the keys, so there the page is as it is without them. */
+    show() {
+        const landscape = this.landscapePhone.matches;
+        const shown = this.open && !landscape;
+        this.root.hidden = !shown;
+        this.toggle.hidden = this.open || landscape;
+        document.body.classList.toggle(OpenClass, shown);
+        if (!shown) this.releaseAll();
+        this.layout.reserveForTouchKeyboard(shown ? this.root.offsetHeight : null);
     }
 
     showLayer(name) {
