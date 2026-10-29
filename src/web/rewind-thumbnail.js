@@ -44,8 +44,8 @@ function captureThumbnail(fb32) {
 }
 
 /**
- * Execute cycles until a complete top-to-bottom frame is in fb32, with the debug hooks detached: a preview is not a
- * run the user asked to stop, so no breakpoint or watch cuts it short.
+ * Execute cycles until a complete top-to-bottom frame is in fb32, with the debug hooks detached so that no
+ * breakpoint or watch cuts the preview short.
  *
  * Snapshots may be mid-frame, so we run through two vsyncs:
  * 1. First vsync completes the partial frame and clears fb32 normally.
