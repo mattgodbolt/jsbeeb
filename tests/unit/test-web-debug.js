@@ -93,7 +93,14 @@ describe("Debugger", () => {
         arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
         labelFiles = new LabelFiles({ load: vi.fn() });
-        const made = new Debugger({ symbolSets, labelFiles, keys, arrangement, monitor: monitor(), breakpointStorage: null });
+        const made = new Debugger({
+            symbolSets,
+            labelFiles,
+            keys,
+            arrangement,
+            monitor: monitor(),
+            breakpointStorage: null,
+        });
         made.setCpu(cpu);
         stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
