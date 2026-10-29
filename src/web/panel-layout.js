@@ -28,6 +28,7 @@ export const PanelIds = [
     "uservia",
     "crtc",
     "soundchip",
+    "videoula",
     "fdc",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };

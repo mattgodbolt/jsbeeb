@@ -24,6 +24,7 @@ describe("AnalogueInputs", () => {
             getGamepads: () => [],
             settings: new Settings({ urlState: fakeUrlState() }),
             audioHandler: { tryResume: vi.fn() },
+            takeScreenClick: () => false,
         };
         vi.spyOn(deps.settings.urlState, "updateUrl");
     });
@@ -101,6 +102,18 @@ describe("AnalogueInputs", () => {
             vi.spyOn(inputs.mouseJoystickSource, "isEnabled").mockReturnValue(true);
             mouse("mousedown");
             expect(down).toHaveBeenCalledWith(0);
+        });
+
+        it("offers a left click to the debugger first, and gives the machine only those it leaves", () => {
+            deps.takeScreenClick = vi.fn(() => true);
+            make();
+            const taken = mouse("mousedown");
+            expect(deps.takeScreenClick).toHaveBeenCalledTimes(1);
+            expect(deps.processor.touchScreen.onMouse).not.toHaveBeenCalled();
+            expect(taken.defaultPrevented).toBe(true);
+            mouse("mousemove");
+            expect(deps.takeScreenClick).toHaveBeenCalledTimes(1);
+            expect(deps.processor.touchScreen.onMouse).toHaveBeenCalledTimes(1);
         });
     });
 
