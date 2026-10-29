@@ -745,7 +745,9 @@ export class Debugger {
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
         const cycles = cycleCount(cpu);
         this.updateElem(document.getElementById("cpu6502_cycles"), String(cycles));
-        const stopwatch = this._stopwatchFrom === null ? "" : String(cycles - this._stopwatchFrom);
+        // A power-on reset starts the count again from zero, behind the stopwatch's start.
+        const timing = this._stopwatchFrom !== null && cycles >= this._stopwatchFrom;
+        const stopwatch = timing ? String(cycles - this._stopwatchFrom) : "";
         this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
         const beam = cpu.video.beamPosition();
         this.updateElem(document.getElementById("beam-line"), String(beam.line));

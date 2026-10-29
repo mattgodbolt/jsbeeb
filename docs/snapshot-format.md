@@ -242,7 +242,7 @@ Contains ~40 scalar fields for display timing and rendering state, plus nested o
 | `lineBaseOdd`             | number     | `hsyncCount` under which framebuffer row 1 was drawn. Absent means 0           |
 | `phaseBaseEven`           | number     | `subcarrierPhase` under which framebuffer row 0 was drawn. Absent means 0      |
 | `phaseBaseOdd`            | number     | `subcarrierPhase` under which framebuffer row 1 was drawn. Absent means 0      |
-| `frameStartX`             | number     | `bitmapX` had no hsync since flyback sent it back. Absent means `bitmapX`      |
+| `frameStartX`             | number     | Where `bitmapX` would be with no hsync since flyback. Absent means `bitmapX`   |
 | `horizCounter`            | number     | Horizontal character counter                                                   |
 | `vertCounter`             | number     | Vertical character row counter                                                 |
 | `scanlineCounter`         | number     | Scanline within character row                                                  |

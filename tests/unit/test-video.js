@@ -1830,6 +1830,15 @@ describe("Video", () => {
             expect(video.beamPosition()).toMatchObject({ line: 0, frameCycle: 1 });
         });
 
+        it("counts a snapshot that predates the frame's start from where its beam was", () => {
+            rig.run(ClocksPerScanline);
+            const older = video.snapshotState();
+            delete older.frameStartX;
+            const restored = makeVideo().video;
+            restored.restoreState(older);
+            expect(restored.beamPosition().frameCycle).toBe(0);
+        });
+
         it("counts the odd interlace field's lines from 0 too", () => {
             rig.writeCrtc(8, 1);
             for (let field = 0; field < 2; field++) {

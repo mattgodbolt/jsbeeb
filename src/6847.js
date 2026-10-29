@@ -117,7 +117,7 @@ const MODE_AG = 0x10; // graphics mode
 const VdgClockMhz = 3.638004;
 
 // The counters run up to and including these, so a line is one cycle more and a field one line more.
-const LastLineCycle = 228; // not 227.5
+const LastLineCycle = 228;
 const LastFieldLine = 262; // NTSC; the standard Atom has no PAL
 const VertBlankLines = 13;
 const TopBorderLines = 25;
