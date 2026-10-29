@@ -5,6 +5,7 @@ import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 import { rendezvousPlugin } from "./rendezvous/vite-plugin.js";
 import { analyticsPlugin } from "./tools/vite-plugin-analytics.js";
 import { browserFloorPlugin } from "./tools/vite-plugin-browser-floor.js";
+import { htmlIncludesPlugin } from "./tools/vite-plugin-html-includes.js";
 import { workersFor } from "./tools/test-workers.js";
 
 // Every run in a GitHub Actions job appends to one summary page, so the suites need headings of
@@ -29,7 +30,7 @@ function gitCommit() {
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
     base: "./", // Use relative paths for Electron compatibility
-    plugins: [firShaderPlugin(), rendezvousPlugin(), analyticsPlugin(), browserFloorPlugin()],
+    plugins: [htmlIncludesPlugin(), firShaderPlugin(), rendezvousPlugin(), analyticsPlugin(), browserFloorPlugin()],
     define: { "import.meta.env.JSBEEB_COMMIT": JSON.stringify(gitCommit()) },
     build: {
         target: browserslistToEsbuild(),
