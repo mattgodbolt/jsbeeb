@@ -210,14 +210,17 @@ export class WatchPanel {
             breaker.classList.toggle("armed", on);
             const when = condition ? `on a write that makes it ${condition.text}` : "on a write that changes it";
             breaker.title = `${on ? "Stops the machine" : "Stop the machine"} ${when}. ${DeviceNote}`;
-            this._showPopup(null);
             this._watchWrites();
         };
         arm(false, null);
+        const choose = (on, condition) => {
+            arm(on, condition);
+            this._showPopup(null);
+        };
         const off = textButton("watch-break-choice", "off", "Never stop the machine for it");
-        off.addEventListener("click", () => arm(false, null));
+        off.addEventListener("click", () => choose(false, null));
         const onChange = textButton("watch-break-choice", "on change", "Stop the machine on a write that changes it");
-        onChange.addEventListener("click", () => arm(true, null));
+        onChange.addEventListener("click", () => choose(true, null));
         const conditionForm = document.createElement("form");
         const conditionBox = document.createElement("input");
         conditionBox.type = "text";
@@ -232,7 +235,7 @@ export class WatchPanel {
             const condition = parseCondition(conditionBox.value);
             conditionBox.classList.toggle("is-invalid", condition === undefined);
             if (!condition) return;
-            arm(true, condition);
+            choose(true, condition);
         });
         breakCell.append(off, onChange, conditionForm);
         cell("", "").append(breaker);

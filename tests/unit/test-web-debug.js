@@ -1100,10 +1100,14 @@ describe("Debugger", () => {
                 dbgr.hide();
                 stoppedLoop.tick(MachineSecond / 100);
             };
-            // LDA #5; STA $70; LDA #6; STA $70; LDA #16; STA $70; LDA #$12; STA $FE4E; JMP $2011
-            const program = [0xa9, 5, 0x85, 0x70, 0xa9, 6, 0x85, 0x70, 0xa9, 16, 0x85, 0x70, 0xa9, 0x12, 0x8d];
+            // LDA #5; STA $70; LDA #6; STA $70; LDA #16; STA $70; LDA #$12; STA $C000; STA $FE4E; JMP $2014
+            const program = [
+                [0xa9, 5, 0x85, 0x70, 0xa9, 6, 0x85, 0x70, 0xa9, 16, 0x85, 0x70],
+                [0xa9, 0x12, 0x8d, 0x00, 0xc0, 0x8d, 0x4e, 0xfe, 0x4c, 0x14, 0x20],
+            ].flat();
+            const loadProgram = () => program.forEach((byte, i) => cpu.writemem(0x2000 + i, byte));
             beforeEach(() => {
-                program.concat([0x4e, 0xfe, 0x4c, 0x11, 0x20]).forEach((byte, i) => cpu.writemem(0x2000 + i, byte));
+                loadProgram();
                 dbgr.debug(cpu.pc);
             });
 
@@ -1117,8 +1121,11 @@ describe("Debugger", () => {
                 expect(cpu.pc).toBe(0x2008);
                 expect(fired()).toEqual([["$0070", "6", "dec", "brk", "×"]]);
                 expect(panelOpen()).toBe(true);
+                keyPress("n");
+                expect(fired()).toEqual([]);
                 run();
                 expect(cpu.pc).toBe(0x200c);
+                expect(fired()).toHaveLength(1);
                 dbgr.hide();
                 expect(fired()).toEqual([]);
                 pickBreak(1, "off");
@@ -1152,27 +1159,35 @@ describe("Debugger", () => {
                 expect(document.activeElement).not.toBe(box);
             });
 
+            /** A BBC B, without the ROMs jsdom cannot fetch, as the test CPU has neither ROM nor I/O. */
+            const switchToBeeb = async () => {
+                const beeb = findModel("B-DFS1.2");
+                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+                await cpu.initialise();
+                loadProgram();
+                cpu.pc = 0x2000;
+                dbgr.setCpu(cpu);
+                stoppedLoop.cpu = cpu;
+            };
+
             it("moves its watching to a new CPU, leaving the old one on its fast path", async () => {
                 addWatch("$70");
                 pickBreak(0, "on change");
                 const oldCpu = cpu;
-                cpu = fake6502(null, { video });
-                await cpu.initialise();
-                program.concat([0x4e, 0xfe, 0x4c, 0x11, 0x20]).forEach((byte, i) => cpu.writemem(0x2000 + i, byte));
-                cpu.writemem(0x70, 0x05);
-                cpu.pc = 0x2000;
-                dbgr.setCpu(cpu);
-                stoppedLoop.cpu = cpu;
+                await switchToBeeb();
                 expect(oldCpu.onFastPath).toBe(true);
                 run();
-                expect(cpu.pc).toBe(0x2008);
+                expect(cpu.pc).toBe(0x2004);
             });
 
-            it("stops on every write to a device register, testing the byte written", () => {
+            it("stops on every write to a device register, testing the byte written, and never on one to ROM", async () => {
+                await switchToBeeb();
+                addWatch("$c000");
                 addWatch("$fe4e");
-                breakWhen(0, "= $12");
+                pickBreak(0, "on change");
+                breakWhen(1, "= $12");
                 run();
-                expect(cpu.pc).toBe(0x2011);
+                expect(cpu.pc).toBe(0x2014);
             });
         });
 
