@@ -40,12 +40,18 @@ describe("watches", () => {
         ["$41", 66, false, "=$41"],
         ["== 5", 5, true, "=5"],
         [">= 300", 299, false, ">=300"],
+        ["<> 5", 6, true, "<>5"],
+        ["> -1", 0, true, ">-1"],
+        ["< A", 8, true, "<A"],
+        ["= ?&70 + 1", 0x35, true, "=?&70 + 1"],
+        ["= $41 OR $42", 0x43, true, "=$41 OR $42"],
     ])("holds a condition %s for %i: %s, shown as %s", (text, value, holds, shown) => {
+        const cpu = { a: 9, pc: 0, peekmem: peek };
         expect(parseCondition(text)).toMatchObject({ text: shown });
-        expect(parseCondition(text).holds(value)).toBe(holds);
+        expect(parseCondition(text).holds(value, cpu)).toBe(holds);
     });
 
-    it.each(["= $", "= 5x", "> -1", "=== 5", "=> 5"])("refuses the condition %s", (text) => {
+    it.each(["= $", "= 5x", "", "=== 5", "=> 5", "is 5"])("refuses the condition %j", (text) => {
         expect(parseCondition(text)).toBeUndefined();
     });
 

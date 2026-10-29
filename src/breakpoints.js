@@ -19,6 +19,8 @@ const Accesses = ["execute", "read", "write"];
  * @property {number} [end] - the last address it covers; `start` if not given
  * @property {number} [bank] - only while this sideways bank is paged in where it is hit
  * @property {string} [condition]
+ * @property {(address: number, value: number) => boolean} [accepts] - a test of its own, after the condition, for an
+ * owner whose rule a condition cannot say, such as a watch's
  * @property {number} [hitCount] - acts on this hit and every one after; 1 if not given
  * @property {boolean} [enabled] - true if not given
  * @property {"stop" | "log"} [action] - stop if not given
@@ -132,11 +134,11 @@ export class Breakpoints {
         return entry;
     }
 
-    _spec({ kind, start, end, bank, condition, hitCount, enabled, action, label, owner, onHit }) {
-        return { kind, start, end, bank, condition, hitCount, enabled, action, label, owner, onHit };
+    _spec({ kind, start, end, bank, condition, accepts, hitCount, enabled, action, label, owner, onHit }) {
+        return { kind, start, end, bank, condition, accepts, hitCount, enabled, action, label, owner, onHit };
     }
 
-    _checked({ kind, start, end, bank, condition, hitCount, enabled, action, label, owner, onHit }) {
+    _checked({ kind, start, end, bank, condition, accepts, hitCount, enabled, action, label, owner, onHit }) {
         if (!AccessesOfKind.has(kind)) throw new Error(`Unknown breakpoint type: ${kind}`);
         end ??= start;
         requireAddress("start", start);
@@ -166,6 +168,7 @@ export class Breakpoints {
             action,
             label,
             owner: owner ?? "user",
+            accepts,
             onHit,
         };
     }
@@ -212,6 +215,7 @@ export class Breakpoints {
             if (address < entry.start || address > entry.end) continue;
             if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) continue;
             if (entry.test && !entry.test(cpu, pc, value, old)) continue;
+            if (entry.accepts && !entry.accepts(address, value)) continue;
             if (++entry.hits < entry.hitCount) continue;
             const hit = {
                 id: entry.id,

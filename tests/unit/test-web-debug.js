@@ -1607,6 +1607,23 @@ describe("Debugger", () => {
                 expect(cpu.onFastPath).toBe(true);
             });
 
+            it("breaks through the CPU's breakpoints, over the watch's bytes, stopping when they are removed", () => {
+                addWatch("$ffff");
+                watchControl(0, "watch-format").click();
+                [...watchChoices(0).querySelectorAll("button")]
+                    .find((choice) => choice.textContent === "hex16")
+                    .click();
+                pickBreak(0, "on change");
+                expect(cpu.breakpoints.list().map(({ kind, start, end, owner }) => [kind, start, end, owner])).toEqual([
+                    ["write", 0xffff, 0xffff, "watch"],
+                    ["write", 0x0000, 0x0000, "watch"],
+                ]);
+                cpu.breakpoints.remove(cpu.breakpoints.list()[0].id);
+                expect(cpu.breakpoints.list()).toEqual([]);
+                expect(watchRows()[0][3]).toBe("brk");
+                expect(cpu.onFastPath).toBe(true);
+            });
+
             it("shows every watch one write fires", () => {
                 addWatch("$70");
                 addWatch("$70");

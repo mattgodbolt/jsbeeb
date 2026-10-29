@@ -1,3 +1,5 @@
+import { compileCondition } from "./conditions.js";
+
 /**
  * @typedef {object} WatchFormat
  * @property {string} name
@@ -33,39 +35,36 @@ function watchValue(peek, address, format) {
     return value;
 }
 
-const Comparisons = {
-    "=": (a, b) => a === b,
-    "!=": (a, b) => a !== b,
-    "<": (a, b) => a < b,
-    "<=": (a, b) => a <= b,
-    ">": (a, b) => a > b,
-    ">=": (a, b) => a >= b,
-};
-const ConditionPattern = /^(!=|<=|>=|==|=|<|>)?\s*(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+))$/i;
+const LeadingComparison = /^(==|!=|<>|<=|>=|=|<|>)?\s*/;
+const NumberLiteral = /^(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+))$/i;
 
 /**
  * @typedef {object} WatchCondition
  * @property {string} text
- * @property {(value: number) => boolean} holds
+ * @property {(value: number, cpu: object) => boolean} holds - whether it holds for the watch's value, with the CPU
+ * for any register or memory the condition reads
  */
 
 /**
- * A break's condition, such as `= 5`, `!= $20` or `> &7f`: decimal unless marked hex by `$`, `&` or `0x`. A bare
- * value, such as `5`, means `= 5`, and `==` is `=`.
+ * A break's condition: a comparison and what the watch's value is compared with, such as `= 5`, `!= $20` or
+ * `> ?&70`, in the language of src/conditions.js. A bare value, such as `5`, means `= 5`, and `==` is `=`.
  * @param {string} text
  * @returns {WatchCondition | undefined}
  */
 export function parseCondition(text) {
-    const match = ConditionPattern.exec(text.trim());
-    if (!match) return undefined;
-    const [, typed, hex, dec] = match;
+    const trimmed = text.trim();
+    const [comparison, typed] = LeadingComparison.exec(trimmed);
     const op = typed === undefined || typed === "==" ? "=" : typed;
-    const operand = hex === undefined ? parseInt(dec, 10) : parseInt(hex, 16);
-    const compare = Comparisons[op];
-    return {
-        text: `${op}${hex === undefined ? dec : `$${hex.toLowerCase()}`}`,
-        holds: (value) => compare(value, operand),
-    };
+    const operand = trimmed.slice(comparison.length);
+    let test;
+    try {
+        test = compileCondition(`value ${op} (${operand})`);
+    } catch {
+        return undefined;
+    }
+    const [, hex, dec] = NumberLiteral.exec(operand) ?? [];
+    const shown = hex !== undefined ? `$${hex.toLowerCase()}` : (dec ?? operand);
+    return { text: `${op}${shown}`, holds: (value, cpu) => test(cpu, cpu?.pc, value, value) !== 0 };
 }
 
 /**
@@ -77,12 +76,13 @@ export function parseCondition(text) {
  * @param {number} address
  * @param {number} byte
  * @param {boolean} toRam
+ * @param {object} cpu - for a condition reading registers or memory
  */
-export function writeStops(peek, watch, address, byte, toRam) {
+export function writeStops(peek, watch, address, byte, toRam, cpu) {
     const { format, condition } = watch;
     if (((address - watch.address) & 0xffff) >= format.bytes) return false;
-    if (!toRam) return !condition || condition.holds(byte);
+    if (!toRam) return !condition || condition.holds(byte, cpu);
     const after = watchValue((at) => (at === address ? byte : peek(at)), watch.address, format);
     if (after === watchValue(peek, watch.address, format)) return false;
-    return !condition || condition.holds(after);
+    return !condition || condition.holds(after, cpu);
 }
