@@ -46,6 +46,11 @@ describe("label files", () => {
                 [label("start", 0x1900), label("start", 0x1900), label("_0.inner", 0x190e)],
             ],
             [
+                "BeebAsm 1.10's -d -dd for code ending at $ffff, leaving out the label past it",
+                "[{'end':65536L,'top':65534L,'.top':65534L,'.end':65536L}]\n",
+                [label("top", 0xfffe), label("top", 0xfffe)],
+            ],
+            [
                 "VICE's save_labels, skipping a disc drive's",
                 "al C:1900 .start\nal C:190d .done\nal 8:0300 .drive_code\n",
                 [label("start", 0x1900), label("done", 0x190d)],
@@ -75,7 +80,7 @@ describe("label files", () => {
                 `line 1, "\u0000${"x".repeat(39)}...", isn't`,
             ],
             ["an address past the top of memory", "al C:10000 .past", "line 1 has the address 65536, past $ffff"],
-            ["a BeebAsm name past the top of memory", "[{'big':65536L}]", "'big' has the address 65536"],
+            ["a BeebAsm name past the top of memory", "[{'big':65537L}]", "'big' has the address 65537"],
         ])("refuses %s", (_, text, problem) => {
             expect(() => parseLabels(text)).toThrow(problem);
         });

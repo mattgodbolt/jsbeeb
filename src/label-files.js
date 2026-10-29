@@ -17,6 +17,8 @@ import { isHttps } from "./symbol-sets.js";
 const SidewaysStart = 0x8000;
 const SidewaysEnd = 0xc000;
 const LastAddress = 0xffff;
+// The highest BeebAsm label: its PC after a byte at $ffff, which names no byte.
+const BeebAsmEnd = 0x10000;
 const QuotedLength = 40;
 
 const BeebAsmFile = /^\[\{([\s\S]*)\}\]$/;
@@ -44,6 +46,7 @@ function beebAsmLabels(body) {
     BeebAsmEntry.lastIndex = 0;
     for (let match; (match = BeebAsmEntry.exec(body)); consumed = BeebAsmEntry.lastIndex) {
         const [, name, value] = match;
+        if (Number(value) === BeebAsmEnd) continue;
         labels.push({ name: name.replace(/^\./, ""), address: checkedAddress(Number(value), `'${name}'`), bank: null });
     }
     const rest = body.slice(consumed).trim();
