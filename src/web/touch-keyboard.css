@@ -1,3 +1,9 @@
+@font-face {
+  font-family: "Open Gorton";
+  src: url("/fonts/open-gorton/OpenGorton-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+
 #touch-keyboard {
   position: fixed;
   left: 0;
@@ -79,7 +85,8 @@ body.touch-keyboard-open #leds {
   border-radius: 5px;
   border-bottom: 3px solid #0e0d0c;
   font:
-    600 16px/1 system-ui,
+    16px/1 "Open Gorton",
+    system-ui,
     sans-serif;
   box-sizing: border-box;
 }
@@ -90,11 +97,20 @@ body.touch-keyboard-open #leds {
 
 #touch-keyboard .tk-key.tiny {
   font-size: 8.5px;
-  letter-spacing: -0.2px;
 }
 
 #touch-keyboard .tk-key.arrow {
   font-size: 13px;
+}
+
+#touch-keyboard .tk-key.italic {
+  font-style: italic;
+}
+
+#touch-keyboard .tk-key sub {
+  font-size: 0.7em;
+  line-height: 0;
+  vertical-align: -0.15em;
 }
 
 #touch-keyboard .tk-key.vertical {

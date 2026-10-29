@@ -23,7 +23,8 @@ const buzz = () => navigator.vibrate?.(VibrateMs);
 
 /**
  * A key on the glass. `key` names a position in the model's key table, or BREAK; `sub` is the shifted legend the
- * keycap prints above; `w` is the columns the key spans (flex weight outside the grid) and `rows` the rows.
+ * keycap prints above; `subscript` follows the legend, small and low; `w` is the columns the key spans (flex weight
+ * outside the grid) and `rows` the rows.
  */
 const k = (label, key, ...extra) => Object.assign({ label, key, w: 1 }, ...extra);
 const letters = (row) => [...row].map((c) => k(c, c));
@@ -44,7 +45,7 @@ const BottomRow = (layerLabel, layer) => [
 ];
 
 export const FunctionRow = [
-    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => k(`f${n}`, `F${n}`, { cls: "fkey" })),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => k("f", `F${n}`, { cls: "fkey italic", subscript: `${n}` })),
     gap(0.5),
     k("BREAK", BreakKey, { w: 1.6, cls: "fkey small" }),
 ];
@@ -276,6 +277,11 @@ export class TouchKeyboard {
         }
         const label = document.createElement("span");
         label.textContent = def.label;
+        if (def.subscript) {
+            const subscript = document.createElement("sub");
+            subscript.textContent = def.subscript;
+            label.append(subscript);
+        }
         el.append(label);
         el.def = def;
         return el;

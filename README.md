@@ -525,6 +525,9 @@ support. Andrew developed the original Atom implementation including the MC6847 
 interface, Atom keyboard mapping, tape support, and speaker output. His work in [PR #505](https://github.com/mattgodbolt/jsbeeb/pull/505)
 was incrementally merged and refined into the codebase.
 
+The on-screen keyboard's legends are in Dakota Felder's [Open Gorton](https://github.com/dakotafelder/open-gorton)
+font, used under the MIT licence; see [public/fonts/open-gorton](public/fonts/open-gorton).
+
 A lot of the early development used the amazing [Visual 6502](http://visual6502.org/) as reference for intra-instruction
 timings. Amazing stuff.
 

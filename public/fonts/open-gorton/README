@@ -1,0 +1,6 @@
+Open Gorton, by Dakota Felder, from https://github.com/dakotafelder/open-gorton
+(commit 30094223a4f1e54e44ec3e2c39477f1b7e1006e4), under the MIT licence in LICENSE.
+
+OpenGorton-Regular.woff2 is built from that repository's OpenGorton-Regular.otf by
+tools/make-touch-keyboard-font.py, which cuts it down to the characters the on-screen
+keyboard needs and slashes its zero.
