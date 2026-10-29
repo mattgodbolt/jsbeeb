@@ -24,6 +24,7 @@ const PanelElements = [
     "peripherals-panel",
     "watch-panel",
     "watch-menu",
+    "cub-monitor",
 ];
 
 const MachineSecond = 2000000;
@@ -69,13 +70,14 @@ describe("Debugger", () => {
     let arrangement;
     let stoppedLoop;
     let resize;
+    const monitor = () => document.getElementById("cub-monitor");
 
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
         arrangement = new PanelArrangement(() => window.localStorage);
         arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
-        const made = new Debugger({ symbolSets, keys, arrangement });
+        const made = new Debugger({ symbolSets, keys, arrangement, monitor: monitor() });
         made.setCpu(cpu);
         stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
@@ -449,7 +451,7 @@ describe("Debugger", () => {
             domFromIndexHtml(...PanelElements);
             arrangement = new PanelArrangement(() => window.localStorage);
             const symbolSets = new SymbolSets({ baseUrl: new URL("https://symbols.example/"), load: index.load });
-            dbgr = new Debugger({ symbolSets, keys: new PanelKeys(arrangement), arrangement });
+            dbgr = new Debugger({ symbolSets, keys: new PanelKeys(arrangement), arrangement, monitor: monitor() });
             dbgr.watches.floating.open();
             dbgr.panels.registers.open();
             await vi.waitFor(() => expect(index.load).toHaveBeenCalled());
@@ -554,6 +556,25 @@ describe("Debugger", () => {
             goTo("goto-mem-addr-form", "$0004");
             keyPress("i");
             expect(memTarget().dataset.addr).toBe(`${0xfffc}`);
+        });
+
+        it("opens on the byte drawn where the stopped screen is clicked, and leaves a running one's clicks alone", () => {
+            const picture = vi.spyOn(video, "addressShownAt").mockImplementation((x, y) => (y < 0.5 ? 0x3456 : null));
+            const findsBytes = () => monitor().classList.contains("finds-bytes");
+            dbgr.debug(cpu.pc);
+            dbgr.panels.memory.close();
+            expect(findsBytes()).toBe(true);
+
+            expect(dbgr.showScreenByteAt(0.25, 0.75)).toBe(true);
+            expect(visible("memory-panel")).toBe(false);
+            expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(true);
+            expect(picture).toHaveBeenLastCalledWith(0.25, 0.25);
+            expect(visible("memory-panel")).toBe(true);
+            expect(memTarget().dataset.addr).toBe(`${0x3456}`);
+
+            stoppedLoop.go();
+            expect(findsBytes()).toBe(false);
+            expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(false);
         });
     });
 

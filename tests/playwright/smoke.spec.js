@@ -481,6 +481,39 @@ test("the memory view shows 8, 16 or 32 bytes a row as its panel is widened, its
     expect(await memoryRows()).toMatchObject({ highlight: 0x1250, target: `${0x1254}`, fits: true });
 });
 
+test("a click on the stopped screen opens memory at the byte drawn there, and a running screen's clicks are the machine's", async ({
+    beeb,
+    page,
+}) => {
+    const Mode7Screen = { start: 0x7c00, end: 0x7c00 + 1000 };
+    const target = () => page.locator("#memory .mem_bytes .target").getAttribute("data-addr");
+    const centre = async () => {
+        const box = await page.locator("#screen").boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    };
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    await beeb.togglePanel("memory");
+    await expect(page.locator("#memory-panel")).toBeHidden();
+    await expect(page.locator("#cub-monitor")).toHaveCSS("cursor", "crosshair");
+
+    await centre();
+    await expect(page.locator("#memory-panel")).toBeVisible();
+    const drawn = await page.evaluate(() => window.processor.video.addressShownAt(0.5, 0.5));
+    expect(drawn).toBeGreaterThanOrEqual(Mode7Screen.start);
+    expect(drawn).toBeLessThan(Mode7Screen.end);
+    expect(await target()).toBe(`${drawn}`);
+
+    await page.fill("#goto-mem-addr-form .goto-addr", "1234");
+    await page.press("#goto-mem-addr-form .goto-addr", "Enter");
+    await page.keyboard.press("g");
+    await expect(page.locator("#cub-monitor")).not.toHaveCSS("cursor", "crosshair");
+    await centre();
+    expect(await target()).toBe(`${0x1234}`);
+});
+
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
     beeb,
     page,
