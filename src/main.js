@@ -59,6 +59,8 @@ import { sessionPage } from "./web/session-page.js";
 import { webRtcTransport } from "./web/session-transport.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
+import { LabelFiles } from "./label-files.js";
+import { loadData } from "./loader.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
 import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
@@ -101,8 +103,10 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 
 const panelArrangement = new PanelArrangement(() => window.localStorage);
 const panelKeys = new PanelKeys(panelArrangement);
+const labelFiles = new LabelFiles({ load: loadData });
 const dbgr = new Debugger({
     symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }),
+    labelFiles,
     keys: panelKeys,
     arrangement: panelArrangement,
 });
@@ -136,13 +140,17 @@ settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
 const bankRoms = [];
+const labelFileUrls = [];
 const familyWarnings = processInputParams(parsedQuery, {
     machineKeys: model.keys,
     hostKeyCodes,
     userKeymap,
     gamepad,
     bankRoms,
+    labelFiles: labelFileUrls,
 });
+for (const { url, bank } of labelFileUrls)
+    labelFiles.load(url, bank).catch((error) => toast(error.message, { title: "Label files" }));
 if (familyWarnings.length) {
     toast(`${familyWarnings.join(" ")} The key names and ROM banks are listed in the README.`, {
         title: "Parameters in the URL",

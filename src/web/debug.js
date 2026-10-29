@@ -1,4 +1,3 @@
-import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
@@ -18,6 +17,8 @@ import {
     powerOfTwoColumnsThatFit,
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { NumRomBanks } from "../6502.js";
+import { toast } from "./toast.js";
 
 const noop = () => {};
 
@@ -323,10 +324,11 @@ export class Debugger {
     /**
      * @param {object} options
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
+     * @param {import("../label-files.js").LabelFiles} options.labelFiles - the user's own names, ahead of the sets'
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
      */
-    constructor({ symbolSets, keys, arrangement }) {
+    constructor({ symbolSets, labelFiles, keys, arrangement }) {
         this._arrangement = arrangement;
         this.patchInstructions = new Map();
         this._loop = null;
@@ -354,14 +356,17 @@ export class Debugger {
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.uservia = this.sysvia = this.crtc = noop;
         this._symbolSets = symbolSets;
+        this._labelFiles = labelFiles;
         this._names = NoNames;
-        for (const credit of Object.values(this._credits)) toggle(credit.line, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
             // The index arriving is what lets the sets matching memory be fetched.
             if (this.watches.floating.isOpen) this._namesNow();
-            if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
-            this._matchSymbols();
-            this._refresh.drawNow();
+            this._renameShown();
+        });
+        this._labelsLine = document.querySelector("#disassembly-panel .debug-labels");
+        labelFiles.addEventListener("change", () => {
+            this._showLabelFiles();
+            this._renameShown();
         });
 
         this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
@@ -411,6 +416,63 @@ export class Debugger {
         });
     }
 
+    _renameShown() {
+        if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
+        this._matchSymbols();
+        this._refresh.drawNow();
+    }
+
+    /** Lists the label files under the disassembly, each with the bank it is for and a button to forget it. */
+    _showLabelFiles() {
+        const { files } = this._labelFiles;
+        this._labelsLine.hidden = files.length === 0;
+        this._labelsLine.replaceChildren(
+            "labels from ",
+            ...files.flatMap((file, i) => [...(i ? [" · "] : []), this._labelFileNode(file)]),
+        );
+    }
+
+    _labelFileNode(file) {
+        const node = document.createElement("span");
+        node.className = "label-file";
+        const bank = document.createElement("select");
+        bank.className = "panel-field label-bank";
+        bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
+        bank.setAttribute("aria-label", `Bank for ${file.title}`);
+        bank.append(
+            new Option("any bank", "", false, file.bank === null),
+            ...Array.from({ length: NumRomBanks }, (_, n) => new Option(`bank ${n}`, `${n}`, false, file.bank === n)),
+        );
+        bank.addEventListener("change", () => {
+            this._labelFiles.tie(file, bank.value === "" ? null : Number(bank.value));
+            bank.blur();
+        });
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "label-forget";
+        forget.textContent = "\u00d7";
+        forget.title = forget.ariaLabel = `Forget ${file.title}'s labels`;
+        forget.addEventListener("click", () => this._labelFiles.remove(file));
+        node.append(file.title, " ", bank, forget);
+        return node;
+    }
+
+    async _dropLabels(file) {
+        try {
+            const added = this._labelFiles.add({
+                title: file.name,
+                source: "",
+                text: await file.text(),
+                bank: null,
+            });
+            toast(`${added.labels.length} labels from ${file.name} name addresses in the debugger.`, {
+                title: "Label files",
+            });
+        } catch (error) {
+            toast(error.message, { title: "Label files" });
+        }
+    }
+
     _offerWatch(e, address, name) {
         e.preventDefault();
         this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
@@ -428,6 +490,14 @@ export class Debugger {
             minSize: own.minSize,
             reopens: true,
             arrangement: this._arrangement,
+        });
+        panel.dataset.dropWhat = "Drop a label file";
+        panel.dataset.dropInto = "BeebAsm, VICE or b-em labels name addresses in the debugger";
+        panel.addEventListener("drop", (e) => {
+            const file = e.dataTransfer?.files[0];
+            if (!file) return;
+            e.preventDefault();
+            this._dropLabels(file);
         });
         floating.addEventListener("open", () => {
             if (!this.cpu) return;
@@ -812,14 +882,15 @@ export class Debugger {
                 title.className = "symbol-set";
                 title.textContent = set.title;
                 title.title = [set.licence, set.notice].filter(Boolean).join("\n\n");
-                return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
+                const origin = set.source ? [" (", ...homeNodes(set.home), sourceNode(set.source), ")"] : [];
+                return [...(i ? [" · "] : []), title, ...origin];
             }),
         );
         credit.line.title = credit.line.textContent;
     }
 
     _namesNow() {
-        return this._symbolSets?.names(this._peek) ?? NoNames;
+        return this._labelFiles.names(this._symbolSets?.names(this._peek) ?? NoNames, this.cpu?.pagedBank);
     }
 
     _resolveWatch(text) {

@@ -10,6 +10,7 @@ import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
+import { LabelFiles } from "../../src/label-files.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
@@ -69,13 +70,15 @@ describe("Debugger", () => {
     let arrangement;
     let stoppedLoop;
     let resize;
+    let labelFiles;
 
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
         arrangement = new PanelArrangement(() => window.localStorage);
         arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
-        const made = new Debugger({ symbolSets, keys, arrangement });
+        labelFiles = new LabelFiles({ load: vi.fn() });
+        const made = new Debugger({ symbolSets, labelFiles, keys, arrangement });
         made.setCpu(cpu);
         stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
@@ -449,7 +452,12 @@ describe("Debugger", () => {
             domFromIndexHtml(...PanelElements);
             arrangement = new PanelArrangement(() => window.localStorage);
             const symbolSets = new SymbolSets({ baseUrl: new URL("https://symbols.example/"), load: index.load });
-            dbgr = new Debugger({ symbolSets, keys: new PanelKeys(arrangement), arrangement });
+            dbgr = new Debugger({
+                symbolSets,
+                labelFiles: new LabelFiles({ load: vi.fn() }),
+                keys: new PanelKeys(arrangement),
+                arrangement,
+            });
             dbgr.watches.floating.open();
             dbgr.panels.registers.open();
             await vi.waitFor(() => expect(index.load).toHaveBeenCalled());
@@ -1634,6 +1642,63 @@ describe("Debugger", () => {
             expect(load).toHaveBeenCalledTimes(1);
             dbgr.debug(cpu.pc);
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR oswrch"));
+        });
+    });
+
+    describe("names from label files", () => {
+        const rowAt = (address) => disRows().find((row) => Number(row.dataset.addr) === address);
+        const code = (address) => rowAt(address).querySelector(".disassembly");
+        const labelsLine = () => document.querySelector("#disassembly-panel .debug-labels");
+        const drop = (panelId, name, text) => {
+            const event = new Event("drop", { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", {
+                value: { types: ["Files"], files: [new File([text], name)] },
+            });
+            document.getElementById(panelId).dispatchEvent(event);
+            return event;
+        };
+
+        beforeEach(() => {
+            [0x20, 0x03, 0x80].forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
+            cpu.romSelect(15);
+            dbgr.debug(cpu.pc);
+        });
+
+        it("names the disassembly from a file dropped on any debugger panel, crediting and listing it", async () => {
+            const event = drop("memory-panel", "game.txt", "al C:2000 .start\nal C:8003 .service\n");
+            expect(event.defaultPrevented).toBe(true);
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
+            expect(addrOf(rowAt(0x2000))).toBe("2000 start");
+            expect(document.querySelector("#disassembly-panel .debug-symbols").textContent).toBe("names from game.txt");
+            expect(labelsLine().hidden).toBe(false);
+            expect(labelsLine().textContent).toMatch(/^labels from game.txt any bank/);
+            goTo("goto-dis-addr-form", "service");
+            expect(addrOf(currentRow())).toBe("8003 service");
+        });
+
+        it("ties a file to a bank from its menu, and forgets it from its button", async () => {
+            drop("disassembly-panel", "rom.txt", "service=8003");
+            await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
+            const bank = labelsLine().querySelector("select");
+            bank.value = "4";
+            bank.dispatchEvent(new Event("change"));
+            expect(code(0x2002).textContent).toBe("JSR $8003");
+            cpu.romSelect(4);
+            dbgr.debug(cpu.pc);
+            expect(code(0x2002).textContent).toBe("JSR service");
+            labelsLine().querySelector("button").click();
+            expect(code(0x2002).textContent).toBe("JSR $8003");
+            expect(labelsLine().hidden).toBe(true);
+        });
+
+        it("says why a dropped file isn't labels, and names nothing from it", async () => {
+            drop("disassembly-panel", "game.ssd", "\u0000\u0001binary");
+            await vi.waitFor(() =>
+                expect(document.querySelector(".toast")?.textContent).toContain(
+                    "game.ssd isn't a label file jsbeeb reads",
+                ),
+            );
+            expect(labelsLine().hidden).toBe(true);
         });
     });
 
