@@ -1,4 +1,4 @@
-import { SoundChip } from "../soundchip.js";
+import { SoundChip, ToneCounterSteps } from "../soundchip.js";
 import { decodedPanel, DecodedRegisters, register, spelt } from "./decoded-registers.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 
@@ -6,7 +6,6 @@ const MinPanelSize = { w: 240, h: 120 };
 const NoiseChannel = 3;
 const ChipClockHz = 4_000_000;
 const ToneClockHz = ChipClockHz / 32;
-const ZeroPeriod = 1024;
 const NoiseDividers = [512, 1024, 2048];
 const NoiseRateMask = 3;
 const NoiseFollowsTone2 = 3;
@@ -35,7 +34,7 @@ const RegisterNames = ChannelNames.flatMap((channel) => [
 ]);
 const LatchForms = RegisterNames.map((name, index) => `R${index}: ${name}`);
 
-const toneHz = (period) => ToneClockHz / (period || ZeroPeriod);
+const toneHz = (period) => ToneClockHz / (period || ToneCounterSteps);
 
 /** The equal-tempered note nearest `hz`, with how far off it is in cents, as "C#4 +12c". */
 function noteName(hz) {

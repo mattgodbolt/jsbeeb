@@ -16,6 +16,9 @@ const DcRestoreCornerHz = 1 / (2 * Math.PI * 10e3 * 4.7e-6);
 // stream through a long execute() rather than all arriving at its end.
 const EventProgressCycles = 4000;
 
+// The tone counters are 10 bits wide and wrap, so a period of 0 counts this many steps.
+export const ToneCounterSteps = 1024;
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -161,8 +164,12 @@ export class SoundChip {
         }
     }
 
+    tonePeriod(channel) {
+        return this.registers[channel] === 0 ? ToneCounterSteps : this.registers[channel];
+    }
+
     toneChannel(channel, out, offset, length) {
-        const reg = this.registers[channel] === 0 ? 1024 : this.registers[channel];
+        const reg = this.tonePeriod(channel);
         const vol = this.volume[channel];
         for (let i = 0; i < length; ++i) {
             this._doChannelStep(channel, reg);
@@ -196,7 +203,7 @@ export class SoundChip {
             case 2:
                 return 0x40;
             case 3:
-                return this.registers[channel - 1];
+                return this.tonePeriod(2);
         }
     }
 

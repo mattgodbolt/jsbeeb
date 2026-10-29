@@ -125,7 +125,7 @@ export class EmulationLoop extends EventTarget {
 
     /** The machine's state is being replaced or previewed, so a debugger run to a stop no longer applies. */
     replacingState() {
-        this.dbgr.cancelRun();
+        this.dbgr.replacingState();
     }
 
     go() {

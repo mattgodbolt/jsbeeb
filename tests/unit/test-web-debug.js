@@ -23,6 +23,7 @@ const PanelElements = [
     "registers-panel",
     "watch-panel",
     "watch-menu",
+    "cub-monitor",
 ];
 
 const MachineSecond = 2000000;
@@ -68,13 +69,14 @@ describe("Debugger", () => {
     let arrangement;
     let stoppedLoop;
     let resize;
+    const monitor = () => document.getElementById("cub-monitor");
 
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
         arrangement = new PanelArrangement(() => window.localStorage);
         arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
-        const made = new Debugger({ symbolSets, keys, arrangement });
+        const made = new Debugger({ symbolSets, keys, arrangement, monitor: monitor() });
         made.setCpu(cpu);
         stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
@@ -325,6 +327,40 @@ describe("Debugger", () => {
             expect(document.getElementById("cpu6502_stack").textContent).toBe("");
         });
 
+        it("time from where the stopwatch was reset, until the state it was reset in is replaced, through a power-on reset", () => {
+            const stopwatch = () => document.getElementById("debug-stopwatch").textContent;
+            const reset = () => document.getElementById("debug-stopwatch-reset").click();
+            dbgr.debug(cpu.pc);
+            expect(stopwatch()).toBe(String(cpu.scheduler.epoch));
+            reset();
+            expect(stopwatch()).toBe("0");
+            keyPress("n");
+            expect(stopwatch()).toBe("2");
+            dbgr.replacingState();
+            dbgr.debug(cpu.pc);
+            expect(stopwatch()).toBe("");
+            reset();
+            keyPress("n");
+            const timed = stopwatch();
+            cpu.reset(true);
+            dbgr.debug(cpu.pc);
+            expect(stopwatch()).toBe(timed);
+            expect(cycleCount(cpu)).toBe(0);
+        });
+
+        it("show where the beam is in the frame, and the CRTC's counters only on a machine with one", () => {
+            const text = (id) => document.getElementById(id).textContent;
+            cpu.execute(1000);
+            dbgr.debug(cpu.pc);
+            const beam = video.beamPosition();
+            expect([text("beam-line"), text("beam-cycle")]).toEqual([String(beam.line), String(beam.frameCycle)]);
+            expect(visible("beam-crtc")).toBe(false);
+            video.beamPosition = () => ({ ...beam, crtc: { row: 5, scanline: 3, column: 40 } });
+            dbgr.debug(cpu.pc);
+            expect(visible("beam-crtc")).toBe(true);
+            expect([text("crtc-row"), text("crtc-scanline"), text("crtc-column")]).toEqual(["5", "3", "40"]);
+        });
+
         it("give the keyboard back on Escape in a goto box, staying open", () => {
             dbgr.debug(cpu.pc);
             const box = document.querySelector("#goto-dis-addr-form .goto-addr");
@@ -379,10 +415,12 @@ describe("Debugger", () => {
         describe("the toolbar", () => {
             const button = (run) => document.querySelector(`#toolbar-panel [data-run="${run}"]`);
             const enabled = () =>
-                ["go", "stop", "step", "stepOver", "stepOut", "runToCursor"].filter((run) => !button(run).disabled);
+                ["go", "stop", "step", "stepOver", "stepOut", "runToCursor", "runToVsync"].filter(
+                    (run) => !button(run).disabled,
+                );
 
             it("offers what the machine can do as it is", () => {
-                expect(enabled()).toEqual(["go", "step", "stepOver", "stepOut", "runToCursor"]);
+                expect(enabled()).toEqual(["go", "step", "stepOver", "stepOut", "runToCursor", "runToVsync"]);
                 stoppedLoop.running = true;
                 stoppedLoop.dispatchEvent(new Event("running"));
                 expect(enabled()).toEqual(["stop"]);
@@ -391,7 +429,7 @@ describe("Debugger", () => {
             it("names in each button's tooltip the key that does the same", () => {
                 const keyFor = (run) =>
                     [...ToolbarKeys, ...DisassemblyKeys].find((row) => row.run === run && row.key).key;
-                for (const run of ["go", "step", "stepOver", "stepOut", "runToCursor"])
+                for (const run of ["go", "step", "stepOver", "stepOut", "runToCursor", "runToVsync"])
                     expect(button(run).title).toMatch(new RegExp(`\\(${keyFor(run)}\\)$`));
             });
 
@@ -432,7 +470,7 @@ describe("Debugger", () => {
             domFromIndexHtml(...PanelElements);
             arrangement = new PanelArrangement(() => window.localStorage);
             const symbolSets = new SymbolSets({ baseUrl: new URL("https://symbols.example/"), load: index.load });
-            dbgr = new Debugger({ symbolSets, keys: new PanelKeys(arrangement), arrangement });
+            dbgr = new Debugger({ symbolSets, keys: new PanelKeys(arrangement), arrangement, monitor: monitor() });
             dbgr.watches.floating.open();
             dbgr.panels.registers.open();
             await vi.waitFor(() => expect(index.load).toHaveBeenCalled());
@@ -537,6 +575,29 @@ describe("Debugger", () => {
             goTo("goto-mem-addr-form", "$0004");
             keyPress("i");
             expect(memTarget().dataset.addr).toBe(`${0xfffc}`);
+        });
+
+        it("opens on the byte drawn where the stopped screen is clicked, and leaves a running one's clicks alone", () => {
+            const picture = vi.spyOn(video, "addressShownAt").mockImplementation((x, y) => (y < 0.5 ? 0x3456 : null));
+            const findsBytes = () => monitor().classList.contains("finds-bytes");
+            dbgr.debug(cpu.pc);
+            dbgr.panels.memory.close();
+            expect(findsBytes()).toBe(true);
+
+            expect(dbgr.showScreenByteAt(0.25, 0.75)).toBe(true);
+            expect(visible("memory-panel")).toBe(false);
+            expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(true);
+            expect(picture).toHaveBeenLastCalledWith(0.25, 0.25);
+            expect(visible("memory-panel")).toBe(true);
+            expect(memTarget().dataset.addr).toBe(`${0x3456}`);
+
+            dbgr.keepOffTouchKeyboard(() => true);
+            expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(false);
+            dbgr.keepOffTouchKeyboard(() => false);
+
+            stoppedLoop.go();
+            expect(findsBytes()).toBe(false);
+            expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(false);
         });
     });
 
@@ -825,6 +886,60 @@ describe("Debugger", () => {
                     cpu.execute(100);
                     expect(cpu.onFastPath).toBe(true);
                 });
+            });
+        });
+
+        describe("to a place in the frame", () => {
+            const LongestInstruction = 7;
+            const beam = () => video.beamPosition();
+            // Whether it ends in the debugger's quick run or the loop's, depends on how far the target is.
+            const finishRun = () => {
+                if (loop.running) loop.tick(MachineSecond);
+            };
+
+            beforeEach(() => {
+                // JMP $2000
+                load(0x2000, [0x4c, 0x00, 0x20]);
+                dbgr.debug(cpu.pc);
+            });
+
+            it("runs to the start of the next vsync, from in one as from out of one", () => {
+                for (let i = 0; i < 2; i++) {
+                    keyPress("v");
+                    finishRun();
+                    expect(loop.running).toBe(false);
+                    expect(beam().inVSync).toBe(true);
+                    expect(beam().frameCycle).toBeLessThan(LongestInstruction);
+                }
+            });
+
+            it("runs to the start of a line, the next frame's when the beam is on it", () => {
+                const lineCycles = 128;
+                const fieldCycles = 312.5 * lineCycles;
+                goTo("run-to-line-form", "100");
+                finishRun();
+                expect(beam().line).toBe(100);
+                expect(beam().frameCycle - 100 * lineCycles).toBeLessThan(LongestInstruction);
+                const arrived = cycleCount(cpu);
+                goTo("run-to-line-form", "100");
+                finishRun();
+                expect(beam().line).toBe(100);
+                expect(cycleCount(cpu) - arrived).toBeGreaterThan(fieldCycles - LongestInstruction);
+            });
+
+            it("takes only a whole number for a line", () => {
+                goTo("run-to-line-form", "1e2");
+                expect(document.querySelector("#run-to-line-form .goto-addr").classList.contains("is-invalid")).toBe(
+                    true,
+                );
+                expect(cpu.pc).toBe(0x2000);
+            });
+
+            it("forgets the run when the machine's state is replaced", () => {
+                goTo("run-to-line-form", "400");
+                expect(loop.running).toBe(true);
+                dbgr.replacingState();
+                expect(cpu.onFastPath).toBe(true);
             });
         });
 

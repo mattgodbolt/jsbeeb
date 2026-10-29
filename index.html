@@ -451,6 +451,14 @@
             >
               Cursor
             </button>
+            <button
+              type="button"
+              class="btn btn-outline-light"
+              data-run="runToVsync"
+              title="Run to the start of the next vsync (v)"
+            >
+              VSync
+            </button>
           </div>
           <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
             &times;
@@ -513,6 +521,16 @@
       <div id="registers-panel" class="debug-panel" data-feature="debug_registers" hidden>
         <div class="panel-header">
           <span class="panel-title">Registers</span>
+          <form role="form" id="run-to-line-form" class="goto-form">
+            <input
+              type="text"
+              class="form-control form-control-sm goto-addr panel-field"
+              placeholder="Run to line"
+              aria-label="Run to TV line"
+              title="Run until the beam reaches this TV line, counted from vsync"
+              autocomplete="off"
+            />
+          </form>
           <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
             &times;
           </button>
@@ -533,6 +551,25 @@
           </div>
           <div><span class="register">Stack</span> <span id="cpu6502_stack"></span></div>
           <div><span class="register">Cycles</span> <span id="cpu6502_cycles"></span></div>
+          <div>
+            <span class="register">Stopwatch</span> <span id="debug-stopwatch"></span>
+            <button
+              type="button"
+              class="txt-btn"
+              id="debug-stopwatch-reset"
+              tabindex="-1"
+              title="Start counting from now"
+            >
+              reset
+            </button>
+          </div>
+          <div title="Where the beam is in the TV's frame, counted from vsync">
+            <span class="register">Frame</span> line <span id="beam-line"></span> cycle <span id="beam-cycle"></span>
+          </div>
+          <div id="beam-crtc" title="The 6845's character row, scanline within it and character column">
+            <span class="register">CRTC</span> row <span id="crtc-row"></span> scan <span id="crtc-scanline"></span> col
+            <span id="crtc-column"></span>
+          </div>
         </div>
       </div>
       <div id="leds">
