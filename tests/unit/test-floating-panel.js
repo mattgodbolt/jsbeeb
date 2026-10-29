@@ -446,6 +446,51 @@ describe("FloatingPanel", () => {
             expect(relayout).not.toHaveBeenCalled();
         });
 
+        it("are left where a move in progress has them, and catch up once it ends", () => {
+            const top = above();
+            const under = below();
+            top.open();
+            under.open();
+            const start = rectOf(top);
+            pointer(header(top), "pointerdown", start.x + 10, start.y + 10, {});
+            pointer(header(top), "pointermove", start.x + 310, start.y + 210, {});
+            arrangement.keepAttached();
+            expect(rectOf(top)).toMatchObject({ x: start.x + 300, y: start.y + 200 });
+            expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + Gap);
+            pointer(header(top), "pointerup", start.x + 310, start.y + 210, {});
+            expect(rectOf(top)).toMatchObject({ x: start.x + 300, y: start.y + 200 });
+            expect(rectOf(under).y).toBe(start.y + 200 + Natural.h + Gap);
+        });
+
+        for (const [ending, end] of [
+            ["closed", (floating) => floating.close()],
+            ["loses the pointer", (floating) => pointer(header(floating), "lostpointercapture", 0, 0, {})],
+        ])
+            it(`keep attached again once a panel ${ending} part way through a drag`, () => {
+                const top = above();
+                const under = below();
+                const other = watches();
+                top.open();
+                under.open();
+                other.open();
+                pointer(header(other), "pointerdown", 20, 70, {});
+                pointer(header(other), "pointermove", 320, 270, {});
+                end(other);
+                boxFromStyle(top.panel, { w: Natural.w, h: Natural.h + 40 });
+                arrangement.keepAttached();
+                expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + 40 + Gap);
+            });
+
+        it("lay out nothing at the end of a move that nothing asked to keep them attached during", () => {
+            const top = above();
+            const under = below();
+            top.open();
+            under.open();
+            const relayout = vi.spyOn(arrangement, "relayout");
+            drag(header(top), { x: 20, y: 70 }, { x: 320, y: 270 });
+            expect(relayout).not.toHaveBeenCalled();
+        });
+
         it("are measured rounded up, so content laid out at a fraction of a pixel never wraps", () => {
             const floating = watches();
             boxFromStyle(floating.panel, { w: 150.4, h: 80.2 });

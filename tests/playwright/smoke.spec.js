@@ -369,6 +369,37 @@ test("the disassembly and memory views fill their panels' height as they are res
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
 });
 
+test("a step part way through a move or resize leaves the panel where the drag has it", async ({ beeb, page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    const panel = page.locator("#memory-panel");
+    await expect(panel).toBeVisible();
+    const cycles = page.locator("#cpu6502_cycles");
+    const stepPartWayThroughDrag = async (grip, dx, dy) => {
+        const box = await page.locator(`#memory-panel ${grip}`).boundingBox();
+        const from = { x: box.x + Math.min(40, box.width / 2), y: box.y + box.height / 2 };
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(from.x + dx, from.y + dy, { steps: 10 });
+        const dragged = await panel.boundingBox();
+        const steppedFrom = await cycles.textContent();
+        await page.keyboard.press("n");
+        await expect.poll(() => cycles.textContent()).not.toBe(steppedFrom);
+        const afterStep = await panel.boundingBox();
+        await page.mouse.up();
+        return { dragged, afterStep };
+    };
+    const opened = await panel.boundingBox();
+    const moved = await stepPartWayThroughDrag(".panel-header", 300, 150);
+    expect(moved.dragged.y).toBeGreaterThan(opened.y + 100);
+    expect(moved.afterStep).toEqual(moved.dragged);
+    const resized = await stepPartWayThroughDrag(".panel-resize-bottom", 0, 100);
+    expect(resized.dragged.height).toBeGreaterThan(opened.height + 50);
+    expect(resized.afterStep).toEqual(resized.dragged);
+});
+
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
     beeb,
     page,
