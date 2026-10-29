@@ -21,6 +21,7 @@ import {
     stubResizeObserver,
     teardownDom,
     toasts,
+    captureDownloads,
 } from "./helpers.js";
 
 const PanelElements = [
@@ -494,6 +495,20 @@ describe("Debugger", () => {
     });
 
     describe("the memory window", () => {
+        const SysViaIfr = 0xfe4d;
+        const Ca1Flag = 0x02;
+
+        /** A BBC B, as the test CPU has no I/O, without the ROMs jsdom cannot fetch; its system VIA has CA1 flagged. */
+        const useModelB = async () => {
+            const beeb = findModel("B-DFS1.2");
+            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+            await cpu.initialise();
+            dbgr.setCpu(cpu);
+            stoppedLoop.cpu = cpu;
+            cpu.sysvia.setVBlankInt(true);
+            cpu.sysvia.setVBlankInt(false);
+        };
+
         it("shows the bytes and text around the address the form asks for, marked in its aligned row", () => {
             cpu.writemem(0x1234, 0x48);
             dbgr.debug(cpu.pc);
@@ -533,15 +548,7 @@ describe("Debugger", () => {
 
         it("shows a hardware register without the side effects of reading it", async () => {
             const SysViaOra = 0xfe41;
-            const SysViaIfr = 0xfe4d;
-            const Ca1Flag = 0x02;
-            // The test CPU has no I/O, so a BBC B, without the ROMs jsdom cannot fetch.
-            const beeb = findModel("B-DFS1.2");
-            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
-            await cpu.initialise();
-            dbgr.setCpu(cpu);
-            cpu.sysvia.setVBlankInt(true);
-            cpu.sysvia.setVBlankInt(false);
+            await useModelB();
             expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$FE41");
@@ -553,7 +560,9 @@ describe("Debugger", () => {
             const editField = () => document.querySelector("#memory .mem-edit");
             const type = (text, key, shiftKey) => {
                 editField().value = text;
-                editField().dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, cancelable: true }));
+                editField().dispatchEvent(
+                    new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }),
+                );
             };
 
             beforeEach(() => {
@@ -564,6 +573,8 @@ describe("Debugger", () => {
             });
 
             it("writes a byte on Tab or Shift-Tab, moving on, and on Enter, handing focus back", () => {
+                dbgr.watches.floating.open();
+                addWatch("$1234");
                 memByte(0x1234).click();
                 expect(document.activeElement).toBe(editField());
                 expect(editField().value).toBe("48");
@@ -576,6 +587,7 @@ describe("Debugger", () => {
                 expect(editField().parentElement).toBe(memByte(0x1234));
                 type("1", "Enter", false);
                 expect(cpu.peekmem(0x1234)).toBe(0x01);
+                expect(watchRows()).toEqual([["$1234", "1", "dec", "\u00d7"]]);
                 expect(editField()).toBeNull();
                 expect(document.activeElement).toBe(document.body);
             });
@@ -586,6 +598,7 @@ describe("Debugger", () => {
                 expect(editField().classList.contains("is-invalid")).toBe(true);
                 type("12", "Escape", false);
                 expect(editField()).toBeNull();
+                expect(visible("memory-panel")).toBe(true);
                 expect(cpu.peekmem(0x1234)).toBe(0x48);
             });
 
@@ -599,16 +612,8 @@ describe("Debugger", () => {
             });
 
             it("writes as the CPU does: ROM keeps its byte, saying so, and a register's device sees the write", async () => {
-                const SysViaIfr = 0xfe4d;
-                const Ca1Flag = 0x02;
                 const OsRom = 0xc000;
-                const beeb = findModel("B-DFS1.2");
-                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
-                await cpu.initialise();
-                dbgr.setCpu(cpu);
-                stoppedLoop.cpu = cpu;
-                cpu.sysvia.setVBlankInt(true);
-                cpu.sysvia.setVBlankInt(false);
+                await useModelB();
                 dbgr.debug(cpu.pc);
                 goTo("goto-mem-addr-form", "$FE4D");
                 memByte(SysViaIfr).click();
@@ -623,9 +628,7 @@ describe("Debugger", () => {
         });
 
         it("saves the range asked for, offering the rows shown, as the bytes there", async () => {
-            const createObjectURL = vi.fn(() => "blob:memory");
-            vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
-            const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+            const downloads = captureDownloads();
             for (let i = 0; i < 4; ++i) cpu.writemem(0x1230 + i, 0x10 + i);
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$1234");
@@ -643,9 +646,22 @@ describe("Debugger", () => {
             to.value = "$1233";
             form.dispatchEvent(new Event("submit", { cancelable: true }));
             expect(form.hidden).toBe(true);
-            expect(clicked.mock.contexts[0].download).toBe("memory-1230-1233.bin");
-            const saved = new Uint8Array(await createObjectURL.mock.calls[0][0].arrayBuffer());
-            expect([...saved]).toEqual([0x10, 0x11, 0x12, 0x13]);
+            const [saved] = downloads();
+            expect(saved.name).toBe("memory-1230-1233.bin");
+            expect([...new Uint8Array(await saved.blob.arrayBuffer())]).toEqual([0x10, 0x11, 0x12, 0x13]);
+        });
+
+        it("saves registers without the side effects of reading them", async () => {
+            const downloads = captureDownloads();
+            await useModelB();
+            dbgr.debug(cpu.pc);
+            document.getElementById("memory-save-open").click();
+            const form = document.getElementById("memory-save-form");
+            form.elements.namedItem("from").value = "$FE40";
+            form.elements.namedItem("to").value = "$FE4F";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            expect(downloads().map(({ name }) => name)).toEqual(["memory-fe40-fe4f.bin"]);
+            expect(cpu.peekmem(SysViaIfr) & Ca1Flag).toBe(Ca1Flag);
         });
 
         it("scrolls a row per wheel notch and a screenful on U", () => {

@@ -207,7 +207,7 @@ class MemoryView {
         if (!this._byteAt(address)) this.update(address);
         const byte = this._byteAt(address);
         const field = document.createElement("input");
-        field.className = "mem-edit";
+        field.className = "mem-edit panel-field";
         field.maxLength = 2;
         field.autocomplete = "off";
         field.spellcheck = false;
@@ -217,7 +217,6 @@ class MemoryView {
         field.addEventListener("blur", () => this.update(), { once: true });
         field.addEventListener("input", () => field.classList.remove("is-invalid"));
         field.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") return field.blur();
             if (e.key !== "Enter" && e.key !== "Tab") return;
             e.preventDefault();
             const value = HexByte.test(field.value) ? parseInt(field.value, 16) : undefined;
