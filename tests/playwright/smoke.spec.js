@@ -27,6 +27,7 @@ const LightsBarViewports = [
 const Oswrch = 0xffee;
 const BasicOswrchCall = 0x8e33;
 const Unnamed = 0x3000;
+const Osbyte157Entry = 0xffa7;
 const OsScreenMode = 0x355;
 // A field's rows are cleared at the flyback after the next field's, so the MODE 7 field the mode changed in is gone
 // only after the frame count has gone up three times.
@@ -151,6 +152,31 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     await goTo(Unnamed);
     await expect(credit).toHaveCSS("visibility", "hidden");
     expect(await panelWidth()).toBe(creditedWidth);
+});
+
+test("a wider disassembly panel shows more of each name, in one column", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    const box = page.locator("#goto-dis-addr-form .goto-addr");
+    await box.fill(`$${Osbyte157Entry.toString(16)}`);
+    await box.press("Enter");
+    const name = page.locator("#disassembly .highlight .dis_addr .named");
+    await expect(name).toHaveText("osbyte157EntryPoint");
+    const shown = () => name.evaluate((node) => node.clientWidth / node.scrollWidth);
+    const columnLefts = () =>
+        page
+            .locator("#disassembly .instr_bytes")
+            .evaluateAll((nodes) => new Set(nodes.map((node) => node.getBoundingClientRect().left)).size);
+    expect(await shown()).toBeLessThan(1);
+
+    const handle = await page.locator("#disassembly-panel .panel-resize-left").boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 - 200, handle.y + handle.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(shown).toBe(1);
+    expect(await columnLefts()).toBe(1);
 });
 
 test("the no-audio-worklet warning fits a phone and a desktop, closes without taking the keyboard, and is back on reload", async ({

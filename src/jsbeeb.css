@@ -601,7 +601,6 @@ div.modal-body > div:not(:first-child) {
 
 .dis_addr {
   display: inline-block;
-  width: 12ch;
   color: #d0d0d0;
   white-space: nowrap;
   overflow: hidden;
@@ -619,6 +618,11 @@ div.modal-body > div:not(:first-child) {
   display: inline-block;
   width: 4ch;
   color: #60f060;
+}
+
+/* Half of any width the panel has beyond its natural one goes to the names. */
+#disassembly .dis_addr {
+  width: clamp(12ch, 12ch + (100% - var(--natural-width)) / 2, 32ch);
 }
 
 #memory .dis_addr {
