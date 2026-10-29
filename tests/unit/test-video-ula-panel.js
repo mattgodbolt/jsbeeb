@@ -5,7 +5,7 @@ import { findModel } from "../../src/models.js";
 import { Video } from "../../src/video.js";
 import { VideoUlaPanel } from "../../src/web/video-ula-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { decodedMeanings, teardownDom } from "./helpers.js";
+import { decodedMeanings, decodedRow, teardownDom } from "./helpers.js";
 
 const Control = 0xfe20;
 const Palette = 0xfe21;
@@ -43,9 +43,18 @@ describe("VideoUlaPanel", () => {
         expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
     });
 
+    it("is filled before it opens, so that it is laid out at its size", () => {
+        makePanel(false);
+        expect(meanings("CTRL")).toHaveLength(7);
+        expect(swatches("ula-palette")[0].label).toBe("white");
+        expect(document.querySelector("#videoula-panel .ula-palette-heading").textContent).toBe("Palette");
+    });
+
     it("decodes the control register: cursor, clock rate, characters per line, teletext and flash", () => {
         const { write } = makePanel(false);
         write(Control, Mode2Control);
+        const charactersTitle = decodedRow("videoula-panel", "CTRL").querySelectorAll(".decoded-meaning span")[4].title;
+        expect(charactersTitle).toBe("Bits 2 and 3: pixels are shifted out at 4 MHz");
         expect(meanings("CTRL")).toEqual([
             "+cursor 1",
             "+cursor 2",
@@ -93,6 +102,8 @@ describe("VideoUlaPanel", () => {
         expect(swatches("nula-palette")[8].label).toBe("000 flash");
         expect(meanings("R8")).toEqual(["+8", "-9", "+a", "+b"]);
         expect(meanings("R9")).toEqual(["-c", "+d", "-e", "+f"]);
+        write(NulaControl, 0x8f);
+        expect(swatches("ula-palette")[2].label).toBe("NuLA 9/e");
         const ulaHeading = document.querySelector("#videoula-panel .ula-palette-heading");
         expect(ulaHeading.textContent).toBe("Palette");
         write(NulaControl, 0x11);
