@@ -40,11 +40,12 @@ export class BreakpointsPanel {
     /**
      * @param {object} options
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
-     * @param {(text: string) => {address: number, label: string} | undefined} options.resolve - a name or address
+     * @param {(text: string) => {address: number, name: string | undefined} | undefined} options.resolve - the address
+     * a name or number gives, and the name if it was one
      * @param {(address: number) => string | undefined} options.nameOf - the name the debugger shows for an address
      * @param {(address: number) => void} options.showCode
      * @param {(address: number) => void} options.showMemory
-     * @param {() => Storage} options.storage
+     * @param {(() => Storage) | null} options.storage - where breakpoints are kept between visits, or null
      */
     constructor({ arrangement, resolve, nameOf, showCode, showMemory, storage }) {
         this._resolve = resolve;
@@ -74,7 +75,7 @@ export class BreakpointsPanel {
         this._empty = body.querySelector(".bp-empty");
         const form = body.querySelector(".bp-add-form");
         this._input = form.querySelector(".bp-add");
-        this._kindButton = textButton("bp-add-kind dropdown-toggle", "", "");
+        this._kindButton = textButton("bp-add-kind", "", "");
         form.prepend(this._kindButton);
         this._showNewKind(this._newKind);
         this._kindButton.addEventListener("click", () =>
@@ -154,7 +155,7 @@ export class BreakpointsPanel {
                 kind: this._newKind.kind,
                 start: start.address,
                 end: end.address,
-                label: to === undefined && start.label !== `$${hexword(start.address)}` ? start.label : undefined,
+                label: to === undefined ? start.name : undefined,
             });
         } catch (error) {
             this._invalid(this._input, error.message);
@@ -169,7 +170,10 @@ export class BreakpointsPanel {
         input.title = message ?? "";
     }
 
+    /** Lists the breakpoints again, unless one of its fields is being edited, which renders on being left. */
     _render() {
+        if (document.activeElement?.classList.contains("bp-edit") && this.panel.contains(document.activeElement))
+            return;
         this._list.replaceChildren();
         this._hitCells.clear();
         this._nameCells.clear();
@@ -213,22 +217,17 @@ export class BreakpointsPanel {
         this._nameCells.set(id, name);
         whereCell.append(name);
         if (owner !== "user") whereCell.append(` (from ${owner})`);
-        if (!this._cpu.model.isAtom && start >= SidewaysStart && end <= SidewaysEnd)
-            whereCell.append(this._bankButton(bank, change));
+        const sideways = !this._cpu.model.isAtom && start >= SidewaysStart && end <= SidewaysEnd;
+        if (sideways || bank !== undefined) whereCell.append(this._bankButton(bank, change));
 
-        cell(
-            "bp-condition",
-            this._editable(condition ?? "", "always", "Condition", (text) => change({ condition: text })),
+        const conditionButton = textButton(condition ? "" : "bp-placeholder", condition ?? "always", "");
+        this._editOnClick(conditionButton, condition ?? "", "Condition", (text) => change({ condition: text }));
+        cell("bp-condition", conditionButton);
+
+        const hits = textButton("bp-hits", "", "");
+        this._editOnClick(hits, String(breakpoint.hitCount), "Hits so far; the hit to stop from", (text) =>
+            change({ hitCount: Number(text) }),
         );
-
-        const hits = textButton("bp-hits", "", "Hits so far; click to stop only from a given hit");
-        hits.addEventListener("click", () => {
-            const input = this._editField(String(breakpoint.hitCount), "Stop from hit", (text) =>
-                change({ hitCount: Number(text) }),
-            );
-            hits.replaceWith(input);
-            input.focus();
-        });
         this._hitCells.set(id, hits);
         cell("bp-hit-count", hits);
 
@@ -261,39 +260,38 @@ export class BreakpointsPanel {
         return button;
     }
 
-    /** A button showing `text` (or `placeholder` if none) that turns into a field to change it. */
-    _editable(text, placeholder, what, commit) {
-        const button = textButton(text ? "" : "bp-placeholder", text || placeholder, `${what}; click to change`);
+    /**
+     * Makes `button` turn into a field holding `text` when clicked, which commits on Enter, and puts the button back,
+     * as it was, on Escape or on leaving it. A change the field cannot take marks it, with the reason as its tooltip.
+     */
+    _editOnClick(button, text, what, commit) {
+        button.title = `${what}; click to change`;
         button.addEventListener("click", () => {
-            const input = this._editField(text, what, commit);
+            const input = document.createElement("input");
+            input.type = "text";
+            input.className = "form-control form-control-sm panel-field bp-edit";
+            input.value = text;
+            input.setAttribute("aria-label", what);
+            input.addEventListener("input", () => this._invalid(input, null));
+            input.addEventListener("keydown", (e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                try {
+                    commit(input.value);
+                } catch (error) {
+                    this._invalid(input, error.message);
+                    return;
+                }
+                input.blur();
+            });
+            input.addEventListener("blur", () => this._render());
             button.replaceWith(input);
             input.focus();
         });
-        return button;
-    }
-
-    /** A field holding `text`, committed on Enter, and put back as it was on Escape or leaving it. */
-    _editField(text, what, commit) {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.className = "form-control form-control-sm panel-field bp-edit";
-        input.value = text;
-        input.setAttribute("aria-label", what);
-        input.addEventListener("input", () => this._invalid(input, null));
-        input.addEventListener("keydown", (e) => {
-            if (e.key !== "Enter") return;
-            e.preventDefault();
-            try {
-                commit(input.value);
-            } catch (error) {
-                this._invalid(input, error.message);
-            }
-        });
-        input.addEventListener("blur", () => this._render());
-        return input;
     }
 
     _restore() {
+        if (!this._storage) return;
         let saved;
         try {
             saved = JSON.parse(this._storage().getItem(StorageKey) ?? "null");
@@ -314,6 +312,7 @@ export class BreakpointsPanel {
     }
 
     _save() {
+        if (!this._storage) return;
         const breakpoints = this._breakpoints
             .list()
             .filter(({ owner }) => owner === "user")

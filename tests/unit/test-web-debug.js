@@ -93,7 +93,7 @@ describe("Debugger", () => {
         arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
         labelFiles = new LabelFiles({ load: vi.fn() });
-        const made = new Debugger({ symbolSets, labelFiles, keys, arrangement, monitor: monitor() });
+        const made = new Debugger({ symbolSets, labelFiles, keys, arrangement, monitor: monitor(), breakpointStorage: null });
         made.setCpu(cpu);
         stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
@@ -119,6 +119,17 @@ describe("Debugger", () => {
         // Closed, they stop looking at the machine once a frame.
         dbgr.hidePanels();
         return teardownDom();
+    });
+
+    it.each([
+        ["SysVIA.ORB", 0xfe40, "SysVIA.ORB"],
+        ["fe40", 0xfe40, undefined],
+    ])("adds a breakpoint typed as %s in the Breakpoints panel", (text, address, label) => {
+        dbgr.breakpoints.floating.open();
+        const input = document.querySelector("#breakpoints-panel .bp-add");
+        input.value = text;
+        document.querySelector("#breakpoints-panel .bp-add-form").requestSubmit();
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: address, label })]);
     });
 
     it("logs each hit of a log breakpoint to the console", () => {
@@ -580,6 +591,7 @@ describe("Debugger", () => {
                 keys: new PanelKeys(arrangement),
                 arrangement,
                 monitor: monitor(),
+                breakpointStorage: null,
             });
             dbgr.watches.floating.open();
             dbgr.panels.registers.open();

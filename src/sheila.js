@@ -210,7 +210,9 @@ export function sheilaName(blocks, address, accesses) {
  * @returns {number | undefined}
  */
 export function sheilaAddress(blocks, text) {
-    const [device, name] = text.toUpperCase().split(".");
+    const parts = text.toUpperCase().split(".");
+    if (parts.length !== 2) return undefined;
+    const [device, name] = parts;
     for (const block of blocks) {
         if (block.device.toUpperCase() !== device) continue;
         const offset = block.registers.findIndex(({ read, write }) => read === name || write === name);

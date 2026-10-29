@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sheilaBlocks, sheilaName, sheilaRegister } from "../../src/sheila.js";
+import { sheilaAddress, sheilaBlocks, sheilaName, sheilaRegister } from "../../src/sheila.js";
 import { allModels, findModel } from "../../src/models.js";
 
 const NoFittings = { hasTube: false, hasEconet: false, hasVideoNula: false };
@@ -97,6 +97,20 @@ describe("SHEILA register names", () => {
         expect(sheilaName(b, 0xfe20, ["read", "write"]).name).toBe("Econet.INTON/VideoULA.CONTROL");
         expect(sheilaName(b, 0xfe30, ["read", "write"]).name).toBe("Paging.ROMSEL");
         expect(sheilaName(b, 0xfe30, ["read"])).toBeUndefined();
+    });
+
+    it.each([
+        ["SysVIA.ORB", 0xfe40],
+        ["sysvia.irb", 0xfe40],
+        ["UserVIA.IFR", 0xfe6d],
+        ["FDC.DATA", 0xfe84],
+        ["Paging.ROMSEL", 0xfe30],
+        ["SysVIA", undefined],
+        ["Tube", undefined],
+        ["SysVIA.ORB.junk", undefined],
+        ["SysVIA.NOPE", undefined],
+    ])("finds the address %s names", (text, address) => {
+        expect(sheilaAddress(blocksOf("B-DFS1.2"), text)).toBe(address);
     });
 
     it("has nothing for an Atom", () => {

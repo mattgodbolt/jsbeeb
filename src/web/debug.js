@@ -371,8 +371,10 @@ export class Debugger {
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
      * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
+     * @param {(() => Storage) | null} options.breakpointStorage - where breakpoints are kept between visits, or null
+     * to keep them only for this visit
      */
-    constructor({ symbolSets, labelFiles, keys, arrangement, monitor }) {
+    constructor({ symbolSets, labelFiles, keys, arrangement, monitor, breakpointStorage }) {
         this._arrangement = arrangement;
         this._monitor = monitor;
         this.patchInstructions = new Map();
@@ -475,7 +477,7 @@ export class Debugger {
                 this.panels.memory.open();
                 this._memoryView.update(address);
             },
-            storage: () => window.localStorage,
+            storage: breakpointStorage,
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -1053,12 +1055,14 @@ export class Debugger {
         return { address, label: label ?? `$${hexword(address)}` };
     }
 
-    /** What a breakpoint's address `text` names, as a watch's does or as a SHEILA register such as SysVIA.ORB. */
+    /**
+     * What a breakpoint's address `text` names, as a watch's does or as a SHEILA register such as SysVIA.ORB, and
+     * the name if it was one rather than a number.
+     */
     _resolveBreakpoint(text) {
-        const found = this._resolveWatch(text);
-        if (found) return found;
-        const address = sheilaAddress(this._sheila, text);
-        return address === undefined ? undefined : { address, label: text };
+        const address = this._resolveWatch(text)?.address ?? sheilaAddress(this._sheila, text);
+        if (address === undefined) return undefined;
+        return { address, name: parseAddr(text) === undefined ? text : undefined };
     }
 
     /** Whether the machine is stopped in the debugger. */

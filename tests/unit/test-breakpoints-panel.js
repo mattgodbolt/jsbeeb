@@ -19,8 +19,9 @@ describe("BreakpointsPanel", () => {
     const names = new Map([["oswrch", 0xffee]]);
     const resolve = (text) => {
         const address = names.get(text) ?? parseAddr(text);
-        return address === undefined ? undefined : { address, label: names.has(text) ? text : `$${text}` };
+        return address === undefined ? undefined : { address, name: names.has(text) ? text : undefined };
     };
+    let nameOf;
 
     const makePanel = async (model) => {
         cpu = fake6502(model);
@@ -29,7 +30,7 @@ describe("BreakpointsPanel", () => {
         panel = new BreakpointsPanel({
             arrangement: new PanelArrangement(() => window.localStorage),
             resolve,
-            nameOf: (address) => [...names].find(([, at]) => at === address)?.[0],
+            nameOf: (address) => nameOf(address),
             showCode,
             showMemory,
             storage: () => window.localStorage,
@@ -40,6 +41,7 @@ describe("BreakpointsPanel", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "warn").mockImplementation(() => {});
+        nameOf = (address) => [...names].find(([, at]) => at === address)?.[0];
         window.localStorage.clear();
         await makePanel(findModel("B-DFS1.2"));
     });
@@ -75,11 +77,11 @@ describe("BreakpointsPanel", () => {
     it("lists every breakpoint, however it was set, saying when there are none", () => {
         expect(panel.panel.querySelector(".bp-empty").hidden).toBe(false);
         cpu.breakpoints.add({ kind: "write", start: 0x3000, end: 0x30ff, condition: "value != old", action: "log" });
-        cpu.breakpoints.add({ kind: "execute", start: 0x8003, hitCount: 3, owner: "Watches" });
+        cpu.breakpoints.add({ kind: "execute", start: 0x8003, hitCount: 3, owner: "script" });
         cpu.breakpoints.add({ kind: "execute", start: 0xffee });
         expect(rows().map(rowText)).toEqual([
             ["", "W", "$3000-$30ff", "value != old", "0", "log", "×"],
-            ["", "X", "$8003 (from Watches) any ROM", "always", "0 of 3", "stop", "×"],
+            ["", "X", "$8003 (from script) any ROM", "always", "0 of 3", "stop", "×"],
             ["", "X", "$ffee oswrch", "always", "0", "stop", "×"],
         ]);
         expect(panel.panel.querySelector(".bp-empty").hidden).toBe(true);
@@ -121,6 +123,20 @@ describe("BreakpointsPanel", () => {
         expect(cpu.breakpoints.list()).toEqual([]);
     });
 
+    it("puts a field back as it was on leaving it, and keeps it across a change elsewhere", () => {
+        const id = cpu.breakpoints.add({ kind: "execute", start: 0x2000, condition: "A = 1" });
+        click(rows()[0].querySelector(".bp-condition .txt-btn"));
+        const condition = rows()[0].querySelector(".bp-edit");
+        condition.focus();
+        type(condition, "A = 2");
+        cpu.breakpoints.add({ kind: "read", start: 0x70 });
+        expect(rows()[0].querySelector(".bp-edit")).toBe(condition);
+        condition.blur();
+        expect(rows().map(rowText)[0][3]).toBe("A = 1");
+        expect(rows()).toHaveLength(2);
+        expect(cpu.breakpoints.get(id).condition).toBe("A = 1");
+    });
+
     it("edits a condition and a hit count in place, keeping a bad condition for fixing", () => {
         const id = cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
         click(rows()[0].querySelector(".bp-condition .txt-btn"));
@@ -144,6 +160,20 @@ describe("BreakpointsPanel", () => {
         click(rows()[1].querySelector(".bp-where"));
         expect(showCode).toHaveBeenCalledWith(0x2000);
         expect(showMemory).toHaveBeenCalledWith(0xfe40);
+    });
+
+    it("names an address once the debugger has a name for it", () => {
+        cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
+        expect(rows()[0].querySelector(".bp-name").textContent).toBe("");
+        nameOf = (address) => (address === 0x2000 ? "start" : undefined);
+        panel.update();
+        expect(rows()[0].querySelector(".bp-name").textContent).toBe("start");
+    });
+
+    it("offers a bank for sideways addresses, or where one is set", () => {
+        cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
+        cpu.breakpoints.add({ kind: "execute", start: 0x7f00, end: 0x80ff, bank: 15 });
+        expect(rows().map((row) => row.querySelector(".bp-bank")?.textContent)).toEqual([undefined, "ROM 15"]);
     });
 
     it("pins a sideways breakpoint to the bank paged in now, and back to any", () => {
@@ -173,7 +203,7 @@ describe("BreakpointsPanel", () => {
     it("saves the user's breakpoints and puts them back on the next visit", async () => {
         cpu.breakpoints.add({ kind: "write", start: 0x3000, end: 0x3001, condition: "value != old", label: "flag" });
         cpu.breakpoints.add({ kind: "execute", start: 0x2000, enabled: false, hitCount: 2, action: "log" });
-        cpu.breakpoints.add({ kind: "write", start: 0x70, owner: "Watches" });
+        cpu.breakpoints.add({ kind: "write", start: 0x70, owner: "script" });
         cpu.breakpoints.add({ kind: "execute", start: 0x8000, bank: 4 });
         await revisit(findModel("B-stock"));
         expect(
@@ -209,11 +239,13 @@ describe("BreakpointsPanel", () => {
                 action: "log",
             },
         ]);
-        expect(saved().breakpoints.map(({ start }) => start)).toEqual([0x3000, 0x2000, 0x8000]);
+        cpu.breakpoints.add({ kind: "read", start: 0x70 });
+        expect(saved().breakpoints.map(({ start }) => start)).toEqual([0x3000, 0x2000, 0x70, 0x8000]);
         await revisit(findModel("B-DFS1.2"));
         expect(cpu.breakpoints.list().map(({ start, bank }) => [start, bank])).toEqual([
             [0x3000, undefined],
             [0x2000, undefined],
+            [0x70, undefined],
             [0x8000, 4],
         ]);
     });

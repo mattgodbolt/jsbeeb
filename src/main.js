@@ -118,6 +118,8 @@ const dbgr = new Debugger({
     keys: panelKeys,
     arrangement: panelArrangement,
     monitor: document.getElementById("cub-monitor"),
+    // A saved breakpoint would take the CPU off its fast path and skew the numbers.
+    breakpointStorage: benchmarkPage ? null : () => window.localStorage,
 });
 
 if (!window.isSecureContext)
