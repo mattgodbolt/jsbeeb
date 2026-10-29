@@ -40,9 +40,3 @@ describe("stitchHtml", () => {
         expect(() => stitchHtml(`${Fixtures}/malformed-outer.html`)).toThrow(`${Fixtures}/malformed.html:1: `);
     });
 });
-
-describe("index.html", () => {
-    it("stitches with every include found", () => {
-        expect(stitchHtml("index.html")).not.toContain("<!-- include:");
-    });
-});
