@@ -41,12 +41,14 @@ export class BreakpointsPanel {
      * @param {object} options
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      * @param {(text: string) => {address: number, label: string} | undefined} options.resolve - a name or address
+     * @param {(address: number) => string | undefined} options.nameOf - the name the debugger shows for an address
      * @param {(address: number) => void} options.showCode
      * @param {(address: number) => void} options.showMemory
      * @param {() => Storage} options.storage
      */
-    constructor({ arrangement, resolve, showCode, showMemory, storage }) {
+    constructor({ arrangement, resolve, nameOf, showCode, showMemory, storage }) {
         this._resolve = resolve;
+        this._nameOf = nameOf;
         this._showCode = showCode;
         this._showMemory = showMemory;
         this._storage = storage;
@@ -56,6 +58,7 @@ export class BreakpointsPanel {
         this._unrestored = [];
         this._stoppedBy = null;
         this._hitCells = new Map();
+        this._nameCells = new Map();
         this._newKind = Kinds[0];
 
         const { panel, body } = panelShell({ id: "breakpoints", title: "Breakpoints", feature: "breakpoints" });
@@ -117,13 +120,16 @@ export class BreakpointsPanel {
         this._render();
     }
 
-    /** Shows each breakpoint's hits as they are now. */
+    /** Shows each breakpoint's hits as they are now, and its address's name, which can come with symbols later. */
     update() {
         if (!this._breakpoints) return;
-        for (const { id, hits, hitCount } of this._breakpoints.list()) {
-            const cell = this._hitCells.get(id);
-            const text = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
-            if (cell && cell.textContent !== text) cell.textContent = text;
+        for (const { id, start, hits, hitCount, label } of this._breakpoints.list()) {
+            const hitText = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
+            const hitCell = this._hitCells.get(id);
+            if (hitCell && hitCell.textContent !== hitText) hitCell.textContent = hitText;
+            const nameText = label ?? this._nameOf(start) ?? "";
+            const nameCell = this._nameCells.get(id);
+            if (nameCell && nameCell.textContent !== nameText) nameCell.textContent = nameText;
         }
     }
 
@@ -166,6 +172,7 @@ export class BreakpointsPanel {
     _render() {
         this._list.replaceChildren();
         this._hitCells.clear();
+        this._nameCells.clear();
         const all = this._breakpoints.list();
         for (const breakpoint of all) this._list.append(this._row(breakpoint));
         this._empty.hidden = all.length > 0;
@@ -173,7 +180,7 @@ export class BreakpointsPanel {
     }
 
     _row(breakpoint) {
-        const { id, kind, start, end, bank, condition, enabled, action, label, owner } = breakpoint;
+        const { id, kind, start, end, bank, condition, enabled, action, owner } = breakpoint;
         const change = (changes) => this._breakpoints.update(id, changes);
         const row = document.createElement("tr");
         row.dataset.id = String(id);
@@ -201,7 +208,10 @@ export class BreakpointsPanel {
         const where = textButton("bp-where", rangeText(breakpoint), `Show ${rangeText(breakpoint)}`);
         where.addEventListener("click", () => (kind === "execute" ? this._showCode(start) : this._showMemory(start)));
         const whereCell = cell("bp-address", where);
-        if (label) whereCell.append(` ${label}`);
+        const name = document.createElement("span");
+        name.className = "bp-name";
+        this._nameCells.set(id, name);
+        whereCell.append(name);
         if (owner !== "user") whereCell.append(` (from ${owner})`);
         if (!this._cpu.model.isAtom && start >= SidewaysStart && end <= SidewaysEnd)
             whereCell.append(this._bankButton(bank, change));

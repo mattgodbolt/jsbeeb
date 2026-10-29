@@ -1077,6 +1077,14 @@ small {
   color: #f0d080;
 }
 
+#breakpoints-panel .bp-name {
+  margin-left: 1ch;
+}
+
+#breakpoints-panel .bp-name:empty {
+  display: none;
+}
+
 #breakpoints-panel .bp-condition {
   width: 100%;
 }

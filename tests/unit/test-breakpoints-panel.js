@@ -29,6 +29,7 @@ describe("BreakpointsPanel", () => {
         panel = new BreakpointsPanel({
             arrangement: new PanelArrangement(() => window.localStorage),
             resolve,
+            nameOf: (address) => [...names].find(([, at]) => at === address)?.[0],
             showCode,
             showMemory,
             storage: () => window.localStorage,
@@ -51,7 +52,13 @@ describe("BreakpointsPanel", () => {
     };
 
     const rows = () => [...panel.panel.querySelectorAll(".bp-list tr")];
-    const rowText = (row) => [...row.querySelectorAll("td")].map((td) => td.textContent.trim());
+    const rowText = (row) =>
+        [...row.querySelectorAll("td")].map((td) =>
+            [...td.childNodes]
+                .map((node) => node.textContent.trim())
+                .filter(Boolean)
+                .join(" "),
+        );
     const click = (element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     const input = () => panel.panel.querySelector(".bp-add");
     const type = (field, text) => {
@@ -69,9 +76,11 @@ describe("BreakpointsPanel", () => {
         expect(panel.panel.querySelector(".bp-empty").hidden).toBe(false);
         cpu.breakpoints.add({ kind: "write", start: 0x3000, end: 0x30ff, condition: "value != old", action: "log" });
         cpu.breakpoints.add({ kind: "execute", start: 0x8003, hitCount: 3, owner: "Watches" });
+        cpu.breakpoints.add({ kind: "execute", start: 0xffee });
         expect(rows().map(rowText)).toEqual([
             ["", "W", "$3000-$30ff", "value != old", "0", "log", "×"],
-            ["", "X", "$8003 (from Watches)any ROM", "always", "0 of 3", "stop", "×"],
+            ["", "X", "$8003 (from Watches) any ROM", "always", "0 of 3", "stop", "×"],
+            ["", "X", "$ffee oswrch", "always", "0", "stop", "×"],
         ]);
         expect(panel.panel.querySelector(".bp-empty").hidden).toBe(true);
     });

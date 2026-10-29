@@ -466,6 +466,7 @@ export class Debugger {
         this.breakpoints = new BreakpointsPanel({
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
+            nameOf: (address) => this._names.address(address, this.cpu.pc)?.name,
             showCode: (address) => {
                 this.panels.disassembly.open();
                 this._disassembly.update(address);
@@ -1006,6 +1007,7 @@ export class Debugger {
                 ]),
         );
         this._matchedAt = performance.now();
+        this.breakpoints.update();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
