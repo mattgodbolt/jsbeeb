@@ -329,6 +329,7 @@ const layout = new Layout({
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
+dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
 new DebugMenu({ arrangement: panelArrangement, dbgr, inDebugger: () => loop.mode === RunMode.debugging });
 
 if (!parsedQuery.embed && !model.isAtom) {

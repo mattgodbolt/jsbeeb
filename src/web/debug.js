@@ -256,11 +256,6 @@ const DebuggerOwnPanels = ["toolbar", "disassembly", "registers", "memory", "per
 /** Every panel Alt-D and Alt-S show and hide: the debugger's own, and the decoded system VIA. */
 const DebugPanelIds = [...DebuggerOwnPanels, "sysvia"];
 const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
-/**
- * Narrower than this, a phone's window: entering the debugger opens no panels there, as they would cover its
- * on-screen keyboard, though the Debug menu and Alt-D still show them.
- */
-const PhoneWindowWidth = 700;
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
 const PeripheralsWindowWidth = 1600;
 const MinPanelWidth = 220;
@@ -341,6 +336,7 @@ export class Debugger {
         this._shownAt = null;
         this._matchedAt = 0;
         this._screenBounds = () => null;
+        this._touchKeyboardShown = () => false;
         this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
         this._peek = peek;
@@ -491,6 +487,15 @@ export class Debugger {
      */
     placeBesideScreen(screenBounds) {
         this._screenBounds = screenBounds;
+    }
+
+    /**
+     * Opens no panels on entering the debugger while the on-screen keyboard shows, as they would cover it; the
+     * Debug menu and Alt-D still show them.
+     * @param {function(): boolean} isShown
+     */
+    keepOffTouchKeyboard(isShown) {
+        this._touchKeyboardShown = isShown;
     }
 
     _columnWidth(side) {
@@ -863,7 +868,7 @@ export class Debugger {
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
-            if (window.innerWidth > PhoneWindowWidth) this.showPanels();
+            if (!this._touchKeyboardShown()) this.showPanels();
         }
         this._arrangement.keepAttached();
         this.cpu.video.debugPaint();

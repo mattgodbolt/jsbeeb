@@ -197,6 +197,12 @@ const DebugPanels = ["#debug-toolbar", "#disassembly-panel", "#registers-panel",
 const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
+test("a fresh profile opens no floating panel on load", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    expect(await page.locator(".floating-panel:visible").count()).toBe(0);
+});
+
 test("Alt-S opens the debugger's panels beside the screen, g leaves them open and following the machine, and Alt-S closes them", async ({
     beeb,
     page,

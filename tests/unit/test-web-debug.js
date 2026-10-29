@@ -159,12 +159,17 @@ describe("Debugger", () => {
             expect(shown()).toEqual(NarrowSet);
         });
 
-        it("stay shut on entering the debugger in a phone's window, where they would cover its keyboard, but show when asked", () => {
-            vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+        it("stay shut on entering the debugger while the on-screen keyboard shows, at any width, but show when asked", () => {
+            let keyboardShown = true;
+            dbgr.keepOffTouchKeyboard(() => keyboardShown);
             dbgr.debug(cpu.pc);
             expect(dbgr.enabled()).toBe(true);
             expect(shown()).toEqual([]);
             dbgr.togglePanels();
+            expect(shown()).toEqual(NarrowSet);
+            dbgr.toggleDebugger();
+            keyboardShown = false;
+            dbgr.toggleDebugger();
             expect(shown()).toEqual(NarrowSet);
         });
 
