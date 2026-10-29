@@ -609,7 +609,7 @@ describe("Debugger", () => {
                 expect(editField().parentElement).toBe(memByte(0x1234));
                 type("1", "Enter", false);
                 expect(cpu.peekmem(0x1234)).toBe(0x01);
-                expect(watchRows()).toEqual([["$1234", "1", "dec", "\u00d7"]]);
+                expect(watchRows()).toEqual([["$1234", "1", "dec", "brk", "\u00d7"]]);
                 expect(editField()).toBeNull();
                 expect(document.activeElement).toBe(document.body);
             });
