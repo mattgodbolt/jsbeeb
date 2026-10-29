@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { findModel } from "../../src/models.js";
-import { HwScrollSubtract, Video } from "../../src/video.js";
+import { FakeVideo, HwScrollSubtract, Video } from "../../src/video.js";
 import { CrtcPanel, screenAddress } from "../../src/web/crtc-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { decodedMeanings, teardownDom } from "./helpers.js";
@@ -10,7 +10,10 @@ import { decodedMeanings, teardownDom } from "./helpers.js";
 const FramebufferPixels = 1024 * 768;
 const MaValues = 0x4000;
 const ScanlineClocks = 128;
-const FrameClocks = ScanlineClocks * 312;
+const ScanlineCount = 312;
+const FrameClocks = ScanlineClocks * ScanlineCount;
+const SteadyCursor = 0x07;
+const HiddenCursor = 0x27;
 
 // What the MOS programs for MODE 1 and MODE 7, R0 to R13.
 const Mode1 = [0x7f, 0x50, 0x62, 0x28, 0x26, 0x00, 0x20, 0x22, 0x01, 0x07, 0x67, 0x08, 0x06, 0x00];
@@ -43,9 +46,14 @@ describe("CrtcPanel", () => {
 
     const meanings = (name) => decodedMeanings("crtc-panel", name);
 
-    it("is made for a BBC or a Master, not for an Atom, whose video is a 6847", () => {
-        const fits = (name) => CrtcPanel.fits({ model: findModel(name) });
-        expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
+    it("is made for a BBC or a Master, not for an Atom, whose video is a 6847, nor for a machine with fake video", () => {
+        const fits = (name, fake) => CrtcPanel.fits({ model: findModel(name), video: fake ? new FakeVideo() : video });
+        expect([fits("B-DFS1.2", false), fits("Master", false), fits("Atom", false), fits("B-DFS1.2", true)]).toEqual([
+            true,
+            true,
+            false,
+            false,
+        ]);
     });
 
     it("spells out MODE 1's timing, interlace, cursor and screen start", () => {
@@ -67,6 +75,58 @@ describe("CrtcPanel", () => {
         expect(meanings("R8")).toEqual(["interlace sync and video", "display delay 1", "cursor delay 2"]);
         expect(meanings("R9")).toEqual(["19 lines, 10 a field"]);
         expect(meanings("R12/13")).toEqual(["at &7c00", "-wrapped"]);
+    });
+
+    it("gives a line's length at the 1 MHz character clock, and a vsync width of 0 as 16", () => {
+        program(video, [...Mode1.slice(0, 3), 0x08]);
+        video.ula.write(0, 0);
+        panel.update();
+        expect(meanings("R0")).toEqual(["128 chars, 128 µs"]);
+        expect(meanings("R3")).toEqual(["hsync 8 chars", "vsync 16 lines"]);
+    });
+
+    it("lights the cursor as shown in a field its blink shows it in", () => {
+        program(video, [...Mode1.slice(0, 10), SteadyCursor]);
+        video.polltime(2 * FrameClocks);
+        panel.update();
+        expect(meanings("R10")).toEqual(["from line 7", "cursor steady", "+shown"]);
+        program(video, [...Mode1.slice(0, 10), HiddenCursor]);
+        video.polltime(2 * FrameClocks);
+        panel.update();
+        expect(meanings("R10")).toEqual(["from line 7", "cursor hidden", "-shown"]);
+    });
+
+    it("follows the counters to a character, giving the byte read and the row's start in memory", () => {
+        program(video, Mode1);
+        const at = (char, scanline, row) =>
+            video.horizCounter === char && video.scanlineCounter === scanline && video.vertCounter === row;
+        video.polltime(FrameClocks);
+        while (!at(0, 2, 1)) video.polltime(1);
+        panel.update();
+        expect(meanings("C0")).toEqual(["char 0 of 128", "+displayed", "-hsync"]);
+        expect(meanings("C9")).toEqual(["line 2 of 8", expect.stringMatching(/odd field$/)]);
+        expect(meanings("C4")).toEqual(["row 1 of 39", "+displayed", "-vsync", "-adjust", "-dummy"]);
+        expect(meanings("MA")).toEqual(["reads &3282", "row &3280"]);
+    });
+
+    it("adds the dummy scanline to the even field only, and lights the odd field only while interlaced", () => {
+        program(video, Mode7);
+        const inDummy = new Set();
+        const fields = new Set();
+        for (let line = 0; line < 4 * ScanlineCount; ++line) {
+            video.polltime(ScanlineClocks);
+            panel.update();
+            (video.inDummyRaster ? inDummy : fields).add(meanings("C9")[1]);
+        }
+        expect([[...inDummy], [...fields].sort()]).toEqual([["-odd field"], ["+odd field", "-odd field"]]);
+        program(video, [...Mode7.slice(0, 8), 0x90]);
+        const odd = new Set();
+        for (let field = 0; field < 4; ++field) {
+            video.polltime(FrameClocks);
+            panel.update();
+            odd.add(meanings("C9")[1]);
+        }
+        expect([...odd]).toEqual(["-odd field"]);
     });
 
     it("gives a screen start past &8000 where IC32's screen size wraps it", () => {

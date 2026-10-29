@@ -1,5 +1,5 @@
 import { hexword } from "../hex.js";
-import { HDISPENABLE, VDISPENABLE } from "../video.js";
+import { HDISPENABLE, VDISPENABLE, Video } from "../video.js";
 import { decodedPanel, DecodedRegisters, lit, register, spelt } from "./decoded-registers.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
@@ -90,7 +90,7 @@ function decodeVerticalTotal(r4, state) {
     return [
         counted(
             `${r4 + 1} rows, ${lines} lines`,
-            "R4 + 1 rows of characters; with R5's adjust, the scanlines in a field",
+            "R4 + 1 rows of characters; with R5's adjust, the scanlines in a field, and half a line more interlaced",
             "128 rows, 4127 lines",
         ),
     ];
@@ -138,10 +138,14 @@ function decodeCharacter(c0, { regs, inHSync, dispEnabled }) {
     ];
 }
 
-function decodeScanline(c9, { regs, frameCount }) {
+function decodeScanline(c9, { regs, evenField }) {
     return [
         counted(`line ${c9} of ${regs[9] + 1}`, "Scanlines into the row, counting to R9", "line 31 of 32"),
-        lit("odd field", "The odd field, whose scanlines interlace sits between the even field's", frameCount & 1),
+        lit(
+            "odd field",
+            "Interlaced, and the odd field, whose scanlines sit between the even field's",
+            regs[8] & 1 && !evenField,
+        ),
     ];
 }
 
@@ -223,6 +227,19 @@ const Sections = {
             register("C0", "The character counter", 8, (s) => s.horizCounter, decodeCharacter),
             register("C9", "The scanline counter", 8, (s) => s.scanlineCounter, decodeScanline),
             register("C4", "The row counter", 8, (s) => s.vertCounter, decodeRow),
+            register(
+                "C5",
+                "The vertical adjust counter",
+                8,
+                (s) => s.vertAdjustCounter,
+                (c5, { regs }) => [
+                    counted(
+                        `line ${c5} of ${regs[5]}`,
+                        "Scanlines into R5's adjust, while C4 shows it",
+                        "line 31 of 31",
+                    ),
+                ],
+            ),
             register("MA", "The memory address", 16, (s) => s.addr, decodeAddress),
         ],
     },
@@ -257,6 +274,7 @@ function crtcState(video) {
         horizCounter: video.horizCounter,
         scanlineCounter: video.scanlineCounter,
         vertCounter: video.vertCounter,
+        vertAdjustCounter: video.vertAdjustCounter,
         addr: video.addr,
         lineStartAddr: video.lineStartAddr,
         rowAddress: video.externalRowAddress(),
@@ -265,16 +283,16 @@ function crtcState(video) {
         inVSync: video.inVSync,
         inVertAdjust: video.inVertAdjust,
         inDummyRaster: video.inDummyRaster,
-        frameCount: video.frameCount,
+        evenField: video.doEvenFrameLogic,
         cursorOnThisFrame: video.cursorOnThisFrame,
     };
 }
 
 /** A floating panel showing the 6845 CRTC decoded: its registers by what they set, and where its counters are. */
 export class CrtcPanel {
-    /** Whether the machine has a 6845 to show: the Atom's video is a 6847. */
+    /** Whether the machine has a 6845 to show: the Atom's video is a 6847, and `?fakeVideo` has none at all. */
     static fits(cpu) {
-        return !cpu.model.isAtom;
+        return !cpu.model.isAtom && cpu.video instanceof Video;
     }
 
     /**
