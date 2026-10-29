@@ -9,12 +9,12 @@ import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
-import { bindGotoForm, cloneTemplate, externalLink, labelHtml } from "./debug-dom.js";
+import { bindGotoForm, cloneTemplate, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 
 const noop = () => {};
 
-const numToShow = 16;
+const InitialMemoryRows = 16;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
 const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
@@ -55,20 +55,16 @@ class MemoryView {
      * @param {(address: number) => number} peekMem
      * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
+     * @param {() => void} redraw - redraws it, once its rows have changed in number
      */
-    constructor(widget, peekMem, naming, showing) {
+    constructor(widget, peekMem, naming, showing, redraw) {
         this._widget = widget;
         this._peekMem = peekMem;
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
-        this._rows = [];
-
-        for (let i = 0; i < numToShow; i++) {
-            this._rows.push(cloneTemplate(this._widget));
-        }
-        this._widget.querySelector(".template").remove();
+        this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
 
         widget.addEventListener("wheel", (evt) => {
             const deltaY = evt.deltaY;
@@ -81,11 +77,11 @@ class MemoryView {
 
     update(maybeNewAddr) {
         if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
-        let addr = this._addr - 8 * Math.floor(this._rows.length / 2);
+        let addr = this._addr - 8 * this._rows.anchor;
         if (addr < 0) addr = 0;
         const { names, pc } = this._naming();
         const shown = new Set();
-        for (const row of this._rows) {
+        for (const row of this._rows.rows) {
             row.querySelector(".dis_addr").innerHTML = labelHtml(addr);
             row.classList.toggle("highlight", addr === this._addr);
             const dump = this.dump(addr, addr + 8);
@@ -300,6 +296,7 @@ export class Debugger {
             peek,
             () => ({ names: this._names, pc: this.cpu.pc }),
             (sets) => this._credit(this._credits.memory, sets),
+            () => this._redraw(() => this._memoryView.update()),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
@@ -344,6 +341,7 @@ export class Debugger {
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
+            redraw: () => this._redraw(() => this._disassembly.update(this._disassembly.cursor)),
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -504,6 +502,14 @@ export class Debugger {
     _rememberOpenPanels() {
         if (this._hidingPanels) return;
         rememberPanels(this._debugPanels().flatMap(({ id, isOpen }) => (isOpen ? [id] : [])));
+    }
+
+    /**
+     * Has a view redraw where it is, for a resize that changed how many rows it shows. Not through the refresh, whose
+     * draw lays the panels out again, which part way through a drag would undo it.
+     */
+    _redraw(redraw) {
+        if (this.cpu) redraw();
     }
 
     _showOpenPanels() {

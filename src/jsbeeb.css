@@ -104,6 +104,31 @@ body {
   width: var(--natural-width);
 }
 
+#disassembly-panel .panel-body,
+#memory-panel .panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sized as FittedRows in debug-dom.js needs. */
+#disassembly,
+#memory {
+  --row-height: 1.5em;
+  flex: 1 1 calc(var(--rows) * var(--row-height));
+  min-height: var(--row-height);
+  overflow: hidden;
+}
+
+#disassembly > div,
+#memory > div {
+  height: var(--row-height);
+}
+
+#memory > div > span {
+  vertical-align: top;
+}
+
 .goto-form {
   flex: 0 1 8em;
   min-width: 4em;
@@ -117,6 +142,7 @@ body {
 
 .debug-symbols,
 .panel-keys {
+  flex: none;
   padding-top: 3px;
   color: #aaaaaa;
 }

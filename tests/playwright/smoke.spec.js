@@ -254,6 +254,95 @@ test("on a window wide enough, the debugger's panels default to the gutters each
     expect((await boxesOf(page, DebugPanels)).filter((box) => overlap(box, screen))).toEqual([]);
 });
 
+test("the disassembly and memory views fill their panels' height as they are resized, keeping what they centre on where it was, and come back at that size on reload", async ({
+    beeb,
+    page,
+}) => {
+    const views = ["#disassembly", "#memory"];
+    const rowsOf = (view) =>
+        page.locator(view).evaluate((container) => {
+            const rows = [...container.children];
+            const box = container.getBoundingClientRect();
+            const last = rows.at(-1).getBoundingClientRect();
+            const highlight = rows.find((row) => row.classList.contains("highlight"));
+            return {
+                count: rows.length,
+                first: rows[0].querySelector(".addr").textContent,
+                highlight: highlight.querySelector(".addr").textContent,
+                highlightTop: highlight.getBoundingClientRect().top,
+                highlightRow: rows.indexOf(highlight),
+                // Within a pixel, as a row that layout rounding leaves a fraction short still counts.
+                fits: last.bottom - box.bottom < 1,
+                full: box.bottom - last.bottom < last.height,
+                creditHeight: container.parentElement.querySelector(".debug-symbols").offsetHeight,
+                drawn: rows.every((row) => row.matches("[data-addr]") || row.querySelector("[data-addr]") !== null),
+            };
+        });
+    const dragBottom = async (view, dy) => {
+        const handle = await page.locator(`${view}-panel .panel-resize-bottom`).boundingBox();
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + dy, { steps: 10 });
+        await page.mouse.up();
+    };
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    for (const view of views) await expect(page.locator(`${view}-panel`)).toBeVisible();
+    await page.fill("#goto-mem-addr-form .goto-addr", "1000");
+    await page.press("#goto-mem-addr-form .goto-addr", "Enter");
+    const initial = await Promise.all(views.map(rowsOf));
+
+    for (const view of views) {
+        const panel = page.locator(`${view}-panel`);
+        const opened = await rowsOf(view);
+        const openedHeight = (await panel.boundingBox()).height;
+        expect(opened.fits).toBe(true);
+        await dragBottom(view, 200);
+        await expect.poll(async () => (await rowsOf(view)).count).toBeGreaterThan(opened.count);
+        expect(await rowsOf(view)).toMatchObject({
+            first: opened.first,
+            highlight: opened.highlight,
+            highlightTop: opened.highlightTop,
+            fits: true,
+            full: true,
+            drawn: true,
+        });
+        expect((await panel.boundingBox()).height).toBe(openedHeight + 200);
+    }
+    const steppedFrom = (await rowsOf("#disassembly")).highlight;
+    await page.keyboard.press("n");
+    await expect.poll(async () => (await rowsOf("#disassembly")).highlight).not.toBe(steppedFrom);
+    for (const view of views) expect(await rowsOf(view)).toMatchObject({ fits: true, full: true });
+
+    await dragBottom("#memory", -400);
+    await expect.poll(async () => (await rowsOf("#memory")).count).toBeLessThan(initial[1].count);
+    const squeezed = await rowsOf("#memory");
+    expect(squeezed).toMatchObject({
+        highlight: "1000",
+        highlightRow: Math.floor(squeezed.count / 2),
+        fits: true,
+        full: true,
+        creditHeight: initial[1].creditHeight,
+    });
+
+    const counts = await Promise.all(views.map(async (view) => (await rowsOf(view)).count));
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    for (const [index, view] of views.entries())
+        await expect.poll(async () => (await rowsOf(view)).count).toBe(counts[index]);
+
+    await page.setViewportSize({ width: 1920, height: 400 });
+    await expect.poll(async () => (await rowsOf("#disassembly")).count).toBeLessThan(counts[0]);
+    for (const [index, view] of views.entries())
+        expect(await rowsOf(view)).toMatchObject({ fits: true, full: true, creditHeight: initial[index].creditHeight });
+    const shrunk = await rowsOf("#disassembly");
+    expect(shrunk.highlightRow).toBe(Math.floor(shrunk.count / 2));
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
+});
+
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
     beeb,
     page,
