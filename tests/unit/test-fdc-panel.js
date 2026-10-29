@@ -67,6 +67,12 @@ describe("FdcPanel", () => {
     const meanings = (name) => decodedMeanings("fdc-panel", name);
     const part = (className) => document.querySelector(`#fdc-panel .${className}`);
     const logLines = () => [...part("fdc-log").children].map((line) => line.textContent);
+    const toggles = () =>
+        [...part("fdc-log-heading").querySelectorAll(".decoded-bit")].map((toggle) => {
+            const on = toggle.classList.contains("lit");
+            expect(toggle.getAttribute("aria-pressed")).toBe(String(on));
+            return `${on ? "+" : "-"}${toggle.textContent}`;
+        });
 
     it("shows the 8271's command by name, its parameters by what they mean, and that it waits for the rest", () => {
         const { fdc, panel } = panelFor(IntelFdc, {});
@@ -118,11 +124,6 @@ describe("FdcPanel", () => {
         panel.update();
         expect(meanings("CMD")).toEqual(["write sector", "-multi", "-settle", "+deleted"]);
     });
-
-    const toggles = () =>
-        [...part("fdc-log-heading").querySelectorAll(".decoded-bit")].map(
-            (toggle) => `${toggle.getAttribute("aria-pressed") === "true" ? "+" : "-"}${toggle.textContent}`,
-        );
 
     it("logs the controller's commands and its state changes in the panel while each is toggled on", () => {
         const { fdc } = panelFor(IntelFdc, {});
