@@ -1,7 +1,7 @@
-import { hexword } from "../hex.js";
+import { hexbyte, hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
 import { sheilaBlocks, sheilaName } from "../sheila.js";
-import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
+import { bindGotoForm, byteChar, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { keyLine } from "./panel-keys.js";
 
 const InitialRows = 16;
@@ -68,10 +68,10 @@ export class DisassemblyView {
      * @param {object} options
      * @param {import("./floating-panel.js").FloatingPanel} options.floating - its panel, whose keys answer while open
      * @param {import("./panel-keys.js").PanelKeys} options.keys
+     * @param {import("./paging-override.js").PagingOverride} options.paging - what it reads memory through
      * @param {() => import("../symbol-names.js").SymbolNames} options.names - the names matched to memory now
-     * @param {(from: number, to: number) => {hex: string[], asc: string[]}} options.dump - the bytes from `from` up to
-     * `to`, as hex and as text
-     * @param {(text: string) => number | undefined} options.resolve - the address a "Go to" text names
+     * @param {(text: string) => {address: number, view: string} | undefined} options.resolve - the address a "Go to"
+     * text names, and the view to show it in
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} options.showing - the sets whose names it
      * shows
      * @param {(address: number) => void} options.showMemory - follows a memory operand
@@ -80,9 +80,9 @@ export class DisassemblyView {
      * @param {() => void} options.runToCursor
      * @param {() => void} options.refit - redraws it, once its rows have changed in number
      */
-    constructor({ floating, keys, names, dump, resolve, showing, showMemory, offerWatch, runToCursor, refit }) {
+    constructor({ floating, keys, paging, names, resolve, showing, showMemory, offerWatch, runToCursor, refit }) {
+        this._paging = paging;
         this._names = names;
-        this._dump = dump;
         this._showing = showing;
         this._showMemory = showMemory;
         this._cpu = null;
@@ -94,7 +94,10 @@ export class DisassemblyView {
         this._widget = floating.panel.querySelector("#disassembly");
         this._rows = new FittedRows(this._widget, InitialRows, refit);
 
-        bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, (address) => this.update(address));
+        bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, ({ address, view }) => {
+            this._paging.view = view;
+            this.update(address);
+        });
 
         this._widget.addEventListener("click", (e) => {
             if (e.target.closest(".bp_gutter")) this._gutterClick(e);
@@ -191,8 +194,8 @@ export class DisassemblyView {
     _showRow(row, address, shown) {
         const cpu = this._cpu;
         const names = this._names();
-        const [text, end, jumpTarget] = cpu.disassembler.disassemble(address);
-        const dump = this._dump(address, end);
+        const [text, end, jumpTarget] = this._paging.disassembler.disassemble(address);
+        const bytes = Array.from({ length: end - address }, (_, i) => this._paging.peek(address + i));
         const addrNode = row.querySelector(".dis_addr");
         addrNode.innerHTML = labelHtml(address);
         const named = names.address(address, cpu.pc);
@@ -200,10 +203,10 @@ export class DisassemblyView {
             addrNode.append(" ", nameNode(named, address));
             shown.add(named.set);
         }
-        row.classList.toggle("current", address === cpu.pc);
+        row.classList.toggle("current", address === cpu.pc && !this._paging.differs(address));
         row.classList.toggle("highlight", address === this._cursor);
-        row.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
-        row.querySelector(".instr_asc").textContent = dump.asc.join("");
+        row.querySelector(".instr_bytes").textContent = bytes.map(hexbyte).join(" ");
+        row.querySelector(".instr_asc").textContent = bytes.map(byteChar).join("");
         const disNode = row.querySelector(".disassembly");
         disNode.innerHTML = text;
         const accesses = operandAccesses(text);
@@ -248,11 +251,11 @@ export class DisassemblyView {
     }
 
     _prevInstruction(address) {
-        return this._cpu.disassembler.prevInstruction(address, this._cpu.pc);
+        return this._paging.disassembler.prevInstruction(address, this._cpu.pc);
     }
 
     _nextInstruction(address) {
-        return this._cpu.disassembler.nextInstruction(address);
+        return this._paging.disassembler.nextInstruction(address);
     }
 
     _followJump(e) {

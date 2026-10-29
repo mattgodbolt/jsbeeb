@@ -14,7 +14,15 @@ import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
-import { domFromIndexHtml, fakeAnimationFrames, sentEvents, stubResizeObserver, teardownDom } from "./helpers.js";
+import {
+    bankOffset,
+    domFromIndexHtml,
+    fakeAnimationFrames,
+    fitRomHeader,
+    sentEvents,
+    stubResizeObserver,
+    teardownDom,
+} from "./helpers.js";
 
 const PanelElements = [
     "toolbar-panel",
@@ -554,6 +562,70 @@ describe("Debugger", () => {
             goTo("goto-mem-addr-form", "$0004");
             keyPress("i");
             expect(memTarget().dataset.addr).toBe(`${0xfffc}`);
+        });
+    });
+
+    describe("viewing another bank", () => {
+        const picker = (panelId) => document.querySelector(`#${panelId} .paging-picker`);
+        const pick = (panelId, text) => {
+            picker(panelId).click();
+            [...document.querySelectorAll(".paging-menu:not([hidden]) button")]
+                .find((choice) => choice.textContent.startsWith(text))
+                .click();
+        };
+
+        beforeEach(() => {
+            cpu.romSelect(15);
+            cpu.ramRomOs[bankOffset(cpu, 15, 0x8100)] = 0xff;
+            cpu.ramRomOs[bankOffset(cpu, 4, 0x8100)] = 0x44;
+            fitRomHeader(cpu, 4, "TOOLKIT", "1.2");
+            dbgr.debug(cpu.pc);
+        });
+
+        it.each(["$8100`4", "4:8100"])("shows the bank %s names in memory until paged is picked again", (text) => {
+            goTo("goto-mem-addr-form", text);
+            expect(memTarget().textContent).toBe("44");
+            expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            expect(picker("memory-panel").classList.contains("overridden")).toBe(true);
+            goTo("goto-mem-addr-form", "$8101");
+            expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            pick("memory-panel", "paged");
+            goTo("goto-mem-addr-form", "$8100");
+            expect(memTarget().textContent).toBe("ff");
+            expect(picker("memory-panel").classList.contains("overridden")).toBe(false);
+            expect(cpu.romsel).toBe(15);
+        });
+
+        it("refuses a view the machine doesn't have", () => {
+            goTo("goto-mem-addr-form", "$3000`s");
+            expect(document.querySelector("#goto-mem-addr-form .goto-addr").classList.contains("is-invalid")).toBe(
+                true,
+            );
+        });
+
+        it("disassembles the bank picked, not marking the program counter where it reads other than the CPU", () => {
+            cpu.ramRomOs.set([0xa9, 0x44], bankOffset(cpu, 4, 0x8000));
+            cpu.ramRomOs.set([0xa9, 0xff], bankOffset(cpu, 15, 0x8000));
+            cpu.pc = 0x8000;
+            dbgr.debug(cpu.pc);
+            pick("disassembly-panel", "4 ");
+            expect(currentRow().querySelector(".disassembly").textContent).toBe("LDA #$44");
+            expect(currentRow().classList.contains("current")).toBe(false);
+            goTo("goto-dis-addr-form", "f:8000");
+            expect(currentRow().querySelector(".disassembly").textContent).toBe("LDA #$ff");
+            expect(currentRow().classList.contains("current")).toBe(true);
+            expect(picker("memory-panel").textContent).toBe("paged");
+        });
+
+        it("shows a bank from its start, as code while stopped and as bytes while running", () => {
+            dbgr.showBank(4);
+            expect(addrOf(currentRow())).toBe("8000");
+            expect(picker("disassembly-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            stoppedLoop.go();
+            dbgr.showBank(4);
+            expect(visible("memory-panel")).toBe(true);
+            expect(addrOf(memHighlight())).toBe("8000");
+            expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
         });
     });
 

@@ -44,3 +44,14 @@ export function downloadDriveData(data, name, extension) {
     const blob = new Blob([data], { type: "application/octet-stream" });
     downloadBlob(blob, replaceOrAddExtension(name, extension));
 }
+
+/** A button drawn as text, out of the tab order, so that Tab from a panel's text box can't reach it. */
+export function textButton(className, text, title) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `txt-btn ${className}`;
+    button.textContent = text;
+    button.title = title;
+    button.tabIndex = -1;
+    return button;
+}

@@ -24,7 +24,7 @@ import { BitshiftersArchive } from "./bitshifters.js";
 import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
-import { NumRomBanks } from "./6502.js";
+import { requireBank } from "./paging.js";
 import { setNodeBasePath } from "./loader.js";
 
 // BBC framebuffer is 1024×625 pixels
@@ -749,14 +749,6 @@ export class MachineSession {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Throws unless `bank`, if given, is a sideways bank. */
-function requireBank(bank, { romSockets }) {
-    const lowest = NumRomBanks - romSockets;
-    const highest = NumRomBanks - 1;
-    if (bank !== undefined && (!Number.isInteger(bank) || bank < lowest || bank > highest))
-        throw new Error(`Bank ${bank} is not ${lowest} to ${highest}`);
-}
 
 /**
  * Reconstruct a flat text representation from the captured VDU elements.

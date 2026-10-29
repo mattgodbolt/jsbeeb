@@ -2,6 +2,14 @@ import { hexword } from "../hex.js";
 
 // The DOM pieces the debugger's views share.
 
+const FirstPrintable = 0x20;
+const PastPrintable = 0x80;
+
+/** A byte as the views show it as text: its character if printable, a dot if not. */
+export function byteChar(byte) {
+    return byte >= FirstPrintable && byte < PastPrintable ? String.fromCharCode(byte) : ".";
+}
+
 export function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }
@@ -93,11 +101,11 @@ export class FittedRows {
 }
 
 /**
- * Has a panel's "Go to" box hand `go` the address its text resolves to, marking the box instead when it resolves to
- * none.
+ * Has a panel's "Go to" box hand `go` what its text resolves to, marking the box instead when it resolves to nothing.
+ * @template Target
  * @param {HTMLFormElement} form
- * @param {(text: string) => number | undefined} resolve
- * @param {(address: number) => void} go
+ * @param {(text: string) => Target | undefined} resolve
+ * @param {(target: Target) => void} go
  */
 export function bindGotoForm(form, resolve, go) {
     const addr = form.querySelector(".goto-addr");
@@ -106,10 +114,10 @@ export function bindGotoForm(form, resolve, go) {
         e.preventDefault();
         const text = addr.value.trim();
         if (!text) return;
-        const address = resolve(text);
-        addr.classList.toggle("is-invalid", address === undefined);
-        if (address === undefined) return;
-        go(address);
+        const target = resolve(text);
+        addr.classList.toggle("is-invalid", target === undefined);
+        if (target === undefined) return;
+        go(target);
         addr.value = "";
         addr.blur();
     });

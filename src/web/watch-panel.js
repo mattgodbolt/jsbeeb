@@ -2,6 +2,7 @@ import { hexword } from "../hex.js";
 import { formatWatch, WatchFormats } from "../watches.js";
 import { FloatingPanel } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
+import { textButton } from "./dom-utils.js";
 
 const MinPanelSize = { w: 200, h: 80 };
 
@@ -186,15 +187,4 @@ export class WatchPanel {
         open.popup.hidden = false;
         open.opener?.setAttribute("aria-expanded", "true");
     }
-}
-
-function textButton(className, text, title) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `txt-btn ${className}`;
-    button.textContent = text;
-    button.title = title;
-    // Out of the tab order, so Tab from the add box can't reach it either.
-    button.tabIndex = -1;
-    return button;
 }

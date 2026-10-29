@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DisassemblyView } from "../../src/web/disassembly-view.js";
+import { PagingOverride } from "../../src/web/paging-override.js";
 import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
@@ -20,12 +21,7 @@ describe("DisassemblyView", () => {
     let showMemory;
     let offerWatch;
     let runToCursor;
-
-    const dump = (from, to) => {
-        const bytes = [];
-        for (let at = from; at < to; at++) bytes.push(cpu.peekmem(at));
-        return { hex: bytes.map(hexbyte), asc: bytes.map((b) => (b >= 32 && b < 128 ? String.fromCharCode(b) : ".")) };
-    };
+    let paging;
 
     const useCpu = async (model) => {
         cpu = fake6502(model, { video });
@@ -33,6 +29,7 @@ describe("DisassemblyView", () => {
         cpu.writemem(0x2000, 0xa9);
         cpu.writemem(0x2001, 0x41);
         cpu.pc = 0x2000;
+        paging.setCpu(cpu);
         view.setCpu(cpu);
     };
 
@@ -56,12 +53,16 @@ describe("DisassemblyView", () => {
         showMemory = vi.fn();
         offerWatch = vi.fn();
         runToCursor = vi.fn();
+        paging = new PagingOverride({ panel, changed: () => view.redraw() });
         view = new DisassemblyView({
             floating,
             keys,
+            paging,
             names: () => NoNames,
-            dump,
-            resolve: parseAddr,
+            resolve: (text) => {
+                const address = parseAddr(text);
+                return address === undefined ? undefined : { address, view: paging.view };
+            },
             showing: () => {},
             showMemory,
             offerWatch,

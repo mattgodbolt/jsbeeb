@@ -884,7 +884,8 @@ small {
   font-family: inherit;
 }
 
-#watch-menu {
+#watch-menu,
+.paging-menu {
   position: fixed;
   z-index: 20;
   display: flex;
@@ -897,11 +898,13 @@ small {
   font-size: 9pt;
 }
 
-#watch-menu[hidden] {
+#watch-menu[hidden],
+.paging-menu[hidden] {
   display: none;
 }
 
-#watch-menu .txt-btn {
+#watch-menu .txt-btn,
+.paging-menu .txt-btn {
   color: #cccccc;
   text-align: left;
   font-family: inherit;
@@ -982,6 +985,51 @@ small {
 
 .uservia-control .decoded-meaning {
   width: 50ch;
+}
+
+.paging-registers .decoded-meaning {
+  width: 32ch;
+}
+
+.socket-table .socket {
+  cursor: pointer;
+}
+
+.socket-table .socket:hover td {
+  text-decoration: underline;
+}
+
+.socket-table .socket.paged td {
+  color: #000000;
+  background: #80d0d0;
+}
+
+.socket-kind {
+  color: #aaaaaa;
+}
+
+/* As wide as the longest title it is likely to show, so that loading a ROM never resizes the panel. */
+.socket-contents {
+  width: 24ch;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paging-picker {
+  flex: none;
+  color: #aaaaaa;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.paging-picker.overridden {
+  color: #f0d080;
+}
+
+.paging-menu .paging-choice[aria-checked="true"] {
+  color: #f0d080;
 }
 
 .decoded-value,

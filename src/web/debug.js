@@ -11,6 +11,7 @@ import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import {
     bindGotoForm,
+    byteChar,
     cloneTemplate,
     externalLink,
     FittedRows,
@@ -18,6 +19,8 @@ import {
     powerOfTwoColumnsThatFit,
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { PagingOverride } from "./paging-override.js";
+import { bankView, PagedView, parseViewedAddress, peekViewed } from "../paging.js";
 
 const noop = () => {};
 
@@ -30,6 +33,7 @@ const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
 const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
 const Call = /^JSR\b/;
 const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
+const SidewaysStart = 0x8000;
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
@@ -61,18 +65,19 @@ function memoryTitle(address, named, inRegion) {
 class MemoryView {
     /**
      * @param {HTMLElement} widget
-     * @param {(address: number) => number} peekMem
+     * @param {PagingOverride} paging - what it reads memory through
      * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
      * @param {() => void} redraw - redraws it, once its rows have changed in number or width
      */
-    constructor(widget, peekMem, naming, showing, redraw) {
+    constructor(widget, paging, naming, showing, redraw) {
         this._widget = widget;
-        this._peekMem = peekMem;
+        this._paging = paging;
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
+        this._snapshotView = PagedView;
         this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
         this._setBytesPerRow(FewestBytesPerRow);
 
@@ -159,22 +164,21 @@ class MemoryView {
         const hex = [];
         const asc = [];
         const changed = [];
+        // Bytes of another view were never snapshotted, so none of them can be shown as changed.
+        const comparable = this._snapshotView === this._paging.view;
         for (let i = from; i < to; ++i) {
-            const b = this._peekMem(i);
+            const b = this._paging.peek(i);
             hex.push(hexbyte(b));
-            changed.push(i < this._prevSnapshot.length && this._prevSnapshot[i] !== b);
-            if (b >= 32 && b < 128) {
-                asc.push(String.fromCharCode(b));
-            } else {
-                asc.push(".");
-            }
+            changed.push(comparable && i < this._prevSnapshot.length && this._prevSnapshot[i] !== b);
+            asc.push(byteChar(b));
         }
         return { hex: hex, asc: asc, changed: changed };
     }
 
     snapshot() {
+        this._snapshotView = this._paging.view;
         for (let i = 0; i < 65536; ++i) {
-            this._prevSnapshot[i] = this._peekMem(i);
+            this._prevSnapshot[i] = this._paging.peek(i);
         }
     }
 
@@ -342,11 +346,24 @@ export class Debugger {
             disassembly: { line: document.querySelector("#disassembly-panel .debug-symbols"), sets: null },
             memory: { line: document.querySelector("#memory-panel .debug-symbols"), sets: null },
         };
+        this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
+        /** @type {Map<PagingOverride, import("../symbol-names.js").SymbolNames>} */
+        this._viewNames = new Map();
+        this._paging = {
+            memory: new PagingOverride({
+                panel: this.panels.memory.panel,
+                changed: () => this._viewChanged(() => this._memoryView.update()),
+            }),
+            disassembly: new PagingOverride({
+                panel: this.panels.disassembly.panel,
+                changed: () => this._viewChanged(() => this._disassembly.redraw()),
+            }),
+        };
         this._memoryView = new MemoryView(
             document.getElementById("memory"),
-            peek,
-            () => ({ names: this._names, pc: this.cpu.pc }),
-            (sets) => this._credit(this._credits.memory, sets),
+            this._paging.memory,
+            () => ({ names: this._namesIn(this._paging.memory), pc: this.cpu.pc }),
+            (sets) => this._credit(this._credits.memory, this._namesIn(this._paging.memory), sets),
             () => this._redraw(() => this._memoryView.update()),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
@@ -364,7 +381,6 @@ export class Debugger {
             this._refresh.drawNow();
         });
 
-        this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
         this._refresh = arrangement.refreshing(
             () => this._ownPanelsShown(),
             () => this._showOpenPanels(),
@@ -381,14 +397,13 @@ export class Debugger {
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
         };
-        const resolve = (text) => addressFor(this._names, text, this.cpu.pc);
         this._disassembly = new DisassemblyView({
             floating: this.panels.disassembly,
             keys,
-            names: () => this._names,
-            dump: (from, to) => this._memoryView.dump(from, to),
-            resolve,
-            showing: (sets) => this._credit(this._credits.disassembly, sets),
+            paging: this._paging.disassembly,
+            names: () => this._namesIn(this._paging.disassembly),
+            resolve: (text) => this._resolveViewed(this._paging.disassembly, text),
+            showing: (sets) => this._credit(this._credits.disassembly, this._namesIn(this._paging.disassembly), sets),
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
@@ -400,15 +415,61 @@ export class Debugger {
         this._bindToolbar();
         this._bindKeys(keys);
 
-        bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
-            this._memoryView.update(address),
+        bindGotoForm(
+            document.getElementById("goto-mem-addr-form"),
+            (text) => this._resolveViewed(this._paging.memory, text),
+            ({ address, view }) => {
+                this._paging.memory.view = view;
+                this._memoryView.update(address);
+            },
         );
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            this._offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
+            this._offerWatch(e, address, this._namesIn(this._paging.memory).address(address, this.cpu.pc)?.name);
         });
+    }
+
+    /** The names matched to memory as `paging` shows it. */
+    _namesIn(paging) {
+        return paging.view === PagedView ? this._names : (this._viewNames.get(paging) ?? NoNames);
+    }
+
+    _viewChanged(redraw) {
+        if (!this.cpu) return;
+        this._matchSymbols();
+        redraw();
+    }
+
+    /**
+     * The address a Go to text names, and the view it is in: the one it qualifies the address with, or else the one
+     * `paging` shows. Names resolve as matched to memory in that view.
+     * @returns {{address: number, view: import("../paging.js").PagingView} | undefined}
+     */
+    _resolveViewed(paging, text) {
+        const parsed = parseViewedAddress(text, this.cpu.model);
+        if (!parsed) return undefined;
+        const view = parsed.view ?? paging.view;
+        const names =
+            view === paging.view
+                ? this._namesIn(paging)
+                : this._namesFor((address) => peekViewed(this.cpu, view, address));
+        const address = addressFor(names, parsed.address, this.cpu.pc);
+        return address === undefined ? undefined : { address, view };
+    }
+
+    /**
+     * Shows sideways `bank` from its start: its code in the disassembly while stopped in the debugger, where the
+     * disassembly isn't following the program counter, or else its bytes in the memory panel.
+     */
+    showBank(bank) {
+        const [paging, floating, show] = this._inDebugger
+            ? [this._paging.disassembly, this.panels.disassembly, (at) => this._disassembly.update(at)]
+            : [this._paging.memory, this.panels.memory, (at) => this._memoryView.update(at)];
+        paging.view = bankView(bank);
+        show(SidewaysStart);
+        floating.open();
     }
 
     _offerWatch(e, address, name) {
@@ -605,6 +666,7 @@ export class Debugger {
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
+        for (const paging of Object.values(this._paging)) paging.setCpu(cpu);
         this._disassembly.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
@@ -796,12 +858,17 @@ export class Debugger {
 
     _matchSymbols() {
         this._names = this._namesNow();
+        this._viewNames = new Map(
+            Object.values(this._paging)
+                .filter((paging) => paging.view !== PagedView)
+                .map((paging) => [paging, this._namesFor((address) => paging.peek(address))]),
+        );
         this._matchedAt = performance.now();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
-    _credit(credit, sets) {
-        const credited = this._names.sets.filter((set) => sets.has(set));
+    _credit(credit, names, sets) {
+        const credited = names.sets.filter((set) => sets.has(set));
         if (credit.sets?.size === credited.length && credited.every((set) => credit.sets.has(set))) return;
         credit.sets = new Set(credited);
         credit.line.style.visibility = credited.length > 0 ? "" : "hidden";
@@ -819,7 +886,11 @@ export class Debugger {
     }
 
     _namesNow() {
-        return this._symbolSets?.names(this._peek) ?? NoNames;
+        return this._namesFor(this._peek);
+    }
+
+    _namesFor(peek) {
+        return this._symbolSets?.names(peek) ?? NoNames;
     }
 
     _resolveWatch(text) {
