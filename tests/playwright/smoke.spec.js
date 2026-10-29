@@ -193,7 +193,7 @@ test("the no-audio-worklet warning fits a phone and a desktop, closes without ta
     await expect(warning).toContainText("No audio worklet API");
 });
 
-const DebugPanels = ["#debug-toolbar", "#disassembly-panel", "#registers-panel", "#memory-panel", "#peripherals-panel"];
+const DebugPanels = ["#toolbar-panel", "#disassembly-panel", "#registers-panel", "#memory-panel", "#peripherals-panel"];
 const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 

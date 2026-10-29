@@ -171,7 +171,7 @@ export class PanelArrangement extends EventTarget {
     /** The panels that offer themselves in a menu, in the order of PanelIds. */
     listed() {
         return this._stack
-            .filter((floating) => floating.title !== null)
+            .filter((floating) => floating.listed)
             .sort((a, b) => PanelIds.indexOf(a.id) - PanelIds.indexOf(b.id));
     }
 
@@ -359,7 +359,6 @@ export class FloatingPanel extends EventTarget {
         closeButton.addEventListener("click", () => this.close());
         panel.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
-            // Neither the page nor the machine sees it.
             e.stopPropagation();
             if (e.target.closest(".panel-field")) e.target.blur();
             else this.close();
@@ -371,6 +370,11 @@ export class FloatingPanel extends EventTarget {
         panel.addEventListener("pointerdown", () => arrangement.raise(this), true);
         this._bindGestures();
         arrangement.register(this);
+    }
+
+    /** Whether it offers itself in menus of panels. */
+    get listed() {
+        return this.title !== null;
     }
 
     /** Whether it can be moved: only while its header is styled as a drag handle, with the move cursor. */

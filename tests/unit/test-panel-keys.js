@@ -2,11 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { helpRows, keyLine, PanelKeys } from "../../src/web/panel-keys.js";
-import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { DisassemblyKeys, MemoryKeys, ToolbarKeys } from "../../src/web/debug.js";
 import { PauseKeys } from "../../src/web/keyboard-setup.js";
-import { StartEdge } from "../../src/web/panel-layout.js";
-import { teardownDom } from "./helpers.js";
+import { bareFloatingPanel, teardownDom } from "./helpers.js";
 
 const Tables = { ToolbarKeys, DisassemblyKeys, MemoryKeys, PauseKeys };
 
@@ -14,24 +13,7 @@ describe("PanelKeys", () => {
     let arrangement;
     let keys;
 
-    const panel = (id) => {
-        document.body.insertAdjacentHTML(
-            "beforeend",
-            `<div id="${id}" hidden><div class="header"><button class="close"></button></div></div>`,
-        );
-        const element = document.getElementById(id);
-        return new FloatingPanel({
-            panel: element,
-            header: element.querySelector(".header"),
-            closeButton: element.querySelector(".close"),
-            id,
-            title: id,
-            place: () => ({ x: StartEdge, y: StartEdge }),
-            minSize: { w: 100, h: 50 },
-            reopens: false,
-            arrangement,
-        });
-    };
+    const panel = (id) => bareFloatingPanel(arrangement, id, id);
     const owner = (floating, table) => {
         const actions = Object.fromEntries(table.filter((row) => row.run).map((row) => [row.run, vi.fn()]));
         keys.register({ table, actions, isLive: () => floating?.isOpen ?? true, panel: floating });

@@ -2,33 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DebugMenu } from "../../src/web/debug-menu.js";
-import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
-import { StartEdge } from "../../src/web/panel-layout.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { bareFloatingPanel, domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("DebugMenu", () => {
     let arrangement;
     let dbgr;
-    let inDebugger;
 
-    const panel = (id, title) => {
-        document.body.insertAdjacentHTML(
-            "beforeend",
-            `<div id="${id}" hidden><div class="header"><button class="close"></button></div></div>`,
-        );
-        const element = document.getElementById(id);
-        return new FloatingPanel({
-            panel: element,
-            header: element.querySelector(".header"),
-            closeButton: element.querySelector(".close"),
-            id,
-            title,
-            place: () => ({ x: StartEdge, y: StartEdge }),
-            minSize: { w: 100, h: 50 },
-            reopens: false,
-            arrangement,
-        });
-    };
+    const panel = (id, title) => bareFloatingPanel(arrangement, id, title);
     const show = () => document.getElementById("navbarDebug").dispatchEvent(new Event("show.bs.dropdown"));
     const items = () =>
         [...document.querySelectorAll("#debug-menu .panel-item")].map((item) => [
@@ -40,9 +21,8 @@ describe("DebugMenu", () => {
     beforeEach(() => {
         domFromIndexHtml("navbarDebug", "debug-menu");
         arrangement = new PanelArrangement(() => window.localStorage);
-        inDebugger = false;
-        dbgr = { panelsShown: () => false, toggleDebugger: vi.fn(), togglePanels: vi.fn() };
-        new DebugMenu({ arrangement, dbgr, inDebugger: () => inDebugger });
+        dbgr = { inDebugger: () => false, panelsShown: () => false, toggleDebugger: vi.fn(), togglePanels: vi.fn() };
+        new DebugMenu({ arrangement, dbgr });
     });
 
     afterEach(teardownDom);
@@ -74,7 +54,7 @@ describe("DebugMenu", () => {
             "Enter the debugger",
             "Show the debug panels",
         ]);
-        inDebugger = true;
+        dbgr.inDebugger = () => true;
         dbgr.panelsShown = () => true;
         show();
         expect([label("debugger-toggle"), label("debug-views-toggle")]).toEqual([

@@ -8,12 +8,10 @@ export class DebugMenu {
      * @param {object} options
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      * @param {import("./debug.js").Debugger} options.dbgr
-     * @param {function(): boolean} options.inDebugger
      */
-    constructor({ arrangement, dbgr, inDebugger }) {
+    constructor({ arrangement, dbgr }) {
         this._arrangement = arrangement;
         this._dbgr = dbgr;
-        this._inDebugger = inDebugger;
         this._menu = document.getElementById("debug-menu");
         this._debuggerItem = document.getElementById("debugger-toggle");
         this._panelsItem = document.getElementById("debug-views-toggle");
@@ -30,7 +28,7 @@ export class DebugMenu {
     }
 
     render() {
-        this._debuggerItem.querySelector(".menu-label").textContent = this._inDebugger()
+        this._debuggerItem.querySelector(".menu-label").textContent = this._dbgr.inDebugger()
             ? "Leave the debugger"
             : "Enter the debugger";
         this._panelsItem.querySelector(".menu-label").textContent = this._dbgr.panelsShown()

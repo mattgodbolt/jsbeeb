@@ -402,7 +402,7 @@
         </div>
       </div>
       <div id="watch-menu" hidden></div>
-      <div id="debug-toolbar" class="debug-panel" hidden>
+      <div id="toolbar-panel" class="debug-panel" data-feature="debug_toolbar" hidden>
         <div class="debug-panel-header">
           <span class="disc-title">Debugger</span>
           <div class="btn-group btn-group-sm" role="group" aria-label="Run and stop">
@@ -459,7 +459,7 @@
           </button>
         </div>
       </div>
-      <div id="disassembly-panel" class="debug-panel" hidden>
+      <div id="disassembly-panel" class="debug-panel" data-feature="debug_disassembly" hidden>
         <div class="debug-panel-header">
           <span class="disc-title">Disassembly</span>
           <form role="form" id="goto-dis-addr-form" class="goto-form">
@@ -471,7 +471,9 @@
               autocomplete="off"
             />
           </form>
-          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
+            &times;
+          </button>
         </div>
         <div class="panel-body">
           <div id="disassembly">
@@ -484,7 +486,7 @@
           <div class="panel-keys"></div>
         </div>
       </div>
-      <div id="memory-panel" class="debug-panel" hidden>
+      <div id="memory-panel" class="debug-panel" data-feature="debug_memory" hidden>
         <div class="debug-panel-header">
           <span class="disc-title">Memory</span>
           <form role="form" id="goto-mem-addr-form" class="goto-form">
@@ -496,7 +498,9 @@
               autocomplete="off"
             />
           </form>
-          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
+            &times;
+          </button>
         </div>
         <div class="panel-body">
           <div id="memory">
@@ -515,10 +519,12 @@
           <div class="panel-keys"></div>
         </div>
       </div>
-      <div id="registers-panel" class="debug-panel" hidden>
+      <div id="registers-panel" class="debug-panel" data-feature="debug_registers" hidden>
         <div class="debug-panel-header">
           <span class="disc-title">Registers</span>
-          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
+            &times;
+          </button>
         </div>
         <div class="panel-body" id="registers">
           <div>
@@ -538,10 +544,12 @@
           <div><span class="register">Cycles</span> <span id="cpu6502_cycles"></span></div>
         </div>
       </div>
-      <div id="peripherals-panel" class="debug-panel" hidden>
+      <div id="peripherals-panel" class="debug-panel" data-feature="debug_peripherals" hidden>
         <div class="debug-panel-header">
           <span class="disc-title">Peripherals</span>
-          <button type="button" class="btn btn-sm btn-outline-light panel-close">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
+            &times;
+          </button>
         </div>
         <div class="panel-body">
           <div class="via_regs" id="sysvia">
@@ -603,9 +611,11 @@
         </div>
       </div>
       <div id="sysvia-panel" data-feature="system_via" hidden>
-        <div class="register-panel-header">
+        <div class="debug-panel-header">
           <span class="disc-title">System VIA</span>
-          <button type="button" class="btn btn-sm btn-outline-light register-panel-close" tabindex="-1">Close</button>
+          <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
+            &times;
+          </button>
         </div>
         <div class="panel-body register-panel-body">
           <div class="sysvia-ports"></div>

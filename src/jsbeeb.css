@@ -84,22 +84,22 @@ body {
   font-weight: bold;
 }
 
-#debug-toolbar .floating-panel-header {
+#toolbar-panel .floating-panel-header {
   flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 0;
 }
 
-#debug-toolbar,
-#debug-toolbar .disc-title {
+#toolbar-panel,
+#toolbar-panel .disc-title {
   font-family: var(--bs-body-font-family);
 }
 
-#debug-toolbar .btn {
+#toolbar-panel .btn {
   padding: 0 5px;
 }
 
-.debug-panel .panel-close {
+.debug-panel-header .panel-close {
   margin-left: auto;
 }
 
@@ -910,10 +910,6 @@ small {
 
 .awaiting-machine {
   visibility: hidden;
-}
-
-.register-panel-close {
-  margin-left: auto;
 }
 
 .register-panel-body {

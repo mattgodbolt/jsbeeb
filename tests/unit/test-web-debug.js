@@ -14,7 +14,7 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 const PanelElements = [
-    "debug-toolbar",
+    "toolbar-panel",
     "disassembly-panel",
     "memory-panel",
     "registers-panel",
@@ -140,22 +140,22 @@ describe("Debugger", () => {
 
     describe("the panels", () => {
         const DebugPanels = [
-            "debug-toolbar",
+            "toolbar-panel",
             "disassembly-panel",
             "registers-panel",
             "memory-panel",
             "peripherals-panel",
         ];
         const shown = () => DebugPanels.filter(visible);
-        const NarrowSet = ["debug-toolbar", "disassembly-panel", "registers-panel", "memory-panel"];
+        const NarrowSet = ["toolbar-panel", "disassembly-panel", "registers-panel", "memory-panel"];
 
         it("open on entering the debugger, and stay open once the machine goes on", () => {
             expect(shown()).toEqual([]);
             dbgr.debug(cpu.pc);
-            expect(dbgr.enabled()).toBe(true);
+            expect(dbgr.inDebugger()).toBe(true);
             expect(shown()).toEqual(NarrowSet);
             stoppedLoop.go();
-            expect(dbgr.enabled()).toBe(false);
+            expect(dbgr.inDebugger()).toBe(false);
             expect(shown()).toEqual(NarrowSet);
         });
 
@@ -163,7 +163,7 @@ describe("Debugger", () => {
             let keyboardShown = true;
             dbgr.keepOffTouchKeyboard(() => keyboardShown);
             dbgr.debug(cpu.pc);
-            expect(dbgr.enabled()).toBe(true);
+            expect(dbgr.inDebugger()).toBe(true);
             expect(shown()).toEqual([]);
             dbgr.togglePanels();
             expect(shown()).toEqual(NarrowSet);
@@ -188,7 +188,7 @@ describe("Debugger", () => {
             expect(shown()).toEqual([]);
             dbgr.toggleDebugger();
             expect(stoppedLoop.mode).toBe(RunMode.debugging);
-            expect(shown()).toEqual(["debug-toolbar", "disassembly-panel", "registers-panel", "peripherals-panel"]);
+            expect(shown()).toEqual(["toolbar-panel", "disassembly-panel", "registers-panel", "peripherals-panel"]);
         });
 
         it("open the defaults again once every one has been closed by hand", () => {
@@ -204,7 +204,7 @@ describe("Debugger", () => {
             dbgr.togglePanels();
             expect(shown()).toEqual(NarrowSet);
             expect(stoppedLoop.mode).toBe(RunMode.running);
-            expect(dbgr.enabled()).toBe(false);
+            expect(dbgr.inDebugger()).toBe(false);
             expect(addrOf(currentRow())).toBe("2000");
             dbgr.togglePanels();
             expect(shown()).toEqual([]);
@@ -230,7 +230,7 @@ describe("Debugger", () => {
             dbgr.panels.registers.open();
             dbgr.hidePanels();
             dbgr.toggleDebugger();
-            expect(shown()).toEqual(["debug-toolbar", "registers-panel"]);
+            expect(shown()).toEqual(["toolbar-panel", "registers-panel"]);
         });
 
         it("count the decoded system VIA among them, hiding it and showing it again with the rest", () => {
@@ -360,7 +360,7 @@ describe("Debugger", () => {
         });
 
         describe("the toolbar", () => {
-            const button = (run) => document.querySelector(`#debug-toolbar [data-run="${run}"]`);
+            const button = (run) => document.querySelector(`#toolbar-panel [data-run="${run}"]`);
             const enabled = () =>
                 ["go", "stop", "step", "stepOver", "stepOut", "runToCursor"].filter((run) => !button(run).disabled);
 
@@ -417,7 +417,7 @@ describe("Debugger", () => {
             expect(shown()).toEqual(NarrowSet);
         });
 
-        it("note the debugger opening each time it is entered, not each time it stops", () => {
+        it("note the debugger opening each time it is entered, not each time it stops, and each panel as it opens", () => {
             const sent = sentEvents();
             dbgr.debug(cpu.pc);
             dbgr.debug(cpu.pc);
@@ -425,8 +425,28 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             expect(sent("feature_used")).toEqual([
                 { feature: "debugger", action: "open" },
+                { feature: "debug_toolbar", action: "open" },
+                { feature: "debug_disassembly", action: "open" },
+                { feature: "debug_registers", action: "open" },
+                { feature: "debug_memory", action: "open" },
                 { feature: "debugger", action: "open" },
             ]);
+        });
+
+        it("show nothing at all when the symbol index arrives before the machine is there", async () => {
+            const index = { load: vi.fn(async () => ({ format: 1, sets: [] })) };
+            dbgr.hidePanels();
+            document.body.innerHTML = "";
+            domFromIndexHtml(...PanelElements);
+            arrangement = new PanelArrangement(() => window.localStorage);
+            const symbolSets = new SymbolSets({ baseUrl: new URL("https://symbols.example/"), load: index.load });
+            dbgr = new Debugger({ symbolSets, keys: new PanelKeys(arrangement), arrangement });
+            dbgr.watches.floating.open();
+            dbgr.panels.registers.open();
+            await vi.waitFor(() => expect(index.load).toHaveBeenCalled());
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            dbgr.setCpu(cpu);
+            expect(document.getElementById("cpu6502_pc").textContent).toBe("2000");
         });
 
         it.each([
@@ -1518,7 +1538,7 @@ describe("Debugger", () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
             addWatch("oswrch");
             expect(watchRows()).toEqual([["oswrch", "108", "dec", "\u00d7"]]);
-            expect(dbgr.enabled()).toBe(false);
+            expect(dbgr.inDebugger()).toBe(false);
             document.getElementById("watch-close").click();
         });
 

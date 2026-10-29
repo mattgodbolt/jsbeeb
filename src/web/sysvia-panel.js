@@ -427,8 +427,8 @@ export class SysViaPanel {
         this._show(NoMachineState);
         this.floating = new FloatingPanel({
             panel: this.panel,
-            header: this.panel.querySelector(".register-panel-header"),
-            closeButton: this.panel.querySelector(".register-panel-close"),
+            header: this.panel.querySelector(".debug-panel-header"),
+            closeButton: this.panel.querySelector(".panel-close"),
             id: "sysvia",
             title: "System VIA",
             place: () => ({ x: Centred, y: StartEdge }),
