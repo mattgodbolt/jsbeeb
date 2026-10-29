@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingPanel, navbarHeightOf, PanelArrangement, panelShell } from "../../src/web/floating-panel.js";
 import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
-import { sentEvents, teardownDom } from "./helpers.js";
+import { fakeAnimationFrames, sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
 const HeaderHeight = 30;
@@ -561,20 +561,9 @@ describe("FloatingPanel", () => {
     describe("keeping up with the machine", () => {
         let frames;
         let cycles;
-        const runFrame = () => {
-            const pending = [...frames.values()];
-            frames.clear();
-            for (const callback of pending) callback();
-        };
 
         beforeEach(() => {
-            frames = new Map();
-            let handle = 0;
-            vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-                frames.set(++handle, callback);
-                return handle;
-            });
-            vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+            frames = fakeAnimationFrames();
             cycles = 0;
             arrangement.followMachine(() => cycles);
         });
@@ -585,17 +574,17 @@ describe("FloatingPanel", () => {
             const refresh = arrangement.refreshing(() => floating.isOpen, draw);
             floating.open();
             refresh.drawNow();
-            runFrame();
+            frames.run();
             expect(draw).toHaveBeenCalledTimes(1);
             cycles += 100;
-            runFrame();
-            runFrame();
+            frames.run();
+            frames.run();
             expect(draw).toHaveBeenCalledTimes(2);
             refresh.drawSoon();
-            runFrame();
+            frames.run();
             expect(draw).toHaveBeenCalledTimes(3);
             cycles = 0;
-            runFrame();
+            frames.run();
             expect(draw).toHaveBeenCalledTimes(4);
         });
 
@@ -608,8 +597,8 @@ describe("FloatingPanel", () => {
             const refresh = arrangement.refreshing(() => floating.isOpen, draw);
             floating.open();
             refresh.drawNow();
-            runFrame();
-            runFrame();
+            frames.run();
+            frames.run();
             expect(draw).toHaveBeenCalledTimes(2);
         });
 
@@ -620,7 +609,7 @@ describe("FloatingPanel", () => {
             floating.open();
             cycles += 100;
             refresh.drawn();
-            runFrame();
+            frames.run();
             expect(draw).not.toHaveBeenCalled();
         });
 
@@ -632,17 +621,17 @@ describe("FloatingPanel", () => {
             arrangement.refreshing(() => first.isOpen, draws[0]);
             arrangement.refreshing(() => second.isOpen, draws[1]);
             other.open();
-            expect(frames.size).toBe(0);
+            expect(frames.pending).toBe(0);
             first.open();
             second.open();
-            expect(frames.size).toBe(1);
+            expect(frames.pending).toBe(1);
             cycles += 1;
-            runFrame();
+            frames.run();
             expect(draws.map((draw) => draw.mock.calls.length)).toEqual([1, 1]);
             first.close();
-            expect(frames.size).toBe(1);
+            expect(frames.pending).toBe(1);
             second.close();
-            expect(frames.size).toBe(0);
+            expect(frames.pending).toBe(0);
         });
     });
 });

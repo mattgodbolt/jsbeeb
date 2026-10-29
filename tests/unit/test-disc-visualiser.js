@@ -6,7 +6,7 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
-import { domFromIndexHtml, ssdImage, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeAnimationFrames, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
 
@@ -22,7 +22,7 @@ const overlayContext = () => ({
 
 describe("DiscVisualiser", () => {
     let fdc;
-    let rafCallbacks;
+    let frames;
     let resizeObserved;
 
     beforeEach(() => {
@@ -52,13 +52,7 @@ describe("DiscVisualiser", () => {
             },
         );
 
-        rafCallbacks = new Map();
-        let nextHandle = 1;
-        vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-            rafCallbacks.set(nextHandle, callback);
-            return nextHandle++;
-        });
-        vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => rafCallbacks.delete(handle));
+        frames = fakeAnimationFrames();
 
         fdc = {
             drives: [
@@ -73,13 +67,8 @@ describe("DiscVisualiser", () => {
     const make = () => new DiscVisualiser({ fdc, arrangement: new PanelArrangement(() => window.localStorage) });
     const panel = () => document.getElementById("disc-panel");
     const status = () => document.getElementById("disc-status").textContent;
-    const pumpFrame = () => {
-        const callbacks = [...rafCallbacks.values()];
-        rafCallbacks.clear();
-        for (const callback of callbacks) callback();
-    };
     const pumpUntilScanned = () => {
-        for (let i = 0; i < 500 && status().includes("reading surface"); ++i) pumpFrame();
+        for (let i = 0; i < 500 && status().includes("reading surface"); ++i) frames.run();
     };
 
     describe("the panel", () => {
@@ -95,9 +84,9 @@ describe("DiscVisualiser", () => {
         it("stops animating once closed", () => {
             const visualiser = make();
             visualiser.toggle();
-            pumpFrame();
+            frames.run();
             document.getElementById("disc-close").click();
-            expect(rafCallbacks.size).toBe(0);
+            expect(frames.pending).toBe(0);
         });
 
         it("redraws its surface at the size the canvas is resized to, while open", () => {
@@ -171,11 +160,11 @@ describe("DiscVisualiser", () => {
             const { x, y } = geometry.pointAt(0, 0.25);
             const overlay = document.getElementById("disc-overlay");
             overlay.dispatchEvent(new MouseEvent("mousemove", { clientX: x, clientY: y }));
-            pumpFrame();
+            frames.run();
             expect(document.getElementById("disc-hover-where").textContent).toMatch(/^Track 0 · word \d+/);
             expect(document.getElementById("disc-hover-what").textContent).toMatch(/pulses|no flux/);
             overlay.dispatchEvent(new MouseEvent("mouseleave"));
-            pumpFrame();
+            frames.run();
             expect(document.getElementById("disc-hover-where").textContent).toBe("Point at the surface to read it");
         });
 
@@ -185,10 +174,10 @@ describe("DiscVisualiser", () => {
             pumpUntilScanned();
             const overlay = document.getElementById("disc-overlay");
             overlay.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: 50, clientY: 50 }));
-            pumpFrame();
+            frames.run();
             expect(status()).toContain("1.3x");
             overlay.dispatchEvent(new MouseEvent("dblclick"));
-            pumpFrame();
+            frames.run();
             expect(status()).not.toContain("x");
         });
     });

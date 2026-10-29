@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
 import { SoundChip } from "../../src/soundchip.js";
+import { goertzelAmplitude } from "./helpers.js";
 
 // audio-renderer.js reads AudioWorklet globals at import time, so stub them
 // before dynamically importing it.
@@ -53,20 +54,6 @@ const SampledSoundCarrierHz = 4000000 / (32 * SampledSoundCarrierPeriod);
 // 6250 Hz: its third harmonic sits where the board's filter has bitten hard.
 const HighTonePeriod = 20;
 const HighToneHz = 4000000 / (32 * HighTonePeriod);
-
-// Amplitude of the frequency-bin component at freq, via the Goertzel algorithm.
-function goertzelAmplitude(samples, freq, rate) {
-    const w = (2 * Math.PI * freq) / rate;
-    const coeff = 2 * Math.cos(w);
-    let s1 = 0;
-    let s2 = 0;
-    for (const sample of samples) {
-        const s0 = sample + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-    }
-    return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
-}
 
 // Stands in for the main thread: a chip that emits events, an epoch that
 // advances with emulated time, and a flush that ships both to the worklet.

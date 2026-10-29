@@ -1,24 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { PolyphaseResampler } from "../../src/resampler.js";
+import { goertzelAmplitude } from "./helpers.js";
 
 const InputRate = 500000;
 const OutputRate = 48000;
 const Ratio = InputRate / OutputRate;
 const Cutoff = 0.4 * OutputRate;
-
-function goertzelAmplitude(samples, freq, rate) {
-    const w = (2 * Math.PI * freq) / rate;
-    const coeff = 2 * Math.cos(w);
-    let s1 = 0;
-    let s2 = 0;
-    for (const x of samples) {
-        const s0 = x + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-    }
-    return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
-}
 
 // Push `signal` through in quanta of `quantum` output samples, as the worklet does.
 function resampleInQuanta(signal, quantum, options = {}) {

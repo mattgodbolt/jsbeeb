@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Printer, MaxBufferedChars } from "../../src/printer.js";
 import { UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { ViaRegister } from "./helpers.js";
 
-const OraNoHandshake = 0x0f;
-const Pcr = 0x0c;
-const Ifr = 0x0d;
+const { ORAnh, PCR, IFR } = ViaRegister;
 const PcrCa2High = 0x0e;
 const PcrCa2Low = 0x0c;
 const IntCa1 = 0x02;
@@ -16,9 +15,9 @@ function makeUserVia() {
 
 function print(uservia, text) {
     for (const char of text) {
-        uservia.write(OraNoHandshake, char.charCodeAt(0));
-        uservia.write(Pcr, PcrCa2High);
-        uservia.write(Pcr, PcrCa2Low);
+        uservia.write(ORAnh, char.charCodeAt(0));
+        uservia.write(PCR, PcrCa2High);
+        uservia.write(PCR, PcrCa2Low);
     }
 }
 
@@ -41,7 +40,7 @@ describe("Printer", () => {
 
             print(uservia, "A");
 
-            expect(uservia.read(Ifr) & IntCa1).toBe(IntCa1);
+            expect(uservia.read(IFR) & IntCa1).toBe(IntCa1);
         });
 
         it("acks every character of a run", () => {
@@ -49,8 +48,8 @@ describe("Printer", () => {
 
             for (const char of "HELLO") {
                 print(uservia, char);
-                expect(uservia.read(Ifr) & IntCa1).toBe(IntCa1);
-                uservia.write(Ifr, 0x7f);
+                expect(uservia.read(IFR) & IntCa1).toBe(IntCa1);
+                uservia.write(IFR, 0x7f);
             }
         });
     });

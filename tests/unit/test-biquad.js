@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Biquad } from "../../src/biquad.js";
+import { goertzelAmplitude } from "./helpers.js";
 
 const SampleRate = 500000;
 // Chosen so every frequency measured below is a whole number of cycles in
@@ -8,19 +9,6 @@ const SampleRate = 500000;
 const Corner = SampleRate / 80;
 const Q = 0.696;
 const Window = 128000;
-
-function goertzelAmplitude(samples, freq) {
-    const w = (2 * Math.PI * freq) / SampleRate;
-    const coeff = 2 * Math.cos(w);
-    let s1 = 0;
-    let s2 = 0;
-    for (const sample of samples) {
-        const s0 = sample + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-    }
-    return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
-}
 
 function sine(freq, length) {
     const samples = new Float64Array(length);
@@ -32,7 +20,7 @@ function sine(freq, length) {
 function gainDb(filter, freq) {
     const samples = sine(freq, 2 * Window);
     filter.process(samples, 0, samples.length);
-    return 20 * Math.log10(goertzelAmplitude(samples.subarray(Window), freq));
+    return 20 * Math.log10(goertzelAmplitude(samples.subarray(Window), freq, SampleRate));
 }
 
 const lowPass = () => Biquad.lowPass(SampleRate, Corner, Q);

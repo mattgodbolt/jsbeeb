@@ -206,3 +206,57 @@ export function bareFloatingPanel(arrangement, id, title) {
         arrangement,
     });
 }
+
+/**
+ * Holds requestAnimationFrame callbacks until the test runs them. `run(time)` runs the frames queued so
+ * far, not the ones they queue in turn.
+ */
+export function fakeAnimationFrames() {
+    const queued = new Map();
+    let lastHandle = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+        queued.set(++lastHandle, callback);
+        return lastHandle;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => queued.delete(handle));
+    return {
+        get pending() {
+            return queued.size;
+        },
+        run(time) {
+            const due = [...queued.values()];
+            queued.clear();
+            for (const callback of due) callback(time);
+        },
+    };
+}
+
+/** The amplitude of the component of `samples` at `freq`, by the Goertzel algorithm. */
+export function goertzelAmplitude(samples, freq, sampleRate) {
+    const coeff = 2 * Math.cos((2 * Math.PI * freq) / sampleRate);
+    let s1 = 0;
+    let s2 = 0;
+    for (const sample of samples) {
+        const s0 = sample + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
+}
+
+export const ViaRegister = {
+    ORB: 0x0,
+    ORA: 0x1,
+    DDRB: 0x2,
+    DDRA: 0x3,
+    T1CL: 0x4,
+    T1CH: 0x5,
+    T2CL: 0x8,
+    T2CH: 0x9,
+    SR: 0xa,
+    ACR: 0xb,
+    PCR: 0xc,
+    IFR: 0xd,
+    IER: 0xe,
+    ORAnh: 0xf,
+};

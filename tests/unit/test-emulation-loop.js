@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TickMs } from "../../src/emulation-tick.js";
 import { EmulationLoop, RunMode } from "../../src/web/emulation-loop.js";
-import { domFromIndexHtml, sentEvents, teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, fakeAnimationFrames, sentEvents, teardownDom, toasts } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
 // Bootstrap's stand-in for a transitionend in jsdom fires after 5 ms.
@@ -11,14 +11,13 @@ const ToastShowMs = 10;
 
 describe("EmulationLoop", () => {
     let deps;
-    let vsyncCallbacks;
+    let vsyncs;
 
     beforeEach(() => {
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
         // Move off zero: the loop uses last === 0 to mean "first tick".
         vi.advanceTimersByTime(1000);
-        vsyncCallbacks = [];
-        vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => vsyncCallbacks.push(callback));
+        vsyncs = fakeAnimationFrames();
         domFromIndexHtml("leds");
         deps = {
             processor: {
@@ -107,7 +106,7 @@ describe("EmulationLoop", () => {
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 10);
     });
 
-    const vsync = (time) => vsyncCallbacks.pop()(time);
+    const vsync = (time) => vsyncs.run(time);
 
     describe("on a vsync", () => {
         it("runs the machine up to the vsync and presents in the same callback", () => {
@@ -118,7 +117,7 @@ describe("EmulationLoop", () => {
             vsync(vsyncTime);
             expect(cyclesExecuted().at(-1)).toBe((5 * ClocksPerSecond) / 1000);
             expect(deps.display.present).toHaveBeenCalledWith(vsyncTime);
-            expect(vsyncCallbacks).toHaveLength(1);
+            expect(vsyncs.pending).toBe(1);
         });
 
         it("times the run from when the callback ran, not from the vsync", () => {
@@ -145,6 +144,7 @@ describe("EmulationLoop", () => {
             loop.toggleFastAsPossible();
             vi.advanceTimersByTime(TickMs);
             const executed = cyclesExecuted().length;
+            expect(vsyncs.pending).toBe(1);
             vsync(performance.now() + 5);
             expect(cyclesExecuted().length).toBe(executed);
         });
@@ -154,7 +154,7 @@ describe("EmulationLoop", () => {
             loop.stop(false);
             vsync(performance.now() + 5);
             expect(deps.display.present).not.toHaveBeenCalled();
-            expect(vsyncCallbacks).toHaveLength(0);
+            expect(vsyncs.pending).toBe(0);
         });
     });
 
