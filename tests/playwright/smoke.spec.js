@@ -343,6 +343,40 @@ test("the disassembly and memory views fill their panels' height as they are res
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
 });
 
+test("a step part way through a drag leaves the panel being dragged where the pointer has it", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    const panel = page.locator("#memory-panel");
+    await expect(panel).toBeVisible();
+    const cycles = page.locator("#cpu6502_cycles");
+    const opened = await panel.boundingBox();
+    const header = await page.locator("#memory-panel .panel-header").boundingBox();
+    const from = { x: header.x + 40, y: header.y + header.height / 2 };
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 300, from.y + 150, { steps: 10 });
+    const steppedFrom = await cycles.textContent();
+    await page.keyboard.press("n");
+    await expect.poll(() => cycles.textContent()).not.toBe(steppedFrom);
+    expect(await panel.boundingBox()).toMatchObject({ x: opened.x + 300, y: opened.y + 150 });
+
+    const handle = await page.locator("#memory-panel .panel-resize-bottom").boundingBox();
+    await page.mouse.up();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 100, { steps: 10 });
+    const resizedFrom = await cycles.textContent();
+    await page.keyboard.press("n");
+    await expect.poll(() => cycles.textContent()).not.toBe(resizedFrom);
+    expect((await panel.boundingBox()).height).toBe(opened.height + 100);
+    await page.mouse.up();
+});
+
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
     beeb,
     page,

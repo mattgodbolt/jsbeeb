@@ -462,6 +462,25 @@ describe("FloatingPanel", () => {
             expect(rectOf(under).y).toBe(start.y + 200 + Natural.h + Gap);
         });
 
+        for (const [ending, end] of [
+            ["closed", (floating) => floating.close()],
+            ["loses the pointer", (floating) => pointer(header(floating), "lostpointercapture", 0, 0, {})],
+        ])
+            it(`keep attached again once a panel ${ending} part way through a drag`, () => {
+                const top = above();
+                const under = below();
+                const other = watches();
+                top.open();
+                under.open();
+                other.open();
+                pointer(header(other), "pointerdown", 20, 70, {});
+                pointer(header(other), "pointermove", 320, 270, {});
+                end(other);
+                boxFromStyle(top.panel, { w: Natural.w, h: Natural.h + 40 });
+                arrangement.keepAttached();
+                expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + 40 + Gap);
+            });
+
         it("are left at the size a resize in progress has them", () => {
             const top = above();
             const under = below();

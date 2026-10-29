@@ -626,7 +626,7 @@ export class FloatingPanel extends EventTarget {
             );
             gesture.rect = this._arrangement.follow(this, gesture.context, rect, gesture.edges, !e.shiftKey);
         });
-        for (const ending of ["pointerup", "pointercancel"])
+        for (const ending of ["pointerup", "pointercancel", "lostpointercapture"])
             this.panel.addEventListener(ending, (e) => {
                 const gesture = this._gesture;
                 if (!gesture || gesture.pointerId !== e.pointerId) return;
