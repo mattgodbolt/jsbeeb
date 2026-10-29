@@ -3,4 +3,4 @@ Open Gorton, by Dakota Felder, from https://github.com/dakotafelder/open-gorton
 
 OpenGorton-Regular.woff2 is built from that repository's OpenGorton-Regular.otf by
 tools/make-touch-keyboard-font.py, which cuts it down to printable ASCII less the
-lowercase letters (which it maps to its capitals) and slashes its zero.
+lowercase letters (which it maps to its capitals) and makes its zero a slashed O.
