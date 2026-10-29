@@ -479,6 +479,8 @@ export class Debugger {
             },
             storage: breakpointStorage,
         });
+        // As for the watches, so a name typed while the machine runs can resolve.
+        this.breakpoints.floating.addEventListener("open", () => this._namesNow());
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();

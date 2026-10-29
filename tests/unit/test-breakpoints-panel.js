@@ -123,18 +123,29 @@ describe("BreakpointsPanel", () => {
         expect(cpu.breakpoints.list()).toEqual([]);
     });
 
-    it("puts a field back as it was on leaving it, and keeps it across a change elsewhere", () => {
+    it("puts a field back as it was on Escape, keeping it, with the keyboard, across changes made meanwhile", () => {
         const id = cpu.breakpoints.add({ kind: "execute", start: 0x2000, condition: "A = 1" });
+        const other = cpu.breakpoints.add({ kind: "read", start: 0x70 });
         click(rows()[0].querySelector(".bp-condition .txt-btn"));
         const condition = rows()[0].querySelector(".bp-edit");
-        condition.focus();
         type(condition, "A = 2");
-        cpu.breakpoints.add({ kind: "read", start: 0x70 });
+        click(rows()[1].querySelector(".bp-enabled"));
+        cpu.breakpoints.add({ kind: "write", start: 0x71 });
+        expect(cpu.breakpoints.get(other).enabled).toBe(false);
+        expect(rows()[1].querySelector(".bp-enabled").classList.contains("disabled")).toBe(true);
         expect(rows()[0].querySelector(".bp-edit")).toBe(condition);
-        condition.blur();
-        expect(rows().map(rowText)[0][3]).toBe("A = 1");
-        expect(rows()).toHaveLength(2);
+        expect(document.activeElement).toBe(condition);
+        condition.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        expect(rows().map((row) => rowText(row)[3])).toEqual(["A = 1", "always", "always"]);
         expect(cpu.breakpoints.get(id).condition).toBe("A = 1");
+    });
+
+    it("moves straight from one field to another", () => {
+        cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
+        click(rows()[0].querySelector(".bp-condition .txt-btn"));
+        click(rows()[0].querySelector(".bp-hits"));
+        expect([...panel.panel.querySelectorAll(".bp-edit")].map((field) => field.value)).toEqual(["1"]);
+        expect(document.activeElement).toBe(rows()[0].querySelector(".bp-hit-count .bp-edit"));
     });
 
     it("edits a condition and a hit count in place, keeping a bad condition for fixing", () => {
@@ -173,6 +184,13 @@ describe("BreakpointsPanel", () => {
     it("offers a bank for sideways addresses, or where one is set", () => {
         cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
         cpu.breakpoints.add({ kind: "execute", start: 0x7f00, end: 0x80ff, bank: 15 });
+        expect(rows().map((row) => row.querySelector(".bp-bank")?.textContent)).toEqual([undefined, "ROM 15"]);
+    });
+
+    it("offers no bank on the Atom unless one is set", async () => {
+        await revisit(findModel("Atom"));
+        cpu.breakpoints.add({ kind: "execute", start: 0x8000 });
+        cpu.breakpoints.add({ kind: "execute", start: 0x8000, bank: 15 });
         expect(rows().map((row) => row.querySelector(".bp-bank")?.textContent)).toEqual([undefined, "ROM 15"]);
     });
 

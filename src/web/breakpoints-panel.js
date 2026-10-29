@@ -9,10 +9,10 @@ const SavedFields = ["kind", "start", "end", "bank", "condition", "hitCount", "e
 const SidewaysStart = 0x8000;
 const SidewaysEnd = 0xbfff;
 const Kinds = [
-    { kind: "execute", short: "X", name: "Execute", title: "Stops before the CPU runs an instruction here" },
-    { kind: "read", short: "R", name: "Read", title: "Stops after an instruction reads here, fetches included" },
-    { kind: "write", short: "W", name: "Write", title: "Stops after an instruction writes here" },
-    { kind: "access", short: "RW", name: "Read or write", title: "Stops after an instruction reads or writes here" },
+    { kind: "execute", short: "X", name: "Execute", title: "Acts before the CPU runs an instruction here" },
+    { kind: "read", short: "R", name: "Read", title: "Acts after an instruction reads here, fetches included" },
+    { kind: "write", short: "W", name: "Write", title: "Acts after an instruction writes here" },
+    { kind: "access", short: "RW", name: "Read or write", title: "Acts after an instruction reads or writes here" },
 ];
 const KindOf = new Map(Kinds.map((kind) => [kind.kind, kind]));
 const RangeSeparator = /\s*-\s*/;
@@ -60,6 +60,9 @@ export class BreakpointsPanel {
         this._stoppedBy = null;
         this._hitCells = new Map();
         this._nameCells = new Map();
+        /** @type {{id: number, field: string, input: HTMLInputElement} | null} */
+        this._editing = null;
+        this._rendering = false;
         this._newKind = Kinds[0];
 
         const { panel, body } = panelShell({ id: "breakpoints", title: "Breakpoints", feature: "breakpoints" });
@@ -170,17 +173,29 @@ export class BreakpointsPanel {
         input.title = message ?? "";
     }
 
-    /** Lists the breakpoints again, unless one of its fields is being edited, which renders on being left. */
+    /** Lists the breakpoints again, keeping a field being edited, with the keyboard, in its breakpoint's new row. */
     _render() {
-        if (document.activeElement?.classList.contains("bp-edit") && this.panel.contains(document.activeElement))
-            return;
-        this._list.replaceChildren();
-        this._hitCells.clear();
-        this._nameCells.clear();
-        const all = this._breakpoints.list();
-        for (const breakpoint of all) this._list.append(this._row(breakpoint));
-        this._empty.hidden = all.length > 0;
-        this.update();
+        this._rendering = true;
+        try {
+            this._list.replaceChildren();
+            this._hitCells.clear();
+            this._nameCells.clear();
+            const all = this._breakpoints.list();
+            for (const breakpoint of all) this._list.append(this._row(breakpoint));
+            this._empty.hidden = all.length > 0;
+            this.update();
+        } finally {
+            this._rendering = false;
+        }
+        const editing = this._editing;
+        if (editing && this._list.contains(editing.input)) editing.input.focus();
+        else this._editing = null;
+    }
+
+    /** `button`, or the field editing `field` of breakpoint `id` in its place. */
+    _orEditing(button, id, field) {
+        const editing = this._editing;
+        return editing?.id === id && editing.field === field ? editing.input : button;
     }
 
     _row(breakpoint) {
@@ -221,15 +236,21 @@ export class BreakpointsPanel {
         if (sideways || bank !== undefined) whereCell.append(this._bankButton(bank, change));
 
         const conditionButton = textButton(condition ? "" : "bp-placeholder", condition ?? "always", "");
-        this._editOnClick(conditionButton, condition ?? "", "Condition", (text) => change({ condition: text }));
-        cell("bp-condition", conditionButton);
+        this._editOnClick(conditionButton, { id, field: "condition" }, condition ?? "", "Condition", (text) =>
+            change({ condition: text }),
+        );
+        cell("bp-condition", this._orEditing(conditionButton, id, "condition"));
 
         const hits = textButton("bp-hits", "", "");
-        this._editOnClick(hits, String(breakpoint.hitCount), "Hits so far; the hit to stop from", (text) =>
-            change({ hitCount: Number(text) }),
+        this._editOnClick(
+            hits,
+            { id, field: "hitCount" },
+            String(breakpoint.hitCount),
+            "Hits so far; the hit to stop from",
+            (text) => change({ hitCount: Number(text) }),
         );
         this._hitCells.set(id, hits);
-        cell("bp-hit-count", hits);
+        cell("bp-hit-count", this._orEditing(hits, id, "hitCount"));
 
         const actionButton = textButton(
             "bp-action",
@@ -261,10 +282,11 @@ export class BreakpointsPanel {
     }
 
     /**
-     * Makes `button` turn into a field holding `text` when clicked, which commits on Enter, and puts the button back,
-     * as it was, on Escape or on leaving it. A change the field cannot take marks it, with the reason as its tooltip.
+     * Makes `button` turn into a field editing `what` (`field` of breakpoint `id`), holding `text`, when clicked. It
+     * commits on Enter, and puts the button back, as it was, on Escape or on leaving it. A change the field cannot
+     * take marks it, with the reason as its tooltip.
      */
-    _editOnClick(button, text, what, commit) {
+    _editOnClick(button, { id, field }, text, what, commit) {
         button.title = `${what}; click to change`;
         button.addEventListener("click", () => {
             const input = document.createElement("input");
@@ -284,7 +306,13 @@ export class BreakpointsPanel {
                 }
                 input.blur();
             });
-            input.addEventListener("blur", () => this._render());
+            // Moving the field into a redrawn row blurs it too; that is not leaving it.
+            input.addEventListener("blur", () => {
+                if (this._rendering) return;
+                if (this._editing?.input === input) this._editing = null;
+                this._render();
+            });
+            this._editing = { id, field, input };
             button.replaceWith(input);
             input.focus();
         });
@@ -304,8 +332,8 @@ export class BreakpointsPanel {
             try {
                 this._breakpoints.add(Object.fromEntries(SavedFields.map((field) => [field, spec?.[field]])));
             } catch (error) {
-                // Kept for a machine it fits, such as a bank this model has no socket for.
-                this._unrestored.push(spec);
+                // Kept for a machine with a socket for its bank; anything else wrong with it is dropped.
+                if (spec?.bank !== undefined) this._unrestored.push(spec);
                 console.warn(`Could not put back a saved breakpoint: ${error.message}`);
             }
         }
