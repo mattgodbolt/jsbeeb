@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { helpRows, keyLine, PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { DisassemblyKeys, MemoryKeys, ToolbarKeys } from "../../src/web/debug.js";
+import { MemoryKeys, ToolbarKeys } from "../../src/web/debug.js";
+import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { PauseKeys } from "../../src/web/keyboard-setup.js";
 import { bareFloatingPanel, teardownDom } from "./helpers.js";
 
