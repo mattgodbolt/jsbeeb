@@ -11,7 +11,7 @@ describe("htmlIncludesPlugin", () => {
         await server?.close();
     });
 
-    it("serves index.html with its includes expanded", async () => {
+    it("expands includes in the page it serves", async () => {
         server = await createServer({
             configFile: false,
             logLevel: "silent",
