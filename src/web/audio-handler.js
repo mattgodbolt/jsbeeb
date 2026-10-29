@@ -90,7 +90,6 @@ export class AudioHandler {
         this.music5000 = hasMusic5000 ? this._createMusic5000() : new FakeMusic5000();
     }
 
-    // Unlike the element's other warnings, nothing on the page can clear this one.
     _warnNoWorklet() {
         const localhost = new URL(window.location);
         localhost.hostname = "localhost";
