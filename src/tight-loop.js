@@ -1,4 +1,4 @@
-/** Longest, in bytes, a loop can be and still count as tight. */
+/** Furthest, in bytes, a tight loop's branch back can be from the instruction it goes back to. */
 const MaxLoopBytes = 32;
 
 const Reading = new Set(["LDA", "LDX", "LDY", "BIT", "CMP", "CPX", "CPY", "AND", "ORA"]);
@@ -34,19 +34,19 @@ function waitingInstruction(disassembler, address) {
 
 /**
  * The tight loop the instruction at `pc` is part of, if it is in one: a short run of instructions closed by a branch
- * back that writes nothing, calls nothing and only loads, moves or masks its registers, so that it waits for what it reads to be
- * changed by a device or an interrupt. Found from the code alone, without running it.
+ * back that writes nothing, calls nothing and only loads, moves or masks its registers, so that it waits for what it
+ * reads to be changed by a device or an interrupt. Found from the code alone, without running it.
  * @param {{cpu: {peekmem: (address: number) => number}, opcodes: Object<number, string>,
  * disassemble: (address: number, plain: boolean) => any[]}} disassembler the CPU's
  * @param {number} pc
  * @returns {TightLoop | undefined}
  */
 export function tightLoopAt(disassembler, pc) {
-    for (let address = pc; address - pc < MaxLoopBytes;) {
+    for (let address = pc; address - pc <= MaxLoopBytes;) {
         const instruction = waitingInstruction(disassembler, address);
         if (!instruction) return undefined;
         const { target } = instruction;
-        if (target !== undefined && target <= pc && address - target < MaxLoopBytes)
+        if (target !== undefined && target <= pc && address - target <= MaxLoopBytes)
             return loopFrom(disassembler, target, address, pc);
         if (instruction.unconditional) return undefined;
         address = instruction.next;
@@ -54,7 +54,10 @@ export function tightLoopAt(disassembler, pc) {
     return undefined;
 }
 
-/** The loop from `start` to the branch back at `end`, if every instruction of it on the way through `pc` waits. */
+/**
+ * The loop from `start` to the branch back at `end`, if every instruction of it on the way through `pc` waits and
+ * none jumps away before `end`.
+ */
 function loopFrom(disassembler, start, end, pc) {
     const reads = new Set();
     let passesPc = false;
@@ -64,6 +67,7 @@ function loopFrom(disassembler, start, end, pc) {
         passesPc ||= address === pc;
         for (const read of instruction.reads) reads.add(read);
         if (address === end) return passesPc ? { start, end, reads: [...reads] } : undefined;
+        if (instruction.unconditional) return undefined;
         address = instruction.next;
     }
     return undefined;

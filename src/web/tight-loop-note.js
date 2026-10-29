@@ -77,10 +77,7 @@ export class TightLoopNote {
         button.className = "txt-btn";
         button.tabIndex = -1;
         button.textContent = `open ${block.title}`;
-        button.addEventListener("click", () => {
-            floating.open();
-            this._arrangement.raise(floating);
-        });
+        button.addEventListener("click", () => floating.open());
         return button;
     }
 }
