@@ -1,20 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { UserVia } from "../../src/via.js";
 import { UserViaPanel } from "../../src/web/uservia-panel.js";
 import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeAnimationFrames, teardownDom, ViaRegister } from "./helpers.js";
 
-const ORB = 0x0,
-    ORA = 0x1,
-    DDRB = 0x2,
-    DDRA = 0x3,
-    T1CL = 0x4,
-    T1CH = 0x5,
-    PCR = 0xc;
+const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, PCR } = ViaRegister;
 const PcrCa2PulseOutput = 0x0a;
 const TicksPerMicrosecond = 2;
 
@@ -24,11 +18,11 @@ describe("UserViaPanel", () => {
     let arrangement;
     let panel;
     let userPortInputs;
+    let frames;
 
     beforeEach(() => {
         domFromIndexHtml("peripherals-panel");
-        vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
-        vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+        frames = fakeAnimationFrames();
         scheduler = new Scheduler();
         userPortInputs = 0xff;
         via = new UserVia({ interrupt: 0 }, scheduler, false, { read: () => userPortInputs, write: () => {} });
@@ -122,8 +116,7 @@ describe("UserViaPanel", () => {
         via.write(T1CL, 0x10);
         via.write(T1CH, 0x27);
         scheduler.polltime(100 * TicksPerMicrosecond);
-        const [frame] = window.requestAnimationFrame.mock.calls.at(-1);
-        frame();
+        frames.run();
         expect(meanings("T1L")).toEqual(["10000 cycles"]);
         expect(meanings("T1C")).toEqual(["9901 cycles"]);
     });

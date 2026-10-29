@@ -7,19 +7,9 @@ import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeAnimationFrames, teardownDom, ViaRegister } from "./helpers.js";
 
-const ORB = 0x0,
-    ORA = 0x1,
-    DDRB = 0x2,
-    DDRA = 0x3,
-    T1CL = 0x4,
-    T1CH = 0x5,
-    T2CL = 0x8,
-    T2CH = 0x9,
-    ACR = 0xb,
-    PCR = 0xc,
-    IER = 0xe;
+const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, T2CL, T2CH, ACR, PCR, IER } = ViaRegister;
 const PortBLatchLines = 0x0f;
 const PortBRtcLines = 0xc0;
 const LatchSet = 0x08;
@@ -53,9 +43,7 @@ describe("SysViaPanel", () => {
 
     beforeEach(() => {
         domFromIndexHtml("peripherals-panel");
-        frames = [];
-        vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
-        vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => frames.splice(0));
+        frames = fakeAnimationFrames();
         scheduler = new Scheduler();
         cpu = { interrupt: 0 };
         arrangement = new PanelArrangement(() => window.localStorage);
@@ -71,7 +59,6 @@ describe("SysViaPanel", () => {
     });
 
     const isOpen = () => !document.getElementById("sysvia-panel").hidden;
-    const nextFrame = () => frames.shift()();
     const setLatch = (bit, level) => via.write(ORB, bit | (level ? LatchSet : 0));
     const registerRow = (name) =>
         [...document.querySelectorAll(".decoded-registers tr")].find(
@@ -102,14 +89,14 @@ describe("SysViaPanel", () => {
             expect(isOpen()).toBe(true);
             expect(hex("IC32")).toBe("00");
             setLatch(LatchCapsLock, true);
-            nextFrame();
+            frames.run();
             expect(hex("IC32")).toBe("00");
             scheduler.polltime(1);
-            nextFrame();
+            frames.run();
             expect(hex("IC32")).toBe("40");
             opener().click();
             expect(isOpen()).toBe(false);
-            expect(frames).toEqual([]);
+            expect(frames.pending).toBe(0);
         });
 
         it("keeps focus where it was, as the keyboard belongs to the machine", () => {

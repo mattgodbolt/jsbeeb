@@ -14,7 +14,7 @@ import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
-import { domFromIndexHtml, sentEvents, stubResizeObserver, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeAnimationFrames, sentEvents, stubResizeObserver, teardownDom } from "./helpers.js";
 
 const PanelElements = [
     "toolbar-panel",
@@ -332,22 +332,11 @@ describe("Debugger", () => {
 
         describe("once a frame", () => {
             let frames;
-            const runFrame = () => {
-                const pending = [...frames.values()];
-                frames.clear();
-                for (const callback of pending) callback();
-            };
             const shownA = () => document.getElementById("cpu6502_a").textContent;
             const shownPc = () => document.getElementById("cpu6502_pc").textContent;
 
             beforeEach(() => {
-                frames = new Map();
-                let handle = 0;
-                vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-                    frames.set(++handle, callback);
-                    return handle;
-                });
-                vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+                frames = fakeAnimationFrames();
                 dbgr.debug(cpu.pc);
             });
 
@@ -356,7 +345,7 @@ describe("Debugger", () => {
                 cpu.writemem(0x0000, 0x77);
                 stoppedLoop.tick(2);
                 const read = vi.spyOn(cpu, "readmem");
-                runFrame();
+                frames.run();
                 expect(shownA()).toBe("41");
                 expect(addrOf(document.querySelector("#disassembly .current"))).toBe("2002");
                 expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe("77");
@@ -367,8 +356,8 @@ describe("Debugger", () => {
                 const operand = () => disRows()[8].querySelector(".disassembly").firstChild;
                 const before = operand();
                 const peek = vi.spyOn(cpu, "peekmem");
-                runFrame();
-                runFrame();
+                frames.run();
+                frames.run();
                 expect(peek).not.toHaveBeenCalled();
                 expect(operand()).toBe(before);
             });
@@ -378,20 +367,20 @@ describe("Debugger", () => {
                 stoppedLoop.go();
                 stoppedLoop.tick(2);
                 stoppedLoop.stop(false);
-                runFrame();
+                frames.run();
                 expect(shownPc()).toBe("2002");
                 cpu.restoreState(start);
-                runFrame();
+                frames.run();
                 expect(shownPc()).toBe("2000");
             });
 
             it("read nothing once closed", () => {
                 stoppedLoop.go();
                 dbgr.hidePanels();
-                expect(frames.size).toBe(0);
+                expect(frames.pending).toBe(0);
                 const peek = vi.spyOn(cpu, "peekmem");
                 stoppedLoop.tick(2);
-                runFrame();
+                frames.run();
                 expect(peek).not.toHaveBeenCalled();
             });
         });
@@ -923,20 +912,9 @@ describe("Debugger", () => {
 
     describe("the watch panel", () => {
         let frames;
-        const runFrame = () => {
-            const pending = [...frames.values()];
-            frames.clear();
-            for (const callback of pending) callback();
-        };
 
         beforeEach(() => {
-            frames = new Map();
-            let handle = 0;
-            vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-                frames.set(++handle, callback);
-                return handle;
-            });
-            vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+            frames = fakeAnimationFrames();
             cpu.writemem(0x70, 0x05);
             cpu.writemem(0x71, 0x01);
         });
@@ -980,19 +958,19 @@ describe("Debugger", () => {
             cpu.writemem(0x70, 0x06);
             stoppedLoop.tick(2);
             read.mockClear();
-            runFrame();
-            runFrame();
+            frames.run();
+            frames.run();
             expect(watchRows()[0][1]).toBe("6");
             expect(peek).toHaveBeenCalledTimes(1);
-            expect(frames.size).toBe(1);
+            expect(frames.pending).toBe(1);
             openFromMenu();
             expect(panelOpen()).toBe(false);
-            expect(frames.size).toBe(0);
+            expect(frames.pending).toBe(0);
             peek.mockClear();
             cpu.writemem(0x70, 0x07);
             stoppedLoop.tick(2);
             read.mockClear();
-            runFrame();
+            frames.run();
             expect(peek).not.toHaveBeenCalled();
             expect(read).not.toHaveBeenCalled();
             expect(watchRows()[0][1]).toBe("6");

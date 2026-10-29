@@ -3,21 +3,9 @@ import { SysVia, UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { ViaRegister } from "./helpers.js";
 
-const ORB = 0x0,
-    ORA = 0x1,
-    DDRB = 0x2,
-    DDRA = 0x3,
-    T1CL = 0x4,
-    T1CH = 0x5,
-    T2CL = 0x8,
-    T2CH = 0x9,
-    SR = 0xa,
-    ACR = 0xb,
-    PCR = 0xc,
-    IFR = 0xd,
-    IER = 0xe,
-    ORAnh = 0xf;
+const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, T2CL, T2CH, SR, ACR, PCR, IFR, IER, ORAnh } = ViaRegister;
 const AcrT1Continuous = 0x40;
 const AcrShiftOutFreeRunningT2 = 0x10;
 const AcrT2CountsPb6 = 0x20;

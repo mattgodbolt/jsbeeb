@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { SoundChip, AtomSoundChip, InstrumentedSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { goertzelAmplitude } from "./helpers.js";
 
 const WhiteNoiseFastestRate = 0xe4;
 const PeriodicNoiseFastestRate = 0xe0;
@@ -56,20 +57,6 @@ describe("SoundChip advance", () => {
         expect(() => chip.advance(1024)).toThrow("Sound buffer accounting error");
     });
 });
-
-// Amplitude of the frequency-bin component at freq, via the Goertzel algorithm.
-function goertzelAmplitude(samples, freq, sampleRate) {
-    const w = (2 * Math.PI * freq) / sampleRate;
-    const coeff = 2 * Math.cos(w);
-    let s1 = 0;
-    let s2 = 0;
-    for (const sample of samples) {
-        const s0 = sample + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-    }
-    return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
-}
 
 describe("SoundChip DC restoration", () => {
     // 500 kHz chip rate; the blocker's 47 ms time constant settles well inside half a second.
