@@ -91,13 +91,13 @@ describe("Key tables", () => {
 
     it("makes a panel's line of keys from its labelled rows", () => {
         expect(keyLine(DisassemblyKeys)).toBe("c run to cursor · t breakpoint · j/k move · b back");
-        expect(keyLine(MemoryKeys)).toBe("u/i/U/I ±8, ±64");
+        expect(keyLine(MemoryKeys)).toBe("u/i/U/I ±1, ±8 rows");
     });
 
     it("makes Help's rows, a key cap for each key", () => {
         const rows = helpRows([MemoryKeys]);
         expect(rows.map((row) => row.textContent)).toEqual([
-            "u i U IMemory forward (u, U) or back (i, I), 8 or 64 bytes",
+            "u i U IMemory forward (u, U) or back (i, I), one row or eight",
         ]);
         expect([...rows[0].querySelectorAll(".key")].map((cap) => cap.textContent)).toEqual(["u", "i", "U", "I"]);
     });

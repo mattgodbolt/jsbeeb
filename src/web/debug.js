@@ -9,12 +9,21 @@ import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
-import { bindGotoForm, cloneTemplate, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
+import {
+    bindGotoForm,
+    cloneTemplate,
+    externalLink,
+    FittedRows,
+    labelHtml,
+    powerOfTwoColumnsThatFit,
+} from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 
 const noop = () => {};
 
 const InitialMemoryRows = 16;
+const FewestBytesPerRow = 8;
+const MemoryPageRows = 8;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
 const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
@@ -55,7 +64,7 @@ class MemoryView {
      * @param {(address: number) => number} peekMem
      * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
-     * @param {() => void} redraw - redraws it, once its rows have changed in number
+     * @param {() => void} redraw - redraws it, once its rows have changed in number or width
      */
     constructor(widget, peekMem, naming, showing, redraw) {
         this._widget = widget;
@@ -65,29 +74,65 @@ class MemoryView {
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
         this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
+        this._setBytesPerRow(FewestBytesPerRow);
+
+        new ResizeObserver(([entry]) => {
+            const row = this._rows.rows[0];
+            const [address, bytes, text] = [".dis_addr", ".mem_bytes", ".mem_asc"].map((selector) =>
+                row.querySelector(selector).getBoundingClientRect(),
+            );
+            const bytesWidth = bytes.width + text.width;
+            // Zero while the panel is hidden.
+            if (bytesWidth === 0) return;
+            const perRow = powerOfTwoColumnsThatFit(
+                entry.contentRect.width,
+                text.right - address.left - bytesWidth,
+                bytesWidth / this._bytesPerRow,
+                FewestBytesPerRow,
+            );
+            if (perRow === this._bytesPerRow) return;
+            this._setBytesPerRow(perRow);
+            redraw();
+        }).observe(widget);
 
         widget.addEventListener("wheel", (evt) => {
             const deltaY = evt.deltaY;
             if (deltaY === 0) return;
-            const steps = (deltaY / 20) | 0;
-            this.update(this._addr + 8 * steps);
+            this.step((deltaY / 20) | 0);
             evt.preventDefault();
         });
     }
 
+    _setBytesPerRow(bytes) {
+        this._bytesPerRow = bytes;
+        this._widget.style.setProperty("--bytes", `${bytes}`);
+    }
+
+    /** Gives `row` a span per byte in each column, unless it has them for the current width. */
+    _shapeRow(row) {
+        const [hex, text] = [row.querySelector(".mem_bytes"), row.querySelector(".mem_asc")];
+        if (hex.childElementCount === this._bytesPerRow) return;
+        const spans = () => Array.from({ length: this._bytesPerRow }, () => document.createElement("span"));
+        hex.replaceChildren(...spans().flatMap((span, i) => (i ? [" ", span] : [span])));
+        text.replaceChildren(...spans());
+    }
+
     update(maybeNewAddr) {
-        if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
-        let addr = this._addr - 8 * this._rows.anchor;
+        if (maybeNewAddr !== undefined) this._addr = maybeNewAddr & 0xffff;
+        const perRow = this._bytesPerRow;
+        const targetRow = this._addr & -perRow;
+        let addr = targetRow - perRow * this._rows.anchor;
         if (addr < 0) addr = 0;
         const { names, pc } = this._naming();
         const shown = new Set();
         for (const row of this._rows.rows) {
+            this._shapeRow(row);
             row.querySelector(".dis_addr").innerHTML = labelHtml(addr);
-            row.classList.toggle("highlight", addr === this._addr);
-            const dump = this.dump(addr, addr + 8);
+            row.classList.toggle("highlight", addr === targetRow);
+            const dump = this.dump(addr, addr + perRow);
             const bytes = row.querySelectorAll(".mem_bytes span");
             const ascii = row.querySelectorAll(".mem_asc span");
-            for (let i = 0; i < 8; ++i) {
+            for (let i = 0; i < perRow; ++i) {
                 const address = (addr + i) & 0xffff;
                 const inRegion = names.regionAt(address);
                 const named = names.address(address, pc);
@@ -98,12 +143,13 @@ class MemoryView {
                 for (const span of [bytes[i], ascii[i]]) {
                     span.dataset.addr = address;
                     span.classList.toggle("changed", dump.changed[i]);
+                    span.classList.toggle("target", address === this._addr);
                     span.classList.toggle("region", !!inRegion);
                     span.classList.toggle("region-start", inRegion?.region.start === address);
                     span.title = inRegion || named ? memoryTitle(address, named, inRegion) : "";
                 }
             }
-            addr = (addr + 8) & 0xffff;
+            addr = (addr + perRow) & 0xffff;
         }
         this._showing(shown);
     }
@@ -132,8 +178,9 @@ class MemoryView {
         }
     }
 
-    step(delta) {
-        this.update(this._addr + delta);
+    /** Moves it on by `rows` of its current width, back for a negative number. */
+    step(rows) {
+        this.update(this._addr + rows * this._bytesPerRow);
     }
 }
 
@@ -164,7 +211,11 @@ export const ToolbarKeys = [
 ];
 
 export const MemoryKeys = [
-    { combo: "u i U I", label: "±8, ±64", description: "Memory forward (u, U) or back (i, I), 8 or 64 bytes" },
+    {
+        combo: "u i U I",
+        label: "±1, ±8 rows",
+        description: "Memory forward (u, U) or back (i, I), one row or eight",
+    },
     { key: "u", run: "forward" },
     { key: "i", run: "back" },
     { key: "U", run: "pageForward" },
@@ -433,10 +484,10 @@ export class Debugger {
         keys.register({
             table: MemoryKeys,
             actions: {
-                forward: () => this._memoryView.step(8),
-                back: () => this._memoryView.step(-8),
-                pageForward: () => this._memoryView.step(64),
-                pageBack: () => this._memoryView.step(-64),
+                forward: () => this._memoryView.step(1),
+                back: () => this._memoryView.step(-1),
+                pageForward: () => this._memoryView.step(MemoryPageRows),
+                pageBack: () => this._memoryView.step(-MemoryPageRows),
             },
             isLive: () => memory.isOpen,
             panel: memory,

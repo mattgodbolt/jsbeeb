@@ -125,6 +125,11 @@ body {
   height: var(--row-height);
 }
 
+/* Its width is the panel's, or an eight-byte row's, and never its rows', which debug.js fits to it. */
+#memory {
+  min-width: 38ch;
+}
+
 #memory > div > span {
   vertical-align: top;
 }
@@ -626,17 +631,24 @@ div.modal-body > div:not(:first-child) {
 
 .mem_bytes {
   display: inline-block;
-  width: 25ch;
+  width: calc(var(--bytes) * 3ch);
   color: #80d0d0;
 }
 
 .mem_asc {
   display: inline-block;
-  width: 8ch;
+  width: calc(var(--bytes) * 1ch);
+  margin-left: 1ch;
   color: #60f060;
 }
 
+#memory .target {
+  outline: 1px solid #aaaaaa;
+}
+
 #memory > div {
+  width: 0;
+  min-width: 100%;
   white-space: nowrap;
 }
 
