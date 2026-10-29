@@ -5,6 +5,9 @@ import { StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 200, h: 80 };
 const RowCells = 5;
+// As the CPU's memStat marks a page: a write to ROM changes nothing, and one to neither reaches a device.
+const RamStat = 1;
+const RomStat = 2;
 const DeviceNote = "A device register stops it on every write to it, never on a change the device makes itself.";
 
 /**
@@ -125,7 +128,9 @@ export class WatchPanel {
         if (breaking && !this._writeHook && this._cpu) {
             const cpu = this._cpu;
             this._writeHook = cpu.debugWrite.add((address, byte) => {
-                const toRam = cpu.memStat[cpu.memStatOffset + (address >>> 8)] === 1;
+                const stat = cpu.memStat[cpu.memStatOffset + (address >>> 8)];
+                if (stat === RomStat) return false;
+                const toRam = stat === RamStat;
                 const fired = this._watches.find(
                     (watch) => watch.breaks && writeStops(this._peek, watch, address, byte, toRam),
                 );
@@ -228,7 +233,6 @@ export class WatchPanel {
             conditionBox.classList.toggle("is-invalid", condition === undefined);
             if (!condition) return;
             arm(true, condition);
-            conditionBox.blur();
         });
         breakCell.append(off, onChange, conditionForm);
         cell("", "").append(breaker);
@@ -267,6 +271,7 @@ export class WatchPanel {
     _showPopup(open) {
         const was = this._openPopup;
         if (was && was.popup !== open?.popup) {
+            if (was.popup.contains(document.activeElement)) document.activeElement.blur();
             was.popup.hidden = true;
             was.opener?.setAttribute("aria-expanded", "false");
         }

@@ -52,6 +52,7 @@ describe("watches", () => {
         ["a write making the condition hold", "hex16", "= $1200", 0x70, 0x00, true, true],
         ["a write leaving the condition false", "hex16", "= $1200", 0x70, 0x01, true, false],
         ["a device write of the same byte", "hex", null, 0x70, 0x34, false, true],
+        ["a device write failing the condition", "hex", "= $05", 0x70, 0x06, false, false],
         ["a device write tested against the byte written", "hex16", "= $00", 0x71, 0x00, false, true],
     ])("decides whether %s stops a %s watch", (_, name, text, at, byte, toRam, stops) => {
         const watch = { address: 0x70, format: format(name), condition: text && parseCondition(text) };

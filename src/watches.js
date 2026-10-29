@@ -68,7 +68,7 @@ export function parseCondition(text) {
 
 /**
  * Whether the CPU writing `byte` to `address` stops a break on `watch`: a write that changes its value, to one its
- * condition holds for if it has one. A write to a byte that is not RAM stops it whatever it changes, testing the
+ * condition holds for if it has one. A write to a device stops it whatever it changes, testing the
  * condition against the byte written, as a device register reads back the device's state rather than the write.
  * @param {(address: number) => number} peek
  * @param {{address: number, format: WatchFormat, condition: WatchCondition | null}} watch

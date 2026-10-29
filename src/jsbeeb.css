@@ -925,17 +925,13 @@ small {
   margin-left: 4px;
 }
 
-.watch-condition {
-  font-family: inherit;
-}
-
-#watch-panel .watch-break {
+#watch-panel .txt-btn.watch-break {
   font-family: inherit;
   white-space: nowrap;
   color: #777777;
 }
 
-#watch-panel .watch-break.armed {
+#watch-panel .txt-btn.watch-break.armed {
   color: #ff6060;
 }
 

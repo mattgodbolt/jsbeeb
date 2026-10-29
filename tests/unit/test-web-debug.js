@@ -27,6 +27,7 @@ const PanelElements = [
 ];
 
 const MachineSecond = 2000000;
+const WatchRowSelector = "#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)";
 
 /** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
 class StandInLoop extends EventTarget {
@@ -128,14 +129,12 @@ describe("Debugger", () => {
         document.getElementById("watch-add-form").dispatchEvent(new Event("submit", { cancelable: true }));
     };
     const watchRows = () =>
-        [...document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)")].map(
-            (row) =>
-                [...row.querySelectorAll("td")].map(
-                    (td) => td.querySelector(".watch-format")?.textContent ?? td.textContent,
-                ),
+        [...document.querySelectorAll(WatchRowSelector)].map((row) =>
+            [...row.querySelectorAll("td")].map(
+                (td) => td.querySelector(".watch-format")?.textContent ?? td.textContent,
+            ),
         );
-    const watchRow = (index) =>
-        document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)")[index];
+    const watchRow = (index) => document.querySelectorAll(WatchRowSelector)[index];
     const watchControl = (index, className) => watchRow(index).querySelector(`.${className}`);
     const watchChoices = (index) => watchRow(index).nextElementSibling;
     const watchMenu = () => document.getElementById("watch-menu");
@@ -1137,6 +1136,36 @@ describe("Debugger", () => {
                 expect(watchRows()[0][3]).toBe("brk>=$10");
                 run();
                 expect(cpu.pc).toBe(0x200c);
+            });
+
+            it("gives the keyboard back when its choices close with the condition box still focused", () => {
+                openFromMenu();
+                addWatch("$70");
+                watchControl(0, "watch-break").click();
+                const box = breakChoices(0).querySelector("input");
+                box.focus();
+                expect(document.activeElement).toBe(box);
+                [...breakChoices(0).querySelectorAll("button")]
+                    .find((choice) => choice.textContent === "on change")
+                    .click();
+                expect(breakChoices(0).hidden).toBe(true);
+                expect(document.activeElement).not.toBe(box);
+            });
+
+            it("moves its watching to a new CPU, leaving the old one on its fast path", async () => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                const oldCpu = cpu;
+                cpu = fake6502(null, { video });
+                await cpu.initialise();
+                program.concat([0x4e, 0xfe, 0x4c, 0x11, 0x20]).forEach((byte, i) => cpu.writemem(0x2000 + i, byte));
+                cpu.writemem(0x70, 0x05);
+                cpu.pc = 0x2000;
+                dbgr.setCpu(cpu);
+                stoppedLoop.cpu = cpu;
+                expect(oldCpu.onFastPath).toBe(true);
+                run();
+                expect(cpu.pc).toBe(0x2008);
             });
 
             it("stops on every write to a device register, testing the byte written", () => {
