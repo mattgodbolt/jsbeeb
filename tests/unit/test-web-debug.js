@@ -441,7 +441,9 @@ describe("Debugger", () => {
                     expect(loopLine().textContent).toBe(
                         "In a loop at $3000-$3005 polling SysVIA.IFR ($fe4d) open System VIA",
                     );
-                    loopLine().querySelector("button").click();
+                    const opener = loopLine().querySelector("button");
+                    opener.click();
+                    opener.click();
                     expect(visible("sysvia-panel")).toBe(true);
                 });
 
@@ -456,16 +458,25 @@ describe("Debugger", () => {
                         [0xa5, 0xa2, 0x10, 0x04, 0xa5, 0xff, 0x10, 0xf8],
                         "$3000-$3006 polling $00a2 and $00ff",
                     ],
+                    [
+                        "a device with no panel",
+                        [0x2c, 0x80, 0xfe, 0x30, 0xfb],
+                        "$3000-$3003 polling FDC.STATUS ($fe80)",
+                    ],
                     ["a loop of one instruction that reads nothing", [0x4c, 0x00, 0x30], "$3000 that reads nothing"],
                 ])("names %s", (_, code, text) => {
                     stopIn(code);
                     expect(loopLine().textContent).toBe(`In a loop at ${text}`);
                 });
 
-                it("says nothing once the machine runs on, or stopped outside a loop", () => {
+                it("says nothing once the machine runs on", () => {
                     stopIn(SysViaFlagWait);
                     stoppedLoop.go();
                     expect(loopLine().hidden).toBe(true);
+                });
+
+                it("says nothing stopped outside a loop", () => {
+                    stopIn(SysViaFlagWait);
                     cpu.pc = 0x2000;
                     dbgr.debug(cpu.pc);
                     expect(loopLine().hidden).toBe(true);

@@ -1,5 +1,5 @@
 import { hexword } from "../hex.js";
-import { machineSheilaBlocks, sheilaRegister } from "../sheila.js";
+import { machineSheilaBlocks, sheilaName, sheilaRegister } from "../sheila.js";
 import { tightLoopAt } from "../tight-loop.js";
 import { DebugGroup } from "./floating-panel.js";
 
@@ -63,10 +63,9 @@ export class TightLoopNote {
         const node = document.createElement("span");
         node.className = "polled";
         const found = sheilaRegister(this._sheila, address, "read");
-        node.textContent = found
-            ? `${found.block.device}.${found.name} ($${hexword(address)})`
-            : `$${hexword(address)}`;
-        if (found) node.title = `${found.block.title} ${found.name}`;
+        const named = sheilaName(this._sheila, address, ["read"]);
+        node.textContent = named ? `${named.name} ($${hexword(address)})` : `$${hexword(address)}`;
+        if (named) node.title = named.title;
         const id = found && DevicePanels[found.block.device];
         const panel = id && this._arrangement.panelsIn(DebugGroup).find((floating) => floating.id === id);
         return { node, panel, block: found?.block };

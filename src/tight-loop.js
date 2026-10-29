@@ -14,14 +14,13 @@ const Quiet = new Set(["TAX", "TAY", "TXA", "TYA", "TSX", "CLC", "SEC", "CLI", "
 /**
  * The instruction at `address`, as far as a tight loop cares: where it goes next, where it may branch, and what it
  * reads. Undefined for one no tight loop runs: a write, a call, a return, an indexed or indirect read, an unknown
- * opcode, or anything that changes a register other than by loading it.
+ * opcode, or anything that changes a register other than by loading it, moving another into it or masking A.
  */
 function waitingInstruction(disassembler, address) {
     const peek = (at) => disassembler.cpu.peekmem(at & 0xffff);
     const [mnemonic, mode] = (disassembler.opcodes[peek(address)] ?? "").split(" ");
-    const [, end, operand] = disassembler.disassemble(address, true);
-    if (end > 0xffff) return undefined;
-    const next = end;
+    const [, next, operand] = disassembler.disassemble(address, true);
+    if (next > 0xffff) return undefined;
     const step = (target, reads, unconditional) => ({ next, target, reads, unconditional });
     if (mode === "branch") return step(operand, [], mnemonic === "BRA");
     if (mnemonic === "JMP" && mode === "abs") return step(operand, [], true);
@@ -35,7 +34,7 @@ function waitingInstruction(disassembler, address) {
 
 /**
  * The tight loop the instruction at `pc` is part of, if it is in one: a short run of instructions closed by a branch
- * back that writes nothing, calls nothing and only loads its registers, so that it waits for what it reads to be
+ * back that writes nothing, calls nothing and only loads, moves or masks its registers, so that it waits for what it reads to be
  * changed by a device or an interrupt. Found from the code alone, without running it.
  * @param {{cpu: {peekmem: (address: number) => number}, opcodes: Object<number, string>,
  * disassemble: (address: number, plain: boolean) => any[]}} disassembler the CPU's
