@@ -288,7 +288,7 @@ export class EmulationLoop extends EventTarget {
         // now can be a vsync timestamp, before this ran; the timings use start.
         const start = performance.now();
         const { processor, display, audioHandler } = this;
-        if (!this.lockstep) this.gamepad.update(processor.sysvia);
+        if (!this.lockstep) this.gamepad.update(processor.keyboardInterface);
         this.dispatchEvent(new Event("tick"));
         if (this.emulatedTo !== 0) {
             let cycles;

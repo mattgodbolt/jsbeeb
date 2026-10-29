@@ -345,7 +345,7 @@ export const Parameters = {
         names: ["LEFT", "RIGHT", "UP", "DOWN", "FIRE"],
         type: ParamTypes.STRING,
         localToPage: true,
-        apply: (control, bbcKey, { gamepad }) => gamepad.remap(control, bbcKey),
+        apply: (control, machineKey, { gamepad }) => gamepad.remap(control, machineKey),
     },
     romBank: {
         prefix: "ROM.",
