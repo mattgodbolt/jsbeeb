@@ -259,12 +259,14 @@ const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
 const PeripheralsWindowWidth = 1600;
 const MinPanelWidth = 220;
+/** In px, the disassembly's own width: enough for a line with a named operand. */
+const DisassemblyWidth = 400;
 /**
  * In px, the narrowest each side's gutter can be for its panels to go in it by default: the left's for memory's
  * rows, the right's for a disassembly line with a named operand. Narrower, they go at their own widths, against
  * the window's edge.
  */
-const ColumnWidthNeeded = { left: 280, right: 400 };
+const ColumnWidthNeeded = { left: 280, right: DisassemblyWidth };
 const StackBytesShown = 8;
 const RunningNameMatchMs = 1000;
 const MinSizes = {
@@ -445,6 +447,8 @@ export class Debugger {
     _makePanel(id) {
         const panel = document.getElementById(id === "toolbar" ? "debug-toolbar" : `${id}-panel`);
         const { side, ...place } = DefaultPlaces[id];
+        // A custom property, which laying the panel out leaves alone, unlike its width.
+        if (id === "disassembly") panel.style.setProperty("--natural-width", `${DisassemblyWidth}px`);
         const floating = new FloatingPanel({
             panel,
             header: panel.querySelector(".debug-panel-header"),

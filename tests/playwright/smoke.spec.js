@@ -177,7 +177,7 @@ test("Alt-S opens the debugger's panels beside the screen, g leaves them open an
     const current = page.locator("#disassembly .current");
     expect(await current.evaluate((row) => row.scrollWidth <= row.clientWidth)).toBe(true);
     const peripherals = page.locator("#peripherals-panel .panel-body");
-    expect(await peripherals.evaluate((body) => (body.scrollTop = body.scrollHeight))).toBeGreaterThan(0);
+    await peripherals.evaluate((body) => body.scrollTo(0, body.scrollHeight));
     await expect(page.locator("#crtc .crtc_regs tr:not(.template)").last()).toBeInViewport();
 
     const cycles = page.locator("#cpu6502_cycles");

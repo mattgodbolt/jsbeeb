@@ -1338,6 +1338,7 @@ describe("Debugger", () => {
             expect(credited()).toBe(true);
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
+            expect(symbolsLine().title).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
         });
 

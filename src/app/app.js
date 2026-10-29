@@ -141,18 +141,16 @@ function debugMenu(panels) {
     return {
         label: "Debug",
         submenu: [
-            // Not registered off a Mac, so the keys reach the page, which answers them; on a Mac the menu takes them
-            // and does the same.
+            // Shown, not registered, so the keys reach the page, which answers them. A Mac would register them anyway,
+            // taking Option-S and Option-D from the page's text fields, so there they are not shown.
             {
                 label: "Enter or Leave the Debugger",
-                accelerator: "Alt+S",
-                registerAccelerator: false,
+                ...(!isMac && { accelerator: "Alt+S", registerAccelerator: false }),
                 click: sendAction("toggle-debugger"),
             },
             {
                 label: "Show or Hide the Debug Panels",
-                accelerator: "Alt+D",
-                registerAccelerator: false,
+                ...(!isMac && { accelerator: "Alt+D", registerAccelerator: false }),
                 click: sendAction("toggle-debug-panels"),
             },
             { type: "separator" },
@@ -270,7 +268,8 @@ const template = (panels) => [
             },
             { type: "separator" },
             {
-                // No accelerator: Alt-S reaches the page, where it toggles rather than only stopping.
+                // No accelerator: Alt-S reaches the page, where it toggles rather than only stopping. Unlike Debug's
+                // item, these two only stop or only resume, and leave the debug panels as they are.
                 label: "Pause and Show Debugger",
                 click: sendAction("pause"),
             },

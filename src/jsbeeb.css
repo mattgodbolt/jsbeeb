@@ -103,9 +103,9 @@ body {
   margin-left: auto;
 }
 
-/* A width of its own, not its rows', so that it keeps it as the names in view come and go. */
+/* A width of its own (set in debug.js), not its rows', so that it keeps it as the names in view come and go. */
 #disassembly-panel {
-  width: 400px;
+  width: var(--natural-width);
 }
 
 .goto-form {
@@ -125,14 +125,14 @@ body {
   color: #aaaaaa;
 }
 
-/* Wraps to the panel's width instead of setting it. */
+/* Fitted to the panel's width instead of setting it. */
 .debug-symbols,
 .panel-keys {
   width: 0;
   min-width: 100%;
 }
 
-/* One line however many sets it credits, so that the panels below a disassembly keep their place as it changes. */
+/* One line however many sets it credits, so that the panels attached below keep their place as it changes. */
 .debug-symbols {
   white-space: nowrap;
   overflow: hidden;
