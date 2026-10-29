@@ -189,14 +189,14 @@ same for that row.
 | ---------------- | --------------------------------------------------------------------- |
 | `Alt-S`          | Enter the debugger, or leave it and resume                            |
 | `Alt-D`          | Show or hide the debug panels, leaving the machine running or stopped |
-| `Alt-P`          | Pause emulation, or resume                                            |
-| `Alt-T`          | Toggle turbo (fast-as-possible)                                       |
-| `Alt-B`          | Open printer output window                                            |
-| `Alt-W`          | Open rewind scrubber                                                  |
+| `Alt-P`          | Pause or resume, without the debugger                                 |
+| `Alt-T`          | Turbo (as fast as possible), or back to real speed                    |
+| `Alt-B`          | Open the printer output                                               |
+| `Alt-W`          | Rewind: pick an earlier moment to go back to                          |
 | `Alt-M`          | Media window, aimed at drive 0                                        |
 | `Alt-Shift-M`    | Media window, aimed at drive 1                                        |
 | `Alt-C`          | Media window, aimed at the cassette                                   |
-| `Alt-1 to Alt-8` | Hold an accessibility switch down                                     |
+| `Alt-1 to Alt-8` | Hold accessibility switch 1 to 8 down (user port PB0 to PB7)          |
 
 Every shortcut is on `Alt`, so that `Ctrl` belongs to the emulated machine: `Ctrl-B` is `VDU 2` on a BBC, `Ctrl-L`
 clears the screen, and jsbeeb should not be taking any of them.

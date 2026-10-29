@@ -6,11 +6,11 @@ import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
-import { helpRows, keyLine } from "./panel-keys.js";
+import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import { NumRomBanks } from "../6502.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
-import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { DisassemblyView } from "./disassembly-view.js";
 import { toast } from "./toast.js";
 import { Dropdown } from "bootstrap";
 
@@ -221,9 +221,6 @@ export const MemoryKeys = [
     { key: "U", run: "pageForward" },
     { key: "I", run: "pageBack" },
 ];
-
-/** Help's rows for every key the debugger's panels answer. */
-export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys]);
 
 const RememberedPanelsKey = "debugPanels";
 const MinPanelWidth = 220;
