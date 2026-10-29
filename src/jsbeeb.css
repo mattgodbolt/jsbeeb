@@ -1133,7 +1133,7 @@ small {
 
 .basic-residents {
   display: grid;
-  grid-template-columns: repeat(3, 3ch 12ch);
+  grid-template-columns: repeat(3, 3ch minmax(11ch, 1fr));
   column-gap: 1ch;
   margin-bottom: 6px;
 }

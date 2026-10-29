@@ -32,6 +32,9 @@ const LastPrintable = 0x7e;
 const EndOfProgram = 0x80;
 const LineHeaderBytes = 4;
 const IntegerBytes = 4;
+const RealBytes = 5;
+const StringBytes = 4;
+const ArrayElementsShown = 16;
 const ExponentBias = 128;
 const MantissaSign = 0x80;
 const SignificantDigits = 9;
@@ -136,12 +139,21 @@ function stringValue(peek, address) {
     return `"${printable(peek, word(peek, address), peek(address + 3))}"`;
 }
 
-/** An array's name with its bounds, as DIM gave them: the stored sizes are each one more. */
-function arrayName(peek, name, address) {
-    const dimensions = (peek(address) - 1) / 2;
-    const bounds = [];
-    for (let i = 0; i < dimensions; ++i) bounds.push(word(peek, address + 1 + 2 * i) - 1);
-    return `${name}${bounds.join(",")})`;
+/**
+ * An array: its name with its bounds, as DIM gave them (each stored size is one more), and its first elements in the
+ * order BASIC keeps them, after the byte giving the size of the bounds and the bounds themselves.
+ */
+function array(peek, name, address) {
+    const headerBytes = peek(address);
+    const sizes = [];
+    for (let at = address + 1; at < address + headerBytes; at += 2) sizes.push(word(peek, at));
+    const count = sizes.reduce((product, size) => product * size, 1);
+    const element = scalarReader(name.slice(0, -1));
+    const shown = [];
+    for (let i = 0; i < Math.min(count, ArrayElementsShown); ++i)
+        shown.push(element.read(peek, address + headerBytes + i * element.bytes));
+    if (count > ArrayElementsShown) shown.push("...");
+    return { name: `${name}${sizes.map((size) => size - 1).join(",")})`, value: shown.join(", ") };
 }
 
 /**
@@ -164,11 +176,16 @@ function* chain(peek, head, heap) {
     }
 }
 
+/** How a value is read and how many bytes it takes, by the name it is held under. */
+function scalarReader(name) {
+    if (name.endsWith("%")) return { bytes: IntegerBytes, read: (peek, at) => String(int32(peek, at)) };
+    if (name.endsWith("$")) return { bytes: StringBytes, read: stringValue };
+    return { bytes: RealBytes, read: (peek, at) => formatReal(real(peek, at)) };
+}
+
 function variable(peek, name, address) {
-    if (name.endsWith("(")) return { name: arrayName(peek, name, address), value: "" };
-    if (name.endsWith("%")) return { name, value: String(int32(peek, address)) };
-    if (name.endsWith("$")) return { name, value: stringValue(peek, address) };
-    return { name, value: formatReal(real(peek, address)) };
+    if (name.endsWith("(")) return array(peek, name, address);
+    return { name, value: scalarReader(name).read(peek, address) };
 }
 
 /**

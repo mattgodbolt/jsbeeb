@@ -681,6 +681,19 @@ test("the sound chip panel opens from the Debug menu, names a tone's note, and f
     expect(fits).toBe(true);
 });
 
+test("the BASIC panel opens from the Debug menu at the prompt, its content no wider than the size it opened at", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.togglePanel("basic");
+    const panel = page.locator("#basic-panel");
+    await expect(panel).toContainText("No program line running");
+    await expect(panel).toContainText("Z%");
+    expect(await panel.locator(".panel-body").evaluate((body) => body.scrollWidth <= body.clientWidth)).toBe(true);
+});
+
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({
     beeb,
     page,
