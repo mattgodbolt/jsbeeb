@@ -57,6 +57,24 @@ const fadeOf = (source) => source.connect.mock.calls[0][0];
 /** Where in a run recorded at `rate` ms its step `step` begins, less the join's fade. */
 const stepOffset = (rate, step) => RunLead + (step * rate) / 1000 - JoinFade;
 
+const Start = 5;
+
+const untouched = (source) => expect(source.stop).not.toHaveBeenCalled();
+
+/** Stopped without the fade, as a source that has not yet been heard. */
+const outright = (source) => {
+    expect(source.stop).toHaveBeenCalledWith();
+    expect(fadeOf(source).gain.cancelScheduledValues).not.toHaveBeenCalled();
+};
+
+/** Faded out to silence by `time` from Start. */
+const fadedBy = (time) => (source) => {
+    const end = Start + time;
+    expect(source.stop).toHaveBeenCalledWith(expect.closeTo(end, 9));
+    expect(fadeOf(source).gain.setValueAtTime).toHaveBeenLastCalledWith(1, expect.closeTo(end - JoinFade, 9));
+    expect(fadeOf(source).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.closeTo(end, 9));
+};
+
 describe("DdNoise seeks", () => {
     let context;
     let ddNoise;
@@ -105,177 +123,152 @@ describe("DdNoise seeks", () => {
         expect(starts(ddNoise)[0].sound).toBe(Sounds[runName(rate, true)]);
     });
 
-    it("plays the last steps of a run through to its settle for a seek it covers", () => {
-        context.currentTime = 5;
-        ddNoise.seekStart(-20, 20);
-        const [run, ...rest] = starts(ddNoise);
-        expect(rest).toEqual([]);
-        expect(run.sound).toBe(Sounds.seek20out);
-        expect(run.when).toBeCloseTo(5, 9);
-        expect(run.offset).toBeCloseTo(stepOffset(20, RunSteps - 20), 9);
-        expect(run.offset + run.duration).toBeCloseTo(Sounds.seek20out.duration, 9);
-    });
-
-    it("opens a seek longer than the run with its opening steps, fills from past them, and ends the run", () => {
-        context.currentTime = 5;
-        ddNoise.seekStart(79, 6);
-        const made = starts(ddNoise);
-        expect(made).toHaveLength(3);
-        made.forEach(({ sound }) => expect(sound).toBe(Sounds.seek06in));
-        const [first, second, last] = made;
-        // 79 steps: the run's opening 35, then 14 from step 5 on, then its last 30 and the settle.
-        expect(first.when).toBeCloseTo(5, 9);
-        expect(first.offset).toBeCloseTo(stepOffset(6, 0), 9);
-        expect(first.duration).toBeCloseTo(35 * 0.006 + JoinFade, 9);
-        expect(second.when).toBeCloseTo(5 + 35 * 0.006, 9);
-        expect(second.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
-        expect(second.duration).toBeCloseTo(14 * 0.006 + JoinFade, 9);
-        expect(last.when).toBeCloseTo(5 + 49 * 0.006, 9);
-        expect(last.offset).toBeCloseTo(stepOffset(6, RunFillFirstStep), 9);
-        expect(last.offset + last.duration).toBeCloseTo(Sounds.seek06in.duration, 9);
-    });
-
-    it("plays a run's opening steps only at the start of a seek just longer than the run", () => {
-        ddNoise.seekStart(36, 12);
-        const [first, last] = starts(ddNoise);
-        expect(starts(ddNoise)).toHaveLength(2);
-        expect(first.offset).toBeCloseTo(stepOffset(12, 0), 9);
-        expect(first.duration).toBeCloseTo(6 * 0.012 + JoinFade, 9);
-        expect(last.offset).toBeCloseTo(stepOffset(12, RunFillFirstStep), 9);
-    });
-
-    it("cross-fades the pieces of a long run, each fading out as the next fades in", () => {
-        ddNoise.seekStart(79, 12);
-        const [first, second] = starts(ddNoise);
-        const firstEnd = first.when + first.duration;
-        expect(second.when).toBeCloseTo(firstEnd - JoinFade, 9);
-    });
-
-    it("fades the run out where the head stopped short, and lets the settle ring from there", () => {
-        context.currentTime = 5;
-        ddNoise.seekStart(30, 24);
-        const [run] = ddNoise.playing;
-        ddNoise.seekEnd(11);
-        const stopAt = 5 + JoinFade + 11 * 0.024;
-        expect(run.stop).toHaveBeenCalledWith(expect.closeTo(stopAt, 9));
-        expect(fadeOf(run).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.closeTo(stopAt, 9));
-        const settle = starts(ddNoise).at(-1);
-        expect(settle.sound).toBe(Sounds.seek24in);
-        expect(settle.when).toBeCloseTo(stopAt - JoinFade, 9);
-        expect(settle.offset).toBeCloseTo(stepOffset(24, RunSteps), 9);
-    });
-
-    it("drops the pieces of a long run that would have sounded after the head stopped", () => {
-        ddNoise.seekStart(79, 12);
-        const [first, second, last] = ddNoise.playing;
-        ddNoise.seekEnd(20);
-        expect(first.stop).toHaveBeenCalledWith(expect.closeTo(JoinFade + 20 * 0.012, 9));
-        expect(second.stop).toHaveBeenCalledWith();
-        expect(last.stop).toHaveBeenCalledWith();
-    });
-
-    it("fades out the piece of a long run the head stopped in, past the first", () => {
-        ddNoise.seekStart(79, 12);
-        const [first, second, last] = ddNoise.playing;
-        ddNoise.seekEnd(40);
-        expect(first.stop).not.toHaveBeenCalled();
-        expect(second.stop).toHaveBeenCalledWith(expect.closeTo(JoinFade + 40 * 0.012, 9));
-        expect(last.stop).toHaveBeenCalledWith();
-    });
-
-    it("fades out every sounding piece of a long run when the stop is reported late", () => {
-        ddNoise.seekStart(79, 12);
-        const [first, second, last] = ddNoise.playing;
-        context.currentTime = 0.5;
-        ddNoise.seekEnd(20);
-        expect(first.stop).toHaveBeenCalledWith(expect.closeTo(0.5 + JoinFade, 9));
-        expect(second.stop).toHaveBeenCalledWith(expect.closeTo(0.5 + JoinFade, 9));
-        expect(fadeOf(second).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
-            0,
-            expect.closeTo(0.5 + JoinFade, 9),
+    // Each piece: the step its cut point lands on, the recorded step it plays from, and how many it
+    // plays (null: the rest, settle and all).
+    it.each([
+        ["a seek the run covers", -20, 20, [[0, RunSteps - 20, null]]],
+        [
+            "a seek just longer than the run",
+            36,
+            12,
+            [
+                [0, 0, 6],
+                [6, RunFillFirstStep, null],
+            ],
+        ],
+        [
+            "a seek filled out once",
+            79,
+            6,
+            [
+                [0, 0, 35],
+                [35, RunFillFirstStep, 14],
+                [49, RunFillFirstStep, null],
+            ],
+        ],
+        [
+            "a seek filled out twice",
+            100,
+            30,
+            [
+                [0, 0, 35],
+                [35, RunFillFirstStep, 30],
+                [65, RunFillFirstStep, 5],
+                [70, RunFillFirstStep, null],
+            ],
+        ],
+    ])("plays %s as cross-fading pieces of the run", (_, steps, rate, pieces) => {
+        context.currentTime = Start;
+        ddNoise.seekStart(steps, rate);
+        const sound = Sounds[runName(rate, steps > 0)];
+        const stepSeconds = rate / 1000;
+        expect(starts(ddNoise)).toEqual(
+            pieces.map(([at, first, take]) => ({
+                sound,
+                when: expect.closeTo(Start + at * stepSeconds, 9),
+                offset: expect.closeTo(stepOffset(rate, first), 9),
+                duration: expect.closeTo(
+                    take === null ? sound.duration - stepOffset(rate, first) : take * stepSeconds + JoinFade,
+                    9,
+                ),
+            })),
         );
-        expect(last.stop).toHaveBeenCalledWith();
     });
 
-    it("fades the run out when the head is reported not to have moved at all", () => {
-        ddNoise.seekStart(5, 24);
-        const [run] = ddNoise.playing;
-        context.currentTime = 0.05;
-        ddNoise.seekEnd(0);
-        expect(run.stop).toHaveBeenCalledWith(expect.closeTo(0.05 + JoinFade, 9));
+    // At 24 ms a step; times are from the start of the seek.
+    const cutAfter = (steps) => JoinFade + steps * 0.024;
+
+    it.each([
+        [
+            "short of a seek the run covers, fading the run out and moving the settle there",
+            30,
+            0,
+            11,
+            [fadedBy(cutAfter(11))],
+            cutAfter(11),
+        ],
+        [
+            "short, told after the audio clock has passed it, fading out from now",
+            30,
+            0.5,
+            11,
+            [fadedBy(0.5 + JoinFade)],
+            0.5 + JoinFade,
+        ],
+        [
+            "short in the first piece of a long seek, dropping the pieces after it",
+            79,
+            0,
+            20,
+            [fadedBy(cutAfter(20)), outright, outright],
+            cutAfter(20),
+        ],
+        [
+            "short in a later piece of a long seek, fading out that piece",
+            79,
+            0,
+            40,
+            [untouched, fadedBy(cutAfter(40)), outright],
+            cutAfter(40),
+        ],
+        [
+            "short of a long seek, told late, fading out every sounding piece",
+            79,
+            1,
+            20,
+            [fadedBy(1 + JoinFade), fadedBy(1 + JoinFade), outright],
+            1 + JoinFade,
+        ],
+        ["without moving, fading the run out", 5, 0.05, 0, [fadedBy(0.05 + JoinFade)], 0.05 + JoinFade],
+        [
+            "without moving while the run still fades in, stopping it outright",
+            5,
+            JoinFade / 2,
+            0,
+            [outright],
+            JoinFade / 2 + JoinFade,
+        ],
+        ["where it was told to, leaving the run alone", 5, 0, 5, [untouched], null],
+        [
+            "short once every step has sounded, leaving the run's own settle ringing",
+            5,
+            cutAfter(5) + 0.01,
+            3,
+            [untouched],
+            null,
+        ],
+    ])("when the head stops %s", (_, steps, after, stopped, expectStops, settleCut) => {
+        context.currentTime = Start;
+        ddNoise.seekStart(steps, 24);
+        const pieces = ddNoise.playing.slice();
+        context.currentTime = Start + after;
+        ddNoise.seekEnd(stopped);
+        expect(pieces).toHaveLength(expectStops.length);
+        pieces.forEach((piece, i) => expectStops[i](piece));
+        const sound = Sounds.seek24in;
+        const settleOffset = stepOffset(24, RunSteps);
+        const settle = {
+            sound,
+            when: expect.closeTo(Start + settleCut - JoinFade, 9),
+            offset: expect.closeTo(settleOffset, 9),
+            duration: expect.closeTo(sound.duration - settleOffset, 9),
+        };
+        expect(ddNoise.playing.slice(0, pieces.length)).toEqual(pieces);
+        expect(starts(ddNoise).slice(pieces.length)).toEqual(settleCut === null ? [] : [settle]);
     });
 
-    it("fades the settle in from now when the stop is reported late", () => {
-        ddNoise.seekStart(30, 24);
-        context.currentTime = 0.5;
-        ddNoise.seekEnd(11);
-        const settle = starts(ddNoise).at(-1);
-        expect(settle.when).toBeCloseTo(0.5, 9);
-        expect(settle.offset).toBeCloseTo(stepOffset(24, RunSteps), 9);
-    });
-
-    it("leaves the run's own settle ringing when told of a stop after every step has sounded", () => {
-        ddNoise.seekStart(5, 24);
-        const [run] = ddNoise.playing;
-        context.currentTime = JoinFade + 5 * 0.024 + 0.01;
-        ddNoise.seekEnd(3);
-        expect(run.stop).not.toHaveBeenCalled();
-        expect(ddNoise.playing).toHaveLength(1);
-    });
-
-    it("fades out from now when the head is reported stopped after the audio clock has passed it", () => {
-        ddNoise.seekStart(30, 24);
-        const [run] = ddNoise.playing;
-        context.currentTime = 0.5;
-        ddNoise.seekEnd(11);
-        expect(run.stop).toHaveBeenCalledWith(expect.closeTo(0.5 + JoinFade, 9));
-        expect(fadeOf(run).gain.setValueAtTime).toHaveBeenLastCalledWith(1, 0.5);
-    });
-
-    it("leaves a run alone when the head stops where it was told to", () => {
-        ddNoise.seekStart(5, 24);
-        const made = ddNoise.playing.slice();
-        ddNoise.seekEnd(5);
-        made.forEach((source) => expect(source.stop).not.toHaveBeenCalled());
-        expect(ddNoise.playing).toHaveLength(made.length);
-    });
-
-    it("fades out for a new movement while steps are still to sound", () => {
-        ddNoise.seekStart(30, 24);
+    it.each([
+        ["fades out a run with steps still to sound", 30, 0.05, fadedBy(0.05 + JoinFade)],
+        ["stops outright a run still fading in", 30, JoinFade / 2, outright],
+        ["lets a run that has reached its settle ring on", 5, cutAfter(5) + 0.005, untouched],
+    ])("on a new movement, %s", (_, steps, after, expectStop) => {
+        context.currentTime = Start;
+        ddNoise.seekStart(steps, 24);
         const [old] = ddNoise.playing;
-        context.currentTime = 0.05;
+        context.currentTime = Start + after;
         ddNoise.seekStart(-1, 24);
-        expect(old.stop).toHaveBeenCalledWith(expect.closeTo(0.05 + JoinFade, 9));
-        expect(fadeOf(old).gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
-            0,
-            expect.closeTo(0.05 + JoinFade, 9),
-        );
+        expectStop(old);
         expect(starts(ddNoise).at(-1).sound).toBe(Sounds.stepOut);
-    });
-
-    it("stops outright a run a new movement interrupts while it is still fading in", () => {
-        ddNoise.seekStart(30, 24);
-        const [old] = ddNoise.playing;
-        context.currentTime = JoinFade / 2;
-        ddNoise.seekStart(-1, 24);
-        expect(old.stop).toHaveBeenCalledWith();
-        expect(fadeOf(old).gain.cancelScheduledValues).not.toHaveBeenCalled();
-    });
-
-    it("stops outright a run that took no steps, told while it is still fading in", () => {
-        ddNoise.seekStart(5, 24);
-        const [run] = ddNoise.playing;
-        context.currentTime = JoinFade / 2;
-        ddNoise.seekEnd(0);
-        expect(run.stop).toHaveBeenCalledWith();
-    });
-
-    it("lets a run that has reached its settle ring on under a new movement", () => {
-        ddNoise.seekStart(5, 24);
-        const [old] = ddNoise.playing;
-        context.currentTime = JoinFade + 5 * 0.024 + 0.005;
-        ddNoise.seekStart(30, 24);
-        expect(old.stop).not.toHaveBeenCalled();
     });
 
     it("drops a moved settle if a new movement comes before it sounds", () => {
