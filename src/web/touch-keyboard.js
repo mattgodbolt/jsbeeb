@@ -25,7 +25,7 @@ const SvgNs = "http://www.w3.org/2000/svg";
 /**
  * Legends Open Gorton cannot set, drawn as the BBC's keycaps print them. The cursor keys' arrow points left, with a
  * solid head over half its length. The function keys' f is a plain f leaning 10 degrees, standing on the
- * baseline, its path in units of a capital's height over 700.
+ * baseline; its path is 700 units tall, which the CSS sets 0.85em high.
  */
 const Glyphs = {
     arrow: { viewBox: "0 0 20 10", path: "M0 5 L11 0 V4.1 H20 V5.9 H11 V10 Z" },

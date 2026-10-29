@@ -120,7 +120,7 @@ body.touch-keyboard-open #leds {
 #touch-keyboard .tk-digit {
   font-size: 0.66em;
   margin-left: 0.04em;
-  -webkit-text-stroke: 0.04em currentColor;
+  -webkit-text-stroke: 0.06em currentColor;
 }
 
 #touch-keyboard .tk-key.vertical {
