@@ -144,7 +144,9 @@ describe("Disassemble6502", () => {
             ["*SLO zp", fake6502, 0x07, "a", "anzc", false],
             ["*LAX (zp,X), whose load moves its own pointer", fake6502, 0xa3, "ax", "axnz", false],
             ["TSB zp", fake65C02, 0x04, "a", "z", false],
-            ["BRK, which clears D only on CMOS", fake65C02, 0x00, "snvdizc", "sdi", false],
+            ["CMOS BRK", fake65C02, 0x00, "snvdizc", "sdi", false],
+            ["NMOS BRK, which leaves D alone", fake6502, 0x00, "snvdizc", "si", false],
+            ["*ANC #, which writes N before copying it to C", fake6502, 0x0b, "a", "anzc", true],
             ["an unknown opcode", fake6502, 0x02, "", "", false],
         ])("measures what %s reads and writes, and whether it settles", (_, cpu, opcode, reads, writes, idempotent) => {
             expect(cpu().disassembler.effects(opcode)).toEqual({
@@ -152,6 +154,17 @@ describe("Disassemble6502", () => {
                 writes: [...writes],
                 idempotent,
             });
+        });
+
+        it("measures without touching the machine it measures", () => {
+            const cpu = fake6502();
+            const machine = () => ({
+                registers: [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte()],
+                memory: Array.from({ length: 0x10000 }, (_, address) => cpu.peekmem(address)),
+            });
+            const before = machine();
+            for (let opcode = 0; opcode < 256; opcode++) cpu.disassembler.effects(opcode);
+            expect(machine()).toEqual(before);
         });
     });
 

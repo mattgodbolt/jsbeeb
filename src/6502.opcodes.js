@@ -1020,9 +1020,9 @@ const Registers = ["a", "x", "y", "s"];
 const FlagBits = { n: 0x80, v: 0x40, d: 0x08, i: 0x04, z: 0x02, c: 0x01 };
 const Flags = Object.keys(FlagBits);
 const ProbePc = 0x2000;
-// Whether an instruction settles can hang on the values it meets (TSB settles at once only if A's bits were already
-// set), so it runs from states unlike in every register, flag and memory byte, one of them with memory clear but
-// for its operands.
+// Whether an instruction settles can hang on the values it meets (TSB settles at once if A shares a bit with memory),
+// so it runs from two states unlike in every register, flag and memory byte, and one with memory clear but for its
+// operands.
 const ProbeStates = [
     { a: 0x5a, x: 0x3c, y: 0xc3, s: 0xe0, flags: 0x00, fill: (address) => (address * 7 + 0x35) & 0xff },
     { a: 0xa5, x: 0xc3, y: 0x3c, s: 0x1f, flags: 0xff, fill: (address) => (address * 13 + 0x9a) & 0xff },
@@ -1080,7 +1080,6 @@ function runRecorded(cpu, instruction, state) {
         polltimeAddr: { value: noop },
         checkInt: { value: noop },
         branch: { value: noop },
-        takeInt: { value: false, writable: true },
     });
     instruction(stand);
     const flagsByte = Flags.reduce((byte, flag) => (registers[flag] ? byte | FlagBits[flag] : byte), 0);
