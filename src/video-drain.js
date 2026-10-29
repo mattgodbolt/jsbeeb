@@ -99,17 +99,17 @@ import { encodeLineGrid, LineGridRows } from "./video-filters/pixel-grid.js";
 export const PendingRowBias = 1;
 export const PendingOffsetShift = 8;
 export const PendingOffsetMask = 0xfffff;
-export const PendingByteMask = 0xff;
+const PendingByteMask = 0xff;
 export const PendingCursor = 1 << 28;
 // Flyback drains, and a field records at most 313 lines (bitmapY below 625 in steps of two) of 128
 // cells and a few cursor inverts.
-export const PendingCapacity = 1 << 16;
+const PendingCapacity = 1 << 16;
 export const CursorInvert = 0x00ffffff;
 export const OPAQUE_BLACK = 0xff000000;
 
 const Table4bppBytes = 4 * 256 * 16;
 const PaletteEntries = 16;
-export const RowShift = 10;
+const RowShift = 10;
 export const RowPixels = 1 << RowShift;
 const WordShift = 2;
 const WordBytes = 1 << WordShift;

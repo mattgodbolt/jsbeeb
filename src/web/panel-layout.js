@@ -12,7 +12,7 @@
 
 /** Between neighbouring panels; a panel goes flush against the area's edges. */
 export const Gap = 8;
-export const SnapDistance = 12;
+const SnapDistance = 12;
 export const LayoutVersion = 1;
 /** Every panel there is or will be. Saved entries under any other id are dropped. */
 export const PanelIds = [

@@ -20,7 +20,7 @@ import { PalCyclesPerLine, PalPhasePerLine } from "../video.js";
  * size, to roughly match the bezel in tv.png; canvasLeft and canvasTop below place it in
  * the bezel.
  */
-export const PalScreenCurvature = { x: 1 / 48, y: 1 / 48 };
+const PalScreenCurvature = { x: 1 / 48, y: 1 / 48 };
 
 export class PALCompositeFilter {
     static getDisplayConfig() {

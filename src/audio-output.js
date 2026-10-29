@@ -9,7 +9,7 @@ import { Biquad } from "./biquad.js";
 // Q = 1/(3 - K) = 0.696, below 1/sqrt(2), so no resonant peak. Run at the chip
 // rate, ahead of the resampler.
 export const OutputFilterHz = 7234;
-export const OutputFilterQ = 0.696;
+const OutputFilterQ = 0.696;
 
 // The coupling capacitors after the filter, each a first-order high-pass:
 // C10 100nF into the LM386's 50K input, C79 330nF into 4K7 + 1K (Master only),
@@ -18,7 +18,7 @@ export const BoardHighPassHz = [32, 85, 423];
 
 // The internal speaker and case, fitted to microphone captures of a Master 128
 // (the driver's resonance, a presence bump, and the roll-off above 6 kHz).
-export const SpeakerStages = [
+const SpeakerStages = [
     { type: "highPass", frequency: 550, q: 1.56 },
     { type: "peaking", frequency: 460, q: 3.5, gainDb: 16.5 },
     { type: "peaking", frequency: 2750, q: 0.5, gainDb: 13.9 },

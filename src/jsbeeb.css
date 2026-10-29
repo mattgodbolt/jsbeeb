@@ -576,10 +576,6 @@ h6.dbg {
   white-space: nowrap;
 }
 
-.hidden-unless-db-enabled {
-  display: none;
-}
-
 .key.function {
   background-color: #9c402b;
 }

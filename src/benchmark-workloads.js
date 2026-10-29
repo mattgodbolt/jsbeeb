@@ -10,7 +10,7 @@ const DiscKeys = ["disc1", "disc2"];
 const HexRadix = 16;
 
 /** The checks run the restored machine this long to see its program move, then restore it again. */
-export const CheckCycles = 1000 * 1000;
+const CheckCycles = 1000 * 1000;
 
 const AllBits = 0xff;
 const GzipMagic = [0x1f, 0x8b];

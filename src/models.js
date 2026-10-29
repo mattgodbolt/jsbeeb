@@ -418,7 +418,7 @@ export const basicOnly = new Model({
  * modules.
  */
 export const TubeModel = findModel("Tube65C02");
-export const TurboTubeModel = findModel("Tube65C102");
+const TurboTubeModel = findModel("Tube65C102");
 
 /** @returns {Model} the second processor sold for this machine: the Turbo board for a Master. */
 export function tubeModelFor(model) {

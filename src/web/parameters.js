@@ -34,8 +34,6 @@ const clampAfterglow = (ms) => Math.min(MaxPersistenceMs, Math.max(0, ms));
 
 export const DisplaySection = "display";
 
-export const RequiredProperties = ["type"];
-
 const Peripherals = { label: "Additional peripherals", hint: "(some combinations may cause compatibility issues)" };
 
 /**

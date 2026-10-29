@@ -3,8 +3,8 @@ import { TickMs } from "../emulation-tick.js";
 import { isSameModel } from "../snapshot.js";
 import { FakeVideo } from "../video.js";
 
-export const WarmupSeconds = 5;
-export const Repeats = 10;
+const WarmupSeconds = 5;
+const Repeats = 10;
 const ChunksPerSecond = 1000 / TickMs;
 const DialogId = "benchmark";
 // Each changes what a pass measures or what an emulated second is.

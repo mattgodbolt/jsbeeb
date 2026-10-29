@@ -5,12 +5,12 @@ import { matchRegions, NoNames, SymbolNames } from "./symbol-names.js";
 /** @typedef {import("./symbol-names.js").SymbolSet} SymbolSet */
 /** @typedef {import("./symbol-names.js").Region} Region */
 
-export const Format = 1;
+const Format = 1;
 const AddressSpace = 0x10000;
 const FirstRetryDelayMs = 5000;
 const MaxRetryDelayMs = 5 * 60 * 1000;
-export const RelativeJsonPath = /^(?:[\w-]+\/)*[\w-][\w.-]*\.json$/;
-export const NameLinkPlaceholders = ["name", "addr", "place"];
+const RelativeJsonPath = /^(?:[\w-]+\/)*[\w-][\w.-]*\.json$/;
+const NameLinkPlaceholders = ["name", "addr", "place"];
 const Placeholder = /\{([^{}]*)\}/g;
 const SiteOfTemplate = /^https:\/\/[^/{}]+\//;
 
@@ -63,7 +63,7 @@ export function nameUrl(set, name, address) {
 }
 
 /** "0x1a2c" as a number; only a region's or a scope's end can be 0x10000. */
-export function parseAddress(text, what, limit = AddressSpace - 1) {
+function parseAddress(text, what, limit = AddressSpace - 1) {
     const digits = /^0x([0-9a-f]{1,5})$/.exec(text)?.[1];
     const value = digits === undefined ? NaN : parseInt(digits, 16);
     if (!(value <= limit))
