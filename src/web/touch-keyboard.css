@@ -4,6 +4,9 @@
   right: 0;
   bottom: 0;
   z-index: 1030;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   padding: 2px 4px calc(4px + env(safe-area-inset-bottom));
   background: linear-gradient(#d8cfb8, #bfb497);
   border-top: 2px solid #8d836b;
@@ -17,16 +20,13 @@
 }
 
 #touch-keyboard[hidden],
+#touch-keyboard .tk-layer[hidden],
 #touch-keyboard-toggle[hidden] {
   display: none;
 }
 
-/* A landscape phone has so little height that every pixel of key is a pixel off the picture. */
-@media (max-height: 500px) {
-  #touch-keyboard {
-    --key-height: 24px;
-    opacity: 0.62;
-  }
+body.touch-keyboard-open #leds {
+  display: none;
 }
 
 #touch-keyboard .tk-bar {
@@ -45,24 +45,21 @@
   touch-action: manipulation;
 }
 
-#touch-keyboard .tk-fixed {
-  margin-bottom: 3px;
-}
-
 #touch-keyboard .tk-layer {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 3px;
-}
-
-#touch-keyboard[data-layer="letters"] .tk-layer[data-name="letters"],
-#touch-keyboard[data-layer="symbols"] .tk-layer[data-name="symbols"] {
-  display: flex;
 }
 
 #touch-keyboard .tk-row {
   display: flex;
   gap: 3px;
+  height: var(--key-height);
+}
+
+#touch-keyboard .tk-row > div {
+  flex-basis: 0;
+  min-width: 0;
 }
 
 #touch-keyboard .tk-grid {
@@ -72,21 +69,12 @@
   gap: 3px;
 }
 
-#touch-keyboard .tk-grid > .tk-key {
-  height: auto;
-}
-
-#touch-keyboard .tk-row > div {
-  flex-basis: 0;
-  min-width: 0;
-}
-
 #touch-keyboard .tk-key {
-  position: relative;
-  height: var(--key-height);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1px;
   background: linear-gradient(#3b3733, #25221f);
   color: #f1ece0;
   border-radius: 5px;
@@ -101,6 +89,20 @@
   font-size: 11px;
 }
 
+#touch-keyboard .tk-key.tiny {
+  font-size: 8.5px;
+  letter-spacing: -0.2px;
+}
+
+#touch-keyboard .tk-key.arrow {
+  font-size: 13px;
+}
+
+#touch-keyboard .tk-key.vertical {
+  writing-mode: vertical-rl;
+  letter-spacing: 1px;
+}
+
 #touch-keyboard .tk-key.fkey {
   background: linear-gradient(#d23a2c, #a52519);
   border-bottom-color: #5e130c;
@@ -112,18 +114,15 @@
   border-bottom-color: #7a7058;
 }
 
-#touch-keyboard .tk-key.arrow {
-  font-size: 13px;
-}
-
-#touch-keyboard .tk-key {
-  flex-direction: column;
-  gap: 1px;
+#touch-keyboard .tk-key.held {
+  background: #e8a317;
+  color: #111;
+  border-bottom-width: 1px;
+  transform: translateY(2px);
 }
 
 #touch-keyboard .tk-shifted {
   font-size: 10px;
-  line-height: 1;
   opacity: 0.65;
 }
 
@@ -132,22 +131,32 @@
   color: #ffd76a;
 }
 
-#touch-keyboard .tk-key.tiny {
-  font-size: 8.5px;
-  letter-spacing: -0.2px;
+#touch-keyboard .tk-leds {
+  display: flex;
+  gap: 14px;
+  font-size: 9px;
+  line-height: 1.1;
+  color: #5b533f;
 }
 
-#touch-keyboard .tk-label {
-  white-space: pre;
-  text-align: center;
-  line-height: 1;
+#touch-keyboard .tk-leds span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
-#touch-keyboard .tk-key.held {
-  background: #e8a317;
-  color: #111;
-  border-bottom-width: 1px;
-  transform: translateY(2px);
+#touch-keyboard .tk-leds i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5a1a14;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+#touch-keyboard .tk-leds i.on {
+  background: #ff3b2a;
+  box-shadow: 0 0 6px 2px rgba(255, 59, 42, 0.8);
 }
 
 #touch-keyboard-toggle {
@@ -165,78 +174,20 @@
   line-height: 1;
 }
 
-/* The keyboard carries the lights that matter, as the real machine does. */
-body.touch-keyboard-open #leds {
-  display: none;
-}
-
-#touch-keyboard .tk-leds {
-  display: flex;
-  gap: 14px;
-  margin-top: 3px;
-  font-size: 9px;
-  line-height: 1.1;
-  color: #5b533f;
-}
-
-#touch-keyboard .tk-leds span {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-#touch-keyboard i[data-led] {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #5a1a14;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
-}
-
-#touch-keyboard i[data-led].on {
-  background: #ff3b2a;
-  box-shadow: 0 0 6px 2px rgba(255, 59, 42, 0.8);
-}
-
-/* Fills while the thumb stays down, so the delay before BREAK acts is visible. */
-#touch-keyboard .tk-key[data-reset]::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 3px;
-  width: 0;
-  background: #fff;
-}
-
-#touch-keyboard .tk-key[data-reset].held::after {
-  width: 100%;
-  transition: width 350ms linear;
-}
-
-#touch-keyboard .tk-key[data-reset].short::after {
-  width: 100%;
-  background: #ffd76a;
-  animation: tk-short-flash 300ms ease-out;
-}
-
-@keyframes tk-short-flash {
-  from {
-    opacity: 1;
-    height: 100%;
-  }
-  to {
-    opacity: 0;
-    height: 100%;
-  }
-}
-
-/* Last, to win over the column layout above: 24px keys have no room to stack the two legends. */
+/* A landscape phone has so little height that every pixel of key is a pixel off the picture; 24px keys have no
+   room to stack legends, and wide ones need not. */
 @media (max-height: 500px) {
+  #touch-keyboard {
+    --key-height: 24px;
+    opacity: 0.62;
+  }
+
   #touch-keyboard .tk-key {
     flex-direction: row;
     gap: 3px;
+  }
+
+  #touch-keyboard .tk-key.vertical {
+    writing-mode: horizontal-tb;
   }
 }

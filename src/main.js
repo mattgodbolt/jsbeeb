@@ -221,6 +221,10 @@ dbgr.attachLoop(loop);
 
 new RunControls({ loop });
 
+const onAnyKeyDown = () => {
+    audioHandler.tryResume();
+    inputs.ensureMicrophoneRunning();
+};
 const { keyboard } = new KeyboardSetup({
     actions: {
         toggleFast: () => loop.toggleFastAsPossible(),
@@ -228,10 +232,7 @@ const { keyboard } = new KeyboardSetup({
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
-        onAnyKeyDown: () => {
-            audioHandler.tryResume();
-            inputs.ensureMicrophoneRunning();
-        },
+        onAnyKeyDown,
     },
     accessibilitySwitches,
     processor,
@@ -319,17 +320,7 @@ const layout = new Layout({
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
 
-new TouchKeyboard({
-    processor,
-    model,
-    keyboard,
-    layout,
-    loop,
-    onAnyKeyDown: () => {
-        audioHandler.tryResume();
-        inputs.ensureMicrophoneRunning();
-    },
-});
+new TouchKeyboard({ processor, model, keyboard, layout, loop, openMedia: () => mediaWindow.openFor(0), onAnyKeyDown });
 panelArrangement.reopen();
 
 // Everything a setting can reach now exists.

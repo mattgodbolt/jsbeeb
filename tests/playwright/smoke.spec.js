@@ -318,6 +318,33 @@ test("the media window fills a phone's screen without scrolling sideways, and it
     expect(await shown(1)).toEqual({ note: false, jacket: true });
 });
 
+test.describe("on a phone", () => {
+    test.use({ viewport: { width: 412, height: 915 }, hasTouch: true });
+
+    test("SHIFT+BREAK on the on-screen keyboard boots the disc, even with SHIFT lifted first", async ({
+        beeb,
+        page,
+    }) => {
+        await beeb.open("?disc=Welcome.ssd");
+        await beeb.expectScreenText(">");
+        const cdp = await page.context().newCDPSession(page);
+        const touchPoint = async (label, id) => {
+            const key = page.locator("#touch-keyboard .tk-key:visible", { hasText: new RegExp(`^${label}$`) });
+            const box = await key.first().boundingBox();
+            return { x: box.x + box.width / 2, y: box.y + box.height / 2, id };
+        };
+        const shift = await touchPoint("SHIFT", 1);
+        const breakKey = await touchPoint("BREAK", 2);
+        const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+        await touch("touchStart", [shift]);
+        await touch("touchStart", [shift, breakKey]);
+        await beeb.runFor(50);
+        await touch("touchEnd", [breakKey]);
+        await touch("touchEnd", []);
+        await beeb.expectScreenText("automatically loaded");
+    });
+});
+
 test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({
     beeb,
     page,

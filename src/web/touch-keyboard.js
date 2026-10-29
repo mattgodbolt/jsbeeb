@@ -1,23 +1,19 @@
 import "./touch-keyboard.css";
-import { BBC } from "../keymap.js";
 
 const StorageKey = "touchKeyboardOpen";
 const NarrowScreenQuery = "(max-width: 700px)";
 const TouchQuery = "(pointer: coarse)";
+const LandscapeQuery = "(max-height: 500px)";
 const ForceParameter = "touchkeys";
-// The OS scans the keyboard every 10 ms and misses a press shorter than two scans, which a quick tap can be.
+// In the machine's own time, which falls behind the wall clock when the page is busy. The OS scans the keyboard every
+// 10 ms and misses a press shorter than two scans, and reads SHIFT and CTRL some 20 ms after BREAK comes up.
 const MinHoldMs = 40;
-// BREAK resets the machine, which a stray thumb on a phone would do all too easily, so it takes a deliberate hold.
-const BreakHoldMs = 350;
-// The MOS reads SHIFT (boot) and CTRL (hard reset) just after BREAK is released, so they outlast it.
-const ChordHoldMs = 300;
-const ShortTapMs = 300;
+const BreakGraceMs = 100;
+const BreakModifiers = new Set(["SHIFT", "CTRL"]);
 // A touch in the gap between keys goes to the nearest key if it is within this many CSS pixels of one.
 const GapReachPx = 8;
-const ModifierKeys = new Set(["SHIFT", "CTRL"]);
 const VibrateMs = 8;
-const LandscapeQuery = "(max-height: 500px)";
-const HeightVariable = "--touch-keyboard-height";
+const BreakKey = "BREAK";
 const OpenClass = "touch-keyboard-open";
 const HeldClass = "held";
 const ShiftedClass = "shifted";
@@ -27,233 +23,177 @@ const ShiftedClass = "shifted";
 const buzz = () => navigator.vibrate?.(VibrateMs);
 
 /**
- * A key on the glass. `key` names a position in the keymap's BBC table, so the press reaches the matrix
- * whatever layout the host is using; `reset` is BREAK, which is not in the matrix. `w` is the flex weight.
+ * A key on the glass. `key` names a position in the model's key table, or BREAK; `sub` is the shifted legend the
+ * keycap prints above; `w` is the columns the key spans (flex weight outside the grid) and `rows` the rows.
  */
-const k = (label, key, w = 1, extra = {}) => ({ label, key, w, ...extra });
-const letter = (c) => k(c, c);
-const fn = (n) => k(`f${n}`, `F${n}`, 1, { cls: "fkey" });
-const gap = (w) => ({ spacer: true, w });
+const k = (label, key, ...extra) => Object.assign({ label, key, w: 1 }, ...extra);
+const letters = (row) => [...row].map((c) => k(c, c));
+const gap = (w) => ({ w });
+const small = { cls: "small" };
 
-const ArrowKeys = [
-    k("◀", "LEFT", 0.9, { cls: "arrow" }),
-    k("▼", "DOWN", 0.9, { cls: "arrow" }),
-    k("▲", "UP", 0.9, { cls: "arrow" }),
-    k("▶", "RIGHT", 0.9, { cls: "arrow" }),
+const BottomRow = (layerLabel, layer) => [
+    k(layerLabel, null, { w: 1.6, cls: "layer", layer }),
+    k("ESC", "ESCAPE", { w: 1.2 }, small),
+    k("CTRL", "CTRL", { w: 1.2 }, small),
+    k("SPACE", "SPACE", { w: 3.6 }),
+    ...[
+        ["◀", "LEFT"],
+        ["▼", "DOWN"],
+        ["▲", "UP"],
+        ["▶", "RIGHT"],
+    ].map(([label, key]) => k(label, key, { w: 0.9, cls: "arrow" })),
 ];
 
-/** The bottom row is the same on every layer, so a game never has to leave its layer for space or the cursors. */
-const BottomRow = (layerLabel) => [
-    k(layerLabel, null, 1.6, { cls: "layer" }),
-    k("ESC", "ESCAPE", 1.2, { cls: "small" }),
-    k("CTRL", "CTRL", 1.2, { cls: "small" }),
-    k("SPACE", "SPACE", 3.6),
-    ...ArrowKeys,
-];
-
-/** The unshifted digit and the shifted symbol the BBC prints above it. */
-const DigitLegends = ["1 !", '2 "', "3 #", "4 $", "5 %", "6 &", "7 '", "8 (", "9 )", "0"];
-const Digits = DigitLegends.map((legend) => {
-    const [digit, sub] = legend.split(" ");
-    return k(digit, `K${digit}`, 1, { sub });
-});
-
-/** Along the top on every layer, as the red keys are on the real machine, with BREAK apart at the right. */
 export const FunctionRow = [
-    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fn),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => k(`f${n}`, `F${n}`, { cls: "fkey" })),
     gap(0.5),
-    k("BREAK", null, 1.6, { cls: "fkey small", reset: true }),
+    k("BREAK", BreakKey, { w: 1.6, cls: "fkey small" }),
 ];
-
-const Shift = k("SHIFT", "SHIFT", 1, { cls: "tiny" });
-const Delete = k("DEL", "DELETE", 1, { cls: "tiny" });
-const Return = k("RET\nURN", "RETURN", 1, { cls: "tiny", rows: 2 });
 
 /**
- * The layers. Every row but the last goes in a 12-column grid (`w` is the columns a key spans, `rows` the rows it
- * spans); the last is the bottom row, in flex weights. The BBC's right-hand cluster (`:` `*`, `/` `?`, RETURN) is
- * on the main layer where it is on the real machine, so a Z X * ? RETURN game plays without switching layer.
+ * Every row but the last goes in a 12-column grid; the last is the bottom row, the same on every layer, in flex
+ * weights.
  */
 export const Layers = {
-    letters: [
-        [...Digits, k("-", "MINUS", 1, { sub: "=" }), k("^", "HAT_TILDE", 1, { sub: "~" })],
-        [...[..."QWERTYUIOP"].map(letter), k("@", "AT"), Return],
+    main: [
         [
-            ...[..."ASDFGHJKL"].map(letter),
-            k(";", "SEMICOLON_PLUS", 1, { sub: "+" }),
-            k(":", "COLON_STAR", 1, { sub: "*" }),
+            ...[..."1234567890"].map((digit, i) => k(digit, `K${digit}`, { sub: "!\"#$%&'()"[i] })),
+            k("-", "MINUS", { sub: "=" }),
+            k("^", "HAT_TILDE", { sub: "~" }),
         ],
+        [...letters("QWERTYUIOP"), k("@", "AT"), k("RETURN", "RETURN", { rows: 2, cls: "small vertical" })],
+        [...letters("ASDFGHJKL"), k(";", "SEMICOLON_PLUS", { sub: "+" }), k(":", "COLON_STAR", { sub: "*" })],
         [
-            Shift,
-            ...[..."ZXCVBNM"].map(letter),
-            k(",", "COMMA", 1, { sub: "<" }),
-            k(".", "PERIOD", 1, { sub: ">" }),
-            k("/", "SLASH", 1, { sub: "?" }),
-            Delete,
+            k("SHIFT", "SHIFT", { cls: "tiny" }),
+            ...letters("ZXCVBNM"),
+            k(",", "COMMA", { sub: "<" }),
+            k(".", "PERIOD", { sub: ">" }),
+            k("/", "SLASH", { sub: "?" }),
+            k("DEL", "DELETE", { cls: "tiny" }),
         ],
-        BottomRow("more"),
+        BottomRow("more", "more"),
     ],
-    symbols: [
-        [gap(11), k("\\", "PIPE_BACKSLASH", 1, { sub: "|" })],
+    more: [
+        [gap(11), k("\\", "PIPE_BACKSLASH", { sub: "|" })],
         [
-            k("TAB", "TAB", 2, { cls: "small" }),
+            k("TAB", "TAB", { w: 2 }, small),
             gap(7),
-            k("[", "LEFT_SQUARE_BRACKET", 1, { sub: "{" }),
-            k("]", "RIGHT_SQUARE_BRACKET", 1, { sub: "}" }),
-            k("\u00a3", "UNDERSCORE_POUND", 1, { sub: "_" }),
+            k("[", "LEFT_SQUARE_BRACKET", { sub: "{" }),
+            k("]", "RIGHT_SQUARE_BRACKET", { sub: "}" }),
+            k("£", "UNDERSCORE_POUND", { sub: "_" }),
         ],
-        [k("CAPS", "CAPSLOCK", 2, { cls: "small" }), gap(8), k("RETURN", "RETURN", 2, { cls: "small" })],
+        [k("CAPS", "CAPSLOCK", { w: 2 }, small), gap(8), k("RETURN", "RETURN", { w: 2 }, small)],
         [
-            k("SH LK", "SHIFTLOCK", 2, { cls: "small" }),
-            k("SHIFT", "SHIFT", 2, { cls: "small" }),
+            k("SH LK", "SHIFTLOCK", { w: 2 }, small),
+            k("SHIFT", "SHIFT", { w: 2 }, small),
             gap(4),
-            k("DEL", "DELETE", 2, { cls: "small" }),
-            k("COPY", "COPY", 2, { cls: "small" }),
+            k("DEL", "DELETE", { w: 2 }, small),
+            k("COPY", "COPY", { w: 2 }, small),
         ],
-        BottomRow("ABC"),
+        BottomRow("ABC", "main"),
     ],
 };
 
-/** Every matrix position a layer can press, for checking the layers against the keymap. */
-export const keyNames = () =>
-    new Set(
-        [FunctionRow, ...Object.values(Layers).flat()]
-            .flat()
-            .map((key) => key.key)
-            .filter(Boolean),
-    );
+/** The Model B's lights, along the bottom left of its keyboard. */
+const Leds = [
+    ["cassette motor", (processor) => processor.tapeInterface.motorOn],
+    ["caps lock", (processor) => processor.sysvia.capsLockLight],
+    ["shift lock", (processor) => processor.sysvia.shiftLockLight],
+];
 
-export const matrixPosition = (name) => BBC[name];
-
-/**
- * Whether to offer the keyboard: any touch screen or narrow window, or ?touchkeys to try it at a desk.
- */
 export const wantsTouchKeyboard = (search, matches) =>
     new URLSearchParams(search).has(ForceParameter) || matches(TouchQuery) || matches(NarrowScreenQuery);
 
 /**
- * An on-screen BBC keyboard that presses keys in the machine's matrix directly (the same place the physical
- * keyboard's presses end up), so held keys and SHIFT/CTRL chords work with as many fingers as the screen reports.
+ * An on-screen BBC keyboard. Keys go to the machine's matrix by position through the same input as the physical
+ * keyboard, so held keys and chords work with as many fingers as the screen reports.
  */
 export class TouchKeyboard {
-    constructor({ processor, model, keyboard, layout, loop, onAnyKeyDown }) {
-        this.model = model;
-        this.onAnyKeyDown = onAnyKeyDown;
+    constructor({ processor, model, keyboard, layout, loop, openMedia, onAnyKeyDown }) {
+        if (model.isAtom || !wantsTouchKeyboard(window.location.search, (query) => window.matchMedia(query).matches))
+            return;
         this.processor = processor;
+        this.model = model;
         this.keyboard = keyboard;
         this.layout = layout;
-        this.layer = "letters";
+        this.onAnyKeyDown = onAnyKeyDown;
+        /** @type {Map<number, HTMLElement>} the key each pointer is holding */
         this.held = new Map();
-        this.pendingModifierUps = [];
-        this.resetActive = false;
-        this.resetReleasedAt = -Infinity;
-        this.shiftHolds = 0;
-        if (!wantsTouchKeyboard(window.location.search, (query) => window.matchMedia(query).matches)) return;
+        /** @type {Map<string, number>} keys lifted from the glass and not yet sent up, by when they went down */
+        this.releasing = new Map();
+        this.resetting = false;
+        this.breakUpAt = -Infinity;
 
-        this.root = this.build();
-        document.body.append(this.root);
+        this.root = this.build(openMedia);
         this.toggle = this.buildToggle();
-        document.body.append(this.toggle);
+        document.body.append(this.root, this.toggle);
         window.addEventListener("pointerup", (evt) => this.release(evt));
         window.addEventListener("pointercancel", (evt) => this.release(evt));
         window.addEventListener("blur", () => this.releaseAll());
-        loop.addEventListener("tick", () => this.syncLeds());
-        new ResizeObserver(() => this.publishHeight()).observe(this.root);
-        window.addEventListener("resize", () => this.publishHeight());
-        this.setOpen(this.storedOpen());
+        loop.addEventListener("tick", () => {
+            this.sendDueReleases();
+            this.syncLeds();
+        });
+        new ResizeObserver(() => this.reserveRoom()).observe(this.root);
+        this.showLayer("main");
+        this.setOpen(window.localStorage[StorageKey] !== "false");
     }
 
-    storedOpen() {
-        try {
-            return window.localStorage.getItem(StorageKey) !== "false";
-        } catch {
-            return true;
-        }
-    }
-
-    build() {
+    build(openMedia) {
         const root = document.createElement("div");
         root.id = "touch-keyboard";
-        root.dataset.layer = this.layer;
         const bar = document.createElement("div");
         bar.className = "tk-bar";
-        bar.append(this.buildMediaButton());
-        const hide = document.createElement("button");
-        hide.type = "button";
-        hide.tabIndex = -1;
-        hide.textContent = "⌄ hide";
-        hide.addEventListener("click", () => this.setOpen(false));
-        bar.append(hide);
-        root.append(bar);
-        const fixed = document.createElement("div");
-        fixed.className = "tk-fixed";
-        fixed.append(this.buildRow(FunctionRow));
-        root.append(fixed);
-        for (const [name, rows] of Object.entries(Layers)) {
+        bar.append(
+            this.buildButton("media", "tk-media", openMedia),
+            this.buildButton("⌄ hide", "tk-hide", () => this.setOpen(false)),
+        );
+        root.append(bar, this.buildRow(FunctionRow));
+        this.layers = Object.entries(Layers).map(([name, rows]) => {
             const layer = document.createElement("div");
             layer.className = "tk-layer";
             layer.dataset.name = name;
             const grid = document.createElement("div");
             grid.className = "tk-grid";
-            for (const row of rows.slice(0, -1)) for (const def of row) grid.append(this.buildKey(def, true));
+            for (const def of rows.slice(0, -1).flat()) grid.append(this.buildKey(def, true));
             layer.append(grid, this.buildRow(rows.at(-1)));
-            root.append(layer);
-        }
-        root.append(this.buildLeds());
+            return layer;
+        });
+        root.append(...this.layers, this.buildLeds());
         root.addEventListener("pointerdown", (evt) => this.press(evt));
         for (const type of ["contextmenu", "dblclick", "selectstart", "mousedown"]) {
-            root.addEventListener(type, (evt) => evt.preventDefault(), { passive: false });
+            root.addEventListener(type, (evt) => evt.preventDefault());
         }
         return root;
     }
 
-    /** The Model B's three red lights, along the bottom left of its keyboard, each labelled above. */
+    buildButton(text, className, onClick) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.tabIndex = -1;
+        button.className = className;
+        button.textContent = text;
+        button.addEventListener("click", onClick);
+        return button;
+    }
+
     buildLeds() {
         const leds = document.createElement("div");
         leds.className = "tk-leds";
-        const lights = [
-            ["motor", "cassette motor"],
-            ...(this.model.isAtom
-                ? []
-                : [
-                      ["caps", "caps lock"],
-                      ["shift", "shift lock"],
-                  ]),
-        ];
-        for (const [name, label] of lights) {
+        this.leds = Leds.map(([label, lit]) => {
             const light = document.createElement("span");
             light.textContent = label;
             const led = document.createElement("i");
-            led.dataset.led = name;
             light.append(led);
             leds.append(light);
-        }
+            return { led, lit };
+        });
         return leds;
     }
 
-    /** The hidden lights bar's drive readouts are the way into the media window on a phone. */
-    buildMediaButton() {
-        const media = document.createElement("button");
-        media.type = "button";
-        media.tabIndex = -1;
-        media.className = "tk-media";
-        media.textContent = "media";
-        media.addEventListener("click", () => document.querySelector('#leds .slot-readout[data-slot="0"]').click());
-        return media;
-    }
-
-    /** Follows the same machine state as the lights bar's lamps, which FrontPanel drives from the same fields. */
     syncLeds() {
         if (!this.open) return;
-        const { processor } = this;
-        const state = {
-            motor: processor.tapeInterface.motorOn,
-            caps: !this.model.isAtom && processor.sysvia.capsLockLight,
-            shift: !this.model.isAtom && processor.sysvia.shiftLockLight,
-        };
-        for (const led of this.root.querySelectorAll("[data-led]")) {
-            led.classList.toggle("on", !!state[led.dataset.led]);
-        }
+        for (const { led, lit } of this.leds) led.classList.toggle("on", !!lit(this.processor));
     }
 
     buildRow(row) {
@@ -271,9 +211,8 @@ export class TouchKeyboard {
         } else {
             el.style.flexGrow = def.w;
         }
-        if (def.spacer) return el;
+        if (!def.label) return el;
         el.className = `tk-key ${def.cls ?? ""}`;
-        // Like the real keycaps: the shifted legend above the unshifted one.
         if (def.sub) {
             const sub = document.createElement("span");
             sub.className = "tk-shifted";
@@ -281,24 +220,16 @@ export class TouchKeyboard {
             el.append(sub);
         }
         const label = document.createElement("span");
-        label.className = "tk-label";
         label.textContent = def.label;
         el.append(label);
-        el.dataset.key = def.key ?? "";
-        if (def.reset) el.dataset.reset = "1";
-        if (def.cls?.includes("layer")) el.dataset.layerKey = "1";
         el.def = def;
         return el;
     }
 
     buildToggle() {
-        const toggle = document.createElement("button");
+        const toggle = this.buildButton("⌨", "", () => this.setOpen(true));
         toggle.id = "touch-keyboard-toggle";
-        toggle.type = "button";
-        toggle.tabIndex = -1;
-        toggle.textContent = "⌨";
         toggle.setAttribute("aria-label", "Show the on-screen keyboard");
-        toggle.addEventListener("click", () => this.setOpen(true));
         return toggle;
     }
 
@@ -307,52 +238,38 @@ export class TouchKeyboard {
         this.root.hidden = !open;
         this.toggle.hidden = open;
         document.body.classList.toggle(OpenClass, open);
-        try {
-            window.localStorage.setItem(StorageKey, String(open));
-        } catch {
-            // Remembering is a convenience.
-        }
+        window.localStorage[StorageKey] = String(open);
         if (!open) this.releaseAll();
-        this.publishHeight();
+        this.reserveRoom();
     }
 
-    publishHeight() {
-        // A landscape phone cannot spare the height, so there the keys float translucently over the picture.
-        const height = this.open && !window.matchMedia(LandscapeQuery).matches ? this.root.offsetHeight : 0;
-        document.documentElement.style.setProperty(HeightVariable, `${height}px`);
-        this.layout?.resize();
+    /** A landscape phone cannot spare the height, so there the keys float translucently over the picture. */
+    reserveRoom() {
+        const floats = window.matchMedia(LandscapeQuery).matches;
+        this.layout.reserveForTouchKeyboard(this.open ? (floats ? 0 : this.root.offsetHeight) : null);
     }
 
-    setLayer(name) {
-        this.layer = name;
-        this.root.dataset.layer = name;
+    showLayer(name) {
+        for (const layer of this.layers) layer.hidden = layer.dataset.name !== name;
     }
 
     press(evt) {
         if (evt.target.closest("button")) return;
         const el = evt.target.closest(".tk-key") ?? this.nearestKey(evt.clientX, evt.clientY);
-        if (!el) return;
+        if (!el || this.held.has(evt.pointerId)) return;
         evt.preventDefault();
-        if (el.dataset.layerKey) {
-            this.setLayer(this.layer === "letters" ? "symbols" : "letters");
-            buzz();
+        buzz();
+        const { def } = el;
+        if (def.layer) {
+            this.showLayer(def.layer);
             return;
         }
-        if (!el.def || this.held.has(evt.pointerId)) return;
         this.onAnyKeyDown();
-        el.pressedAt = performance.now();
+        el.pressedAt = this.machineMs();
         this.held.set(evt.pointerId, el);
         el.classList.add(HeldClass);
-        if (el.def.reset) {
-            // A deliberate chord: with SHIFT or CTRL already down there is no stray touch to guard against.
-            if (this.modifierHeld()) this.startReset(el);
-            else el.breakTimer = setTimeout(() => this.startReset(el), BreakHoldMs);
-        } else {
-            this.send(el.def, true);
-            if (ModifierKeys.has(el.def.key)) this.startPendingReset();
-        }
+        this.send(def.key, true);
         this.showShift();
-        buzz();
     }
 
     /** The key whose face is closest to a touch that landed in a gap, so the gaps are part of the keys. */
@@ -378,95 +295,56 @@ export class TouchKeyboard {
         const el = this.held.get(evt.pointerId);
         if (!el) return;
         this.held.delete(evt.pointerId);
-        el.classList.remove(HeldClass);
         this.letGo(el);
-        this.showShift();
     }
 
     releaseAll() {
-        for (const [id, el] of this.held) {
-            el.classList.remove(HeldClass);
-            this.letGo(el);
-            this.held.delete(id);
-        }
-        this.showShift();
-    }
-
-    modifierHeld() {
-        return [...this.held.values()].some((el) => ModifierKeys.has(el.def.key));
-    }
-
-    startReset(el) {
-        el.breakTimer = null;
-        this.resetActive = true;
-        this.send(el.def, true);
-        buzz();
-    }
-
-    /** SHIFT or CTRL put down while a lone BREAK is still inside its hold finishes the chord. */
-    startPendingReset() {
-        for (const el of this.held.values()) {
-            if (!el.breakTimer) continue;
-            clearTimeout(el.breakTimer);
-            this.startReset(el);
-        }
+        const els = [...this.held.values()];
+        this.held.clear();
+        for (const el of els) this.letGo(el);
     }
 
     letGo(el) {
-        if (el.def.reset) {
-            if (el.breakTimer) {
-                // Too short to have reset anything; say so rather than feel dead.
-                clearTimeout(el.breakTimer);
-                el.breakTimer = null;
-                el.classList.add("short");
-                setTimeout(() => el.classList.remove("short"), ShortTapMs);
-                return;
-            }
-            this.send(el.def, false);
-            this.resetActive = false;
-            this.resetReleasedAt = performance.now();
-            for (const pending of this.pendingModifierUps.splice(0)) this.letGoLater(pending, ChordHoldMs);
-            return;
-        }
-        if (ModifierKeys.has(el.def.key)) {
-            // Whichever thumb lifts first, the machine must still see the modifier as BREAK comes up.
-            if (this.resetActive) {
-                this.pendingModifierUps.push(el);
-                return;
-            }
-            const sinceReset = performance.now() - this.resetReleasedAt;
-            if (sinceReset < ChordHoldMs) {
-                this.letGoLater(el, ChordHoldMs - sinceReset);
-                return;
-            }
-        }
-        this.letGoLater(el, MinHoldMs - (performance.now() - el.pressedAt));
+        el.classList.remove(HeldClass);
+        this.showShift();
+        this.releasing.set(el.def.key, el.pressedAt);
     }
 
-    letGoLater(el, delay) {
-        // Pressed again in the meantime, so the key is still wanted down.
-        const up = () => {
-            if (![...this.held.values()].some((other) => other.def.key === el.def.key)) this.send(el.def, false);
-        };
-        if (delay > 0) setTimeout(up, delay);
-        else up();
+    /** SHIFT and CTRL stay down until BREAK has been up a while, so SHIFT+BREAK boots whichever thumb lifts first. */
+    sendDueReleases() {
+        const now = this.machineMs();
+        const isWithin = (since, ms) => now >= since && now - since < ms;
+        for (const [key, pressedAt] of this.releasing) {
+            if (this.isHeld(key)) {
+                this.releasing.delete(key);
+                continue;
+            }
+            if (isWithin(pressedAt, MinHoldMs)) continue;
+            if (BreakModifiers.has(key) && (this.resetting || isWithin(this.breakUpAt, BreakGraceMs))) continue;
+            this.releasing.delete(key);
+            this.send(key, false);
+            if (key === BreakKey) this.breakUpAt = now;
+        }
     }
 
-    /** Labels show the shifted symbol while any SHIFT key is held. */
+    machineMs() {
+        const { processor } = this;
+        return (processor.cycleSeconds + processor.currentCycles / this.model.cyclesPerSecond) * 1000;
+    }
+
+    isHeld(key) {
+        return [...this.held.values()].some((el) => el.def.key === key);
+    }
+
     showShift() {
-        const shifted = [...this.held.values()].some((el) => el.def.key === "SHIFT");
-        this.root.classList.toggle(ShiftedClass, shifted);
+        this.root.classList.toggle(ShiftedClass, this.isHeld("SHIFT"));
     }
 
-    send(def, down) {
+    send(key, down) {
         const { input } = this.keyboard;
-        if (def.reset) {
+        if (key === BreakKey) {
+            this.resetting = down;
             input.setReset(down);
-            return;
-        }
-        const position = this.processor.model.keys[def.key];
-        if (input.keyRaw) input.keyRaw(position, down);
-        else if (down) this.processor.keyboardInterface.keyDownRaw(position);
-        else this.processor.keyboardInterface.keyUpRaw(position);
+        } else input.keyRaw(this.model.keys[key], down);
     }
 }
