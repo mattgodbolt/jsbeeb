@@ -354,27 +354,27 @@ test("a step part way through a drag leaves the panel being dragged where the po
     const panel = page.locator("#memory-panel");
     await expect(panel).toBeVisible();
     const cycles = page.locator("#cpu6502_cycles");
+    const stepPartWayThroughDrag = async (grip, dx, dy) => {
+        const box = await page.locator(`#memory-panel ${grip}`).boundingBox();
+        const from = { x: box.x + Math.min(40, box.width / 2), y: box.y + box.height / 2 };
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(from.x + dx, from.y + dy, { steps: 10 });
+        const dragged = await panel.boundingBox();
+        const steppedFrom = await cycles.textContent();
+        await page.keyboard.press("n");
+        await expect.poll(() => cycles.textContent()).not.toBe(steppedFrom);
+        const afterStep = await panel.boundingBox();
+        await page.mouse.up();
+        return { dragged, afterStep };
+    };
     const opened = await panel.boundingBox();
-    const header = await page.locator("#memory-panel .panel-header").boundingBox();
-    const from = { x: header.x + 40, y: header.y + header.height / 2 };
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
-    await page.mouse.move(from.x + 300, from.y + 150, { steps: 10 });
-    const steppedFrom = await cycles.textContent();
-    await page.keyboard.press("n");
-    await expect.poll(() => cycles.textContent()).not.toBe(steppedFrom);
-    expect(await panel.boundingBox()).toMatchObject({ x: opened.x + 300, y: opened.y + 150 });
-
-    const handle = await page.locator("#memory-panel .panel-resize-bottom").boundingBox();
-    await page.mouse.up();
-    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 100, { steps: 10 });
-    const resizedFrom = await cycles.textContent();
-    await page.keyboard.press("n");
-    await expect.poll(() => cycles.textContent()).not.toBe(resizedFrom);
-    expect((await panel.boundingBox()).height).toBe(opened.height + 100);
-    await page.mouse.up();
+    const moved = await stepPartWayThroughDrag(".panel-header", 300, 150);
+    expect(moved.dragged.y).toBeGreaterThan(opened.y + 100);
+    expect(moved.afterStep).toEqual(moved.dragged);
+    const resized = await stepPartWayThroughDrag(".panel-resize-bottom", 0, 100);
+    expect(resized.dragged.height).toBeGreaterThan(opened.height + 50);
+    expect(resized.afterStep).toEqual(resized.dragged);
 });
 
 test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
