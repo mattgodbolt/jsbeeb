@@ -602,6 +602,15 @@ describe("Debugger", () => {
                 expect(cpu.peekmem(0x1234)).toBe(0x48);
             });
 
+            it("is given up unwritten when the view redraws under it", () => {
+                memByte(0x1234).click();
+                editField().value = "99";
+                document
+                    .getElementById("memory")
+                    .dispatchEvent(new WheelEvent("wheel", { deltaY: 20, cancelable: true }));
+                expect([editField(), document.activeElement, cpu.peekmem(0x1234)]).toEqual([null, document.body, 0x48]);
+            });
+
             it("is offered only while stopped, and given up when the machine runs", () => {
                 memByte(0x1234).click();
                 stoppedLoop.go();

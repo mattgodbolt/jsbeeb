@@ -225,7 +225,7 @@ class MemoryView {
             field.classList.toggle("is-invalid", value === undefined);
             if (value === undefined) return;
             field.blur();
-            if (field.value !== was) write(address, value);
+            if (value !== parseInt(was, 16)) write(address, value);
             if (e.key === "Tab") this.edit((address + (e.shiftKey ? -1 : 1)) & 0xffff, write);
         });
         field.focus();

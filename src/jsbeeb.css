@@ -258,7 +258,8 @@ h6.dbg {
 }
 
 /* Bootstrap's warning icon would hide most of a box this narrow. */
-.goto-addr.is-invalid {
+.goto-addr.is-invalid,
+#memory-save-form .is-invalid {
   padding-right: 0.5rem;
   background-image: none;
 }
