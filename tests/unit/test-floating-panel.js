@@ -446,6 +446,35 @@ describe("FloatingPanel", () => {
             expect(relayout).not.toHaveBeenCalled();
         });
 
+        it("are left where a move in progress has them, and catch up once it ends", () => {
+            const top = above();
+            const under = below();
+            top.open();
+            under.open();
+            const start = rectOf(top);
+            pointer(header(top), "pointerdown", start.x + 10, start.y + 10, {});
+            pointer(header(top), "pointermove", start.x + 310, start.y + 210, {});
+            arrangement.keepAttached();
+            expect(rectOf(top)).toMatchObject({ x: start.x + 300, y: start.y + 200 });
+            expect(rectOf(under).y).toBe(NavbarHeight + Natural.h + Gap);
+            pointer(header(top), "pointerup", start.x + 310, start.y + 210, {});
+            expect(rectOf(top)).toMatchObject({ x: start.x + 300, y: start.y + 200 });
+            expect(rectOf(under).y).toBe(start.y + 200 + Natural.h + Gap);
+        });
+
+        it("are left at the size a resize in progress has them", () => {
+            const top = above();
+            const under = below();
+            top.open();
+            under.open();
+            const start = rectOf(top);
+            const corner = { x: start.x + start.w, y: start.y + start.h };
+            pointer(handle(top, "bottom-right"), "pointerdown", corner.x, corner.y, {});
+            pointer(handle(top, "bottom-right"), "pointermove", corner.x + 50, corner.y + 30, {});
+            arrangement.keepAttached();
+            expect(rectOf(top)).toMatchObject({ w: start.w + 50, h: start.h + 30 });
+        });
+
         it("are measured rounded up, so content laid out at a fraction of a pixel never wraps", () => {
             const floating = watches();
             boxFromStyle(floating.panel, { w: 150.4, h: 80.2 });

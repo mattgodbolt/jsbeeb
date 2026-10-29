@@ -165,6 +165,9 @@ export class PanelArrangement extends EventTarget {
         this._refreshes = [];
         this._cycles = () => null;
         this._frameHandle = null;
+        /** @type {Set<FloatingPanel>} */
+        this._gesturing = new Set();
+        this._attachDeferred = false;
         this._onWindowResize = () => this.relayout();
         this._onClick = (e) => this._openFrom(e);
     }
@@ -350,9 +353,14 @@ export class PanelArrangement extends EventTarget {
 
     /**
      * Lays the panels out again if one has come away from the neighbour it is attached to, as when the
-     * neighbour's content has grown. Owners whose content changes size call this.
+     * neighbour's content has grown. Owners whose content changes size call this. Put off while a panel
+     * is moved or resized, as the panel being dragged has come away from its neighbour on purpose.
      */
     keepAttached() {
+        if (this._gesturing.size > 0) {
+            this._attachDeferred = true;
+            return;
+        }
         const open = this._stack.filter((floating) => floating.isOpen && floating.movable);
         const rects = Object.fromEntries(open.map((floating) => [floating.id, boundsOf(floating.panel)]));
         const layout = this._read();
@@ -406,6 +414,7 @@ export class PanelArrangement extends EventTarget {
 
     /** What a gesture on `floating` snaps to and is kept inside, fixed when it starts. */
     beginGesture(floating) {
+        this._gesturing.add(floating);
         return { area: this.workArea(), others: this._others(floating) };
     }
 
@@ -436,6 +445,14 @@ export class PanelArrangement extends EventTarget {
             h: isResize && (edges.top || edges.bottom) ? Math.round(rect.h) : (before?.h ?? null),
         };
         this._save(arranged(layout, floating.id, capture(rect, gesture.area, gesture.others, size)));
+    }
+
+    /** Ends a gesture on `floating`, settled or not, and catches up with what it put off. */
+    endGesture(floating) {
+        this._gesturing.delete(floating);
+        if (this._gesturing.size > 0 || !this._attachDeferred) return;
+        this._attachDeferred = false;
+        this.keepAttached();
     }
 }
 
@@ -552,7 +569,7 @@ export class FloatingPanel extends EventTarget {
     close() {
         if (!this.isOpen) return;
         this.isOpen = false;
-        this._gesture = null;
+        this._endGesture();
         // Focus left inside a hidden panel would keep the keyboard from the machine.
         if (this.panel.contains(document.activeElement)) document.activeElement.blur();
         this.panel.hidden = true;
@@ -613,9 +630,15 @@ export class FloatingPanel extends EventTarget {
             this.panel.addEventListener(ending, (e) => {
                 const gesture = this._gesture;
                 if (!gesture || gesture.pointerId !== e.pointerId) return;
-                this._gesture = null;
                 if (gesture.rect) this._arrangement.settle(this, gesture.context, gesture.rect, gesture.edges);
+                this._endGesture();
             });
+    }
+
+    _endGesture() {
+        if (!this._gesture) return;
+        this._gesture = null;
+        this._arrangement.endGesture(this);
     }
 
     _begin(e, target, edges) {
