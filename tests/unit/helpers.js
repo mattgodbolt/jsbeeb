@@ -22,14 +22,24 @@ export function domFromIndexHtml(...ids) {
     }
 }
 
-/** jsdom has no ResizeObserver, and lays nothing out for one to report. */
+/**
+ * jsdom has no ResizeObserver, and lays nothing out for one to report.
+ * @returns {(element: Element, height: number) => void} reports `element` resized to `height`
+ */
 export function stubResizeObserver() {
+    const observers = new Map();
     vi.stubGlobal(
         "ResizeObserver",
         class {
-            observe() {}
+            constructor(callback) {
+                this.callback = callback;
+            }
+            observe(element) {
+                observers.set(element, this.callback);
+            }
         },
     );
+    return (element, height) => observers.get(element)([{ contentRect: { height } }]);
 }
 
 /** Enough of an FDC for the page's side of putting a disc in and taking it out. */

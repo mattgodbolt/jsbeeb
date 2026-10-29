@@ -68,6 +68,7 @@ describe("Debugger", () => {
     let keys;
     let arrangement;
     let stoppedLoop;
+    let resize;
 
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
@@ -85,7 +86,7 @@ describe("Debugger", () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
         window.localStorage.clear();
         domFromIndexHtml(...PanelElements);
-        stubResizeObserver();
+        resize = stubResizeObserver();
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });
@@ -143,6 +144,16 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
+        it("keeps a paused disassembly where it was put when a resize changes how many rows it shows", () => {
+            const rowHeight = 16;
+            dbgr.showPanels();
+            goTo("goto-dis-addr-form", "c000");
+            vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, rowHeight));
+            resize(document.getElementById("disassembly"), 20 * rowHeight);
+            expect(disRows()).toHaveLength(20);
+            expect(addrOf(currentRow())).toBe("c000");
+        });
+
         const DebugPanels = [
             "toolbar-panel",
             "disassembly-panel",
