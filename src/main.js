@@ -149,8 +149,16 @@ const familyWarnings = processInputParams(parsedQuery, {
     bankRoms,
     labelFiles: labelFileUrls,
 });
-for (const { url, bank } of labelFileUrls)
-    labelFiles.load(url, bank).catch((error) => toast(error.message, { title: "Label files" }));
+// One at a time, so that they are in the URL's order, which says whose name an address takes.
+(async () => {
+    for (const { url, bank } of labelFileUrls) {
+        try {
+            await labelFiles.load(url, bank);
+        } catch (error) {
+            toast(error.message, { title: "Label files" });
+        }
+    }
+})();
 if (familyWarnings.length) {
     toast(`${familyWarnings.join(" ")} The key names and ROM banks are listed in the README.`, {
         title: "Parameters in the URL",

@@ -60,7 +60,7 @@ describe("label files", () => {
                 "# mine\nstart=$1900\n  oswrch = &FFEE\nloop=1902\nservice=F:8003\n\n",
                 [label("start", 0x1900), label("oswrch", 0xffee), label("loop", 0x1902), label("service", 0x8003, 15)],
             ],
-            ["ACME's, with a comment after", "start\t= $1900 ; ?\n", [label("start", 0x1900)]],
+            ["b-em's, ignoring what follows the address", "start\t= $1900 ; ?\n", [label("start", 0x1900)]],
         ])("reads %s", (_, text, labels) => {
             expect(parseLabels(text)).toEqual(labels);
         });
@@ -69,6 +69,11 @@ describe("label files", () => {
             ["an empty BeebAsm dump", "[{}]", "it has no labels"],
             ["a BeebAsm dump with something else in it", "[{'start':6400L,oops}]", 'it has ",oops" where a label goes'],
             ["a line that is none of them", "start=$1900\nhello there", 'line 2, "hello there", isn\'t'],
+            [
+                "a long line, quoting only its start",
+                `\u0000${"x".repeat(5000)}`,
+                `line 1, "\u0000${"x".repeat(39)}...", isn't`,
+            ],
             ["an address past the top of memory", "al C:10000 .past", "line 1 has the address 65536, past $ffff"],
             ["a BeebAsm name past the top of memory", "[{'big':65536L}]", "'big' has the address 65536"],
         ])("refuses %s", (_, text, problem) => {
@@ -87,7 +92,8 @@ describe("label files", () => {
         });
         const mosNames = new SymbolNames([{ set: mos, regions: [] }]);
         const files = () => new LabelFiles({ load: vi.fn() });
-        const add = (labelFiles, title, text, bank = null) => labelFiles.add({ title, source: "", text, bank });
+        const add = (labelFiles, title, text, bank = null) =>
+            labelFiles.add({ key: title, title, source: "", text, bank });
         const nameAt = (names, address) => names.address(address, 0)?.name;
 
         it("leaves the sets' names as they are with no files", () => {
@@ -126,20 +132,34 @@ describe("label files", () => {
             expect(labelFiles.names(NoNames, 15).addressOf("service", 0)).toBeUndefined();
         });
 
-        it("replaces a file of the same title, forgets one, ties one to a bank, and says so each time", () => {
+        it("names an address from the earlier of two untied files", () => {
+            const labelFiles = files();
+            add(labelFiles, "first.txt", "first=$1900");
+            add(labelFiles, "second.txt", "second=$1900\nonly_second=$1902");
+            const names = labelFiles.names(NoNames, 0);
+            expect([nameAt(names, 0x1900), nameAt(names, 0x1902), names.addressOf("second", 0)]).toEqual([
+                "first",
+                "only_second",
+                0x1900,
+            ]);
+        });
+
+        it("replaces a file of the same key in its place, keeping its bank, and says so at each change", () => {
             const labelFiles = files();
             const changed = vi.fn();
             labelFiles.addEventListener("change", changed);
             add(labelFiles, "game.txt", "old=$8000");
+            const other = add(labelFiles, "other.txt", "other=$8000");
+            labelFiles.tie(labelFiles.files[0], 1);
             const game = add(labelFiles, "game.txt", "new=$8000");
-            const other = add(labelFiles, "other.txt", "other=$1900");
             expect(labelFiles.files).toEqual([game, other]);
-            expect(nameAt(labelFiles.names(NoNames, 0), 0x8000)).toBe("new");
-            labelFiles.tie(game, 1);
-            expect(nameAt(labelFiles.names(NoNames, 0), 0x8000)).toBeUndefined();
+            expect(game.bank).toBe(1);
+            expect(nameAt(labelFiles.names(NoNames, 1), 0x8000)).toBe("new");
+            expect(nameAt(labelFiles.names(NoNames, 0), 0x8000)).toBe("other");
+            expect(add(labelFiles, "game.txt", "newer=$8000", 2).bank).toBe(2);
             labelFiles.remove(other);
-            expect(labelFiles.files).toEqual([game]);
-            expect(changed).toHaveBeenCalledTimes(5);
+            expect(labelFiles.files.map(({ title }) => title)).toEqual(["game.txt"]);
+            expect(changed).toHaveBeenCalledTimes(6);
         });
 
         it("says which file isn't labels, and keeps what it had", () => {
@@ -164,6 +184,9 @@ describe("label files", () => {
                 title: "demo.txt",
                 source: "",
             });
+            expect((await labelFiles.load("https://example.com/other/demo.txt", null)).title).toBe("demo.txt");
+            expect(labelFiles.files).toHaveLength(3);
+            expect((await labelFiles.load("my%labels.txt", null)).title).toBe("my%labels.txt");
             await expect(labelFiles.load("https://example.com/missing.txt", null)).rejects.toThrow(
                 "Couldn't fetch the labels in https://example.com/missing.txt: 404",
             );

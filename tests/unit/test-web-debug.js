@@ -1679,14 +1679,16 @@ describe("Debugger", () => {
         it("ties a file to a bank from its menu, and forgets it from its button", async () => {
             drop("disassembly-panel", "rom.txt", "service=8003");
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
-            const bank = labelsLine().querySelector("select");
-            bank.value = "4";
-            bank.dispatchEvent(new Event("change"));
+            const bankChoice = (text) =>
+                [...labelsLine().querySelectorAll(".dropdown-item")].find((item) => item.textContent === text);
+            bankChoice("4").click();
+            expect(labelsLine().querySelector(".label-bank").textContent).toBe("bank 4");
+            expect(bankChoice("4").classList.contains("active")).toBe(true);
             expect(code(0x2002).textContent).toBe("JSR $8003");
             cpu.romSelect(4);
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR service");
-            labelsLine().querySelector("button").click();
+            labelsLine().querySelector(".label-forget").click();
             expect(code(0x2002).textContent).toBe("JSR $8003");
             expect(labelsLine().hidden).toBe(true);
         });

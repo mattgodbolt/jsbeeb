@@ -8,6 +8,7 @@ import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
+import { NumRomBanks } from "../6502.js";
 import {
     bindGotoForm,
     cloneTemplate,
@@ -17,7 +18,6 @@ import {
     powerOfTwoColumnsThatFit,
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
-import { NumRomBanks } from "../6502.js";
 import { toast } from "./toast.js";
 
 const noop = () => {};
@@ -45,6 +45,8 @@ function homeNodes(home) {
     if (!isHttps(home)) return [];
     return [externalLink(home, new URL(home).hostname.replace(/^www\./, "")), ", "];
 }
+
+const bankName = (bank) => (bank === null ? "any bank" : `bank ${bank}`);
 
 function addressFor(names, text, pc) {
     return names.addressOf(text, pc) ?? parseAddr(text);
@@ -434,38 +436,49 @@ export class Debugger {
 
     _labelFileNode(file) {
         const node = document.createElement("span");
-        node.className = "label-file";
-        const bank = document.createElement("select");
-        bank.className = "panel-field label-bank";
+        node.className = "label-file dropdown";
+        const bank = document.createElement("button");
+        bank.type = "button";
+        bank.className = "label-bank dropdown-toggle";
+        bank.dataset.bsToggle = "dropdown";
+        bank.textContent = bankName(file.bank);
         bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
-        bank.setAttribute("aria-label", `Bank for ${file.title}`);
-        bank.append(
-            new Option("any bank", "", false, file.bank === null),
-            ...Array.from({ length: NumRomBanks }, (_, n) => new Option(`bank ${n}`, `${n}`, false, file.bank === n)),
+        // Bootstrap focuses the toggle as its menu opens.
+        bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
+        const banks = document.createElement("div");
+        banks.className = "dropdown-menu dropdown-menu-dark label-banks";
+        banks.append(
+            ...[null, ...Array.from({ length: NumRomBanks }, (_, n) => n)].map((choice) => {
+                const item = document.createElement("button");
+                item.type = "button";
+                item.className = "dropdown-item";
+                item.classList.toggle("active", choice === file.bank);
+                item.textContent = choice === null ? "any bank" : `${choice}`;
+                item.addEventListener("click", () => this._labelFiles.tie(file, choice));
+                return item;
+            }),
         );
-        bank.addEventListener("change", () => {
-            this._labelFiles.tie(file, bank.value === "" ? null : Number(bank.value));
-            bank.blur();
-        });
         const forget = document.createElement("button");
         forget.type = "button";
         forget.className = "label-forget";
         forget.textContent = "\u00d7";
         forget.title = forget.ariaLabel = `Forget ${file.title}'s labels`;
         forget.addEventListener("click", () => this._labelFiles.remove(file));
-        node.append(file.title, " ", bank, forget);
+        node.append(file.title, " ", bank, banks, forget);
         return node;
     }
 
     async _dropLabels(file) {
         try {
             const added = this._labelFiles.add({
+                key: file.name,
                 title: file.name,
                 source: "",
                 text: await file.text(),
                 bank: null,
             });
-            toast(`${added.labels.length} labels from ${file.name} name addresses in the debugger.`, {
+            const names = new Set(added.labels.map(({ name }) => name)).size;
+            toast(`${names} names from ${file.name} are in the debugger.`, {
                 title: "Label files",
             });
         } catch (error) {

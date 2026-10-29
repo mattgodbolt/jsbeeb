@@ -3,20 +3,21 @@
  * sets. The formats, as their writers write them:
  *
  * - BeebAsm's `-d` or `-dd`, alone or with `-labels <file>`: `[{'start':6400L,'.loop':6402L}]`, in decimal,
- *   with `-dd`'s names as dotted scopes (`.done._0.inner`); SymbolTable::Dump in
+ *   with `-dd`'s names as dotted scopes (`._0.inner`); SymbolTable::Dump in
  *   https://github.com/stardot/beebasm/blob/5d5d9405ef5e017a041871839d47aec3b1577bff/src/symboltable.cpp
  * - VICE's `save_labels`, `al C:1900 .start` (mon_save_symbols in
  *   https://github.com/VICE-Team/svn-mirror/blob/b8f6bc233c32b1d1e9d5a7d558e684cd860b1eb0/vice/src/monitor/monitor.c),
  *   and cc65's `-Ln`, `al 001900 .start`; another memory space than the computer's is a disc drive's.
  * - b-em's `simplesym`, `start=$1900`, `&1900`, `1900` or `F:8000` for ROM bank F (simplesym and
  *   dbg_parse_addr in https://github.com/stardot/b-em/blob/fbe85339ac4ac565f4bb65e5aae7998eb71a5632/src/debugger.c
- *   and src/6502.c), which also reads ACME's `start = $1900 ; comment`, as VICE's `load_labels` does.
+ *   and src/6502.c), which ignores what follows the address.
  */
 import { isHttps } from "./symbol-sets.js";
 
 const SidewaysStart = 0x8000;
 const SidewaysEnd = 0xc000;
 const LastAddress = 0xffff;
+const QuotedLength = 40;
 
 const BeebAsmFile = /^\[\{([\s\S]*)\}\]$/;
 // BeebAsm's Dump, as its source is now, writes no comma between -d's list and -dd's.
@@ -28,6 +29,8 @@ const BemValue = /^(?:[$&]([0-9a-f]+)|(?:([0-9a-f]):)?([0-9a-f]+))$/i;
 const CommentLine = /^\s*(?:[;#].*)?$/;
 
 /** @typedef {{name: string, address: number, bank: number | null}} Label - `bank` for a b-em `bank:address` */
+
+const quoted = (text) => `"${text.length > QuotedLength ? `${text.slice(0, QuotedLength)}...` : text}"`;
 
 function checkedAddress(value, where) {
     if (!(value <= LastAddress)) throw new Error(`${where} has the address ${value}, past $ffff`);
@@ -44,7 +47,7 @@ function beebAsmLabels(body) {
         labels.push({ name: name.replace(/^\./, ""), address: checkedAddress(Number(value), `'${name}'`), bank: null });
     }
     const rest = body.slice(consumed).trim();
-    if (rest) throw new Error(`it has "${rest.slice(0, 20)}" where a label goes`);
+    if (rest) throw new Error(`it has ${quoted(rest)} where a label goes`);
     return labels;
 }
 
@@ -59,7 +62,7 @@ function lineLabel(line, number) {
     }
     const assignment = AssignmentLine.exec(line);
     const value = assignment && BemValue.exec(assignment[2]);
-    if (!value) throw new Error(`${where}, "${line}", isn't a BeebAsm, VICE or b-em label`);
+    if (!value) throw new Error(`${where}, ${quoted(line)}, isn't a BeebAsm, VICE or b-em label`);
     const [, prefixed, bank, bare] = value;
     return {
         name: assignment[1],
@@ -86,6 +89,15 @@ export function parseLabels(text) {
     return labels;
 }
 
+function fileName(url) {
+    const name = new URL(url, "file:///").pathname.split("/").pop() || url;
+    try {
+        return decodeURIComponent(name);
+    } catch {
+        return name;
+    }
+}
+
 const inSideways = (address) => address >= SidewaysStart && address < SidewaysEnd;
 
 /**
@@ -93,7 +105,8 @@ const inSideways = (address) => address >= SidewaysStart && address < SidewaysEn
  * or null for whatever is paged in; `set` is what credits it, shaped as a symbol set.
  */
 class LabelFile {
-    constructor(title, source, labels, bank) {
+    constructor(key, title, source, labels, bank) {
+        this.key = key;
         this.title = title;
         this.labels = labels;
         this.bank = bank;
@@ -153,9 +166,10 @@ class LabelledNames {
 }
 
 /**
- * The label files loaded into this page, each by its title, which a file of the same title replaces. Where
- * two name an address, a name for the bank paged in comes first, then the earlier file's. Dispatches
- * "change" when one is added, removed or tied to another bank.
+ * The label files loaded into this page, in the order they were added; a file added with the key of
+ * one already here replaces it, keeping its place and any bank it was tied to. Where two name an
+ * address, a name for the bank paged in comes first, then the earlier file's. Dispatches "change" when
+ * one is added, removed or tied to another bank.
  */
 export class LabelFiles extends EventTarget {
     /** @param {{load: (url: string) => Promise<Uint8Array>}} options */
@@ -168,35 +182,35 @@ export class LabelFiles extends EventTarget {
     }
 
     /**
-     * Adds the labels in `text`, replacing any file of the same title, crediting `source` if it isn't
-     * empty. Throws, saying what is wrong, if it isn't a label file.
-     * @param {{title: string, source: string, text: string, bank: number | null}} file
+     * Adds the labels in `text`, crediting `source` if it isn't empty. Throws, saying what is wrong, if
+     * it isn't a label file.
+     * @param {{key: string, title: string, source: string, text: string, bank: number | null}} file
      */
-    add({ title, source, text, bank }) {
+    add({ key, title, source, text, bank }) {
         let labels;
         try {
             labels = parseLabels(text);
         } catch (error) {
             throw new Error(`${title} isn't a label file jsbeeb reads: ${error.message}`, { cause: error });
         }
-        const file = new LabelFile(title, source, labels, bank);
-        const replaced = this.files.findIndex((each) => each.title === title);
+        const replaced = this.files.findIndex((each) => each.key === key);
+        const file = new LabelFile(key, title, source, labels, bank ?? this.files[replaced]?.bank ?? null);
         if (replaced >= 0) this.files[replaced] = file;
         else this.files.push(file);
         this._changed();
         return file;
     }
 
-    /** Fetches `url` and adds it, by the last part of its path. */
+    /** Fetches `url` and adds it, titled by the last part of its path. */
     async load(url, bank) {
-        const title = decodeURIComponent(new URL(url, "file:///").pathname.split("/").pop() || url);
         let data;
         try {
             data = await this._load(url);
         } catch (error) {
             throw new Error(`Couldn't fetch the labels in ${url}: ${error.message}`, { cause: error });
         }
-        return this.add({ title, source: isHttps(url) ? url : "", text: new TextDecoder().decode(data), bank });
+        const text = new TextDecoder().decode(data);
+        return this.add({ key: url, title: fileName(url), source: isHttps(url) ? url : "", text, bank });
     }
 
     remove(file) {

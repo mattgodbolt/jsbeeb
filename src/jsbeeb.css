@@ -167,12 +167,28 @@ body {
 
 .label-bank {
   margin-left: 2px;
-  padding: 0 2px;
+  padding: 0 4px;
   border: 1px solid #555555;
   border-radius: 3px;
   background: #222222;
   color: #dddddd;
   font-size: inherit;
+}
+
+.label-banks.show {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  min-width: 0;
+  font-size: 12px;
+}
+
+.label-banks .dropdown-item {
+  padding: 2px 10px;
+  text-align: center;
+}
+
+.label-banks .dropdown-item:first-child {
+  grid-column: 1 / -1;
 }
 
 .label-forget {
