@@ -23,7 +23,7 @@ describe("PagingPanel", () => {
 
     const meanings = (name) => decodedMeanings("paging-panel", name);
     const sockets = () =>
-        [...document.querySelectorAll("#paging-panel .socket")].map((row) => [
+        [...document.querySelectorAll("#paging-panel .paging-socket")].map((row) => [
             ...[...row.children].map((part) => part.textContent),
             row.classList.contains("paged"),
         ]);
@@ -51,7 +51,7 @@ describe("PagingPanel", () => {
             ["D", "ROM", "empty", false],
         ]);
         expect(rows[15]).toEqual(["0", "RAM", "sideways RAM", false]);
-        document.querySelectorAll("#paging-panel .socket")[1].click();
+        document.querySelectorAll("#paging-panel .paging-socket")[1].click();
         expect(showBank).toHaveBeenCalledWith(14);
     });
 

@@ -989,8 +989,8 @@ small {
   width: 32ch;
 }
 
-/* Down the columns from the highest bank, as the video ULA's palette is laid out. */
-.socket-grid {
+/* Down the columns from the highest bank. */
+.paging-socket-grid {
   display: grid;
   grid-template-rows: repeat(8, auto);
   grid-auto-flow: column;
@@ -998,8 +998,13 @@ small {
   column-gap: 2ch;
 }
 
-.socket {
+.paging-sockets-heading {
+  padding-left: 4px;
+}
+
+.paging-socket {
   display: grid;
+  /* A fixed width for the title keeps a loaded ROM from resizing the panel. */
   grid-template-columns: max-content max-content 20ch;
   gap: 0 1ch;
   padding: 0 4px;
@@ -1007,29 +1012,28 @@ small {
   cursor: pointer;
 }
 
-.socket:hover {
+.paging-socket:hover {
   text-decoration: underline;
 }
 
-.socket.paged {
+.paging-socket.paged {
   color: #000000;
   background: #80d0d0;
 }
 
-.socket-bank {
+.paging-socket-bank {
   color: #f0d080;
 }
 
-.socket-kind {
+.paging-socket-kind {
   color: #aaaaaa;
 }
 
-.socket.paged span {
+.paging-socket.paged span {
   color: inherit;
 }
 
-/* Its fixed width keeps a loaded ROM from resizing the panel. */
-.socket-contents {
+.paging-socket-contents {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

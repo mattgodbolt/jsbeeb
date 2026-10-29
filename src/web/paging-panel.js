@@ -84,11 +84,11 @@ export class PagingPanel {
         body.innerHTML = `
             <div>
                 <div class="paging-registers"></div>
-                <div class="decoded-heading">Sockets</div>
-                <div class="socket-grid"></div>
+                <div class="decoded-heading paging-sockets-heading">Sockets</div>
+                <div class="paging-socket-grid"></div>
             </div>`;
         this._registers = new DecodedRegisters(body.querySelector(".paging-registers"), sections(isMaster));
-        this._sockets = this._socketGrid(body.querySelector(".socket-grid"), showBank);
+        this._sockets = this._socketGrid(body.querySelector(".paging-socket-grid"), showBank);
         this.update();
     }
 
@@ -97,9 +97,13 @@ export class PagingPanel {
             .reverse()
             .map((bank) => {
                 const socket = document.createElement("div");
-                socket.className = "socket";
+                socket.className = "paging-socket";
                 socket.title = `Show bank ${bankName(bank)} from &8000`;
-                const [name, kind, contents] = ["socket-bank", "socket-kind", "socket-contents"].map((className) => {
+                const [name, kind, contents] = [
+                    "paging-socket-bank",
+                    "paging-socket-kind",
+                    "paging-socket-contents",
+                ].map((className) => {
                     const part = document.createElement("span");
                     part.className = className;
                     return part;
