@@ -179,6 +179,10 @@ jobs:
   update-web:
     needs: [checks, unit, integration, e2e, cpu-test]
     runs-on: ubuntu-24.04
+    concurrency:
+      group: ${{ github.ref == 'refs/heads/main' && 'deploy-web' || format('update-web-{0}', github.run_id) }}
+      cancel-in-progress: false
+      queue: max
     steps:
       - uses: actions/checkout@v7
       - name: Use Node.js
@@ -191,18 +195,32 @@ jobs:
           GA_MEASUREMENT_ID: ${{ vars.GA_MEASUREMENT_ID }}
         run: |
           make dist
-      - name: Deploy the rendezvous function
+      # Test runs finish out of order, so an older commit can reach the deploy after a newer one.
+      - name: Check this is still the newest commit on main
+        id: newest
         if: github.ref == 'refs/heads/main'
+        run: |
+          tip=$(git ls-remote --exit-code origin refs/heads/main)
+          tip=${tip%%[[:space:]]*}
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo deploy=true >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Not deploying: main has moved on to $tip, whose own run deploys it if its tests pass"
+          fi
+      - name: Deploy the rendezvous function
+        if: steps.newest.outputs.deploy == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-2
         run: |
           zip -j rendezvous.zip rendezvous/*
+          # A previous update that Failed must not block this one; one still in progress fails the next line anyway.
+          aws lambda wait function-updated-v2 --function-name jsbeeb-rendezvous || true
           aws lambda update-function-code --function-name jsbeeb-rendezvous --zip-file fileb://rendezvous.zip
           aws lambda wait function-updated-v2 --function-name jsbeeb-rendezvous
       - name: Deploy to S3
-        if: github.ref == 'refs/heads/main'
+        if: steps.newest.outputs.deploy == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
