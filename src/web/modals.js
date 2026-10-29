@@ -74,33 +74,36 @@ export class Modals {
     /** @returns {Promise<boolean>} true for the yes button; false for any other way out of the dialog */
     confirm(message, yesText, noText) {
         const yesButton = this.aysEl.querySelector(".ays-yes");
-        this.aysEl.querySelector(".context").textContent = message;
-        this.aysEl.querySelector(".ays-no").textContent = noText;
-        yesButton.textContent = yesText;
         return new Promise((resolve) => {
             let confirmed = false;
             const onYes = () => {
                 confirmed = true;
                 this.aysModal.hide();
             };
-            // Listening from the show, not now, keeps a previous opening's late hidden from answering this question.
-            this.aysEl.addEventListener(
-                "show.bs.modal",
-                () => {
-                    yesButton.addEventListener("click", onYes, { once: true });
-                    // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
-                    this.aysEl.addEventListener(
-                        "hidden.bs.modal",
-                        () => {
-                            yesButton.removeEventListener("click", onYes);
-                            resolve(confirmed);
-                        },
-                        { once: true },
-                    );
-                },
-                { once: true },
-            );
+            // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
+            const onHidden = () => {
+                yesButton.removeEventListener("click", onYes);
+                resolve(confirmed);
+            };
+            // Asked from the show, not now, so a previous opening's late hidden cannot answer this question.
+            const ask = () => {
+                this.aysEl.querySelector(".context").textContent = message;
+                this.aysEl.querySelector(".ays-no").textContent = noText;
+                yesButton.textContent = yesText;
+                yesButton.addEventListener("click", onYes, { once: true });
+                this.aysEl.addEventListener("hidden.bs.modal", onHidden, { once: true });
+            };
+            this.aysEl.addEventListener("show.bs.modal", ask, { once: true });
+            // Bootstrap raises no show at all while the dialog is up or in its own fade; that question goes unasked.
+            let raised = false;
+            const onRaised = (event) => (raised ||= event.target === this.aysEl);
+            window.addEventListener("show.bs.modal", onRaised, { capture: true });
             this.aysModal.show();
+            window.removeEventListener("show.bs.modal", onRaised, { capture: true });
+            if (!raised) {
+                this.aysEl.removeEventListener("show.bs.modal", ask);
+                resolve(false);
+            }
         });
     }
 }

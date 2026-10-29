@@ -52,17 +52,26 @@ describe("Modals", () => {
             expect(loop.hold).toHaveBeenCalledTimes(1);
         });
 
+        const afterTheDialogFades = async (next) => {
+            modals.hide("info");
+            await vi.advanceTimersToNextTimerAsync();
+            modals.show(next);
+        };
+        const fromTheHideEvent = async (next) => {
+            document.getElementById("info").addEventListener("hide.bs.modal", () => modals.show(next), { once: true });
+            modals.hide("info");
+        };
+
         it.each([
-            ["the same modal", "info"],
-            ["another modal", "help"],
+            ["the same modal", "info", afterTheDialogFades],
+            ["another modal", "help", afterTheDialogFades],
+            ["another modal from the hide itself", "help", fromTheHideEvent],
         ])(
-            "shows %s raised while a modal's backdrop is still fading once that is done, whole and held",
-            async (_, next) => {
+            "shows %s raised while a modal is closing once it has closed, whole and held",
+            async (_, next, raiseWhileClosing) => {
                 modals.show("info");
                 await vi.runAllTimersAsync();
-                modals.hide("info");
-                await vi.advanceTimersToNextTimerAsync();
-                modals.show(next);
+                await raiseWhileClosing(next);
                 await vi.runAllTimersAsync();
                 expect([...document.querySelectorAll(".modal.show")]).toEqual([document.getElementById(next)]);
                 expect(document.querySelectorAll(".modal-backdrop")).toHaveLength(1);
@@ -71,6 +80,18 @@ describe("Modals", () => {
                 expect(resumes()[1]).not.toHaveBeenCalled();
             },
         );
+
+        it("lets other modals show after a hide that was prevented", async () => {
+            modals.show("info");
+            await vi.runAllTimersAsync();
+            document
+                .getElementById("info")
+                .addEventListener("hide.bs.modal", (event) => event.preventDefault(), { once: true });
+            modals.hide("info");
+            modals.show("help");
+            await vi.runAllTimersAsync();
+            expect(document.getElementById("help").classList.contains("show")).toBe(true);
+        });
 
         it("reports whether any modal is up", () => {
             expect(modals.anyVisible()).toBe(false);
@@ -139,6 +160,16 @@ describe("Modals", () => {
             dialog().querySelector(".ays-yes").click();
             await vi.runAllTimersAsync();
             await expect(second).resolves.toBe(true);
+        });
+
+        it("answers no at once to a question asked while another is up, leaving that one on screen", async () => {
+            const first = modals.confirm("Restart now?", "Restart", "Later");
+            await vi.runAllTimersAsync();
+            await expect(modals.confirm("Switch machine?", "Switch", "Stay")).resolves.toBe(false);
+            expect(dialog().querySelector(".context").textContent).toBe("Restart now?");
+            dialog().querySelector(".ays-yes").click();
+            await vi.runAllTimersAsync();
+            await expect(first).resolves.toBe(true);
         });
     });
 
