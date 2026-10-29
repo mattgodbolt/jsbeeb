@@ -135,6 +135,11 @@ describe("Debugger", () => {
         [...document.querySelectorAll("#memory > div")]
             .find((row) => addrOf(row) === hexword(address & ~7))
             .querySelectorAll(".mem_bytes span")[address & 7];
+    const editField = () => document.querySelector("#memory .mem-edit");
+    const type = (text, key, shiftKey) => {
+        editField().value = text;
+        editField().dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    };
     const watchBox = () => document.getElementById("watch-add");
     const addWatch = (text) => {
         watchBox().value = text;
@@ -581,14 +586,6 @@ describe("Debugger", () => {
         });
 
         describe("edited in place", () => {
-            const editField = () => document.querySelector("#memory .mem-edit");
-            const type = (text, key, shiftKey) => {
-                editField().value = text;
-                editField().dispatchEvent(
-                    new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }),
-                );
-            };
-
             beforeEach(() => {
                 cpu.writemem(0x1234, 0x48);
                 cpu.writemem(0x1235, 0x49);
@@ -799,14 +796,12 @@ describe("Debugger", () => {
             form.dispatchEvent(new Event("submit", { cancelable: true }));
             const [saved] = downloads();
             expect([...new Uint8Array(await saved.blob.arrayBuffer())]).toEqual([0x44]);
-            const field = () => document.querySelector("#memory .mem-edit");
             memByte(0x8100).click();
-            expect(field()).toBeNull();
+            expect(editField()).toBeNull();
             goTo("goto-mem-addr-form", "$7fff");
             memByte(0x7fff).click();
-            field().value = "12";
-            field().dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
-            expect([field(), cpu.peekmem(0x7fff)]).toEqual([null, 0x12]);
+            type("12", "Tab", false);
+            expect([editField(), cpu.peekmem(0x7fff)]).toEqual([null, 0x12]);
             expect(toasts()).toEqual([
                 expect.stringContaining("$8100 shows other memory"),
                 expect.stringContaining("$8000 shows other memory"),
