@@ -342,11 +342,11 @@ describe("Debugger", () => {
             expect(document.getElementById("cpu6502_stack").textContent).toBe("");
         });
 
-        it("time from where the stopwatch was reset, until the state it was reset in is replaced or powered off", () => {
+        it("time from where the stopwatch was reset, until the state it was reset in is replaced, through a power-on reset", () => {
             const stopwatch = () => document.getElementById("debug-stopwatch").textContent;
             const reset = () => document.getElementById("debug-stopwatch-reset").click();
             dbgr.debug(cpu.pc);
-            expect(stopwatch()).toBe(String(cycleCount(cpu)));
+            expect(stopwatch()).toBe(String(cpu.scheduler.epoch));
             reset();
             expect(stopwatch()).toBe("0");
             keyPress("n");
@@ -355,11 +355,12 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             expect(stopwatch()).toBe("");
             reset();
-            expect(stopwatch()).toBe("0");
             keyPress("n");
+            const timed = stopwatch();
             cpu.reset(true);
             dbgr.debug(cpu.pc);
-            expect(stopwatch()).toBe("");
+            expect(stopwatch()).toBe(timed);
+            expect(cycleCount(cpu)).toBe(0);
         });
 
         it("show where the beam is in the frame, and the CRTC's counters only on a machine with one", () => {

@@ -333,7 +333,8 @@ export class Debugger {
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
-        // Null once the state it started in is replaced, until it is reset.
+        // On the scheduler's clock, which a power-on reset leaves running. Null once the state it started in is
+        // replaced, until it is reset.
         this._stopwatchFrom = 0;
         this._inDebugger = false;
         this._hidingPanels = false;
@@ -415,7 +416,7 @@ export class Debugger {
         );
         document.getElementById("debug-stopwatch-reset").addEventListener("click", () => {
             if (!this.cpu) return;
-            this._stopwatchFrom = cycleCount(this.cpu);
+            this._stopwatchFrom = this.cpu.scheduler.epoch;
             this.updateRegisters();
         });
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
@@ -745,9 +746,7 @@ export class Debugger {
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
         const cycles = cycleCount(cpu);
         this.updateElem(document.getElementById("cpu6502_cycles"), String(cycles));
-        // A power-on reset starts the count again from zero, behind the stopwatch's start.
-        const timing = this._stopwatchFrom !== null && cycles >= this._stopwatchFrom;
-        const stopwatch = timing ? String(cycles - this._stopwatchFrom) : "";
+        const stopwatch = this._stopwatchFrom === null ? "" : String(cpu.scheduler.epoch - this._stopwatchFrom);
         this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
         const beam = cpu.video.beamPosition();
         this.updateElem(document.getElementById("beam-line"), String(beam.line));
