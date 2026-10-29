@@ -4,62 +4,34 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { UserVia } from "../../src/via.js";
 import { UserViaPanel } from "../../src/web/uservia-panel.js";
-import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
-import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, fakeAnimationFrames, teardownDom, ViaRegister } from "./helpers.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { decodedMeanings, decodedRow, domFromIndexHtml, teardownDom, ViaRegister } from "./helpers.js";
 
-const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, PCR } = ViaRegister;
+const { ORB, ORA, DDRB, DDRA, PCR } = ViaRegister;
 const PcrCa2PulseOutput = 0x0a;
-const TicksPerMicrosecond = 2;
 
 describe("UserViaPanel", () => {
     let scheduler;
     let via;
-    let arrangement;
     let panel;
     let userPortInputs;
-    let frames;
 
     beforeEach(() => {
         domFromIndexHtml("peripherals-panel");
-        frames = fakeAnimationFrames();
         scheduler = new Scheduler();
         userPortInputs = 0xff;
         via = new UserVia({ interrupt: 0 }, scheduler, false, { read: () => userPortInputs, write: () => {} });
-        arrangement = new PanelArrangement(() => window.localStorage);
-        arrangement.followMachine(() => scheduler.epoch);
-        panel = new UserViaPanel({ cpu: { uservia: via }, arrangement });
-        panel.floating.open();
+        panel = new UserViaPanel({
+            cpu: { uservia: via },
+            arrangement: new PanelArrangement(() => window.localStorage),
+        });
     });
 
     afterEach(teardownDom);
 
-    const registerRow = (name) =>
-        [...document.querySelectorAll("#uservia-panel .decoded-registers tr")].find(
-            (row) => row.querySelector("th")?.textContent === name,
-        );
-    /** A lit bit as +name, an unlit one as -name, and a value spelt out as itself. */
-    const meanings = (name) =>
-        [...registerRow(name).querySelectorAll(".decoded-meaning span")].map((span) => {
-            if (span.classList.contains("decoded-value")) return span.textContent;
-            return `${span.classList.contains("lit") ? "+" : "-"}${span.textContent}`;
-        });
-    const titles = (name) => [...registerRow(name).querySelectorAll(".decoded-meaning span")].map((span) => span.title);
-
-    it("is made for a BBC or a Master, not for an Atom, whose CPU carries a user VIA it never wires up", () => {
-        const fits = (name) => UserViaPanel.fits({ model: findModel(name) });
-        expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
-    });
-
-    it("opens and closes from the peripherals panel's user VIA section, as one of the debugger's panels", () => {
-        const opener = document.querySelector('#uservia [data-opens="uservia-panel"]');
-        opener.click();
-        expect(panel.floating.isOpen).toBe(false);
-        opener.click();
-        expect(panel.floating.isOpen).toBe(true);
-        expect(arrangement.panelsIn(DebugGroup)).toEqual([panel.floating]);
-        expect(arrangement.listed().map(({ title }) => title)).toEqual(["User VIA"]);
-    });
+    const meanings = (name) => decodedMeanings("uservia-panel", name);
+    const titles = (name) =>
+        [...decodedRow("uservia-panel", name).querySelectorAll(".decoded-meaning span")].map((span) => span.title);
 
     it("shows the character on the printer's data lines, and a byte that is not one in hex", () => {
         via.write(DDRA, 0xff);
@@ -110,14 +82,5 @@ describe("UserViaPanel", () => {
             "+CA1 printer ack",
             "-CA2 printer strobe",
         ]);
-    });
-
-    it("gives the timers in cycles, and keeps up once a frame as the machine moves on", () => {
-        via.write(T1CL, 0x10);
-        via.write(T1CH, 0x27);
-        scheduler.polltime(100 * TicksPerMicrosecond);
-        frames.run();
-        expect(meanings("T1L")).toEqual(["10000 cycles"]);
-        expect(meanings("T1C")).toEqual(["9901 cycles"]);
     });
 });

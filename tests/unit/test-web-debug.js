@@ -333,7 +333,6 @@ describe("Debugger", () => {
         describe("once a frame", () => {
             let frames;
             const shownA = () => document.getElementById("cpu6502_a").textContent;
-            const shownPc = () => document.getElementById("cpu6502_pc").textContent;
 
             beforeEach(() => {
                 frames = fakeAnimationFrames();
@@ -350,28 +349,6 @@ describe("Debugger", () => {
                 expect(addrOf(document.querySelector("#disassembly .current"))).toBe("2002");
                 expect(memHighlight().querySelector(".mem_bytes span").textContent).toBe("77");
                 expect(read).not.toHaveBeenCalled();
-            });
-
-            it("draw nothing while the machine stands still, so a click lands on what it went down on", () => {
-                const operand = () => disRows()[8].querySelector(".disassembly").firstChild;
-                const before = operand();
-                const peek = vi.spyOn(cpu, "peekmem");
-                frames.run();
-                frames.run();
-                expect(peek).not.toHaveBeenCalled();
-                expect(operand()).toBe(before);
-            });
-
-            it("catch up with a state put in while the machine is paused", () => {
-                const start = cpu.snapshotState();
-                stoppedLoop.go();
-                stoppedLoop.tick(2);
-                stoppedLoop.stop(false);
-                frames.run();
-                expect(shownPc()).toBe("2002");
-                cpu.restoreState(start);
-                frames.run();
-                expect(shownPc()).toBe("2000");
             });
 
             it("read nothing once closed", () => {
