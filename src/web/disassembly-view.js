@@ -78,9 +78,9 @@ export class DisassemblyView {
      * @param {(event: MouseEvent, address: number, name: string | undefined) => void} options.offerWatch - offers a
      * right-clicked address as a watch
      * @param {() => void} options.runToCursor
-     * @param {() => void} options.redraw - redraws it, once its rows have changed in number
+     * @param {() => void} options.refit - redraws it, once its rows have changed in number
      */
-    constructor({ floating, keys, names, dump, resolve, showing, showMemory, offerWatch, runToCursor, redraw }) {
+    constructor({ floating, keys, names, dump, resolve, showing, showMemory, offerWatch, runToCursor, refit }) {
         this._names = names;
         this._dump = dump;
         this._showing = showing;
@@ -88,10 +88,11 @@ export class DisassemblyView {
         this._cpu = null;
         this._sheila = [];
         this._cursor = 0;
+        this._cursorRow = Math.floor(InitialRows / 2);
         this._backStack = [];
         this._breakpoints = new Map();
         this._widget = floating.panel.querySelector("#disassembly");
-        this._rows = new FittedRows(this._widget, InitialRows, redraw);
+        this._rows = new FittedRows(this._widget, InitialRows, refit);
 
         bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, (address) => this.update(address));
 
@@ -127,7 +128,7 @@ export class DisassemblyView {
                 runToCursor,
                 toggleBreakpoint: () => {
                     this._toggleBreakpoint(this._cursor);
-                    this.update(this._cursor);
+                    this.redraw();
                 },
                 down: () => this.update(this._nextInstruction(this._cursor)),
                 up: () => this.update(this._prevInstruction(this._cursor)),
@@ -156,16 +157,30 @@ export class DisassemblyView {
         return this._cursor;
     }
 
-    /** Shows the instructions around `address`, highlighting it. */
+    /** Shows the instructions around `address`, highlighting it in the middle row. */
     update(address) {
+        this._draw(address, this._middleRow());
+    }
+
+    /** Shows the highlighted instruction again in the row it is in, or the middle row if that row has gone. */
+    redraw() {
+        this._draw(this._cursor, this._cursorRow < this._rows.rows.length ? this._cursorRow : this._middleRow());
+    }
+
+    _middleRow() {
+        return Math.floor(this._rows.rows.length / 2);
+    }
+
+    _draw(address, cursorRow) {
         this._cursor = address;
-        const { rows, anchor } = this._rows;
+        this._cursorRow = cursorRow;
+        const { rows } = this._rows;
         const shown = new Set();
-        for (let i = anchor; i < rows.length; ++i) {
+        for (let i = cursorRow; i < rows.length; ++i) {
             address = this._showRow(rows[i], address, shown);
         }
         address = this._cursor;
-        for (let i = anchor - 1; i >= 0; --i) {
+        for (let i = cursorRow - 1; i >= 0; --i) {
             address = this._prevInstruction(address);
             this._showRow(rows[i], address, shown);
         }

@@ -144,14 +144,34 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
-        it("keeps a paused disassembly where it was put when a resize changes how many rows it shows", () => {
+        it("centres the disassembly on what it moves to at any height, and keeps a stopped one's row through a resize", () => {
             const rowHeight = 16;
+            const highlightRow = () => disRows().indexOf(currentRow());
+            const resizeTo = (rows) => resize(document.getElementById("disassembly"), rows * rowHeight);
             dbgr.showPanels();
             goTo("goto-dis-addr-form", "c000");
             vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, rowHeight));
-            resize(document.getElementById("disassembly"), 20 * rowHeight);
-            expect(disRows()).toHaveLength(20);
-            expect(addrOf(currentRow())).toBe("c000");
+            resizeTo(40);
+            expect(disRows()).toHaveLength(40);
+            expect([addrOf(currentRow()), highlightRow()]).toEqual(["c000", 8]);
+
+            dbgr.debug(cpu.pc);
+            expect(highlightRow()).toBe(20);
+            resizeTo(16);
+            expect(highlightRow()).toBe(8);
+            resizeTo(40);
+            keyPress("j");
+            expect(highlightRow()).toBe(20);
+            resizeTo(50);
+            keyPress("t");
+            expect(highlightRow()).toBe(20);
+            dbgr.panels.disassembly.close();
+            dbgr.panels.disassembly.open();
+            expect(highlightRow()).toBe(20);
+
+            stoppedLoop.go();
+            resizeTo(30);
+            expect([addrOf(currentRow()), highlightRow()]).toEqual([hexword(cpu.pc), 15]);
         });
 
         const DebugPanels = [
