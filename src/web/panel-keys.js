@@ -48,9 +48,9 @@ export function keyLine(table) {
         .join(" · ");
 }
 
-/** Help's rows for `tables`: each documented combo, its keys as key caps, and what they do. */
-export function helpRows(tables) {
-    return tables.flatMap(documented).map(({ combo, description }) => helpRow(combo.split(" "), description));
+/** Help's rows for `table`: each documented combo, its keys as key caps, and what they do. */
+export function helpRows(table) {
+    return documented(table).map(({ combo, description }) => helpRow(combo.split(" "), description));
 }
 
 /** A row of Help: `keys` as key caps, and what they do. */

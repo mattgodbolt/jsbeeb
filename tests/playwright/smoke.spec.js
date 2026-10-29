@@ -837,7 +837,7 @@ test.describe("on a phone", () => {
     });
 });
 
-test("each of help's tabs fits a desktop or tablet window whole and a phone's width, and opens on the debugging tab while paused", async ({
+test("each of help's tabs fits a desktop or tablet window whole and a phone's width, and opens on the debugging tab while paused or debugging", async ({
     beeb,
     page,
 }) => {
@@ -889,11 +889,18 @@ test("each of help's tabs fits a desktop or tablet window whole and a phone's wi
 
     await page.setViewportSize({ width: 1920, height: 940 });
     await tabs.first().click();
-    await page.keyboard.press("Escape");
-    await beeb.expectRunningPast(await beeb.cycles());
-    await page.keyboard.press("Alt+P");
-    await openHelp();
-    await expect(page.locator("#help-debugging.show")).toBeVisible();
+    for (const stop of ["Alt+P", "Alt+S"]) {
+        await page.keyboard.press("Escape");
+        await beeb.expectRunningPast(await beeb.cycles());
+        await page.keyboard.press(stop);
+        await openHelp();
+        await expect(page.locator("#help-debugging.show"), stop).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.locator("#help")).toBeHidden();
+        await page.keyboard.press(stop);
+        await openHelp();
+        await expect(page.locator("#help-start.show"), `after ${stop} again`).toBeVisible();
+    }
 });
 
 test("settings hold the emulator while open, a restart is asked about from inside their close, and a setting survives a reload", async ({

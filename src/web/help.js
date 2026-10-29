@@ -27,7 +27,7 @@ export function fillHelp() {
             heading.textContent = title;
             const rows = document.createElement("table");
             rows.className = "table table-sm";
-            rows.createTBody().append(...helpRows([table]));
+            rows.createTBody().append(...helpRows(table));
             block.append(heading, rows);
             return block;
         }),
