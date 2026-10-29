@@ -201,6 +201,7 @@ export const ToolbarKeys = [
         label: "step out",
         description: "Run until this subroutine or interrupt handler returns",
     },
+    { combo: "v", key: "v", run: "runToVsync", label: "vsync", description: "Run to the start of the next vsync" },
 ];
 
 export const MemoryKeys = [

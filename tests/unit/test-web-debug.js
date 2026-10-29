@@ -427,7 +427,7 @@ describe("Debugger", () => {
             it("names in each button's tooltip the key that does the same", () => {
                 const keyFor = (run) =>
                     [...ToolbarKeys, ...DisassemblyKeys].find((row) => row.run === run && row.key).key;
-                for (const run of ["go", "step", "stepOver", "stepOut", "runToCursor"])
+                for (const run of ["go", "step", "stepOver", "stepOut", "runToCursor", "runToVsync"])
                     expect(button(run).title).toMatch(new RegExp(`\\(${keyFor(run)}\\)$`));
             });
 
@@ -880,7 +880,7 @@ describe("Debugger", () => {
 
             it("runs to the start of the next vsync, from in one as from out of one", () => {
                 for (let i = 0; i < 2; i++) {
-                    document.querySelector(`#toolbar-panel [data-run="runToVsync"]`).click();
+                    keyPress("v");
                     finishRun();
                     expect(loop.running).toBe(false);
                     expect(beam().inVSync).toBe(true);
