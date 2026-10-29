@@ -25,6 +25,14 @@ export function cloneTemplate(container) {
     return clone;
 }
 
+/** In px, a shortfall from whole rows that layout rounding can leave, and that still counts as fitting. */
+const RowRoundingSlack = 0.5;
+
+/** How many rows of `rowHeight` fit in `height`, at least one. */
+export function rowsThatFit(height, rowHeight) {
+    return Math.max(1, Math.floor((height + RowRoundingSlack) / rowHeight));
+}
+
 /**
  * The rows of a view's container, cloned from its template, as many as fit the container's height. The stylesheet
  * sizes the container from `--rows`, set here to `initial`, and not from the rows in it, so that their number never
@@ -52,7 +60,7 @@ export class FittedRows {
             const rowHeight = this.rows[0].getBoundingClientRect().height;
             // Both are zero while the panel is hidden.
             if (height === 0 || rowHeight === 0) return;
-            const count = Math.max(1, Math.floor(height / rowHeight));
+            const count = rowsThatFit(height, rowHeight);
             if (count === this.rows.length) return;
             this._setCount(count);
             refit();

@@ -271,7 +271,8 @@ test("the disassembly and memory views fill their panels' height as they are res
                 highlight: highlight.querySelector(".addr").textContent,
                 highlightTop: highlight.getBoundingClientRect().top,
                 highlightRow: rows.indexOf(highlight),
-                fits: last.bottom <= box.bottom,
+                // Within a pixel, as a row that layout rounding leaves a fraction short still counts.
+                fits: last.bottom - box.bottom < 1,
                 full: box.bottom - last.bottom < last.height,
                 creditHeight: container.parentElement.querySelector(".debug-symbols").offsetHeight,
             };
