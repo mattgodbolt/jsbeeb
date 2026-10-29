@@ -1832,6 +1832,19 @@ export class Cpu6502 extends Base6502 {
         this.halted = true;
     }
 
+    /** Runs `run` with every debug hook detached, so nothing it executes is seen by a hook or halts at one. */
+    withoutDebugHooks(run) {
+        const attached = [this._debugInstruction, this._debugRead, this._debugWrite];
+        this._debugInstruction = this._debugRead = this._debugWrite = null;
+        this.refreshLook();
+        try {
+            return run();
+        } finally {
+            [this._debugInstruction, this._debugRead, this._debugWrite] = attached;
+            this.refreshLook();
+        }
+    }
+
     /** Changes the host key layout for the keyboard, and for every reset after it. */
     setKeyLayout(layout) {
         this.keyLayout = layout;

@@ -35,6 +35,7 @@ describe("RewindUI", () => {
         processor = {
             snapshotState: vi.fn(() => ({ live: true })),
             restoreState: vi.fn(),
+            withoutDebugHooks: (run) => run(),
             execute: vi.fn(() => {
                 video.frameCount++;
             }),
