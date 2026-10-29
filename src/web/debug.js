@@ -1,8 +1,7 @@
 import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
-import { isHttps, nameUrl } from "../symbol-sets.js";
-import { sheilaBlocks, sheilaName } from "../sheila.js";
+import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
 import { SysViaPanel } from "./sysvia-panel.js";
 import { WatchPanel } from "./watch-panel.js";
@@ -11,6 +10,8 @@ import { FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
+import { bindGotoForm, cloneTemplate, externalLink, labelHtml } from "./debug-dom.js";
+import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 
 const noop = () => {};
 
@@ -22,51 +23,9 @@ const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
 const Call = /^JSR\b/;
 const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
 
-const Writes = /^\*?(?:ST[AXYZ]|SAX|SH[ASXY])\b/;
-const ReadModifyWrites = /^\*?(?:ASL|LSR|ROL|ROR|INC|DEC|TSB|TRB|DCP|ISB|RLA|RRA|SLO|SRE)\b/;
-
-/** @returns {("read" | "write")[]} */
-function operandAccesses(instruction) {
-    if (Writes.test(instruction)) return ["write"];
-    if (ReadModifyWrites.test(instruction)) return ["read", "write"];
-    return ["read"];
-}
-
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
     return ((s - startS) & 0xff) < 0x80;
-}
-
-function labelHtml(addr) {
-    return '<span class="addr">' + hexword(addr) + "</span>";
-}
-
-function nameTitle({ name, set }, addr) {
-    const url = nameUrl(set, name, addr);
-    return `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
-}
-
-function showName(node, named, addr) {
-    node.classList.add("named");
-    node.textContent = named.name;
-    node.title = nameTitle(named, addr);
-}
-
-function nameNode(named, addr) {
-    const url = nameUrl(named.set, named.name, addr);
-    const node = url ? externalLink(url) : document.createElement("span");
-    node.classList.add("symbol");
-    showName(node, named, addr);
-    return node;
-}
-
-function externalLink(url, text = "") {
-    const link = document.createElement("a");
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = text;
-    return link;
 }
 
 function sourceNode(source) {
@@ -76,16 +35,6 @@ function sourceNode(source) {
 function homeNodes(home) {
     if (!isHttps(home)) return [];
     return [externalLink(home, new URL(home).hostname.replace(/^www\./, "")), ", "];
-}
-
-// Clone a template row, unhide it, append to parent, and remove the template class.
-function cloneTemplate(container) {
-    const template = container.querySelector(".template");
-    const clone = template.cloneNode(true);
-    clone.classList.remove("template");
-    clone.style.display = "";
-    container.appendChild(clone);
-    return clone;
 }
 
 function addressFor(names, text, pc) {
@@ -219,27 +168,6 @@ export const ToolbarKeys = [
     },
 ];
 
-export const DisassemblyKeys = [
-    {
-        combo: "c",
-        key: "c",
-        run: "runToCursor",
-        label: "run to cursor",
-        description: "Run to the highlighted instruction",
-    },
-    {
-        combo: "t",
-        key: "t",
-        run: "toggleBreakpoint",
-        label: "breakpoint",
-        description: "Set or clear a breakpoint on the highlighted instruction",
-    },
-    { combo: "j k", label: "move", description: "Move the highlight down or up" },
-    { key: "j", run: "down" },
-    { key: "k", run: "up" },
-    { combo: "b", key: "b", run: "back", label: "back", description: "Back after clicking a jump target" },
-];
-
 export const MemoryKeys = [
     { combo: "u i U I", label: "±8, ±64", description: "Memory forward (u, U) or back (i, I), 8 or 64 bytes" },
     { key: "u", run: "forward" },
@@ -367,7 +295,6 @@ export class Debugger {
         this._matchedAt = 0;
         this._screenBounds = () => null;
         this._touchKeyboardShown = () => false;
-        this.disass = document.getElementById("disassembly");
         const peek = (address) => (this.cpu ? this.cpu.peekmem(address) : 0);
         this._peek = peek;
         this._credits = {
@@ -388,11 +315,7 @@ export class Debugger {
         });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
-        this.disassPc = 0;
-        this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = noop;
-        this._sheila = [];
-        this.breakpoints = {};
         this._symbolSets = symbolSets;
         this._names = NoNames;
         for (const credit of Object.values(this._credits)) toggle(credit.line, symbolSets !== null);
@@ -419,69 +342,35 @@ export class Debugger {
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
         };
+        const resolve = (text) => addressFor(this._names, text, this.cpu.pc);
+        this._disassembly = new DisassemblyView({
+            floating: this.panels.disassembly,
+            keys,
+            names: () => this._names,
+            dump: (from, to) => this._memoryView.dump(from, to),
+            resolve,
+            showing: (sets) => this._credit(this._credits.disassembly, sets),
+            showMemory: (address) => this._memoryView.update(address),
+            offerWatch: (e, address, name) => this._offerWatch(e, address, name),
+            runToCursor: this._actions.runToCursor,
+        });
         this._bindToolbar();
         this._bindKeys(keys);
 
-        const setupGoto = (form, func) => {
-            const addr = form.querySelector(".goto-addr");
-            addr.addEventListener("input", () => addr.classList.remove("is-invalid"));
-            form.addEventListener("submit", (e) => {
-                e.preventDefault();
-                const text = addr.value.trim();
-                if (!text) return;
-                const address = addressFor(this._names, text, this.cpu.pc);
-                addr.classList.toggle("is-invalid", address === undefined);
-                if (address === undefined) return;
-                func(address);
-                addr.value = "";
-                addr.blur();
-            });
-        };
-
-        setupGoto(document.getElementById("goto-mem-addr-form"), (address) => this._memoryView.update(address));
-        setupGoto(document.getElementById("goto-dis-addr-form"), this.updateDisassembly.bind(this));
-
-        for (let i = 0; i < numToShow; i++) {
-            cloneTemplate(this.disass);
-        }
-
-        this.disass.addEventListener("click", (e) => {
-            if (e.target.closest(".bp_gutter")) this.bpClick(e);
-        });
-
-        const offerWatch = (e, address, name) => {
-            e.preventDefault();
-            this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
-        };
+        bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
+            this._memoryView.update(address),
+        );
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
+            this._offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
         });
-        this.disass.addEventListener("contextmenu", (e) => {
-            const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
-            const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
-            if (operand) {
-                offerWatch(e, Number(operand.dataset.ref), operand.dataset.name);
-            } else if (e.target.closest(".dis_addr")) {
-                offerWatch(e, at, this._names.address(at, this.cpu.pc)?.name);
-            }
-        });
+    }
 
-        this.disass.addEventListener("wheel", (evt) => {
-            let deltaY = evt.deltaY;
-            if (deltaY === 0) return;
-            let addr = this.disassPc;
-            const func = deltaY < 0 ? this.prevInstruction.bind(this) : this.nextInstruction.bind(this);
-            deltaY = Math.abs(deltaY);
-            while (deltaY > 0) {
-                addr = func(addr);
-                deltaY -= 30;
-            }
-            this.updateDisassembly(addr);
-            evt.preventDefault();
-        });
+    _offerWatch(e, address, name) {
+        e.preventDefault();
+        this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
     }
 
     _makePanel(own) {
@@ -549,29 +438,12 @@ export class Debugger {
     }
 
     _bindKeys(keys) {
-        const { toolbar, disassembly, memory } = this.panels;
+        const { toolbar, memory } = this.panels;
         keys.register({
             table: ToolbarKeys,
             actions: this._actions,
             isLive: () => this._loop.mode === RunMode.debugging,
             panel: toolbar,
-        });
-        keys.register({
-            table: DisassemblyKeys,
-            actions: {
-                runToCursor: this._actions.runToCursor,
-                toggleBreakpoint: () => {
-                    this.toggleBreakpoint(this.disassPc);
-                    this.updateDisassembly(this.disassPc);
-                },
-                down: () => this.updateDisassembly(this.nextInstruction(this.disassPc)),
-                up: () => this.updateDisassembly(this.prevInstruction(this.disassPc)),
-                back: () => {
-                    if (this.disassStack.length) this.updateDisassembly(this.disassStack.pop());
-                },
-            },
-            isLive: () => disassembly.isOpen,
-            panel: disassembly,
         });
         keys.register({
             table: MemoryKeys,
@@ -584,16 +456,15 @@ export class Debugger {
             isLive: () => memory.isOpen,
             panel: memory,
         });
-        disassembly.panel.querySelector(".panel-keys").textContent = keyLine(DisassemblyKeys);
         memory.panel.querySelector(".panel-keys").textContent = keyLine(MemoryKeys);
     }
 
     /** Runs `act`, entering the debugger first, with the cursor where it was, if the machine is merely paused. */
     _fromDebugger(act) {
         if (this._loop.mode !== RunMode.debugging) {
-            const cursor = this.disassPc;
+            const cursor = this._disassembly.cursor;
             this._loop.stop(true);
-            this.updateDisassembly(cursor);
+            this._disassembly.update(cursor);
         }
         act();
     }
@@ -669,7 +540,11 @@ export class Debugger {
 
     /** Where the disassembly shows: the program counter while the machine runs or outside the debugger. */
     _disassemblyAt() {
-        return this._loop?.isRunning() || !this._inDebugger ? this.cpu.pc : this.disassPc;
+        return this._loop?.isRunning() || !this._inDebugger ? this.cpu.pc : this._disassembly.cursor;
+    }
+
+    updateDisassembly(address) {
+        this._disassembly.update(address);
     }
 
     updateMemory() {
@@ -691,12 +566,7 @@ export class Debugger {
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
-        this._sheila = sheilaBlocks({
-            model: cpu.model,
-            hasTube: cpu.hasTube,
-            hasEconet: !!cpu.econet,
-            hasVideoNula: cpu.video.ula.hasVideoNula,
-        });
+        this._disassembly.setCpu(cpu);
         if (this._ownPanelsShown()) this._showOpenPanels();
     }
     disassemble(addr) {
@@ -927,83 +797,6 @@ export class Debugger {
         return this._inDebugger;
     }
 
-    updateDisassembly(address) {
-        this.disassPc = address;
-        const elems = Array.from(this.disass.children).filter(
-            (el) => el.style.display !== "none" && !el.classList.contains("template"),
-        );
-        const shown = new Set();
-
-        const updateDisElem = (elem, address) => {
-            const result = this.disassemble(address);
-            const dump = this._memoryView.dump(address, result[1]);
-            const addrNode = elem.querySelector(".dis_addr");
-            addrNode.innerHTML = labelHtml(address);
-            const named = this._names.address(address, this.cpu.pc);
-            if (named) {
-                addrNode.append(" ", nameNode(named, address));
-                shown.add(named.set);
-            }
-            elem.classList.toggle("current", address === this.cpu.pc);
-            elem.classList.toggle("highlight", address === this.disassPc);
-            elem.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
-            elem.querySelector(".instr_asc").textContent = dump.asc.join("");
-            const disNode = elem.querySelector(".disassembly");
-            disNode.innerHTML = result[0];
-            const accesses = operandAccesses(result[0]);
-            for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
-                const target = parseInt(ref.dataset.ref, 10);
-                const operand = this._names.operand(address, target);
-                const register = ref.classList.contains("instr_mem_ref")
-                    ? sheilaName(this._sheila, target, accesses)
-                    : undefined;
-                // A register's name displaces a MOS's name for it, but not a program's, which says what it is for.
-                const inline = register && operand?.set.system ? undefined : operand;
-                if (inline) {
-                    showName(ref, inline, target);
-                    if (register) ref.title += `\n${register.title}`;
-                    shown.add(inline.set);
-                    ref.dataset.name = inline.name;
-                } else if (register) {
-                    const note = document.createElement("span");
-                    note.className = "note";
-                    note.textContent = ` ; ${register.name}`;
-                    note.title = operand ? `${register.title}\n${nameTitle(operand, target)}` : register.title;
-                    disNode.append(note);
-                    ref.dataset.name = register.name;
-                }
-            }
-            for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
-                ref.addEventListener("click", (e) => this.memClick(e));
-            }
-            for (const ref of disNode.querySelectorAll(".instr_instr_ref")) {
-                ref.addEventListener("click", (e) => this.instrClick(e));
-            }
-            elem.querySelector(".bp_gutter").classList.toggle("active", !!this.breakpoints[address]);
-            elem.dataset.addr = address;
-            if (result[2] !== undefined) {
-                elem.dataset.ref = result[2];
-            } else {
-                delete elem.dataset.ref;
-            }
-            return result[1];
-        };
-
-        for (let i = 0; i < numToShow / 2; ++i) {
-            address = updateDisElem(elems[i + numToShow / 2], address);
-        }
-        address = this.disassPc;
-        for (let i = numToShow / 2 - 1; i >= 0; --i) {
-            address = this.prevInstruction(address);
-            updateDisElem(elems[i], address);
-        }
-        this._credit(this._credits.disassembly, shown);
-    }
-
-    prevInstruction(address) {
-        return this.cpu.disassembler.prevInstruction(address, this.cpu.pc);
-    }
-
     updatePrevMem() {
         this._memoryView.snapshot();
     }
@@ -1132,40 +925,7 @@ export class Debugger {
     }
 
     runToCursor() {
-        const target = this.disassPc;
+        const target = this._disassembly.cursor;
         this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
-    }
-
-    nextInstruction(address) {
-        return this.cpu.disassembler.nextInstruction(address);
-    }
-
-    instrClick(e) {
-        const ref = parseInt(e.target.closest("[data-ref]").dataset.ref, 10);
-        this.disassStack.push(this.disassPc);
-        this.updateDisassembly(ref);
-    }
-
-    memClick(e) {
-        const ref = parseInt(e.target.closest("[data-ref]").dataset.ref, 10);
-        this._memoryView.update(ref);
-    }
-
-    toggleBreakpoint(address) {
-        if (this.breakpoints[address]) {
-            console.log("Removing breakpoint from address " + hexword(address));
-            this.breakpoints[address].remove();
-            this.breakpoints[address] = undefined;
-        } else {
-            console.log("Adding breakpoint to address " + hexword(address));
-            this.breakpoints[address] = this.cpu.debugInstruction.add((x) => x === address);
-        }
-    }
-
-    bpClick(e) {
-        const disElem = e.target.closest(".dis_elem");
-        const address = parseInt(disElem.dataset.addr, 10);
-        this.toggleBreakpoint(address);
-        e.target.closest(".bp_gutter").classList.toggle("active", !!this.breakpoints[address]);
     }
 }

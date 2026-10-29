@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Debugger, DisassemblyKeys, ToolbarKeys } from "../../src/web/debug.js";
+import { Debugger, ToolbarKeys } from "../../src/web/debug.js";
+import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { Gap } from "../../src/web/panel-layout.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
@@ -469,174 +470,12 @@ describe("Debugger", () => {
         });
     });
 
-    describe("the disassembly window", () => {
-        it("centres on the program counter with the instruction decoded", () => {
-            dbgr.debug(cpu.pc);
-            expect(disRows()).toHaveLength(16);
-            const row = currentRow();
-            expect(row.classList.contains("current")).toBe(true);
-            expect(row.querySelector(".dis_addr").textContent).toBe("2000");
-            expect(row.querySelector(".instr_bytes").textContent).toBe("a9 41");
-            expect(row.querySelector(".disassembly").textContent).toBe("LDA #$41");
-            expect(video.debugPaint).toHaveBeenCalled();
-        });
-
-        it("goes where the address form asks", () => {
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$3000");
-            expect(addrOf(currentRow())).toBe("3000");
-        });
-
-        it("stays put and marks the box when the text is neither a name nor an address", () => {
-            dbgr.debug(cpu.pc);
-            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
-            box.focus();
-            box.value = "monster_x";
-            box.form.dispatchEvent(new Event("submit", { cancelable: true }));
-            expect(addrOf(currentRow())).toBe("2000");
-            expect(disRows().map((row) => row.querySelector(".dis_addr").textContent)).not.toContain("NaN");
-            expect(box.value).toBe("monster_x");
-            expect(box.classList.contains("is-invalid")).toBe(true);
-            expect(document.activeElement).toBe(box);
-            box.dispatchEvent(new Event("input"));
-            expect(box.classList.contains("is-invalid")).toBe(false);
-            box.value = " ";
-            box.form.dispatchEvent(new Event("submit", { cancelable: true }));
-            expect(box.classList.contains("is-invalid")).toBe(false);
-        });
-
-        it("leaves the memory view alone too when the text is neither a name nor an address", () => {
-            dbgr.debug(cpu.pc);
-            goTo("goto-mem-addr-form", "$1234");
-            goTo("goto-mem-addr-form", "monster_x");
-            const box = document.querySelector("#goto-mem-addr-form .goto-addr");
-            expect(addrOf(memHighlight())).toBe("1234");
-            expect(box.classList.contains("is-invalid")).toBe(true);
-        });
-
-        it("walks instructions with the wheel and the j and k keys", () => {
-            dbgr.debug(cpu.pc);
-            const disass = document.getElementById("disassembly");
-            disass.dispatchEvent(new WheelEvent("wheel", { deltaY: 30, cancelable: true }));
-            expect(addrOf(currentRow())).toBe("2002");
-            disass.dispatchEvent(new WheelEvent("wheel", { deltaY: -30, cancelable: true }));
-            expect(addrOf(currentRow())).toBe("2000");
-            keyPress("j");
-            expect(addrOf(currentRow())).toBe("2002");
-            keyPress("k");
-            expect(addrOf(currentRow())).toBe("2000");
-        });
-
-        it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {
-            dbgr.debug(cpu.pc);
-            const gutter = () => currentRow().querySelector(".bp_gutter");
-            gutter().dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            expect(gutter().classList.contains("active")).toBe(true);
-            keyPress("j");
-            keyPress("k");
-            expect(gutter().classList.contains("active")).toBe(true);
-            gutter().dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            expect(gutter().classList.contains("active")).toBe(false);
-        });
-
-        it("toggles a breakpoint at the cursor with the t key", () => {
-            dbgr.debug(cpu.pc);
-            keyPress("t");
-            expect(currentRow().querySelector(".bp_gutter").classList.contains("active")).toBe(true);
-        });
-
-        describe("SHEILA registers", () => {
-            const codeAt = (address) =>
-                disRows()
-                    .find((row) => Number(row.dataset.addr) === address)
-                    .querySelector(".disassembly");
-            const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
-
-            it("notes the register an operand writes, reads, or both, still following it to the memory view", () => {
-                program([0x8d, 0x40, 0xfe, 0xad, 0x40, 0xfe, 0xee, 0x80, 0xfe, 0x2c, 0x4d, 0xfe, 0xad, 0x00, 0x30]);
-                dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("STA $fe40 ; SysVIA.ORB");
-                expect(codeAt(0x2002).querySelector(".note").title).toBe("System VIA ORB: $fe40");
-                expect(codeAt(0x2005).textContent).toBe("LDA $fe40 ; SysVIA.IRB");
-                expect(codeAt(0x2008).textContent).toBe("INC $fe80 ; FDC.STATUS/COMMAND");
-                expect(codeAt(0x200b).textContent).toBe("BIT $fe4d ; SysVIA.IFR");
-                expect(codeAt(0x200e).textContent).toBe("LDA $3000");
-                codeAt(0x2002)
-                    .querySelector(".instr_mem_ref")
-                    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-                expect(addrOf(memHighlight())).toBe("fe40");
-            });
-
-            it.each([
-                ["STX", 0x8e, "SysVIA.ORB"],
-                ["STY", 0x8c, "SysVIA.ORB"],
-                ["*SAX", 0x8f, "SysVIA.ORB"],
-                ["LDX", 0xae, "SysVIA.IRB"],
-                ["CMP", 0xcd, "SysVIA.IRB"],
-                ["*NOP", 0x0c, "SysVIA.IRB"],
-                ["ASL", 0x0e, "SysVIA.IRB/ORB"],
-                ["ROR", 0x6e, "SysVIA.IRB/ORB"],
-                ["*SLO", 0x0f, "SysVIA.IRB/ORB"],
-                ["*DCP", 0xcf, "SysVIA.IRB/ORB"],
-                ["*ISB", 0xef, "SysVIA.IRB/ORB"],
-            ])("takes %s's operand as the register it accesses", (mnemonic, opcode, name) => {
-                program([opcode, 0x40, 0xfe]);
-                dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
-            });
-
-            it.each([
-                ["STZ", 0x9c, "SysVIA.ORB"],
-                ["TSB", 0x0c, "SysVIA.IRB/ORB"],
-                ["TRB", 0x1c, "SysVIA.IRB/ORB"],
-            ])("takes the 65C12's %s's operand as the register it accesses", async (mnemonic, opcode, name) => {
-                cpu = fake6502(TEST_65C12, { video });
-                await cpu.initialise();
-                dbgr.setCpu(cpu);
-                cpu.pc = 0x2000;
-                program([opcode, 0x40, 0xfe]);
-                dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe(`${mnemonic} $fe40 ; ${name}`);
-            });
-
-            it("names the registers of what is fitted", () => {
-                video.ula.hasVideoNula = true;
-                dbgr.setCpu(cpu);
-                program([0x8d, 0x22, 0xfe]);
-                dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("STA $fe22 ; VideoULA.NULA_CONTROL");
-            });
-
-            it("leaves a jump into SHEILA as an address", () => {
-                program([0x20, 0x40, 0xfe]);
-                dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("JSR $fe40");
-            });
-
-            it("names the registers the model has where it has them", async () => {
-                const master = findModel("Master");
-                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(master)), master, { os: [] }), {
-                    video,
-                });
-                await cpu.initialise();
-                dbgr.setCpu(cpu);
-                cpu.pc = 0x2000;
-                program([0x8d, 0x34, 0xfe, 0x8d, 0x28, 0xfe, 0xad, 0x80, 0xfe]);
-                dbgr.debug(cpu.pc);
-                expect(codeAt(0x2002).textContent).toBe("STA $fe34 ; Paging.ACCCON");
-                expect(codeAt(0x2005).textContent).toBe("STA $fe28 ; FDC.COMMAND");
-                expect(codeAt(0x2008).textContent).toBe("LDA $fe80");
-            });
-
-            it("watches a register by its name from a right-click", () => {
-                program([0x8d, 0x40, 0xfe]);
-                dbgr.debug(cpu.pc);
-                rightClick(codeAt(0x2002).querySelector(".instr_mem_ref"));
-                pickFromMenu("Watch hex");
-                expect(watchRows().map(([name]) => name)).toEqual(["SysVIA.ORB"]);
-                document.getElementById("watch-close").click();
-            });
-        });
+    it("centres the disassembly on the program counter on entering the debugger, and repaints the screen", () => {
+        dbgr.debug(cpu.pc);
+        const row = currentRow();
+        expect(row.classList.contains("current")).toBe(true);
+        expect(addrOf(row)).toBe("2000");
+        expect(video.debugPaint).toHaveBeenCalled();
     });
 
     describe("the memory window", () => {
@@ -648,6 +487,15 @@ describe("Debugger", () => {
             expect(row.querySelector(".dis_addr").textContent).toBe("1234");
             expect(row.querySelector(".mem_bytes span").textContent).toBe("48");
             expect(row.querySelector(".mem_asc span").textContent).toBe("H");
+        });
+
+        it("leaves the memory view alone when the text is neither a name nor an address", () => {
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$1234");
+            goTo("goto-mem-addr-form", "monster_x");
+            const box = document.querySelector("#goto-mem-addr-form .goto-addr");
+            expect(addrOf(memHighlight())).toBe("1234");
+            expect(box.classList.contains("is-invalid")).toBe(true);
         });
 
         it("marks bytes changed since the last debugger visit, forgetting them on leaving", () => {
