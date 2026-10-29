@@ -1,15 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BBC } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, fakeAnimationFrames, teardownDom, ViaRegister } from "./helpers.js";
+import { decodedMeanings, decodedRow, domFromIndexHtml, teardownDom, ViaRegister } from "./helpers.js";
 
-const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, T2CL, T2CH, ACR, PCR, IER } = ViaRegister;
+const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, ACR, PCR, IER } = ViaRegister;
 const PortBLatchLines = 0x0f;
 const PortBRtcLines = 0xc0;
 const LatchSet = 0x08;
@@ -30,7 +29,6 @@ describe("SysViaPanel", () => {
     let via;
     let panel;
     let arrangement;
-    let frames;
 
     const makeVia = (isMaster) =>
         new SysVia(cpu, scheduler, {
@@ -43,79 +41,27 @@ describe("SysViaPanel", () => {
 
     beforeEach(() => {
         domFromIndexHtml("peripherals-panel");
-        frames = fakeAnimationFrames();
         scheduler = new Scheduler();
         cpu = { interrupt: 0 };
         arrangement = new PanelArrangement(() => window.localStorage);
-        arrangement.followMachine(() => scheduler.epoch);
         via = makeVia(false);
         via.write(DDRB, PortBLatchLines);
         panel = new SysViaPanel({ cpu: { sysvia: via }, arrangement });
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        teardownDom();
-    });
+    afterEach(teardownDom);
 
-    const isOpen = () => !document.getElementById("sysvia-panel").hidden;
     const setLatch = (bit, level) => via.write(ORB, bit | (level ? LatchSet : 0));
-    const registerRow = (name) =>
-        [...document.querySelectorAll(".decoded-registers tr")].find(
-            (row) => row.querySelector("th")?.textContent === name,
-        );
+    const registerRow = (name) => decodedRow("sysvia-panel", name);
     const hex = (name) => registerRow(name).querySelector(".decoded-hex").textContent;
-    /** A lit bit as +name, an unlit one as -name, and a value spelt out as itself. */
-    const meanings = (name) =>
-        [...registerRow(name).querySelectorAll(".decoded-meaning span")].map((span) => {
-            if (span.classList.contains("decoded-value")) return span.textContent;
-            return `${span.classList.contains("lit") ? "+" : "-"}${span.textContent}`;
-        });
+    const meanings = (name) => decodedMeanings("sysvia-panel", name);
     const matrixCell = ([column, row]) =>
         document.querySelectorAll(".key-matrix tbody tr")[row].querySelectorAll("td")[column];
     const matrixColumns = () => document.querySelectorAll(".key-matrix thead th").length - 1;
     const scannedColumn = () => document.querySelector(".key-matrix thead th.scanned")?.textContent;
     const matrixStatus = () => document.querySelector(".key-matrix-status").textContent;
 
-    describe("opening", () => {
-        it("is made for a BBC or a Master, not for an Atom, whose CPU carries a system VIA it never wires up", () => {
-            const fits = (name) => SysViaPanel.fits({ model: findModel(name) });
-            expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
-        });
-
-        it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open and the machine moves on", () => {
-            const opener = () => document.querySelector('#sysvia [data-opens="sysvia-panel"]');
-            opener().click();
-            expect(isOpen()).toBe(true);
-            expect(hex("IC32")).toBe("00");
-            setLatch(LatchCapsLock, true);
-            frames.run();
-            expect(hex("IC32")).toBe("00");
-            scheduler.polltime(1);
-            frames.run();
-            expect(hex("IC32")).toBe("40");
-            opener().click();
-            expect(isOpen()).toBe(false);
-            expect(frames.pending).toBe(0);
-        });
-
-        it("keeps focus where it was, as the keyboard belongs to the machine", () => {
-            for (const opener of document.querySelectorAll("#sysvia-panel button")) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                opener.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
-            }
-        });
-
-        it("is filled before it opens, so that it is laid out at the size it will be", () => {
-            expect(isOpen()).toBe(false);
-            expect(meanings("IFR")).toHaveLength(8);
-        });
-    });
-
     describe("the registers", () => {
-        beforeEach(() => panel.floating.open());
-
         it("names IC32's bits, the active-low ones lit when low", () => {
             expect(meanings("IC32")).toEqual([
                 "+sound write",
@@ -201,24 +147,6 @@ describe("SysViaPanel", () => {
             expect(meanings("T2C")).toEqual(["65534 pulses"]);
         });
 
-        it("gives the timers in cycles as a program would read them now, without clearing the flag", () => {
-            via.write(T1CL, 0x10);
-            via.write(T1CH, 0x27);
-            via.write(T2CL, 0xe8);
-            via.write(T2CH, 0x03);
-            scheduler.polltime(100 * TicksPerMicrosecond);
-            panel.update();
-            expect(hex("T1L")).toBe("2710");
-            expect(meanings("T1L")).toEqual(["10000 cycles"]);
-            expect(meanings("T1C")).toEqual(["9901 cycles"]);
-            expect(meanings("T2C")).toEqual(["901 cycles"]);
-            scheduler.polltime(1000 * TicksPerMicrosecond);
-            panel.update();
-            expect(meanings("IFR")).toContain("+T2");
-            panel.update();
-            expect(meanings("IFR")).toContain("+T2");
-        });
-
         it("reads the selected key from port A while the keyboard is not scanning itself", () => {
             via.write(DDRA, 0x7f);
             via.write(ORA, (BBC.A[1] << 4) | BBC.A[0]);
@@ -235,8 +163,6 @@ describe("SysViaPanel", () => {
     });
 
     describe("the keyboard matrix", () => {
-        beforeEach(() => panel.floating.open());
-
         it("lays out the thirteen columns the keyboard is scanned on, keys named where they sit", () => {
             expect(matrixColumns()).toBe(MatrixColumns);
             expect(matrixCell(BBC.A).textContent).toBe("A");

@@ -233,6 +233,19 @@ export function fakeAnimationFrames() {
     };
 }
 
+/** The row of the decoded panel `panelId` that shows the register `name`. */
+export const decodedRow = (panelId, name) =>
+    [...document.querySelectorAll(`#${panelId} .decoded-registers tr`)].find(
+        (row) => row.querySelector("th")?.textContent === name,
+    );
+
+/** What a decoded panel shows a register to mean: a lit bit as +name, an unlit one as -name, a value as itself. */
+export const decodedMeanings = (panelId, name) =>
+    [...decodedRow(panelId, name).querySelectorAll(".decoded-meaning span")].map((span) => {
+        if (span.classList.contains("decoded-value")) return span.textContent;
+        return `${span.classList.contains("lit") ? "+" : "-"}${span.textContent}`;
+    });
+
 /** The amplitude of the component of `samples` at `freq`, by the Goertzel algorithm. */
 export function goertzelAmplitude(samples, freq, sampleRate) {
     const coeff = 2 * Math.cos((2 * Math.PI * freq) / sampleRate);
