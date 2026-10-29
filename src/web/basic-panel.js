@@ -169,7 +169,7 @@ export class BasicPanel {
 
     /** BASIC as it is when a run starts, which the run keeps to should another language take over. */
     _runningBasic() {
-        return this._basic() ? { ...this._language } : null;
+        return this._basic() ? this._language : null;
     }
 
     stepStatement() {

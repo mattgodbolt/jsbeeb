@@ -2,6 +2,7 @@ import { hexbyte } from "./hex.js";
 
 // BBC BASIC's workspace, the same in BASIC I, II and IV: https://8bs.com/basic/memory.htm
 const Lomem = 0x00;
+const VariablesEnd = 0x02;
 const Himem = 0x06;
 const TextPointerOffset = 0x0a;
 const TextPointerBase = 0x0b;
@@ -36,8 +37,8 @@ const MantissaSign = 0x80;
 const SignificantDigits = 9;
 const LargestFixedExponent = 8;
 const SmallestFixedExponent = -1;
-/** Beyond any list of variables or lines that fits in memory, so that a corrupted link cannot loop for ever. */
-const MostEntries = 0x4000;
+/** More lines than fit in memory, so that a walk over memory that is not a program ends. */
+const MostLines = 0x4000;
 
 /**
  * Every BASIC jsbeeb carries reads each statement's first non-space character with `LDA (&0B),Y`, skipping spaces with
@@ -145,15 +146,19 @@ function arrayName(peek, name, address) {
 
 /**
  * The entries of one of BASIC's chains: a link to the next, then the rest of the name, ended by a zero. BASIC ends a
- * chain with a link whose high byte is zero, and leaves the low byte as it was.
+ * chain with a link whose high byte is zero, and leaves the low byte as it was. Every entry is in the heap, between
+ * LOMEM and the end of the variables, and in no other chain, so a walk over memory that is not BASIC's ends there.
+ * @param {(address: number) => number} peek
+ * @param {number} head
+ * @param {{lomem: number, end: number, seen: Set<number>}} heap
  */
-function* chain(peek, head) {
+function* chain(peek, head, heap) {
     let entry = word(peek, head);
-    for (let count = 0; entry >> 8 !== 0 && count < MostEntries; ++count) {
+    while (entry >> 8 !== 0 && entry >= heap.lomem && entry < heap.end && !heap.seen.has(entry)) {
+        heap.seen.add(entry);
         let name = "";
         let at = entry + 2;
-        for (let code = peek(at); code !== 0 && name.length < MostEntries; code = peek(++at))
-            name += String.fromCharCode(code);
+        for (let code = peek(at); code !== 0 && at < heap.end; code = peek(++at)) name += String.fromCharCode(code);
         yield { name, value: (at + 1) & 0xffff };
         entry = word(peek, entry);
     }
@@ -171,14 +176,15 @@ function variable(peek, name, address) {
  * @param {(address: number) => number} peek
  */
 export function readVariables(peek) {
+    const heap = { lomem: word(peek, Lomem), end: word(peek, VariablesEnd), seen: new Set() };
     const variables = [];
     for (let initial = FirstVariableInitial; initial <= LastVariableInitial; ++initial) {
         const first = String.fromCharCode(initial);
-        for (const { name, value } of chain(peek, ResidentIntegers + 2 * initial))
+        for (const { name, value } of chain(peek, ResidentIntegers + 2 * initial, heap))
             variables.push(variable(peek, first + name, value));
     }
     variables.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    const named = (prefix, head) => [...chain(peek, head)].map(({ name }) => prefix + name);
+    const named = (prefix, head) => [...chain(peek, head, heap)].map(({ name }) => prefix + name);
     return { variables, routines: [...named("PROC", ProcedureChain), ...named("FN", FunctionChain)] };
 }
 
@@ -229,7 +235,7 @@ export function readPointers(peek) {
 export function* programLines(peek, page) {
     let start = page;
     if (peek(start) !== Return) return;
-    for (let count = 0; count < MostEntries; ++count) {
+    for (let count = 0; count < MostLines; ++count) {
         const high = peek(start + 1);
         const length = peek(start + 3);
         if (high & EndOfProgram || length < LineHeaderBytes || start + length > 0xffff) return;

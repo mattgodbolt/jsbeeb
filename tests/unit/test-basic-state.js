@@ -41,12 +41,17 @@ describe("basicRom", () => {
 });
 
 describe("readVariables", () => {
+    const heap = [0x00, [0x00, 0x30, 0x00, 0x40]];
+
     it("ends a chain at a link whose high byte is zero, whatever its low byte", () => {
-        const peek = memory([
-            [0x482, [0x00, 0x30]],
-            [0x3000, [0xff, 0x00, ...ascii("pple%"), 0, 7, 0, 0, 0]],
-        ]);
+        const peek = memory([heap, [0x482, [0x00, 0x30]], [0x3000, [0xff, 0x00, ...ascii("pple%"), 0, 7, 0, 0, 0]]]);
         expect(readVariables(peek).variables).toEqual([{ name: "Apple%", value: "7" }]);
+    });
+
+    it("reads each entry once, and only in the heap, however the links in memory that is not BASIC's run", () => {
+        const peek = memory([heap, [0x400, new Array(0x100).fill(0x31)], [0x3000, new Array(0x1000).fill(0x31)]]);
+        const { variables, routines } = readVariables(peek);
+        expect(variables.length + routines.length).toBe(1);
     });
 });
 
