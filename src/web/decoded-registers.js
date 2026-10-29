@@ -74,7 +74,9 @@ export class DecodedRegisters {
             const hex = register.bits === 16 ? hexword(value) : hexbyte(value);
             if (row.hex.textContent !== hex) row.hex.textContent = hex;
             const meanings = register.decode(value, state);
-            const shown = meanings.map(({ text, lit, width }) => `${text}\u0000${lit}\u0000${width}`).join("\u0001");
+            const shown = meanings
+                .map(({ text, title, lit, width }) => `${text}\u0000${title}\u0000${lit}\u0000${width}`)
+                .join("\u0001");
             if (shown === row.shown) continue;
             row.shown = shown;
             const valueWidth = Math.max(0, ...meanings.map(({ lit, width }) => (lit === undefined ? width : 0)));

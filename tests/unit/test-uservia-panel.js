@@ -85,6 +85,14 @@ describe("UserViaPanel", () => {
         expect(meanings("PB")).toEqual(["+PB7", "-PB6", "+PB5", "+PB4", "-PB3", "+PB2", "-PB1", "+PB0"]);
         expect(titles("PB")[1]).toBe("PB6 on the user port: an input, read low");
         expect(titles("PB")[7]).toBe("PB0 on the user port: an output, driven high");
+        via.write(DDRB, 0xff);
+        via.write(ORB, 0xff);
+        userPortInputs = 0xff;
+        panel.update();
+        via.write(DDRB, 0x00);
+        panel.update();
+        expect(meanings("PB")).toEqual(["+PB7", "+PB6", "+PB5", "+PB4", "+PB3", "+PB2", "+PB1", "+PB0"]);
+        expect(titles("PB")[7]).toBe("PB0 on the user port: an input, read high");
     });
 
     it("names the PCR's lines and the interrupts by the printer and user port wired to them", () => {

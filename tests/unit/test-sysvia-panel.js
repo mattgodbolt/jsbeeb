@@ -5,7 +5,7 @@ import { BBC } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
-import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { findModel } from "../../src/models.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
@@ -94,11 +94,6 @@ describe("SysViaPanel", () => {
         it("is made for a BBC or a Master, not for an Atom, whose CPU carries a system VIA it never wires up", () => {
             const fits = (name) => SysViaPanel.fits({ model: findModel(name) });
             expect([fits("B-DFS1.2"), fits("Master"), fits("Atom")]).toEqual([true, true, false]);
-        });
-
-        it("is one of the debugger's panels, listed by its title", () => {
-            expect(arrangement.group(DebugGroup)).toEqual([panel.floating]);
-            expect(arrangement.listed().map(({ title }) => title)).toEqual(["System VIA"]);
         });
 
         it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open and the machine moves on", () => {

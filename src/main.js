@@ -336,7 +336,6 @@ const layout = new Layout({
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
 dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
-// Shown and hidden with the debugger's own panels, those of the devices this machine has.
 for (const DevicePanel of [SysViaPanel, UserViaPanel])
     if (DevicePanel.fits(processor)) new DevicePanel({ cpu: processor, arrangement: panelArrangement });
 new DebugMenu({ arrangement: panelArrangement, dbgr });
