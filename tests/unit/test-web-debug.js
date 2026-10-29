@@ -35,6 +35,7 @@ const PanelElements = [
 ];
 
 const MachineSecond = 2000000;
+const WatchRowSelector = "#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)";
 
 /** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
 class StandInLoop extends EventTarget {
@@ -137,12 +138,12 @@ describe("Debugger", () => {
         document.getElementById("watch-add-form").dispatchEvent(new Event("submit", { cancelable: true }));
     };
     const watchRows = () =>
-        [...document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats)")].map((row) =>
+        [...document.querySelectorAll(WatchRowSelector)].map((row) =>
             [...row.querySelectorAll("td")].map(
                 (td) => td.querySelector(".watch-format")?.textContent ?? td.textContent,
             ),
         );
-    const watchRow = (index) => document.querySelectorAll("#watch-panel .watch-list tr:not(.watch-formats)")[index];
+    const watchRow = (index) => document.querySelectorAll(WatchRowSelector)[index];
     const watchControl = (index, className) => watchRow(index).querySelector(`.${className}`);
     const watchChoices = (index) => watchRow(index).nextElementSibling;
     const watchMenu = () => document.getElementById("watch-menu");
@@ -608,7 +609,7 @@ describe("Debugger", () => {
                 expect(editField().parentElement).toBe(memByte(0x1234));
                 type("1", "Enter", false);
                 expect(cpu.peekmem(0x1234)).toBe(0x01);
-                expect(watchRows()).toEqual([["$1234", "1", "dec", "\u00d7"]]);
+                expect(watchRows()).toEqual([["$1234", "1", "dec", "brk", "\u00d7"]]);
                 expect(editField()).toBeNull();
                 expect(document.activeElement).toBe(document.body);
             });
@@ -1192,7 +1193,7 @@ describe("Debugger", () => {
             addWatch("$70");
             expect(document.activeElement).not.toBe(watchBox());
             expect(watchBox().value).toBe("");
-            expect(watchRows()).toEqual([["$0070", "5", "dec", "\u00d7"]]);
+            expect(watchRows()).toEqual([["$0070", "5", "dec", "brk", "\u00d7"]]);
         });
 
         it("gives the keyboard back on Escape, keeping the panel open and the Escape from the machine", () => {
@@ -1285,7 +1286,7 @@ describe("Debugger", () => {
             pickFromMenu("Watch hex16");
             expect(watchMenu().hidden).toBe(true);
             expect(panelOpen()).toBe(true);
-            expect(watchRows()).toEqual([["$0070", "$0105", "hex16", "\u00d7"]]);
+            expect(watchRows()).toEqual([["$0070", "$0105", "hex16", "brk", "\u00d7"]]);
         });
 
         it("closes the menu on a click elsewhere, or on Escape, which goes on to the page", () => {
@@ -1326,6 +1327,138 @@ describe("Debugger", () => {
             watchControl(0, "watch-format").click();
             document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
             expect(watchChoices(0).hidden).toBe(true);
+        });
+
+        describe("breaking on a write", () => {
+            const breakChoices = (index) => watchRow(index).nextElementSibling.nextElementSibling;
+            const pickBreak = (index, text) => {
+                watchControl(index, "watch-break").click();
+                [...breakChoices(index).querySelectorAll("button")]
+                    .find((choice) => choice.textContent === text)
+                    .click();
+            };
+            const breakWhen = (index, text) => {
+                watchControl(index, "watch-break").click();
+                const box = breakChoices(index).querySelector("input");
+                box.value = text;
+                box.form.dispatchEvent(new Event("submit", { cancelable: true }));
+                return box;
+            };
+            const fired = () => watchRows().filter((_, i) => watchRow(i).classList.contains("watch-fired"));
+            const run = () => {
+                dbgr.hide();
+                stoppedLoop.tick(MachineSecond / 100);
+            };
+            // LDA #5; STA $70; LDA #6; STA $70; LDA #16; STA $70; LDA #$12; STA $C000; STA $FE4E; JMP $2014
+            const program = [
+                [0xa9, 5, 0x85, 0x70, 0xa9, 6, 0x85, 0x70, 0xa9, 16, 0x85, 0x70],
+                [0xa9, 0x12, 0x8d, 0x00, 0xc0, 0x8d, 0x4e, 0xfe, 0x4c, 0x14, 0x20],
+            ].flat();
+            const loadProgram = () => program.forEach((byte, i) => cpu.writemem(0x2000 + i, byte));
+            beforeEach(() => {
+                loadProgram();
+                dbgr.debug(cpu.pc);
+            });
+
+            it("stops after a write that changes an armed watch, showing which, on the slower path only while one is armed", () => {
+                addWatch("$71");
+                addWatch("$70");
+                pickBreak(1, "on change");
+                expect(cpu.onFastPath).toBe(false);
+                expect(panelOpen()).toBe(false);
+                run();
+                expect(cpu.pc).toBe(0x2008);
+                expect(fired()).toEqual([["$0070", "6", "dec", "brk", "×"]]);
+                expect(panelOpen()).toBe(true);
+                keyPress("n");
+                expect(fired()).toEqual([]);
+                run();
+                expect(cpu.pc).toBe(0x200c);
+                expect(fired()).toHaveLength(1);
+                dbgr.hide();
+                expect(fired()).toEqual([]);
+                pickBreak(1, "off");
+                expect(cpu.onFastPath).toBe(true);
+                pickBreak(0, "on change");
+                watchControl(0, "watch-remove").click();
+                expect(cpu.onFastPath).toBe(true);
+            });
+
+            it("shows every watch one write fires", () => {
+                addWatch("$70");
+                addWatch("$70");
+                pickBreak(0, "on change");
+                pickBreak(1, "on change");
+                run();
+                expect(fired()).toHaveLength(2);
+            });
+
+            it("shows no watch as fired at a stop of another kind after one fired in a run outside the loop", () => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                dbgr.hide();
+                expect(cpu.execute(MachineSecond / 100)).toBe(false);
+                pickBreak(0, "off");
+                cpu.debugInstruction.add((pc) => pc === 0x2014);
+                stoppedLoop.tick(MachineSecond / 100);
+                expect(cpu.pc).toBe(0x2014);
+                expect(fired()).toEqual([]);
+            });
+
+            it("stops only when a write makes it match a condition, refusing one it cannot read", () => {
+                addWatch("$70");
+                expect(breakWhen(0, "is 16").classList.contains("is-invalid")).toBe(true);
+                expect(cpu.onFastPath).toBe(true);
+                breakWhen(0, ">= $10");
+                expect(watchRows()[0][3]).toBe("brk>=$10");
+                run();
+                expect(cpu.pc).toBe(0x200c);
+            });
+
+            it("gives the keyboard back when its choices close with the condition box still focused", () => {
+                openFromMenu();
+                addWatch("$70");
+                watchControl(0, "watch-break").click();
+                const box = breakChoices(0).querySelector("input");
+                box.focus();
+                expect(document.activeElement).toBe(box);
+                [...breakChoices(0).querySelectorAll("button")]
+                    .find((choice) => choice.textContent === "on change")
+                    .click();
+                expect(breakChoices(0).hidden).toBe(true);
+                expect(document.activeElement).not.toBe(box);
+            });
+
+            /** A BBC B, without the ROMs jsdom cannot fetch, as the test CPU has neither ROM nor I/O. */
+            const switchToBeeb = async () => {
+                const beeb = findModel("B-DFS1.2");
+                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+                await cpu.initialise();
+                loadProgram();
+                cpu.pc = 0x2000;
+                dbgr.setCpu(cpu);
+                stoppedLoop.cpu = cpu;
+            };
+
+            it("moves its watching to a new CPU, leaving the old one on its fast path", async () => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                const oldCpu = cpu;
+                await switchToBeeb();
+                expect(oldCpu.onFastPath).toBe(true);
+                run();
+                expect(cpu.pc).toBe(0x2004);
+            });
+
+            it("stops on every write to a device register, testing the byte written, and never on one to ROM", async () => {
+                await switchToBeeb();
+                addWatch("$c000");
+                addWatch("$fe4e");
+                pickBreak(0, "on change");
+                breakWhen(1, "= $12");
+                run();
+                expect(cpu.pc).toBe(0x2014);
+            });
         });
 
         it("leaves the browser's own menu to a right-click on an instruction's mnemonic or bytes", () => {
@@ -1614,7 +1747,7 @@ describe("Debugger", () => {
             await vi.waitFor(() => expect(load.mock.settledResults.at(-1)?.type).toBe("fulfilled"));
             await new Promise((resolve) => setTimeout(resolve, 0));
             addWatch("oswrch");
-            expect(watchRows()).toEqual([["oswrch", "108", "dec", "\u00d7"]]);
+            expect(watchRows()).toEqual([["oswrch", "108", "dec", "brk", "\u00d7"]]);
             expect(dbgr.inDebugger()).toBe(false);
             document.getElementById("watch-close").click();
         });
@@ -1628,9 +1761,9 @@ describe("Debugger", () => {
             addWatch("nobody");
             expect(watchBox().classList.contains("is-invalid")).toBe(true);
             expect(watchRows()).toEqual([
-                ["oswrch", "108", "dec", "\u00d7"],
-                ["$3001", "14", "dec", "\u00d7"],
-                ["os_text_ptr", "0", "dec", "\u00d7"],
+                ["oswrch", "108", "dec", "brk", "\u00d7"],
+                ["$3001", "14", "dec", "brk", "\u00d7"],
+                ["os_text_ptr", "0", "dec", "brk", "\u00d7"],
             ]);
         });
 
