@@ -1663,6 +1663,17 @@ describe("Debugger", () => {
                 expect(cpu.onFastPath).toBe(true);
             });
 
+            it("lists its break in the Breakpoints panel, whose × turns the break off", () => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                dbgr.breakpoints.floating.open();
+                const row = document.querySelector("#breakpoints-panel .bp-list tr");
+                expect(row.querySelector(".bp-address").textContent).toBe("$0070 (from watch)");
+                row.querySelector(".bp-remove").click();
+                expect(watchRows()[0][3]).toBe("brk");
+                expect(cpu.onFastPath).toBe(true);
+            });
+
             it("shows every watch one write fires", () => {
                 addWatch("$70");
                 addWatch("$70");
@@ -1905,6 +1916,23 @@ describe("Debugger", () => {
             await vi.waitFor(() =>
                 expect(document.querySelector("#breakpoints-panel .bp-name").textContent).toBe("oswrch"),
             );
+        });
+
+        it("names a breakpoint's address once a program loaded later matches, with only the Breakpoints panel open", async () => {
+            const now = vi.spyOn(performance, "now").mockReturnValue(0);
+            const anchor = cpu.peekmem(OswrchAt);
+            cpu.writemem(OswrchAt, anchor ^ 0xff);
+            dbgr.hidePanels();
+            cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
+            dbgr.breakpoints.floating.open();
+            await vi.waitFor(() => expect(load).toHaveBeenCalledWith(`${BaseUrl}index.json`));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const name = () => document.querySelector("#breakpoints-panel .bp-name").textContent;
+            expect(name()).toBe("");
+            cpu.writemem(OswrchAt, anchor);
+            now.mockReturnValue(1000 * 60);
+            dbgr.breakpoints.update();
+            await vi.waitFor(() => expect(name()).toBe("oswrch"));
         });
 
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {
