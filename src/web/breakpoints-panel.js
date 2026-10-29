@@ -126,7 +126,8 @@ export class BreakpointsPanel {
 
     /** Shows each breakpoint's hits as they are now, and its address's name, which can come with symbols later. */
     update() {
-        if (!this._breakpoints) return;
+        // Naming asks for the symbols, which a closed panel has no need of.
+        if (!this._breakpoints || !this.floating.isOpen) return;
         for (const { id, start, hits, hitCount, label } of this._breakpoints.list()) {
             const hitText = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
             const hitCell = this._hitCells.get(id);

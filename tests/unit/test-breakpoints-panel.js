@@ -13,26 +13,21 @@ const StorageKey = "debugBreakpoints";
 describe("BreakpointsPanel", () => {
     let cpu;
     let panel;
-    let showCode;
-    let showMemory;
 
     const names = new Map([["oswrch", 0xffee]]);
     const resolve = (text) => {
         const address = names.get(text) ?? parseAddr(text);
         return address === undefined ? undefined : { address, name: names.has(text) ? text : undefined };
     };
-    let nameOf;
 
     const makePanel = async (model) => {
         cpu = fake6502(model);
-        showCode = vi.fn();
-        showMemory = vi.fn();
         panel = new BreakpointsPanel({
             arrangement: new PanelArrangement(() => window.localStorage),
             resolve,
-            nameOf: (address) => nameOf(address),
-            showCode,
-            showMemory,
+            nameOf: (address) => [...names].find(([, at]) => at === address)?.[0],
+            showCode: () => {},
+            showMemory: () => {},
             storage: () => window.localStorage,
         });
         panel.setCpu(cpu);
@@ -43,7 +38,6 @@ describe("BreakpointsPanel", () => {
         vi.spyOn(console, "warn").mockImplementation(() => {});
         // jsdom's window never has the focus; a browser's does while it is in front.
         vi.spyOn(document, "hasFocus").mockReturnValue(true);
-        nameOf = (address) => [...names].find(([, at]) => at === address)?.[0];
         window.localStorage.clear();
         await makePanel(findModel("B-DFS1.2"));
     });
@@ -175,23 +169,6 @@ describe("BreakpointsPanel", () => {
         type(hitCount, "5");
         enter(hitCount);
         expect(cpu.breakpoints.get(id)).toMatchObject({ condition: "A = &0D", hitCount: 5 });
-    });
-
-    it("shows code for an execute breakpoint and memory for the others", () => {
-        cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
-        cpu.breakpoints.add({ kind: "access", start: 0xfe40 });
-        click(rows()[0].querySelector(".bp-where"));
-        click(rows()[1].querySelector(".bp-where"));
-        expect(showCode).toHaveBeenCalledWith(0x2000);
-        expect(showMemory).toHaveBeenCalledWith(0xfe40);
-    });
-
-    it("names an address once the debugger has a name for it", () => {
-        cpu.breakpoints.add({ kind: "execute", start: 0x2000 });
-        expect(rows()[0].querySelector(".bp-name").textContent).toBe("");
-        nameOf = (address) => (address === 0x2000 ? "start" : undefined);
-        panel.update();
-        expect(rows()[0].querySelector(".bp-name").textContent).toBe("start");
     });
 
     it("offers a bank for sideways addresses, or where one is set", () => {

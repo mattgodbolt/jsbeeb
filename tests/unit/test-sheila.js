@@ -109,6 +109,8 @@ describe("SHEILA register names", () => {
         ["Tube", undefined],
         ["SysVIA.ORB.junk", undefined],
         ["SysVIA.NOPE", undefined],
+        ["SysVIA.T1LL", 0xfe44],
+        ["SysVIA.IRB/ORB", undefined],
     ])("finds the address %s names", (text, address) => {
         expect(sheilaAddress(blocksOf("B-DFS1.2"), text)).toBe(address);
     });

@@ -175,7 +175,7 @@ describe("Breakpoints", () => {
 
     it("checks a spec without adding it", () => {
         expect(() => breakpoints.check({ kind: "read", start: 0, hitCount: 0 })).toThrow(
-            "Hit count 0 is not 1 or more",
+            "Hit count 0 is not a whole number from 1",
         );
         breakpoints.check({ kind: "read", start: 0 });
         expect(breakpoints.list()).toEqual([]);

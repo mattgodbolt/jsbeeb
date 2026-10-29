@@ -1909,6 +1909,13 @@ describe("Debugger", () => {
             expect(watchRows().map(([name]) => name)).toEqual(["$8000", "$8000"]);
         });
 
+        it("fetches no names for breakpoints while the Breakpoints panel is closed", async () => {
+            dbgr.hidePanels();
+            cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(load).not.toHaveBeenCalled();
+        });
+
         it("names a breakpoint's address in the Breakpoints panel with only that panel open", async () => {
             dbgr.hidePanels();
             cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
