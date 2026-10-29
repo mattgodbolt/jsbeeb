@@ -53,30 +53,28 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    processor.withoutDebugHooks(() => runThroughTwoVsyncs(processor, video));
-}
+    processor.withoutDebugHooks(() => {
+        const startFrame = video.frameCount;
 
-function runThroughTwoVsyncs(processor, video) {
-    const startFrame = video.frameCount;
-
-    // Phase 1: run to first vsync (completes partial frame, clears fb32)
-    for (let i = 0; i < MaxChunks; i++) {
-        if (processor.execute(CyclesPerChunk) === false) break;
-        if (video.frameCount !== startFrame) break;
-    }
-
-    // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
-    const secondFrame = video.frameCount;
-    const origClear = video.clearPaintBuffer;
-    video.clearPaintBuffer = function () {};
-    try {
+        // Phase 1: run to first vsync (completes partial frame, clears fb32)
         for (let i = 0; i < MaxChunks; i++) {
-            if (processor.execute(CyclesPerChunk) === false) return;
-            if (video.frameCount !== secondFrame) return;
+            if (processor.execute(CyclesPerChunk) === false) break;
+            if (video.frameCount !== startFrame) break;
         }
-    } finally {
-        video.clearPaintBuffer = origClear;
-    }
+
+        // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
+        const secondFrame = video.frameCount;
+        const origClear = video.clearPaintBuffer;
+        video.clearPaintBuffer = function () {};
+        try {
+            for (let i = 0; i < MaxChunks; i++) {
+                if (processor.execute(CyclesPerChunk) === false) return;
+                if (video.frameCount !== secondFrame) return;
+            }
+        } finally {
+            video.clearPaintBuffer = origClear;
+        }
+    });
 }
 
 /**

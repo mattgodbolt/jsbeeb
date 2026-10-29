@@ -171,13 +171,15 @@ describe("executeUntilFrame", () => {
         const StoreThenLoop = [0x8d, 0x00, 0x30, 0x4c, 0x00, 0x20];
         processor.ramRomOs.set(StoreThenLoop, 0x2000);
         processor.pc = 0x2000;
-        processor.debugInstruction.add(() => true);
+        const breakpoint = processor.debugInstruction.add(() => true);
         processor.debugWrite.add(() => true);
         const startFrame = video.frameCount;
 
         executeUntilFrame(processor, video);
 
         expect(video.frameCount).toBe(startFrame + 2);
+        expect(processor.execute(1000)).toBe(false);
+        breakpoint.remove();
         expect(processor.execute(1000)).toBe(false);
     });
 });
