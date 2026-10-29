@@ -294,6 +294,7 @@ export const Parameters = {
 
     // Boolean parameters
     embed: { type: ParamTypes.BOOL, localToPage: true, reportedAtStart: true },
+    touchkeys: { type: ParamTypes.BOOL, localToPage: true },
     fasttape: { type: ParamTypes.BOOL },
     noseek: { type: ParamTypes.BOOL },
     glEnabled: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },

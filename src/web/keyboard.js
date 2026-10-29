@@ -74,6 +74,8 @@ export class Keyboard extends EventTarget {
         return {
             keyDown: (...args) => this.keyInterface.keyDown(...args),
             keyUp: (key) => this.keyInterface.keyUp(key),
+            keyRaw: (colRow, down) =>
+                down ? this.keyInterface.keyDownRaw(colRow) : this.keyInterface.keyUpRaw(colRow),
             setReset: (resetting) => this.processor.setReset(resetting),
             clearKeys: () => this.keyInterface.clearKeys(),
         };
