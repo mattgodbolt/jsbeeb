@@ -19,7 +19,7 @@ const FewestBytesPerRow = 8;
 const MemoryPageRows = 8;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
-const NeverReturns = new Set(["jump", "return", "interrupt"]);
+const NeverFallsThrough = new Set(["jump", "return", "interrupt"]);
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
@@ -799,7 +799,7 @@ export class Debugger {
         const { flow, next: end, target } = this.cpu.disassembler.instructionAt(pc);
         const next = end & 0xffff;
         const entry = this.resetEntry();
-        if (NeverReturns.has(flow)) return this.step();
+        if (NeverFallsThrough.has(flow)) return this.step();
         if (flow === "branch" && target <= pc) {
             return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
         }

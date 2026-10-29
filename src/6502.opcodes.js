@@ -1015,7 +1015,8 @@ function instructionLength(mode) {
     if (mode === "implied" || mode === "A") return 1;
     return mode.includes("abs") || mode === "zp,branch" ? 3 : 2;
 }
-const UnknownOpcode = Object.freeze({ mnemonic: "???", mode: "implied", length: 1, accesses: [], flow: "next" });
+
+const UnknownOpcode = { mnemonic: "???", mode: "implied", length: 1, accesses: [], flow: "next" };
 
 /**
  * @typedef {"next" | "branch" | "jump" | "call" | "return" | "interrupt"} Flow
@@ -1034,13 +1035,13 @@ function describeOpcodes(opcodes) {
         const [mnemonic, mode = "implied"] = text.split(" ");
         const { read, write, flow } = getOp(mnemonic, mode === "implied" ? undefined : mode);
         const memory = !ModesWithoutMemoryOperand.has(mode);
-        descriptions[Number(opcode)] = Object.freeze({
+        descriptions[Number(opcode)] = {
             mnemonic,
             mode,
             length: instructionLength(mode),
             accesses: [...(memory && read ? ["read"] : []), ...(memory && write ? ["write"] : [])],
             flow: flow ?? (mode.endsWith("branch") ? "branch" : "next"),
-        });
+        };
     }
     return descriptions;
 }
