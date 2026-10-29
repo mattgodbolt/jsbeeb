@@ -13,10 +13,8 @@ const KeyTables = [
     ["Disassembly", DisassemblyKeys],
     ["Memory", MemoryKeys],
 ];
-const StartTab = "help-start";
-const DebuggingTab = "help-debugging";
-
-const tabButton = (paneId) => document.querySelector(`#help [data-bs-target="#${paneId}"]`);
+const StartTab = "#help-start";
+const DebuggingTab = "#help-debugging";
 
 /** Fills Help's tables of keys from the tables that bind them. */
 export function fillHelp() {
@@ -42,12 +40,15 @@ export function fillHelp() {
  */
 export function openHelpOnTheTabForNow(isStopped) {
     let chosen = StartTab;
+    let choosing = true;
     const help = document.getElementById("help");
-    help.addEventListener("click", (event) => {
-        const pane = event.target.closest("[data-bs-toggle='tab']")?.dataset.bsTarget;
-        if (pane) chosen = pane.slice(1);
+    help.addEventListener("show.bs.tab", (event) => {
+        if (choosing) chosen = event.target.dataset.bsTarget;
     });
     help.addEventListener("show.bs.modal", () => {
-        bootstrap.Tab.getOrCreateInstance(tabButton(isStopped() ? DebuggingTab : chosen)).show();
+        choosing = false;
+        const tab = isStopped() ? DebuggingTab : chosen;
+        bootstrap.Tab.getOrCreateInstance(help.querySelector(`[data-bs-target="${tab}"]`)).show();
+        choosing = true;
     });
 }

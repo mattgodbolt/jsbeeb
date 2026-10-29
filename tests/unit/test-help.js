@@ -22,7 +22,7 @@ describe("Help", () => {
         ]);
     });
 
-    it("opens on the debugging tab while stopped, and otherwise on the tab last chosen", () => {
+    it("opens on the debugging tab while stopped, and otherwise on the tab last chosen, by click or arrow key", () => {
         domFromIndexHtml("help");
         let stopped = false;
         openHelpOnTheTabForNow(() => stopped);
@@ -34,7 +34,9 @@ describe("Help", () => {
         };
 
         expect(openedOn(false)).toBe("#help-start");
-        help.querySelector('[data-bs-target="#help-keyboard"]').click();
+        const shortcuts = help.querySelector('[data-bs-target="#help-shortcuts"]');
+        shortcuts.click();
+        shortcuts.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
         expect(openedOn(true)).toBe("#help-debugging");
         expect(openedOn(false)).toBe("#help-keyboard");
     });
