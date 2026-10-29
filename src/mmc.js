@@ -62,8 +62,6 @@ const CMD_GET_PORT_DDR = 0xa0;
 const CMD_SET_PORT_DDR = 0xa1;
 const CMD_READ_PORT = 0xa2;
 const CMD_WRITE_PORT = 0xa3;
-// The PIC's weak pull-ups hold an unpressed line high.
-const JOYSTICK_IDLE = 0xff;
 const CMD_GET_FW_VER = 0xe0;
 const CMD_GET_BL_VER = 0xe1;
 const CMD_GET_CFG_BYTE = 0xf0;
@@ -81,6 +79,9 @@ const STATUS_BUSY = 0x80;
 const MMC_MCU_BUSY = 0x01;
 const MMC_MCU_READ = 0x02;
 const MMC_MCU_WROTE = 0x04;
+
+// The PIC's weak pull-ups hold an unpressed joystick line high.
+const JOYSTICK_IDLE = 0xff;
 
 const VSN_MAJ = 2;
 const VSN_MIN = 10;
