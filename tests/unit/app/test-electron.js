@@ -7,6 +7,8 @@ import { teardownDom } from "../helpers.js";
 describe("the Electron hooks", () => {
     let api;
     let deps;
+    let panels;
+    let listed;
 
     beforeEach(() => {
         api = {
@@ -17,6 +19,8 @@ describe("the Electron hooks", () => {
             onLoadState: vi.fn(),
             setTitle: vi.fn(),
             saveSettings: vi.fn(),
+            setPanels: vi.fn(),
+            onTogglePanel: vi.fn(),
         };
         window.electronAPI = api;
         const slots = Object.assign(new EventTarget(), {
@@ -24,7 +28,10 @@ describe("the Electron hooks", () => {
             deck: "the deck",
             load: vi.fn().mockResolvedValue("loaded"),
         });
+        panels = Object.assign(new EventTarget(), { listed: () => listed });
+        listed = [];
         deps = {
+            panels,
             media: { slots },
             modals: { show: vi.fn() },
             actions: { media: vi.fn() },
@@ -51,6 +58,18 @@ describe("the Electron hooks", () => {
         expect(deps.modals.show).toHaveBeenCalledWith("configuration");
         api.onAction.mock.calls[0][0]({ actionId: "media" });
         expect(deps.actions.media).toHaveBeenCalled();
+    });
+
+    it("tells the app's Debug menu the panels to list and which are open, and toggles the one it names", () => {
+        const watches = { id: "watches", title: "Watches", isOpen: false, toggle: vi.fn() };
+        listed = [watches];
+        initialise(deps);
+        expect(api.setPanels).toHaveBeenLastCalledWith([{ id: "watches", title: "Watches", open: false }]);
+        watches.isOpen = true;
+        panels.dispatchEvent(new Event("change"));
+        expect(api.setPanels).toHaveBeenLastCalledWith([{ id: "watches", title: "Watches", open: true }]);
+        api.onTogglePanel.mock.calls[0][0]({ id: "watches" });
+        expect(watches.toggle).toHaveBeenCalled();
     });
 
     it("does nothing outside Electron", () => {

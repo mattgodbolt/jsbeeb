@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onLoadState: (callback) => ipcRenderer.on("load-state", (event, message) => callback(message)),
     setTitle: (title) => ipcRenderer.send("set-title", title),
     saveSettings: (settings) => ipcRenderer.send("save-settings", settings),
+    setPanels: (panels) => ipcRenderer.send("set-panels", panels),
+    onTogglePanel: (callback) => ipcRenderer.on("toggle-panel", (event, message) => callback(message)),
 });
 
 window.addEventListener("DOMContentLoaded", () => {

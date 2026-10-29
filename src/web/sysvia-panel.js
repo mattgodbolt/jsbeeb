@@ -3,7 +3,7 @@ import { BBC } from "../keymap.js";
 import { KeyMatrixSize } from "../via.js";
 import { HwScrollSubtract } from "../video.js";
 import { DecodedRegisters, namedBits } from "./decoded-registers.js";
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 // The keypad's columns, 10 to 12, are scanned on a B as well, and the host's keypad reaches them.
@@ -406,8 +406,9 @@ export class SysViaPanel {
     /**
      * @param {object} options
      * @param {() => import("../via.js").SysVia | undefined} options.via - the machine's, if it has one
+     * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      */
-    constructor({ via }) {
+    constructor({ via, arrangement }) {
         this._via = via;
         this._frameHandle = null;
         this.panel = document.getElementById("sysvia-panel");
@@ -426,13 +427,14 @@ export class SysViaPanel {
         this._show(NoMachineState);
         this.floating = new FloatingPanel({
             panel: this.panel,
-            header: this.panel.querySelector(".register-panel-header"),
-            closeButton: this.panel.querySelector(".register-panel-close"),
+            header: this.panel.querySelector(".debug-panel-header"),
+            closeButton: this.panel.querySelector(".panel-close"),
             id: "sysvia",
-            place: { x: Centred, y: StartEdge },
+            title: "System VIA",
+            place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
             reopens: true,
-            arrangement: panelArrangement,
+            arrangement,
         });
         this.floating.addEventListener("open", () => this._tick());
         this.floating.addEventListener("close", () => {
@@ -444,12 +446,7 @@ export class SysViaPanel {
                 e.preventDefault();
                 this.floating.toggle();
             });
-            // A focused button would keep keys from the machine and the debugger.
-            opener.addEventListener("mousedown", (e) => e.preventDefault());
         }
-        this.panel.addEventListener("mousedown", (e) => {
-            if (e.target.closest("button")) e.preventDefault();
-        });
     }
 
     update() {

@@ -16,13 +16,19 @@ const TypingTargets = [
     `input:not(${NotTypedIntoInputs.map((type) => `[type="${type}"]`).join(", ")})`,
 ].join(", ");
 const typingIntoField = () => !!document.activeElement?.matches(TypingTargets);
-// Where keys are for the page, not the machine: the paste box, the media window's controls and the watch add box.
-const KeyboardSinks = `#${PasteBoxId}, #media-panel, #watch-add`;
+// Where keys are for the page, not the machine: the paste box, the media window's controls and panels' text fields.
+const KeyboardSinks = `#${PasteBoxId}, #media-panel, .panel-field`;
 // The media window's own shortcuts have to answer from inside it, or it cannot be re-aimed from
 // the keyboard at all. The paste box keeps every key, because on a Mac Alt is Option and types
 // an accented character rather than nothing.
 const ShortcutSinks = `#${PasteBoxId}`;
 const inKeyboardSink = () => !!document.activeElement?.closest(KeyboardSinks);
+
+/** A pause's own keys, beneath any panel's; see panel-keys.js for the shape. */
+export const PauseKeys = [
+    { combo: "g", key: "g", run: "go", description: "Resume" },
+    { combo: "n", key: "n", run: "step", description: "Run one frame" },
+];
 
 // Chrome resets the input method when focus moves into a text field and out again.
 function resetInputMethod() {
@@ -44,10 +50,18 @@ export class KeyboardSetup {
      *   toggleFast, openRewind, openPrinter, openMedia, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
      * @param {import("./emulation-loop.js").EmulationLoop} opts.loop
+     * @param {import("./debug.js").Debugger} opts.dbgr
+     * @param {import("./panel-keys.js").PanelKeys} opts.keys the panels' keys, answered while the machine is stopped
      */
-    constructor({ actions, accessibilitySwitches, processor, loop, dbgr, keyLayout }) {
+    constructor({ actions, accessibilitySwitches, processor, loop, dbgr, keys, keyLayout }) {
         this.loop = loop;
-        this.dbgr = dbgr;
+        this.keys = keys;
+        keys.register({
+            table: PauseKeys,
+            actions: { go: () => loop.go(), step: () => loop.step() },
+            isLive: () => loop.mode === RunMode.paused,
+            panel: null,
+        });
         const keyboard = (this.keyboard = new Keyboard({
             processor,
             inputEnabledFunction: inKeyboardSink,
@@ -60,7 +74,8 @@ export class KeyboardSetup {
 
         const alt = { alt: true, ctrl: false };
         const runners = {
-            toggleDebugger: () => (loop.mode === RunMode.debugging ? loop.go() : loop.stop(true)),
+            toggleDebugger: () => dbgr.toggleDebugger(),
+            toggleDebugPanels: () => dbgr.togglePanels(),
             togglePause: () => (loop.isRunning() ? loop.stop(false) : loop.go()),
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
@@ -99,12 +114,14 @@ export class KeyboardSetup {
         });
     }
 
-    /** The debugger's keys, and a pause's, are the characters they print, not positions. */
+    /**
+     * While the machine is stopped, the panels' keys, and a pause's, are the characters they print, not positions.
+     * While it runs every key is the machine's.
+     */
     keyPress(evt) {
         if (inKeyboardSink() || typingIntoField()) return;
-        const { loop, dbgr } = this;
-        if (loop.mode === RunMode.paused && evt.key === "n") loop.step();
-        else if ((loop.mode === RunMode.paused || loop.mode === RunMode.debugging) && evt.key === "g") loop.go();
-        else if (loop.mode === RunMode.debugging && dbgr.keyPress(evt.key)) evt.preventDefault();
+        const { mode } = this.loop;
+        if (mode !== RunMode.paused && mode !== RunMode.debugging) return;
+        if (this.keys.press(evt.key)) evt.preventDefault();
     }
 }

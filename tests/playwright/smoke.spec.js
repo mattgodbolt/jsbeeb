@@ -133,7 +133,7 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     await beeb.expectScreenText(">");
     await page.evaluate((address) => window.processor.debugInstruction.add((pc) => pc === address), Oswrch);
     await beeb.pressKey("a");
-    const credit = page.locator("#debug-symbols");
+    const credit = page.locator("#disassembly-panel .debug-symbols");
     const goTo = async (address) => {
         const box = page.locator("#goto-dis-addr-form .goto-addr");
         await box.fill(`$${address.toString(16)}`);
@@ -143,7 +143,8 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     await goTo(BasicOswrchCall);
     await expect(credit).toContainText("MOS 1.20");
     await expect(credit).toContainText("BASIC II");
-    const panelWidth = () => page.locator("#debug").evaluate((panel) => panel.getBoundingClientRect().width);
+    const panelWidth = () =>
+        page.locator("#disassembly-panel").evaluate((panel) => panel.getBoundingClientRect().width);
     const creditedWidth = await panelWidth();
     await credit.evaluate((line) => line.append(" · a set with a long title".repeat(20)));
     expect(await panelWidth()).toBe(creditedWidth);
@@ -192,14 +193,126 @@ test("the no-audio-worklet warning fits a phone and a desktop, closes without ta
     await expect(warning).toContainText("No audio worklet API");
 });
 
-test("the system VIA panel opens from the More menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
+const DebugPanels = ["#toolbar-panel", "#disassembly-panel", "#registers-panel", "#memory-panel", "#peripherals-panel"];
+const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
+const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+test("a fresh profile opens no floating panel on load", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    expect(await page.locator(".floating-panel:visible").count()).toBe(0);
+});
+
+test("Alt-S opens the debugger's panels beside the screen, g leaves them open and following the machine, and Alt-S closes them", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeVisible();
+    await beeb.expectHeld();
+    const screen = await page.locator("#screen").boundingBox();
+    const boxes = await boxesOf(page, DebugPanels);
+    // The right-hand gutter is narrower than a disassembly line, so only the left-hand column clears the screen.
+    expect(
+        (await boxesOf(page, ["#memory-panel", "#peripherals-panel"])).filter((box) => overlap(box, screen)),
+    ).toEqual([]);
+    expect(boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => overlap(a, b)))).toEqual([]);
+    const current = page.locator("#disassembly .current");
+    expect(await current.evaluate((row) => row.scrollWidth <= row.clientWidth)).toBe(true);
+    const peripherals = page.locator("#peripherals-panel .panel-body");
+    await peripherals.evaluate((body) => body.scrollTo(0, body.scrollHeight));
+    await expect(page.locator("#crtc .crtc_regs tr:not(.template)").last()).toBeInViewport();
+
+    const cycles = page.locator("#cpu6502_cycles");
+    const stoppedAt = await cycles.textContent();
+    await page.keyboard.press("g");
+    await expect.poll(() => cycles.textContent()).not.toBe(stoppedAt);
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeVisible();
+    await beeb.pressKey("j");
+    await beeb.expectScreenText(">J");
+
+    await page.keyboard.press("Alt+S");
+    const held = await beeb.expectHeld();
+    await page.keyboard.press("Alt+S");
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeHidden();
+    await beeb.expectRunningPast(held);
+});
+
+test("on a window wide enough, the debugger's panels default to the gutters each side of the screen", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 3440, height: 1440 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await page.keyboard.press("Alt+S");
+    for (const panel of DebugPanels) await expect(page.locator(panel)).toBeVisible();
+    const screen = await page.locator("#screen").boundingBox();
+    expect((await boxesOf(page, DebugPanels)).filter((box) => overlap(box, screen))).toEqual([]);
+});
+
+test("Alt-D shows and hides the debugger's panels with the machine left running, and the Debug menu does too", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    const narrowSet = DebugPanels.slice(0, 4);
+    await page.keyboard.press("Alt+D");
+    for (const panel of narrowSet) await expect(page.locator(panel)).toBeVisible();
+    await expect(page.locator("#peripherals-panel")).toBeHidden();
+    const boxes = await boxesOf(page, narrowSet);
+    expect(boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => overlap(a, b)))).toEqual([]);
+    await beeb.expectRunningPast(await beeb.cycles());
+    await page.keyboard.press("Alt+D");
+    for (const panel of narrowSet) await expect(page.locator(panel)).toBeHidden();
+
+    await beeb.togglePanel("memory");
+    await expect(page.locator("#memory-panel")).toBeVisible();
+    await expect(page.locator('#debug-menu [data-panel="memory"]')).toBeHidden();
+    await beeb.pressKey("k");
+    await beeb.expectScreenText(">K");
+});
+
+test("a panel's keys act only while the machine is stopped, and every other key still reaches the machine", async ({
     beeb,
     page,
 }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click("#navbarMore");
-    await page.click("#sysvia-open");
+    await beeb.disableAutoRepeat();
+    await page.keyboard.press("Alt+D");
+    const memoryAt = page.locator("#memory .highlight .dis_addr");
+    await expect(memoryAt).toHaveText("0000");
+    await beeb.pressKey("u");
+    await beeb.expectScreenText(">U");
+    await expect(memoryAt).toHaveText("0000");
+
+    await page.keyboard.press("Alt+S");
+    await beeb.expectHeld();
+    await page.keyboard.press("u");
+    await expect(memoryAt).toHaveText("0008");
+    const disassemblyAt = page.locator("#disassembly .highlight .dis_addr");
+    const before = await disassemblyAt.textContent();
+    await page.keyboard.press("j");
+    await expect(disassemblyAt).not.toHaveText(before);
+    await beeb.expectHeld();
+    await page.keyboard.press("g");
+    await beeb.pressKey("x");
+    await beeb.expectScreenText(">UX");
+});
+
+test("the system VIA panel opens from the Debug menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.togglePanel("sysvia");
     const panel = page.locator("#sysvia-panel");
     await expect(panel).toBeVisible();
     const register = (name) => panel.locator(`.decoded-registers tr:has(th:text-is("${name}"))`);
@@ -223,8 +336,7 @@ test("the system VIA panel's content fits the size it opened at, and keeps its s
 }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click("#navbarMore");
-    await page.click("#sysvia-open");
+    await beeb.togglePanel("sysvia");
     await page.evaluate(() => {
         const body = document.querySelector("#sysvia-panel .panel-body");
         window.e2eSizes = new Set();
@@ -275,12 +387,20 @@ test("a state saved at a breakpoint loads paused there in the debugger, on this 
     await page.click("#debug-play");
     await beeb.expectRunningPast(savedAt.cycles);
 
-    // Each load starts with the machine running and the debugger shut. The play button comes on as soon as the load
-    // holds the machine, before the state is in; the debugger opening is what says it is.
+    // Each load starts with the machine running. The play button comes on as soon as the load holds the machine,
+    // before the state is in, and the debugger's panels stay open from before; the machine arriving where it was
+    // saved is what says it is in.
     const loadAndContinue = async () => {
         await page.setInputFiles("#load-state", saved);
-        await expect(page.locator("#debug")).toBeVisible();
-        expect(await where()).toEqual(savedAt);
+        // A load from another model goes by way of a reload, which nothing can be asked across.
+        const whereIfThere = async () => {
+            try {
+                return await where();
+            } catch {
+                return null;
+            }
+        };
+        await expect.poll(whereIfThere).toEqual(savedAt);
         await expect(page.locator("#debug-play")).toBeEnabled();
         await expect(stoppedAtOswrch).toHaveText(/^ffee /);
         const loaded = await beeb.expectHeld();
@@ -531,8 +651,7 @@ test("a panel dragged to the right edge stays on it as the window grows, returns
     await page.setViewportSize({ width: 1280, height: 720 });
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click("#navbarMore");
-    await page.click("#watch-open");
+    await beeb.togglePanel("watches");
     const header = page.locator(".watch-header .disc-title");
     const grab = await header.boundingBox();
     await page.mouse.move(grab.x + 5, grab.y + 5);
@@ -582,8 +701,7 @@ test("a panel can be dragged into the bottom corner, over the lights, and up to 
     await page.setViewportSize({ width: 1280, height: 720 });
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click("#navbarMore");
-    await page.click("#watch-open");
+    await beeb.togglePanel("watches");
     const corner = await dragHeaderTo(1279, 719);
     expect(corner.x + corner.width).toBe(1280);
     expect(corner.y + corner.height).toBe(720);
@@ -613,8 +731,7 @@ test("the disc surface fits its panel without scrolling, at the size it opens at
     await page.setViewportSize({ width: 1280, height: 600 });
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click("#navbarMore");
-    await page.click("#disc-visualiser-open");
+    await beeb.togglePanel("disc");
     const opened = await fit();
     expect(opened.overflow).toBeLessThanOrEqual(0);
     const handle = await page.locator("#disc-panel .panel-resize-bottom").boundingBox();
@@ -631,8 +748,7 @@ test("the disc surface fits its panel without scrolling, at the size it opens at
 test("the disc surface panel keeps its size as the hover readout comes and goes", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await page.click("#navbarMore");
-    await page.click("#disc-visualiser-open");
+    await beeb.togglePanel("disc");
     const panel = page.locator("#disc-panel");
     const hoverText = page.locator("#disc-hover-what");
     const before = await panel.boundingBox();

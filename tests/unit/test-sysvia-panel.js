@@ -5,6 +5,7 @@ import { BBC } from "../../src/keymap.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const ORB = 0x0,
@@ -49,7 +50,7 @@ describe("SysViaPanel", () => {
         });
 
     beforeEach(() => {
-        domFromIndexHtml("sysvia-open", "sysvia-panel", "hardware_debug");
+        domFromIndexHtml("sysvia-panel", "peripherals-panel");
         frames = [];
         vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
         vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => frames.splice(0));
@@ -57,7 +58,7 @@ describe("SysViaPanel", () => {
         cpu = { interrupt: 0 };
         via = makeVia(false);
         via.write(DDRB, PortBLatchLines);
-        panel = new SysViaPanel({ via: () => via });
+        panel = new SysViaPanel({ via: () => via, arrangement: new PanelArrangement(() => window.localStorage) });
     });
 
     afterEach(() => {
@@ -86,10 +87,8 @@ describe("SysViaPanel", () => {
     const matrixStatus = () => document.querySelector(".key-matrix-status").textContent;
 
     describe("opening", () => {
-        it.each([
-            ["the menu", () => document.getElementById("sysvia-open")],
-            ["the debugger's system VIA section", () => document.querySelector("#sysvia .sysvia-open")],
-        ])("opens and closes from %s, and reads the VIA once a frame only while open", (_, opener) => {
+        it("opens and closes from the peripherals panel's system VIA section, and reads the VIA once a frame only while open", () => {
+            const opener = () => document.querySelector("#sysvia .sysvia-open");
             opener().click();
             expect(isOpen()).toBe(true);
             expect(hex("IC32")).toBe("00");
@@ -103,7 +102,7 @@ describe("SysViaPanel", () => {
         });
 
         it("keeps focus where it was, as the keyboard belongs to the machine", () => {
-            for (const opener of document.querySelectorAll(".sysvia-open, #sysvia-panel button")) {
+            for (const opener of document.querySelectorAll("#sysvia-panel button")) {
                 const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
                 opener.dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);

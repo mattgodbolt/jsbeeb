@@ -3,6 +3,8 @@ import { dirname, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
+import { FloatingPanel } from "../../src/web/floating-panel.js";
+import { StartEdge } from "../../src/web/panel-layout.js";
 
 let indexHtmlDoc = null;
 
@@ -166,4 +168,24 @@ export async function teardownDom() {
     window.history.replaceState(null, "", window.location.pathname);
     window.localStorage.clear();
     window.sessionStorage.clear();
+}
+
+/** A FloatingPanel on a bare element of its own, offered in menus as `title` (or not, for null). */
+export function bareFloatingPanel(arrangement, id, title) {
+    document.body.insertAdjacentHTML(
+        "beforeend",
+        `<div id="${id}" hidden><div class="header"><button class="close"></button></div></div>`,
+    );
+    const element = document.getElementById(id);
+    return new FloatingPanel({
+        panel: element,
+        header: element.querySelector(".header"),
+        closeButton: element.querySelector(".close"),
+        id,
+        title,
+        place: () => ({ x: StartEdge, y: StartEdge }),
+        minSize: { w: 100, h: 50 },
+        reopens: false,
+        arrangement,
+    });
 }

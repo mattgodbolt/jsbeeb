@@ -58,51 +58,101 @@ body {
   height: 600px;
 }
 
-#debug {
-  background-color: #333333;
-  border: 1px solid #555555;
-  margin: 2px;
-  padding: 2px;
-  position: fixed;
-  bottom: 0;
-  right: 0;
+.debug-panel {
   font-size: 8pt;
   font-family: monospace;
 }
 
-#hardware_debug {
-  background-color: #333333;
-  border: 1px solid #555555;
-  margin: 2px;
-  padding: 2px;
-  position: fixed;
-  bottom: 80px;
-  left: 0;
-  font-size: 8pt;
+.debug-panel .floating-panel-header {
+  align-items: center;
+}
+
+.debug-panel .btn {
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+#peripherals-panel th,
+#peripherals-panel td {
+  padding: 0 2px 0 0;
+  line-height: 1.25;
+}
+
+.debug-panel h6.dbg {
+  margin: 4px 0 2px;
+  font-size: inherit;
+  font-weight: bold;
+}
+
+#toolbar-panel .floating-panel-header {
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 0;
+}
+
+#toolbar-panel,
+#toolbar-panel .disc-title {
+  font-family: var(--bs-body-font-family);
+}
+
+#toolbar-panel .btn {
+  padding: 0 5px;
+}
+
+.debug-panel-header .panel-close {
+  margin-left: auto;
+}
+
+/* A width of its own (set in debug.js), not its rows', so that it keeps it as the names in view come and go. */
+#disassembly-panel {
+  width: var(--natural-width);
+}
+
+.goto-form {
+  flex: 0 1 8em;
+  min-width: 4em;
+}
+
+.goto-form .goto-addr {
+  padding: 0 4px;
+  font-size: 11px;
   font-family: monospace;
 }
 
-#registers {
-  float: right;
-  text-align: right;
-  width: 90px;
-}
-
-#debug-symbols,
-#debug-keys {
-  clear: both;
+.debug-symbols,
+.panel-keys {
   padding-top: 3px;
   color: #aaaaaa;
 }
 
-/* Wraps to the panel's width instead of setting it. */
-#debug-symbols {
+/* Fitted to the panel's width instead of setting it. */
+.debug-symbols,
+.panel-keys {
   width: 0;
   min-width: 100%;
 }
 
-#debug-symbols a {
+/* One line however many sets it credits, so that the panels attached below keep their place as it changes. */
+.debug-symbols {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.debug-symbols a {
   color: #aaaaff;
+}
+
+#registers > div {
+  white-space: nowrap;
+}
+
+#registers .flags {
+  margin-left: 1ch;
+}
+
+#registers .register {
+  margin-right: 0.5ch;
 }
 
 .symbol,
@@ -128,6 +178,12 @@ body {
   max-width: calc(100% - 5ch);
 }
 
+/* Inline, so that a row too long for its panel loses the end of the name rather than the whole of it. */
+.disassembly .named {
+  display: inline;
+  max-width: none;
+}
+
 a.symbol {
   text-decoration: none;
 }
@@ -136,45 +192,16 @@ a.symbol:hover {
   text-decoration: underline;
 }
 
-#crtc_debug {
-  background-color: #333333;
-  border: 1px solid #555555;
-  margin: 2px;
-  padding: 2px;
-  position: fixed;
-  top: 80px;
-  right: 0;
-  font-size: 8pt;
-  font-family: monospace;
-}
-
 h6.dbg {
   text-align: center;
 }
 
-.via_regs {
-  display: inline-block;
-}
-
-.crtc_regs {
-  display: inline-block;
-}
-
+.via_regs,
+.crtc_regs,
 .crtc_state {
   display: inline-block;
-}
-
-span.accesskey {
-  text-decoration: underline;
-}
-
-.debug-container {
-  float: left;
-  width: 400px;
-}
-
-.goto-addr {
-  max-width: 6em;
+  vertical-align: top;
+  margin-right: 1ch;
 }
 
 /* Bootstrap's warning icon would hide most of a box this narrow. */
@@ -552,7 +579,7 @@ div.modal-body > div:not(:first-child) {
 
 .dis_addr {
   display: inline-block;
-  width: 8em;
+  width: 12ch;
   color: #d0d0d0;
   white-space: nowrap;
   overflow: hidden;
@@ -562,26 +589,55 @@ div.modal-body > div:not(:first-child) {
 
 .instr_bytes {
   display: inline-block;
-  width: 6em;
+  width: 9ch;
   color: #80d0d0;
 }
 
 .instr_asc {
   display: inline-block;
-  width: 3em;
+  width: 4ch;
   color: #60f060;
+}
+
+#memory .dis_addr {
+  width: 5ch;
 }
 
 .mem_bytes {
   display: inline-block;
-  width: 18em;
+  width: 25ch;
   color: #80d0d0;
 }
 
 .mem_asc {
   display: inline-block;
-  width: 9em;
+  width: 8ch;
   color: #60f060;
+}
+
+#memory > div {
+  white-space: nowrap;
+}
+
+.panel-item::before {
+  content: "\2713";
+  display: inline-block;
+  width: 1.5em;
+  visibility: hidden;
+}
+
+.panel-item[aria-checked="true"]::before {
+  visibility: visible;
+}
+
+.menu-with-key {
+  display: flex;
+  gap: 2em;
+  justify-content: space-between;
+}
+
+.menu-key {
+  color: #999;
 }
 
 #memory .region:not(.changed) {
@@ -856,10 +912,6 @@ small {
   visibility: hidden;
 }
 
-.register-panel-close {
-  margin-left: auto;
-}
-
 .register-panel-body {
   display: grid;
   grid-template-columns: max-content max-content;
@@ -969,7 +1021,7 @@ small {
   white-space: nowrap;
 }
 
-#hardware_debug .sysvia-open {
+#peripherals-panel .sysvia-open {
   color: #aaaaff;
   font-family: inherit;
   font-size: inherit;

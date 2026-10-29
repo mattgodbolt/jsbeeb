@@ -136,10 +136,20 @@ export class Layout {
         this.resize();
     }
 
-    resize() {
+    /**
+     * Where the screen goes across the window as it is now, worked out afresh rather than read from the page: the
+     * picture of the BBC's screen, inside the monitor's bezel.
+     */
+    screenBounds() {
+        const { monitor, canvas } = this._fit();
+        const left = (window.innerWidth - monitor.width) / 2 + canvas.left;
+        return { left, right: left + canvas.width };
+    }
+
+    _fit() {
         // The display config can change when the display mode switches.
         const displayConfig = this.display.filterClass.getDisplayConfig();
-        const fitted = fitMonitor(
+        return fitMonitor(
             displayConfig,
             {
                 innerWidth: window.innerWidth,
@@ -151,7 +161,10 @@ export class Layout {
             },
             { width: this.screenCanvas.getAttribute("width"), height: this.screenCanvas.getAttribute("height") },
         );
+    }
 
+    resize() {
+        const fitted = this._fit();
         this.cubMonitor.style.height = fitted.monitor.height + "px";
         this.cubMonitor.style.width = fitted.monitor.width + "px";
         this.cubMonitorPic.style.height = fitted.monitor.height + "px";

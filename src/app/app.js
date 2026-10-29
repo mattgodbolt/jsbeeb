@@ -14,6 +14,8 @@ ipcMain.on("set-title", (event, title) => {
     if (win) win.setTitle(title);
 });
 
+ipcMain.on("set-panels", (event, panels) => setMenu(panels));
+
 ipcMain.on("save-settings", (event, settings) => {
     const current = store.get("settings", {});
     store.set("settings", { ...current, ...settings });
@@ -134,7 +136,35 @@ function sendAction(actionId) {
     };
 }
 
-const template = [
+/** The Debug menu: into and out of the debugger, and every panel the page lists, ticked while open. */
+function debugMenu(panels) {
+    return {
+        label: "Debug",
+        submenu: [
+            // Shown, not registered, so the keys reach the page, which answers them. A Mac would register them anyway,
+            // taking Option-S and Option-D from the page's text fields, so there they are not shown.
+            {
+                label: "Enter or Leave the Debugger",
+                ...(!isMac && { accelerator: "Alt+S", registerAccelerator: false }),
+                click: sendAction("toggle-debugger"),
+            },
+            {
+                label: "Show or Hide the Debug Panels",
+                ...(!isMac && { accelerator: "Alt+D", registerAccelerator: false }),
+                click: sendAction("toggle-debug-panels"),
+            },
+            { type: "separator" },
+            ...panels.map(({ id, title, open }) => ({
+                label: title,
+                type: "checkbox",
+                checked: open,
+                click: (_, browserWindow) => browserWindow.webContents.send("toggle-panel", { id }),
+            })),
+        ],
+    };
+}
+
+const template = (panels) => [
     // { role: 'appMenu' }
     ...(isMac
         ? [
@@ -238,7 +268,8 @@ const template = [
             },
             { type: "separator" },
             {
-                // No accelerator: Alt-S reaches the page, where it toggles rather than only stopping.
+                // No accelerator: Alt-S reaches the page, where it toggles rather than only stopping. Unlike Debug's
+                // item, Pause never leaves the debugger and Resume never closes its panels.
                 label: "Pause and Show Debugger",
                 click: sendAction("pause"),
             },
@@ -257,6 +288,7 @@ const template = [
             },
         ],
     },
+    debugMenu(panels),
     {
         role: "help",
         submenu: [
@@ -279,5 +311,8 @@ const template = [
     },
 ];
 
-const menu = Menu.buildFromTemplate(template);
-Menu.setApplicationMenu(menu);
+function setMenu(panels) {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template(panels)));
+}
+
+setMenu([]);

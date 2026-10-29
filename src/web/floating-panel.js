@@ -7,6 +7,7 @@ import {
     emptyLayout,
     Gap,
     opened,
+    PanelIds,
     parseLayout,
     placeOf,
     placeOpened,
@@ -54,6 +55,18 @@ function dragged(start, edges, dx, dy, min) {
     return rect;
 }
 
+const AxisSpans = { x: ["x", "w"], y: ["y", "h"] };
+/** In px, for the rounding between where a panel was put and where the page drew it. */
+const AbutTolerance = 1;
+
+/** Whether `rect` sits a Gap from `neighbour` on `axis`, on the `side` it is attached to. */
+function abuts(rect, neighbour, axis, side) {
+    const [pos, size] = AxisSpans[axis];
+    const gap =
+        side === "after" ? rect[pos] - (neighbour[pos] + neighbour[size]) : neighbour[pos] - (rect[pos] + rect[size]);
+    return Math.abs(gap - Gap) <= AbutTolerance;
+}
+
 /** `rect` kept inside `area`: moved for a move, cut at the moving edges for a resize. */
 function keptInside(rect, area, edges, min) {
     const lo = { x: area.left, y: area.top };
@@ -90,11 +103,12 @@ function keptInside(rect, area, edges, min) {
 /**
  * Places, stacks and remembers every floating panel. What the user arranged is saved in one
  * localStorage entry (see panel-layout.js); window resizes lay the panels out again from it
- * without writing to it.
+ * without writing to it. Raises "change" when a panel opens or closes, or leaves the list.
  */
-export class PanelArrangement {
+export class PanelArrangement extends EventTarget {
     /** @param {function(): Storage} storage */
     constructor(storage) {
+        super();
         this._storage = storage;
         /** @type {FloatingPanel[]} lowest first */
         this._stack = [];
@@ -143,6 +157,24 @@ export class PanelArrangement {
         };
     }
 
+    /** Of `floatings`, the one stacked highest, or null if none is registered here. */
+    frontmost(floatings) {
+        return this._stack.findLast((floating) => floatings.includes(floating)) ?? null;
+    }
+
+    /** Takes `floating` out of menus of panels, as for a machine that lacks what it shows. */
+    unlist(floating) {
+        floating.title = null;
+        this.dispatchEvent(new Event("change"));
+    }
+
+    /** The panels that offer themselves in a menu, in the order of PanelIds. */
+    listed() {
+        return this._stack
+            .filter((floating) => floating.listed)
+            .sort((a, b) => PanelIds.indexOf(a.id) - PanelIds.indexOf(b.id));
+    }
+
     raise(floating) {
         this._stack = [...this._stack.filter((other) => other !== floating), floating];
         this._stack.forEach((other, index) => (other.panel.style.zIndex = `${BaseZIndex + index}`));
@@ -151,6 +183,7 @@ export class PanelArrangement {
     onOpen(floating) {
         const layout = opened(this._read(), floating.id);
         this._save(layout);
+        this.dispatchEvent(new Event("change"));
         this.raise(floating);
         floating.clearGeometry();
         if (!floating.movable) return;
@@ -169,6 +202,7 @@ export class PanelArrangement {
 
     onClose(floating) {
         this._save(closed(this._read(), floating.id));
+        this.dispatchEvent(new Event("change"));
     }
 
     /** Lays every open panel out again for the window as it is now. */
@@ -192,6 +226,25 @@ export class PanelArrangement {
             if (rect.overlapping) this.raise(movable[index]);
         }
         for (const [element, scrollTop] of scrolled) element.scrollTop = scrollTop;
+    }
+
+    /**
+     * Lays the panels out again if one has come away from the neighbour it is attached to, as when the
+     * neighbour's content has grown. Owners whose content changes size call this.
+     */
+    keepAttached() {
+        const open = this._stack.filter((floating) => floating.isOpen && floating.movable);
+        const rects = Object.fromEntries(open.map((floating) => [floating.id, boundsOf(floating.panel)]));
+        const layout = this._read();
+        const detached = open.some((floating) => {
+            const place = placeOf(layout, floating.id) ?? floating.place();
+            return ["x", "y"].some((axis) => {
+                const attach = place[axis].attach;
+                const neighbour = attach && rects[attach.to];
+                return neighbour && !abuts(rects[floating.id], neighbour, axis, attach.side);
+            });
+        });
+        if (detached) this.relayout();
     }
 
     /** Panels may be put over the lights, but do not open over them by default. */
@@ -270,8 +323,10 @@ export const panelArrangement = new PanelArrangement(() => window.localStorage);
 
 /**
  * A panel that floats over the machine: hidden until opened, dragged by its header, resized from
- * its edges and corners, raised by a click, and closed by its button or Escape. A
- * PanelArrangement places it and remembers where the user put it. Raises "open" and "close".
+ * its edges and corners, raised by a click, and closed by its button or Escape. Its buttons and
+ * links never take focus, and Escape in one of its text fields (class `panel-field`) gives the
+ * keyboard back instead of closing it. A PanelArrangement places it and remembers where the user
+ * put it. Raises "open" and "close".
  */
 export class FloatingPanel extends EventTarget {
     /**
@@ -280,16 +335,19 @@ export class FloatingPanel extends EventTarget {
      * @param {HTMLElement} options.header the drag handle
      * @param {HTMLElement} options.closeButton
      * @param {string} options.id one of panel-layout.js's PanelIds, under which its place is saved
-     * @param {{x: object, y: object}} options.place where it goes until the user arranges it
+     * @param {string | null} options.title what a menu of panels calls it, or null to stay out of such menus
+     * @param {function(): {x: object, y: object, w?: number}} options.place where it goes until the user
+     * arranges it, asked afresh each time it is laid out
      * @param {{w: number, h: number}} options.minSize
      * @param {boolean} options.reopens whether it opens again on reload if it was open
      * @param {PanelArrangement} options.arrangement
      */
-    constructor({ panel, header, closeButton, id, place, minSize, reopens, arrangement }) {
+    constructor({ panel, header, closeButton, id, title, place, minSize, reopens, arrangement }) {
         super();
         this.panel = panel;
         this.header = header;
         this.id = id;
+        this.title = title;
         this.place = place;
         this.minSize = minSize;
         this.reopens = reopens;
@@ -302,11 +360,21 @@ export class FloatingPanel extends EventTarget {
         panel.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
             e.stopPropagation();
-            this.close();
+            if (e.target.closest(".panel-field")) e.target.blur();
+            else this.close();
+        });
+        // Focus left on a control would keep the keys from the machine and the panels.
+        panel.addEventListener("mousedown", (e) => {
+            if (e.target.closest("button, a")) e.preventDefault();
         });
         panel.addEventListener("pointerdown", () => arrangement.raise(this), true);
         this._bindGestures();
         arrangement.register(this);
+    }
+
+    /** Whether it offers itself in menus of panels. */
+    get listed() {
+        return this.title !== null;
     }
 
     /** Whether it can be moved: only while its header is styled as a drag handle, with the move cursor. */
@@ -349,18 +417,23 @@ export class FloatingPanel extends EventTarget {
 
     /** Its size as its content and stylesheet would have it, once its geometry is cleared, for the layout. */
     measure() {
+        const place = this.place();
+        // Its content may wrap at the width its place gives it, and be taller there.
+        if (place.w) this.panel.style.width = `${place.w}px`;
+        const bounds = this.panel.getBoundingClientRect();
         return {
             id: this.id,
-            natural: { w: this.panel.offsetWidth, h: this.panel.offsetHeight },
+            // Rounded up, as a width rounded down would wrap its content.
+            natural: { w: Math.ceil(bounds.width), h: Math.ceil(bounds.height) },
             min: this.minSize,
             header: this.headerHeight(),
-            place: this.place,
+            place,
         };
     }
 
     _bindGestures() {
         this.header.addEventListener("pointerdown", (e) => {
-            if (e.target.closest("button")) return;
+            if (e.target.closest("button, input")) return;
             this._begin(e, this.header, AllEdges);
         });
         for (const name of ResizeEdges) {

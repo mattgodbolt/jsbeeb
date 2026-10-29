@@ -20,6 +20,7 @@ export const PanelIds = [
     "session",
     "watches",
     "disc",
+    "toolbar",
     "disassembly",
     "memory",
     "registers",
@@ -216,7 +217,7 @@ function wantedRect(place, size, area, placed) {
     };
 }
 
-const placeFor = (layout, panel) => placeOf(layout, panel.id) ?? { ...panel.place, w: null, h: null };
+const placeFor = (layout, panel) => placeOf(layout, panel.id) ?? { w: null, h: null, ...panel.place };
 const sizeFor = (place, panel, area) => ({ w: sizeOn(place, "x", area, panel), h: sizeOn(place, "y", area, panel) });
 /** What `panel` must keep clear of: `placed`, and `avoid` too while it is in its default place. */
 const obstaclesFor = (layout, panel, placed, avoid) => (placeOf(layout, panel.id) ? placed : { ...avoid, ...placed });
@@ -228,7 +229,7 @@ const obstaclesFor = (layout, panel, placed, avoid) => (placeOf(layout, panel.id
  * @param {object} area
  * @param {{id: string, natural: {w: number, h: number}, min: {w: number, h: number}, header: number, place: object}[]} panels
  * the open panels: their content's size, their smallest usable size, their header's height, and
- * the place they take until the user arranges them
+ * the place they take until the user arranges them, which may give a width
  * @param {Object<string, object>} avoid rects, with their header's height set to their whole height, that
  * panels keep clear of while in their default places
  * @returns {Object<string, {x: number, y: number, w: number, h: number, overlapping: boolean}>} in the

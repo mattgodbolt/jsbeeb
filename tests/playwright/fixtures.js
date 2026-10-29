@@ -138,6 +138,12 @@ export class Beeb {
         await this.page.keyboard.up(key);
     }
 
+    /** Opens or closes a panel from the Debug menu, by its id in the panel layout. */
+    async togglePanel(id) {
+        await this.page.click("#navbarDebug");
+        await this.page.click(`#debug-menu [data-panel="${id}"]`);
+    }
+
     disableAutoRepeat() {
         return this.page.evaluate((address) => window.processor.writemem(address, 0), AutoRepeatDelayAddress);
     }

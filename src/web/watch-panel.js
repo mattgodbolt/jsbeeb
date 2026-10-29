@@ -1,6 +1,6 @@
 import { hexword } from "../hex.js";
 import { formatWatch, WatchFormats } from "../watches.js";
-import { FloatingPanel, panelArrangement } from "./floating-panel.js";
+import { FloatingPanel } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 200, h: 80 };
@@ -15,8 +15,9 @@ export class WatchPanel {
      * @param {object} options
      * @param {(address: number) => number} options.peek - reads without side effects
      * @param {(text: string) => {address: number, label: string} | undefined} options.resolve
+     * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      */
-    constructor({ peek, resolve }) {
+    constructor({ peek, resolve, arrangement }) {
         this._peek = peek;
         this._resolve = resolve;
         /** @type {{address: number, format: import("../watches.js").WatchFormat, value: HTMLElement}[]} */
@@ -41,19 +42,16 @@ export class WatchPanel {
             this._menu.append(choice);
         }
 
-        document.getElementById("watch-open").addEventListener("click", (e) => {
-            e.preventDefault();
-            this.floating.toggle();
-        });
         this.floating = new FloatingPanel({
             panel: this.panel,
             header: this.panel.querySelector(".watch-header"),
             closeButton: document.getElementById("watch-close"),
             id: "watches",
-            place: { x: StartEdge, y: StartEdge },
+            title: "Watches",
+            place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: MinPanelSize,
             reopens: true,
-            arrangement: panelArrangement,
+            arrangement,
         });
         this.floating.addEventListener("open", () => this._tick());
         this.floating.addEventListener("close", () => {
@@ -61,12 +59,10 @@ export class WatchPanel {
             this._frameHandle = null;
             this._showPopup(null);
         });
-        // A focused button would keep keys from the machine and the debugger.
-        for (const holder of [this.panel, this._menu]) {
-            holder.addEventListener("mousedown", (e) => {
-                if (e.target.closest("button")) e.preventDefault();
-            });
-        }
+        // Outside the panel, so its buttons are kept from focus here rather than by the panel.
+        this._menu.addEventListener("mousedown", (e) => {
+            if (e.target.closest("button")) e.preventDefault();
+        });
         this._menu.addEventListener("contextmenu", (e) => e.preventDefault());
         // pointerdown, as the panel's drag handle cancels the mousedown that would follow.
         document.addEventListener(
@@ -86,12 +82,6 @@ export class WatchPanel {
             true,
         );
         this._input.addEventListener("input", () => this._input.classList.remove("is-invalid"));
-        this._input.addEventListener("keydown", (e) => {
-            if (e.key !== "Escape") return;
-            // Neither the panel nor the page sees it: one would close, the other pass Escape on to the machine.
-            e.stopPropagation();
-            this._input.blur();
-        });
         document.getElementById("watch-add-form").addEventListener("submit", (e) => {
             e.preventDefault();
             const text = this._input.value.trim();

@@ -3,7 +3,9 @@ import { version } from "../package.json";
 import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
-import { Debugger } from "./web/debug.js";
+import { Debugger, debuggerHelpRows } from "./web/debug.js";
+import { DebugMenu } from "./web/debug-menu.js";
+import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
 import { initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -94,7 +96,13 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 // The pieces that exist before the machine: settings, screen, sound.
 // ------------------------------------------------------------------------
 
-const dbgr = new Debugger({ symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }) });
+const panelKeys = new PanelKeys(panelArrangement);
+const dbgr = new Debugger({
+    symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }),
+    keys: panelKeys,
+    arrangement: panelArrangement,
+});
+document.getElementById("debug-keys-help").append(...debuggerHelpRows());
 
 const gamepad = new GamePad();
 if (!window.isSecureContext)
@@ -238,6 +246,7 @@ const { keyboard } = new KeyboardSetup({
     processor,
     loop,
     dbgr,
+    keys: panelKeys,
     keyLayout,
 });
 
@@ -319,6 +328,9 @@ const layout = new Layout({
     embed: !!parsedQuery.embed,
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
+dbgr.placeBesideScreen(() => layout.screenBounds());
+dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
+new DebugMenu({ arrangement: panelArrangement, dbgr });
 
 if (!parsedQuery.embed && !model.isAtom) {
     new TouchKeyboard({
@@ -332,6 +344,7 @@ if (!parsedQuery.embed && !model.isAtom) {
         onAnyKeyDown,
     });
 }
+
 panelArrangement.reopen();
 
 // Everything a setting can reach now exists.
@@ -452,6 +465,7 @@ electron({
     drives,
     modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
+    panels: panelArrangement,
     actions: {
         "soft-reset": () => page.softReset(),
         "hard-reset": () => page.hardReset(),
@@ -460,6 +474,8 @@ electron({
         rewind: () => rewindUI.open(),
         pause: () => loop.stop(true),
         resume: () => loop.go(),
+        "toggle-debugger": () => dbgr.toggleDebugger(),
+        "toggle-debug-panels": () => dbgr.togglePanels(),
     },
 });
 

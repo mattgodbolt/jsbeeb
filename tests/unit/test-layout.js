@@ -132,6 +132,14 @@ describe("Layout", () => {
             expect(canvas.style.top).toBe("64px");
         });
 
+        it("says where the picture inside the monitor's bezel is across the window, without placing anything", () => {
+            // An 824px monitor centred in 1024px, at 1.03 times the config: the picture starts 100 * 1.03 in.
+            const bounds = make({ embed: false }).screenBounds();
+            expect(bounds.left).toBeCloseTo(100 + 103);
+            expect(bounds.right).toBeCloseTo(100 + 103 + 600 * 1.03);
+            expect(document.getElementById("cub-monitor").style.width).toBe("");
+        });
+
         it("hides the page furniture and sees through the body when embedded", () => {
             make();
             expect(document.querySelector(".embed-hide").style.display).toBe("none");

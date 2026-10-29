@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
+import { PanelKeys } from "../../src/web/panel-keys.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
 import { keyCodes } from "../../src/keymap.js";
@@ -37,6 +39,7 @@ describe("KeyboardSetup", () => {
     let accessibilitySwitches;
     let processor;
     let dbgr;
+    let keys;
     let loop;
     let setup;
 
@@ -52,9 +55,18 @@ describe("KeyboardSetup", () => {
         };
         accessibilitySwitches = new AccessibilitySwitches();
         processor = fakeKeyboardProcessor();
-        dbgr = { keyPress: vi.fn(() => true) };
+        dbgr = { toggleDebugger: vi.fn(), togglePanels: vi.fn() };
+        keys = new PanelKeys(new PanelArrangement(() => window.localStorage));
         loop = stubLoop();
-        setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, loop, dbgr, keyLayout: "physical" });
+        setup = new KeyboardSetup({
+            actions,
+            accessibilitySwitches,
+            processor,
+            loop,
+            dbgr,
+            keys,
+            keyLayout: "physical",
+        });
     });
 
     afterEach(teardownDom);
@@ -203,11 +215,11 @@ describe("KeyboardSetup", () => {
             const typeKey = (key) => setup.keyPress(new KeyboardEvent("keypress", { key, cancelable: true }));
 
             it.each([
-                ["g", "a debugger goto box", "debug", "#goto-dis-addr-form .goto-addr", RunMode.debugging, "go"],
+                ["g", "a panel's text field", "watch-panel", "#watch-add", RunMode.paused, "go"],
                 ["g", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "go"],
                 ["n", "the session dialog's name box", "session-dialog", "#session-name", RunMode.paused, "step"],
             ])("%s stays in %s, and drives the machine from elsewhere", (key, _, from, field, mode, call) => {
-                domFromIndexHtml(from);
+                showFromIndexHtml(from);
                 loop.mode = mode;
 
                 document.querySelector(field).focus();
@@ -221,7 +233,14 @@ describe("KeyboardSetup", () => {
                 expect(loop[call]).toHaveBeenCalledTimes(1);
             });
 
-            it("leaves the debugger's letters to a field being typed into", () => {
+            it("leaves a panel's letters to a field being typed into", () => {
+                const down = vi.fn();
+                keys.register({
+                    table: [{ key: "j", run: "down" }],
+                    actions: { down },
+                    isLive: () => true,
+                    panel: null,
+                });
                 domFromIndexHtml("session-dialog");
                 loop.mode = RunMode.debugging;
                 document.getElementById("session-name").focus();
@@ -229,7 +248,7 @@ describe("KeyboardSetup", () => {
                 const j = new KeyboardEvent("keypress", { key: "j", cancelable: true });
                 setup.keyPress(j);
 
-                expect(dbgr.keyPress).not.toHaveBeenCalled();
+                expect(down).not.toHaveBeenCalled();
                 expect(j.defaultPrevented).toBe(false);
             });
 
@@ -279,7 +298,6 @@ describe("KeyboardSetup", () => {
     describe("running and stopping", () => {
         const inputs = {
             "Alt-P": () => document.dispatchEvent(keyEvent("keydown", keyCodes.P, { alt: true })),
-            "Alt-S": () => document.dispatchEvent(keyEvent("keydown", keyCodes.S, { alt: true })),
             g: () => document.dispatchEvent(new KeyboardEvent("keypress", { key: "g", cancelable: true })),
             n: () => document.dispatchEvent(new KeyboardEvent("keypress", { key: "n", cancelable: true })),
         };
@@ -288,36 +306,65 @@ describe("KeyboardSetup", () => {
 
         it.each([
             [RunMode.running, "Alt-P", only("stop", false)],
-            [RunMode.running, "Alt-S", only("stop", true)],
             [RunMode.running, "g", only()],
             [RunMode.running, "n", only()],
             [RunMode.paused, "Alt-P", only("go")],
-            [RunMode.paused, "Alt-S", only("stop", true)],
             [RunMode.paused, "g", only("go")],
             [RunMode.paused, "n", only("step")],
             [RunMode.debugging, "Alt-P", only("go")],
-            [RunMode.debugging, "Alt-S", only("go")],
-            [RunMode.debugging, "g", only("go")],
+            [RunMode.debugging, "g", only()],
+            [RunMode.debugging, "n", only()],
         ])("while %s, %s calls the loop's %o", (mode, input, expected) => {
             loop.mode = mode;
             inputs[input]();
             expect(loopCalls()).toEqual(expected);
         });
 
-        it("leaves typed characters to the page while the machine runs", () => {
-            const g = new KeyboardEvent("keypress", { key: "g", cancelable: true });
-            document.dispatchEvent(g);
-            expect(g.defaultPrevented).toBe(false);
-            expect(dbgr.keyPress).not.toHaveBeenCalled();
+        it.each([
+            ["Alt-S", keyCodes.S, "toggleDebugger"],
+            ["Alt-D", keyCodes.D, "togglePanels"],
+        ])("%s asks the debugger, whatever the machine is doing", (_, code, call) => {
+            for (const mode of [RunMode.running, RunMode.paused, RunMode.debugging]) {
+                loop.mode = mode;
+                document.dispatchEvent(keyEvent("keydown", code, { alt: true }));
+                document.dispatchEvent(keyEvent("keyup", code, { alt: true }));
+            }
+            expect(dbgr[call]).toHaveBeenCalledTimes(3);
+            expect(loopCalls()).toEqual(only());
         });
 
-        it("gives the debugger every key but g", () => {
-            loop.mode = RunMode.debugging;
-            const n = new KeyboardEvent("keypress", { key: "n", cancelable: true });
-            document.dispatchEvent(n);
-            expect(dbgr.keyPress).toHaveBeenCalledWith("n");
-            expect(n.defaultPrevented).toBe(true);
-            expect(loopCalls()).toEqual(only());
+        describe("a panel's keys", () => {
+            let down;
+            beforeEach(() => {
+                down = vi.fn();
+                keys.register({
+                    table: [{ key: "j", run: "down" }],
+                    actions: { down },
+                    isLive: () => true,
+                    panel: null,
+                });
+            });
+            const press = (key) => {
+                const event = new KeyboardEvent("keypress", { key, cancelable: true });
+                document.dispatchEvent(event);
+                return event;
+            };
+
+            it("leave every key to the machine while it runs", () => {
+                expect(press("j").defaultPrevented).toBe(false);
+                expect(down).not.toHaveBeenCalled();
+            });
+
+            it.each([RunMode.paused, RunMode.debugging])("answer while %s, taking the key from the page", (mode) => {
+                loop.mode = mode;
+                expect(press("j").defaultPrevented).toBe(true);
+                expect(down).toHaveBeenCalledTimes(1);
+            });
+
+            it("leave a key nobody binds to the page", () => {
+                loop.mode = RunMode.debugging;
+                expect(press("q").defaultPrevented).toBe(false);
+            });
         });
     });
 });
