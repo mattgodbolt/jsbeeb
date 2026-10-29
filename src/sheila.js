@@ -202,3 +202,19 @@ export function sheilaName(blocks, address, accesses) {
         title: `${each.map(({ block, names }) => `${block.title} ${names}`).join(" / ")}: $${hexword(address)}`,
     };
 }
+
+/**
+ * The address of the register `text` names as the disassembly shows it, such as "SysVIA.ORB", in any case.
+ * @param {SheilaBlock[]} blocks
+ * @param {string} text
+ * @returns {number | undefined}
+ */
+export function sheilaAddress(blocks, text) {
+    const [device, name] = text.toUpperCase().split(".");
+    for (const block of blocks) {
+        if (block.device.toUpperCase() !== device) continue;
+        const offset = block.registers.findIndex(({ read, write }) => read === name || write === name);
+        if (offset >= 0) return block.start + offset;
+    }
+    return undefined;
+}

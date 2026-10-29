@@ -269,6 +269,7 @@ describe("Debugger", () => {
                 "Disassembly",
                 "Memory",
                 "Registers",
+                "Breakpoints",
             ]);
         });
 

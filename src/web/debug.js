@@ -12,6 +12,8 @@ import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
+import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
+import { BreakpointsPanel } from "./breakpoints-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
@@ -460,6 +462,20 @@ export class Debugger {
                 ),
         });
         this._loopNote = new TightLoopNote(this.panels.toolbar.panel.querySelector(".tight-loop"), arrangement);
+        this._sheila = [];
+        this.breakpoints = new BreakpointsPanel({
+            arrangement,
+            resolve: (text) => this._resolveBreakpoint(text),
+            showCode: (address) => {
+                this.panels.disassembly.open();
+                this._disassembly.update(address);
+            },
+            showMemory: (address) => {
+                this.panels.memory.open();
+                this._memoryView.update(address);
+            },
+            storage: () => window.localStorage,
+        });
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -880,6 +896,8 @@ export class Debugger {
         cpu.breakpoints.onHit((hit) => {
             if (hit.action === "log") console.log(describeHit(hit));
         });
+        this._sheila = machineSheilaBlocks(cpu);
+        this.breakpoints.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {
@@ -1031,6 +1049,14 @@ export class Debugger {
         if (address === undefined) return undefined;
         const label = parseAddr(text) === address ? names.address(address, pc)?.name : text;
         return { address, label: label ?? `$${hexword(address)}` };
+    }
+
+    /** What a breakpoint's address `text` names, as a watch's does or as a SHEILA register such as SysVIA.ORB. */
+    _resolveBreakpoint(text) {
+        const found = this._resolveWatch(text);
+        if (found) return found;
+        const address = sheilaAddress(this._sheila, text);
+        return address === undefined ? undefined : { address, label: text };
     }
 
     /** Whether the machine is stopped in the debugger. */
