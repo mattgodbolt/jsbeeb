@@ -52,6 +52,7 @@ import { UserViaPanel } from "./web/uservia-panel.js";
 import { VideoUlaPanel } from "./web/video-ula-panel.js";
 import { PagingPanel } from "./web/paging-panel.js";
 import { SoundChipPanel } from "./web/soundchip-panel.js";
+import { FdcPanel } from "./web/fdc-panel.js";
 import { cycleCount } from "./lockstep.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
@@ -64,6 +65,8 @@ import { sessionPage } from "./web/session-page.js";
 import { webRtcTransport } from "./web/session-transport.js";
 import { createRendezvousClient } from "./web/rendezvous-client.js";
 import { SymbolSets } from "./symbol-sets.js";
+import { LabelFiles } from "./label-files.js";
+import { loadData } from "./loader.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
 import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
@@ -107,8 +110,10 @@ const lowLatency = parsedQuery.lowLatency ?? true;
 
 const panelArrangement = new PanelArrangement(() => window.localStorage);
 const panelKeys = new PanelKeys(panelArrangement);
+const labelFiles = new LabelFiles({ load: loadData });
 const dbgr = new Debugger({
     symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }),
+    labelFiles,
     keys: panelKeys,
     arrangement: panelArrangement,
     monitor: document.getElementById("cub-monitor"),
@@ -142,13 +147,25 @@ settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
 const bankRoms = [];
+const labelFileUrls = [];
 const familyWarnings = processInputParams(parsedQuery, {
     machineKeys: model.keys,
     hostKeyCodes,
     userKeymap,
     gamepad,
     bankRoms,
+    labelFiles: labelFileUrls,
 });
+// One at a time, so that they are in the URL's order, which says whose name an address takes.
+(async () => {
+    for (const { url, bank } of labelFileUrls) {
+        try {
+            await labelFiles.load(url, bank);
+        } catch (error) {
+            toast(error.message, { title: "Label files" });
+        }
+    }
+})();
 if (familyWarnings.length) {
     toast(`${familyWarnings.join(" ")} The key names and ROM banks are listed in the README.`, {
         title: "Parameters in the URL",
@@ -348,6 +365,7 @@ dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
 for (const DevicePanel of [SysViaPanel, UserViaPanel, CrtcPanel, SoundChipPanel, VideoUlaPanel])
     if (DevicePanel.fits(processor))
         new DevicePanel({ cpu: processor, arrangement: panelArrangement, audio: audioHandler });
+new FdcPanel({ cpu: processor, arrangement: panelArrangement, visualiser: discVisualiser });
 if (PagingPanel.fits(processor))
     new PagingPanel({ cpu: processor, arrangement: panelArrangement, showBank: (bank) => dbgr.showBank(bank) });
 new DebugMenu({ arrangement: panelArrangement, dbgr });

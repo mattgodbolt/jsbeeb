@@ -197,11 +197,22 @@ export class MediaWindow {
 
     /**
      * The whole page takes a dropped file: a disc goes into the aimed drive, a tape into the
-     * deck, a save state is restored. An overlay says so while a file is over the page.
+     * deck, a save state is restored. An overlay says so while a file is over the page. An element
+     * with `data-drop-into` takes its own drops, and the overlay says what it does with them.
      */
     bindDropZone() {
         const zone = document.getElementById("drop-zone");
+        const what = zone.querySelector(".drop-zone-what");
         const words = zone.querySelector(".drop-zone-into");
+        const ownWhat = what.textContent;
+        const claimant = (e) => (e.target instanceof Element ? e.target.closest("[data-drop-into]") : null);
+        const describe = (e) => {
+            const claimed = claimant(e);
+            what.textContent = claimed?.dataset.dropWhat ?? ownWhat;
+            words.textContent =
+                claimed?.dataset.dropInto ??
+                (this.model.isAtom ? "a tape goes in the deck" : `a disc goes into ${this.targetName}`);
+        };
         // dragenter and dragleave fire for every element crossed, so the depth says when the page is left.
         let depth = 0;
         const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
@@ -211,12 +222,8 @@ export class MediaWindow {
             (e) => {
                 if (!hasFiles(e)) return;
                 e.preventDefault();
-                if (depth++ === 0) {
-                    words.textContent = this.model.isAtom
-                        ? "a tape goes in the deck"
-                        : `a disc goes into ${this.targetName}`;
-                    zone.hidden = false;
-                }
+                if (depth++ === 0) zone.hidden = false;
+                describe(e);
             },
             { signal },
         );
@@ -226,6 +233,7 @@ export class MediaWindow {
                 if (!hasFiles(e)) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "copy";
+                describe(e);
             },
             { signal },
         );
@@ -244,6 +252,7 @@ export class MediaWindow {
                 e.preventDefault();
                 depth = 0;
                 zone.hidden = true;
+                if (claimant(e)) return;
                 const file = e.dataTransfer.files[0];
                 if (!file) return;
                 await this.openFile(file, "Dropped", "drop");
