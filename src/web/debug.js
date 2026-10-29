@@ -683,6 +683,7 @@ export class Debugger {
     setCpu(cpu) {
         this.cpu = cpu;
         this._disassembly.setCpu(cpu);
+        this.watches.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     disassemble(addr) {
@@ -771,6 +772,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
+        this.watches.showWhichFired();
         this._refresh.drawn();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
@@ -851,6 +853,7 @@ export class Debugger {
         // A run handed to the loop keeps the memory it started from, to show what it changed.
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
+        this.watches.clearFired();
         this._inDebugger = false;
         this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
