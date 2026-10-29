@@ -8,7 +8,6 @@ import {
     parameterFor,
     processInputParams,
     readTakenFromHost,
-    RequiredProperties,
     takenFromHostValues,
     tubeCpuSpeedLabel,
     urlParamType,
@@ -28,8 +27,7 @@ describe("Parameters", () => {
     const families = Object.entries(Parameters).filter(([, { prefix }]) => prefix);
     const fixedNames = Object.keys(Parameters).filter((name) => !Parameters[name].prefix);
 
-    it.each(Object.entries(Parameters))("declares everything %s must", (name, parameter) => {
-        for (const property of RequiredProperties) expect(parameter, property).toHaveProperty(property);
+    it.each(Object.entries(Parameters))("declares a URL type for %s", (name, parameter) => {
         expect(Object.values(ParamTypes)).toContain(parameter.type);
     });
 

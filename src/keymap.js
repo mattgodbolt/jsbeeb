@@ -362,7 +362,7 @@ export const keyCodes = {
  * Other names a `KEY.` parameter may use for a host key: one that covers both sides of a pair,
  * or a second name for a key that is printed differently on different keyboards.
  */
-export const keyCodeAliases = {
+const keyCodeAliases = {
     SHIFT: [keyCodes.SHIFT_LEFT, keyCodes.SHIFT_RIGHT],
     CTRL: [keyCodes.CTRL_LEFT, keyCodes.CTRL_RIGHT],
     ALT: [keyCodes.ALT_LEFT, keyCodes.ALT_RIGHT],

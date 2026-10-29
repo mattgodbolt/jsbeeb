@@ -125,7 +125,7 @@ export const MachineRequirements = Object.freeze({
 });
 
 /** A descriptor's `requires` for a manifest's machine name, or undefined for a name outside the table. */
-export const machineRequirement = (machine) =>
+const machineRequirement = (machine) =>
     Object.hasOwn(MachineRequirements, machine) ? MachineRequirements[machine] : undefined;
 
 // Looked up when asked, since parameters.js imports this module by way of analytics-filters.js.

@@ -40,7 +40,7 @@ export function peerState({ connected, left, stats, statsAgeMs }) {
 }
 
 /** A line about a peer, from its `state` and whichever of `rttMs`, `lagMs` and `leftReason` are known. */
-export function peerDetail({ state, rttMs, lagMs, leftReason }) {
+function peerDetail({ state, rttMs, lagMs, leftReason }) {
     if (state === "left") return `left: ${leftReason}`;
     const parts = [Descriptions[state]];
     if (rttMs !== undefined) parts.push(`${Math.round(rttMs)} ms round trip`);

@@ -21,7 +21,7 @@ export function load(name) {
 /**
  * Class representing a disc format type with associated loader and saver functions
  */
-export class DiscType {
+class DiscType {
     /**
      * Create a new disc type.
      * @param {Object} [options] - Configuration options for this disc type.

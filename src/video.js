@@ -17,15 +17,15 @@ const noop = () => {};
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
-export const SKEWDISPENABLE = 1 << 2;
-export const SCANLINEDISPENABLE = 1 << 3;
-export const USERDISPENABLE = 1 << 4;
-export const FRAMESKIPENABLE = 1 << 5;
+const SKEWDISPENABLE = 1 << 2;
+const SCANLINEDISPENABLE = 1 << 3;
+const USERDISPENABLE = 1 << 4;
+const FRAMESKIPENABLE = 1 << 5;
 export const EVERYTHINGENABLED =
     VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
 export { OPAQUE_BLACK };
-export const OPAQUE_WHITE = 0xffffffff;
+const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
 
@@ -33,7 +33,7 @@ export const MinPaintedFrameRows = 64;
 // BBC Master 128. Exactly nominal, a 312-line frame advances the subcarrier by
 // half a cycle to four decimal places, so the cross-colour left by the decoder
 // inverts every frame; an offset of this order makes it crawl instead (#962).
-export const PalSubcarrierOffsetHz = 239;
+const PalSubcarrierOffsetHz = 239;
 const PalNominalSubcarrierHz = 4433618.75;
 const PalLineHz = 15625;
 export const PalCyclesPerLine = (PalNominalSubcarrierHz + PalSubcarrierOffsetHz) / PalLineHz;

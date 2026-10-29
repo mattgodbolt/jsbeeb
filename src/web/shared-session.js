@@ -124,7 +124,7 @@ function randomId() {
 
 const mappingKey = (mapping) => mapping.join(",");
 
-export const randomName = () => humanId({ separator: "-", capitalize: false });
+const randomName = () => humanId({ separator: "-", capitalize: false });
 
 // The control characters, and the bidirectional ones that could reorder a name among others.
 // eslint-disable-next-line no-control-regex
