@@ -1007,7 +1007,8 @@ small {
   background: rgba(255, 96, 96, 0.25);
 }
 
-#watch-panel .txt-btn {
+#watch-panel .txt-btn,
+#fdc-panel .txt-btn {
   color: #cccccc;
   text-decoration-color: rgba(255, 255, 255, 0.45);
 }
@@ -1092,13 +1093,41 @@ small {
   color: #aaaaaa;
 }
 
-.soundchip-mutes .decoded-bit {
+.soundchip-mutes .decoded-bit,
+.fdc-log-heading .decoded-bit {
   margin-left: 6px;
+}
+
+button.decoded-bit {
   font: inherit;
 }
 
-.soundchip-mutes .decoded-bit:not(.lit) {
+button.decoded-bit:not(.lit) {
   background: transparent;
+}
+
+.fdc-registers .decoded-meaning {
+  width: 62ch;
+}
+
+.fdc-drive .decoded-meaning {
+  width: 52ch;
+}
+
+.fdc-log-area {
+  grid-column: 1 / -1;
+}
+
+.fdc-log {
+  /* Anchoring would scroll the log back by every line dropped from its top, as if the reader had. */
+  overflow-anchor: none;
+  height: 192px;
+  line-height: 16px;
+  overflow: auto;
+  padding: 2px 4px;
+  background: #1a1a1a;
+  color: #cccccc;
+  white-space: pre;
 }
 
 .decoded-value,
